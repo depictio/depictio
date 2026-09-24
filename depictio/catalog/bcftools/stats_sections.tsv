@@ -5,9 +5,6 @@ NA12878_200M	freebayes	allele_frequency	0.99		14443
 NA12878_200M	deepvariant	indel_length	-60.0		15
 NA12878_200M	deepvariant	indel_length	-56.0		1
 NA12878_200M	deepvariant	indel_length	-52.0		1
-NA12878_200M	deepvariant	quality	0.0		7512
-NA12878_200M	deepvariant	quality	0.1		144
-NA12878_200M	deepvariant	quality	0.2		42
 NA12878_200M	deepvariant	singleton_stats		singleton SNPs	47060
 NA12878_200M	deepvariant	singleton_stats		singleton indels	6662
 NA12878_200M	freebayes	singleton_stats		singleton SNPs	23914

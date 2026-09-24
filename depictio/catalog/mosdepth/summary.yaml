@@ -8,8 +8,9 @@ description: >-
   twice, once genome-wide and once over the targets only; the recipe splits
   that into a `scope` column (genome or region) instead of mixing two very
   different depths on one axis. Sample and alignment stage come from the file
-  name, and only the primary contigs and the run total are kept, which drops
-  the thousands of ALT, decoy and HLA rows a GRCh38 run lists.
+  name, one pass is kept per sample, and only the primary contigs and the run
+  total are kept, which drops the thousands of ALT, decoy and HLA rows a
+  GRCh38 run lists.
 find:
   path_glob: "**/*.mosdepth.summary.txt"
 recipe: mosdepth/summary.py

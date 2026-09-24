@@ -23,6 +23,21 @@ frame, and the recipe reads it through `dc_ref`::
           include_file_paths: source_path
           infer_schema_length: 0
 
+**E1 is phased here.** An eigenvector's sign is arbitrary: ``eigs-cis`` run
+without a ``--phasing-track`` (nf-core/hic 2.0.0 passes none) returns each
+chromosome's E1 with whatever sign the solver lands on, independently per
+chromosome and per resolution, so "A" at 250 kb can be "B" at 500 kb on the
+same bins. The recipe fixes the sign per (sample, resolution, chromosome):
+when the run supplies no GC or gene track, it orients E1 so that it correlates
+positively with the bin's contact coverage, read as ``1 / weight`` (cooler's
+balancing weight is the inverse of a bin's raw coverage). The A compartment is
+the open, gene-dense, well-mappable one and collects more contacts, so higher
+coverage marks A; the rule depends on the data only, not on an assembly, and it
+gives every resolution the same orientation because they share one coverage
+profile. A chromosome whose E1 does not correlate with coverage at all (a
+near-zero correlation, typical of chrY) keeps the solver's sign. E2 and E3 are
+left as written.
+
 ``compartment`` turns that sign into a category ("A" / "B", null on a bin with
 no E1), because the sign is what a reader groups and colours by: a continuous
 E1 column can be plotted but it cannot fill a donut, drive a Select filter or
@@ -36,7 +51,7 @@ Output schema:
     start : Int64          bin start
     end : Int64             bin end
     weight : Float64      cooler balancing weight for the bin (null on blacklisted bins)
-    E1 : Float64          first eigenvector, the A/B compartment track
+    E1 : Float64          first eigenvector, the A/B compartment track, phased (A positive)
     compartment : Utf8    "A" where E1 is positive, "B" where it is negative, null on a bin with no E1
     E2 : Float64          second eigenvector
     E3 : Float64          third eigenvector
@@ -47,6 +62,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.cooltools import float_col
 
 #: Data-collection tag the recipe reads. A template reusing this recipe must
 #: scan the per-sample vecs files into a DC with this tag (see module docstring).
@@ -73,8 +89,35 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 #: than as A, so the two labels never overlap.
 COMPARTMENT_LABELS = ("A", "B")
 
+#: Grouping inside which the E1 sign is fixed: the solver picks one sign per
+#: chromosome of one eigs-cis call.
+PHASE_GROUP = ["sample", "resolution", "chrom"]
+
 #: `<sample>.<resolution>_compartments.cis.vecs.tsv`
 _PATH_RE = r"([^/\\]+)\.(\d+)_compartments\.cis\.vecs\.tsv$"
+
+
+def phase_by_coverage(df: pl.DataFrame) -> pl.DataFrame:
+    """Flip E1 per chromosome so it correlates positively with bin coverage.
+
+    Coverage is ``1 / weight`` (the balancing weight is the inverse of a bin's
+    raw coverage). A group with no usable bin, or a correlation that is null or
+    exactly zero, keeps its sign.
+    """
+    coverage = pl.when(pl.col("weight") > 0).then(1.0 / pl.col("weight")).otherwise(None)
+    signs = (
+        df.with_columns(coverage.alias("_coverage"))
+        .filter(pl.col("E1").is_not_null() & pl.col("_coverage").is_not_null())
+        .group_by(PHASE_GROUP)
+        .agg(pl.corr("E1", "_coverage").alias("_corr"))
+        .with_columns(pl.when(pl.col("_corr") < 0).then(-1.0).otherwise(1.0).alias("_sign"))
+        .select([*PHASE_GROUP, "_sign"])
+    )
+    return (
+        df.join(signs, on=PHASE_GROUP, how="left")
+        .with_columns((pl.col("E1") * pl.col("_sign").fill_null(1.0)).alias("E1"))
+        .drop("_sign")
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -85,11 +128,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("source_path").str.extract(_PATH_RE, 2).cast(pl.Int64).alias("resolution"),
         pl.col("start").cast(pl.Int64, strict=False),
         pl.col("end").cast(pl.Int64, strict=False),
-        pl.col("weight").cast(pl.Float64, strict=False),
-        pl.col("E1").cast(pl.Float64, strict=False),
-        pl.col("E2").cast(pl.Float64, strict=False),
-        pl.col("E3").cast(pl.Float64, strict=False),
-    ).with_columns(
+        float_col("weight"),
+        float_col("E1"),
+        float_col("E2"),
+        float_col("E3"),
+    )
+    df = phase_by_coverage(df).with_columns(
         pl.when(pl.col("E1") > 0)
         .then(pl.lit(COMPARTMENT_LABELS[0], dtype=pl.Utf8))
         .when(pl.col("E1") < 0)

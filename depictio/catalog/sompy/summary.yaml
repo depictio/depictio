@@ -2,8 +2,9 @@ id: sompy_summary
 name: som.py benchmark summary
 mode: benchmark-summary
 description: >-
-  Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with
-  binomial confidence intervals.
+  Somatic small-variant accuracy from som.py: precision/recall/F1 per callset
+  with binomial confidence intervals. `caller` is the tool that made the calls,
+  `label` the callset's samplesheet id and `truth_set` the truth set.
 find: { path_glob: "**/summary/tables/sompy/sompy.summary.csv" }
 recipe: sompy/summary.py
 fixture: summary.tsv

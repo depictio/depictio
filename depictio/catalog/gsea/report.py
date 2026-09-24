@@ -31,6 +31,7 @@ Output:
     term : Utf8                  the gene set name
     size : Int64                 genes of the set found in the ranked list
     es, nes : Float64            enrichment score, and the size-normalised one
+    abs_nes : Float64            |nes|, so "strongest set" reads both poles
     nom_pvalue : Float64         nominal p-value
     fdr_qvalue : Float64         FDR q-value across the sets of this report
     fwer_pvalue : Float64        family-wise error rate
@@ -63,6 +64,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "size": pl.Int64,
     "es": pl.Float64,
     "nes": pl.Float64,
+    "abs_nes": pl.Float64,
     "nom_pvalue": pl.Float64,
     "fdr_qvalue": pl.Float64,
     "fwer_pvalue": pl.Float64,
@@ -131,7 +133,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("leading_edge")
         .str.extract(_TAGS.pattern, 1)
         .cast(pl.Float64, strict=False)
-        .alias("leading_edge_percent")
+        .alias("leading_edge_percent"),
+        # The strongest set can sit at either pole: a max over `nes` misses a
+        # negative one, a max over its magnitude does not.
+        pl.col("nes").abs().alias("abs_nes"),
     )
 
     # GSEA writes 0 for any q-value below its resolution, which a -log10 turns

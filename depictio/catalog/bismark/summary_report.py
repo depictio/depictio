@@ -54,9 +54,8 @@ Output schema:
     pct_chg_methylation : Float64       methylated / called CHGs * 100
     pct_chh_methylation : Float64       methylated / called CHHs * 100
     conversion_efficiency_pct : Float64 100 - pct_chh_methylation
-    cell_line : Utf8                    from the sample hub, null when it declares none
-    treatment : Utf8                    from the sample hub, null when it declares none
-    group : Utf8                        the two-level factor of the run, when declared
+    <design columns> : Utf8             every factor of the sample hub (the run's
+                                        METADATA_FILE), when it declares any
 """
 
 from __future__ import annotations
@@ -64,6 +63,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.bismark_names import hub_factor_columns
 from depictio.recipes.lib.sample_hub import annotate_from_hub
 
 SAMPLES_DC_TAG = "samples"
@@ -77,9 +77,6 @@ SOURCES: list[RecipeSource] = [
     ),
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
-
-#: Sample-hub columns carried onto the summary when the hub declares them.
-ANNOTATION_COLUMNS = ("cell_line", "treatment", "group")
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
@@ -103,10 +100,9 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "pct_chg_methylation": pl.Float64,
     "pct_chh_methylation": pl.Float64,
     "conversion_efficiency_pct": pl.Float64,
-    "cell_line": pl.Utf8,
-    "treatment": pl.Utf8,
-    "group": pl.Utf8,
 }
+# Design columns are run-dependent (the sample hub's factors); validated dynamically.
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # The BAM name in the `File` column records the trimming and alignment stages;
 # the sample is what is left of it. `bismark_[a-z0-9]+` rather than
@@ -146,6 +142,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     raw = sources["summary"]
     if raw.is_empty():
         raise ValueError("bismark_summary_report: bismark_summary_report.txt holds no row")
+    samples = sources.get("samples")
+    factors = hub_factor_columns(samples)
 
     renames = {
         c: _HEADER_MAP[c.strip().lower()] for c in raw.columns if c.strip().lower() in _HEADER_MAP
@@ -186,7 +184,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .cast(pl.Float64)
             .alias("conversion_efficiency_pct")
         )
-        .pipe(annotate_from_hub, sources.get("samples"), ANNOTATION_COLUMNS, left_on="sample")
-        .select(list(EXPECTED_SCHEMA))
+        .pipe(annotate_from_hub, samples, factors, left_on="sample")
+        .select(*EXPECTED_SCHEMA, *factors)
         .sort("sample")
     )

@@ -45,6 +45,32 @@ NO_STAGE = "all"
 #: Suffix mosdepth appends to the contig name of a ``--by`` (on-target) row.
 _REGION_SUFFIX = "_region"
 
+#: When mosdepth ran more than once on a sample (sarek measures the
+#: duplicate-marked and then the recalibrated CRAM), one pass is kept: the
+#: first of these stages the sample has, else its alphabetically first one.
+#: Recalibration rewrites base qualities, not alignments, so the passes carry
+#: the same depth; keeping both doubled every sum and every track lane.
+STAGE_PREFERENCE = ("recal", "md", "sorted")
+
+
+def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
+    """Rows of one mosdepth pass per sample (see ``STAGE_PREFERENCE``)."""
+    rank = pl.col("stage").replace_strict(
+        {s: i for i, s in enumerate(STAGE_PREFERENCE)},
+        default=len(STAGE_PREFERENCE),
+        return_dtype=pl.Int64,
+    )
+    kept = (
+        df.select("sample", "stage")
+        .unique()
+        .with_columns(rank.alias("_rank"))
+        .sort(["sample", "_rank", "stage"])
+        .unique(subset="sample", keep="first", maintain_order=True)
+        .select("sample", "stage")
+    )
+    return df.join(kept, on=["sample", "stage"], how="semi")
+
+
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,  # md / recal on sarek; "all" when the file name has no stage
@@ -65,7 +91,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     basename = pl.col("source_path").str.split("/").list.last()
     is_region = pl.col("chrom").str.ends_with(_REGION_SUFFIX)
 
-    return (
+    return keep_one_stage(
         df.with_columns(
             pl.coalesce(
                 basename.str.extract(_NAME_RE, 1), basename.str.extract(_PLAIN_NAME_RE, 1)
@@ -86,5 +112,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .drop("chrom")
         .rename({"contig": "chrom"})
         .select(list(EXPECTED_SCHEMA))
-        .sort(["sample", "stage", "scope", "chrom"])
-    )
+    ).sort(["sample", "stage", "scope", "chrom"])

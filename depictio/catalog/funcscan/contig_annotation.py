@@ -2,17 +2,17 @@
 
 nf-core/funcscan annotates every assembly once (Pyrodigal / Prodigal / Bakta /
 Prokka) and then screens the predicted proteins four independent times. The
-annotation itself is not published with the AWS megatest results, but every
-screen carries the contig its feature sits on, so the annotated locus layer can
-be rebuilt from the screens themselves: one row per contig that carries at
-least one feature, with how many features each screen put there.
+annotation tables are not always published, but every screen carries the contig
+its feature sits on, so the annotated locus layer can be rebuilt from the
+screens themselves: one row per contig that carries at least one feature, with
+how many features each screen put there.
 
-Contig names come from the assembler that produced the MGnify assemblies and
-carry the length and the k-mer coverage in the name itself
-(``ERZ1664511.16-NODE-16-length-49668-cov-9.810473``), which is where
-``contig_length`` and ``contig_coverage`` are read from. A contig whose name
-does not follow that convention keeps a null length and is simply absent from
-the density axis rather than dropped.
+``contig_length`` and ``contig_coverage`` are read from the contig name when the
+assembler wrote them there: SPAdes-style names (``NODE_16_length_49668_cov_9.81``,
+with underscores or, after renaming, dashes) and MEGAHIT headers that kept their
+``len=`` / ``multi=`` fields. Any other naming (Flye, MEGAHIT ids trimmed to
+``k141_123``, external assemblies) keeps a null length and coverage: the contig
+stays in the table and simply drops out of the length and density axes.
 
 Every source is an optional ``dc_ref``: a screen the run did not enable
 contributes zeros instead of pruning the collection.
@@ -100,11 +100,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ]
     )
 
-    # The assembler writes the contig length and the k-mer coverage into the
-    # name; a contig named any other way keeps a null and drops out of the
-    # density axis instead of out of the table.
-    length = pl.col("contig").str.extract(r"length-(\d+)", 1).cast(pl.Int64, strict=False)
-    coverage = pl.col("contig").str.extract(r"cov-([0-9.]+)", 1).cast(pl.Float64, strict=False)
+    # Length and coverage come from the contig name when the assembler wrote
+    # them there (SPAdes NODE_x_length_y_cov_z, with _ or -, or MEGAHIT len= /
+    # multi=); any other naming keeps a null and drops out of the density axis
+    # instead of out of the table.
+    contig = pl.col("contig")
+    length = pl.coalesce(
+        contig.str.extract(r"length[_-](\d+)", 1),
+        contig.str.extract(r"len=(\d+)", 1),
+    ).cast(pl.Int64, strict=False)
+    coverage = pl.coalesce(
+        contig.str.extract(r"cov[_-]([0-9.]+[0-9])", 1),
+        contig.str.extract(r"multi=([0-9.]+[0-9])", 1),
+    ).cast(pl.Float64, strict=False)
 
     out = out.with_columns(
         length.alias("contig_length"),

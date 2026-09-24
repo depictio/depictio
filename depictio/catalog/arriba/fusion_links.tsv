@@ -1,16 +1,16 @@
-label	chrom_a	pos_a	chrom_b	pos_b	weight	category	confidence
-FGFR3--TACC3	chr4	1806934	chr4	1727977	494	duplication	high
-FIP1L1--PDGFRA	chr4	53425965	chr4	54274925	107	deletion	high
-GOPC--ROS1	chr6	117566854	chr6	117321394	75	deletion/read-through	high
-GOPC--ROS1	chr6	117566854	chr6	117320030	9	deletion/read-through	low
-HOOK3--RET	chr8	42968214	chr10	43116584	14	translocation	high
-ETV6--NTRK3	chr12	11869969	chr15	87940753	13	translocation	high
-AKAP9--BRAF	chr7	92003235	chr7	140787584	13	inversion	high
-BRD4--NUTM1	chr19	15254152	chr15	34347969	8	translocation	high
-EML4--ALK	chr2	42301394	chr2	29223584	8	inversion	high
-NPM1--ALK	chr5	171391799	chr2	29223528	7	translocation	high
-CD74--ROS1	chr5	150404680	chr6	117324415	6	translocation	high
-TMPRSS2--ETV1	chr21	41494375	chr7	13935838	15	translocation	medium
-EWSR1--ATF1	chr22	29287134	chr12	50814280	9	translocation	medium
-CIC--DUX4L8	chr19	42295049	chr4	190068609	9	translocation	medium
-EWSR1--FLI1	chr22	29287134	chr11	128807180	8	translocation	medium
+sample	label	chrom_a	pos_a	chrom_b	pos_b	weight	category	confidence
+test	FGFR3--TACC3	chr4	1806934	chr4	1727977	494	duplication	high
+test	FIP1L1--PDGFRA	chr4	53425965	chr4	54274925	107	deletion	high
+test	GOPC--ROS1	chr6	117566854	chr6	117321394	75	deletion/read-through	high
+test	GOPC--ROS1	chr6	117566854	chr6	117320030	9	deletion/read-through	low
+test	HOOK3--RET	chr8	42968214	chr10	43116584	14	translocation	high
+test	ETV6--NTRK3	chr12	11869969	chr15	87940753	13	translocation	high
+test	AKAP9--BRAF	chr7	92003235	chr7	140787584	13	inversion	high
+test	BRD4--NUTM1	chr19	15254152	chr15	34347969	8	translocation	high
+test	EML4--ALK	chr2	42301394	chr2	29223584	8	inversion	high
+test	NPM1--ALK	chr5	171391799	chr2	29223528	7	translocation	high
+test	CD74--ROS1	chr5	150404680	chr6	117324415	6	translocation	high
+test	TMPRSS2--ETV1	chr21	41494375	chr7	13935838	15	translocation	medium
+test	EWSR1--ATF1	chr22	29287134	chr12	50814280	9	translocation	medium
+test	CIC--DUX4L8	chr19	42295049	chr4	190068609	9	translocation	medium
+test	EWSR1--FLI1	chr22	29287134	chr11	128807180	8	translocation	medium

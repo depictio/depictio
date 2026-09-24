@@ -1198,14 +1198,29 @@ _KRAKEN_MODULE_ORDER = [
 ]
 
 
+# Falco output is read by MultiQC's FastQC module, which anchors itself `falco`
+# only when every file it parsed is Falco's. Run it twice, split by path, so a
+# report that also carries FastQC keeps both sections. As with Kraken, naming
+# `fastqc` here replaces its default run, hence the second entry.
+_FALCO_MODULE_ORDER = [
+    {"fastqc": {"name": "Falco", "anchor": "falco", "path_filters": ["*_falco/*"]}},
+    {"fastqc": {"path_filters_exclude": ["*_falco/*"]}},
+]
+
+
 def module_order_for(sections: list[str]) -> list[dict] | None:
     """The `module_order` these sections need, or None when the default will do.
 
-    Only requested when a Kraken-derived alias is in play: the override replaces
-    the plain `kraken` run, so applying it unconditionally would change how an
-    unrelated report is built.
+    Only requested when a Kraken-derived alias or Falco is in play: each
+    override replaces the plain module's run, so applying it unconditionally
+    would change how an unrelated report is built.
     """
-    return _KRAKEN_MODULE_ORDER if {"bracken", "centrifuge"} & set(sections) else None
+    order: list[dict] = []
+    if {"bracken", "centrifuge"} & set(sections):
+        order += _KRAKEN_MODULE_ORDER
+    if "falco" in sections:
+        order += _FALCO_MODULE_ORDER
+    return order or None
 
 
 def deeptools(sample: str) -> dict[str, str]:
@@ -1919,20 +1934,403 @@ def gtdbtk(sample: str) -> dict[str, str]:
     return {f"{sample}.bac120.summary.tsv": header + "\n" + row + "\n"}
 
 
+def sortmerna(sample: str) -> dict[str, str]:
+    """SortMeRNA >= 4.2 `*.sortmerna.log`. MultiQC keys on the literal
+    `Minimal SW score based on E-value` line; the sample is the basename of the
+    `Reads file` path, and the per-database block after `Coverage by database:`
+    is what the detailed hit-count bar plot draws.
+    """
+    total = _vary(sample, 900_000, 1_100_000)
+    rrna = _vary(sample, 20_000, 90_000)
+    body = f"""
+ Program:     SortMeRNA version 4.3.6
+ Command:     sortmerna --ref rfam-5.8s-database-id98.fasta --ref silva-euk-18s-id95.fasta --reads {sample}.fastq.gz
+
+ Process pid = 12345
+
+ Parameters summary:
+    Reference file: rfam-5.8s-database-id98.fasta
+        Seed length = 18
+        Pass 1 = 18, Pass 2 = 9, Pass 3 = 3
+        Gumbel lambda = 0.602330
+        Gumbel K = 0.332702
+        Minimal SW score based on E-value = 48
+    Number of seeds = 2
+    Edges = 4
+    SW match = 2
+    SW mismatch = -3
+    SW gap open penalty = 5
+    SW gap extend penalty = 2
+    SW ambiguous nucleotide = -3
+    SQ tags are not output
+    Number of alignment processing threads = 4
+    Reads file = {sample}.fastq.gz
+    Total reads = {total}
+
+ Results:
+    Total reads = {total}
+    Total reads passing E-value threshold = {rrna} ({rrna / total * 100:.2f})
+    Total reads failing E-value threshold = {total - rrna} ({(total - rrna) / total * 100:.2f})
+    Minimum read length = 30
+    Maximum read length = 75
+    Mean read length    = 73
+
+ Coverage by database:
+    rfam-5.8s-database-id98.fasta\t\t{_vary(sample, 1, 30) / 100:.2f}%
+    silva-euk-18s-id95.fasta\t\t{rrna / total * 100 - 0.3:.2f}%
+
+"""
+    return {f"{sample}.sortmerna.log": body}
+
+
+# riboWaltz regions exactly as the module names its bar categories.
+_RIBO_REGIONS = ("5' UTR", "CDS", "3' UTR")
+
+
+def ribowaltz(sample: str) -> dict[str, str]:
+    """The three riboWaltz QC tables nf-core/riboseq writes per sample.
+
+    MultiQC needs `ribowaltz` in each filename (the headers are generic) and
+    keys on the header line; the sample name comes from the `sample` column.
+    """
+    cds = _vary(sample, 70, 85)
+    utr5 = _vary(sample, 5, 15)
+    shares = {"5' UTR": utr5, "CDS": cds, "3' UTR": 100 - cds - utr5}
+    region = ["sample\tregion\tcount\tscaled_count"]
+    region += [f"{sample}\t{r}\t{shares[r] * 1_000}\t{shares[r]:.1f}" for r in _RIBO_REGIONS]
+
+    frames = ["sample\tregion\tframe\tcount\tscaled_count"]
+    for r in _RIBO_REGIONS:
+        # In-frame enrichment in the CDS only, as real footprints show.
+        split = (60, 25, 15) if r == "CDS" else (34, 33, 33)
+        frames += [
+            f"{sample}\t{r}\t{f}\t{split[f] * shares[r] * 10}\t{split[f]:.1f}" for f in range(3)
+        ]
+
+    meta = ["sample\tregion\tx\ty"]
+    for label in ("Distance from start (nt)", "Distance from stop (nt)"):
+        for x in range(-24, 25):
+            # A 3-nt period peaking on frame 0: the periodicity the plot is for.
+            y = (6.0 if x % 3 == 0 else 1.5) + _vary(sample, 0, 9) / 10.0
+            meta.append(f"{sample}\t{label}\t{x}\t{y:.2f}")
+    return {
+        f"{sample}.ribowaltz_psite_region.tsv": "\n".join(region) + "\n",
+        f"{sample}.ribowaltz_frames.tsv": "\n".join(frames) + "\n",
+        f"{sample}.ribowaltz_metaprofile_psite.tsv": "\n".join(meta) + "\n",
+    }
+
+
+def ribotish(sample: str) -> dict[str, str]:
+    """Ribo-TISH `quality` output `{sample}_qual.txt`.
+
+    The module reads line 4 only: a Python dict literal of read length to the
+    per-frame counts `[f0, f1, f2]`. The first three lines are the other
+    profiles `ribotish quality` writes and are not parsed.
+    """
+    lengths = range(25, 35)
+    frames = {
+        n: [
+            _vary(sample, 4_000, 6_000) * (3 if n in (28, 29) else 1),
+            _vary(sample, 900, 1_300),
+            _vary(sample, 700, 1_100),
+        ]
+        for n in lengths
+    }
+    profile = {n: [0] * 3 for n in lengths}
+    body = "\n".join(
+        [
+            str({n: 1 for n in lengths}),
+            str(profile),
+            str(profile),
+            str(frames),
+        ]
+    )
+    return {f"{sample}_qual.txt": body + "\n"}
+
+
+def mirtrace(sample: str) -> dict[str, str]:
+    """miRTrace `qc` outputs, one set for the whole run.
+
+    Emitted once, like `nonpareil`: miRTrace writes a single results JSON and
+    single per-statistic tables with one column per library, and the module
+    takes the sample names from the JSON `verbosename` and the table headers.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    results = []
+    for s in SAMPLES:
+        total = _vary(s, 800_000, 1_200_000)
+        qc = [_vary(s, 5_000, 9_000), _vary(s, 2_000, 4_000), _vary(s, 60_000, 90_000)]
+        qc.append(_vary(s, 10_000, 20_000))
+        qc.append(total - sum(qc))
+        rna = [_vary(s, 400_000, 600_000), _vary(s, 50_000, 90_000), _vary(s, 20_000, 40_000)]
+        rna.append(_vary(s, 5_000, 10_000))
+        rna.append(qc[4] - sum(rna))
+        results.append(
+            {
+                "filename": f"{s}.fastq.gz",
+                "verbosename": s,
+                "stats": {"allSeqsCount": total, "statsQC": qc, "statsRNAType": rna},
+            }
+        )
+    lengths = range(15, 41)
+    header = "\t".join(SAMPLES)
+    length = [f"LENGTH\t{header}"] + [
+        f"{n}\t"
+        + "\t".join(str(_vary(s, 100, 900) * (20 if 20 <= n <= 24 else 1)) for s in SAMPLES)
+        for n in lengths
+    ]
+    clades = ("primates", "rodents", "lizards_and_birds", "fish", "insects", "nematode", "monocots")
+    contamination = [f"CLADE\t{header}"] + [
+        f"{c}\t" + "\t".join(str(_vary(s, 10, 90) * (500 if i == 0 else 1)) for s in SAMPLES)
+        for i, c in enumerate(clades)
+    ]
+    complexity = [f"DISTINCT_MIRNA_HAIRPINS_ACCUMULATED_COUNT\t{header}"] + [
+        f"{depth}\t" + "\t".join(str(min(900, depth // 200 + _vary(s, 0, 40))) for s in SAMPLES)
+        for depth in range(0, 200_001, 20_000)
+    ]
+    return {
+        "mirtrace/mirtrace-results.json": json.dumps({"results": results}),
+        "mirtrace/mirtrace-stats-length.tsv": "\n".join(length) + "\n",
+        "mirtrace/mirtrace-stats-contamination_basic.tsv": "\n".join(contamination) + "\n",
+        "mirtrace/mirtrace-stats-mirna-complexity.tsv": "\n".join(complexity) + "\n",
+    }
+
+
+# The isomiR categories mirtop stats reports; the module plots `{cat}_sum`,
+# `{cat}_count` and `{cat}_mean` for each.
+_MIRTOP_CATS = ("ref_miRNA", "iso_3p", "iso_5p", "iso_add3p", "iso_snv")
+
+
+def mirtop(sample: str) -> dict[str, str]:
+    """`mirtop stats` JSON log `*_mirtop_stats.log` (one sample per file here).
+
+    The sample name is the key under `metrics`, not the filename.
+    """
+    metrics: dict[str, float] = {}
+    for idx, cat in enumerate(_MIRTOP_CATS):
+        count = _vary(sample, 50, 300) // (idx + 1)
+        total = count * _vary(sample, 20, 60)
+        metrics[f"{cat}_count"] = count
+        metrics[f"{cat}_sum"] = total
+        metrics[f"{cat}_mean"] = round(total / count, 3)
+    iso = [c for c in _MIRTOP_CATS if c != "ref_miRNA"]
+    metrics["isomiR_count"] = sum(metrics[f"{c}_count"] for c in iso)
+    metrics["isomiR_sum"] = sum(metrics[f"{c}_sum"] for c in iso)
+    payload = {"meta": {"version": "v0.4.25"}, "metrics": {sample: metrics}}
+    return {f"{sample}_mirtop_stats.log": json.dumps(payload)}
+
+
+_PERCOLATOR_FEATURES = (
+    "MS:1002252",
+    "MS:1002255",
+    "ionb_min_abs_diff",
+    "iony_min_abs_diff",
+    "rt_diff",
+)
+
+
+def percolator(sample: str) -> dict[str, str]:
+    """Percolator `--weights` output `*percolator_feature_weights.tsv`.
+
+    A header of feature names, then three rows per cross-validation fold of
+    which the module reads the first (the normalised weights). The sample name
+    is the filename.
+    """
+    rows = ["\t".join(_PERCOLATOR_FEATURES)]
+    for fold in range(3):
+        normalised = [
+            f"{(_vary(sample, 1, 90) + 13 * i + fold) / 100 * (1 if i % 2 else -1):.4f}"
+            for i in range(len(_PERCOLATOR_FEATURES))
+        ]
+        raw = [f"{float(v) * 2.5:.4f}" for v in normalised]
+        rows += ["\t".join(normalised), "\t".join(raw), "\t".join(raw)]
+    return {f"{sample}.percolator_feature_weights.tsv": "\n".join(rows) + "\n"}
+
+
+def bcl2fastq(sample: str) -> dict[str, str]:
+    """bcl2fastq `Stats/Stats.json`, one file for the flow cell.
+
+    Emitted once: every library of the run is a `DemuxResults` entry of one
+    JSON, and `UnknownBarcodes` feeds the undetermined-barcodes plot.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    conversion = []
+    unknown = []
+    for lane in (1, 2):
+        demux = []
+        for s in SAMPLES:
+            reads = _vary(s, 800_000, 1_200_000) + lane * 1_000
+            yield_ = reads * 150
+            demux.append(
+                {
+                    "SampleId": s,
+                    "SampleName": s,
+                    "IndexMetrics": [
+                        {
+                            "IndexSequence": "ACGTACGT",
+                            "MismatchCounts": {
+                                "0": int(reads * 0.97),
+                                "1": reads - int(reads * 0.97),
+                            },
+                        }
+                    ],
+                    "NumberReads": reads,
+                    "Yield": yield_,
+                    "ReadMetrics": [
+                        {
+                            "ReadNumber": 1,
+                            "Yield": yield_,
+                            "YieldQ30": int(yield_ * 0.92),
+                            "QualityScoreSum": yield_ * 35,
+                            "TrimmedBases": 0,
+                        }
+                    ],
+                }
+            )
+        undetermined = 40_000 + lane * 5_000
+        conversion.append(
+            {
+                "LaneNumber": lane,
+                "TotalClustersRaw": 5_000_000,
+                "TotalClustersPF": 4_000_000,
+                "Yield": sum(d["Yield"] for d in demux),
+                "DemuxResults": demux,
+                "Undetermined": {
+                    "NumberReads": undetermined,
+                    "Yield": undetermined * 150,
+                    "ReadMetrics": [
+                        {
+                            "ReadNumber": 1,
+                            "Yield": undetermined * 150,
+                            "YieldQ30": undetermined * 120,
+                            "QualityScoreSum": undetermined * 150 * 30,
+                            "TrimmedBases": 0,
+                        }
+                    ],
+                },
+            }
+        )
+        unknown.append(
+            {
+                "Lane": lane,
+                "Barcodes": {
+                    "GGGGGGGG": 20_000 + lane * 100,
+                    "NNNNNNNN": 8_000,
+                    "ACGTACGA": 3_000,
+                },
+            }
+        )
+    payload = {
+        "Flowcell": "CONFFLOWCELL",
+        "RunNumber": 1,
+        "RunId": "240101_CONF_0001_ACONFFLOWCELL",
+        "ReadInfosForLanes": [],
+        "ConversionResults": conversion,
+        "UnknownBarcodes": unknown,
+    }
+    return {"Stats/Stats.json": json.dumps(payload, indent=2)}
+
+
+def checkqc(sample: str) -> dict[str, str]:
+    """CheckQC `--json` stdout, one file per run folder.
+
+    CheckQC only reports what fails, so a sample appears in the report only
+    through an issue: every stub library gets a reads-per-sample warning, and
+    one lane each carries an undetermined-percentage and an overrepresented
+    unknown-index issue so all three catalogued plots have data.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    reads = [
+        {
+            "type": "warning",
+            "message": f"Number of reads for sample {s} was too low on lane 1",
+            "data": {
+                "lane": 1,
+                "number_of_samples": len(SAMPLES),
+                "sample_id": s,
+                "sample_name": s,
+                "sample_reads": _vary(s, 5, 9),
+                "threshold": 10,
+            },
+        }
+        for s in SAMPLES
+    ]
+    undetermined = [
+        {
+            "type": "error",
+            "message": "The percentage of undetermined indexes was to high on lane 1",
+            "data": {
+                "lane": 1,
+                "percentage_undetermined": 12.5,
+                "threshold": 10,
+                "computed_threshold": 10.8,
+                "phix_on_lane": 0.8,
+            },
+        }
+    ]
+    unidentified = [
+        {
+            "type": "warning",
+            "message": "Overrepresented unknown barcode",
+            "data": {
+                "msg": (
+                    f"Index: {index} on lane: 1 was significantly overrepresented "
+                    f"({share}%) at significance threshold of: 1.0%."
+                )
+            },
+        }
+        for index, share in (("GGGGGGGG+AGATCTCG", 4.2), ("NNNNNNNN+NNNNNNNN", 1.7))
+    ]
+    payload = {
+        "exit_status": 1,
+        "version": "4.0.7",
+        "run_summary": {
+            "instrument_and_reagent_type": "novaseq_SP",
+            "read_length": "151-151",
+            "handlers": [],
+        },
+        "ReadsPerSampleHandler": reads,
+        "UndeterminedPercentageHandler": undetermined,
+        "UnidentifiedIndexHandler": unidentified,
+    }
+    return {"checkqc.json": json.dumps(payload, indent=2)}
+
+
+def falco(sample: str) -> dict[str, str]:
+    """Falco's `fastqc_data.txt`: FastQC's format under a `##Falco` banner.
+
+    MultiQC has no Falco module; its FastQC module reads Falco output and only
+    anchors the result `falco` when *every* file it parsed came from Falco. With
+    a FastQC stub in the same report both would merge into one `fastqc` section,
+    so `module_order_for` runs the FastQC module twice, split by path.
+    """
+    files = fastqc(sample)
+    ((_, body),) = files.items()
+    return {
+        f"{sample}_falco/fastqc_data.txt": body.replace("##FastQC\t0.12.1", "##Falco\t1.2.1", 1)
+    }
+
+
 STUB_BUILDERS = {
     "adapterremoval": adapterremoval,
     "ataqv": ataqv,
     "bcftools": bcftools,
+    "bcl2fastq": bcl2fastq,
     "bismark": bismark,
     "bowtie2": bowtie2,
     "bracken": bracken,
     "cellranger": cellranger,
     "centrifuge": centrifuge,
     "checkm2": checkm2,
+    "checkqc": checkqc,
     "cutadapt": cutadapt,
     "damageprofiler": damageprofiler,
     "deeptools": deeptools,
     "dupradar": dupradar,
+    "falco": falco,
     "fastp": fastp,
     "fastqc": fastqc,
     "featurecounts": featurecounts,
@@ -1946,23 +2344,29 @@ STUB_BUILDERS = {
     "kraken": kraken,
     "malt": malt,
     "metaphlan": metaphlan,
+    "mirtop": mirtop,
+    "mirtrace": mirtrace,
     "mosdepth": mosdepth,
     "nanoq": nanoq,
     "nanostat": nanostat,
     "nonpareil": nonpareil,
     "nsc": nsc_coefficient,
+    "percolator": percolator,
     "picard": picard,
     "porechop": porechop,
     "preseq": preseq,
     "prokka": prokka,
     "qualimap": qualimap,
     "quast": quast,
+    "ribotish": ribotish,
+    "ribowaltz": ribowaltz,
     "rsc": rsc_coefficient,
     "rseqc": rseqc,
     "salmon": salmon,
     "samtools": samtools,
     "snpeff": snpeff,
     "sompy": sompy,
+    "sortmerna": sortmerna,
     "star": star,
     "strand": strand_shift_correlation,
     "summary": summary,

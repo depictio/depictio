@@ -1,0 +1,14 @@
+# rMATS: replicate multivariate analysis of transcript splicing. nf-core/rnasplice
+# runs `rmats.py --task prep` then `--task post` from LOCAL modules
+# (modules/local/rmats_prep.nf, rmats_post.nf); only the prep step exists in
+# nf-core/modules, so identity points at the pipeline module that writes the
+# tables read here. One directory per contrast, one `<TYPE>.MATS.<JC|JCEC>.txt`
+# table per event type; the recipes match on those file names.
+id: rmats
+name: rMATS
+description: >-
+  Differential alternative splicing of annotated and novel events (skipped
+  exons, retained introns, mutually exclusive exons, alternative 3' and 5'
+  splice sites) between two groups of replicated RNA-seq samples.
+homepage: https://github.com/Xinglab/rmats-turbo
+source_url: https://github.com/nf-core/rnasplice/blob/1.0.4/modules/local/rmats_post.nf

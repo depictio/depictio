@@ -1,0 +1,30 @@
+id: busco_batch_summary
+name: BUSCO completeness per assembly
+mode: batch-summary
+description: >-
+  One row per assessed assembly from BUSCO's batch summary: the complete,
+  single-copy, duplicated, fragmented and missing percentages against the lineage
+  dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is
+  the headline; a high duplicated share on a haploid target points at retained
+  haplotigs, a high fragmented share at a base-level error rate high enough to
+  break gene models.
+find:
+  path_glob: "**/*-busco.batch_summary.txt"
+  path_glob_alt:
+    - "**/*-busco/batch_summary.txt"
+    - "**/*batch_summary.txt"
+recipe: busco/batch_summary.py
+fixture: batch_summary.tsv
+renders_as:
+  - { id: completeness_vs_duplication, component: advanced_viz, kind: scatter_xy,
+      roles: {x: complete_pct, y: duplicated_pct, label: assembly_id, color: lineage, size: contig_n50} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: complete_pct, color: lineage, title: Complete BUSCOs per assembly} }
+  - { component: card, column: complete_pct, aggregation: max,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: duplicated_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: missing_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: assembly_id, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: lineage }
+  - { component: table }

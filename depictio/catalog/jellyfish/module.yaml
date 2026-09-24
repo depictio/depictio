@@ -1,0 +1,12 @@
+# Jellyfish: k-mer counting. The histogram of k-mer multiplicities is the
+# read spectrum every reference-free genome profile starts from: the error peak
+# at multiplicity 1, the homozygous peak at the sequencing depth, and a
+# heterozygous peak at half of it when the genome is diploid and heterozygous.
+# One output, the histogram (`jellyfish histo`), which nf-core/genomeassembler
+# publishes next to GenomeScope's fit to it (`depictio/catalog/genomescope/`).
+# The `.jf` count databases are not read.
+id: jellyfish
+name: Jellyfish
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/jellyfish/count
+homepage: https://github.com/gmarcais/Jellyfish
+description: K-mer counting and the read k-mer spectrum.

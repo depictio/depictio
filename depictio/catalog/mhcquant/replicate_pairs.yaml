@@ -1,0 +1,17 @@
+id: mhcquant_replicate_pairs
+name: Replicate intensity pairs
+mode: immunopeptidomics/replicate-pairs
+description: >-
+  Log10 intensity of each peptide in two replicates of the same sample, for
+  every replicate pair, restricted to the peptides quantified in both. A good
+  pair hugs the diagonal.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/replicate_pairs.py
+fixture: replicate_pairs.tsv
+renders_as:
+  - id: replicate_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: intensity_a, y: intensity_b, label: peptide, color: pair }
+  - { component: interactive, interactive_type: MultiSelect, column_name: pair }
+  - { component: table }

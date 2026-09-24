@@ -2,9 +2,11 @@ id: rtgtools_vcfeval_summary
 name: vcfeval benchmark summary
 mode: benchmark-summary
 description: >-
-  Per-sample / per-caller variant-calling accuracy (TP/FP/FN, precision, recall,
-  F1) from rtg-tools vcfeval's aggregated summary. Serves both germline (small/)
-  and somatic (indel/) categories.
+  Per-callset variant-calling accuracy (TP/FP/FN, precision, recall, F1) from
+  rtg-tools vcfeval's aggregated summary. `label` is the callset's samplesheet
+  id, `caller` the tool that made the calls and `truth_set` the truth set it was
+  compared against. Serves the germline (small/) and somatic (snv/, indel/)
+  routes with the same vocabulary.
 find: { path_glob: "**/summary/tables/rtgtools/rtgtools.summary.csv" }
 recipe: rtgtools/vcfeval_summary.py
 fixture: vcfeval_summary.tsv

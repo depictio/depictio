@@ -29,6 +29,7 @@ bin through the same two calls; only the column names and the separator change.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
@@ -162,6 +163,84 @@ def bin_delimited_file(
         bin_size=bin_size,
         weight_col=weight_col,
     )
+
+
+def complete_window_frame(
+    files: Sequence[tuple[str, str]],
+    *,
+    column_names: list[str],
+    chrom_col: str = "chrom",
+    pos_col: str = "start",
+    value_col: str = "value",
+    bin_size: int = DEFAULT_BIN_SIZE,
+    skip_rows: int = 0,
+    min_obs: int = 1,
+    min_windows_per_contig: int = 1,
+    label: str = "genomic_bins",
+) -> pl.DataFrame:
+    """Bin one file per sample and keep the windows every sample measured.
+
+    The shared front half of every cohort panel downstream of binning: each
+    ``(path, sample)`` is streamed through ``bin_delimited_file``, windows with
+    fewer than ``min_obs`` observations are dropped, only the windows left in
+    **every** sample are kept (so a PCA, a correlation and a per-window test all
+    read the same complete matrix), and contigs with fewer than
+    ``min_windows_per_contig`` such windows are dropped, which removes unplaced
+    scaffolds and the mitochondrion without naming an assembly.
+
+    Returns a long frame ``sample, chromosome, start, end, mean, n``. Raises
+    ``ValueError`` (prefixed with ``label``) when a file keeps no window or when
+    the samples share none.
+    """
+    per_sample: list[pl.DataFrame] = []
+    for path, sample in files:
+        binned = bin_delimited_file(
+            path,
+            column_names=column_names,
+            chrom_col=chrom_col,
+            pos_col=pos_col,
+            value_col=value_col,
+            bin_size=bin_size,
+            skip_rows=skip_rows,
+        )
+        kept = binned.filter(pl.col("n") >= min_obs).select(
+            pl.lit(sample, pl.Utf8).alias("sample"),
+            pl.col("chrom").alias("chromosome"),
+            "start",
+            "end",
+            "mean",
+            "n",
+        )
+        if kept.is_empty():
+            raise ValueError(
+                f"{label}: no window of {Path(path).name} reached {min_obs} observations"
+            )
+        per_sample.append(kept)
+    if not per_sample:
+        raise ValueError(f"{label}: no file to bin")
+
+    long = pl.concat(per_sample)
+    n_samples = long.get_column("sample").n_unique()
+    complete = (
+        long.group_by(["chromosome", "start"])
+        .agg(pl.col("sample").n_unique().alias("_samples"))
+        .filter(pl.col("_samples") == n_samples)
+        .drop("_samples")
+    )
+    dense_contigs = (
+        complete.group_by("chromosome")
+        .agg(pl.len().alias("_windows"))
+        .filter(pl.col("_windows") >= min_windows_per_contig)
+        .get_column("chromosome")
+        .to_list()
+    )
+    complete = complete.filter(pl.col("chromosome").is_in(dense_contigs))
+    if complete.is_empty():
+        raise ValueError(
+            f"{label}: no window is covered in every sample on any contig with at least "
+            f"{min_windows_per_contig} windows; the samples share no comparable genomic space"
+        )
+    return long.join(complete, on=["chromosome", "start"], how="inner")
 
 
 def window_id_expr(

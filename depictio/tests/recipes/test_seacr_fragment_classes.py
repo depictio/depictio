@@ -116,3 +116,15 @@ def test_a_padded_class_takes_the_samples_real_target(tmp_path: Path) -> None:
     ladder = _ladder([("s1_R1", 100, 10), ("s1_R1", 200, 30)])
     out = execute_recipe(RECIPE, tmp_path, extra_sources={"fragments": ladder})
     assert out["target"].to_list() == ["s1"] * 4
+
+
+def test_the_sample_median_is_weighted_by_fragments_not_by_rows(tmp_path: Path) -> None:
+    # Three lengths, but most fragments are short: the row median (the middle of
+    # the x axis) would be 300, the fragment median is 100.
+    ladder = _ladder([("s1", 100, 8), ("s1", 300, 1), ("s1", 500, 1), ("s2", 200, 1)])
+    out = execute_recipe(RECIPE, tmp_path, extra_sources={"fragments": ladder})
+
+    medians = dict(zip(out["sample"].to_list(), out["sample_median_length"].to_list()))
+    assert medians == {"s1": 100.0, "s2": 200.0}
+    # Repeated on each of the four class rows, so a card weighs every sample once.
+    assert out.group_by("sample").len()["len"].to_list() == [4, 4]

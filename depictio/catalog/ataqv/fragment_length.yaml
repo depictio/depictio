@@ -18,7 +18,7 @@ renders_as:
   - { component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction_of_all_reads, color: sample, title: Fragment length distribution} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_count, color: fragment_class, title: Reads per fragment class} }
   - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }
-  - { component: card, column: fragment_class, aggregation: count, secondary_layout: donut, breakdown_col: fragment_class }
-  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: read_count, aggregation: nunique, secondary_layout: composition, breakdown_col: fragment_class }
+  # No count or median card over this table: it has one row per (library,
+  # length), so either measures the x axis of the ladder, not the fragments.
+  # The per-library median fragment length is `ataqv/metrics.median_fragment_length`.
   - { component: table }

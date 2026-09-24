@@ -20,22 +20,39 @@ Rows whose breakpoint does not parse as ``chr:pos`` are dropped rather than
 placed at position 0: a chord drawn at the wrong locus is worse than a chord
 that is not drawn, and the renderer already reports how many links it left out.
 
-The per-sample file carries no sample column, and the recipe harness
-concatenates the globbed files without their paths, so no ``sample`` column can
-be recovered here either (same limitation as ``arriba/fusions.py``). The fusion
-call is the unit of analysis.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
 
 Output columns:
-    label, chrom_a, pos_a, chrom_b, pos_b, weight, category, confidence
+    sample, label, chrom_a, pos_a, chrom_b, pos_b, weight, category, confidence
 """
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`arriba/<sample>.arriba.fusions.tsv`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".arriba.fusions.tsv"
+
+
+def _sample() -> pl.Expr:
+    """``arriba/S1.arriba.fusions.tsv`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
+        source_path=_SOURCE_PATH,
         glob_pattern="arriba/*.arriba.fusions.tsv",
         format="TSV",
         read_kwargs={
@@ -49,6 +66,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "label": pl.Utf8,
     "chrom_a": pl.Utf8,
     "pos_a": pl.Int64,
@@ -97,6 +115,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
 
     return parsed.select(
+        _sample(),
         pl.concat_str(_text("#gene1"), pl.lit("--"), _text("gene2")).alias("label"),
         pl.col("_chrom_breakpoint1").alias("chrom_a"),
         pl.col("_pos_breakpoint1").alias("pos_a"),

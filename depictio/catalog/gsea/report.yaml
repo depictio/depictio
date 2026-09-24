@@ -37,9 +37,10 @@ renders_as:
       breakdown_col: phenotype,
       top_n_count: 4,
     }
+  # On |NES|: the strongest set can sit at the negative pole.
   - {
       component: card,
-      column: nes,
+      column: abs_nes,
       aggregation: max,
       aggregations: [box_plot_stats],
       secondary_layout: box_plot,
@@ -56,8 +57,8 @@ renders_as:
   - {
       component: card,
       column: leading_edge_percent,
-      aggregation: average,
-      secondary_layout: gauge,
-      coverage_max: 100,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
     }
   - { component: table, row_selection_enabled: true, row_selection_column: term }

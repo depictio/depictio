@@ -6,6 +6,8 @@ description: >-
   matrix, read from the file the pipeline publishes rather than recomputed, so
   the dashboard and the MultiQC report show the same points. The variance each
   component explains is parsed out of the file header and kept as a column.
+  A run with several count matrices (one per antibody, merge level or aligner
+  route) gets one PCA per matrix, told apart by the pca_set column.
 find:
   path_glob: "**/*pca.vals.txt"
   path_glob_alt: # MultiQC custom-content flavour written by chipseq and atacseq

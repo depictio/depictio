@@ -1,0 +1,13 @@
+# Merqury: reference-free assembly accuracy and completeness from k-mers. The
+# read k-mers are the truth set: a k-mer found in the assembly but never in the
+# reads is an assembly error (the QV), a solid read k-mer missing from the
+# assembly is lost sequence (the completeness), and the copy number each read
+# k-mer gets in the assembly shows collapsed repeats and retained haplotigs.
+# Three outputs: the assembly-level QV and completeness, the per-sequence QV,
+# and the copy-number composition of the read k-mers. The PNG plots and the
+# `*_only.bed`/`.wig` error tracks are not read.
+id: merqury
+name: Merqury
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/merqury/merqury
+homepage: https://github.com/marbl/merqury
+description: K-mer based assembly consensus quality (QV), k-mer completeness and copy-number spectra.

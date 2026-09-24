@@ -7,9 +7,9 @@ description: >-
   1 Mb windows and reports the target-length-weighted mean depth of each
   window, so a capture panel with a few hundred thousand unevenly spaced
   targets becomes a track a browser can draw and an eye can read. Only the
-  primary contigs are kept. One lane per sample and alignment stage
-  (duplicate-marked, then recalibrated), so a stage that lost coverage shows
-  up as a lane that dropped rather than as a number to look up.
+  primary contigs are kept. One lane per sample: when mosdepth ran on more
+  than one alignment stage of a sample (duplicate-marked, then recalibrated),
+  one pass is kept, since both measure the same alignments.
 find:
   path_glob: "**/*.regions.bed.gz"
 recipe: mosdepth/regions.py

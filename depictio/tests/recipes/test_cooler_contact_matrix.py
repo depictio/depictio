@@ -178,7 +178,7 @@ def test_a_derived_cell_is_the_sum_of_the_cells_it_merged(recipe) -> None:
 
     fine = out.filter(pl.col("resolution") == 500_000)
     coarse = out.filter(pl.col("resolution") == 1_000_000)
-    # The 1 Mb cell at (0, 0) merges the 500 kb cells (0,0), (0,1), (1,1)  - 
+    # The 1 Mb cell at (0, 0) merges the 500 kb cells (0,0), (0,1), (1,1)  -
     # (1,0) is not in the dump, only its mirror is.
     merged = fine.filter(pl.col("start1") < 1_000_000, pl.col("start2") < 1_000_000)
     got = coarse.filter(pl.col("start1") == 0, pl.col("start2") == 0)["count"].to_list()

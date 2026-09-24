@@ -2,7 +2,8 @@ id: cellranger_cell_expression_long
 name: Marker expression per cell, long
 mode: analysis/cell_expression_long
 description: >-
-  The curated panel half of the cell x gene matrix, melted to one row per
+  The marker-panel slice of the cell x gene matrix (MARKER_PANEL when set, else
+  the top markers of each cluster), melted to one row per
   (cell, gene), so a distribution plot can show the spread of one marker
   across clusters rather than the cluster mean a dot plot draws.
 find:
