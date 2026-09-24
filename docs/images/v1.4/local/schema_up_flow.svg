@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="610" viewBox="0 0 1420 610">
+  <rect width="1420" height="610" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">What <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="22.0">depictio local up</tspan> does</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">from a bare machine with uv to a dashboard: ~40 s the first time, ~20 s after</text>
+  <rect x="40.0" y="120.0" width="190.0" height="132.0" rx="6" fill="#e7f5ff"/>
+  <path d="M40.1,119.8 C102.8,118.9 167.1,118.6 229.3,120.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.9,120.5 C101.9,119.8 165.3,118.7 229.4,119.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M230.8,119.3 C230.4,165.4 230.2,207.7 230.6,251.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M229.5,120.1 C228.9,162.8 229.4,209.0 230.2,251.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M230.3,251.9 C166.8,250.6 101.9,251.1 39.7,252.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M229.6,252.1 C166.5,251.4 104.3,252.6 40.0,252.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.9,252.4 C40.7,207.3 41.5,162.8 39.4,120.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.6,251.7 C38.5,208.5 40.8,164.2 40.3,120.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="135.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">uvx</tspan></text>
+  <text x="135.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">resolves</text>
+  <text x="135.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">depictio[local]</tspan></text>
+  <text x="135.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">~2 GB env, cached</text>
+  <rect x="270.0" y="120.0" width="190.0" height="132.0" rx="6" fill="#ffe8cc"/>
+  <path d="M270.0,120.3 C333.6,119.9 397.8,121.4 459.3,120.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.8,120.3 C333.8,121.6 397.7,119.3 459.2,119.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.4,119.6 C458.9,162.8 458.6,208.9 459.8,252.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M460.5,120.6 C458.7,163.8 460.2,209.2 459.6,251.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.5,251.6 C396.2,253.2 334.8,250.9 269.6,252.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.8,252.1 C397.0,251.2 331.7,251.7 270.7,252.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.6,252.4 C270.0,208.4 270.6,162.6 270.6,120.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.3,251.3 C269.7,207.7 268.7,164.4 269.5,119.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="365.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">binaries</text>
+  <text x="365.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">py-rattler</tspan> →</text>
+  <text x="365.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">conda-forge</text>
+  <text x="365.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">first run only, 8 s</text>
+  <rect x="500.0" y="120.0" width="190.0" height="132.0" rx="6" fill="#ffffff"/>
+  <path d="M499.4,119.8 C562.8,118.6 625.1,118.9 689.2,120.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.8,119.4 C563.7,118.9 625.9,119.5 690.6,120.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M689.7,119.6 C689.9,163.9 688.7,206.7 690.5,251.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M690.1,119.2 C688.5,165.4 690.1,206.9 690.0,252.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M689.5,252.4 C627.8,252.6 562.6,251.6 500.1,252.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M690.6,252.5 C626.1,251.1 564.3,253.6 500.5,252.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.2,251.6 C499.1,208.1 499.5,162.5 499.6,120.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.7,251.8 C501.5,207.8 501.4,165.6 499.6,119.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="595.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">ports, secrets</text>
+  <text x="595.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">8058 27018 6379 9000</text>
+  <text x="595.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">or any free port</text>
+  <text x="595.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">secrets.json</tspan> 0600</text>
+  <rect x="730.0" y="120.0" width="190.0" height="132.0" rx="6" fill="#ebfbee"/>
+  <path d="M730.5,120.0 C792.4,119.1 857.1,121.3 920.2,120.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.4,120.0 C792.0,120.5 858.0,120.9 919.5,120.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.8,120.7 C919.5,165.0 921.5,207.7 920.4,251.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.4,120.5 C918.8,162.9 921.3,209.0 920.8,252.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.8,252.2 C856.2,252.2 792.2,250.4 730.0,252.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.6,251.7 C856.5,253.2 794.4,251.1 729.6,252.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.8,251.9 C729.2,207.7 728.8,165.3 730.1,120.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.0,251.2 C729.7,209.3 730.0,164.1 729.9,119.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="825.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">services</text>
+  <text x="825.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">mongod</tspan></text>
+  <text x="825.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">redis-server</tspan></text>
+  <text x="825.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">minio server</tspan></text>
+  <rect x="960.0" y="120.0" width="190.0" height="132.0" rx="6" fill="#fff9db"/>
+  <path d="M960.4,120.1 C1021.7,121.0 1085.6,119.9 1149.7,120.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.6,119.6 C1023.5,120.9 1085.4,120.2 1150.4,120.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1150.2,120.0 C1150.2,164.8 1151.3,207.8 1150.0,252.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1150.3,120.6 C1149.8,164.1 1149.9,209.4 1150.7,251.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1149.4,251.9 C1086.9,253.4 1024.4,250.8 959.3,251.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1149.4,252.3 C1085.3,252.5 1024.2,253.3 960.3,251.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.8,252.0 C961.2,209.5 959.1,165.4 960.8,120.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.5,251.7 C958.9,207.8 960.0,163.5 960.4,119.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1055.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">server</text>
+  <text x="1055.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">uvicorn</tspan>, 1 worker</text>
+  <text x="1055.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">celery</tspan>, 2 processes</text>
+  <text x="1055.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">wait for <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">/health</tspan></text>
+  <rect x="1190.0" y="120.0" width="190.0" height="132.0" rx="6" fill="#f3f0ff"/>
+  <path d="M1190.2,120.0 C1253.5,119.8 1315.1,119.5 1379.3,120.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1189.3,120.4 C1254.3,121.5 1315.4,119.2 1379.6,119.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.4,120.7 C1379.8,165.3 1381.0,207.2 1380.1,252.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.3,120.7 C1378.7,162.6 1380.6,207.8 1380.2,252.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.9,251.7 C1315.3,253.1 1251.9,253.2 1190.1,252.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.4,251.5 C1315.9,250.8 1253.4,251.2 1189.3,251.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1190.0,251.5 C1189.4,207.4 1190.8,163.3 1189.8,119.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1189.5,252.0 C1189.2,206.4 1190.7,164.2 1190.7,119.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1285.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">ingest</text>
+  <text x="1285.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">depictio run</tspan></text>
+  <text x="1285.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">--template --data-root</tspan></text>
+  <text x="1285.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">then <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">/dashboards</tspan></text>
+  <path d="M229.8,186.0 C244.6,185.7 256.6,187.3 270.4,187.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M229.8,185.7 C242.7,187.3 257.5,186.5 269.1,185.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.6,186.3 C265.0,184.3 261.3,180.9 258.0,179.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.7,185.9 C265.4,187.7 261.3,190.3 257.4,193.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.6,185.7 C475.2,186.2 485.6,187.9 499.0,185.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.0,185.5 C473.2,186.0 485.5,186.0 499.2,185.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.1,186.0 C495.0,182.9 491.4,181.1 487.9,179.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.5,185.6 C496.3,188.9 491.5,190.0 487.9,192.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M690.5,186.6 C701.5,187.3 718.2,186.5 729.3,186.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M690.2,186.8 C703.4,187.3 717.9,187.3 730.4,186.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M729.6,186.3 C725.3,182.9 721.0,181.3 717.7,179.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M730.3,186.2 C726.1,188.6 721.7,189.4 717.6,192.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.1,185.5 C934.0,184.3 947.6,185.0 960.5,185.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.0,186.4 C934.3,187.9 946.6,185.5 960.5,186.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.2,185.8 C956.2,183.0 951.1,181.1 947.7,178.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.2,185.8 C955.0,187.7 952.1,190.8 947.7,192.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1151.0,186.9 C1163.2,184.5 1178.2,184.8 1189.0,185.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1149.4,186.9 C1164.6,187.9 1176.5,185.1 1189.4,186.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1190.3,186.0 C1185.2,183.9 1182.7,180.9 1178.0,179.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1189.5,186.0 C1185.3,189.0 1181.7,189.4 1177.6,192.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="940.0" y="278.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">each one waited for (TCP port, health endpoint), then for <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.4">cli/admin_config.yaml</tspan></text>
+  <rect x="40.0" y="320.0" width="420.0" height="205.0" rx="6" fill="#ffffff"/>
+  <path d="M39.2,320.4 C178.9,319.5 319.4,321.1 460.5,319.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.8,319.8 C181.4,320.7 321.3,319.3 460.8,320.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.4,320.5 C459.6,388.1 459.3,455.2 459.7,525.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M459.8,320.7 C459.2,387.6 460.0,455.7 460.6,525.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M460.4,524.3 C320.4,526.3 181.4,525.2 40.4,524.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M460.7,524.4 C320.8,525.5 179.3,523.6 40.0,524.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.2,524.7 C39.4,457.4 41.5,387.6 40.1,319.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.0,524.6 C38.9,455.6 39.1,389.6 40.7,320.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="250.0" y="347.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">~/.depictio/local</tspan></text>
+  <text x="250.0" y="371.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">env/</tspan>: mongod, redis, minio (~360 MB)</text>
+  <text x="250.0" y="392.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">mongo/</tspan> <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">redis/</tspan> <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">minio/</tspan>: data</text>
+  <text x="250.0" y="413.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">keys/</tspan> + <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">cli/admin_config.yaml</tspan></text>
+  <text x="250.0" y="434.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">logs/&lt;service&gt;.log</tspan></text>
+  <text x="250.0" y="455.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">screenshots/</tspan>: thumbnails, off the package</text>
+  <text x="250.0" y="476.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">state.json</tspan>: pids and ports</text>
+  <text x="250.0" y="497.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">secrets.json</tspan>: generated, mode 0600</text>
+  <rect x="500.0" y="320.0" width="420.0" height="205.0" rx="6" fill="#ffffff"/>
+  <path d="M499.7,319.3 C639.8,318.8 779.0,318.7 919.6,319.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.9,320.0 C640.2,321.2 780.8,319.7 919.8,319.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.0,320.2 C918.6,387.6 921.5,455.5 920.6,524.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.7,320.6 C919.3,387.5 919.7,456.5 920.6,524.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.1,524.2 C778.5,525.7 641.3,524.9 499.8,525.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.4,524.4 C781.0,526.1 641.5,524.2 500.0,525.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.9,525.1 C501.4,457.4 500.5,389.2 499.3,320.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.4,524.6 C499.1,458.0 500.5,387.7 500.2,320.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="710.0" y="347.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">status</tspan> · <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">down</tspan> · <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">wipe</tspan></text>
+  <text x="710.0" y="371.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">status</tspan>: each service, its pid and port</text>
+  <text x="710.0" y="392.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">down</tspan>: SIGTERM each process group,</text>
+  <text x="710.0" y="413.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">in reverse start order</text>
+  <text x="710.0" y="434.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">wipe</tspan>: delete the data, keep the binaries</text>
+  <text x="710.0" y="455.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="710.0" y="476.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a second <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">up</tspan> while running only ingests,</text>
+  <text x="710.0" y="497.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the server is reused as is</text>
+  <rect x="960.0" y="320.0" width="420.0" height="205.0" rx="6" fill="#ffe3e3"/>
+  <path d="M959.8,319.6 C1098.8,318.6 1240.1,320.3 1380.2,319.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.6,320.0 C1099.4,319.9 1241.5,320.5 1379.6,319.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1380.0,320.3 C1381.5,389.0 1379.4,455.1 1379.9,524.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.7,319.9 C1380.5,389.7 1379.1,455.2 1380.3,524.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1380.8,524.7 C1241.0,525.8 1100.0,524.1 960.5,524.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1380.0,524.5 C1239.1,525.8 1099.3,526.4 959.6,524.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.5,525.8 C960.5,458.1 958.9,388.0 959.4,319.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.4,525.8 C958.6,456.3 961.3,389.6 960.7,319.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1170.0" y="347.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">when something goes wrong</text>
+  <text x="1170.0" y="371.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a process exits during startup:</text>
+  <text x="1170.0" y="392.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">stop what was started, name its log</text>
+  <text x="1170.0" y="413.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="1170.0" y="434.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a default port is taken: pick a free one</text>
+  <text x="1170.0" y="455.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">--port</tspan> is taken: refuse, say which</text>
+  <text x="1170.0" y="476.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="1170.0" y="497.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">no Chromium: thumbnails off, not errors</text>
+  <text x="40.0" y="580.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">measured on linux-64: cold uv + conda caches 41 s with the nf-core/rnaseq megatest, warm 20 s, iris example 8 s</text>
+</svg>
