@@ -403,6 +403,24 @@ class DashboardDataLite(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_linked_components(self) -> "DashboardDataLite":
+        """Refuse a record card whose `linked_component` names nothing here.
+
+        Checked at parse time rather than left to `to_full`: an unresolved link
+        would otherwise import as a card that never follows any selection, with
+        nothing on screen to say why.
+        """
+        from depictio.models.components.advanced_viz.record_link import (
+            resolve_linked_components,
+        )
+
+        resolve_linked_components(self._component_dicts())
+        return self
+
+    def _component_dicts(self) -> list[dict[str, Any]]:
+        return [c if isinstance(c, dict) else c.model_dump() for c in self.components]
+
     # Sentinel key names used to inject YAML comment separators between sections.
     # After yaml.dump(), these are replaced by comment lines via _apply_section_comments().
     SENTINEL_OPTIONAL: ClassVar[str] = "__section_optional__"
@@ -1064,6 +1082,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["aggregations"] = comp["aggregations"]
                 if comp.get("filter_expr"):
                     lite_comp["filter_expr"] = comp["filter_expr"]
+                if comp.get("follow_region_filter") is True:
+                    lite_comp["follow_region_filter"] = True
                 display = collect_display_fields(
                     comp,
                     [
@@ -1086,6 +1106,14 @@ class DashboardDataLite(BaseModel):
                 # Conditional data scoping
                 if comp.get("filter_expr"):
                     lite_comp["filter_expr"] = comp["filter_expr"]
+                if comp.get("slider_mode"):
+                    lite_comp["slider_mode"] = comp["slider_mode"]
+                # Declared initial state (mirror of `to_full`).
+                default_state = comp.get("default_state") or {}
+                if default_state.get("default_range") is not None:
+                    lite_comp["default_range"] = default_state["default_range"]
+                elif default_state.get("default_value") is not None:
+                    lite_comp["default_value"] = default_state["default_value"]
                 display = collect_display_fields(comp, ["title_size", "custom_color", "icon_name"])
                 if display:
                     lite_comp["display"] = display
@@ -1373,6 +1401,7 @@ class DashboardDataLite(BaseModel):
                         "threshold_warn": comp_dict.get("threshold_warn"),
                         "attrition_cols": comp_dict.get("attrition_cols") or [],
                         "trend_col": comp_dict.get("trend_col"),
+                        "follow_region_filter": bool(comp_dict.get("follow_region_filter")),
                     }
                 )
                 for f in [
@@ -1394,7 +1423,15 @@ class DashboardDataLite(BaseModel):
                         "column_name": comp_dict.get("column_name", ""),
                         "column_type": comp_dict.get("column_type", "object"),
                         "value": None,
-                        "default_state": None,
+                        # Declared defaults travel as ``default_state``, which the
+                        # viewer seeds its initial filter state from.
+                        "default_state": (
+                            {"default_range": list(comp_dict["default_range"])}
+                            if comp_dict.get("default_range") is not None
+                            else {"default_value": comp_dict["default_value"]}
+                            if comp_dict.get("default_value") is not None
+                            else None
+                        ),
                         "filter_expr": comp_dict.get("filter_expr"),
                         # Layout / grouping carried through from the lite model so
                         # the React viewer can bucket components into the top panel
@@ -1404,6 +1441,9 @@ class DashboardDataLite(BaseModel):
                         "timescale": comp_dict.get("timescale"),
                         "show_marks": comp_dict.get("show_marks"),
                         "show_histogram": comp_dict.get("show_histogram"),
+                        # Slider comparison (gte when absent); read by
+                        # deltatables_utils when the filter is applied.
+                        "slider_mode": comp_dict.get("slider_mode"),
                     }
                 )
                 for f in ["title_size", "custom_color", "icon_name"]:
@@ -1525,6 +1565,21 @@ class DashboardDataLite(BaseModel):
                 full_comp["body"] = comp_dict.get("body", "")
 
             full_components.append(full_comp)
+
+        # A record card's `linked_component` is written as a tag, but selection
+        # filters carry the emitting component's `index`, and a tag is not
+        # stored at all. Rewrite it to the index now that every component has
+        # one; `full_components` is positional with `self.components`.
+        from depictio.models.components.advanced_viz.record_link import (
+            resolve_linked_components,
+        )
+
+        for card_pos, source_pos in resolve_linked_components(self._component_dicts()).items():
+            card = full_components[card_pos]
+            card["config"] = {
+                **(card.get("config") or {}),
+                "linked_component": full_components[source_pos]["index"],
+            }
 
         full_dict["stored_metadata"] = full_components
 

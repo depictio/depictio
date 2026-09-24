@@ -116,11 +116,13 @@ def test_line_is_not_a_mark_because_genomespy_has_none():
         GenomeViewConfig(mark="line")  # type: ignore[arg-type]
 
 
-def test_annotation_only_offers_assemblies_with_a_shipped_gene_table():
+def test_annotation_falls_back_to_none_without_a_shipped_gene_table():
     for assembly in ("hg38", "mm10"):
         assert GenomeViewConfig(annotation=assembly).annotation == assembly  # type: ignore[arg-type]
-    with pytest.raises(ValidationError):
-        GenomeViewConfig(annotation="hg19")  # type: ignore[arg-type]
+    # A run's genome is a template variable, so an assembly without a shipped
+    # gene table degrades to no gene lane rather than failing the import.
+    assert GenomeViewConfig(annotation="hg19").annotation == "none"  # type: ignore[arg-type]
+    assert GenomeViewConfig(annotation="GRCh38").annotation == "hg38"  # type: ignore[arg-type]
 
 
 def test_max_facets_is_bounded_so_lanes_stay_readable():

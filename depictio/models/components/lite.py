@@ -374,9 +374,10 @@ class CardLiteComponent(BaseLiteComponent):
     threshold_warn: float | None = Field(
         default=None,
         description=(
-            "Optional softer cut-off between pass and fail. Ignored unless it "
-            "lies on the failing side of ``threshold_value``, where a warn band "
-            "is the only place it is meaningful."
+            "Optional softer cut-off between pass and fail. Must lie on the "
+            "failing side of ``threshold_value`` (below it for ``min``, above it "
+            "for ``max``), the only place a warn band is meaningful; anything "
+            "else is rejected at validation."
         ),
     )
     attrition_cols: list[str] = Field(
@@ -386,6 +387,15 @@ class CardLiteComponent(BaseLiteComponent):
             "the card's own column (which is the first stage). The order is the "
             "pipeline's order and is the content of the chart — the stages are "
             "never sorted by value."
+        ),
+    )
+    follow_region_filter: bool = Field(
+        default=False,
+        description=(
+            "Let a locus navigator's genome region (its brush or ``default_region``) "
+            "narrow this card. Off by default: a region is a place to look, so a "
+            "card keeps summarising the whole collection while the tracks follow "
+            "the locus."
         ),
     )
 
@@ -446,6 +456,37 @@ class CardLiteComponent(BaseLiteComponent):
         return self
 
     @model_validator(mode="after")
+    def validate_threshold_warn_side(self) -> "CardLiteComponent":
+        """Reject a ``threshold_warn`` on the passing side of ``threshold_value``.
+
+        The server used to drop such a warn band silently, so a template author
+        saw a strip with no warn segment and no reason why.
+        """
+        if self.threshold_warn is None:
+            return self
+        if self.threshold_value is None:
+            raise ValueError(
+                "threshold_warn requires threshold_value: the warn band sits between "
+                "the threshold_value cut-off and threshold_warn."
+            )
+        higher_is_better = self.threshold_direction == "min"
+        if higher_is_better and not self.threshold_warn < self.threshold_value:
+            raise ValueError(
+                f"threshold_warn ({self.threshold_warn}) must be below threshold_value "
+                f"({self.threshold_value}) when threshold_direction is 'min' (higher is "
+                "better): the warn band lies on the failing side of the cut-off. Use "
+                "threshold_direction: max if lower values pass."
+            )
+        if not higher_is_better and not self.threshold_warn > self.threshold_value:
+            raise ValueError(
+                f"threshold_warn ({self.threshold_warn}) must be above threshold_value "
+                f"({self.threshold_value}) when threshold_direction is 'max' (lower is "
+                "better): the warn band lies on the failing side of the cut-off. Use "
+                "threshold_direction: min if higher values pass."
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_filter_expr_safety(self) -> "CardLiteComponent":
         """Validate filter_expr is safe if provided."""
         if self.filter_expr is not None:
@@ -453,6 +494,10 @@ class CardLiteComponent(BaseLiteComponent):
 
             validate_filter_expr(self.filter_expr)
         return self
+
+
+# Controls whose initial state is a ``[low, high]`` pair.
+_RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
 
 
 class InteractiveLiteComponent(BaseLiteComponent):
@@ -539,6 +584,24 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "reader sees the distribution they are thresholding. Omitted means off.",
     )
 
+    slider_mode: Literal["gte", "gt", "lte", "lt", "eq", "ne"] | None = Field(
+        default=None,
+        description="Slider only: comparison with the value; gte (threshold) by default",
+    )
+
+    # Initial state, applied on first load (and on "Reset all").
+    default_value: Any | None = Field(
+        default=None,
+        description="Value the filter starts with. Select / MultiSelect: one value or a "
+        "list of values; SegmentedControl: one value; Slider: a number; Checkbox / "
+        "Switch: a boolean. RangeSlider and DateRangePicker use ``default_range``.",
+    )
+    default_range: list[Any] | None = Field(
+        default=None,
+        description="Initial ``[low, high]`` for RangeSlider (numbers) or DateRangePicker "
+        "(ISO dates).",
+    )
+
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
@@ -551,6 +614,55 @@ class InteractiveLiteComponent(BaseLiteComponent):
             valid = ", ".join(COLUMN_TYPES)
             raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
         return v
+
+    @model_validator(mode="after")
+    def validate_defaults(self) -> "InteractiveLiteComponent":
+        """Check that a declared default fits the control it is declared on.
+
+        Without this a misplaced default (``default_value`` on a RangeSlider)
+        was accepted by ``extra="allow"`` and never applied.
+        """
+        kind = self.interactive_component_type
+        if self.default_range is not None:
+            if kind not in _RANGE_DEFAULT_TYPES:
+                raise ValueError(
+                    f"default_range is only valid for {', '.join(_RANGE_DEFAULT_TYPES)}; "
+                    f"use default_value for a {kind}."
+                )
+            if len(self.default_range) != 2:
+                raise ValueError(f"default_range must be [low, high], got {self.default_range!r}.")
+            low, high = self.default_range
+            if kind == "RangeSlider":
+                if not all(
+                    isinstance(v, int | float) and not isinstance(v, bool) for v in (low, high)
+                ):
+                    raise ValueError(
+                        f"RangeSlider default_range must be numbers, got {self.default_range!r}."
+                    )
+                if low > high:
+                    raise ValueError(f"default_range low ({low}) is above high ({high}).")
+        if self.default_value is not None and kind in _RANGE_DEFAULT_TYPES:
+            raise ValueError(f"{kind} takes default_range: [low, high], not default_value.")
+        if self.default_value is not None and kind == "Slider":
+            if isinstance(self.default_value, bool) or not isinstance(
+                self.default_value, int | float
+            ):
+                raise ValueError(
+                    f"Slider default_value must be a number, got {self.default_value!r}."
+                )
+        if isinstance(self.default_value, list) and kind != "MultiSelect" and kind != "Select":
+            raise ValueError(
+                f"A list default_value is only valid for Select / MultiSelect, not {kind}."
+            )
+        return self
+
+    def default_state_payload(self) -> dict[str, Any] | None:
+        """The ``default_state`` a stored component carries for these defaults."""
+        if self.default_range is not None:
+            return {"default_range": list(self.default_range)}
+        if self.default_value is not None:
+            return {"default_value": self.default_value}
+        return None
 
     @model_validator(mode="after")
     def validate_interactive_type_for_column_type(self) -> "InteractiveLiteComponent":
@@ -636,6 +748,13 @@ class TextLiteComponent(BaseLiteComponent):
     component_type: Literal["text"] = "text"
 
     order: int = Field(default=1, ge=1, le=6, description="Heading level (H1–H6; clamped 1..6)")
+    # Overrides the base "sm" default: a text tile without a title_size keeps
+    # the size its heading level gives it.
+    title_size: str | None = Field(
+        default=None,
+        description="Visual size of the heading (xs/sm/md/lg/xl); the level (order) "
+        "stays the document structure",
+    )
     alignment: Literal["left", "center", "right"] = Field(
         default="left", description="Horizontal alignment of the title and body"
     )

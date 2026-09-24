@@ -817,6 +817,13 @@ async def resolve_link(
         # Auto-fetch sample mappings from MultiQC report
         sample_mappings = _get_multiqc_sample_mappings(link.target_dc_id)
         if sample_mappings:
+            from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
+
+            # Re-key by the values being resolved so suffixed MultiQC names
+            # (NA12878_R1, S1_1_val_1) join the hub ids the filter emitted.
+            sample_mappings = remap_mappings_to_hub(
+                sample_mappings, [str(v) for v in values_to_resolve]
+            )
             # Create new config with fetched mappings
             effective_config = LinkConfig(
                 resolver=link.link_config.resolver,
@@ -964,6 +971,9 @@ def link_mapping_preview(
     if not mappings and link.target_type == "multiqc":
         mappings = _get_multiqc_sample_mappings(str(link.target_dc_id))
         if mappings:
+            from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
+
+            mappings = remap_mappings_to_hub(mappings, source_values)
             mappings_source = "multiqc_live"
 
     rows: list[LinkMappingPreviewRow] = []
