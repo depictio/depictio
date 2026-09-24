@@ -645,22 +645,48 @@ async def get_unique_values(
     from depictio.api.v1.deltatables_utils import _get_aggregation_version
 
     dc_id_str = str(data_collection_id)
+    agg_version = _get_aggregation_version(dc_id_str)
     cache_key = (
-        f"unique_values_{dc_id_str}_{column}_{limit}_"
-        f"{filter_expr or 'nofilter'}_{_get_aggregation_version(dc_id_str)}"
+        f"unique_values_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
+    )
+    # Negative entry: "this DC (at this version) has no such column". Keyed
+    # without limit/filter because absence does not depend on them. Without it
+    # every probe of a column the DC lacks re-opened the Delta log on S3.
+    missing_key = f"unique_values_missing_{dc_id_str}_{column}_{agg_version}"
+    column_missing_exc = HTTPException(
+        status_code=404,
+        detail=f"Column '{column}' not found in data collection {data_collection_id}.",
     )
     try:
         from depictio.api.cache import get_cache
 
+        if get_cache().get(missing_key) is not None:
+            logger.debug(f"unique_values: cached miss for {column} on {dc_id_str}")
+            raise column_missing_exc
         cached = get_cache().get(cache_key)
         if cached is not None:
             logger.debug(f"unique_values: cache hit for {column} on {dc_id_str}")
             return {"column": column, "values": cached}
+    except HTTPException:
+        raise
     except Exception as exc:  # the cache is an optimisation, never a dependency
         logger.debug(f"unique_values: cache read failed for {cache_key}: {exc}")
 
+    def _remember_missing() -> None:
+        try:
+            from depictio.api.cache import get_cache
+
+            get_cache().set(missing_key, True)
+        except Exception as exc:
+            logger.debug(f"unique_values: cache write failed for {missing_key}: {exc}")
+
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # Schema comes from the Delta log alone: answer "no such column" before
+        # any data scan, and cache it.
+        if column not in lazy.collect_schema().names():
+            _remember_missing()
+            raise column_missing_exc
 
         if filter_expr:
             from depictio.models.components.filter_expr import (
@@ -681,10 +707,7 @@ async def get_unique_values(
         try:
             df = lazy.select(column).unique().limit(limit).collect()
         except pl.exceptions.ColumnNotFoundError:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Column '{column}' not found in data collection {data_collection_id}.",
-            )
+            raise column_missing_exc
 
         values = df[column].drop_nulls().to_list()
         # Stable ordering — MultiSelect UX expects sorted strings.
@@ -869,6 +892,7 @@ async def get_breakdown_filtered(
     filtered responses bypass the breakdown cache.
     """
     from depictio.api.v1.deltatables_utils import clean_filter_payload
+    from depictio.api.v1.region_scope import scope_region_filters
 
     column = str(request.get("column") or "")
     breakdown_col = str(request.get("breakdown_col") or "")
@@ -880,7 +904,11 @@ async def get_breakdown_filtered(
         breakdown_col,
         str(request.get("aggregation") or "count"),
         int(request.get("top_n_count") or 3),
-        filter_metadata=clean_filter_payload(request.get("filters")),
+        # Same region scope as the saved card (``bulk_compute_cards``): a
+        # locus navigator's region reaches it only with ``follow_region_filter``.
+        filter_metadata=clean_filter_payload(
+            scope_region_filters(request.get("filters") or [], "card", request)
+        ),
         current_user=current_user,
     )
 
@@ -925,8 +953,13 @@ async def get_card_metric(
             detail=f"layout must be 'hero' or one of {NUMERIC_LAYOUTS} and column is required.",
         )
 
+    from depictio.api.v1.region_scope import scope_region_filters
+
     delta_table_location = _resolve_delta_location(data_collection_id, current_user)
-    filter_metadata = clean_filter_payload(request.get("filters"))
+    # Same region scope as the saved card (``bulk_compute_cards``).
+    filter_metadata = clean_filter_payload(
+        scope_region_filters(request.get("filters") or [], "card", request)
+    )
 
     try:
         lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)

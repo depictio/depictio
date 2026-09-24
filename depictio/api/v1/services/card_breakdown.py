@@ -63,18 +63,39 @@ def evenness(counts: list[int], total: int) -> float | None:
     return max(0.0, min(1.0, entropy / math.log(len(present))))
 
 
+# Per-group reductions for the non-additive heroes: the strip then answers "which
+# groups reach the highest max / average", in the card's own unit, instead of
+# counting rows under a card that is not about rows. Only ``count`` and ``sum``
+# groups are parts of a whole; the renderer shows every other kind (these, and
+# ``nunique``, whose per-group distinct counts do not add up to the hero)
+# without a percentage.
+_VALUE_REDUCTIONS: dict[str, Any] = {
+    "average": lambda c: pl.col(c).mean(),
+    "mean": lambda c: pl.col(c).mean(),
+    "median": lambda c: pl.col(c).median(),
+    "min": lambda c: pl.col(c).min(),
+    "max": lambda c: pl.col(c).max(),
+    "range": lambda c: pl.col(c).max() - pl.col(c).min(),
+    "variance": lambda c: pl.col(c).var(),
+    "std_dev": lambda c: pl.col(c).std(),
+    "std": lambda c: pl.col(c).std(),
+}
+
+
 def group_expr(column: str, breakdown_col: str, aggregation: str) -> pl.Expr:
     """Per-group aggregation expression mirroring the card's hero metric.
 
     The strip's "Top N cover X%" has to read against the same denominator as the
     hero value, so a ``nunique POS`` card grouped by ``GENE`` must count
-    *distinct POS per gene*, not rows per gene — otherwise the percentages don't
-    add up to the number printed above them.
+    *distinct POS per gene*, not rows per gene. A ``max`` / ``average`` / ...
+    card reduces each group with its own aggregation (max reads per group, mean
+    reads per group) rather than counting rows under a card that is not about
+    rows.
 
     One special case: when the breakdown column *is* the hero column (an
     ``Unique Lineages`` card broken down by ``lineage``), ``n_unique`` per group
     is trivially 1 and the strip degenerates into N equal bars. Row count is the
-    natural reading there — "Alpha: 14 rows, Delta: 9 rows".
+    natural reading there: "Alpha: 14 rows, Delta: 9 rows".
     """
     hero = (aggregation or "count").lower()
     if column == breakdown_col:
@@ -83,8 +104,26 @@ def group_expr(column: str, breakdown_col: str, aggregation: str) -> pl.Expr:
         return pl.col(column).n_unique().alias("__count__")
     if hero == "sum":
         return pl.col(column).sum().alias("__count__")
-    # ``count`` and anything else → number of rows per group.
+    if hero in _VALUE_REDUCTIONS:
+        return _VALUE_REDUCTIONS[hero](column).alias("__count__")
+    # ``count`` and anything else (percentile, mode, ...) -> rows per group.
     return pl.len().alias("__count__")
+
+
+def _is_value_breakdown(column: str, breakdown_col: str, aggregation: str) -> bool:
+    """True when each group carries a value in the hero's unit (max, mean, ...)
+    rather than a count or a sum: no share of a total applies."""
+    hero = (aggregation or "count").lower()
+    return column != breakdown_col and hero in _VALUE_REDUCTIONS
+
+
+def _plain_number(v: Any) -> float | int | None:
+    if v is None:
+        return None
+    f = float(v)
+    if math.isnan(f) or math.isinf(f):
+        return None
+    return int(f) if f.is_integer() else f
 
 
 def compute_breakdown(
@@ -106,6 +145,8 @@ def compute_breakdown(
     """
     top_n_count = max(1, min(int(top_n_count or 3), MAX_TOP_N))
     lazy = frame.lazy() if isinstance(frame, pl.DataFrame) else frame
+    if _is_value_breakdown(column, breakdown_col, aggregation):
+        return _value_breakdown(lazy, column, breakdown_col, aggregation, top_n_count)
 
     grouped = (
         lazy.group_by(breakdown_col)
@@ -143,4 +184,48 @@ def compute_breakdown(
         "unique_values": int(grouped.height),
         "breakdown_kind": (aggregation or "count").lower(),
         "evenness": evenness([int(c) for c in grouped["__count__"].to_list()], total),
+    }
+
+
+def _value_breakdown(
+    lazy: pl.LazyFrame,
+    column: str,
+    breakdown_col: str,
+    aggregation: str,
+    top_n_count: int,
+) -> dict[str, Any]:
+    """Breakdown for a non-additive hero (max, average, median, ...).
+
+    Each group's ``count`` is the hero aggregation over that group, in the
+    column's unit (kept as a float, not truncated). ``percent``, ``top_share``
+    and ``evenness`` are ``None``: a group's max is not a share of anything.
+    Groups rank by value, descending, except under ``min`` where the lowest
+    groups are the interesting ones. ``total`` is the number of rows, so the
+    tooltip can still say how much data the strip summarises.
+    """
+    hero = (aggregation or "count").lower()
+    ascending = hero == "min"
+    grouped = (
+        lazy.group_by(breakdown_col)
+        .agg(group_expr(column, breakdown_col, aggregation), pl.len().alias("__rows__"))
+        .sort(
+            ["__count__", breakdown_col],
+            descending=[not ascending, False],
+            nulls_last=True,
+        )
+        .collect()
+    )
+    top_rows = grouped.head(top_n_count)
+    names = [
+        ("(null)" if n is None else n) for n in top_rows[breakdown_col].cast(pl.Utf8).to_list()
+    ]
+    values = [_plain_number(v) for v in top_rows["__count__"].to_list()]
+    return {
+        "column": breakdown_col,
+        "total": int(grouped["__rows__"].sum() or 0),
+        "top": [{"name": names[i], "count": values[i], "percent": None} for i in range(len(names))],
+        "top_share": None,
+        "unique_values": int(grouped.height),
+        "breakdown_kind": hero,
+        "evenness": None,
     }

@@ -2143,6 +2143,83 @@ def compute_upset(payload: dict) -> dict:
     }
 
 
+# Rows per sample track above which a coverage track is binned server-side. A
+# track is at most a few thousand pixels wide, so a denser series adds transfer
+# and Plotly layout time (one SVG path per bar for rect marks) and nothing a
+# reader can see. The renderer sends its own budget; this is the fallback.
+COVERAGE_MAX_BINS_PER_TRACK = 4_000
+
+
+def _bin_coverage_frame(
+    df,
+    *,
+    chromosome_col: str,
+    position_col: str,
+    value_col: str,
+    end_col: str | None,
+    sample_col: str | None,
+    category_col: str | None,
+    max_bins: int,
+):
+    """Reduce each sample track to at most about ``max_bins`` bins.
+
+    Returns ``(frame, bin_width)``; ``bin_width`` is ``None`` when the frame
+    was already within budget and is returned untouched.
+
+    One bin width serves every chromosome, sized so the summed span of the
+    chromosomes in the frame splits into ``max_bins`` bins, so a narrow region
+    keeps base-level detail and a whole genome gets one bin per few pixels.
+    Per bin: the first position, the last end, the mean value (the zoom-level
+    summary bigWig uses) and the first category. Bins with no row stay absent,
+    so sparse intervals (peaks) stay sparse.
+    """
+    import math
+
+    import polars as pl
+
+    if max_bins <= 0 or df.height == 0:
+        return df, None
+    track_keys = [sample_col] if sample_col else []
+    per_track = (
+        int(df.group_by(track_keys).len().get_column("len").max()) if track_keys else df.height
+    )
+    if per_track <= max_bins:
+        return df, None
+
+    stop_col = end_col or position_col
+    spans = df.group_by(chromosome_col).agg(
+        pl.col(position_col).min().alias("__lo"), pl.col(stop_col).max().alias("__hi")
+    )
+    total_span = 0
+    for lo, hi in spans.select("__lo", "__hi").iter_rows():
+        if lo is None or hi is None:
+            continue
+        total_span += max(1, int(hi) - int(lo))
+    bin_width = max(1, math.ceil(total_span / max_bins))
+
+    keys = [*track_keys, chromosome_col, "__bin"]
+    aggs = [
+        pl.col(position_col).min(),
+        pl.col(value_col).cast(pl.Float64).mean(),
+    ]
+    taken = {*keys, position_col, value_col}
+    if end_col and end_col not in taken:
+        aggs.append(pl.col(end_col).max())
+        taken.add(end_col)
+    if category_col and category_col not in taken:
+        aggs.append(pl.col(category_col).first())
+
+    binned = (
+        df.join(spans.select(chromosome_col, "__lo"), on=chromosome_col, how="left")
+        .with_columns(((pl.col(position_col) - pl.col("__lo")) // bin_width).alias("__bin"))
+        .group_by(keys)
+        .agg(aggs)
+        .sort([*track_keys, chromosome_col, position_col])
+        .drop("__bin")
+    )
+    return binned, bin_width
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_coverage_track",
     soft_time_limit=180,
@@ -2161,6 +2238,7 @@ def compute_coverage_track(payload: dict) -> dict:
           "samples_filter": [str] | null,
           "smoothing_window": int (0 disables),
           "max_rows": int | null,
+          "max_bins_per_track": int | null (0 disables binning),
           "filter_metadata": [...],
         }
 
@@ -2188,6 +2266,8 @@ def compute_coverage_track(payload: dict) -> dict:
     # clamp defensively rather than trust the input.
     smoothing_window = max(0, min(200, int(payload.get("smoothing_window") or 0)))
     max_rows = int(payload.get("max_rows") or 200_000)
+    raw_bins = payload.get("max_bins_per_track")
+    max_bins = COVERAGE_MAX_BINS_PER_TRACK if raw_bins is None else max(0, int(raw_bins))
     filter_metadata = payload.get("filter_metadata") or []
 
     if not wf_id or not dc_id:
@@ -2252,6 +2332,30 @@ def compute_coverage_track(payload: dict) -> dict:
             .alias(value_col)
         )
 
+    # Bin to the pixel budget before the row cap: binning keeps every region
+    # of the track represented, where the cap below drops rows blindly.
+    input_rows = int(df.height)
+    # Cast the value series to Float64 before reducing so Series.mean()/max()
+    # always return float | None, keeping the JSON summary single-typed. Read
+    # before binning, so the summary max is a real value and not a bin mean.
+    if df.height:
+        values_f64 = df.get_column(value_col).cast(pl.Float64)
+        mean_value = values_f64.mean()
+        max_value = values_f64.max()
+    else:
+        mean_value = None
+        max_value = None
+    df, bin_width = _bin_coverage_frame(
+        df,
+        chromosome_col=chromosome_col,
+        position_col=position_col,
+        value_col=value_col,
+        end_col=end_col,
+        sample_col=sample_col,
+        category_col=category_col,
+        max_bins=max_bins,
+    )
+
     if df.height > max_rows:
         # Last-ditch decimation for runaway DCs — pick every Nth row inside
         # each (sample, chrom) group so each track stays continuous.
@@ -2263,15 +2367,6 @@ def compute_coverage_track(payload: dict) -> dict:
         if col and col not in rows:
             rows[col] = df.get_column(col).to_list()
 
-    # Cast the value series to Float64 before reducing so Series.mean()/max()
-    # always return float | None — keeps the JSON summary single-typed.
-    if df.height:
-        values_f64 = df.get_column(value_col).cast(pl.Float64)
-        mean_value = values_f64.mean()
-        max_value = values_f64.max()
-    else:
-        mean_value = None
-        max_value = None
     summary = {
         "row_count": int(df.height),
         "chromosomes": chromosomes,
@@ -2279,6 +2374,10 @@ def compute_coverage_track(payload: dict) -> dict:
         "n_samples": len(samples),
         "mean_value": mean_value,
         "max_value": max_value,
+        # Set when the track was binned: the bin width in bp and the rows it
+        # was binned from, so the renderer can say the track is a summary.
+        "bin_width": bin_width,
+        "input_rows": input_rows,
     }
     compute_ms = int((time.monotonic() - compute_started) * 1000)
     logger.info(
@@ -2314,15 +2413,29 @@ def _sankey_result_from_frame(
     sort_mode: str,
     min_link_value: float,
     step_filters: dict,
+    option_cols: list[str] | None = None,
 ) -> dict:
     """Aggregate an already-loaded frame into a Plotly Sankey and its metadata.
 
     Split out of :func:`compute_sankey` so the catalog gallery can draw the same
     flow off a bundled fixture. The caller owns loading and its own ``load_ms``.
+
+    ``option_cols`` (default: ``step_cols``) are the columns whose distinct
+    values come back as ``step_options``, read before the step filters so a
+    picked value never hides the others. They are what the renderer's step
+    pickers list, so it needs no capped row fetch of its own.
     """
     import polars as pl
 
     compute_started = time.monotonic()
+    input_rows = int(df.height)
+
+    step_options: dict[str, list[str]] = {}
+    for col in option_cols or step_cols:
+        if col not in df.columns or col in step_options:
+            continue
+        values = df.get_column(col).cast(pl.Utf8).fill_null("").unique().to_list()
+        step_options[col] = sorted(str(v) for v in values)
 
     # Per-step filters applied AFTER global filter_metadata.
     for col, allowed in step_filters.items():
@@ -2477,6 +2590,9 @@ def _sankey_result_from_frame(
         "link_count": len(values),
         "total_flow": total_flow,
         "row_count": int(df.height),
+        # Rows before the step filters; the flow above aggregates all of them.
+        "input_rows": input_rows,
+        "step_options": step_options,
         "compute_ms": compute_ms,
     }
 
@@ -2497,10 +2613,12 @@ def compute_sankey(payload: dict) -> dict:
           "sort_mode": "alphabetical" | "total_flow" | "input",
           "min_link_value": float,
           "step_filters": {col: [value, ...]} | null,
+          "option_cols": [str] | null  (columns to list distinct values for),
           "filter_metadata": [...],
         }
 
-    Returns a Plotly figure JSON ready for react-plotly.js plus node/link
+    Every row of the filtered frame is aggregated into the flow: there is no
+    row cap here. Returns a Plotly figure JSON ready for react-plotly.js plus node/link
     metadata so the renderer can recolour client-side without re-dispatching.
     """
 
@@ -2514,6 +2632,7 @@ def compute_sankey(payload: dict) -> dict:
     sort_mode = str(payload.get("sort_mode") or "total_flow")
     min_link_value = max(0.0, float(payload.get("min_link_value") or 0.0))
     step_filters = payload.get("step_filters") or {}
+    option_cols = [str(c) for c in (payload.get("option_cols") or []) if c]
     filter_metadata = payload.get("filter_metadata") or []
 
     if not wf_id or not dc_id:
@@ -2537,7 +2656,9 @@ def compute_sankey(payload: dict) -> dict:
         }
     }
 
-    project_cols = [*step_cols, value_col] if value_col else list(step_cols)
+    project_cols = list(dict.fromkeys([*step_cols, *option_cols]))
+    if value_col and value_col not in project_cols:
+        project_cols.append(value_col)
 
     started = time.monotonic()
     df = load_deltatable_lite(
@@ -2558,6 +2679,7 @@ def compute_sankey(payload: dict) -> dict:
             sort_mode=sort_mode,
             min_link_value=min_link_value,
             step_filters=step_filters,
+            option_cols=option_cols or None,
         ),
         "load_ms": load_ms,
     }

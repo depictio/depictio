@@ -875,6 +875,39 @@ def fetch_advanced_viz_data(
 
 _CACHE_KEY_VERSION = "v3"
 
+# A failed computation is retried once its entry is older than this. The short
+# backoff stops a tile that re-dispatches on every render from hot-looping on a
+# persistent error, while a fixed cause (data re-ingested, code fixed) no longer
+# replays the stale error forever.
+_FAILED_RETRY_AFTER_S = 60
+
+
+def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
+    """Return the cached compute doc for ``cache_key``, or None on a miss.
+
+    ``done`` and ``pending`` entries are reused as-is. A ``failed`` entry is
+    never treated as a permanent answer: once it is older than
+    ``_FAILED_RETRY_AFTER_S`` it is deleted and the caller re-enqueues the
+    computation. A younger failed entry is still returned so rapid re-renders
+    see the error instead of spawning a task per render.
+    """
+    from datetime import datetime, timezone
+
+    existing = cache.find_one({"_id": cache_key})
+    if not existing or existing.get("status") != "failed":
+        return existing
+    stamp = existing.get("completed_at") or existing.get("created_at")
+    if isinstance(stamp, datetime):
+        if stamp.tzinfo is None:  # pymongo returns naive UTC by default
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age_s = (datetime.now(timezone.utc) - stamp).total_seconds()
+        if age_s < _FAILED_RETRY_AFTER_S:
+            return existing
+    # Only drop it if it is still the failed doc we read (a concurrent retry may
+    # already have replaced it with a fresh pending entry).
+    cache.delete_one({"_id": cache_key, "status": "failed"})
+    return None
+
 
 def _compute_cache_key(payload: dict, user_id) -> str:
     """Stable key for the compute_results cache.
@@ -947,7 +980,7 @@ def dispatch_compute_embedding(
 
     cache = db["compute_results"]
     cache_key = _compute_cache_key(payload, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
 
     # Cache hit (done or pending).
     if existing:
@@ -1107,7 +1140,7 @@ def dispatch_compute_complex_heatmap(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "complex_heatmap")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return {
             "job_id": cache_key,
@@ -1242,7 +1275,7 @@ def dispatch_compute_upset(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "upset_plot")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return {
             "job_id": cache_key,
@@ -1385,7 +1418,7 @@ def _dispatch_compute(
             "from_cache": True,
         }
 
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return _from_cache(existing)
 

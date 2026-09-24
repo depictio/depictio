@@ -610,6 +610,13 @@ class ReferenceDatasetRegistry:
                 continue
             variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
         provided_vars: set[str] = set(variables.keys())
+        # Declared variable defaults (e.g. GENOME) fill in whatever the reference left unset;
+        # like the CLI, a default satisfies `required` but does not fire `if_var_present`.
+        for var in template_section.get("variables") or []:
+            if var.get("default") is not None:
+                variables.setdefault(
+                    var["name"], str(var["default"]).replace("{DATA_ROOT}", data_root)
+                )
         config = substitute_template_variables(config, variables)
 
         # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)

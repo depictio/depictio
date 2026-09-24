@@ -1441,7 +1441,9 @@ def process_recipe_data_collection(
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
-            result_df = recipe_module.transform(sources)
+            from depictio.recipes import call_transform
+
+            result_df = call_transform(recipe_module, sources, transform_config.params)
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
             _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)
@@ -1462,6 +1464,7 @@ def process_recipe_data_collection(
                         overrides,
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,
+                        params=transform_config.params,
                     )
                     run_df = run_df.with_columns(pl.lit(run_tag).alias("depictio_run_id"))
                     all_dfs.append(run_df)
@@ -1477,6 +1480,7 @@ def process_recipe_data_collection(
                 overrides,
                 extra_sources=extra_sources,
                 pipeline_version=pipeline_version,
+                params=transform_config.params,
             )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}

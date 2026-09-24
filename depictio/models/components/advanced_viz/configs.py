@@ -27,6 +27,30 @@ from pydantic import (
 ColourScale = Literal["Viridis", "Plasma", "Inferno", "Magma", "Cividis", "RdBu", "Spectral"]
 
 
+#: Assembly aliases a template's ``GENOME`` variable may carry, mapped onto
+#: the bundled gene tables. Anything else (another organism, an unresolved
+#: ``{GENOME}`` placeholder in a raw YAML) draws no gene lane.
+_GENE_LANE_ALIASES: dict[str, str] = {
+    "none": "none",
+    "hg38": "hg38",
+    "grch38": "hg38",
+    "mm10": "mm10",
+    "grcm38": "mm10",
+}
+
+
+def _coerce_gene_lane(value: Any) -> Any:
+    """Map a free assembly string onto a bundled gene lane, else ``none``."""
+    if value is None:
+        return "none"
+    if isinstance(value, str):
+        return _GENE_LANE_ALIASES.get(value.strip().lower(), "none")
+    return value
+
+
+GeneLaneAssembly = Annotated[Literal["none", "hg38", "mm10"], BeforeValidator(_coerce_gene_lane)]
+
+
 class _BaseVizConfig(BaseModel):
     """Common base for all viz-kind configs."""
 
@@ -1217,7 +1241,7 @@ class CoverageTrackConfig(_BaseVizConfig):
     # genome_view kind draws, so a template that used to bind coverage_track and
     # genome_view on one data collection can bind one tile instead. Both fields
     # below only reach that view; the smoothed Plotly track ignores them.
-    locus_annotation: Literal["none", "hg38", "mm10"] = Field(
+    locus_annotation: GeneLaneAssembly = Field(
         default="none",
         description="Locus view: bundled gene lane drawn under the track",
     )
@@ -1908,7 +1932,7 @@ class SashimiConfig(_BaseVizConfig):
         default=None,
         description="Views offered in the tile's switch; null offers both",
     )
-    annotation: Literal["none", "hg38", "mm10"] = Field(
+    annotation: GeneLaneAssembly = Field(
         default="none",
         description=(
             "GenomeSpy view: bundled protein-coding gene lane drawn under the "
@@ -2183,7 +2207,7 @@ class GenomeViewConfig(_BaseVizConfig):
             "samples in genome order and says how many it dropped."
         ),
     )
-    annotation: Literal["none", "hg38", "mm10"] = Field(
+    annotation: GeneLaneAssembly = Field(
         default="none",
         description=(
             "Gene annotation lane drawn under the data track, from the bundled "
@@ -2506,7 +2530,7 @@ class CnvProfileConfig(_BaseVizConfig):
             "the locus view draws nMajor and nMinor as two rules per segment"
         ),
     )
-    annotation: Literal["none", "hg38", "mm10"] = Field(
+    annotation: GeneLaneAssembly = Field(
         default="none",
         description="Locus view: bundled gene lane drawn under the tracks; labels appear on zoom",
     )
@@ -2610,6 +2634,10 @@ class RecordCardConfig(_BaseVizConfig):
             "so a well-described collection needs no layout here."
         ),
     )
+    labels: dict[str, str] | None = Field(
+        default=None,
+        description="Display label per column; unlisted columns fall back to a short column description, then the column name",
+    )
     link_templates: dict[str, str] | None = Field(
         default=None,
         description=(
@@ -2624,6 +2652,16 @@ class RecordCardConfig(_BaseVizConfig):
             "which is what a dashboard with one selecting tile wants; name a "
             "source when several tiles select at once and only one of them "
             "should drive the card."
+        ),
+    )
+    linked_component: str | None = Field(
+        default=None,
+        description=(
+            "Tag of the component whose selection drives this card. When set, the "
+            "card follows only that component's selection, and a card placed on "
+            "the same row and section directly beside it is laid out as its "
+            "collapsible side panel. The dashboard import resolves the tag to "
+            "the component's index."
         ),
     )
     max_fields: int = Field(
