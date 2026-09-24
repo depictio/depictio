@@ -929,6 +929,9 @@ async def screenshot_react_dual(
         ScreenshotResult dict with `light_screenshot` / `dark_screenshot`
         paths (host-visible via the bind-mounted screenshots dir).
     """
+    if not settings.performance.screenshots_enabled:
+        raise HTTPException(status_code=503, detail="Screenshots are disabled on this instance")
+
     import asyncio
 
     from depictio.api.celery_app import generate_dashboard_screenshot_dual

@@ -22,8 +22,13 @@ def get_version() -> str:
     project_root = Path(__file__).parent.parent
     version_path = project_root / "VERSION"
 
-    with open(version_path, "r") as f:
-        version = f.read().strip()
+    if version_path.is_file():
+        version = version_path.read_text().strip()
+    else:
+        # Installed from a wheel: VERSION sits at the repo root, outside the package.
+        from importlib.metadata import version as package_version
+
+        version = package_version("depictio")
 
     logger.debug(f"Project version: {version}")
 
