@@ -1,0 +1,95 @@
+# Megatest manifest for nf-core/riboseq 2.0.0 (read by scripts/nfcore_megatest.py).
+#
+# The AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline riboseq --version 2.0.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# The full run is ~150 GB (BAM, bigWig, RiboCode HDF5 P-site stores, riboWaltz
+# codon coverage). Only tables are listed here; the subset is ~300 MB.
+# The input samplesheet and contrasts are not part of the published run: they
+# are vendored next to this manifest under input/ and copied into DATA_ROOT/input/
+# (see post_fetch_help).
+pipeline: riboseq
+version: "2.0.0"
+# s3://nf-core-awsmegatests/riboseq/results-<results_sha>/ == the 2.0.0 release tag_sha.
+results_sha: "11d66a3b8ae1f41f9c385af36bd431c35bf015ab"
+run_root: ""
+multiqc:
+  version: "1.33"
+  parquet: multiqc/star/multiqc_report_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet (fastqc x3 stages, trimgalore, sortmerna, star, samtools,
+  # salmon, riboWaltz, Ribo-TISH) and the per-module tables next to it.
+  - multiqc/star/multiqc_report_data/multiqc.parquet
+  - multiqc/star/multiqc_report_data/multiqc_*.txt
+  - multiqc/star/multiqc_report_data/ribowaltz_*.txt
+  - multiqc/star/multiqc_report_data/ribotish_*.txt
+  - multiqc/star/multiqc_report_data/sortmerna-detailed-plot.txt
+  - multiqc/star/multiqc_report_data/star_*.txt
+  # Library QC raw inputs (kept for provenance and the rRNA depletion recipe).
+  - preprocessing/sortmerna/*.sortmerna.log
+  - preprocessing/trimgalore/*_trimming_report.txt
+  - alignment/star/log/*.Log.final.out
+  - alignment/star/sorted/samtools_stats/*.flagstat
+  # Salmon merged gene matrices (all libraries, RNA-seq and Ribo-seq) + per-library meta.
+  - quantification/salmon/salmon.merged.gene_counts.tsv
+  - quantification/salmon/salmon.merged.gene_tpm.tsv
+  - quantification/salmon/*/aux_info/meta_info.json
+  # In-frame P-site gene counts (Ribo-seq libraries, the anota2seq input).
+  - quantification/inframe_psite/gene_counts.tsv
+  # anota2seq results per contrast and analysis (translation, buffering, total, translated).
+  - translational_efficiency/anota2seq/*.anota2seq.results.tsv
+  # riboWaltz QC tables (frame, length, metaprofile, region, codon usage) + P-site offsets.
+  - psites/ribowaltz/ribowaltz_qc/*.tsv
+  - psites/ribowaltz/*.psite_offset.tsv.gz
+  - psites/ribowaltz/*.best_offset.txt
+  # Plastid P-site offsets and metagene profiles.
+  - psites/plastid/offsets/*_p_offsets.txt
+  - psites/plastid/offsets/*_metagene_profiles.txt
+  # Ribo-TISH quality + ORF predictions (per library and merged), RiboCode collapsed ORFs.
+  - riboseq_qc/ribotish/*_qual.txt
+  - orf_predictions/ribotish/*_pred.txt
+  - orf_predictions/ribotish_all/allsamples_pred.txt
+  - orf_predictions/ribocode/*_collapsed.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet, the design table and contrasts are vendored with the template:
+  #   mkdir -p {dest}/input && cp depictio/projects/nf-core/riboseq/2.0.0/input/*.*sv {dest}/input/
+  # SAMPLESHEET_FILE is then auto-detected from input/.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/riboseq/2.0.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/metadata.tsv --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/riboseq/2.0.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/metadata.tsv
+# Megatest facts that must never appear in a dashboard text (lint rule e,
+# depictio/tests/models/test_template_conventions.py): library ids, the
+# exposure studied, the organism and assembly, and genes seen in the run.
+forbidden_terms:
+  - SRX11780879
+  - SRX11780884
+  - SRX11780890
+  - SRX1178
+  - PM2.5
+  - PM2_5
+  - Ribo-seq_C01
+  - Homo sapiens
+  - GRCh38
+  - megatest
+  - DPM1
+  - SCYL3
+  - FUCA2
+  - TSPAN6
+  - "740"
+  - twelve libraries
