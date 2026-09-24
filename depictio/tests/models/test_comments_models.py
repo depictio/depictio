@@ -8,15 +8,19 @@ from pydantic import TypeAdapter, ValidationError
 from depictio.models.models.comments import (
     MAX_LABEL_CHARS,
     MAX_POINT_IDS,
+    MAX_REGION_VERTICES,
+    MAX_VARIANT_CHARS,
     AgentInfo,
     Anchor,
     Annotation,
     AnnotationStyle,
     ArrowNote,
     Author,
+    BoxRegion,
     CommentCreate,
     CommentThread,
     Geometry,
+    LassoRegion,
     MarkedPoints,
     PublishedAnnotation,
     RefLine,
@@ -154,7 +158,34 @@ class TestMarkedPoints:
     def test_coords_without_column_ok(self):
         mp = MarkedPoints.model_validate({"coords": [{"x": "A", "y": 3, "trace": 1}]})
         assert mp.coords[0].trace == 1
+        assert mp.coords[0].index is None
         assert mp.column is None
+
+    def test_coord_point_index(self):
+        mp = MarkedPoints.model_validate(
+            {"coords": [{"x": "Chinstrap", "y": 55.8, "trace": 0, "index": 101}]}
+        )
+        assert mp.coords[0].index == 101
+        assert (
+            MarkedPoints.model_validate({"coords": [{"x": 0, "y": 0, "index": 0}]}).coords[0].index
+            == 0
+        )
+
+    @pytest.mark.parametrize("index", [-1, 1.5, "a"])
+    def test_coord_bad_point_index_rejected(self, index):
+        with pytest.raises(ValidationError):
+            MarkedPoints.model_validate({"coords": [{"x": 0, "y": 0, "index": index}]})
+
+    def test_box_region_on_category_axis(self):
+        # Plotly reports a box on a category axis as category serial numbers.
+        mp = MarkedPoints.model_validate(
+            {
+                "coords": [{"x": "Chinstrap", "y": 50, "trace": 0, "index": 73}],
+                "region": {"shape": "box", "x0": 0.5258, "x1": 1.1717, "y0": 49.29, "y1": 53.79},
+            }
+        )
+        assert isinstance(mp.region, BoxRegion)
+        assert mp.region.x0 == 0.5258
 
     def test_ids_max_length(self):
         MarkedPoints(column="c", ids=list(range(MAX_POINT_IDS)))
@@ -165,6 +196,52 @@ class TestMarkedPoints:
         coords = [{"x": i, "y": i} for i in range(MAX_POINT_IDS + 1)]
         with pytest.raises(ValidationError):
             MarkedPoints.model_validate({"coords": coords})
+
+    def test_region_defaults_to_none(self):
+        assert MarkedPoints(coords=[{"x": 0, "y": 0}]).region is None
+
+    def test_box_region(self):
+        mp = MarkedPoints.model_validate(
+            {
+                "coords": [{"x": 0, "y": 0}],
+                "region": {"shape": "box", "x0": 0, "x1": 2, "y0": "a", "y1": "b"},
+            }
+        )
+        assert isinstance(mp.region, BoxRegion)
+        assert mp.region.y1 == "b"
+
+    def test_lasso_region(self):
+        mp = MarkedPoints.model_validate(
+            {
+                "coords": [{"x": 0, "y": 0}],
+                "region": {"shape": "lasso", "x": [0, 1, 1], "y": [0, 0, 1]},
+            }
+        )
+        assert isinstance(mp.region, LassoRegion)
+        assert len(mp.region.x) == 3
+
+    @pytest.mark.parametrize(
+        "region",
+        [
+            {"shape": "lasso", "x": [0, 1, 1], "y": [0, 0]},
+            {"shape": "lasso", "x": [0, 1], "y": [0, 1]},
+            {
+                "shape": "lasso",
+                "x": [0] * (MAX_REGION_VERTICES + 1),
+                "y": [0] * (MAX_REGION_VERTICES + 1),
+            },
+            {"shape": "circle", "x0": 0, "x1": 1, "y0": 0, "y1": 1},
+            {"shape": "box", "x0": 0, "x1": 1, "y0": 0},
+            {"x0": 0, "x1": 1, "y0": 0, "y1": 1},
+        ],
+    )
+    def test_bad_region_rejected(self, region):
+        with pytest.raises(ValidationError):
+            MarkedPoints.model_validate({"coords": [{"x": 0, "y": 0}], "region": region})
+
+    def test_lasso_vertex_cap_accepted(self):
+        n = MAX_REGION_VERTICES
+        LassoRegion(x=list(range(n)), y=list(range(n)))
 
 
 class TestAnnotation:
@@ -208,6 +285,34 @@ class TestAnnotation:
     def test_palette_color_accepted(self):
         assert _range_annotation(color="grape").color == "grape"
 
+    def test_variant_defaults_to_none(self):
+        assert _range_annotation().variant is None
+
+    def test_variant_length(self):
+        key = "multiqc:fastqc/per_sequence_quality_scores/Read 1"
+        assert _range_annotation(variant=key).variant == key
+        _range_annotation(variant="x" * MAX_VARIANT_CHARS)
+        with pytest.raises(ValidationError):
+            _range_annotation(variant="x" * (MAX_VARIANT_CHARS + 1))
+        with pytest.raises(ValidationError):
+            _range_annotation(variant="")
+
+    def test_variant_kept_on_published_annotation(self):
+        ann = _range_annotation(variant="multiqc:a/b/c")
+        published = PublishedAnnotation(
+            thread_id="t",
+            dashboard_id="d",
+            component_index="c",
+            number=1,
+            kind=ann.kind,
+            geometry=ann.geometry,
+            label=ann.label,
+            color=ann.color,
+            style=ann.style,
+            variant=ann.variant,
+        )
+        assert published.variant == "multiqc:a/b/c"
+
     @pytest.mark.parametrize("color", ["#ff0000", "rgb(0,0,0)", "purple", "Blue"])
     def test_non_palette_color_rejected(self, color):
         with pytest.raises(ValidationError):
@@ -222,15 +327,25 @@ class TestAnnotation:
 
     @pytest.mark.parametrize(
         "style",
-        [{"opacity": -0.1}, {"opacity": 1.1}, {"width": 0}, {"width": 11}, {"dash": "dashdot"}],
+        [
+            {"opacity": -0.1},
+            {"opacity": 1.1},
+            {"width": 0},
+            {"width": 11},
+            {"dash": "dashdot"},
+            {"fill_opacity": -0.01},
+            {"fill_opacity": 1.01},
+        ],
     )
     def test_style_bounds_rejected(self, style):
         with pytest.raises(ValidationError):
             AnnotationStyle.model_validate(style)
 
     def test_style_bounds_accepted(self):
-        style = AnnotationStyle(opacity=1, width=10, dash="dot")
+        style = AnnotationStyle(opacity=1, width=10, dash="dot", fill_opacity=0)
         assert style.opacity == 1 and style.width == 10
+        assert style.fill_opacity == 0
+        assert AnnotationStyle(fill_opacity=1).fill_opacity == 1
 
 
 class TestAuthor:

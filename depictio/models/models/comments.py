@@ -36,8 +36,10 @@ MAX_BODY_CHARS = 4000
 MAX_LABEL_CHARS = 120
 MAX_REASON_CHARS = 1000
 MAX_POINT_IDS = 5000
+MAX_REGION_VERTICES = 1000
 MAX_COMMENTS_PER_THREAD = 500
 MAX_EVIDENCE_ITEMS = 20
+MAX_VARIANT_CHARS = 200
 
 # Mantine palette names: annotations pick a theme colour, never a raw value, so
 # they follow light and dark mode like the rest of the viewer.
@@ -153,6 +155,36 @@ class PointCoord(_Strict):
     y: AxisValue
     trace: int | None = None
     """Index of the trace the point belongs to, when the figure has several."""
+    index: int | None = Field(default=None, ge=0)
+    """Index of the point in its trace's data, kept for traces drawn away from
+    their data x/y (box, violin, bar) to find the drawn mark again."""
+
+
+class BoxRegion(_Strict):
+    """The rectangle a box selection covered."""
+
+    shape: Literal["box"] = "box"
+    x0: AxisValue
+    x1: AxisValue
+    y0: AxisValue
+    y1: AxisValue
+
+
+class LassoRegion(_Strict):
+    """The polygon a lasso selection traced, one vertex per ``x``/``y`` pair."""
+
+    shape: Literal["lasso"] = "lasso"
+    x: list[AxisValue] = Field(min_length=3, max_length=MAX_REGION_VERTICES)
+    y: list[AxisValue] = Field(min_length=3, max_length=MAX_REGION_VERTICES)
+
+    @model_validator(mode="after")
+    def _same_length(self) -> LassoRegion:
+        if len(self.x) != len(self.y):
+            raise ValueError("lasso x and y need the same number of vertices")
+        return self
+
+
+SelectionRegion = Annotated[BoxRegion | LassoRegion, Field(discriminator="shape")]
 
 
 class MarkedPoints(_Strict):
@@ -161,12 +193,15 @@ class MarkedPoints(_Strict):
     Rows are identified by the component's selection column when it has one
     (``column`` + ``ids``), which survives re-sorting and re-ingest. Charts
     without one (bars, histograms) fall back to plain coordinates.
+    ``region`` keeps the area the selection gesture covered, drawn as a
+    shaded background behind the points.
     """
 
     kind: Literal["points"] = "points"
     column: str | None = None
     ids: list[str | int | float] = Field(default_factory=list, max_length=MAX_POINT_IDS)
     coords: list[PointCoord] = Field(default_factory=list, max_length=MAX_POINT_IDS)
+    region: SelectionRegion | None = None
 
     @model_validator(mode="after")
     def _something_marked(self) -> MarkedPoints:
@@ -207,6 +242,8 @@ class AnnotationStyle(_Strict):
     opacity: float | None = Field(default=None, ge=0, le=1)
     dash: Literal["solid", "dash", "dot"] | None = None
     width: float | None = Field(default=None, gt=0, le=10)
+    fill_opacity: float | None = Field(default=None, ge=0, le=1)
+    """Opacity of a marked-points region; 0 draws no background."""
 
 
 class Annotation(_Strict):
@@ -219,6 +256,10 @@ class Annotation(_Strict):
     style: AnnotationStyle = Field(default_factory=AnnotationStyle)
     published: bool = False
     """Visible to viewers of the dashboard (shape and label only)."""
+    variant: str | None = Field(default=None, min_length=1, max_length=MAX_VARIANT_CHARS)
+    """The view of the component the shape was drawn on, for components showing
+    one of several plots (e.g. a MultiQC dataset). A shape with a variant is
+    drawn only on that view; ``None`` draws it on every view."""
 
     @model_validator(mode="after")
     def _geometry_matches_kind(self) -> Annotation:
@@ -408,6 +449,7 @@ class PublishedAnnotation(BaseModel):
     label: str
     color: AnnotationColor
     style: AnnotationStyle
+    variant: str | None = None
 
 
 class CommentAccess(BaseModel):

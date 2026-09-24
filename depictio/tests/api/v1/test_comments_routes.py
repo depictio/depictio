@@ -265,6 +265,47 @@ class TestThreads:
         assert r.annotation.label == "new" and r.annotation.published
         assert r.annotation.geometry.kind == "x_range"
 
+    def test_annotation_patch_style_and_geometry(self, world):
+        points = {
+            "kind": "points",
+            "geometry": {
+                "kind": "points",
+                "coords": [{"x": 1, "y": 2}],
+                "region": {"shape": "box", "x0": 0, "x1": 2, "y0": 0, "y1": 3},
+            },
+            "label": "cluster",
+            "style": {"width": 3, "fill_opacity": 0.2},
+        }
+        a = create(world, annotation=points)
+        assert a.annotation.geometry.region.shape == "box"
+
+        # Style replaces wholesale; explicit nulls leave fields untouched.
+        r = run(
+            cr.update_thread(
+                a.id,
+                ThreadUpdate(
+                    annotation={"style": {"fill_opacity": 0.4}, "label": None, "color": None}
+                ),
+                current_user=world.editor,
+            )
+        )
+        assert r.annotation.style.fill_opacity == 0.4
+        assert r.annotation.style.width is None
+        assert r.annotation.label == "cluster"
+
+        # Dropping the region goes through a full geometry.
+        r = run(
+            cr.update_thread(
+                a.id,
+                ThreadUpdate(
+                    annotation={"geometry": {"kind": "points", "coords": [{"x": 1, "y": 2}]}}
+                ),
+                current_user=world.editor,
+            )
+        )
+        assert r.annotation.geometry.region is None
+        assert r.annotation.style.fill_opacity == 0.4
+
     def test_delete_thread_permissions(self, world):
         t = create(world)
         with pytest.raises(HTTPException) as e:

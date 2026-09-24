@@ -441,6 +441,7 @@ async def list_published_annotations(
                 label=ann.label,
                 color=ann.color,
                 style=ann.style,
+                variant=ann.variant,
             )
         )
     out.sort(key=lambda a: (a.number is None, a.number or 0))
@@ -622,7 +623,14 @@ async def update_thread(
     if body.annotation is not None:
         if thread.annotation is None:
             raise HTTPException(status_code=404, detail="This thread has no annotation.")
-        patch = body.annotation.model_dump(mode="python", exclude_unset=True)
+        # An explicit null means "leave as is": every annotation field is
+        # required once set. ``style`` and ``geometry`` replace the stored
+        # value wholesale, so clients send the complete object.
+        patch = {
+            k: v
+            for k, v in body.annotation.model_dump(mode="python", exclude_unset=True).items()
+            if v is not None
+        }
         if patch.get("published") and thread.is_agent_proposal:
             raise HTTPException(
                 status_code=409,
