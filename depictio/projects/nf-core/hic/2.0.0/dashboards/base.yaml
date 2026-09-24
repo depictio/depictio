@@ -3,12 +3,11 @@ version: 1
 #
 # Funnel: the reprocessed MultiQC report -> HiC-Pro's valid-pair funnel as
 # numbers a card can hold -> the shape of the library (P(s)) -> the contact
-# matrix with its 1D tracks stacked underneath -> the A/B compartments read
-# off it -> the TAD domains derived from the insulation track -> what a
-# multi-sample run would add. The sample hub anchors every tab through the
-# project links; the run this template was validated against is a single
-# sample (three merged FASTQ pairs), so the sample filter has one value today
-# and is ready for a multi-sample run without any change.
+# matrix with its 1D tracks stacked underneath (the locus tab) -> the A/B
+# compartments read
+# off it and the TAD domains derived from the insulation track, genome-wide.
+# The sample hub anchors every tab through the project links, so a
+# multi-sample run filters every tab by sample without any change.
 #
 # HIC-PRO'S NUMBERS APPEAR TWICE, ON PURPOSE. The MultiQC tab keeps HiC-Pro's
 # own panels, because that is the report a reader may already know. But a
@@ -27,7 +26,7 @@ version: 1
 # display-only field MultiQC never persists as a plot id.
 main_dashboard:
   title: nf-core/hic
-  subtitle: "nf-core/hic 2.0.0 megatest: one mESC Hi-C sample (HIC_ES_4), three FASTQ pairs merged by HiC-Pro"
+  subtitle: "Hi-C chromatin architecture: HiC-Pro's valid-pair funnel, library shape, contact maps with their domain and compartment tracks, and the MultiQC report"
   project_tag: Hi-C Genome Architecture
   main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
@@ -42,10 +41,10 @@ main_dashboard:
     description: Applies to every tab through the project links
     persistent: true
     pin: top
-  - name: Funnel scope
+  - name: Glance scope
     icon: mdi:tune
     color: orange
-    description: Narrows the pinned funnel strip to one mapping or contact fate
+    description: Valid-pair rate band on the per-sample funnel the pinned glance strip reads
   grid_sections:
   # Pinned to the top and carried by every tab: the four numbers that decide
   # whether a Hi-C library is worth reading at all. Cards are legal on the
@@ -76,13 +75,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: top
-  - name: Reference tables
-    icon: mdi:table
-    color: gray
-    description: Per-chromosome compartment eigenvalues, on every tab
-    collapsed: true
-    persistent: true
-    pin: bottom
   components:
   # ------------------------------------------------- pinned glance strip (x4)
   - component_type: card
@@ -166,10 +158,9 @@ main_dashboard:
     alignment: left
     body: >
       The reprocessed [MultiQC](https://multiqc.info) report: the general
-      statistics table first, then FastQC on the merged reads, then HiC-Pro's
-      own mapping, pairing, filtering and contact-statistics panels. The same
-      HiC-Pro numbers are read a second time as a table, which is what the
-      pinned strip above and the Run QC tab are built from.
+      statistics table, FastQC on the merged reads, then HiC-Pro's own
+      mapping, pairing, filtering and contact-statistics panels. The pinned
+      strip above and the Run QC tab read the same HiC-Pro numbers as tables.
     workflow_tag: hic
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -198,9 +189,9 @@ main_dashboard:
     alignment: left
     body: >
       [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
-      the two merged FASTQ files (R1/R2) HiC-Pro maps in two-step mode. There
-      is no adapter-trimming module in this run: HiC-Pro's own mapping step
-      does the trimming, in the panels below.
+      the merged R1 and R2 files HiC-Pro maps in two-step mode. nf-core/hic has
+      no adapter-trimming module: HiC-Pro's mapping step trims, in the panels
+      below.
     workflow_tag: hic
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -367,8 +358,8 @@ main_dashboard:
     alignment: left
     body: >
       One row per Hi-C sample, with how many FASTQ pairs HiC-Pro merged into
-      it. This is the collection the sample filter in the left panel is
-      sourced on, so it is what narrows every other tab.
+      it. The sample filter in the left panel is sourced on this table, so it
+      narrows every other tab.
     workflow_tag: hic
     data_collection_tag: samples
     layout: {x: 0, y: 0, w: 6, h: 2}
@@ -394,42 +385,13 @@ main_dashboard:
     section: Sample sheet
     workflow_tag: hic
     data_collection_tag: samples
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample_id
     title: Sample hub
     description: One row per sample, with the FASTQ pairs HiC-Pro merged into it.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 3}
-
-  # -------------------------------------------------------- reference tables
-  - component_type: text
-    tag: hc-ref-intro
-    section: Reference tables
-    title: What the compartment track is built from
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Per-chromosome eigenvalues behind the [cooltools](https://cooltools.readthedocs.io)
-      A/B compartment track: how much of each chromosome's intra-chromosomal
-      correlation structure the first eigenvector explains. The per-bin track
-      itself is on the Compartments tab.
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvalues
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: table
-    tag: hc-ref-table-eigenvalues
-    section: Reference tables
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvalues
-    use: cooltools/eigenvalues
-    row_selection_enabled: false
-    title: Compartment eigenvalues
-    description: eigval1/2/3 per chromosome, both resolutions the run scanned.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
@@ -446,21 +408,23 @@ main_dashboard:
     placement: left
     title: Sample
     layout: {x: 0, y: 0, w: 1, h: 3}
-  # Tab-local: the only categorical column the MultiQC tab's own collections
-  # offer. It narrows the pinned funnel strip that rides this tab.
+  # Tab-local, not persistent: this tab's own control beside the pinned
+  # sample filter. It narrows the pinned glance strip cards that read
+  # pair_stats.
   - component_type: interactive
-    tag: hc-mq-filter-mapping
-    index: hc-mq-mapping-filter
-    section: Funnel scope
-    group: Read-pair fate
+    tag: hc-mq-filter-validrate
+    index: hc-mq-validrate-range
+    section: Glance scope
+    group: Valid pairs
     workflow_tag: hic
-    data_collection_tag: pair_flow
-    interactive_component_type: Select
-    column_name: mapping
-    column_type: object
-    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:shape-outline'}
+    data_collection_tag: pair_stats
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: valid_pair_rate
+    column_type: float64
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:check-decagram'}
     placement: left
-    title: Mapping fate
+    title: Valid-pair rate
     layout: {x: 0, y: 0, w: 1, h: 3}
 
 tabs:
@@ -468,7 +432,7 @@ tabs:
 # Run QC: the valid-pair funnel
 # ============================================================================
 - title: Run QC
-  subtitle: Where half a billion read pairs go, from the sequencer to the long-range cis contacts a Hi-C experiment is built for
+  subtitle: Where the read pairs go, from the sequencer to the long-range cis contacts a Hi-C library is built for
   tab_order: 2
   tab_icon: mdi:filter-variant
   tab_icon_color: teal
@@ -574,14 +538,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      HiC-Pro makes three decisions about every read pair. Does it map
-      uniquely at both ends? Do the two ends sit on restriction fragments that
-      a real ligation could have joined, or is the pair a dangling end, a
-      re-ligation or a self circle? And is the surviving contact
-      intra-chromosomal (cis) or inter-chromosomal (trans)? Each ribbon below
-      is one of those paths, weighted by read pairs, and every loss peels off
-      into the Lost lane at the step it stopped at. The three levels reconcile
-      exactly with the totals HiC-Pro reports.
+      Every read pair followed through HiC-Pro's three decisions: unique
+      mapping at both ends, a valid ligation product rather than a dangling
+      end, re-ligation or self circle, and a cis or trans contact. Ribbons are
+      weighted by read pairs, and each loss peels off into the Lost lane at the
+      step where the pair stopped.
     workflow_tag: hic
     data_collection_tag: pair_flow
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -609,7 +570,8 @@ tabs:
     workflow_tag: hic
     data_collection_tag: pair_flow
     use: hicpro/pair_flow
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     title: Read-pair fates table
     description: One row per path through the three decisions, with the pairs that take it.
     title_size: h3
@@ -626,8 +588,7 @@ tabs:
     alignment: left
     body: >
       The same statistics pivoted the other way: one row per sample, one
-      column per stage, plus the derived rates the strips above read. This is
-      the collection a multi-sample run turns into a cohort comparison.
+      column per stage, plus the derived rates the cards above read.
     workflow_tag: hic
     data_collection_tag: pair_stats
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -637,7 +598,8 @@ tabs:
     workflow_tag: hic
     data_collection_tag: pair_stats
     use: hicpro/pair_stats
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     title: Valid-pair funnel
     description: Counts and rates per sample, from pairs processed to the long-range cis contacts.
     title_size: h3
@@ -678,7 +640,7 @@ tabs:
 # Library shape: P(s)
 # ============================================================================
 - title: Library shape
-  subtitle: How contact probability falls off with genomic distance, per chromosome and pooled, and how the short and long range split
+  subtitle: How contact probability falls off with genomic distance, per chromosome and pooled, and how much of the library is long-range or trans
   tab_order: 3
   tab_icon: mdi:chart-line
   tab_icon_color: cyan
@@ -694,20 +656,15 @@ tabs:
   - name: Shape at a glance
     icon: mdi:counter
     color: cyan
-    description: The slope, the peak probability and the range split
+    description: The slope, the long-range share and the trans share
   - name: Contact probability
     icon: mdi:chart-line
     color: cyan
     description: P(s) with its log-log derivative panel, one curve per chromosome
-  - name: The published curve
-    icon: mdi:chart-bell-curve
-    color: blue
-    description: What hicexplorer wrote, for comparison
-    collapsed: true
-  - name: P(s) table
+  - name: P(s) tables
     icon: mdi:table
     color: gray
-    description: The binned rows behind both curves
+    description: The binned rows behind the curve, and the pooled curve hicexplorer wrote
     collapsed: true
   components:
   - component_type: card
@@ -728,21 +685,21 @@ tabs:
     title: Log-log slope
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: hc-ls-card-prob
-    index: hc-ls-card-prob
+    tag: hc-ls-card-trans
+    index: hc-ls-card-trans
     section: Shape at a glance
     workflow_tag: hic
-    data_collection_tag: distance_profile
-    use: cooltools/distance_profile
-    aggregation: max
+    data_collection_tag: pair_stats
+    use: hicpro/pair_stats
+    aggregation: average
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: contact_probability
+    column_name: trans_ratio
     column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    display: {icon_name: 'mdi:alert-outline', icon_color: '#F4511E', title_color: '#F4511E', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Contact probability
+    title: Trans share
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     tag: hc-ls-card-longrange
@@ -789,19 +746,14 @@ tabs:
     order: 2
     alignment: left
     body: >
-      P(s) is the probability that two loci a distance s apart are in contact.
-      It is recomputed here from the balanced contact dump rather than read
-      from a tool output, because nf-core/hic never runs cooltools expected-cis
-      and the curve the pipeline does publish stops at 3 Mb with a single
-      pooled series. The denominator is every bin pair that could have been
-      observed at that separation, not the non-zero pixels the sparse dump
-      wrote, which is what keeps the tail from flattening artificially. The
-      panel under the curves is its local log-log slope: a fractal globule
-      sits near -1, an equilibrium globule falls to -1.5 and steeper, and a
-      bump or a plateau is trans contamination or a large rearrangement.
+      P(s), the probability that two loci a distance s apart are in contact,
+      per chromosome and pooled, with its local log-log slope underneath. A
+      slope near -1 is the usual interphase range, a fall to -1.5 and steeper
+      is a more compact polymer, and a bump or plateau points to trans
+      contamination or a large rearrangement.
     workflow_tag: hic
     data_collection_tag: distance_profile
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: hc-ls-av-ps
     index: hc-ls-av-ps
@@ -817,69 +769,39 @@ tabs:
       derivative: true
       derivative_window: 3
       legend_pos: right
+      selection_enabled: true
+      selection_column: chrom
     title: "Contact probability P(s) and its slope"
     description: "One curve per chromosome plus the pooled genome-wide curve on log-log axes, with the local slope d log P / d log s in the panel underneath."
     title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 9}
-
-  - component_type: text
-    tag: hc-ls-decay-intro
-    section: The published curve
-    title: What the pipeline itself wrote
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [hicexplorer](https://hicexplorer.readthedocs.io)'s
-      `hicPlotDistVsCounts` curve, as the run published it: 13 points, pooled
-      across the genome, from the 250 kb matrix. It is kept for comparison
-      with the recomputed curve above, which resolves the same decay per
-      chromosome and out to the full chromosome length.
-    workflow_tag: hic
-    data_collection_tag: distance_decay
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: hc-ls-av-decay
-    index: hc-ls-av-decay
-    section: The published curve
-    workflow_tag: hic
-    data_collection_tag: distance_decay
-    use: hicexplorer/decay_curve
-    config:
-      x_title: Genomic distance (bp)
-      y_title: Mean contact frequency
-      log_x: true
-      log_y: true
-    title: "Contact probability vs distance (hicexplorer)"
-    description: "Mean contact frequency at every distance bin the pipeline reported."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
-  - component_type: table
-    tag: hc-ls-table-decay
-    section: The published curve
-    workflow_tag: hic
-    data_collection_tag: distance_decay
-    use: hicexplorer/distance_decay
-    row_selection_enabled: false
-    title: Distance-decay table
-    description: Every distance bin, with the bin-pair count and the normalisation factor behind the curve.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 3}
+    layout: {x: 0, y: 2, w: 8, h: 9}
 
   - component_type: table
     tag: hc-ls-table-ps
-    section: P(s) table
+    section: P(s) tables
     workflow_tag: hic
     data_collection_tag: distance_profile
     use: cooltools/distance_profile
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     title: P(s) bins
     description: Observed signal, possible bin pairs, probability and slope for every distance bin of every series.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 0, w: 8, h: 7}
+
+  - component_type: table
+    tag: hc-ls-table-decay
+    section: P(s) tables
+    workflow_tag: hic
+    data_collection_tag: distance_decay
+    use: hicexplorer/distance_decay
+    row_selection_enabled: false
+    title: Distance-decay table
+    description: The pooled distance-decay curve hicexplorer wrote, every distance bin with its bin-pair count and normalisation factor.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 7, w: 8, h: 3}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
@@ -896,26 +818,11 @@ tabs:
     placement: left
     title: Chromosome
     layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: hc-ls-filter-decaychrom
-    index: hc-ls-decaychrom-filter
-    section: Curve scope
-    group: Region
-    workflow_tag: hic
-    data_collection_tag: distance_decay
-    interactive_component_type: Select
-    column_name: chromosome
-    column_type: object
-    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:map-marker-outline'}
-    placement: left
-    title: Chromosome (published curve)
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
 # ============================================================================
 # Contact maps
 # ============================================================================
 - title: Contact maps
-  subtitle: A locus section. The TAD domains, the contact triangle, the insulation score and the A/B compartment track on one genomic axis, all following one region
+  subtitle: The locus tab. TAD domains, the contact triangle, the insulation score and the A/B compartment track on one genomic axis, all following one region
   tab_order: 4
   tab_icon: mdi:grid
   tab_icon_color: indigo
@@ -931,7 +838,7 @@ tabs:
   - name: Matrix at a glance
     icon: mdi:counter
     color: indigo
-    description: The signal in the matrix and in the tracks under it
+    description: The signal in the matrix and in the tracks under it, in the region on view
   - name: Genome architecture
     icon: mdi:dna
     color: indigo
@@ -952,7 +859,7 @@ tabs:
     display: {icon_name: 'mdi:grid', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Balanced contact value
+    title: Balanced contacts in this region
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     tag: hc-cm-card-insulation
@@ -969,7 +876,7 @@ tabs:
     display: {icon_name: 'mdi:chart-line', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Insulation score
+    title: Insulation in this region
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     tag: hc-cm-card-e1
@@ -986,7 +893,7 @@ tabs:
     display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: E1 spread
+    title: E1 in this region
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     tag: hc-cm-card-compartment
@@ -1003,7 +910,7 @@ tabs:
     display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: A and B bins
+    title: A and B bins in this region
     layout: {x: 6, y: 0, w: 2, h: 2}
 
   # ------------------------------------------------------------ locus section
@@ -1024,14 +931,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The section opens on chr2:65-85 Mb, 20 Mb around the HoxD cluster (about
-      74.7 Mb), where the mESC domains, the A/B switch and the insulation dips
-      all line up. The navigator draws the TAD domains cooltools called at
-      each insulation window; type a locus or a gene symbol in its header, or
-      brush its axis, and the contact triangle and both tracks move with it.
-      The triangle reads every resolution the run dumped (500 kb and 1 Mb) and
-      picks the one that fits the span: TADs are the small triangles along
-      the diagonal, compartments the larger checkerboard behind them.
+      The section opens on a documented default region, chr2:65-85 Mb; type a
+      locus or a gene symbol in the navigator header, or brush its axis, and
+      the contact triangle and both tracks move with it. The triangle draws the
+      finest dumped resolution that fits the span, so domains smaller than that
+      bin show in the tracks but not as triangles.
     workflow_tag: hic
     data_collection_tag: tad_domains
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1046,14 +950,14 @@ tabs:
       controls_placement: header
       mark: rect
       category_col: window
-      assembly: mm10
-      annotation: mm10
+      assembly: "{GENOME}"
+      annotation: "{GENOME}"
       score_title: Domain size (kb)
       opacity: 0.75
       region_filter_enabled: true
       default_region: "chr2:65,000,000-85,000,000"
     title: "TAD domains, the navigator"
-    description: "One rectangle per domain, coloured by the insulation window it was called at, over the mm10 genes. The locus field and a brush on this axis move every tile below."
+    description: "One rectangle per domain, coloured by the insulation window it was called at, on the {GENOME} axis. The locus field and a brush on this axis move every tile below."
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 3}
   - component_type: advanced_viz
@@ -1072,7 +976,7 @@ tabs:
       colour_scale: Inferno
       log_scale: true
     title: "Contact triangle"
-    description: "ICE-balanced intra-chromosomal contacts on the same x axis as the domains above, at the resolution matching the region. Height is the separation between the two bins; colour is contact frequency on a log scale."
+    description: "ICE-balanced intra-chromosomal contacts over the region the navigator shows, on the same x axis as the tracks, at the resolution matching its span. Height is the separation between the two bins; colour is contact frequency on a log scale."
     title_size: h3
     layout: {x: 0, y: 5, w: 8, h: 6}
   - component_type: advanced_viz
@@ -1091,8 +995,8 @@ tabs:
       y_scale: linear
       view: track
       views: [track, locus]
-      locus_annotation: none
-      locus_assembly: mm10
+      locus_annotation: "{GENOME}"
+      locus_assembly: "{GENOME}"
     title: "Insulation score"
     description: "log2 insulation per bin, one line per insulation window. Dips are the TAD boundaries the domains above are cut at; masked bins carry no value."
     title_size: h3
@@ -1114,10 +1018,10 @@ tabs:
       y_scale: linear
       view: track
       views: [track, locus]
-      locus_annotation: none
-      locus_assembly: mm10
+      locus_annotation: "{GENOME}"
+      locus_assembly: "{GENOME}"
     title: "A/B compartment track (E1)"
-    description: "The first eigenvector per bin, one line per eigs-cis resolution. Above zero is the A compartment, below it B; the switches line up with the checkerboard in the triangle."
+    description: "The first eigenvector per bin, one line per eigs-cis resolution, phased so the better-covered compartment is positive. Above zero is A, below it B; the switches line up with the checkerboard in the triangle."
     title_size: h3
     layout: {x: 0, y: 14, w: 8, h: 3}
 
@@ -1170,242 +1074,41 @@ tabs:
     layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
-# Compartments
+# Domains and compartments
 # ============================================================================
-- title: Compartments
-  subtitle: The A/B compartment track cooltools eigs-cis reads off the correlation matrix, at every resolution the run scanned
+# Genome-wide: how many domains, how large, how much of the genome is A or B.
+# No tracks and no region here (the tracks live on Contact maps, the locus
+# tab), and no chromosome filter, so every card reads the whole genome.
+- title: Domains and compartments
+  subtitle: TAD domains and A/B compartments genome-wide, the counts, sizes and splits behind the locus tracks
   tab_order: 5
-  tab_icon: mdi:scale-balance
+  tab_icon: mdi:border-all-variant
   tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Compartment scope
+  - name: Call scope
     icon: mdi:tune
     color: violet
-    description: Chromosome, compartment and resolution to keep in view
-  grid_sections:
-  - name: Compartments at a glance
-    icon: mdi:counter
-    color: violet
-    description: How the genome splits between A and B, and how strong the split is
-  - name: The A/B track
-    icon: mdi:scale-balance
-    color: violet
-    description: E1, the first eigenvector of the intra-chromosomal correlation matrix
-  - name: Compartment table
-    icon: mdi:table
-    color: grape
-    description: The per-bin rows behind the track
-    collapsed: true
-  components:
-  - component_type: card
-    tag: hc-cp-card-split
-    index: hc-cp-card-split
-    section: Compartments at a glance
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    use: cooltools/eigenvector
-    aggregation: count
-    column_name: E1
-    column_type: float64
-    secondary_layout: donut
-    breakdown_col: compartment
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: A and B bins
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: hc-cp-card-e1
-    index: hc-cp-card-e1
-    section: Compartments at a glance
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    use: cooltools/eigenvector
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: E1
-    column_type: float64
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: E1 spread
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: hc-cp-card-eig1
-    index: hc-cp-card-eig1
-    section: Compartments at a glance
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvalues
-    use: cooltools/eigenvalues
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: eigval1
-    column_type: float64
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Eigenvalue 1
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: hc-cp-card-eig2
-    index: hc-cp-card-eig2
-    section: Compartments at a glance
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvalues
-    use: cooltools/eigenvalues
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: eigval2
-    column_type: float64
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Eigenvalue 2
-    layout: {x: 6, y: 0, w: 2, h: 2}
-
-  - component_type: text
-    tag: hc-cp-intro
-    section: The A/B track
-    title: Sign, not magnitude
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [cooltools eigs-cis](https://cooltools.readthedocs.io) diagonalises the
-      intra-chromosomal correlation matrix; E1's sign marks the two
-      compartments (conventionally A positive and gene-dense, B negative), and
-      its zero-crossings are compartment boundaries. The recipe stores that
-      sign as a column of its own, so a reader can filter to one compartment
-      and colour by it instead of re-deriving the threshold in every tile.
-      Blacklisted bins carry no value and appear in neither compartment.
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # One tile, two readings (test_no_double_track_binding): the locus view is
-  # the chromosome-aware GenomeSpy track over the mm10 genes, the track view
-  # the smoothed Plotly line. It used to be a genome_view and a coverage_track
-  # on the same collection.
-  - component_type: advanced_viz
-    tag: hc-cp-av-track
-    index: hc-cp-av-track
-    section: The A/B track
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    use: cooltools/compartment_track
-    config:
-      controls_placement: header
-      end_col: end
-      sample_col: resolution
-      category_col: compartment
-      view_mode: overlay
-      color_by: category
-      y_scale: linear
-      view: locus
-      views: [locus, track]
-      locus_annotation: mm10
-      locus_assembly: mm10
-    title: "A/B compartment track (E1)"
-    description: "E1 per bin coloured by compartment, over the mm10 gene lane, one series per eigs-cis resolution. The header switch flips to the smoothed Plotly line, one chromosome at a time."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  - component_type: table
-    tag: hc-cp-table
-    section: Compartment table
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    use: cooltools/eigenvector
-    row_selection_enabled: false
-    title: Compartment bins
-    description: Every bin's weight, its compartment call and its three eigenvectors, both resolutions the run scanned.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 7}
-
-  # ---------------------------------------------------------------- filters
-  - component_type: interactive
-    tag: hc-cp-filter-chrom
-    index: hc-cp-chrom-filter
-    section: Compartment scope
-    group: Region
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    interactive_component_type: Select
-    column_name: chrom
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:map-marker-outline'}
-    placement: left
-    title: Chromosome
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: hc-cp-filter-compartment
-    index: hc-cp-compartment-filter
-    section: Compartment scope
-    group: Region
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    interactive_component_type: Select
-    column_name: compartment
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:scale-balance'}
-    placement: left
-    title: Compartment
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: hc-cp-filter-resolution
-    index: hc-cp-resolution-filter
-    section: Compartment scope
-    group: Resolution
-    workflow_tag: hic
-    data_collection_tag: compartment_eigenvector
-    interactive_component_type: RangeSlider
-    column_name: resolution
-    column_type: int64
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
-    placement: left
-    title: Resolution (bp)
-    layout: {x: 0, y: 6, w: 1, h: 3}
-
-# ============================================================================
-# TADs and boundaries
-# ============================================================================
-- title: TADs and boundaries
-  subtitle: The insulation score cooltools scans across the matrix, the boundaries it calls from it, and the domains those boundaries enclose
-  tab_order: 6
-  tab_icon: mdi:border-all-variant
-  tab_icon_color: pink
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  filter_sections:
-  - name: Insulation scope
-    icon: mdi:tune
-    color: pink
-    description: Chromosome, window size and resolution to keep in view
+    description: Insulation window, compartment resolution and compartment to keep in view
   grid_sections:
   - name: Domains at a glance
     icon: mdi:counter
     color: pink
     description: How many domains, how large, and how much of them is mappable
-  - name: TAD domains
-    icon: mdi:shape-outline
-    color: pink
-    description: The intervals between consecutive boundary calls
-  - name: Insulation score
-    icon: mdi:chart-line
-    color: grape
-    description: Low insulation marks a TAD boundary
-  - name: Domain and insulation tables
+  - name: Compartments at a glance
+    icon: mdi:counter
+    color: violet
+    description: How the genome splits between A and B, and how strong the split is
+  - name: Domain and compartment distributions
+    icon: mdi:chart-bar
+    color: violet
+    description: Domain sizes per insulation window, and the A and B share per chromosome
+  - name: Domain, insulation and compartment tables
     icon: mdi:table
     color: gray
-    description: The rows behind both tracks
+    description: The rows behind every card and track
     collapsed: true
   components:
   - component_type: card
@@ -1477,99 +1180,118 @@ tabs:
     title_align: left
     title: Bins called a boundary
     layout: {x: 6, y: 0, w: 2, h: 2}
-
+  - component_type: card
+    tag: hc-cp-card-split
+    index: hc-cp-card-split
+    section: Compartments at a glance
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvector
+    use: cooltools/eigenvector
+    aggregation: count
+    column_name: E1
+    column_type: float64
+    secondary_layout: donut
+    breakdown_col: compartment
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: A and B bins
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: hc-cp-card-e1
+    index: hc-cp-card-e1
+    section: Compartments at a glance
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvector
+    use: cooltools/eigenvector
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: E1
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: E1 spread
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: hc-cp-card-eig1
+    index: hc-cp-card-eig1
+    section: Compartments at a glance
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvalues
+    use: cooltools/eigenvalues
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: eigval1
+    column_type: float64
+    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Eigenvalue 1
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: hc-cp-card-eig2
+    index: hc-cp-card-eig2
+    section: Compartments at a glance
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvalues
+    use: cooltools/eigenvalues
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: eigval2
+    column_type: float64
+    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Eigenvalue 2
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: text
-    tag: hc-td-domains-intro
-    section: TAD domains
-    title: A domain is what lies between two boundaries
+    tag: hc-dc-intro
+    section: Domain and compartment distributions
+    title: Genome-wide, not one locus
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      cooltools calls boundaries, not domains: it flags the individual bins
-      whose neighbourhood is depleted of crossing contacts. The interval list
-      below is derived from those flags, because no module in nf-core/hic 2.x
-      emits one (hicFindTADs never runs, as the execution trace confirms).
-      Runs of adjacent flagged bins are merged first, since a boundary at
-      20 kb is usually two or three bins wide, and a domain then runs from the
-      end of one boundary to the start of the next. Domains are scored on how
-      much of their span is mappable, and one that is mostly unmappable is
-      dropped rather than reported as an enormous TAD.
+      Domain sizes per insulation window (a wider window calls fewer, larger
+      domains) and the share of each chromosome's bins in A and in B. E1 is
+      phased per chromosome so the better-covered compartment is A, the same
+      way at every resolution.
     workflow_tag: hic
     data_collection_tag: tad_domains
-    layout: {x: 0, y: 0, w: 8, h: 3}
-  - component_type: advanced_viz
-    tag: hc-td-av-domains
-    index: hc-td-av-domains
-    section: TAD domains
-    workflow_tag: hic
-    data_collection_tag: tad_domains
-    use: cooltools/domain_track
-    config:
-      controls_placement: header
-      mark: rect
-      category_col: window
-      assembly: mm10
-      annotation: mm10
-      score_title: Domain size (kb)
-      point_size: 3
-      opacity: 0.75
-      region_filter_enabled: true
-      default_region: "chr2:65,000,000-85,000,000"
-    title: "TAD domains along the genome"
-    description: "One rectangle per domain, from the left boundary to the right one, coloured by the insulation window it was called at, over the mm10 gene lane. A brush here moves the insulation track below."
-    title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 7}
-  - component_type: text
-    tag: hc-td-intro
-    section: Insulation score
-    title: Where contacts stop crossing
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [cooltools insulation](https://cooltools.readthedocs.io) slides a window
-      along the diagonal and scores how depleted of crossing contacts each bin
-      is; a bin whose neighbourhood is depleted is a TAD boundary.
-      `is_boundary` is cooltools' own threshold call on the score's local
-      minima, at every window size the run scanned. The window matters: a
-      wider window calls fewer, larger domains.
-    workflow_tag: hic
-    data_collection_tag: tad_insulation
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One tile, two readings (test_no_double_track_binding): it used to be a
-  # genome_view and a coverage_track on tad_insulation. It opens on the track
-  # view because that view clamps its x axis to the region the domain track
-  # above emits (tad_domains -> tad_insulation region link); the locus view
-  # narrows its rows to the region but does not zoom to it yet (HC-D20).
-  - component_type: advanced_viz
-    tag: hc-td-av-track
-    index: hc-td-av-track
-    section: Insulation score
+  - component_type: figure
+    tag: hc-dc-fig-domainsize
+    section: Domain and compartment distributions
     workflow_tag: hic
-    data_collection_tag: tad_insulation
-    use: cooltools/insulation_track
-    config:
-      controls_placement: header
-      end_col: end
-      sample_col: window
-      view_mode: overlay
-      color_by: sample
-      y_scale: linear
-      view: track
-      views: [track, locus]
-      locus_annotation: none
-      locus_assembly: mm10
-    title: "Insulation score, on the genome axis"
-    description: "log2 insulation per bin, one line per window, clamped to the region brushed or typed on the domains above. Dips mark candidate TAD boundaries; masked bins carry no value. The header switch flips to the GenomeSpy locus view."
+    data_collection_tag: tad_domains
+    use: cooltools/domains
+    visu_type: box
+    dict_kwargs: {x: window, y: size_kb, color: window, title: Domain size by insulation window}
+    title: Domain size by insulation window
+    description: One box per insulation window, domain size in kb; the median should grow with the window.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: hc-dc-fig-compartment
+    section: Domain and compartment distributions
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvector
+    use: cooltools/eigenvector
+    visu_type: histogram
+    dict_kwargs: {x: chrom, color: compartment, title: A and B bins per chromosome}
+    title: A and B bins per chromosome
+    description: Bins called A and B on every chromosome, all resolutions pooled unless the resolution filter narrows them.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   - component_type: table
     tag: hc-td-table-domains
-    section: Domain and insulation tables
+    section: Domain, insulation and compartment tables
     workflow_tag: hic
     data_collection_tag: tad_domains
     use: cooltools/domains
@@ -1581,7 +1303,7 @@ tabs:
     layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
     tag: hc-td-table
-    section: Domain and insulation tables
+    section: Domain, insulation and compartment tables
     workflow_tag: hic
     data_collection_tag: tad_insulation
     use: cooltools/insulation
@@ -1591,41 +1313,39 @@ tabs:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: table
+    tag: hc-cp-table
+    section: Domain, insulation and compartment tables
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvector
+    use: cooltools/eigenvector
+    row_selection_enabled: false
+    title: Compartment bins
+    description: Every bin's weight, its compartment call and its three eigenvectors, both resolutions the run scanned.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 14, w: 8, h: 7}
+  - component_type: table
+    tag: hc-ref-table-eigenvalues
+    section: Domain, insulation and compartment tables
+    workflow_tag: hic
+    data_collection_tag: compartment_eigenvalues
+    use: cooltools/eigenvalues
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Compartment eigenvalues
+    description: eigval1/2/3 per chromosome, both resolutions the run scanned.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 21, w: 8, h: 5}
 
   # ---------------------------------------------------------------- filters
-  - component_type: interactive
-    tag: hc-td-filter-chrom
-    index: hc-td-chrom-filter
-    section: Insulation scope
-    group: Region
-    workflow_tag: hic
-    data_collection_tag: tad_domains
-    interactive_component_type: Select
-    column_name: chrom
-    column_type: object
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:map-marker-outline'}
-    placement: left
-    title: Chromosome (domains)
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: hc-td-filter-inschrom
-    index: hc-td-inschrom-filter
-    section: Insulation scope
-    group: Region
-    workflow_tag: hic
-    data_collection_tag: tad_insulation
-    interactive_component_type: Select
-    column_name: chrom
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:map-marker-outline'}
-    placement: left
-    title: Chromosome (insulation)
-    layout: {x: 0, y: 3, w: 1, h: 3}
+  # No chromosome filter: this tab is the genome-wide reading.
   - component_type: interactive
     tag: hc-td-filter-domainwindow
     index: hc-td-domainwindow-filter
-    section: Insulation scope
-    group: Window
+    section: Call scope
+    group: Calls
     workflow_tag: hic
     data_collection_tag: tad_domains
     interactive_component_type: RangeSlider
@@ -1633,13 +1353,13 @@ tabs:
     column_type: int64
     display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:ruler'}
     placement: left
-    title: Boundary window (bp)
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    title: Domain window (bp)
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: hc-td-filter-window
     index: hc-td-window-filter
-    section: Insulation scope
-    group: Window
+    section: Call scope
+    group: Calls
     workflow_tag: hic
     data_collection_tag: tad_insulation
     interactive_component_type: RangeSlider
@@ -1648,192 +1368,32 @@ tabs:
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
     placement: left
     title: Insulation window (bp)
-    layout: {x: 0, y: 9, w: 1, h: 3}
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
-    tag: hc-td-filter-resolution
-    index: hc-td-resolution-filter
-    section: Insulation scope
-    group: Window
+    tag: hc-cp-filter-resolution
+    index: hc-cp-resolution-filter
+    section: Call scope
+    group: Calls
     workflow_tag: hic
-    data_collection_tag: tad_domains
+    data_collection_tag: compartment_eigenvector
     interactive_component_type: RangeSlider
     column_name: resolution
     column_type: int64
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:ruler'}
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
     placement: left
-    title: Resolution (bp)
-    layout: {x: 0, y: 12, w: 1, h: 3}
-
-# ============================================================================
-# Compare samples
-# ============================================================================
-- title: Compare samples
-  subtitle: What a multi-sample Hi-C run would add, and what the collections already carry for it
-  tab_order: 7
-  tab_icon: mdi:account-group-outline
-  tab_icon_color: grape
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  filter_sections:
-  - name: Cohort scope
-    icon: mdi:tune
-    color: grape
-    description: Contact fate to compare the samples on
-  grid_sections:
-  - name: Cohort at a glance
-    icon: mdi:counter
-    color: grape
-    description: The per-sample numbers a cohort would be ranked on
-  - name: What is missing
-    icon: mdi:account-group-outline
-    color: grape
-    description: Why this tab has one bar today
-  - name: Per-sample table
-    icon: mdi:table
-    color: gray
-    description: The funnel, one row per sample
-  components:
-  - component_type: card
-    tag: hc-cs-card-valid
-    index: hc-cs-card-valid
-    section: Cohort at a glance
-    workflow_tag: hic
-    data_collection_tag: pair_stats
-    use: hicpro/pair_stats
-    aggregation: sum
-    column_name: valid_pairs_rmdup
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Unique valid pairs
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: hc-cs-card-long
-    index: hc-cs-card-long
-    section: Cohort at a glance
-    workflow_tag: hic
-    data_collection_tag: pair_stats
-    use: hicpro/pair_stats
-    aggregation: sum
-    column_name: cis_long_range
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:ruler', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Long-range cis contacts
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: hc-cs-card-trans
-    index: hc-cs-card-trans
-    section: Cohort at a glance
-    workflow_tag: hic
-    data_collection_tag: pair_stats
-    use: hicpro/pair_stats
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: trans_ratio
-    column_type: float64
-    display: {icon_name: 'mdi:alert-outline', icon_color: '#F4511E', title_color: '#F4511E', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Trans share
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: hc-cs-card-rate
-    index: hc-cs-card-rate
-    section: Cohort at a glance
-    workflow_tag: hic
-    data_collection_tag: pair_stats
-    use: hicpro/pair_stats
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: valid_pair_rate
-    column_type: float64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Valid-pair rate
-    layout: {x: 6, y: 0, w: 2, h: 2}
-
-  - component_type: text
-    tag: hc-cs-intro
-    section: What is missing
-    title: One sample is not a cohort
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The run this template was validated against is a single mouse ES-cell
-      library, HIC_ES_4, assembled from three sequencing runs that HiC-Pro
-      merged before mapping. Every comparison a Hi-C cohort is read for
-      therefore has one bar: reproducibility between replicates (the HiCRep
-      stratum-adjusted correlation), P(s) curves overlaid across conditions,
-      compartment flips between cell types, boundary strength gained or lost
-      on treatment. Nothing in this dashboard hard-codes one sample: the hub
-      carries the sample filter, every collection carries a sample column, and
-      the project links route that filter to all of them, so the same template
-      run against a multi-sample experiment fills these cards and the strips
-      on every other tab without an edit. The cards above already rank samples
-      on the four numbers a cohort is compared on, and the table below is the
-      full per-sample funnel.
-    workflow_tag: hic
-    data_collection_tag: pair_stats
-    layout: {x: 0, y: 0, w: 8, h: 3}
-  - component_type: text
-    tag: hc-cs-next
-    section: What is missing
-    title: What a second sample would unlock
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Replicate correlation needs two matrices at one resolution, which the
-      contact-matrix collection already stores side by side. Multi-sample P(s)
-      needs nothing new at all: the curve collection is keyed on sample and
-      chromosome, so a second library adds a second set of series to the same
-      tile. Compartment and boundary comparisons need the two tracks joined on
-      bin coordinates, which the collections carry but no tile joins yet.
-    workflow_tag: hic
-    data_collection_tag: distance_profile
-    layout: {x: 0, y: 3, w: 8, h: 2}
-
-  - component_type: table
-    tag: hc-cs-table
-    section: Per-sample table
-    workflow_tag: hic
-    data_collection_tag: pair_stats
-    use: hicpro/pair_stats
-    row_selection_enabled: false
-    title: Valid-pair funnel per sample
-    description: One row per sample, every stage and every derived rate.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 3}
-
-  # ---------------------------------------------------------------- filters
+    title: Compartment resolution (bp)
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
-    tag: hc-cs-filter-contacts
-    index: hc-cs-contacts-filter
-    section: Cohort scope
-    group: Read-pair fate
+    tag: hc-cp-filter-compartment
+    index: hc-cp-compartment-filter
+    section: Call scope
+    group: Calls
     workflow_tag: hic
-    data_collection_tag: pair_flow
+    data_collection_tag: compartment_eigenvector
     interactive_component_type: Select
-    column_name: contacts
+    column_name: compartment
     column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:scale-balance'}
     placement: left
-    title: Contact fate
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    title: Compartment
+    layout: {x: 0, y: 9, w: 1, h: 3}

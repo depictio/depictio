@@ -134,3 +134,18 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/mag/5.5.0 --data-root {dest}
+# Megatest facts that must never appear in a dashboard text (lint rule e,
+# depictio/tests/models/test_template_conventions.py): sample ids, a bin id,
+# the organism a default record used to open on, and the run's counts.
+forbidden_terms:
+  - CAPES
+  - CAPES_S7
+  - CAPES_S11
+  - CAPES_S21
+  - SPAdes-MetaBAT2-CAPES_S7.15
+  - Klebsiella
+  - pneumoniae
+  - megatest
+  - "479"
+  - ten assemblies
+  - three samples

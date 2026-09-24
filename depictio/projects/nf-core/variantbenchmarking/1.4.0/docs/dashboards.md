@@ -43,6 +43,13 @@ viralrecon, iris, penguins):
   `sompy/confusion`, `happy/pr_curve`, ...) and every MultiQC tile names its module
   (`use: multiqc/happy`, `multiqc/sompy`, `multiqc/truvari`, `multiqc/bcftools`), so the tile
   chrome shows where the panel comes from.
+- **Row selection.** The callset tables select rows on their identifier: `label` for the
+  vcfeval, truvari, SVbenchmark and Wittyer tables, `caller` for the som.py and somatic
+  vcfeval tables. A picked row narrows the cards, confusion matrix and plots that read the
+  same table. A pick in the som.py summary also reaches its allele-fraction strata and the
+  rtg-tools cross-check through the `links`, and a pick in the truvari table reaches the
+  SVbenchmark and Wittyer panels. The hap.py pooled
+  summary and threshold sweep have no callset column and do not select.
 - **Pinned reference tables.** The raw summary rows sit in a collapsed `Reference tables`
   section that is persistent and pinned to the bottom, so it trails the MultiQC tab as well.
 
@@ -121,11 +128,25 @@ recipe for truvari, which the template does not ship yet.
 
 `dashboards/base.yaml` at the template root is the single-project variant for a data root that
 holds both `small/` and `indel/` (the megatest layout). Its Overview tab carries the germline
-and somatic cards and PR benchmarks side by side; a persistent, pinned `Callsets` filter section
-(germline sample, somatic caller) follows the reader into the Germline and Somatic tabs, which
-add the error, stratification and confidence-interval sections. The Structural & CNV tab binds
-the optional Truvari / SVanalyzer / Wittyer collections and is dropped by the importer on a run
-that lacks them.
+and somatic cards and precision-recall benchmarks side by side; a persistent, pinned `Callsets`
+filter section follows the reader into the Germline and Somatic (small variants) tabs, which add
+the error, stratification and confidence-interval sections. Every tab keeps its own open
+filters, and the advanced visualisation controls sit in the tile header.
+
+Vocabulary, shared by every benchmark collection since wave 3:
+
+- `label`: the callset id the pipeline benchmarked;
+- `caller`: the variant-calling tool behind it (som.py's `Caller` column when present);
+- `truth_set`: the truth set it was scored against, read from the benchmark file name;
+- `tp_base`: the truth-set size (true positives plus false negatives), which the Truth-set
+  variants cards sum;
+- `stats_type` (Wittyer): `Event` or `Base` scoring, one bar group each.
+
+F1 is read on the precision-recall scatters (equal-F1 contours) and the ranked strips; the
+separate F1 bar figures and the false-positive and false-negative bars that repeated the
+confusion matrix are gone. The Structural & CNV tab binds the optional Truvari, SVanalyzer and
+Wittyer collections, linked on `label`, and is dropped by the importer on a run that lacks
+them. Thresholds (recall and precision floors on the cards) are stated in each tab intro.
 
 ---
 

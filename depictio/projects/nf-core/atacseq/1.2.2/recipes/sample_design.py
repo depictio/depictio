@@ -24,6 +24,8 @@ Output schema:
     merged_library : Utf8   <sample>.mLb.clN, the merged filtered library
     group : Utf8            design group; the DESeq2 contrast level
     replicate : Int64       biological replicate number inside the group
+    replicate_label : Utf8  the replicate as a label (``R1``), so a filter can
+                            offer it as a factor rather than a numeric range
     n_libraries : Int64     sequencing libraries merged into the sample
     libraries : Utf8        those library ids, comma separated
 """
@@ -55,6 +57,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "merged_library": pl.Utf8,
     "group": pl.Utf8,
     "replicate": pl.Int64,
+    "replicate_label": pl.Utf8,
     "n_libraries": pl.Int64,
     "libraries": pl.Utf8,
 }
@@ -92,5 +95,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # usable hub: the sample is its own group and the replicate is unknown.
     samples = samples.with_columns(
         pl.col("group").fill_null(pl.col("sample")),
+        pl.format("R{}", pl.col("replicate")).alias("replicate_label"),
     )
     return samples.select(list(EXPECTED_SCHEMA)).sort("sample")

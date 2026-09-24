@@ -598,3 +598,63 @@ HC-D16 workaround. Screenshots in `/tmp/claude-502/shots-hic/`.
   tad_domains 43,775, compartment_eigenvector 16,375). The full 7-tab screenshot run was on
   the previous ingest of the same YAML except the TADs view default. No console errors.
   The TADs tab was re-shot on the final ingest.
+
+## 2026-09-23 wave 3: genericity, E1 phasing, 7 to 5 tabs
+
+### What changed
+
+- **`GENOME` variable.** Declared in `template.yaml` (`default: "hg38"`, UCSC spelling);
+  the bundled reference sets `GENOME: mm10`. Every `assembly` / `locus_assembly` on the
+  Contact maps tracks is now `{GENOME}`. The navigator's `annotation` (gene lane) is set to
+  `none`: the field is `Literal["none", "hg38", "mm10"]` and a `{GENOME}` placeholder would
+  fail model validation (the shipped-YAML tests validate the raw YAML), and a mouse gene
+  lane on a human run is worse than none. Platform follow-up: widen `annotation` to a
+  string that falls back to `none` when no bundled gene table exists.
+- **E1 phased in `cooltools/eigenvector.py`.** Per sample, resolution and chromosome the
+  sign is set so E1 correlates positively with bin coverage (`1 / weight`); no GC or gene
+  track is needed. On the reference run, the per-chromosome correlation of raw E1 with
+  coverage was of either sign (|r| 0.37 to 0.74 on every autosome and chrX, 0.03 to 0.31
+  on chrY). Sign agreement between the 250 kb and 500 kb E1 on overlapping bins (250 kb
+  pairs averaged into their 500 kb bin, 5,112 bins): **40.6 % before, 96.8 % after**; every
+  autosome and chrX is at 95 % or more, chrY stays near 51 % (no coverage signal). New
+  tests: `depictio/tests/recipes/test_cooltools_eigenvector.py` (3).
+- **Tabs 7 to 5.** MultiQC, Run QC, Library shape, Contact maps (the locus tab, the only
+  one with tracks), Domains and compartments (genome-wide: 8 cards, a domain-size box per
+  insulation window, A/B bins per chromosome, 4 collapsed tables, no region and no
+  chromosome filter). Removed: Compare samples (prose moved to docs), the TADs tab's
+  duplicate domain and insulation tracks (`hc-td-av-domains`, `hc-td-av-track`, the
+  latter the tile that stayed a skeleton in the review, so that issue is gone with it), the
+  Compartments tab's duplicate E1 track (`hc-cp-av-track`), the pinned `Reference tables`
+  (eigenvalues moved, collapsed, into Domains and compartments), `hc-mq-filter-mapping`
+  and its `Funnel scope` section (replaced by a `Glance scope` valid-pair-rate slider),
+  `hc-ls-filter-decaychrom` (dead, HC-D10), `hc-ls-av-decay` (the hicexplorer table stays,
+  collapsed, in `P(s) tables`), `hc-ls-card-prob` (replaced by the trans-share box).
+- **Contact maps.** Cards retitled "in this region". `hc-cm-av-matrix` description now
+  says the triangle spans the region the navigator shows (platform fix for HC-D17).
+  Intro rewritten: a documented default region, chr2:65-85 Mb. Rationale, kept here and
+  not in the dashboard: on the reference run the domains, insulation dips and an A/B
+  switch all fall inside that window.
+- **Genericity.** No sample id, organism, cell type, locus name or run count in any
+  dashboard text; generic main and Run QC subtitles; every text tile at most 3
+  sentences. `megatest.yaml` gains `forbidden_terms` (sample id, SRA runs, mESC, ES
+  cell(s), mouse, Mus musculus, HoxD / Hoxd, mm10).
+- **GROUP_COL.** Not added: with no Group comparison tab there is nothing a design column
+  would drive. The docs describe what a future comparison tab would read.
+
+### Checks
+
+```
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
+  depictio/tests/models/test_template_conventions.py -q -rxX -k hic   # 15 passed, 1 xpassed
+uv run pytest depictio/tests/recipes/test_cooltools_eigenvector.py -q  # 3 passed
+uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+  --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest --dry-run      # 8/8, with and without --var GENOME=mm10
+```
+
+### Still open
+
+- Not re-ingested and not checked live (no stack in this wave): the new tab, the box and
+  histogram figures, the phased E1 track and the retitled region cards are unverified in
+  the browser.
+- `.db_seeds` not regenerated (main-owned).
+- The navigator lost its gene lane until the `annotation` field accepts a variable.

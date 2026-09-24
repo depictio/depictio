@@ -17,17 +17,17 @@ main_dashboard:
   - name: Sample filters
     icon: mdi:filter-variant
     color: teal
-    description: Sample, subject, sampling site and sex, applied to every tab
+    description: Sample, subject, {GROUP_COL_DISPLAY} and sex, applied to every tab
     persistent: true
     pin: top
   - name: Read QC scope
     icon: mdi:tune
     color: orange
     description: Narrow the MultiQC panels to selected reports
-    collapsed: true
-  # `Sample sheet` is pinned to the top and `Reference tables` to the bottom, so
-  # the metadata the whole dashboard is filtered by and the rows every tile is
-  # computed from trail each tab. Both are declared here, on the tab no route
+  # `Sample sheet` is pinned to the top and `Reference tables` to the bottom.
+  # Two pinned tables at most: the samplesheet and the repertoire summary, which
+  # both the Repertoire and the Clonal tabs read. The other tables sit collapsed
+  # at the end of the tab that reads them. Declared here, on the tab no route
   # conditional can remove.
   grid_sections:
   - name: Read QC at a glance
@@ -44,13 +44,13 @@ main_dashboard:
     description: GC, length, duplication and adapter content
     collapsed: true
   # The four cohort cards ride every tab open, so a reader always knows how many
-  # samples, subjects and sites the tiles in front of them are computed from.
+  # samples and subjects the tiles in front of them are computed from.
   # The samplesheet table stays in its own collapsed section below: it is the
   # detail behind the same numbers, not something to scroll past on every tab.
   - name: Cohort at a glance
     icon: mdi:chart-box-outline
     color: teal
-    description: Samples, subjects, sites and loci in the current scope
+    description: Samples, subjects, age and loci in the current scope
     persistent: true
     pin: top
   - name: Sample sheet
@@ -63,7 +63,7 @@ main_dashboard:
   - name: Reference tables
     icon: mdi:table
     color: gray
-    description: The rows behind every tile, on every tab
+    description: Per-sample repertoire summary, on every tab
     collapsed: true
     persistent: true
     pin: bottom
@@ -137,9 +137,9 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      Quality falls along the read and the UMI consensus step upstream of the
-      repertoire depends on it. A sample whose curve drops early loses reads at
-      the quality filter, which the next tab counts exactly.
+      Quality falls along the read, and every step downstream of trimming depends
+      on it. A sample whose curve drops early loses reads at the quality filter,
+      which the next tab counts exactly.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: airr-qc-fastp-quality
@@ -257,23 +257,6 @@ main_dashboard:
     title_size: sm
     title_align: left
     layout: {x: 0, y: 12, w: 8, h: 5}
-
-  # ------------------------------------------------------------ sample sheet
-  - component_type: text
-    tag: airr-meta-intro
-    section: Sample sheet
-    workflow_tag: airrflow
-    data_collection_tag: samplesheet
-    title: The cohort behind the run
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The validated AIRR samplesheet airrflow writes. Clones are defined within a
-      subject, so the subject column is what separates the repertoires the later
-      tabs compare.
-    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: airr-meta-card-samples
     section: Cohort at a glance
@@ -299,7 +282,7 @@ main_dashboard:
     column_name: subject_id
     column_type: object
     secondary_layout: top_n
-    breakdown_col: treatment
+    breakdown_col: '{GROUP_COL}'
     top_n_count: 3
     display: {icon_name: 'mdi:account-group-outline', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
     title: Subjects
@@ -329,88 +312,51 @@ main_dashboard:
     aggregation: nunique
     column_name: pcr_target_locus
     column_type: object
-    secondary_layout: composition
-    breakdown_col: subject_id
     display: {icon_name: 'mdi:dna', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title: Target loci
     title_size: sm
     title_align: left
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: table
-    tag: airr-meta-table
+  - component_type: text
+    tag: airr-meta-intro
     section: Sample sheet
     workflow_tag: airrflow
     data_collection_tag: samplesheet
-    row_selection_enabled: false
-    title: AIRR samplesheet
-    description: Sample, subject, species, locus, sampling site, sorted population, sex and age.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-
-  # --------------------------------------------------------- reference tables
-  - component_type: text
-    tag: airr-tables-intro
-    section: Reference tables
-    workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    title: The rows behind every tile
+    title: The samples behind the run
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The per-sample and per-subject tables every panel above is computed from.
-      Filters picked in the left panel narrow these too.
+      The validated AIRR samplesheet airrflow writes, one row per sample. Clones
+      are defined within a subject, so the subject column is what separates the
+      repertoires the later tabs compare.
     layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: airr-meta-table
+    section: Sample sheet
+    workflow_tag: airrflow
+    data_collection_tag: samplesheet
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: AIRR samplesheet
+    description: One row per sample with the submitter's metadata columns.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: table
     tag: airr-tables-summary
     section: Reference tables
     workflow_tag: airrflow
     data_collection_tag: repertoire_summary
     use: enchantr/repertoire_summary
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample_id
     title: Repertoire summary
     description: Clone counts, clone-size spread and the rarefied Hill numbers per sample.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-  - component_type: table
-    tag: airr-tables-seqcounts
-    section: Reference tables
-    workflow_tag: airrflow
-    data_collection_tag: sequence_counts
-    use: enchantr/sequence_counts
-    row_selection_enabled: false
-    title: Sequence processing counts
-    description: Sequences remaining after every pRESTO and Change-O step.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 4}
-  - component_type: table
-    tag: airr-tables-threshold
-    section: Reference tables
-    workflow_tag: airrflow
-    data_collection_tag: threshold_summary
-    use: enchantr/threshold_summary
-    row_selection_enabled: false
-    title: Clonal distance threshold
-    description: The shazam model and threshold fitted for each subject.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 10, w: 8, h: 3}
-  - component_type: table
-    tag: airr-tables-overlap
-    section: Reference tables
-    workflow_tag: airrflow
-    data_collection_tag: clonal_overlap
-    use: enchantr/clonal_overlap
-    row_selection_enabled: false
-    title: Clonal overlap matrix
-    description: Shared clone counts for every sample pair, zero across subjects.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 13, w: 8, h: 4}
+    layout: {x: 0, y: 0, w: 8, h: 4}
 
   # ------------------------------------------------------------- left panel
   - component_type: interactive
@@ -441,24 +387,21 @@ main_dashboard:
     placement: left
     title: Subject
     layout: {x: 0, y: 3, w: 1, h: 3}
-  # airrflow's samplesheet keeps `treatment`, `tissue` and `population` as free
-  # submitter columns. On this cohort `treatment` holds the sampling site (lymph
-  # node against brain lesion), which is the only biological contrast that
-  # varies; `tissue` holds one timepoint for every sample, so a filter on it
-  # could never narrow anything.
+  # The design column comes from the GROUP_COL template variable (default
+  # `treatment`, the samplesheet's condition column), labelled GROUP_COL_DISPLAY.
   - component_type: interactive
-    tag: airr-filter-site
-    index: airr-site-filter
+    tag: airr-filter-group
+    index: airr-group-filter
     section: Sample filters
     group: Cohort
     workflow_tag: airrflow
     data_collection_tag: samplesheet
     interactive_component_type: MultiSelect
-    column_name: treatment
+    column_name: '{GROUP_COL}'
     column_type: object
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:test-tube'}
     placement: left
-    title: Sampling site
+    title: '{GROUP_COL_DISPLAY}'
     layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
     tag: airr-filter-sex
@@ -506,7 +449,6 @@ tabs:
     icon: mdi:tune
     color: indigo
     description: Keep only the samples inside a depth or retention band
-    collapsed: true
   grid_sections:
   - name: Funnel at a glance
     icon: mdi:counter
@@ -520,6 +462,11 @@ tabs:
     icon: mdi:chart-bar
     color: blue
     description: The same funnel one sample at a time
+  - name: Sequence counts table
+    icon: mdi:table
+    color: gray
+    description: Sequences remaining after every pRESTO and Change-O step, per sample
+    collapsed: true
   components:
   - component_type: text
     tag: airr-seq-intro
@@ -532,10 +479,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Three of these steps collapse reads rather than discard them: UMI consensus,
-      deduplication and the representative filter each fold many reads onto one
-      sequence. A low retention is therefore expected, and its spread across
-      samples is what matters.
+      Several steps fold many reads onto one sequence (consensus, deduplication,
+      collapse) rather than discard them, so a low retention is expected. Compare
+      samples with each other: the spread matters more than the level.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: airr-seq-card-input
@@ -566,7 +512,7 @@ tabs:
     breakdown_col: subject_id
     top_n_count: 2
     display: {icon_name: 'mdi:layers-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title: UMI representatives
+    title: Representative sequences
     title_size: sm
     title_align: left
     layout: {x: 2, y: 2, w: 2, h: 2}
@@ -593,12 +539,12 @@ tabs:
     data_collection_tag: sequence_counts
     use: enchantr/sequence_counts
     aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     column_name: retention
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 0.05
     display: {icon_name: 'mdi:percent-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title: Retention
+    title: Median retention
     title_size: sm
     title_align: left
     layout: {x: 6, y: 2, w: 2, h: 2}
@@ -614,10 +560,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Each band is a group of reads following the same path. Reads that stop at a
-      step peel off into the Lost lane and stay there. The depth control in the
-      panel settings adds the [Change-O](https://changeo.readthedocs.io) steps
-      after [IgBLAST](https://ncbi.github.io/igblast/) annotation.
+      Each band is a group of reads following the same path, and reads that stop
+      at a step peel off into the Lost lane. The depth control in the panel
+      settings adds the [Change-O](https://changeo.readthedocs.io) steps after
+      [IgBLAST](https://ncbi.github.io/igblast/) annotation.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: airr-seq-sankey
@@ -697,6 +643,19 @@ tabs:
     description: Fraction of raw reads still represented in the annotated repertoire.
     title_size: h3
     layout: {x: 4, y: 2, w: 4, h: 6}
+  - component_type: table
+    tag: airr-seq-table-counts
+    section: Sequence counts table
+    workflow_tag: airrflow
+    data_collection_tag: sequence_counts
+    use: enchantr/sequence_counts
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Sequence processing counts
+    description: Sequences remaining after every pRESTO and Change-O step.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 4}
 
   - component_type: interactive
     tag: airr-seq-filter-depth
@@ -733,7 +692,7 @@ tabs:
 # Tab 2 - Repertoire
 # =========================================================================
 - title: Repertoire
-  subtitle: How large and how varied each repertoire is, and which V genes build it
+  subtitle: Which V and J genes and which CDR3 lengths build each repertoire
   tab_order: 2
   tab_icon: mdi:dna
   tab_icon_color: pink
@@ -744,13 +703,12 @@ tabs:
   - name: Repertoire scope
     icon: mdi:tune
     color: grape
-    description: Narrow to a clone-count band or a V gene resolution
-    collapsed: true
+    description: Narrow to V families or a CDR3 length band
   grid_sections:
   - name: Repertoire at a glance
     icon: mdi:counter
     color: grape
-    description: Clone counts, clone size and evenness across the cohort
+    description: How many V families and genes each repertoire draws on, and how skewed it is
   - name: V gene usage
     icon: mdi:chart-bar
     color: grape
@@ -763,90 +721,88 @@ tabs:
     icon: mdi:relation-many-to-many
     color: grape
     description: Which V gene pairs with which J gene, per donor
-  - name: Clones and depth
-    icon: mdi:chart-scatter-plot
-    color: violet
-    description: Clone count against sequencing depth, with the table it is read from
   components:
   - component_type: text
     tag: airr-rep-intro
     section: Repertoire at a glance
     workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    title: The shape of each repertoire
+    data_collection_tag: v_gene_usage
+    title: Which genes build each repertoire
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      Clone counts scale with how deeply a sample was sequenced, so the Hill
-      numbers behind the evenness card are rarefied to a common depth. Evenness
-      near one means no clone dominates.
+      This tab reads gene usage: V families and genes, V-J pairs and CDR3 lengths
+      per sample. How clonal and how diverse each repertoire is sits on the Clonal
+      analysis tab.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: airr-rep-card-clones
+    tag: airr-rep-card-vfamilies
     section: Repertoire at a glance
     workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/repertoire_summary
-    aggregation: sum
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: number_of_clones
-    column_type: int64
-    display: {icon_name: 'mdi:dna', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title: Clones
+    data_collection_tag: v_gene_usage
+    use: enchantr/v_gene_usage
+    aggregation: nunique
+    column_name: v_family
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 3
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title: V families
     title_size: sm
     title_align: left
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: airr-rep-card-clonesize
+    tag: airr-rep-card-vgenes
     section: Repertoire at a glance
     workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/repertoire_summary
-    aggregation: median
-    column_name: sequences_per_clone
-    column_type: float64
-    secondary_layout: threshold
-    threshold_value: 2
-    threshold_direction: min
-    threshold_warn: 1.5
-    display: {icon_name: 'mdi:ruler', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title: Mean clone size
+    data_collection_tag: v_gene_usage
+    use: enchantr/v_gene_usage
+    aggregation: nunique
+    column_name: taxon
+    column_type: object
+    filter_expr: "col('rank') == 'V gene'"
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title: V genes
     title_size: sm
     title_align: left
     layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: airr-rep-card-evenness
+    tag: airr-rep-card-vfamily-max
     section: Repertoire at a glance
     workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/repertoire_summary
-    aggregation: median
-    column_name: evenness
+    data_collection_tag: v_gene_usage
+    use: enchantr/v_gene_usage
+    aggregation: max
+    column_name: seq_freq
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title: Evenness
+    filter_expr: "col('rank') == 'V family'"
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 3
+    display: {icon_name: 'mdi:chart-pie', title_font_size: xl, value_font_size: xl}
+    title: Largest V family share
     title_size: sm
     title_align: left
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: airr-rep-card-samples
+    tag: airr-rep-card-productive
     section: Repertoire at a glance
     workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/repertoire_summary
-    aggregation: nunique
-    column_name: sample_id
-    column_type: object
-    secondary_layout: donut
+    data_collection_tag: cdr3_spectratype
+    aggregation: sum
+    column_name: sequences
+    column_type: int64
+    secondary_layout: top_n
     breakdown_col: subject_id
-    top_n_count: 2
-    display: {icon_name: 'mdi:flask', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title: Repertoires
+    top_n_count: 3
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Productive sequences
     title_size: sm
     title_align: left
     layout: {x: 6, y: 2, w: 2, h: 2}
@@ -903,102 +859,6 @@ tabs:
     description: Sample by V gene fractions, column standardised so rare genes stay visible.
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 7}
-  - component_type: figure
-    tag: airr-rep-fig-family
-    index: airr-rep-family-bars
-    section: V gene usage
-    workflow_tag: airrflow
-    data_collection_tag: v_gene_usage
-    use: enchantr/v_gene_usage
-    mode: code
-    code_content: |
-      df_modified = df.filter(pl.col('rank') == 'V family').sort(['sample_id', 'v_family'])
-      fig = px.bar(
-          df_modified.to_pandas(), x='sample_id', y='seq_freq', color='v_family',
-          barmode='stack',
-      )
-      fig.update_layout(
-          xaxis_title='Sample', yaxis_title='Share of sequences',
-          legend_title_text='V family', margin={'t': 24, 'l': 64, 'r': 16, 'b': 88},
-      )
-      fig.update_xaxes(tickangle=-40)
-    selection_enabled: false
-    title: V family composition
-    description: The family level on its own, stacked to one per sample.
-    title_size: h3
-    layout: {x: 0, y: 16, w: 8, h: 6}
-
-  - component_type: text
-    tag: airr-rep-depth-intro
-    section: Clones and depth
-    workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    title: Clones against sequencing depth
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Both axes are log scaled, so a repertoire that is simply deeper sits along
-      the diagonal and one that is genuinely more clonal sits below it. Selecting
-      points, or rows in the table, filters the clonal tab.
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: airr-rep-fig-depth
-    index: airr-rep-depth-scatter
-    section: Clones and depth
-    workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/repertoire_summary
-    mode: code
-    code_content: |
-      fig = px.scatter(
-          df.to_pandas(), x='sequences', y='number_of_clones', color='subject_id',
-          size='sequences_per_clone', size_max=26, log_x=True, log_y=True,
-          hover_name='sample_id', custom_data=['sample_id'],
-      )
-      fig.update_layout(
-          xaxis_title='Sequences into clonal assignment', yaxis_title='Clones',
-          legend_title_text='Subject', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},
-      )
-    selection_enabled: true
-    selection_column: sample_id
-    title: Clones versus depth
-    description: One point per sample; size is the mean clone size. Select points to filter the clonal tab.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 6}
-  - component_type: advanced_viz
-    tag: airr-rep-richness-evenness
-    index: airr-rep-richness-evenness
-    section: Clones and depth
-    workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/richness_evenness
-    config:
-      controls_placement: header
-      x_title: Rarefied richness (clones)
-      y_title: Evenness
-      log_x: true
-      top_n_labels: 3
-      selection_enabled: true
-      selection_column: sample_id
-    title: Richness against evenness
-    description: One point per sample, sized by the sequences behind it. A large but uneven repertoire sits low and right.
-    title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 6}
-  - component_type: table
-    tag: airr-rep-table-summary
-    section: Clones and depth
-    workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    use: enchantr/repertoire_summary
-    row_selection_enabled: true
-    row_selection_column: sample_id
-    title: Repertoire summary
-    description: Select rows to narrow the clone-level panels to those samples.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 4}
 
   - component_type: text
     tag: airr-rep-spectra-intro
@@ -1011,12 +871,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The CDR3 is the loop the receptor binds with, and its length in amino
-      acids is read from the IMGT junction without its two anchor codons. A
-      polyclonal repertoire draws a bell around 12 to 16 residues; one length
-      towering over its neighbours is an expanded clone. Each panel is one
-      sample normalised to its own productive in-frame sequences, so a shallow
-      sample is compared on shape rather than on yield.
+      CDR3 length in amino acids (the IMGT junction without its anchor codons),
+      one panel per sample normalised to its own productive in-frame sequences.
+      A polyclonal repertoire draws a smooth bell whose centre depends on the
+      locus, and one length towering over its neighbours is an expanded clone.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: airr-rep-fig-spectratype
@@ -1041,12 +899,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      One row per donor and V gene, one column per J gene, each cell the share
-      of that donor's productive sequences using the pair. Pairing is counted
-      per donor because clones are defined per donor: two sections of one
-      donor share clones, and counting them apart would weigh one expansion
-      twice. A single bright cell away from the common IGHJ4 column is a
-      candidate expanded lineage.
+      One row per donor and V gene, one column per J gene, each cell the share of
+      that donor's productive sequences using the pair, counted per donor because
+      clones are defined per donor. A single bright cell away from the dominant J
+      gene column is a candidate expanded lineage.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: airr-rep-vj-heatmap
@@ -1068,35 +924,6 @@ tabs:
     description: Share of each donor's sequences per V and J gene pair; rows cluster by pairing profile, J genes keep their genomic order.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 10}
-  - component_type: interactive
-    tag: airr-rep-filter-clones
-    index: airr-rep-clone-range
-    section: Repertoire scope
-    group: Repertoire size
-    workflow_tag: airrflow
-    data_collection_tag: repertoire_summary
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: number_of_clones
-    column_type: int64
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
-    placement: left
-    title: Clones
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: airr-rep-filter-rank
-    index: airr-rep-rank-filter
-    section: Repertoire scope
-    group: V gene resolution
-    workflow_tag: airrflow
-    data_collection_tag: v_gene_usage
-    interactive_component_type: SegmentedControl
-    column_name: rank
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Resolution
-    layout: {x: 0, y: 3, w: 1, h: 2}
   - component_type: interactive
     tag: airr-rep-filter-family
     index: airr-rep-family-filter
@@ -1131,7 +958,7 @@ tabs:
 # Tab 3 - Clonal analysis
 # =========================================================================
 - title: Clonal analysis
-  subtitle: Diversity profiles, clone abundance and which clones two samples share
+  subtitle: How clonal and how diverse each repertoire is, and which clones samples share
   tab_order: 3
   tab_icon: mdi:chart-bell-curve
   tab_icon_color: teal
@@ -1142,18 +969,20 @@ tabs:
   - name: Clonal scope
     icon: mdi:tune
     color: indigo
-    description: Diversity order and the clone sizes to keep
-    collapsed: true
+    description: Clone-count band, diversity order and the clone sizes to keep
   - name: Sharing scope
     icon: mdi:set-merge
     color: teal
     description: How many samples a clone must appear in
-    collapsed: true
   grid_sections:
   - name: Clonal analysis at a glance
     icon: mdi:counter
     color: indigo
-    description: Rarefied richness, clone size classes and the distance threshold behind them
+    description: Clone counts, clone size, diversity and the distance threshold behind them
+  - name: Clones and depth
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Clone count against sequencing depth, and richness against evenness
   - name: Diversity profiles
     icon: mdi:chart-line
     color: indigo
@@ -1166,6 +995,11 @@ tabs:
     icon: mdi:set-merge
     color: teal
     description: Clones seen in more than one sample of a subject
+  - name: Clonal tables
+    icon: mdi:table
+    color: gray
+    description: The fitted distance threshold per subject and the shared-clone matrix
+    collapsed: true
   components:
   - component_type: text
     tag: airr-clone-intro
@@ -1178,11 +1012,43 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Clones are called by nearest-neighbour distance, and the threshold
-      [shazam](https://shazam.readthedocs.io) fitted per subject decides where one
-      clone ends and the next begins. Every number on this tab rests on it, so it
-      is on the card row.
+      Clones are called within a subject by nearest-neighbour distance, and the
+      threshold [shazam](https://shazam.readthedocs.io) fits per subject decides
+      where one clone ends and the next begins. Every number on this tab rests on
+      it, so it sits on the card row with its sensitivity.
     layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: airr-rep-card-clones
+    section: Clonal analysis at a glance
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    use: enchantr/repertoire_summary
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: number_of_clones
+    column_type: int64
+    display: {icon_name: 'mdi:dna', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title: Clones
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: airr-rep-card-clonesize
+    section: Clonal analysis at a glance
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    use: enchantr/repertoire_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: sequences_per_clone
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title: Median clone size
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-clone-card-richness
     section: Clonal analysis at a glance
@@ -1198,41 +1064,41 @@ tabs:
     title: Rarefied richness
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: airr-clone-card-sizeclass
+    tag: airr-rep-card-evenness
     section: Clonal analysis at a glance
     workflow_tag: airrflow
-    data_collection_tag: clone_sizes
-    use: enchantr/clone_sizes
-    aggregation: nunique
-    column_name: clone_id
-    column_type: object
-    secondary_layout: composition
-    breakdown_col: size_class
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title: Clones by size class
+    data_collection_tag: repertoire_summary
+    use: enchantr/repertoire_summary
+    aggregation: median
+    column_name: evenness
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title: Evenness
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-clone-card-threshold
     section: Clonal analysis at a glance
     workflow_tag: airrflow
     data_collection_tag: threshold_summary
     use: enchantr/threshold_summary
-    aggregation: average
+    aggregation: median
     column_name: threshold
     column_type: float64
-    secondary_layout: threshold
-    threshold_value: 0.1
-    threshold_direction: max
-    threshold_warn: 0.08
+    secondary_layout: top_n
+    breakdown_col: subject_id
+    top_n_count: 4
     display: {icon_name: 'mdi:ruler', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title: Distance threshold
+    description: The clonal distance shazam fitted, median over subjects with each subject's value beside it. It is fitted, not a quality verdict.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    layout: {x: 0, y: 4, w: 4, h: 2}
   - component_type: card
     tag: airr-clone-card-sensitivity
     section: Clonal analysis at a glance
@@ -1242,13 +1108,73 @@ tabs:
     aggregation: median
     column_name: sensitivity
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: top_n
+    breakdown_col: subject_id
+    top_n_count: 4
     display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title: Threshold sensitivity
     title_size: sm
     title_align: left
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    layout: {x: 4, y: 4, w: 4, h: 2}
+
+  - component_type: text
+    tag: airr-rep-depth-intro
+    section: Clones and depth
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    title: Clones against sequencing depth
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Both axes are log scaled, so a repertoire that is simply deeper sits along
+      the diagonal and one that is genuinely more clonal sits below it. Selecting
+      points narrows the rest of this tab to those samples.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: airr-rep-fig-depth
+    index: airr-rep-depth-scatter
+    section: Clones and depth
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    use: enchantr/repertoire_summary
+    mode: code
+    code_content: |
+      fig = px.scatter(
+          df.to_pandas(), x='sequences', y='number_of_clones', color='subject_id',
+          size='sequences_per_clone', size_max=26, log_x=True, log_y=True,
+          hover_name='sample_id', custom_data=['sample_id'],
+      )
+      fig.update_layout(
+          xaxis_title='Sequences into clonal assignment', yaxis_title='Clones',
+          legend_title_text='Subject', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},
+      )
+    selection_enabled: true
+    selection_column: sample_id
+    title: Clones versus depth
+    description: One point per sample; size is the mean clone size. Select points to narrow the rest of this tab.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: airr-rep-richness-evenness
+    index: airr-rep-richness-evenness
+    section: Clones and depth
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    use: enchantr/richness_evenness
+    config:
+      controls_placement: header
+      x_title: Rarefied richness (clones)
+      y_title: Evenness
+      log_x: true
+      top_n_labels: 3
+      selection_enabled: true
+      selection_column: sample_id
+    title: Richness against evenness
+    description: One point per sample, sized by the sequences behind it. A large but uneven repertoire sits low and right.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 6}
 
   - component_type: text
     tag: airr-clone-div-intro
@@ -1261,26 +1187,12 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The order q weights clone abundance: at q of 0 every clone counts once, and
-      as q rises the large clones dominate. A curve that falls steeply is a
-      repertoire carried by a few expanded clones. Pick a q on the left to rank
-      the samples at that order with their confidence intervals.
+      The order q weights clone abundance: at q = 0 every clone counts once, and
+      as q rises the largest clones dominate, so a steeply falling curve is a
+      repertoire carried by a few expanded clones. The ranked bars show one named
+      order at a time, picked in the Diversity order filter (Shannon, q = 1, by
+      default).
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: airr-clone-div-profile
-    index: airr-clone-div-profile
-    section: Diversity profiles
-    workflow_tag: airrflow
-    data_collection_tag: clonal_diversity
-    use: enchantr/diversity_profile
-    config:
-      group_col: subject_id
-      show_ci: false
-      top_n: 40
-    title: Hill diversity profile
-    description: Diversity against order q, one line per sample, coloured by subject.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-div-ribbons
     index: airr-clone-div-ribbons
@@ -1300,24 +1212,24 @@ tabs:
       band_opacity: 0.15
       legend_pos: right
     title: Diversity profile with confidence ribbons
-    description: The same curves with the bootstrap band alakazam computed, shaded per sample. Two samples whose bands overlap at a given q are not distinguishable at that order.
+    description: Diversity against order q, one curve per sample with the bootstrap band alakazam computed. Two samples whose bands overlap at a given q are not distinguishable at that order.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-div-cibars
     index: airr-clone-div-cibars
     section: Diversity profiles
     workflow_tag: airrflow
-    data_collection_tag: clonal_diversity
-    use: enchantr/diversity_ci_bars
+    data_collection_tag: diversity_orders
+    use: enchantr/diversity_order_ci_bars
     config:
       metric_name: Hill diversity
       sort_desc: true
       colorscale: Tealgrn
-    title: Diversity at one order, ranked
-    description: Narrow the diversity order on the left to compare one Hill number per sample with its confidence interval.
+    title: Diversity at one named order, ranked
+    description: One Hill number per sample with its bootstrap interval, at the order picked in the Diversity order filter (q = 1 by default).
     title_size: h3
-    layout: {x: 0, y: 14, w: 8, h: 5}
+    layout: {x: 0, y: 8, w: 8, h: 5}
 
   - component_type: text
     tag: airr-clone-abund-intro
@@ -1355,32 +1267,6 @@ tabs:
     description: The shaded band is alakazam's bootstrap interval. Where two curves overlap inside their bands, the difference in expansion is not supported.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: figure
-    tag: airr-clone-fig-rank
-    index: airr-clone-rank-abundance
-    section: Clone abundance
-    workflow_tag: airrflow
-    data_collection_tag: clone_sizes
-    use: enchantr/clone_sizes
-    mode: code
-    code_content: |
-      df_modified = df.filter(pl.col('rank') <= 500)
-      fig = px.scatter(
-          df_modified.to_pandas(), x='rank', y='seq_freq', color='sample_id',
-          log_x=True, log_y=True, opacity=0.7, hover_name='clone_id',
-          custom_data=['sample_id'],
-      )
-      fig.update_traces(marker={'size': 5})
-      fig.update_layout(
-          xaxis_title='Clone rank within sample', yaxis_title='Clone frequency',
-          legend_title_text='Sample', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},
-      )
-    selection_enabled: true
-    selection_column: sample_id
-    title: Rank abundance
-    description: Top 500 clones per sample. Select points to narrow the rest of the tab to those samples.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-sunburst
     index: airr-clone-sunburst
@@ -1398,7 +1284,7 @@ tabs:
     title: Clonal homeostasis
     description: Sequences per subject, sample and clone size class, from rare to hyperexpanded.
     title_size: h3
-    layout: {x: 0, y: 15, w: 8, h: 6}
+    layout: {x: 0, y: 9, w: 8, h: 6}
 
   - component_type: text
     tag: airr-clone-share-intro
@@ -1428,7 +1314,7 @@ tabs:
       cluster_cols: true
       cluster_method: average
       normalize: none
-      colorscale: Tealgrn
+      colorscale: Blues
     title: Shared clones per sample pair
     description: Diagonal is zeroed so the colour scale spans the real sharing.
     title_size: h3
@@ -1453,42 +1339,65 @@ tabs:
     title_size: h3
     layout: {x: 0, y: 8, w: 8, h: 6}
 
-  - component_type: advanced_viz
-    tag: airr-clone-overlap-mds
-    index: airr-clone-overlap-mds
-    section: Sharing between samples
+  - component_type: table
+    tag: airr-clone-table-threshold
+    section: Clonal tables
+    workflow_tag: airrflow
+    data_collection_tag: threshold_summary
+    use: enchantr/threshold_summary
+    row_selection_enabled: true
+    row_selection_column: subject_id
+    title: Clonal distance threshold
+    description: The shazam model and threshold fitted for each subject.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: table
+    tag: airr-clone-table-overlap
+    section: Clonal tables
     workflow_tag: airrflow
     data_collection_tag: clonal_overlap
-    use: enchantr/overlap_mds
-    config:
-      controls_placement: header
-      compute_method: pcoa
-      pcoa_distance: bray_curtis
-      default_color_by: subject_id
-      point_size: 11
-      marker_outline: true
-      show_centroids: true
-      legend_pos: right
-      hover_cols: [sample_id]
-    title: Repertoire overlap ordination
-    description: Samples placed by how many clones they share. Coordinates are recomputed whenever the sample scope changes, so an ordination always describes what is on screen.
+    use: enchantr/clonal_overlap
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Clonal overlap matrix
+    description: Shared clone counts for every sample pair, zero across subjects.
     title_size: h3
-    layout: {x: 0, y: 14, w: 8, h: 6}
+    title_align: left
+    layout: {x: 0, y: 3, w: 8, h: 4}
 
   - component_type: interactive
-    tag: airr-clone-filter-q
-    index: airr-clone-q-range
+    tag: airr-rep-filter-clones
+    index: airr-rep-clone-range
+    section: Clonal scope
+    group: Repertoire size
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: number_of_clones
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Clones
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  # Single choice on the three named orders (diversity_orders DC). It only
+  # reaches the ranked bars: the full profile reads clonal_diversity.
+  - component_type: interactive
+    tag: airr-clone-filter-order
+    index: airr-clone-order-filter
     section: Clonal scope
     group: Diversity
     workflow_tag: airrflow
-    data_collection_tag: clonal_diversity
-    interactive_component_type: RangeSlider
-    column_name: q
-    column_type: float64
+    data_collection_tag: diversity_orders
+    interactive_component_type: Select
+    column_name: order
+    column_type: object
+    default_value: q = 1, Shannon
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
     placement: left
-    title: Diversity order q
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    title: Diversity order
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: airr-clone-filter-sizeclass
     index: airr-clone-sizeclass-filter
@@ -1502,7 +1411,7 @@ tabs:
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
     placement: left
     title: Size class
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
     tag: airr-clone-filter-rank
     index: airr-clone-rank-range
@@ -1516,7 +1425,7 @@ tabs:
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:counter'}
     placement: left
     title: Clone rank
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 9, w: 1, h: 3}
   - component_type: interactive
     tag: airr-clone-filter-nsamples
     index: airr-clone-nsamples-range

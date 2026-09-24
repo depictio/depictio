@@ -154,3 +154,37 @@ nanopore runs, leaving the tab filter-less. Fix:
 - The main-tab sample filter is rebound to the always-present `multiqc_data` DC; the picked sample is
   expanded to its per-report variants by `_resolve_multiqc_sample_filter`. Verified: nanopore / HIV /
   enterovirus main tabs now carry a populated `multiqc_data/sample` filter.
+
+## Wave 3 (3.0.0)
+
+What changed in `3.0.0/dashboards/base.yaml`:
+
+- `Run at a glance` is persistent and pinned (samples, median reads mapped, median 10x
+  breadth, lineages) with no intro text; its duplicates on Sample QC (reads mapped, average
+  10x) and the `Sample metadata` cards were removed. `Sample sheet` (the `summary_metrics`
+  table, 2-sentence intro) moved to the main tab, persistent, pinned top, collapsed.
+  `advanced_viz_controls: header` on every tab.
+- Blockers: duplicate `index: qcdx-missing` (card is now `qcdx-missing-card`); the breadth
+  figure now draws 1x and 10x as grouped bars with a pinned sample order, matching its text;
+  genome-track description says linear, as configured; Manhattan `score_threshold` 0.75 and
+  both texts say 0.75 is the default consensus threshold; the 20x amplicon card is now a
+  count (`coverage < 20`, top samples); `threshold_warn` moved to the failing side (70 under
+  the 80 floor) and removed from the 20x card.
+- Genericity: no spike or scheme prose, `coverage_max: 98` dropped (and its coverage bar),
+  the 80% line documented as the template default. Implementation and changelog prose removed
+  from the MultiQC, Sample QC, allele-frequency and co-occurrence texts; the two oncoplot
+  cards removed. No `<` or `>` left in titles and descriptions.
+- `Sample detail` section at the end of Sample QC: record card on `summary_metrics` keyed by
+  sample, driven by the two scatters and the Sample sheet, no default record.
+- The nf-core variant summary MultiQC panel moved to the collapsed details (the pinned table
+  reads the same numbers); `cov-sample-filter` index renamed `cov-genome-depth`.
+
+Verified offline: shipped-YAML, conventions (top_n and warn-side rules now xpass) and catalog
+tests; `depictio-cli run --dry-run` on the committed `run_1` subset; the breadth figure code
+executed on `summary_metrics.tsv`.
+
+Still open: `.db_seeds` regeneration (main session); there is no `megatest.yaml` for this
+template (its data comes from the `test_illumina` profile), so no `forbidden_terms` lint runs
+(texts checked by hand for sample ids and lineage names); `mosdepth_amplicon_heatmap` is
+ingested but read by no tile; no per-call record card on Variants yet (the Manhattan selects
+by sample); not checked live.

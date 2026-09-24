@@ -198,3 +198,53 @@ Results: `test_shipped_dashboard_yamls.py -k mag` 30 passed; `test_catalog.py`
 (project 6ab3caf59cf1ab2ab1503cbc, dashboard 6ab3cb74e8b8ace33d32c8b1):
 `assembly_nx` 909 rows, `assembly_recruitment` 9 x 6, every other collection
 unchanged (contig_depths 222 165, bin_summary 479).
+
+## Wave 3 (family review rework)
+
+What changed (review-metagenomics.md, consolidated-review.md):
+
+- Genericity: no megatest counts, sample ids, assembler names or result claims
+  in any dashboard text (main subtitle, Assembly subtitle and sections,
+  reference table description, sample-scope description, every intro).
+  `forbidden_terms` added to `megatest.yaml` (sample ids, the old default bin
+  id, the organism it opened on, the run's counts); lint rule e passes.
+- Blockers: `mg-det-av-record` has no `default_record` (it waits for a table
+  selection, `selection_source: table_selection`) and the Klebsiella sentence
+  is gone. `mg-filter-ladder-rung` (an equality Slider that collapsed both
+  curves to one point) is now a RangeSlider on `min_contig_length`, titled
+  "Minimum contig length range (bp)": it windows the thresholds and keeps
+  every curve intact inside the window.
+- Redundancies removed: `mg-det-av-sankey` (one sankey per template, Taxonomy
+  keeps `mg-tax-av-sankey`), `mg-det-av-mimag` (the bin table drives the record
+  card), `mg-asm-fig-n50`, `mg-ladder-av-cumulative` (retained fraction and Nx
+  now share one "Contig length" section), `mg-ctg-fig-hist` (the box plot
+  stays), `mg-filter-tax-rank` (the tile header picker is the rank control),
+  `mg-det-card-phyla`.
+- Cards: `mg-det-card-bins` (duplicate of the glance card) became
+  `mg-det-card-hq` (high-quality MIMAG drafts, `filter_expr` on `mimag_tier`),
+  plus a new `mg-det-card-rna` (bins meeting the MIMAG RNA criteria) to keep 4
+  cards. `mg-bin-card-completeness/-contamination` (duplicates of the glance
+  strip) became `mg-bin-card-n50` and `mg-bin-card-size` (CheckM2 `contig_n50`
+  and `genome_size` medians, box plot).
+- Link `checkm2_quality_report.bin_id -> quast_bins_summary.bin_id`: the Bins
+  tab's quality filters now reach "Bin assembly statistics" (both recipes keep
+  the bin id as the binner wrote it; verified on the catalog fixtures).
+- Composition bars: `default_rank: genus`, `top_n: 12`, `sort_by: abundance`,
+  `normalise_to_one: true` (percentages), header rank picker only.
+- Bin detail: the joined table and the record card sit in a "Bin detail"
+  section at the end of the tab; the record card opens on Quality and carries
+  `labels:` for every raw column name.
+- Intros cut to at most 2 sentences; `advanced_viz_controls: header` on every
+  tab; the Prokka GFF DC description no longer names one assembler.
+
+Verified: `pytest test_shipped_dashboard_yamls.py test_template_conventions.py
+depictio/tests/catalog -k mag`; dry run 8/8 against the local megatest.
+
+Still open:
+
+- Not re-checked live (no ingest in wave 3b): table row selection driving the
+  record card and the locus map at the same time, and the RangeSlider over the
+  six discrete QUAST thresholds.
+- Live row cap of the recruitment and contig tiles unchanged (MG-D14 still
+  pins the scatter to points mode).
+- Hardcoded `display` colours on cards are pre-existing and left as they are.

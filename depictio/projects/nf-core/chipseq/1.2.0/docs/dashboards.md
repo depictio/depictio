@@ -31,15 +31,19 @@ replicates each, every ChIP against its own input control.
   sample, which of those calls the replicates agree on, and which of the agreed intervals
   change between conditions.
 - **The hub is every library, with its factors as columns.** `pipeline_info/design_controls.csv`
-  names the eight ChIPs, their input controls and their antibodies, and nothing else: the
-  conditions the run exists to compare live only inside the sample names, and the eight input
-  libraries appear in no row at all although every QC collection carries them. The `design`
-  collection is therefore a recipe (`nf-core/chipseq/design_factors.py`) rather than a plain
-  scan. It emits one row per library, sixteen in this run, with `role` (ChIP or input control),
-  `antibody`, `condition` and `replicate` parsed out of the names. The persistent
+  names the ChIPs, their input controls and their antibodies, and nothing else: it carries no
+  factor column, and the input libraries appear in no row at all although every QC collection
+  carries them. The `design` collection is therefore a recipe
+  (`nf-core/chipseq/design_factors.py`) rather than a plain scan. It emits one row per
+  library with `role` (ChIP or input control), `antibody` (an input takes the antibody of the
+  ChIPs it serves), `replicate` and `condition`. `replicate` and the design sheet group are
+  recovered from the id the pipeline itself builds, `<group>_R<replicate>`; nothing else is
+  read out of a name. `condition` is the `GROUP_COL` column of the optional design table
+  (`METADATA_FILE`, matched on the library id or on the design group; its other factors are
+  carried as extra columns) and, without a table, the design sheet group. The persistent
   `Sample filters` section pinned to the top of every tab exposes all four, role included,
-  so NTKO against TKO and E2 against VEH are selections rather than facts buried in a string
-  and the input controls can be dropped or kept with one pick.
+  so the run's contrast is a selection and the input controls can be dropped or kept with one
+  pick.
 - **The persistent filters reach every tab.** The project links fan a pick out to the MultiQC
   panels, the peak table, the peak QC summary, the HOMER annotation and the signal
   collections on the sample name. The consensus sets and the DESeq2 contrasts have no sample
@@ -50,7 +54,8 @@ replicates each, every ChIP against its own input control.
   libraries split by role, conditions as a top-4 breakdown, peaks called with a top-3
   breakdown by sample, and the FRiP score as a Tukey box plot. Four different breakdowns on
   purpose. Every other tab opens on its own four-card strip below it, and the collapsed
-  `ChIP design` and `Reference tables` sections follow the viewer from tab to tab.
+  `Sample sheet` (pinned top, row selection on `sample_id`) and `Reference tables` sections
+  follow the viewer from tab to tab.
 - **Peak-level selection, both ways.** The manhattan panel on the Peaks tab carries
   `selection_enabled` on `peak_id`, and both peak tables carry `row_selection_enabled` on the
   same column. Lassoing peaks there narrows the tables, ticking rows in a table narrows the
@@ -84,8 +89,9 @@ read bars. Every library appears here under its `<sample>_T<n>` technical-replic
 sample shows up once per library rather than once per sample.
 
 `Alignment and library complexity` pairs samtools percent mapped with Picard duplication, then
-the preseq complexity curve full width, then the featureCounts assignment bars that say how
-many reads fall inside the consensus peaks.
+the featureCounts assignment bars that say how many reads fall inside the consensus peaks. The
+MultiQC preseq curve is not repeated here: the Signal tab draws the same curve with its
+confidence ribbon.
 
 `ChIP enrichment` is the tab's point: the deepTools fingerprint curve, which separates an
 enriched ChIP from a flat input, next to the FRiP scores, then the strand cross-correlation
@@ -135,18 +141,16 @@ collections: the share of the genome called enriched, and the extrapolated seque
 
 `Peak yield` is a four-card strip on the peak table: peaks in view with a top-3 breakdown by
 sample, peak width as a box plot, fold enrichment as a histogram, and median -log10 q against
-a threshold. Under it, `use: macs2/peak_summary` draws the FRiP score per sample as a bar
-chart, the fraction of each library's mapped reads that fall inside its own peaks.
+a threshold of 1.3 (q 0.05, MACS2's own default cut-off; warn below 1). FRiP per library is
+not repeated here: it is the glance card, the MultiQC FRiP panel and the reference table.
 
 `Significance along the genome` puts every peak at its summit position with -log10 of the
 MACS2 q-value as height, coloured by sample. It is the tab's selection source: lasso a region
 and the peak ids travel to the tables below and, through the project links, to the HOMER
-annotation. Beside it, a volcano of the same significance against fold enrichment over input,
-with the q 1e-10 and five-fold lines drawn and the peaks past both drawn large (`views:
-[volcano]`: a peak call has no mean abundance and no uniform null, so the MA and QQ views are
-not offered); and a
-peak-width histogram per sample, which is what separates a sharp transcription-factor profile
-from a broad histone mark.
+annotation. Under it, a peak-width histogram per sample (log x), which is what separates a
+sharp transcription-factor profile from a broad histone mark. The peak volcano that sat here
+was removed in wave 3: it put differential-expression semantics (up, down, an effect line) on
+peak calls whose fold enrichment is always above one.
 
 `Around the summits` binds the `macs2/summit_profile` catalog output (added in wave 2b). The
 canonical ChIP figure here is a read-coverage metagene around the summits, and it cannot be
@@ -166,21 +170,19 @@ to the Locus tab: binding both on `macs2_peaks` on one tab is what the
 have narrowed this tab's genome-wide cards and Manhattan to one locus.
 
 `Where the peaks land` reads the HOMER annotation: cards for annotated peaks by feature class
-(donut), genes touched (composition by class), distance to TSS (box plot) and peak score
-(histogram); the feature-class composition of each sample as a percentage stacked bar
-(`barnorm: percent`, so libraries with 7 000 and 66 000 peaks compare directly); and a code-mode histogram of the
-signed distance to the nearest TSS, clipped to a 10 kb window and split by feature class, with
-the TSS marked. The raw column runs to several hundred kb, so without the window the peak at
-zero flattens out. Under it, `use: homer/tss_distance` reads the same distances pre-binned
-by the recipe, one curve per sample as a share of that sample's peaks: the histogram pools
-samples and splits by class, the profile does the opposite, and being a share rather than a
-count is what lets libraries of different depth be compared.
+(donut), genes touched (composition by feature class; `gene_type` is empty in HOMER's output),
+distance to TSS (box plot) and peak score (histogram); the feature-class composition of each
+sample as a full-width percentage stacked bar (`barnorm: percent`, so libraries of different
+depth compare directly); and `use: homer/tss_distance`, the distances pre-binned by the
+recipe, one curve per sample as a share of that sample's peaks. The code-mode TSS histogram
+that used to pool the samples was removed in wave 3: it read the full annotation frame and
+repeated the curve.
 
 `Peak tables` (collapsed) holds the HOMER annotation table and the MACS2 call table, both with
 row selection on `peak_id`.
 
 The left panel adds a `Peak scope` group (q-value, fold enrichment and width range sliders,
-plus a chromosome multi-select) and a collapsed `Annotation scope` group (feature class,
+plus a chromosome multi-select) and an open `Annotation scope` group (feature class,
 distance to TSS). Every range slider on the dashboard draws the distribution of its column
 above the handles (`show_histogram: true`).
 
@@ -190,10 +192,9 @@ above the handles (`show_histogram: true`).
 
 The locus section: one navigator, and the tracks under it follow its region. The navigator
 (`use: macs2/peak_genome_view`, controls in the tile header) draws every MACS2 call as a
-rectangle, one lane per library, and opens on `default_region: chr21:43,600,000-44,000,000`,
-the TFF1 neighbourhood, where all eight libraries called peaks and both consensus sets hold
-intervals. TFF1 is the textbook FOXA1 and oestrogen target, so the FOXA1 E2 lanes are dense
-at its enhancer and promoter. A locus typed in the header or a brush on the axis emits a
+rectangle, one lane per library, and opens on `default_region: chr21:43,600,000-44,000,000`
+(the TFF1 neighbourhood on the hg19 megatest, where all eight libraries called peaks and both
+consensus sets hold intervals; the tab intro only says it opens on a fixed default region). A locus typed in the header or a brush on the axis emits a
 chromosome and a position filter on `macs2_peaks`; two `region` links in `template.yaml`
 rename that pair onto `macs2_consensus_boolean` and `homer_annotated_peaks`, so the tracks
 below show the same region:
@@ -203,16 +204,20 @@ below show the same region:
 - `Peaks by nearest gene and feature class`: a second `genome_view` on the HOMER annotation,
   `follow_region_filter: true`, coloured by feature class with the nearest gene on hover.
 
-The run is hg19 (HOMER places the TFF1 promoter peak at -173 bp from the hg19 TSS), and the
-bundled gene lane exists only for hg38 and mm10, so the navigator sets `assembly: hg19` and
-draws no gene lane; gene-symbol search in the locus field is therefore unavailable, only
+The genome axis comes from the `GENOME` template variable (default hg38; the megatest is hg19,
+set through `reference.vars` for the bundled reference and `--var GENOME=hg19` for a CLI
+ingest). With a built-in assembly the navigator fetches only the chromosome of its region, and
+the coverage track bins to 4,000 bins and holds its first fetch until the navigator's region
+lands, so no `chromosomes_filter` is set. The bundled gene lane exists only for hg38 and mm10,
+so no gene lane is drawn; gene-symbol search in the locus field is therefore unavailable, only
 coordinates. The HOMER track stands in for the gene lane. There is no read-coverage track:
 the bigWigs are not in the megatest mirror.
 
 `Region at a glance` recounts the region in view on every move: peaks with a top-3 by
 library, their mean fold enrichment, the consensus support of the intervals as a box plot and
 the number of distinct nearest genes split by feature class. The tab-local `Locus scope`
-carries the chromosome, a q-value slider, the consensus support and the HOMER feature class.
+carries a q-value slider, the consensus support and the HOMER feature class (no lateral
+chromosome filter: the navigator owns the region).
 
 This is a tab of its own rather than a section of Peaks because the navigator's region
 filters narrow every tile of the tab they sit on.
@@ -257,7 +262,8 @@ second one already answers.
 and the sample-to-sample distance matrix of the count matrix it tested, and the published
 MultiQC report renders both as pictures; here they are data. `use: deseq2/qc_pca_embedding`
 places every library in the space of the consensus counts, coloured by consensus set, and
-`use: deseq2/qc_distance_heatmap` clusters the Euclidean distances on DESeq2 rlog values.
+`use: deseq2/qc_distance_heatmap` clusters the Euclidean distances on DESeq2 rlog values
+(Ward linkage, `Blues`, the family convention for distance heatmaps).
 Where the replicates of a condition sit together and the two conditions sit apart, the contrast
 below is measuring the condition; where they interleave, it is measuring the batch.
 
@@ -282,7 +288,8 @@ compares the observed p-values with the uniform null. These were three tiles on 
 
 The PCA tile carries its colour-by and axis pickers in the tile header.
 
-`Differential tables` (collapsed) holds the DESeq2 rows with row selection on `gene_id`.
+`Differential tables` (collapsed) holds the DESeq2 rows with row selection on `gene_id`, then
+the PCA coordinates and the distance matrix behind the `Sample space` tiles.
 
 Pick a single contrast in the left panel before reading any of these panels. DESeq2 names
 consensus intervals `Interval_1 ... Interval_N` and the numbering restarts in each consensus
@@ -292,6 +299,18 @@ filter is a single-choice `Select` for that reason.
 ---
 
 ![Differential binding](screenshots/differential-binding.png)
+
+## Cross-selection
+
+A picked row or point becomes a dashboard filter that narrows the other tiles of its
+collection and follows the project links to the collections they reach. The pinned sample
+sheet and peak summary select on the library id; the summit concordance and footprint
+profiles select on `sample`, each narrowing the other; the annotated and MACS2 peak tables,
+the manhattan panel and both Locus tracks select on `peak_id`; the DESeq2 results select on
+`gene_id` and the PCA and sample distance tables on the sample. A peak record card sits beside
+the annotated peak table (`linked_component`): it stays a thin rail until a row is picked,
+then shows the call with its feature class, distance to TSS and nearest gene. The TSS
+distance profile does not select: its collection has no outgoing link.
 
 ## Catalog modules
 
@@ -351,12 +370,24 @@ python -m depictio.dev_scripts.multiqc_reprocess \
 #    Do not re-run this over a directory that already holds the regenerated
 #    parquet: the source-version probe would then read 1.35 back off it.
 
-# 3. Dry run, then the real ingest.
+# 3. Copy the vendored design table next to the run (the condition per library).
+mkdir -p ~/Data/depictio-nfcore/chipseq/1.2.0/megatest/input
+cp depictio/projects/nf-core/chipseq/1.2.0/input/sample_metadata.tsv \
+  ~/Data/depictio-nfcore/chipseq/1.2.0/megatest/input/
+
+# 4. Dry run, then the real ingest.
+#    The megatest is hg19; the template's GENOME default is hg38.
 python -m depictio.cli run --template nf-core/chipseq/1.2.0 \
-  --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest --dry-run
+  --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest --var GENOME=hg19 \
+  --var METADATA_FILE=~/Data/depictio-nfcore/chipseq/1.2.0/megatest/input/sample_metadata.tsv \
+  --dry-run
 python -m depictio.cli run --template nf-core/chipseq/1.2.0 \
-  --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest
+  --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest --var GENOME=hg19 \
+  --var METADATA_FILE=~/Data/depictio-nfcore/chipseq/1.2.0/megatest/input/sample_metadata.tsv
 ```
+
+Without `METADATA_FILE` the `condition` column is the design sheet group (the ChIP id without
+its replicate tag) and the `metadata` collection is pruned.
 
 Do not pass `--project-name`: the dashboard's `project_tag` is resolved by project name, so
 renaming the project breaks a later standalone `depictio dashboard import`. Re-ingesting

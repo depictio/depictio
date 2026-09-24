@@ -2,278 +2,125 @@
 
 This template turns the output of [nf-core/sarek](https://nf-co.re/sarek) 3.10.0 into a
 six-tab Depictio dashboard. sarek trims and aligns reads, marks duplicates, recalibrates base
-quality with GATK4 BQSR, and calls germline variants with five callers side by side
-(DeepVariant, FreeBayes, HaplotypeCaller, Manta, Strelka), annotating each with SnpEff and VEP.
-The dashboard follows that chain, and keeps going past the summary counts: it reads the VCFs
-themselves, so the caller comparison happens at the level of individual variants and individual
-genes, not only at the level of "how many did each one call".
+quality with GATK4 BQSR, calls variants with any mix of germline and somatic callers, and
+annotates the calls with SnpEff and VEP. The dashboard follows that chain and keeps going past
+the summary counts: it reads the VCFs themselves, so callers are compared call by call and gene
+by gene, not only by how many calls each one made.
 
-Data comes from the AWS megatest run `results-8ccac7ad37b05dd792447763bf9671b719824587` (the
-3.10.0 release tag), `test_full_germline_ncbench_agilent/` profile: one exome (Agilent, WES),
-sequenced at two depths (75M and 200M reads), run through the germline-only route.
+The template was validated on the AWS megatest run `results-8ccac7ad37b05dd792447763bf9671b719824587`
+(the 3.10.0 release tag), `test_full_germline_ncbench_agilent/` profile. The dashboard texts
+quote nothing from that run: its sample names, depths and loci are listed as `forbidden_terms`
+in `megatest.yaml`, and `test_template_conventions.py` keeps them out.
 
-## The one thing to know before reading any concordance panel
+## Inputs the template relies on
 
-**The two samples are the same individual at two sequencing depths.** `NA12878_75M` and
-`NA12878_200M` are one NA12878 exome library, downsampled to 75M reads and 200M reads. So
-nothing here is a cohort, and "concordance" never means "do two people agree". It means two
-different things, and the dashboard is careful to say which:
+- **The sample hub comes from sarek's own CSV manifests.** sarek writes its resume points under
+  `csv/` (`recalibrated.csv`, `markduplicates*.csv`, `variantcalled.csv`). The `samples`
+  collection reads the first design manifest present for patient, sex and status (0 normal,
+  1 tumour, shown as `status_label`) and counts the callers per sample from `variantcalled.csv`.
+  Nothing is parsed out of sample names, and the samplesheet the run was launched with is not
+  needed.
+- **`GENOME`** (default `hg38`) names the assembly of the genome tracks and of the annotated VCF
+  collection. The bundled gene lane of the calls track stays `hg38`, because the viz model only
+  accepts a fixed list there.
+- **Optional collections.** The VCFtools and SnpEff collections, the X/Y sex check and the
+  somatic outputs (ASCAT, CNVkit, MSIsensor-pro, NGSCheckMate) are `optional: true`: a run that
+  skipped a step loads without them. Somatic outputs carry no tiles yet.
+- **The MultiQC tab links through `sample_mapping`** with no hand-written name table: each
+  MultiQC sample name is resolved to the hub sample it starts with.
+- **One mosdepth pass per sample.** sarek runs mosdepth on the duplicate-marked and on the
+  recalibrated CRAM; the coverage recipes keep the recalibrated pass when present (then the
+  duplicate-marked, then the sorted one), so no tile double-counts a sample.
 
-- **Between callers, at one depth**: real algorithmic disagreement. DeepVariant, FreeBayes,
-  HaplotypeCaller and Strelka are calling the same DNA from the same reads.
-- **Between depths, for one caller**: pure sensitivity. Every call found at 75M and missed at
-  200M (or the reverse) is a depth effect, not a biological difference.
+## Conventions
 
-The persistent `Read depth` filter (`read_depth_millions`, shown as `75M reads` /
-`200M reads`) is what separates the two readings: hold one depth and the callers vary; hold one
-caller and the depths vary.
-
-## The germline-only caveat
-
-No tumor/normal pair was run, so ASCAT, ControlFREEC, CNVkit, MSIsensor-pro and NGSCheckMate
-never produced output. The template declares four of those as `optional: true` data collections
-(`ascat_segments`, `cnvkit_segments`, `msisensorpro_summary`, `ngscheckmate_matches`) with their
-real output globs, so a somatic `test_full` run lights them up without a template change; on
-this run the CLI skips them and reports the skip. They carry no dashboard tiles, because a tile
-bound to an absent collection would break the tab it sits on.
-
-**Manta reads near-zero on every SNP/indel panel, on purpose.** Manta is a structural-variant
-caller running alongside four small-variant callers: its bcftools stats report `ts=0 tv=0` and
-almost no SNPs or indels. Every panel that shows it says so, rather than treating it as missing
-data.
-
----
-
-## How the dashboard is built
-
-- **Six tabs.** MultiQC first, then five tabs computed from the pipeline's own output files:
-  Cohort QC, Variant yield, Caller concordance, Consequences, Genes. The reading order is a
-  funnel: is the coverage good enough, how much did each caller call, which of those calls do
-  the callers share, what do the shared calls do to the protein, and which genes carry them.
-- **Every tab opens with a glance strip and an intro.** Four cards sit in the section header,
-  so the headline numbers are readable before any panel loads, and a short text tile says what
-  the tab answers and how to read it.
-- **Box-plot cards.** The distribution cards (quality, depth, allele fraction, per-gene burden)
-  use the `box_plot` secondary layout, so a card shows the spread and the outliers, not only a
-  median that hides them.
-- **The sample hub is the anchor.** `samples` is one row per sample, and a persistent
-  `Sample filters` section (sample, read depth) is pinned to the top of every tab, with
-  `QC thresholds` (the Ts/Tv floor) pinned to the bottom.
-- **Every tab also carries its own filters.** Caller, contig, SnpEff section, impact class,
-  consequence term, FILTER value, gene biotype: each tab exposes the axes its own panels are
-  cut along, so no tab is a dead end that has to be left to filter something.
-- **Catalog provenance.** 77 of the 80 tiles carry a `use:` pointing at a catalog render, so the
-  panel inherits its kind, roles and description from the tool's catalog entry rather than
-  restating them here.
+- **Tab 1 is MultiQC.** The five tabs after it are a funnel: coverage, caller yield, caller
+  agreement, consequences, genes.
+- **Pinned on every tab:** the `Run at a glance` strip (SNPs called, indels per callset as a box
+  plot, samples by status, median Ts/Tv), the collapsed `Sample sheet`, the `Sample filters`
+  (sample, status) and the collapsed `QC thresholds` (a Ts/Tv floor).
+- **Structural-variant callers call few SNPs**, so every Ts/Tv card and filter carries
+  `filter_expr: col('ts_tv') > 0`.
+- **Every tab has its own open filters**, and within a tab the order is cards, distributions,
+  detail, then collapsed tables. Advanced visualisation controls sit in the tile header.
 
 ---
 
 ## MultiQC
 
-The main tab, reading the run's native MultiQC 1.35 report (no reprocessing needed).
-
-`Run at a glance`, pinned to the top of every tab, carries the run in four numbers (SNPs called,
-indels per callset as a box plot, samples by depth, mean Ts/Tv). `Sample sheet`, pinned beside it
-and collapsed, holds the sample hub table. A tab-local `Glance scope` control narrows the strip
-and the reference table to one variant caller.
-
-`MultiQC general statistics` opens the report with the general statistics table: one row per sample and tool run,
-pooling FastQC, fastp, samtools, mosdepth, bcftools, SnpEff and VEP headline numbers.
-
-`Raw and filtered reads` carries FastQC sequence counts, quality histograms and GC content,
-then fastp's kept-reads count.
-
-`Mapping, duplication and base-quality recalibration` is sarek-specific: samtools percent
-mapped, GATK4 MarkDuplicates' duplication rate, GATK4 BQSR's reported-against-empirical quality
-fit, and mosdepth's coverage distribution, cumulative and per-contig.
-
-`What bcftools and VCFtools see across every caller pooled together` holds the variant-QC
-modules MultiQC computes itself: substitution types, indel-length distribution, variant depths,
-and VCFtools' Ts/Tv by allele count.
-
-`What kind of variants were called` closes the tab with the annotation summaries: SnpEff
-effects by impact and by genomic region, VEP's general statistics and its SIFT summary.
-
----
+The run's native MultiQC report: general statistics, read quality (FastQC, fastp), alignment and
+recalibration (samtools, MarkDuplicates, BQSR, mosdepth coverage and insert size), the
+variant-call QC MultiQC pools across callers, and the SnpEff and VEP summaries. A tab-local
+`Glance scope` picker narrows the pinned strip to one caller.
 
 ## Cohort QC
 
-Coverage is the ceiling on everything the other four tabs do, so it comes first. Every panel
-here is computed from mosdepth's own output files, not from MultiQC.
+Coverage bounds every call, so it comes first. Cards: target depth per contig (box plot over the
+capture-target scope), targets under 20x (top samples), and the X/Y depth ratio.
 
-`One locus, three tracks` is a locus section: four tiles that share one region and one
-x-axis, opening on the TP53 neighbourhood (`chr17:7,400,000-8,000,000`).
+`One locus, three tracks` is a locus section. The navigator is a `genome_view` on
+`mosdepth_windows` (the per-target bed binned to 1 Mb windows) that keeps the whole genome and
+only zooms to its region; it opens on `chr1:1,000,000-2,000,000`, a generic window that is
+already small enough for the file track to fetch. Its locus field (a region or a gene symbol)
+and its brush drive three followers through the region links in `template.yaml`: per-target
+depth (`coverage_track` on `mosdepth_targets`), the calls over the gene lane (`genome_view` on
+`vcf_variants`), and the snpEff-annotated VCFs range-read by the browser from the
+`snpeff_vcf_files` indexed_file collection. Cards are not region-scoped.
 
-- The navigator is a `genome_view` on `mosdepth_windows`: mosdepth's per-target
-  `regions.bed.gz` (850k intervals) binned to 1 Mb windows (10,836 rows, the catalog's
-  `mosdepth_regions` renamed to `chrom` / `pos`), so it can hold the whole genome. Its
-  header carries the locus field (a region or a gene symbol); typing there or brushing its
-  axis emits a chromosome and a position filter.
-- `Depth per capture target` is a `coverage_track` on `mosdepth_targets`, the same bed kept
-  per target. A region link in `template.yaml` carries the navigator's filters to it, so it
-  draws only the few hundred targets in view, one lane per sample and mosdepth pass. The `.md` and `.recal` lanes are identical on this run (SK-D9).
-- `Calls over the genes` is a `genome_view` on `vcf_variants`, reached the same way, one lane
-  per caller, over the bundled hg38 gene lane.
-- `The annotated VCFs, read from the files` is a `genome_view` with `source: file` on the
-  `snpeff_vcf_files` indexed_file collection: the eight snpEff-annotated SNV/indel VCFs and
-  their tabix indexes, uploaded as files and range-read by the browser for the window in view.
-
-All four name their coordinates `chrom` / `pos`. That is not cosmetic: a `genome_view` that
-follows a region only recognises the region filters on the column names it binds itself, so
-the navigator reads a renamed copy of the windows rather than `mosdepth_regions`.
-
-At the default region, look for TP53 Pro72Arg at `chr17:7,676,154`: DeepVariant, FreeBayes,
-HaplotypeCaller and Strelka all make it, and HaplotypeCaller's CNN filter drops it at 200M
-reads while passing it at 75M. The glance cards `Depth per capture target` and
-`Captured bases per lane` read `mosdepth_targets` over the whole exome: cards do not read a
-genome region, so they stay run-wide while the tracks narrow.
-
-`Depth per contig` reads mosdepth's `summary.txt`: mean, min and max depth per contig, and the
-difference between a whole contig and the Agilent capture targets inside it. The `mosdepth pass`
-filter separates the duplicate-marked pass from the recalibrated one, on the navigator and on
-these bars; the per-target track keeps all four lanes, because a second link between the
-navigator's collection and the per-target one would collide with the region link (SK-D15).
-
-`X to Y ratio` is a sex check built from the same summaries: chromosome X mean depth against
-chromosome Y mean depth, one point per sample and pass. Both libraries read XX on this run.
-
-`What the same alignments looked like before the depth was measured` closes with the MultiQC
-panels for duplication, percent mapped and insert size, so the alignment context sits next to
-the coverage it produced.
-
----
+`Whole contig against capture targets` compares mosdepth's two scopes per contig, one facet row
+per scope; the scope picker opens on the targets. `X against Y coverage` is a heuristic sex
+check from the same summaries.
 
 ## Variant yield
 
-How much each of the five callers called, and what its own filters threw away.
-
-`Caller yield and SNP fraction, per sample` puts all five callers and both depths on one plane
-as a dot plot: colour is `log10(records)`, size is the SNP fraction of that caller's records
-(0 for Manta), next to grouped bars of SNP and indel counts.
-
-`Mutation spectra` draws the Ts/Tv ratio as the bars it is made of: the `bcftools stats`
-substitution block folded onto the six pyrimidine classes (C to T and T to C are the
-transitions), and its indel-length block within 20 bp, each normalised to its callset's own
-total so callers compare on shape rather than yield. DeepVariant's lower Ts/Tv (1.82 against
-2.5 to 2.6) comes from the RefCall records it keeps in its VCF: its PASS SNPs alone read 2.58,
-its RefCall records 0.38.
-
-`Callset QC profile` is a `parallel_coordinates` tile over `callset_qc`, one polyline per
-sample and caller across record count, SNP fraction, Ts/Tv, multiallelic share, PASS share,
-het to hom ratio, median depth and median heterozygous allele fraction. Manta, which calls no
-SNV, is left out. Brushing an axis emits a range filter.
-
-`What each caller threw away` is new in this lot: VCFtools' `FILTER.summary` per caller, as a
-stacked bar of calls per FILTER partition plus its table. This is where a caller's internal
-filtering becomes visible, rather than only its final PASS count.
-
-`Where a caller's quality score stops meaning anything` draws VCFtools' `TsTv.qual`: Ts/Tv
-recomputed above a sliding quality floor, as a `profile` panel with the quality floor on x. A
-caller's curve flattening near the germline expectation says its quality score has stopped
-separating real transitions from noise. The raw sweep is 106,589 rows, decimated to 1,757 points
-by rank stride (first and last always kept) so the curve is drawn honestly without shipping
-every step.
-
-`The blocks bcftools writes and no panel breaks out per caller` unpacks the parts of
-`bcftools stats` that MultiQC pools: the quality, depth, indel-length, substitution,
-singleton and allele-frequency blocks, one row per bin per caller. The `bcftools block` filter
-is not optional here: the quality block alone is 97% of the 92,362 rows, so the panel is
-unreadable until a block is chosen, and its intro says so.
-
----
+Each caller's own bcftools stats and VCFtools reports, caller against caller. Cards: MNPs,
+multiallelic sites, calls by FILTER value, and the het to hom ratio per callset. Then SNP and
+indel counts per sample, the mutation spectra (strand-folded substitutions and indel lengths,
+each normalised to its callset), the `parallel_coordinates` callset profile, calls per FILTER
+partition, Ts/Tv above a rising quality floor, and the remaining bcftools blocks (indel length,
+substitution, depth, allele frequency, singletons) behind a block picker that opens on depth.
+The bcftools QUAL histogram is not ingested: it outweighed every other block and repeated the
+quality-floor panel.
 
 ## Caller concordance
 
-The first tab that reads the VCFs. `vcf_variants` is 286,631 calls, one row per variant per
-caller per sample, parsed straight out of the caller's own `.vcf.gz`.
-
-`PASS calls shared between callsets` is the variant-level UpSet: each callset is one
-caller at one depth, and the intersections are exact variant matches on
-`chrom:pos:ref:alt`. Reading it needs the framing at the top of this page: a bar where two
-callers meet at the same depth is algorithmic agreement, a bar where one caller meets itself
-across the two depths is sensitivity.
-
-`Genes hit by a coding variant, shared between callers` asks the same question one level up,
-from SnpEff's per-gene tables: callers that disagree on thousands of individual positions often
-agree almost completely on which genes are hit.
-
-`Allele fraction against depth, as a density` is the plane a germline callset is read on: a
-clean diploid run stacks at 0.5 and 1.0, and everything off those two bands is either low
-coverage or a caller artefact. A marker cloud of that many calls is a solid blob, so the tile
-draws a binned 2D histogram (`density: true`) over the row sample the viewer fetches (about
-10k of the 286k calls), not over every call. The companion histogram shows the same
-distribution per caller. The `Depth at the call` slider in the left panel draws the depth
-distribution above itself.
-
-`Where the calls fall` draws the calls along the genome twice: a `manhattan` panel in
-`mode: rainfall` (log10 of the distance to the previous call on the same contig, coloured by
-variant type; on a germline exome the short-distance clusters are gene-dense exons, not
-kataegis), and a `genome_view` with one lane per caller (`facet_by_sample: true`), so a region
-where one caller fires and the others do not is visible as a gap in a lane.
-
----
+Agreement between callers and samples, never a truth comparison (that is
+nf-core/variantbenchmarking). Two UpSets (exact PASS calls, then genes carrying a coding
+variant; both fixed, the pickers do not narrow them), allele fraction against depth as a
+density and as a histogram, a rainfall plot of inter-call distances, and the call table.
 
 ## Consequences
 
-What SnpEff makes of the calls. Two sources sit side by side on purpose: SnpEff's own summary
-CSV (`snpeff_csv_stats`, its published counts) and the same composition recomputed from the
-annotated VCFs (`snpeff_ann_variants`, 371,068 rows). They should agree, and a tab that shows
-both is a tab where a parsing mistake is visible rather than silent.
-
-`SnpEff's own counts` is the published side: the six composition sections SnpEff writes
-(impact, functional class, effect, region, variant type, zygosity) as a bar chart, one section
-at a time via the `SnpEff section` filter.
-
-`The same composition, recomputed on the calls` is the computed side: allele fraction against
-depth coloured by impact class, and the allele-fraction distribution per impact class. A click
-on the scatter fills the `Variant record` card beside it (a `record_card` keyed on
-`variant_key`), one card per callset that made the call, with the gene linked to Ensembl; the
-card opens on TP53 Pro72Arg (`chr17:7676154:G:C`). HIGH
-impact is 3,744 of the 371,068 annotations here, so it is a thin band next to MODIFIER's
-168,740 and needs the impact filter to be read at all.
-
-`One row per annotated call` closes with the annotated call table: locus, allele, quality,
-filter status, genotype, depth, allele fraction, and SnpEff's gene, impact, consequence and
-protein change.
-
----
+SnpEff's published composition next to the same composition recomputed from the annotated calls.
+Cards count impact classes, consequence terms, HIGH-impact calls (top callers) and genes with a
+HIGH or MODERATE call. A click on the allele fraction against depth scatter fills the variant
+record card beside it, which stays a thin rail until a call is picked, with the gene linked to
+Ensembl.
 
 ## Genes
 
-Which genes carry the calls, how the callsets differ on them, and where on the protein the
-variants sit.
+The per-gene burden SnpEff writes: a clustered gene by callset heatmap of coding-variant counts,
+a protein lollipop, and the per-gene table, whose row selection drives the lollipop. A high
+burden on long, repetitive genes is a mappability signal before it is a biological one.
 
-`Impact grid over the 30 most damaged genes` is an oncoplot: genes down the rows, one column
-per callset (caller and sample), cell coloured by the worst impact class in that gene for that
-callset. This is the panel that makes a caller-specific gene visible at a glance: a row that is
-filled for four callsets and blank for two is either a real caller difference or a depth effect,
-and the column labels say which.
+## Selection
 
-`Variant burden, gene against callset` is the same 40-gene neighbourhood as a clustered heatmap
-of counts rather than classes, so a gene that every caller hits but one hits ten times more is
-visible where the oncoplot would show them as equal.
+Tables and point views select on their entity column, and the selection narrows every tile on the
+tab that reads the same collection or one linked from it:
 
-`Coding variants along the protein` is a lollipop over the top 40 genes by coding burden: amino
-acid position on x, one needle per variant, coloured by impact class and labelled with the HGVS
-protein change. 13,993 variants carry a resolvable protein position.
+- The sample sheet selects on `sample_id`, which the links carry to every collection and the
+  MultiQC panels. The contig-depth, sex-check, FILTER and distribution tables, and the sex-check
+  scatter, select on `sample`.
+- The bcftools summary and Ts/Tv tables and the SnpEff composition table select on `caller`,
+  which the links carry to the other callset-level collections on the Variant yield tab and to
+  the annotated calls.
+- The rainfall plot and the call tables select single calls on `variant_key`; the per-gene table
+  selects on `gene_name`, which reaches the protein lollipop.
 
-`The per-gene burden behind the panels` closes with the per-gene table (163,557 gene and callset
-rows), with row selection enabled so a gene picked here drives the lollipop above it.
-
----
-
-## A discrepancy worth reading before you trust the "one patient" framing
-
-The megatest samplesheet's `patient` column is **not** a shared `NA12878` value across both
-rows: it repeats the `sample` column exactly (`NA12878_200M`/`NA12878_200M`,
-`NA12878_75M`/`NA12878_75M`). Both sequencing depths are, biologically, the same individual, but
-structurally the samplesheet treats them as two distinct patients. `status` is `0` (normal) for
-both either way, and the `samples` hub reflects the samplesheet as published rather than the
-biological framing. See `VALIDATION_REPORT.md`, SK-D2.
-
-Two FreeBayes VCFs in the megatest bucket are not VCFs at all but 196-byte Fusion symlink
-targets, so FreeBayes contributes no rows to `vcf_variants` (its annotated twins are complete
-and do reach `snpeff_ann_variants`). See `VALIDATION_REPORT.md`, SK-D7.
+The genome view tracks move the locus through their region links rather than a selection, the
+Ts/Tv quality sweep and the callset QC profile have no sibling tile on their collection, and the
+allele fraction against depth view on the Caller concordance tab draws density bins rather than
+points, so none of them selects.
 
 ---
 

@@ -58,6 +58,12 @@ keys:
 prefix_keys: []
 renames: {}
 post_fetch_help: |
+  === Design table ===
+
+  # The run's design (condition, preparation, source replicate, flow-cell run) is
+  # vendored with the template; the reference seed reads it from {dest}/input/:
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/nanoseq/3.0.0/input/sample_metadata.tsv {dest}/input/
+
   === Reprocess MultiQC (the run wrote a pre-parquet MultiQC, Depictio reads >= 1.31 parquet) ===
 
   python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
@@ -67,7 +73,26 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} --dry-run
+  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} --dry-run \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest}
+  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
+# Megatest-specific names no dashboard text may carry (lint rule e of
+# depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - A549
+  - K562
+  - A549_R1
+  - A549_R2
+  - A549_R3
+  - K562_R1
+  - K562_R2
+  - K562_R3
+  - SG-NEx
+  - SGNex
+  - ENSG00000124570
+  - GRCh37
+  - replicate1
+  - run2

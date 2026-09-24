@@ -32,9 +32,8 @@
 # (fastp, FastQC, snpEff, VEP: MultiQC already parsed them, and VEP publishes
 # nothing but HTML, see VALIDATION_REPORT.md SK-D3) and the bed indices.
 #
-# The samplesheet is not part of the run output: pipeline_info/params.json names
-# it (`input`), and the fetch help below downloads it into <dest>/input/ where
-# the template's `samplesheet` collection scans for it.
+# The samplesheet is not part of the run output; the template builds its sample
+# hub from the csv/*.csv manifests sarek writes, so nothing else is fetched.
 pipeline: sarek
 version: "3.10.0"
 # s3://nf-core-awsmegatests/sarek/results-<results_sha>/ == the 3.10.0 release tag_sha.
@@ -98,16 +97,6 @@ keys:
 prefix_keys: []
 renames: {}
 post_fetch_help: |
-  === Fetch the samplesheet the run was launched with ===
-
-  The run output carries no samplesheet; pipeline_info/params.json names it.
-  The template's `samplesheet` collection scans <dest>/input/ for it:
-
-  mkdir -p {dest}/input
-  curl -fsSL -o {dest}/input/NA12878_Agilent_full_test.csv \
-    https://raw.githubusercontent.com/nf-core/test-datasets/sarek/testdata/csv/NA12878_Agilent_full_test.csv
-  # (a copy ships in depictio/projects/nf-core/sarek/3.10.0/input/)
-
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
@@ -115,3 +104,15 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest}
+# Run-specific values the dashboard texts must not quote (lint rule e,
+# test_template_conventions.py): the megatest sample, its read depths, and the
+# variant and locus the former default record opened on.
+forbidden_terms:
+  - NA12878
+  - 75M
+  - 200M
+  - TP53
+  - Pro72Arg
+  - chr17
+  - Agilent
+  - NCBench

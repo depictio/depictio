@@ -33,6 +33,15 @@
 # collects the tool versions from the tab-separated `software_versions.csv` and
 # nothing else, and no template variable is auto-set from pipeline parameters.
 #
+# DESIGN IS A VARIABLE.
+# The pipeline builds every library id as `<group>_R<replicate>` from the
+# design sheet, so the sheet's group and replicate are recovered from that
+# construction and nothing else is read out of a name. The factor the run
+# tests comes from an optional design table declared through METADATA_FILE
+# (sample id in METADATA_ID_COL, every other column a factor; the ampliseq
+# convention): `condition` of the design hub is its GROUP_COL column. Without
+# the table `condition` is the design sheet's group.
+#
 # LAYOUT NOTE. Data collection scans and recipe globs match on file NAME, so the
 # `bwa/mergedLibrary/macs/narrowPeak/...` prefix is never spelled out: a run
 # aligned with a different aligner (`bowtie2/`, `star/`) lands in the same
@@ -45,10 +54,36 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing chipseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the design
-  # sheets are part of the run's own pipeline_info/ output.
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): library id (or design group) in METADATA_ID_COL, one column per factor. GROUP_COL becomes the condition column of the design hub; the other factors are carried as extra columns."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table id column. Auto-detected as the first column."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design table factor the run compares, carried as the condition column. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "GENOME"
+      description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=<assembly> for a run on another build."
+      required: false
+      default: "hg38"
+  # The bundled reference dataset: the design sheets are part of the run's own
+  # pipeline_info/ output, the design table is vendored in input/ (built once
+  # from the source study's conditions; see VALIDATION_REPORT.md), and the
+  # megatest was aligned to hg19.
   reference:
-    vars: {}
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
+      GENOME: "hg19"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -66,6 +101,14 @@ template:
         key_patterns: ["*"]
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # No design table: the hub falls back to the design sheet's group, so only
+    # the table's own collection goes.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -90,34 +133,59 @@ workflows:
         - "{DATA_ROOT}"
     data_collections:
       # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the library id
+      # or the design group. Pruned when METADATA_FILE is absent. The hub
+      # below joins it, so every design filter reads the hub.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per library or design group, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Library id (or design group) as the pipeline names it. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
       # Hub: every library of the run with its experimental factors as
       # columns. The pipeline's own `design_controls.csv` is not enough for
       # that on two counts, both fixed by the recipe:
-      #   * the conditions the run was built to compare (NTKO / TKO,
-      #     E2 / VEH) live only inside the sample NAMES, so a reader could
-      #     filter by antibody but not by the thing under test;
-      #   * the sheet lists the 8 ChIP libraries and none of the 8 input
-      #     controls, although the controls appear in every QC collection.
+      #   * it carries no factor column, so the condition comes from the
+      #     design table's GROUP_COL (else the design sheet's group);
+      #   * it lists the ChIP libraries and none of the input controls,
+      #     although the controls appear in every QC collection.
       # `replicatesExist` and `multipleGroups` are dropped: the pipeline
       # writes 1 in both for every row here, so they back a dead filter.
       # ----------------------------------------------------------------
       - data_collection_tag: "design"
-        description: "Per-library hub: the ChIPs and their input controls, with the antibody, the condition and the replicate parsed out of the sample names"
+        description: "Per-library hub: the ChIPs and their input controls, with the antibody, the replicate, and the condition from the design table"
         config:
           type: "Table"
           metatype: "Metadata"
           source: "transformed"
           transform:
             recipe: "nf-core/chipseq/design_factors.py"
+            params:
+              group_col: "{GROUP_COL}"
+              id_col: "{METADATA_ID_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "sample_id": "Library identifier, the key every other collection is linked on"
               "role": "ChIP or input control"
               "is_control": "True for the input control libraries"
-              "antibody": "Antibody the ChIP was raised against, or the control's own prefix; the consensus peak sets are built per antibody"
-              "condition": "Experimental condition parsed out of the sample name (NTKO / TKO, E2 / VEH in the megatest)"
-              "replicate": "Replicate tag parsed out of the sample name"
+              "antibody": "Antibody the ChIP was raised against, or of the ChIPs an input control serves; the consensus peak sets are built per antibody"
+              "condition": "GROUP_COL of the design table (METADATA_FILE), else the design sheet group"
+              "replicate": "Design sheet replicate, as the pipeline tags the library id (R1, R2)"
               "control_id": "Input control this ChIP was called against; empty on a control row"
 
       - data_collection_tag: "design_controls"

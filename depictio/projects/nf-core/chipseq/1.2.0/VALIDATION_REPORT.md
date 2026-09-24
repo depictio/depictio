@@ -582,9 +582,19 @@ against the ingested collection rather than assumed. Both are now persistent fil
 library and antibody ones.
 
 The parse is name-shaped, and that is a real limit: a run whose samples are named on another
-convention gets a `condition` that is whatever is left of the name. The recipe emits the column
-either way and the dashboard filter then shows one value per sample, which is visibly useless
-rather than silently wrong.
+convention gets a `condition` that is whatever is left of the name.
+
+**Superseded (wave 3 genericity follow-up).** The token parse is gone. `condition` now comes
+from an optional design table declared through `METADATA_FILE` / `METADATA_ID_COL` /
+`GROUP_COL` (the ampliseq convention, passed to the recipe through the transform `params`
+channel), matched on the library id or on the design group; its other factors ride along as
+extra columns. Without a table `condition` is the design sheet `group`, recovered exactly
+from the id the pipeline builds (`<group>_R<replicate>`), as is `replicate`; no other part of
+a name is read. The megatest design is vendored as `input/sample_metadata.tsv` (16 libraries,
+`sample`, `condition`) and set in `reference.vars`; on it the hub is unchanged except that the
+input controls now take the antibody of the ChIPs they serve (the `antibody` filter no longer
+offers a separate `INPUT` value) and inherit their condition when the table omits them.
+Output schema unchanged (7 columns; extra design factors are optional columns).
 
 ### CS-D16: the input control libraries were in no row of the hub
 
@@ -876,3 +886,35 @@ flanks; EZH2 about 6.5 against 1.5. The text tiles say it is not read coverage.
 Live: the Locus tab opened with the navigator's two filters set to chr21 43600000-44000000
 and the region cards recounted to 89 peaks and 8 nearest genes. The brush / locus-entry walk
 could not be completed: the stack stopped answering mid-validation (see the wave report).
+
+## Wave 3 (2026-09-23)
+
+What changed:
+
+- `GENOME` template variable (default `hg38`); `reference.vars: {GENOME: hg19}` for the
+  reference ingest, `--var GENOME=hg19` in the megatest commands. The Locus navigator and the
+  annotation track read `assembly: "{GENOME}"`; the chromosome filter on Locus is removed
+  (a built-in assembly fetches only the region's chromosome).
+- Tab texts are generic: no sample names, marks, conditions or genome build. The megatest
+  names are listed as `forbidden_terms` in `megatest.yaml`.
+- `ChIP design` renamed `Sample sheet`, with an intro and row selection on `sample_id`.
+- Removed the MultiQC twins and duplicates: preseq panel, FRiP figure, peak volcano, the
+  TSS-distance histogram and its intro.
+- q-value cards threshold at 1.3 (warn 1.0), not 10. The genes card breaks down by
+  annotation class. `Annotation scope` is no longer collapsed.
+- Differential: distance heatmap uses ward linkage and `Blues`; the PCA and distance tables
+  moved into `Differential tables`. Every advanced viz has `controls_placement: header`.
+- PCA tiles kept: the pipeline-local recipe `deseq2_qc_pca.py` returns all rows with both
+  components and per-matrix variance. The empty tiles seen live came from a stale ingest.
+
+Verified: template lint clean on every rule (`test_template_conventions.py`, top_n and
+text_intro xpass), recipe tests, CLI dry run 8/8 with and without `--var GENOME=hg19`.
+
+Still open:
+
+- Re-ingest needed for the PCA tiles and for the `GENOME` substitution to reach the stack.
+- The gene lane (`annotation`) only takes a literal `hg38`/`mm10`/`none`, so a hg19 run keeps
+  no gene lane.
+- Resolved: `design_factors` takes the condition from the optional design table
+  (`METADATA_FILE`, `GROUP_COL`) and otherwise from the design sheet group; see CS-D15.
+- Live rendering of the wave 3 changes not verified (no stack access in this wave).

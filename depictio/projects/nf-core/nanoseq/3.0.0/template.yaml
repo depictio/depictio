@@ -31,6 +31,16 @@
 # NO params.json. As with cutandrun, this run predates the nf-core params
 # dump; provenance collects only pipeline_info/software_versions.yml.
 #
+# DESIGN IS A VARIABLE.
+# The validated samplesheet keeps only the sample name the pipeline builds as
+# `<group>_R<replicate>`, so the group and replicate are recovered from that
+# construction and nothing else is read out of a sample or file name. The
+# condition (GROUP_COL) and the confounders the dashboard offers beside it
+# (library preparation, source replicate, flow-cell run: design-table columns
+# `protocol`, `source_replicate`, `run_id`) come from an optional design table
+# declared through METADATA_FILE, the ampliseq convention. Without it the
+# condition is the samplesheet group and the three confounders read "unknown".
+#
 # LAYOUT NOTE. bambu/, dexseq/ and deseq2/ sit under a single BAMBU/ output
 # stage rather than per-sample directories: bambu/counts_gene.txt and
 # counts_transcript.txt are single files covering every sample as columns;
@@ -63,8 +73,30 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing nanoseq output (bambu/, fastqc/, minimap2/, nanoplot/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample name (or samplesheet group) in METADATA_ID_COL, one column per factor. GROUP_COL becomes the condition; columns named protocol, source_replicate and run_id feed the library preparation, source replicate and flow-cell run filters; other factors are carried as extra columns."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table id column. Auto-detected as the first column."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design table factor the run compares, carried as the condition column. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+  # The bundled reference dataset: the megatest's design table is vendored in
+  # input/ (built once from the source dataset's library annotations; see
+  # VALIDATION_REPORT.md).
   reference:
-    vars: {}
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
   provenance:
     sources:
       - name: "software_versions"
@@ -77,6 +109,14 @@ template:
         key_patterns: ["*"]
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # No design table: the hub falls back to the samplesheet group, so only
+    # the table's own collection goes.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -101,29 +141,55 @@ workflows:
         - "{DATA_ROOT}"
     data_collections:
       # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the sample name
+      # or the samplesheet group. Pruned when METADATA_FILE is absent. The
+      # hub below joins it, so every design filter reads the hub.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample or group, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample name (or samplesheet group) as the pipeline names it. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
       # Hub: one row per sample. nanoseq's samplesheet `sample` column
-      # already is the name every output file uses, so the recipe only
-      # unpacks: condition / replicate out of `<condition>_R<replicate>`,
-      # and protocol / source replicate / run out of the input FASTQ name,
-      # which is where this cohort's real confounder lives (NS-D6).
+      # already is the name every output file uses. The recipe recovers the
+      # group and replicate from the pipeline-built `<group>_R<replicate>`
+      # and takes the condition (GROUP_COL) and the confounders (protocol,
+      # source replicate, run; NS-D6) from the optional design table.
       # ----------------------------------------------------------------
       - data_collection_tag: "samples"
-        description: "Per-sample hub: condition, replicate, library preparation, source replicate and flow-cell run"
+        description: "Per-sample hub: condition, replicate, and the library preparation, source replicate and flow-cell run of the design table"
         config:
           type: "Table"
           metatype: "Metadata"
           source: "transformed"
           transform:
             recipe: "nf-core/nanoseq/samples.py"
+            params:
+              group_col: "{GROUP_COL}"
+              id_col: "{METADATA_ID_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "sample_id": "The samplesheet sample name, used by every output file"
-              "condition": "Biological condition (the samplesheet group, `<condition>_R<replicate>`)"
-              "replicate": "Replicate number inside the condition"
-              "protocol": "Library preparation read off the input FASTQ name (cdna, directcdna, ...)"
-              "source_replicate": "The replicate number the source dataset gave this library, which is not the condition replicate"
-              "run_id": "The flow-cell run the input FASTQ came off"
+              "condition": "GROUP_COL of the design table (METADATA_FILE), else the samplesheet group"
+              "replicate": "Samplesheet replicate number inside the group"
+              "protocol": "Library preparation (cdna, directcdna, ...), the design table's protocol column; unknown without it"
+              "source_replicate": "The replicate number the source dataset gave this library, the design table's source_replicate column; unknown without it"
+              "run_id": "The flow-cell run the library came off, the design table's run_id column; unknown without it"
               "reference": "Genome/transcriptome build used for alignment (the samplesheet `fasta` column)"
               "is_transcripts": "True when the input FASTQ is already a transcriptome, not reads to align"
               "has_fast5": "True when a nanopolish fast5 directory was supplied for this sample"
@@ -350,25 +416,13 @@ workflows:
               "bases_share": "Share of the bases held by reads at least that long"
 
       # ----------------------------------------------------------------
-      # Bambu gene / transcript quantification. The wide matrices feed the
-      # clustered heatmaps; the long twins carry `sample` so the hub filter
-      # reaches them, and the three derived collections (PCA, correlation,
-      # top-variable) answer "do the samples sit where the design says".
+      # Bambu gene / transcript quantification. The long (melted) matrices
+      # carry `sample` so the hub filter reaches them, and the three derived
+      # collections (PCA, correlation, top-variable) answer "do the samples sit
+      # where the design says". The wide top-50 matrices (bambu/counts_gene,
+      # bambu/counts_transcript) are not bound: their count-ranked heatmaps
+      # were dropped in wave 3 for the variance-ranked one and DEXSeq usage.
       # ----------------------------------------------------------------
-      - data_collection_tag: "bambu_counts_gene"
-        description: "Bambu gene-level counts, the top 50 genes by total count across samples"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "bambu/counts_gene.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "gene_id": "Ensembl gene id, extracted from Bambu's GTF-attribute row label"
-              "gene_biotype": "Ensembl biotype (protein_coding, Mt_rRNA, ...)"
-
       - data_collection_tag: "bambu_counts_gene_long"
         description: "Bambu gene counts melted to one row per sample and gene, with CPM and log2(CPM + 1)"
         config:
@@ -387,20 +441,6 @@ workflows:
               "count": "Reads Bambu assigned to the gene in this sample"
               "cpm": "Counts per million of that sample's library"
               "log_cpm": "log2(cpm + 1), the scale the heatmaps and the PCA are built on"
-
-      - data_collection_tag: "bambu_counts_transcript"
-        description: "Bambu transcript-level counts, the top 50 transcripts by total count across samples"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "bambu/counts_transcript.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "transcript_id": "Ensembl transcript id (Bambu TXNAME)"
-              "gene_id": "Ensembl gene id, extracted from Bambu's GTF-attribute GENEID column"
 
       - data_collection_tag: "bambu_counts_transcript_long"
         description: "Bambu transcript counts melted to one row per sample and transcript, with CPM and log2(CPM + 1)"
@@ -499,7 +539,7 @@ workflows:
               infer_schema_length: 0
             columns_description:
               "baseMean": "Mean of normalised counts across samples"
-              "log2FoldChange": "Effect size (A549 vs K562)"
+              "log2FoldChange": "Effect size of the run's contrast"
               "lfcSE": "Standard error of log2FoldChange"
               "pvalue": "Raw Wald p-value"
               "padj": "Benjamini-Hochberg adjusted p-value"
@@ -527,7 +567,7 @@ workflows:
               "padj": "Adjusted p-value; null where DESeq2 filtered the feature out"
               "log2_base_mean": "log2(baseMean + 1), the MA abscissa"
               "neg_log10_padj": "-log10(padj), capped at 300 where padj underflowed to 0"
-              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "significant": "padj below 0.05 and |log2fc| at least 1"
               "direction": "up / down / not significant"
 
       - data_collection_tag: "deseq2_top_expressed"
@@ -553,7 +593,7 @@ workflows:
               "padj": "Adjusted p-value"
               "log2_base_mean": "log2(baseMean + 1)"
               "neg_log10_padj": "-log10(padj), capped at 300"
-              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "significant": "padj below 0.05 and |log2fc| at least 1"
               "direction": "up / down / not significant"
 
       # ----------------------------------------------------------------
@@ -573,10 +613,10 @@ workflows:
             columns_description:
               "feature_id": "DEXSeq featureID (a Bambu transcript id)"
               "gene_id": "Ensembl gene id, extracted from DEXSeq's groupID"
-              "log2fc": "log2 fold change of the feature's relative usage, A549 vs K562"
+              "log2fc": "log2 fold change of the feature's relative usage in the run's contrast"
               "pvalue": "Raw DEXSeq p-value"
               "padj": "Gene-level Benjamini-Hochberg adjusted q-value (dex.padj$gene)"
-              "significant": "padj < 0.05"
+              "significant": "padj below 0.05"
               "direction": "up / down / not significant"
 
       # DEXSeq usage proportions. The results table carries the verdict,

@@ -92,3 +92,17 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/rnaseq/3.26.0 --data-root {dest}
+
+# Megatest sample ids, cell lines, genes and organism that must never appear in
+# a dashboard text (lint: depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - GM12878
+  - K562
+  - MCF7
+  - H1_REP1
+  - H1_REP2
+  - HBG2
+  - ENSG00000196565
+  - eight libraries
+  - Homo sapiens
+  - human

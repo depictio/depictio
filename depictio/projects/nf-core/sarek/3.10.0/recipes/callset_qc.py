@@ -1,9 +1,11 @@
 """One QC profile per callset (sample and caller), for a parallel-coordinates tile.
 
-The megatest has two samples, so a per-sample profile would be two lines. The
-unit the run actually varies is the callset: five callers on each of the two
-depths. Every metric below is one a germline callset is judged on, read from
-the caller's own `bcftools stats` report and from its snpEff-annotated VCF:
+The unit a sarek run varies is the callset (one caller on one sample), so the
+profile has one line per callset rather than per sample. Every metric below
+is one a germline callset is judged on, read from the caller's own
+`bcftools stats` report and from its VCF (the snpEff-annotated twin when the
+run annotated with snpEff, since it carries every caller's calls in full; the
+caller's own VCF otherwise):
 
 - ``n_records``: records in the VCF.
 - ``snp_fraction``: SNPs over records.
@@ -29,7 +31,8 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="summary", dc_ref="bcftools_stats_summary"),
     RecipeSource(ref="tstv", dc_ref="bcftools_stats_tstv"),
-    RecipeSource(ref="variants", dc_ref="snpeff_ann_variants"),
+    RecipeSource(ref="variants", dc_ref="snpeff_ann_variants", optional=True),
+    RecipeSource(ref="calls", dc_ref="vcf_variants"),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -58,7 +61,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     tstv = sources["tstv"].select(*keys, "ts_tv")
 
-    variants = sources["variants"]
+    annotated = sources.get("variants")
+    variants = annotated if annotated is not None and not annotated.is_empty() else sources["calls"]
     passing = pl.col("is_pass").fill_null(False)
     het = pl.col("gt").is_in(_HET)
     per_call = variants.group_by(keys).agg(

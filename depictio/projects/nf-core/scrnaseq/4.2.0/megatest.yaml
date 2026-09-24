@@ -143,3 +143,25 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/scrnaseq/4.2.0 --data-root {dest}
+# Megatest facts no dashboard text may state (checked by
+# depictio/tests/models/test_template_conventions.py): the sample, its tissue,
+# its reference and counts, and the gene names the megatest's clusters and the
+# old PBMC defaults surfaced.
+forbidden_terms:
+  - pbmc8k
+  - PBMC
+  - GRCh38
+  - Homo_sapiens
+  - "8 767"
+  - "499 387"
+  - CD3D
+  - MS4A1
+  - FCER1A
+  - VPREB3
+  - OSBPL10
+  - FCAR
+  - CLEC4E
+  - PF4
+  - PPBP
+  - LMNA
+  - AQP3

@@ -29,7 +29,10 @@ Output schema:
     Kingdom … Species : Utf8
     confidence : Float64
     label : Utf8 — short display label (Phylum if known, else taxon[:8])
-    dominant_habitat : Utf8 — group carrying most of the ASV's abundance
+    dominant_habitat : Utf8 — level of the design factor carrying most of the
+        ASV's abundance. The factor is the template's ``GROUP_COL`` (the
+        ``group_col`` param); the column keeps its historical name for schema
+        stability, whatever factor fills it.
 """
 
 import polars as pl
@@ -93,6 +96,9 @@ _RARE_TOTAL_ABUNDANCE = 0.0001  # = 0.01% of the cohort-wide summed abundance
 MAX_TIPS: int | None = 3000
 
 _METADATA_ID_COL = "sample"
+
+#: ``GROUP_COL`` value the CLI sets when the run declares no group column.
+NO_GROUP_SENTINEL = "__no_group__"
 
 _RANK_PREFIXES = (
     ("Kingdom", "k__"),
@@ -206,21 +212,24 @@ def _from_taxonomy_table(tax: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(conf.alias("confidence")).select(["taxon", *_RANKS, "confidence"])
 
 
-def _group_column(metadata: pl.DataFrame) -> str | None:
+def _group_column(metadata: pl.DataFrame, group_col: str | None = None) -> str | None:
     """The metadata column samples are grouped by.
 
-    `habitat` when the run has one, else the template's own convention: the
-    first column is the sample id and the second is the grouping factor. Reading
-    it positionally is what lets this work on a run whose factor is `locality`,
-    `site` or anything else, instead of only on the reference dataset.
+    The template's ``GROUP_COL`` (passed as the ``group_col`` param) when it is a
+    column of the table. Otherwise the CLI's own convention for ``GROUP_COL``:
+    the first column is the sample id and the second is the grouping factor, so
+    a run whose factor is ``locality``, ``site`` or anything else works without
+    a variable. No column name is special-cased.
     """
-    if "habitat" in metadata.columns:
-        return "habitat"
+    if group_col and group_col != NO_GROUP_SENTINEL and group_col in metadata.columns:
+        return group_col
     candidates = [c for c in metadata.columns if not c.startswith("depictio_")]
     return candidates[1] if len(candidates) > 1 else None
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+def transform(
+    sources: dict[str, pl.DataFrame], params: dict[str, str] | None = None
+) -> pl.DataFrame:
     """Build tip metadata from whichever taxonomy artefact the run produced."""
     asv_tax = sources.get("asv_tax")
     taxonomy = sources.get("taxonomy")
@@ -260,10 +269,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # 'No abundance' (~75 % of the metadata DC for this run — they're
     # taxonomy-classified rep-seqs that dropped out before the OTU table).
     metadata = sources.get("metadata")
-    group_col = _group_column(metadata) if metadata is not None else None
+    group_col = (
+        _group_column(metadata, (params or {}).get("group_col")) if metadata is not None else None
+    )
     if asv_abundance is not None and metadata is not None and group_col is not None:
+        id_col = (params or {}).get("id_col")
         sample_col = next(
-            (c for c in (_METADATA_ID_COL, "ID", "sample_id") if c in metadata.columns),
+            (c for c in (id_col, _METADATA_ID_COL, "ID", "sample_id") if c in metadata.columns),
             metadata.columns[0] if metadata.columns else None,
         )
         if sample_col is not None and sample_col != group_col:

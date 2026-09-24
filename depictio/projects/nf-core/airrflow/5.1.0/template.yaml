@@ -38,22 +38,32 @@ template:
       description: "Set when the run used --skip_report_threshold, or an explicit --clonal_threshold instead of 'auto'. Prunes the threshold summary DC."
       required: false
     - name: "SKIP_MULTIQC"
-      description: "Set when the run used --skip_multiqc (params.json skip_multiqc). Prunes the MultiQC DC and the Quality control tab."
+      description: "Set when the run used --skip_multiqc (params.json skip_multiqc). Prunes the MultiQC DC; the MultiQC panels of the main tab then render empty, the other tabs are unaffected."
       required: false
     - name: "ASSEMBLED_MODE"
       description: "Set when the run used --mode assembled (params.json mode). Prunes the pRESTO log DCs: assembled input skips read pre-processing entirely."
       required: false
+    # Design column (ampliseq 2.18.0 convention). airrflow's samplesheet carries
+    # the design in free submitter columns; `treatment` is the one its schema
+    # documents for the condition, so it is the default. A run whose samplesheet
+    # has no `treatment` column (the nf-core `test` profile uses `intervention`)
+    # passes --var GROUP_COL=<column>.
+    - name: "GROUP_COL"
+      description: "Samplesheet column holding the condition the dashboard filters and breaks down by (default: treatment). Must exist in pipeline_info/samplesheet.valid.tsv."
+      required: false
+      default: "treatment"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL in filter titles and descriptions (default: Condition)."
+      required: false
+      default: "Condition"
   # Variables used when materialising the bundled reference/demo dataset.
-  #
-  # There is deliberately no GROUP_COL here. The dashboard groups on the columns
-  # airrflow's own samplesheet schema guarantees (subject_id, tissue, sex), and
-  # the CLI has no template-level default mechanism: an unset {GROUP_COL} falls
-  # back to the `__no_group__` sentinel (templates.py), which on this template
-  # would bind a filter to a column that does not exist, because the samplesheet
-  # DC is present on every route and no conditional prunes it.
+  # GROUP_COL is spelled out here as well as defaulted above, so the reference
+  # seed never depends on the order in which the resolver applies defaults.
   reference:
     vars:
       SAMPLESHEET_FILE: "{DATA_ROOT}/pipeline_info/samplesheet.valid.tsv"
+      GROUP_COL: "treatment"
+      GROUP_COL_DISPLAY: "Condition"
   # How this pipeline's run provenance (parameters, thresholds, tool versions) is
   # collected at ingest, surfaced in the project's ingestion report and the
   # dashboard Settings drawer. Keys not matched by a group rule land in 'Other';
@@ -114,7 +124,7 @@ template:
     # derived from the repertoire analysis and find-threshold reports goes.
     - if_var_present: "SKIP_CLONAL_ANALYSIS"
       remove_dc_tags:
-        ["repertoire_summary", "clonal_diversity", "clonal_abundance", "clone_sizes",
+        ["repertoire_summary", "clonal_diversity", "diversity_orders", "clonal_abundance", "clone_sizes",
          "clone_sets", "clonal_overlap", "threshold_summary"]
       dashboards: ["dashboards/base.yaml"]
     # --skip_report: repertoire_comparison/ is absent, which also removes the
@@ -238,15 +248,10 @@ workflows:
               "subject_id": "Donor or subject the sample came from; airrflow defines clones within this group"
               "species": "Species the repertoire was sequenced from"
               "pcr_target_locus": "Targeted receptor locus (IG or TR)"
-              # airrflow's samplesheet schema keeps `treatment`, `tissue` and
-              # `population` as free submitter columns, and the megatest
-              # submitters used them in that order for sampling site, timepoint
-              # and sorted cell type. `treatment` is therefore the column that
-              # actually varies here (lymph node against brain lesion), which is
-              # the contrast the dashboard groups on; `tissue` holds the single
-              # timepoint the study collected. Read the values, not the names.
-              "treatment": "Free submitter column; on this cohort the sampling site (lymph node or brain lesion)"
-              "tissue": "Free submitter column; on this cohort the collection timepoint"
+              # `treatment`, `tissue` and `population` are free submitter
+              # columns; the dashboard groups on GROUP_COL (default treatment).
+              "treatment": "Condition or treatment of the sample (free submitter column; the default GROUP_COL)"
+              "tissue": "Tissue the sample was collected from"
               "population": "Sorted cell population the library was built from"
               "sex": "Subject sex"
               "age": "Subject age"
@@ -326,6 +331,25 @@ workflows:
               "d_lower": "Lower bound of the bootstrap confidence interval"
               "d_upper": "Upper bound of the bootstrap confidence interval"
               "e": "Evenness at this order"
+
+      - data_collection_tag: "diversity_orders"
+        optional: true
+        description: "Hill diversity at q = 0, 1 and 2 per sample with its bootstrap interval, one labelled row per sample and order"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/diversity_orders.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+              "order": "Named diversity order: q = 0 richness, q = 1 Shannon, q = 2 Simpson"
+              "q": "Diversity order as a number"
+              "d": "Bootstrapped Hill number at this order"
+              "d_lower": "Lower bound of the bootstrap confidence interval"
+              "d_upper": "Upper bound of the bootstrap confidence interval"
 
       - data_collection_tag: "clonal_abundance"
         # alakazam's estimateAbundance needs enough sequences to bootstrap, so a
@@ -550,6 +574,16 @@ links:
 
   - source_dc_tag: "samplesheet"
     source_column: "sample_id"
+    target_dc_tag: "diversity_orders"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the ranked diversity bars by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
     target_dc_tag: "clone_sizes"
     target_type: "table"
     link_config:
@@ -637,6 +671,16 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Filter the diversity profiles by the repertoire summary selection"
+    enabled: true
+
+  - source_dc_tag: "repertoire_summary"
+    source_column: "sample_id"
+    target_dc_tag: "diversity_orders"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the ranked diversity bars by the repertoire summary selection"
     enabled: true
 
   - source_dc_tag: "repertoire_summary"

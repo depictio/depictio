@@ -69,12 +69,19 @@
 # keyed the same way, one directory per sample under `simpleaf/<sample>/` /
 # `kallisto/<sample>.count/` (`kallisto/<sample>/` for its CellBender run).
 #
-# NO MITOCHONDRIAL GENES ON THIS REFERENCE. The pbmc8k GRCh38 reference
-# bundled with this megatest carries zero genes named `MT-*`, so `pct_mito`
-# is 0 for every cell here (ribo and hb genes ARE present). The column and
-# the MAD mito rule (`mad_high_mito`) are unchanged and will activate against
-# a reference that does carry mitochondrial genes; the dashboard's QC reading
-# leads with n_umi / n_genes / pct_top20 / pct_ribo instead, and says why.
+# HUMAN-ONLY RULES. The mitochondrial fraction and the MAD mito rule
+# (`mad_high_mito`) read gene symbols starting with `MT-`, and the cell-cycle
+# scores read the human Tirosh sets: on another organism (or a reference
+# without mitochondrial genes, such as the megatest's bundled GRCh38, where
+# `pct_mito` is 0 for every cell) the mito columns read 0 and the phase
+# degrades to NA. The dashboard shows the mito rule anyway, since it is the
+# standard scRNA QC axis on any reference that carries MT- genes.
+#
+# MARKER PANEL. No tissue or organism gene panel is hardcoded. The optional
+# `MARKER_PANEL` variable (comma list of gene symbols) is forwarded to the
+# two per-cell expression recipes as their `marker_panel` transform param;
+# without it, or when none of its genes is in the reference, they fall back
+# to the top markers of every graph-based cluster from `cellranger_diffexp`.
 #
 # CellBender is optional (`--skip_cellbender`, default false here) and its
 # per-sample metrics/cell-barcode lists are `optional: true` so a run
@@ -87,6 +94,9 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory of the megatest results: one subdirectory per --aligner route (aligner_cellranger/ required; aligner_simpleaf/, aligner_kallisto/ optional, feed the Aligner concordance tab) plus aligner_cellranger/multiqc/multiqc_data/multiqc.parquet."
       required: true
+    - name: "MARKER_PANEL"
+      description: "Optional comma-separated gene symbols the per-cell marker tiles (Markers violin, gene UMAP Colour by menu) always carry, e.g. the lineage markers of the tissue. Unset, or with none of its genes in the reference, the tiles use the top markers of every graph-based cluster instead."
+      required: false
   reference:
     vars: {}
   provenance:
@@ -849,13 +859,15 @@ workflows:
       # the embedding tile's Colour by menu lists every gene.
       # ----------------------------------------------------------------
       - data_collection_tag: "cellranger_cell_expression"
-        description: "Wide cell by gene table: one row per called cell, one column per marker panel gene (top markers of every graph-based cluster, a curated PBMC panel and the most dispersed genes), log1p(CP10k) normalised, carrying the UMAP coordinates and the cluster label"
+        description: "Wide cell by gene table: one row per called cell, one column per marker panel gene (the optional MARKER_PANEL genes, the top markers of every graph-based cluster and the most dispersed genes), log1p(CP10k) normalised, carrying the UMAP coordinates and the cluster label"
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
             recipe: "cellranger/cell_expression.py"
+            params:
+              marker_panel: "{MARKER_PANEL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -867,13 +879,15 @@ workflows:
               "umap_2": "Second UMAP coordinate"
 
       - data_collection_tag: "cellranger_cell_expression_long"
-        description: "The curated panel half of cellranger_cell_expression, melted to one row per cell and gene, so a box shows a marker's whole per-cell distribution across clusters. Capped to a fixed number of cells per cluster, the figure service does not downsample a box."
+        description: "A marker panel slice of cellranger_cell_expression (MARKER_PANEL when set, otherwise the top 2 markers of every graph-based cluster, at most 24 genes), melted to one row per cell and gene, so a box shows a marker's whole per-cell distribution across clusters. Capped to a fixed number of cells per cluster, the figure service does not downsample a box."
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
             recipe: "cellranger/cell_expression_long.py"
+            params:
+              marker_panel: "{MARKER_PANEL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -1188,7 +1202,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "cellbender/metrics.py"
+            recipe: "nf-core/scrnaseq/simpleaf_cellbender_metrics.py" # cellbender/metrics.py on this route's own raw scan
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -1345,7 +1359,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "cellbender/metrics.py"
+            recipe: "nf-core/scrnaseq/kallisto_cellbender_metrics.py" # cellbender/metrics.py on this route's own raw scan
           dc_specific_properties:
             format: "TSV"
             columns_description:

@@ -210,9 +210,13 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 - Conditionals: `SKIP_CLONAL_ANALYSIS`, `SKIP_REPORT`, `SKIP_THRESHOLD_REPORT`,
   `SKIP_MULTIQC`, `ASSEMBLED_MODE`
 - None of those five flags is auto-detected. `_introspect_pipeline_params` in
-  `depictio/cli/cli/utils/templates.py` maps only the ampliseq and viralrecon flags, so a
+  `depictio/cli/cli/utils/templates.py` maps only the ampliseq, viralrecon and demultiplex flags, so a
   run that skipped a step needs the matching `--var`. Every affected collection is either
   optional or pruned by its conditional, so a run that omits the flag still ingests.
+- Wave 3: `GROUP_COL` (default `treatment`, the megatest's design column) drives the condition
+  filter and the subject card breakdown. The nf-core CI samplesheets carry no such column, so
+  `test` and `test_tcr` ingest with `--var GROUP_COL=<column>`; without it the condition filter
+  is empty.
 
 ### Run executed (this branch)
 
@@ -259,13 +263,13 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 - Per splicing step: `splice_junctions` and `cancer_introns` (`SKIP_CTATSPLICING`).
   `cancer_introns` is additionally `optional: true` and no tile depends on it
 - Route flags are declared but not auto-detected: `_introspect_pipeline_params` maps only
-  the ampliseq and viralrecon flags, so `SKIP_ARRIBA`, `SKIP_STARFUSION`,
+  the ampliseq, viralrecon and demultiplex flags, so `SKIP_ARRIBA`, `SKIP_STARFUSION`,
   `SKIP_FUSIONCATCHER`, `SKIP_FUSIONINSPECTOR`, `SKIP_CTATSPLICING` and `SKIP_QC` must be
   passed by hand as `--var`. `SAMPLESHEET_FILE` overrides where the sheet is looked for
-- The fusion, not the sample, is the key of every collection. rnafusion writes one file per
-  tool per sample with the sample encoded only in the file name, and `resolve_sources`
-  concatenates the globbed files without their path, so no caller table can carry a sample
-  column. The samplesheet therefore reaches only the MultiQC panels
+- The sample is derived from each file name. Since wave 3 every fusion recipe reads `sample`
+  through `RecipeSource.source_path`, the template links `samplesheet.sample` to all ten fusion
+  collections, and the fusion-report rank is computed per sample. Before that, the globbed
+  files were concatenated without their path and every caller table pooled the cohort.
 - Observed on this megatest (the pipeline's own test profile, one synthetic sample `test`
   with all three callers, FusionInspector and CTAT-splicing enabled): 20 consensus fusions
   over 45 caller-evidence rows, Arriba and STAR-Fusion reporting 14 distinct fusions each
@@ -276,7 +280,7 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 | # | Label | Profile / Flags | What differs | Template impact |
 |---|-------|-----------------|--------------|-----------------|
-| F1 | **multi-sample cohort** | any samplesheet with more than one row | Each caller writes one file per sample, all matched by the same glob | The highest-stress scenario and the one this megatest cannot reach. `resolve_sources` drops the path, so every caller table silently pools the cohort into one frame with no sample column and no `depictio_run_id` (transformed collections never get one). Counts stay arithmetically correct but stop being per sample, and the same fusion called in two samples collapses to rows that cannot be told apart. Also the only way to exercise the sample axis at all: the persistent `Sample filters` MultiSelect, the `sample_mapping` fan-out and every per-sample MultiQC panel are single-valued here. Needs a run before the template is claimed cohort-safe. |
+| F1 | **multi-sample cohort** | any samplesheet with more than one row | Each caller writes one file per sample, all matched by the same glob | The highest-stress scenario and the one this megatest cannot reach. Since wave 3 each caller table carries a path-derived `sample` column, and a synthetic two-sample cohort checked offline gives per-sample rows, per-sample ranks and a derived extra caller. A real cohort is still the only way to exercise the sample axis live: the persistent `Sample filters` MultiSelect, the `sample_mapping` fan-out and every per-sample MultiQC panel are single-valued here. |
 | F2 | **single caller** | `--tools arriba` plus the matching `--var SKIP_STARFUSION=true --var SKIP_FUSIONCATCHER=true` | Only one caller directory is written | Two of the three caller collections pruned, so the `Evidence` tab loses two of its three per-caller dot plots and two of its three tables. `caller_evidence` keeps one row per fusion instead of up to three, so the evidence dot plot degenerates to a single column and `evidence_fraction` is 1.0 everywhere. The `Caller concordance` UpSet drops to one set with a single intersection, and `tool_support` becomes a constant, which also flattens the donut on the `Fusions called` card and the colour of the ranking lollipop. Tests conditional pruning and set-based rendering at once. |
 | F3 | **no FusionInspector** | `--var SKIP_FUSIONINSPECTOR=true` | No `fusioninspector/` tree | `fusioninspector_fusions` and `fusion_protein_domains` pruned together, taking two of the three sections of the last tab: `Validated calls` (4 cards, dot plot, allelic-ratio scatter) and `Fusion protein domains` (domain track, lollipop, table). Also removes the tab's second hub, so the two `fusioninspector_fusions -> *` links vanish and only the fusion-consensus fan-out remains. The largest single-flag loss in the template. |
 | F4 | **no CTAT-splicing** | `--var SKIP_CTATSPLICING=true` | No `ctatsplicing/` tree | `splice_junctions` and `cancer_introns` pruned, removing the `Splice junctions` section (4 cards, Manhattan, per-gene bar) and one pinned reference table. Low risk because both collections are deliberately unlinked, so nothing else on the dashboard changes; that is exactly what the scenario should confirm. |
@@ -385,6 +389,12 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
   `deeptools_plot_profile`
 - Consensus route (>= 2 replicates per antibody): `macs2_consensus_boolean`, `macs2_consensus_fc`
 - Differential route (>= 2 conditions per antibody): `deseq2_results_raw` -> `deseq2_results` (dc_ref)
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/sample_metadata.tsv`), joined into `design`: `condition` is the `GROUP_COL` factor,
+  else the design group
+- `GENOME` (default `hg38`) sets the Locus tab's genome axis. The megatest was aligned to hg19,
+  so it is ingested with `--var GENOME=hg19`; `reference.vars` sets both for the bundled
+  reference
 
 **Scenarios:**
 
@@ -399,6 +409,8 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 | `--skip_plot_profile` / `--skip_plot_fingerprint` | flags | `deeptools_plot_profile` / `deeptools_fingerprint_metrics` empty; the two ChIP-enrichment tiles below the MultiQC panels lose their data |
 | `--skip_consensus_peaks` / `--skip_diff_analysis` | flags | Consensus and Differential binding tabs lose their data |
 | MultiQC not reprocessed | (omit the reprocess step) | `multiqc_data` finds no parquet; the whole QC tab is empty. This is the pipeline's normal state: the reprocess is mandatory, not optional |
+| no design table | omit `METADATA_FILE` | `metadata` pruned; `condition` falls back to the design group |
+| `GENOME` left at its default | omit `--var GENOME=hg19` on an hg19 run | the Locus axis is laid out on the wrong assembly; a region typed on a contig that assembly does not list can fail the view |
 
 **Known gap:** the MultiQC General Statistics table cannot be bound for this pipeline
 (samtools stats + flagstat both emit a "Reads mapped" column; the API general-stats payload
@@ -425,6 +437,8 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
   `homer_tss_distance_profile` (dc_ref on `homer_annotated_peaks`)
 - Consensus route (>= 2 replicates per group): `macs2_consensus_boolean`, `macs2_consensus_fc`
 - Differential route (>= 2 conditions): `deseq2_results_raw` -> `deseq2_results` (dc_ref)
+- `GENOME` (default `hg38`) sets the Locus tab's genome axis. The megatest was aligned to hg19,
+  so it is ingested with `--var GENOME=hg19`; `reference.vars` sets it for the bundled reference
 
 ### Further scenarios (analytical, not yet run)
 
@@ -459,6 +473,8 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 - `caller_agreement` joins the two callers per sample, so it needs both
 - `macs2_peaks` is the only `optional: true` collection: a SEACR-only run keeps every
   other tile and simply loses the comparison
+- `GENOME` (default `hg38`, the megatest's build) feeds the Locus tab's navigator, tracks and
+  gene lane since wave 3
 
 ### Further scenarios (analytical, not yet run)
 
@@ -482,7 +498,8 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 **MultiQC:** run wrote 1.35 -> used as-is
 
 **Template requirements:**
-- Always: `samples` (hub, pipeline-local), `samplesheet`, `multiqc_data` (native 1.35 parquet,
+- Always: `samples` (hub, pipeline-local; since wave 3 built from the `csv/` files sarek
+  publishes, with no samplesheet collection), `multiqc_data` (native 1.35 parquet,
   10 modules), `bcftools_stats_raw` (scan, feeds the next two via `dc_ref`),
   `bcftools_stats_summary`, `bcftools_stats_tstv` (the new `bcftools` catalog tool)
 - Germline-only route: 5 callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta, Strelka) x
@@ -504,12 +521,20 @@ the MultiQC link (20 name variants per sample); the resolver gap itself is TEMPL
 FreeBayes contributes no rows to `vcf_variants`; its snpEff twins are complete. Manta's VCFs are
 real (SK-D8).
 
+**2026-09-23 wave 3:** the template no longer depends on the validation run. The hub is built
+from `csv/recalibrated.csv`, `csv/markduplicates*.csv` and `csv/variantcalled.csv`, the first one
+present winning, with no name parsing; the MultiQC link uses the hub-aware `sample_mapping`
+resolver and the `mappings:` table is gone. A `GENOME` variable (default `hg38`) drives the genome
+tracks, the calls-track gene lane and the annotated VCF collection. Every `vcftools_*` and
+`snpeff_*` collection and the XY sex check are optional, and `callset_qc` falls back to the raw
+calls when the annotated VCFs are absent. mosdepth reads one pass per sample.
+
 ### Further scenarios (analytical, not yet run)
 
 | # | Label | Profile / Flags | What differs | Template impact |
 |---|-------|-----------------|--------------|-----------------|
 | SK1 | **germline NCBench Agilent (validated)** | `test_full_germline_ncbench_agilent` | none | 29 of 33 DCs populate (the 4 somatic ones are `optional: true`): 286,631 `vcf_variants` rows, 371,068 `snpeff_ann_variants`, 163,557 `snpeff_genes`, 10 `bcftools_stats_*` rows (2 samples x 5 callers). |
-| SK2 | **`sample_mapping` canonicalisation gap** | any run | sarek's per-tool MultiQC sample names carry stage/caller/annotator suffixes (`.md`, `.recal`, `.deepvariant`, `.freebayes.filtered`, ...) | SK-D1: the shared `sample_mapping` regex only strips a trailing `_1`/`_2` or `" - annotation"` suffix, so the hub's Sample filter rarely narrows the MultiQC panels even though they render correctly unfiltered. The `bcftools_stats_*` links are unaffected (their `sample` column is path-derived, not MultiQC-name-derived). |
+| SK2 | **`sample_mapping` canonicalisation gap (closed in wave 3)** | any run | sarek's per-tool MultiQC sample names carry stage/caller/annotator suffixes (`.md`, `.recal`, `.deepvariant`, `.freebayes.filtered`, ...) | SK-D1 is closed: the resolver now attaches each MultiQC name to its hub id (TEMPLATE_BOTTLENECKS 16), so the hub's Sample filter narrows the MultiQC panels without a hand-written `mappings:` block. Worth a live run to confirm on a caller set other than the megatest's. |
 | SK3 | **single caller** | `--tools haplotypecaller` | Four callers' `bcftools stats` reports absent | `bcftools_stats_summary`/`_tstv` narrow to 2 rows (1 caller x 2 samples); the caller-comparison `dot_plot` degenerates to two points. |
 | SK4 | **annotation skipped** | `--skip_tools snpeff,vep` | No SnpEff/VEP output | `gatk`, `vcftools` and `vep` MultiQC panels empty; the Annotation portion of the MultiQC tab loses its data. |
 | SK5 | **somatic pairs (tumor/normal)** | a tumor/normal design | ASCAT / ControlFREEC / MSIsensor outputs would appear for the first time in this repo | Not published by this megatest, so untestable against it; no somatic-specific catalog output exists yet either: the germline-only `bcftools_stats_*` binding (SN-record based) would still apply to whatever callers run. |
@@ -544,6 +569,13 @@ resolution, and `aligner_summary` / `cell_calls_by_method` promoted from pipelin
 recipes. 56 collections, 9 tabs (a Compare selections tab on `group_compare` is new), 0 bare
 cards, 0 partial grid rows, a tab-local filter section on every tab.
 
+**2026-09-23 wave 3:** no tissue panel is hardcoded any more. `MARKER_PANEL`, an optional comma
+list passed to the two per-cell expression recipes through their `params`, puts the reader's
+genes first; without it the recipes fall back on the top markers per cluster and the most
+dispersed genes, so a run on another tissue or organism ingests. CellBender metrics are read per
+route from each aligner's own scan. No gene, sample or cluster label is named in any text or
+default.
+
 ### Further scenarios (analytical, not yet run)
 
 | # | Label | Profile / Flags | What differs | Template impact |
@@ -554,7 +586,9 @@ cards, 0 partial grid rows, a tab-local filter section on every tab.
 | SC4 | **multi-lane run** | a samplesheet with more than one 10x lane | More than one `sample` value | `cellranger_diffexp`'s top-100-genes-per-cluster cap (open question 2 in the report) would need revisiting for more clusters; `barcode_rank`/`embedding` just gain rows. |
 | SC5 | **MultiQC's own barcode-rank export used instead of the raw-matrix recipe** | hypothetical | MultiQC packs `(rank, count)` tuples as strings inside table cells | SC-D3: not a table a recipe can read cleanly; the fresh streaming sum off the raw matrix is what is actually bound, with the MultiQC panel kept alongside it, labelled as Cell Ranger's own rendering. |
 
-**Ranking by template stress:** SC1 > SC2 > SC4 > SC3 > SC5
+| SC6 | **custom marker panel** | `--var MARKER_PANEL=<gene>,<gene>,...` | none | The panel genes lead the expression matrix and the long table; genes absent from the run are dropped quietly. Not exercised on a live ingest yet. |
+
+**Ranking by template stress:** SC1 > SC2 > SC4 > SC6 > SC3 > SC5
 
 ---
 
@@ -604,9 +638,12 @@ read QC, so the release candidate is the only complete run of this configuration
 
 **Template requirements:**
 - Always: `samples` (hub), `multiqc_data` (REPROCESSED parquet: `fastqc`, `nanostat`,
-  `samtools`), `bambu_counts_gene`, `bambu_counts_transcript` (`complex_heatmap` x2),
-  `deseq2_results_raw` -> `deseq2_results` (`dc_ref`, `volcano`/`ma`/`qq`), `dexseq_results`
-  (`volcano`/`qq`)
+  `samtools`), the long Bambu counts, `deseq2_results_raw` -> `deseq2_results` (`dc_ref`,
+  `volcano`/`ma`/`qq`), `dexseq_results` (`volcano`/`qq`). The wide Bambu matrices are no longer
+  declared (wave 3)
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/sample_metadata.tsv`). The hub reads `condition` from `GROUP_COL` and protocol, source
+  replicate and run id from the table, never from the FASTQ names
 - SG-NEx A549 and K562 cell lines, direct-cDNA and cDNA Nanopore RNA-seq, 3 replicates each (6
   samples)
 - This run publishes no pycoQC, no featureCounts, no JAFFAL fusion calls and no
@@ -634,7 +671,9 @@ run from the repo venv (TEMPLATE_BOTTLENECKS 17).
 | NS4 | **fusion detection or variant calling enabled** | `is_transcripts`, `nanopolish_fast5` set | Not this run's parameters | JAFFAL fusion calls and `variant_calling/` would appear; NS-D3 removed the corresponding manifest keys since neither is triggered here. |
 | NS5 | **Bambu row-id granularity on a richer reference GTF** | a non-minimal test GTF | This megatest's minimal GTF makes Bambu's `gene_id` an exon-granular GTF-attribute string, not a clean `ENSG…` id | NS-D5: only the `bambu` recipes' own regex extraction is unaffected; the reused `deseq2_results` collection keeps the raw descriptor string verbatim, so hover labels on the Differential expression tab are long strings rather than clean gene ids. |
 
-**Ranking by template stress:** NS1 > NS2 > NS5 > NS3 > NS4
+| NS6 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | `condition` is the samplesheet group; the protocol, source replicate and run id filters and donuts read `unknown`. |
+
+**Ranking by template stress:** NS1 > NS2 > NS6 > NS5 > NS3 > NS4
 
 ---
 
@@ -675,11 +714,13 @@ docs, still unexercised.
 | EA1 | **default megatest (validated)** | none | none | 30 of 36 collections populate (5 gated optional ones plus the MultiQC collection carry no Delta table); all 13 `advanced_viz` tiles resolve. |
 | EA2 | **MultiQC not reprocessed** | omit the reprocess step | 1.13.dev0 wrote no parquet (pre-parquet MultiQC era, like cutandrun/nanoseq) | `multiqc_data` finds nothing, whole QC tab empty. |
 | EA3 | **samplesheet not placed by hand** | default fetch only | EA-D1: eager's AWS bucket carries no `input/` prefix and no `params.json` to recover `--input` from | The hand-reconstructed `input/benchmarking_vikingfish.tsv` must be copied into `DATA_ROOT` manually or the `samples` hub is empty. |
-| EA4 | **samplesheet renamed** | any filename not containing `samplesheet` | EA-D2: the `samples` recipe reads a fixed path rather than auto-detecting via `SAMPLESHEET_FILE` (the auto-detect regex only matches filenames containing `samplesheet`) | A renamed manifest silently breaks the hub. |
+| EA4 | **samplesheet renamed** | any filename not containing `samplesheet` | EA-D2 is closed in wave 3: `samples.py` and `lane_stats.py` glob `input/*.tsv` instead of the megatest file name | A renamed sheet still reaches the hub as long as it is the only TSV under `input/`. |
 | EA5 | **sex determination / MTNucRatio / mapDamage / bedtools enabled** | not this run's config | None of those directories exist in the validated run | No catalog output binds them yet; enabling them on a future run needs new template work, not just new data. |
 | EA6 | **DeDup instead of Picard MarkDuplicates** | `--dedupper dedup` | Deduplication tool's report shape changes | Not exercised: this megatest used Picard. |
 
-**Ranking by template stress:** EA1 > EA2 > EA3 > EA4 > EA5 > EA6
+| EA7 | **short-fragment cut-off changed** | `--var SHORT_FRAGMENT_BP=<bp>` | none | Since wave 3 the value reaches the `damageprofiler/authenticity` recipe through its `params`, so the short-fragment share is recomputed, not only relabelled; the output column keeps its fixed name. |
+
+**Ranking by template stress:** EA1 > EA2 > EA3 > EA4 > EA7 > EA5 > EA6
 
 ---
 
@@ -714,17 +755,28 @@ gone from every pattern (`bismark_[a-z0-9]+`), so MS3's hisat route parses. The 
 comparison calls one window on 3 versus 4 libraries without coverage weights (MS-D7), stated
 in prose on the tab.
 
+**2026-09-23 wave 3:** the design is no longer parsed from the sample names. The hub is the
+samplesheet joined to an optional design table declared through `METADATA_FILE` (the megatest
+design is vendored as `input/sample_metadata.tsv`, copied into `{DATA_ROOT}/input/` before the
+ingest); `GROUP_COL` drives the filters, the glance donut and the colours, and the group
+comparison tests the `GROUP_COL` factor when it has two levels. Without a design table
+`metadata` and `bismark_window_group_compare` are pruned. `window_group_compare` now tests every
+eligible window, not the drawing stride; on the megatest no window clears padj 0.05. A `GENOME`
+variable (default `hg38`) feeds the three locus tracks. 6 tabs.
+
 ### Further scenarios (analytical, not yet run)
 
 | # | Label | Profile / Flags | What differs | Template impact |
 |---|-------|-----------------|--------------|-----------------|
 | MS1 | **Bismark route, both cell lines (validated)** | none | none | Every one of the 28 collections populates (135,450 binned-methylation rows), dashboard funnel intact across 8 tabs. |
-| MS2 | **single cell line** | Sample filter narrowed to one `cell_line` value | none | MultiQC panels, alignment/dedup/methylation tables and the M-bias curve all narrow together through the project links; no tile empties (no collection is `optional: true` in this template). |
+| MS2 | **single cell line** | Sample filter narrowed to one value of the design column | none | MultiQC panels, alignment/dedup/methylation tables and the M-bias curve all narrow together through the project links. The group comparison is computed at ingest, so it keeps both groups. |
 | MS3 | **`bismark_hisat` / `bwameth` route** | `--aligner bismark_hisat` or `--aligner bwameth` | Out of scope for this template (Bismark route only) | `bismark/` file-name patterns would not match either alternate route's output names, so ingestion reports 0 rows for every Bismark-tagged collection rather than erroring. |
 | MS4 | **Preseq succeeds for every sample** | a future/different run | MS-D2: this run's `PRESEQ_LCEXTRAP` failed for 6 of 7 samples, so no Preseq collection is declared | The existing `preseq/complexity_curve.py` recipe would bind directly with no pipeline-specific change if a future run succeeds for every sample. |
 | MS5 | **deduplicated bedGraph read as a `coverage_track`** | not built | MS-D4: `*.deduplicated.bedGraph.gz` is fetched but unread | A natural `coverage_track` fit (per-base methylation), left out to keep this lot's Bismark tool to the four report-derived summaries the brief named. |
 
-**Ranking by template stress:** MS1 > MS2 > MS4 > MS5 > MS3
+| MS6 | **no design table** | omit `METADATA_FILE` | `metadata` and `bismark_window_group_compare` pruned | The Group comparison tab loses its test; `GROUP_COL` stays `__no_group__`, so the tiles bound to it depend on import-time pruning. |
+
+**Ranking by template stress:** MS1 > MS6 > MS2 > MS4 > MS5 > MS3
 
 ---
 
@@ -755,18 +807,191 @@ Compartments, TADs and boundaries, Compare samples), 102 components, 64 on `use:
 gating scenario for the Compare samples tab. Saddle plot, HiCRep, APA and the brush from a
 locus track into the contact map remain undone (HC-D10 to HC-D15).
 
+**2026-09-23 wave 3:** 7 tabs to 5 (MultiQC, Run QC, Library shape, Contact maps, Domains and
+compartments); the Compare samples tab is gone. E1 is phased per sample, resolution and
+chromosome so it correlates positively with bin coverage. A `GENOME` variable (default `hg38`)
+feeds every track and gene lane; the bundled reference sets `GENOME: mm10`.
+
 ### Further scenarios (analytical, not yet run)
 
 | # | Label | Profile / Flags | What differs | Template impact |
 |---|-------|-----------------|--------------|-----------------|
-| HC1 | **default megatest (validated)** | none | none | All 6 dedicated tabs populate; all 15 `advanced_viz` kind-bound tiles resolve, no code-mode figure anywhere in this template. |
+| HC1 | **default megatest (validated)** | none | none | All 4 dedicated tabs populate and every `advanced_viz` tile resolves its kind; wave 3 added a domain-size box and histogram figures beside them. Re-checked offline after wave 3, not live. |
 | HC2 | **MultiQC not reprocessed** | omit the reprocess step | 1.13 wrote `mqc_*.txt` only | `multiqc_data` finds nothing, QC tab empty. |
 | HC3 | **finer contact-map resolution fetched** | a fetch with more resolutions | Only the two coarsest resolutions were fetched here | The `contact_map` tile's own downsampling would need re-checking against a denser bin count; not exercised. |
-| HC4 | **multi-sample HiC run** | a samplesheet with more than one sample | Every dedicated-tab collection currently keys off `HIC_ES_4` alone | The hub-driven sample filter would need re-validating against more than one value. |
+| HC4 | **multi-sample HiC run** | a samplesheet with more than one sample | Every dedicated-tab collection currently keys off `HIC_ES_4` alone | The hub-driven sample filter would need re-validating against more than one value, and a sample comparison tab would need adding back: wave 3 removed it for lack of a second sample. |
 | HC5 | **two-resolution window mismatch in insulation** | present in the validated run (20 kb vs 40 kb windows) | HC-D8: the two resolution files scan different, only partially-overlapping window sizes | The recipe discovers windows dynamically from `df.columns` rather than assuming a fixed 3-window tuple, exactly to survive this. |
 | HC6 | **pipeline-local HiCExplorer module cited by `source_url`, not `nf_core_url`** | present in the validated run | HC-D5: `_check_identity_urls()` only enforces the nf-core/modules authority on `nf_core_url` | A pipeline-local module (`HIC_PLOT_DIST_VS_COUNTS`) needs `source_url` instead, a modelling constraint rather than a data-availability scenario. |
 
 **Ranking by template stress:** HC1 > HC2 > HC5 > HC4 > HC3 > HC6
+
+---
+
+## riboseq 2.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/riboseq/results-11d66a3b8ae1f41f9c385af36bd431c35bf015ab/`
+(tag 2.0.0, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.33 -> used as-is (parquet at `multiqc/star/multiqc_report_data/`)
+
+**Template requirements:**
+- Always: the samplesheet, read from `{DATA_ROOT}/input/` because the pipeline does not publish
+  it (vendored with the template, copied by `download_test_data.sh`), and the riboWaltz, anota2seq,
+  Ribo-TISH and RiboCode tables. 14 of the 18 collections are `optional: true`
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/metadata.tsv`). `GROUP_COL` has no template default and is set only by metadata
+  auto-detection, so a run without a design table has no group filter
+- Paired Ribo-seq and RNA-seq libraries; translational efficiency and ORF overlap are computed by
+  pipeline-local recipes; ORFs from the two callers are matched on a `chrom:strand:stop` key
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| RB1 | **megatest with design table (validated offline)** | `--var METADATA_FILE=<DATA_ROOT>/input/metadata.tsv` | none | 18 collections and 35 links resolve; every recipe runs on the real files; CLI dry run 8/8. Live ingestion and rendering still pending. |
+| RB2 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | 17 collections and 23 links; the design table and the group filter disappear. Deriving `GROUP_COL` from the contrasts file would keep the filter (TEMPLATE_BOTTLENECKS 30). |
+| RB3 | **one ORF caller** | a run with Ribo-TISH or RiboCode switched off | one ORF table absent | The ORF overlap collapses to one set; the per-caller collections are optional, so the ingest continues. |
+
+**Ranking by template stress:** RB2 > RB1 > RB3
+
+---
+
+## smrnaseq 2.4.1
+
+**Megatest:** `s3://nf-core-awsmegatests/smrnaseq/results-cb0af579b24cb8d5a3accd87b2f14ea93fe04832/`
+(tag 2.4.1, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.33 -> used as-is
+
+**Template requirements:**
+- Always: the mirtop joined isomiR table (the source of the expression, isomiR and design views,
+  since this run publishes no mature or hairpin count matrix and no edgeR tables), the miRDeep2
+  `result_*.csv` tables at the run root, and `multiqc_data`
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/sample_metadata.tsv`), with `GROUP_COL` naming the factor for colours, strips and the
+  group test
+- `GENOME` (default `hg38`) names the UCSC assembly of the precursor links; the megatest was
+  aligned to hg19
+- Conditionals: `SKIP_MIRDEEP` drops the four miRDeep2 collections, `SKIP_MULTIQC` the MultiQC
+  and miRTrace ones
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| SM1 | **megatest with design table (validated offline)** | `--var METADATA_FILE=<DATA_ROOT>/input/sample_metadata.tsv --var GROUP_COL=condition --var GENOME=hg19` | none | 17 collections; the design adds its factors to the counts and the hub. CLI dry run 8/8. |
+| SM2 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | The counts and the hub lose their design columns; the group comparison has no factor to test and its tiles rely on import-time pruning. Dry run 8/8. |
+| SM3 | **miRDeep2 skipped** | `--skip_mirdeep` plus `--var SKIP_MIRDEEP=true` | no `result_*.csv` | The four miRDeep2 collections are pruned, and the novel-miRNA tiles with them. |
+| SM4 | **assembly without a `chr` prefix** | a run on a build whose contigs are not `chr`-prefixed | precursor coordinates | The UCSC links open on a locus the browser does not know. |
+
+**Ranking by template stress:** SM2 > SM1 > SM3 > SM4
+
+---
+
+## genomeassembler 2.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/genomeassembler/results-a72d47d9cdb50f21b97882dfb2abf4af8f4c74ad/`
+(tag 2.0.0, run_root `.`, manifest megatest.yaml; selective fetch, about 8.6 MB of a 961 GB prefix)
+
+**MultiQC:** the run writes none; the template declares no `multiqc_data` collection and opens on
+an Overview tab instead
+
+**Template requirements:**
+- Always: `samplesheet` (`METADATA_FILE`, default `{DATA_ROOT}/input/samplesheet.csv`, vendored),
+  `GROUP_COL` (default `strategy`) for the filters and the parallel coordinates
+- Every tool collection (QUAST, BUSCO, Merqury, GenomeScope, jellyfish, samtools idxstats) is
+  `optional: true` and every join is a left join, so a sample a tool never reached is a null, not
+  an error. 20 of 24 collections are optional
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| GA1 | **partial megatest (validated offline)** | none | one failed task aborted the assembly QC of half the samples | Every recipe runs; the samples without assembly QC stay in `sample_status` as `No assembly QC`. CLI dry run 8/8 with and without `METADATA_FILE`. |
+| GA2 | **complete run** | cluster re-run with the failing step's errors ignored | every sample reaches assembly QC | The first time every tile carries all samples; submitted, not back yet. |
+| GA3 | **polishing enabled** | medaka, dorado or pilon | polished stages appear | The polishing tiles are bound by file name and have never seen data. |
+| GA4 | **Hi-C scaffolding** | YaHS | scaffolded stage appears | Same as GA3. |
+| GA5 | **another design column** | a samplesheet whose design column is not `strategy` | none | `--var GROUP_COL=<column>`; without it the filters read an absent column. |
+
+**Ranking by template stress:** GA2 > GA3 > GA4 > GA1 > GA5
+
+---
+
+## mhcquant 3.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/mhcquant/results-6ec12c97f7889a3e1f09ab89930723045c6bac68/`
+(tag 3.2.0, run_root `.`, manifest megatest.yaml, `test_full` profile)
+
+**MultiQC:** run wrote 1.33 -> used as-is (mhcquant custom content only; general stats is
+`stats_table`)
+
+**Template requirements:**
+- Always: `samples` (`METADATA_FILE`, default `{DATA_ROOT}/input/samplesheet.tsv`; the pipeline
+  does not publish its samplesheet, so it is vendored and copied by `download_test_data.sh`),
+  the final peptide tables, the Comet PSM tables and `multiqc_data`
+- `GROUP_COL` defaults to `Condition`; since the CLI now applies declared defaults before its
+  generic sentinels, no `--var` is needed for a sheet that has that column
+- Conditionals set by hand, not read from `params.json`: `NO_QUANTIFICATION` prunes the replicate
+  collections, `NO_ION_ANNOTATION` the fragment-ion collection
+- The replicate index of each intensity column is inferred from the samplesheet id order,
+  because the peptide table does not name the raw file behind it
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| MQ1 | **test_full megatest (validated offline)** | none | none | Every recipe runs on the real files; CLI dry run 8/8. |
+| MQ2 | **no quantification** | `--quantify false` plus `--var NO_QUANTIFICATION=1` | no per-replicate intensities | Replicate collections pruned with their tiles. The flag is not read from `params.json` (`quantify`), so the operator must pass it. |
+| MQ3 | **no ion annotation** | `--annotate_ions false` plus `--var NO_ION_ANNOTATION=1` | no fragment-ion table | The fragment-ion collection is pruned. |
+| MQ4 | **replicate order differs from the samplesheet** | a run whose raw files were processed in another order | none visible | Replicate tiles attribute intensities to the wrong raw file, silently. Only a run with known replicates can detect it. |
+| MQ5 | **several samples per condition** | a larger cohort | the sharing view gains depth | With one sample per condition the peptide-sharing tiles compare two samples; a cohort is needed to read them as a condition effect. |
+
+**Ranking by template stress:** MQ4 > MQ2 > MQ5 > MQ3 > MQ1
+
+---
+
+## demultiplex 1.8.0
+
+**Megatest:** `s3://nf-core-awsmegatests/demultiplex/results-daade37c4a75a4c1709ccf12434deb3424141319/`
+(tag 1.8.0, run_root `.`, manifest megatest.yaml; FASTQ not fetched)
+
+**MultiQC:** run wrote 1.35 -> used as-is. The run-level `multiqcsav/` report holds no SAV section
+
+**Template requirements:**
+- bcl2fastq route: `demux_stats`, `lane_summary`, `read_quality`, `unknown_barcodes`. With
+  `IS_BCLCONVERT`, read from the run's `demultiplexer` parameter, the same four collections are
+  repointed at the BCL Convert reports. 13 of 18 collections are `optional: true`, so either
+  layout ingests
+- Per-library hub `libraries`, fastp and Falco QC, CheckQC verdicts
+- Optional: `metadata` (`--var METADATA_FILE`; the library design is vendored in the template
+  directory as `input/library_metadata.tsv`); `GROUP_COL` picks the design column, else one group
+- InterOp metrics need an `interop_summary --csv=1` table that the pipeline does not write
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| DM1 | **bcl2fastq megatest with design (validated offline)** | `--var METADATA_FILE=<template dir>/input/library_metadata.tsv` | none | Every recipe runs on the real files; CLI dry run 8/8. |
+| DM2 | **another design column** | DM1 plus `--var GROUP_COL=<column>` | none | The tiles regroup on the chosen factor. |
+| DM3 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | The hub carries a single `__no_group__` group and every tile still renders. |
+| DM4 | **BCL Convert route** | `--demultiplexer bclconvert` | `Reports/*.csv` instead of `Stats/Stats.json` | Validated on MultiQC test data only; a real nf-core BCL Convert run is the missing check. |
+| DM5 | **multi-lane flowcell** | more than one lane | one FASTQ stem per lane | The hub's `fastq_id` holds the first lane's stem, so the MultiQC fastp and Falco rows of other lanes are not narrowed by the library filter. |
+| DM6 | **InterOp summary provided** | a run with an `interop_summary --csv=1` table | sequencer metrics readable | The SAV section, validated on a fixture only, would populate. |
+
+**Ranking by template stress:** DM4 > DM5 > DM3 > DM1 > DM6 > DM2
+
+---
+
+## rnasplice 1.0.4 (pending)
+
+**Megatest:** `s3://nf-core-awsmegatests/rnasplice/results-1d0494ae3402d1a46e0adadad24f81a0ff855c77/`
+is not usable: 494 objects, only 80 of them with data, no MultiQC and none of the differential
+splicing output.
+
+**Status:** the template waits for an EMBL cluster `test_full` run (two-condition design). If that
+run fails twice, seqinspector 1.1.2 takes its place: its megatest
+(`results-6aa08aabb00cdbb0f5b62adf2749b472e794ba04`) is complete, with a global and a per-group
+MultiQC parquet, and the reason is recorded in its report.
 
 ---
 

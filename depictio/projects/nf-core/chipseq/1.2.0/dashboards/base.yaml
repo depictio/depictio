@@ -5,14 +5,13 @@ version: 1
 # signal numbers -> the peaks each sample yielded -> the consensus peak set per
 # antibody -> differential binding between conditions. The `design` hub is what
 # every tab is narrowed by: it carries one row per LIBRARY (the ChIPs and their
-# input controls) with the antibody, the condition and the replicate parsed out
-# of the sample names, so the comparison the run was built to make - EZH2 in
-# NTKO against TKO cells, FOXA1 in E2-treated against vehicle-treated cells - is
-# a filter and not a fact buried in a string.
+# input controls) with the antibody, the replicate, and the condition taken
+# from the design table (METADATA_FILE, GROUP_COL; else the design sheet
+# group), so the comparison the run was built to make is a filter.
 #
-# Two pinned persistent sections ride every tab: `Cohort at a glance` (the four
-# numbers the whole run is judged on) at the top, and `ChIP design` /
-# `Reference tables` for the rows behind them. The `Sample filters` panel
+# Pinned persistent sections ride every tab: `Cohort at a glance` (the four
+# numbers the whole run is judged on) and `Sample sheet` at the top, and
+# `Reference tables` for the per-sample QC rows at the bottom. The `Sample filters` panel
 # (sample, antibody, condition, replicate, role) is persistent too and reaches
 # every collection through the project links,
 # including the consensus sets and the DESeq2 contrasts, which are keyed on the
@@ -23,7 +22,7 @@ version: 1
 # parquet. Anchors and section names are therefore the 1.35 ones.
 main_dashboard:
   title: nf-core/chipseq
-  subtitle: "nf-core/chipseq 1.2.0 megatest: EZH2 (NTKO / TKO) and FOXA1 (E2 / VEH) ChIP against matched inputs"
+  subtitle: "MACS2 peaks, consensus peak sets per antibody and DESeq2 differential binding, on top of the MultiQC report"
   project_tag: ChIP-seq Peak Analysis
   main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
@@ -55,7 +54,7 @@ main_dashboard:
     color: blue
     description: The sequencing libraries behind the FastQC and Trim Galore panels
     collapsed: true
-  # `Cohort at a glance`, `ChIP design` and `Reference tables` are pinned so the
+  # `Cohort at a glance`, `Sample sheet` and `Reference tables` are pinned so the
   # headline numbers, the design sheet every filter starts from and the
   # per-sample QC rows trail each tab. All three are declared here, on the tab
   # no route conditional can remove.
@@ -66,7 +65,7 @@ main_dashboard:
     description: What the run contains and what it yielded, on every tab
     persistent: true
     pin: top
-  - name: ChIP design
+  - name: Sample sheet
     icon: mdi:table-account
     color: teal
     description: The design sheet every tab is filtered by
@@ -276,8 +275,8 @@ main_dashboard:
     alignment: left
     body: >
       Libraries are merged per sample, duplicates marked and low-quality or
-      blacklisted alignments removed. The complexity curve says whether deeper
-      sequencing would still find new molecules.
+      blacklisted alignments removed. The complexity curve with its confidence
+      ribbon is on the Signal tab.
     workflow_tag: chipseq
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -306,18 +305,6 @@ main_dashboard:
     title_align: left
     layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
-    tag: cs-qc-preseq
-    section: Alignment and library complexity
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: preseq
-    selected_plot: Complexity curve (molecule count)
-    use: multiqc/preseq
-    title: Library complexity curve
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 5}
-  - component_type: multiqc
     tag: cs-qc-featurecounts
     section: Alignment and library complexity
     workflow_tag: chipseq
@@ -328,7 +315,7 @@ main_dashboard:
     title: Reads assigned to consensus peaks
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 12, w: 8, h: 4}
+    layout: {x: 0, y: 7, w: 8, h: 4}
 
   # --------------------------------------------------------- ChIP enrichment
   - component_type: text
@@ -414,33 +401,34 @@ main_dashboard:
     title_align: left
     layout: {x: 0, y: 12, w: 8, h: 5}
 
-  # ------------------------------------------------------------- ChIP design
+  # ------------------------------------------------------------ sample sheet
   - component_type: text
     tag: cs-meta-intro
-    section: ChIP design
+    section: Sample sheet
     title: The cohort behind the run
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      One row per sequencing library: the ChIPs and the input controls they were
-      called against, with the antibody, the condition and the replicate read
-      out of the sample names. Every sample filter in the left panel starts
-      from this table, so it is what the rest of the dashboard is narrowed by.
+      One row per sequencing library, the ChIPs and the input controls they
+      were called against, with the antibody, replicate and design condition.
+      Every sample filter starts from this table; tick a row to carry that
+      library into every tab.
     workflow_tag: chipseq
     data_collection_tag: design
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: cs-ref-table-design
-    section: ChIP design
+    section: Sample sheet
     workflow_tag: chipseq
     data_collection_tag: design
-    row_selection_enabled: false
-    title: ChIP design
+    row_selection_enabled: true
+    title: Sample sheet
     description: One row per library, with its role, antibody, condition, replicate and input control.
     title_size: h3
     title_align: left
+    row_selection_column: sample_id
     layout: {x: 0, y: 2, w: 8, h: 4}
 
   # -------------------------------------------------------- reference tables
@@ -465,7 +453,8 @@ main_dashboard:
     workflow_tag: chipseq
     data_collection_tag: macs2_peak_summary
     use: macs2/peak_summary
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     title: Peak QC summary
     description: Peak count, FRiP score and the width, enrichment and significance spreads per sample.
     title_size: h3
@@ -729,7 +718,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The MultiQC tab plots the expected-distinct curve alone. This one adds the 95% interval preseq puts around it: where the ribbon is narrow the extrapolation is safe, where it fans out, sequencing deeper is a guess.
+      preseq extrapolates how many distinct molecules each library would still
+      yield if it were sequenced deeper. Where the 95% ribbon stays narrow the
+      extrapolation is safe; where it fans out, deeper sequencing is a guess.
     workflow_tag: chipseq
     data_collection_tag: preseq_complexity_curve
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -741,6 +732,7 @@ tabs:
     data_collection_tag: preseq_complexity_curve
     use: preseq/complexity_ribbon
     config:
+      controls_placement: header
       log_x: true
       band_opacity: 0.18
       line_width: 2
@@ -764,7 +756,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      plotFingerprint compares every IP against the input it was called against. The two axes are that comparison: how much of the genome is called enriched, and how far the coverage diverges from the control. The eight input libraries carry no point because they are the reference.
+      plotFingerprint compares every IP against the input it was called
+      against: how much of the genome is called enriched, and how far the
+      coverage diverges from the control. Input libraries carry no point
+      because they are the reference.
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -773,7 +768,7 @@ tabs:
   # the cloud came out as a diagonal band that says nothing a single bar chart
   # would not. `percent_genome_enriched` against `js_distance` is deepTools' own
   # QC scatter and the two axes are independent; the price is that it plots the
-  # 8 IP libraries only, because the JSD columns need `--JSDsample` and the
+  # IP libraries only, because the JSD columns need `--JSDsample` and the
   # inputs are the sample they are compared against.
   - component_type: advanced_viz
     tag: cs-qc-av-fingerprint
@@ -783,6 +778,7 @@ tabs:
     data_collection_tag: deeptools_fingerprint_metrics
     use: deeptools/fingerprint_scatter
     config:
+      controls_placement: header
       x_col: percent_genome_enriched
       y_col: js_distance
       label_col: sample
@@ -795,7 +791,7 @@ tabs:
       max_size: 26
       opacity: 0.85
       marker_outline: true
-      top_n_labels: 8
+      top_n_labels: 5
       legend_pos: right
       selection_enabled: true
       selection_column: sample
@@ -829,6 +825,7 @@ tabs:
     data_collection_tag: deeptools_plot_profile
     use: deeptools/metagene_profile
     config:
+      controls_placement: header
       reference_x: 300
       reference_label: TSS
       shaded_bands:
@@ -898,7 +895,6 @@ tabs:
     icon: mdi:dna
     color: grape
     description: Genomic feature class and distance to the nearest TSS
-    collapsed: true
   grid_sections:
   - name: Peak yield
     icon: mdi:counter
@@ -1000,27 +996,14 @@ tabs:
     column_name: neg_log10_qvalue
     column_type: float64
     secondary_layout: threshold
-    threshold_value: 10
+    threshold_value: 1.3
     threshold_direction: min
-    threshold_warn: 5
+    threshold_warn: 1
     display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
     title: Median -log10 q
     layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: figure
-    tag: cs-pk-fig-frip
-    index: cs-pk-fig-frip
-    section: Peak yield
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peak_summary
-    use: macs2/peak_summary
-    visu_type: bar
-    dict_kwargs: {x: sample, y: frip_score, color: sample}
-    title: FRiP score per sample
-    description: The fraction of each library's mapped reads that fall inside its own peaks. ENCODE reads below 0.01 as a failed enrichment for a transcription factor.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 5}
 
   # ----------------------------------------------------- manhattan + volcano
   - component_type: text
@@ -1048,6 +1031,7 @@ tabs:
     data_collection_tag: macs2_peaks
     use: macs2/peak_significance
     config:
+      controls_placement: header
       feature_col: peak_id
       score_kind: "-log10(q)"
       color_by_columns: [sample]
@@ -1059,40 +1043,6 @@ tabs:
     description: Every peak at its summit position; height is -log10 of the MACS2 q-value, colour is the sample.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
-  # Was a `mode: code` scatter that pulled the whole 258 986-row frame into the
-  # worker and then kept `head(2000)`: code mode skips column projection and
-  # aggregation pushdown, so the read was the full table however few points were
-  # drawn. The `volcano` kind reduces at scan level and keeps the tail whole
-  # (sampling.py, TAIL_ROLE["volcano"]), which is what that head() was reaching
-  # for. `index` is the figure's, unchanged, so saved filters survive.
-  # The role bindings come from the catalog now (`macs2_peaks` grew a `volcano`
-  # render): this tile carried no `use:` at all, which is why it claimed no
-  # catalog provenance and had to spell its own column names out.
-  - component_type: advanced_viz
-    tag: cs-pk-av-volcano
-    index: cs-pk-fig-volcano
-    section: Significance along the genome
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    viz_kind: volcano
-    config:
-      significance_is_neg_log10: true
-      # q < 1e-10, the same cut-off the "Median -log10 q" card draws at 10. It is
-      # also what the scan keeps whole: every peak past it reaches the browser,
-      # the undifferentiated middle is strided.
-      significance_threshold: 1.0e-10
-      effect_threshold: 5.0
-      top_n_labels: 15
-      show_labels: true
-      # A peak call has no mean abundance and no uniform null, so only the
-      # volcano view is offered.
-      view: volcano
-      views: [volcano]
-    title: Enrichment against significance
-    description: -log10 of the MACS2 q-value against fold enrichment over input. The dashed lines are q 1e-10 and five-fold enrichment; peaks past both are drawn large.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 4, h: 6}
   - component_type: figure
     tag: cs-pk-fig-width
     section: Significance along the genome
@@ -1107,7 +1057,7 @@ tabs:
     title: Peak width distribution
     description: How wide the calls are, per sample, on a log axis. A histone mark gives broader peaks than a transcription factor.
     title_size: h3
-    layout: {x: 4, y: 9, w: 4, h: 6}
+    layout: {x: 0, y: 9, w: 8, h: 6}
 
   # ------------------------------------------------------- around the summits
   # The genome_view + coverage_track pair that sat here bound macs2_peaks twice
@@ -1125,12 +1075,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Every summit of a sample is set at 0 and the calls are counted around it in
-      50 bp bins. The first curve counts the summits the other libraries called
-      there: a sharp spike means they agree on the site, a flat line means they
-      do not. The second is the share of the sample's own peaks still covering
-      each offset, the average width of a call. Both come from the narrowPeak
-      intervals, not from read coverage.
+      Every summit of a sample is set at 0 and the calls are counted around it
+      in 50 bp bins, from the narrowPeak intervals rather than read coverage.
+      A sharp spike in the first curve means the other libraries call the same
+      site; the second curve is the average width of the sample's own calls.
     workflow_tag: chipseq
     data_collection_tag: macs2_summit_profile
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1142,12 +1090,15 @@ tabs:
     data_collection_tag: macs2_summit_profile
     use: macs2/summit_concordance_profile
     config:
+      controls_placement: header
       reference_x: 0
       reference_label: Summit
       log_y: true
       x_title: Offset from the summit (bp)
       y_title: Other samples' summits per kb
       legend_pos: right
+      selection_enabled: true
+      selection_column: sample
     title: Other libraries' summits around each summit
     description: Summits called in the other samples, per anchor summit and per kb, on a log axis. Replicates of a sharp factor pile their summits onto each other; a broad mark or an unrelated antibody agrees far less sharply.
     title_size: h3
@@ -1160,11 +1111,14 @@ tabs:
     data_collection_tag: macs2_summit_profile
     use: macs2/summit_footprint_profile
     config:
+      controls_placement: header
       reference_x: 0
       reference_label: Summit
       x_title: Offset from the summit (bp)
       y_title: Share of the sample's peaks covering the offset
       legend_pos: right
+      selection_enabled: true
+      selection_column: sample
     title: Average peak footprint
     description: The share of each sample's calls still open at every offset from their own summit. Where a curve crosses one half is the median half-width of the calls on that side.
     title_size: h3
@@ -1181,8 +1135,9 @@ tabs:
     alignment: left
     body: >
       HOMER assigns every peak to a genomic feature and to the nearest
-      transcription start site. A promoter-heavy profile and a TSS-centred
-      distance histogram are what a transcription factor should look like.
+      transcription start site. The composition bar reads the feature classes
+      per sample, the curve the distance to the TSS as a share of each
+      sample's peaks.
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1214,7 +1169,7 @@ tabs:
     column_name: gene_name
     column_type: object
     secondary_layout: composition
-    breakdown_col: gene_type
+    breakdown_col: annotation_class
     display: {icon_name: 'mdi:dna', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
@@ -1266,57 +1221,7 @@ tabs:
     title: Peak annotation composition per sample
     description: The share of each sample's peaks in promoter-TSS, exon, intron, TTS and intergenic, as a percentage so libraries of different depth compare directly.
     title_size: h3
-    layout: {x: 0, y: 4, w: 4, h: 6}
-  - component_type: figure
-    tag: cs-pk-fig-tss
-    index: cs-pk-fig-tss
-    section: Where the peaks land
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    use: homer/annotated_peaks
-    mode: code
-    visu_type: histogram
-    code_content: |
-      # distance to the nearest TSS, clipped to a 10 kb window: the raw column
-      # runs to several hundred kb and would flatten the peak at zero
-      window = 10_000
-      df_modified = df.filter(
-          pl.col("distance_to_tss").is_not_null()
-          & (pl.col("distance_to_tss").abs() <= window)
-      )
-
-      fig = px.histogram(
-          df_modified.to_pandas(),
-          x="distance_to_tss",
-          color="annotation_class",
-          nbins=80,
-          opacity=0.8,
-      )
-      fig.update_layout(
-          barmode="overlay",
-          xaxis_title="Distance to nearest TSS (bp)",
-          yaxis_title="Peaks",
-          legend_title_text="Feature class",
-          margin={"t": 24, "l": 64, "r": 16, "b": 48},
-      )
-      fig.add_vline(x=0, line_dash="dot", line_color="grey")
-    title: Distance to the nearest TSS
-    description: Peaks within 10 kb of a TSS, by feature class. The dotted line is the TSS itself.
-    title_size: h3
-    layout: {x: 4, y: 4, w: 4, h: 6}
-  - component_type: text
-    tag: cs-pk-tss-intro
-    section: Where the peaks land
-    title: "The same distances, one curve per sample"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The histogram above pools the samples and splits them by feature class. This one does the opposite: one curve per sample, as a share of that sample's peaks, so libraries of different depth can be compared directly.
-    workflow_tag: chipseq
-    data_collection_tag: homer_tss_distance_profile
-    layout: {x: 0, y: 10, w: 8, h: 2}
+    layout: {x: 0, y: 4, w: 8, h: 6}
   - component_type: advanced_viz
     tag: cs-pk-av-tss
     index: cs-pk-av-tss
@@ -1325,6 +1230,7 @@ tabs:
     data_collection_tag: homer_tss_distance_profile
     use: homer/tss_distance
     config:
+      controls_placement: header
       reference_x: 0
       reference_label: TSS
       shaded_bands:
@@ -1335,7 +1241,7 @@ tabs:
     title: "Peak distribution around the nearest TSS"
     description: "Peaks counted in 250 bp bins across a 20 kb window; the shaded band is the 1 kb promoter window either side of the start site."
     title_size: h3
-    layout: {x: 0, y: 12, w: 8, h: 7}
+    layout: {x: 0, y: 10, w: 8, h: 7}
 
   # ------------------------------------------------------------ peak tables
   - component_type: text
@@ -1364,7 +1270,30 @@ tabs:
     description: Feature class, distance to TSS and nearest gene for every peak.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 5, h: 6}
+  - component_type: advanced_viz
+    tag: cs-pk-av-record
+    index: cs-pk-av-record
+    section: Peak tables
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: peak_id
+      title_col: peak_id
+      selection_source: any
+      linked_component: cs-pk-table-homer
+      sections:
+        Call: [sample, chr, start, end, strand, peak_score]
+        Annotation: [annotation_class, annotation, distance_to_tss, nearest_promoter_id, gene_name, gene_type]
+      labels:
+        distance_to_tss: Distance to TSS (bp)
+        nearest_promoter_id: Nearest promoter
+    title: Peak record
+    description: The peak picked in the annotated table beside it, with the feature and gene HOMER assigned to it.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 6}
   - component_type: table
     tag: cs-pk-table-peaks
     section: Peak tables
@@ -1377,7 +1306,7 @@ tabs:
     description: Coordinates, summit, width, fold enrichment and significance per peak.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 5}
+    layout: {x: 0, y: 8, w: 8, h: 5}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -1479,10 +1408,14 @@ tabs:
 # homer_annotated_peaks. A tab of its own rather than a section of Peaks,
 # because those filters narrow every tile on the tab: on the Peaks tab they
 # would have turned the genome-wide cards and Manhattan into one locus.
-# The run is hg19 (HOMER places the TFF1 promoter peak at chr21:43 786 569,
-# -173 bp from the hg19 TSS), and the bundled gene lane exists for hg38 and
+# The genome axis comes from the `GENOME` template variable (default hg38; the
+# hg19 megatest sets it through reference.vars / --var GENOME=hg19). With a
+# built-in assembly the navigator fetches only the chromosome of its region,
+# and the coverage track holds its first fetch until that region lands, so no
+# `chromosomes_filter` is needed. The bundled gene lane exists for hg38 and
 # mm10 only, so no `annotation` lane is drawn: the HOMER track names the
-# nearest gene of every peak instead. No read-coverage track either: the
+# nearest gene of every peak instead. The default region (chr21:43.6-44.0 Mb,
+# the TFF1 locus of the megatest) is documented in the tab intro. No read-coverage track either: the
 # bigWigs are not in the megatest mirror (see VALIDATION_REPORT.md).
 - title: Locus
   subtitle: One region, three collections - the peak calls of every library, the consensus intervals per antibody and the HOMER annotation, on one genome axis
@@ -1496,7 +1429,7 @@ tabs:
   - name: Locus scope
     icon: mdi:filter-variant
     color: teal
-    description: Chromosome, peak strength, consensus support and feature class of the tracks on the region
+    description: Peak strength, consensus support and feature class of the tracks on the region
   grid_sections:
   - name: Region at a glance
     icon: mdi:counter
@@ -1579,17 +1512,15 @@ tabs:
   - component_type: text
     tag: cs-loc-intro
     section: One region, three collections
-    title: TFF1, the classic FOXA1 and oestrogen target
+    title: One region, every track
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The tab opens on chr21:43.6-44.0 Mb (hg19) around TFF1, where every library
-      called peaks: FOXA1 binds the TFF1 enhancer and promoter, EZH2 spreads over
-      the neighbouring genes. Type a region in the navigator header or brush its
-      axis, and the consensus intervals and the HOMER annotation below follow;
-      the cards above recount the region in view.
+      The tab opens on the navigator's default region, a fixed locus set in
+      its config. Type a locus in the navigator header or brush its axis; the
+      tracks and the cards above follow.
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1605,11 +1536,13 @@ tabs:
       mark: rect
       facet_by_sample: true
       max_facets: 8
-      assembly: hg19
+      assembly: "{GENOME}"
       default_region: "chr21:43,600,000-44,000,000"
       score_title: "-log10(q)"
       opacity: 0.85
       region_filter_enabled: true
+      selection_enabled: true
+      selection_column: peak_id
     title: Peak navigator
     description: Every MACS2 call on the region, one lane per library, height is -log10 of the q-value. The locus field in the header and a brush on the axis move this tile and every track below.
     title_size: h3
@@ -1622,6 +1555,7 @@ tabs:
     data_collection_tag: macs2_consensus_boolean
     viz_kind: coverage_track
     config:
+      controls_placement: header
       viz_kind: coverage_track
       chromosome_col: chr
       position_col: start
@@ -1638,7 +1572,7 @@ tabs:
       view: track
       views: [track]
     title: Consensus intervals per antibody
-    description: The merged intervals of each antibody's consensus set on the same region, height is how many libraries called a peak there (1 to 4).
+    description: The merged intervals of each antibody's consensus set on the same region, height is how many libraries called a peak there (1 to the number of libraries in the set).
     title_size: h3
     layout: {x: 0, y: 7, w: 8, h: 3}
   - component_type: advanced_viz
@@ -1649,6 +1583,7 @@ tabs:
     data_collection_tag: homer_annotated_peaks
     viz_kind: genome_view
     config:
+      controls_placement: header
       viz_kind: genome_view
       chr_col: chr
       pos_col: start
@@ -1657,29 +1592,17 @@ tabs:
       feature_col: gene_name
       category_col: annotation_class
       mark: rect
-      assembly: hg19
+      assembly: "{GENOME}"
       score_title: HOMER peak score
       region_filter_enabled: false
       follow_region_filter: true
+      selection_enabled: true
+      selection_column: peak_id
     title: Peaks by nearest gene and feature class
     description: The same calls as HOMER annotated them, coloured by feature class (promoter-TSS, intron, exon, TTS, intergenic); hover a call for the gene it was assigned to.
     title_size: h3
     layout: {x: 0, y: 10, w: 8, h: 3}
 
-  - component_type: interactive
-    tag: cs-loc-filter-chr
-    index: cs-loc-chr-filter
-    section: Locus scope
-    group: Region
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    interactive_component_type: MultiSelect
-    column_name: chr
-    column_type: object
-    display: {title_size: md, icon_name: 'mdi:dna'}
-    placement: left
-    title: Chromosome
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: cs-loc-filter-qvalue
     index: cs-loc-qvalue-range
@@ -1694,7 +1617,7 @@ tabs:
     display: {title_size: md, icon_name: 'mdi:check-decagram'}
     placement: left
     title: -log10 q-value
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: cs-loc-filter-support
     index: cs-loc-support-range
@@ -1709,7 +1632,7 @@ tabs:
     display: {title_size: md, icon_name: 'mdi:set-merge'}
     placement: left
     title: Consensus support
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: cs-loc-filter-class
     index: cs-loc-class-filter
@@ -1723,7 +1646,7 @@ tabs:
     display: {title_size: md, icon_name: 'mdi:shape-outline'}
     placement: left
     title: Feature class
-    layout: {x: 0, y: 9, w: 1, h: 3}
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
 # Consensus
@@ -1857,8 +1780,9 @@ tabs:
     alignment: left
     body: >
       Each bar is a combination of samples calling exactly the same set of
-      intervals. Pick one antibody in the left panel first: with two consensus
-      sets in view the combinations of one never meet those of the other.
+      intervals. Pick one antibody in the left panel first: with several
+      consensus sets in view the combinations of one never meet those of the
+      other.
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1870,6 +1794,7 @@ tabs:
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_upset
     config:
+      controls_placement: header
       # Every sample column of the run: the pipeline names samples <group>_R<replicate>.
       set_columns_pattern: '_R\d+$'
       color_intersections_by: degree
@@ -1906,6 +1831,7 @@ tabs:
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_signal_heatmap
     config:
+      controls_placement: header
       value_columns_pattern: '_R\d+$'
       row_annotation_cols: [consensus_set, support]
       cluster_rows: true
@@ -2007,7 +1933,7 @@ tabs:
 # Differential binding
 # ============================================================================
 - title: Differential binding
-  subtitle: "DESeq2 on the consensus peak counts: EZH2 NTKO against TKO, FOXA1 E2 against VEH"
+  subtitle: DESeq2 on the consensus interval counts, one contrast at a time
   tab_order: 6
   tab_icon: mdi:scale-balance
   tab_icon_color: grape
@@ -2146,11 +2072,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      DESeq2 places every library in the space of the consensus counts. Where
-      the replicates of a condition sit together and the two conditions sit
-      apart, the contrast below is measuring the condition; where they
-      interleave, it is measuring the batch. One matrix per antibody, so the
-      axes only compare libraries of the same consensus set.
+      DESeq2 places every library in the space of its antibody's consensus
+      counts. Replicates of a condition should sit together and the conditions
+      apart; where they interleave, the contrast below measures a batch rather
+      than the condition.
     workflow_tag: chipseq
     data_collection_tag: deseq2_qc_pca
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2184,37 +2109,15 @@ tabs:
     data_collection_tag: deseq2_qc_sample_dists
     use: deseq2/qc_distance_heatmap
     config:
+      controls_placement: header
+      cluster_method: ward
       cluster_rows: true
       cluster_cols: true
-      colorscale: Viridis
+      colorscale: Blues
     title: Distance between libraries
-    description: Euclidean distance on DESeq2 rlog values, clustered. The matrix is block diagonal because a pair drawn from two different antibodies was never compared; a bright block inside one antibody is a library that stands apart from its replicates.
+    description: Euclidean distance on DESeq2 rlog values, Ward-clustered. The matrix is block diagonal because libraries of two different antibodies were never compared; a row that stands out inside one block is a library apart from its replicates.
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 7}
-  - component_type: table
-    tag: cs-db-table-pca
-    section: Sample space
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_qc_pca
-    use: deseq2/qc_pca
-    row_selection_enabled: false
-    title: Principal components
-    description: One row per library, with its coordinates and the variance each component explains in its own matrix.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 16, w: 8, h: 3}
-  - component_type: table
-    tag: cs-db-table-dists
-    section: Sample space
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_qc_sample_dists
-    use: deseq2/qc_sample_dists
-    row_selection_enabled: false
-    title: Sample distance matrix
-    description: The square distance matrix behind the heatmap, one column per library of the same consensus set.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 19, w: 8, h: 3}
 
   - component_type: text
     tag: cs-db-volcano-intro
@@ -2225,11 +2128,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      One tile, three readings of the same DESeq2 rows, switched in its header:
-      the volcano puts significance against effect size, the MA view puts effect
-      size against how many reads the interval carries, and the QQ view compares
-      the p-values with the uniform null. A curve that leaves the diagonal at once
-      is usually confounding rather than signal.
+      One tile, three readings of the same DESeq2 rows, switched in its
+      header: significance against effect size (volcano), effect size against
+      read depth (MA) and the p-values against the uniform null (QQ). A QQ
+      curve that leaves the diagonal at once is usually confounding rather
+      than signal.
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2284,6 +2187,7 @@ tabs:
     data_collection_tag: deseq2_results
     use: deseq2/da_barplot
     config:
+      controls_placement: header
       significance_col: padj
       significance_threshold: 0.05
       top_n: 25
@@ -2302,8 +2206,9 @@ tabs:
     alignment: left
     body: >
       Every tested interval with its effect size, standard error and adjusted
-      p-value. Tick a row to carry that interval into the panels above and back
-      to the consensus tables.
+      p-value, then the principal components and the distance matrix behind
+      the sample-space tiles. Tick a result row to carry that interval into
+      the panels above and back to the consensus tables.
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2320,6 +2225,32 @@ tabs:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: cs-db-table-pca
+    section: Differential tables
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_qc_pca
+    use: deseq2/qc_pca
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Principal components
+    description: One row per library, with its coordinates and the variance each component explains in its own matrix.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 3}
+  - component_type: table
+    tag: cs-db-table-dists
+    section: Differential tables
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_qc_sample_dists
+    use: deseq2/qc_sample_dists
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Sample distance matrix
+    description: The square distance matrix behind the heatmap, one column per library of the same consensus set.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 11, w: 8, h: 3}
 
   - component_type: interactive
     tag: cs-db-filter-contrast

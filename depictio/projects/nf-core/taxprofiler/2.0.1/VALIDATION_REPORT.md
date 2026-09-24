@@ -598,3 +598,52 @@ Commands and results:
 | `depictio.cli run --template nf-core/taxprofiler/2.0.1 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3c9f1ac5a3f0e26e7bf89`, dashboard `6ab3ca0be8b8ace33d32c77e`; 14/14 table DCs have rows (taxpasta_lineage 5,652) |
 | Playwright, 1600x1000 | `/tmp/claude-502/shots-taxprofiler/` (tabs + `verify-profiles-0.png`, Krona with wedges for kaiju, diamond, motus, ...) |
+
+# Wave 3 (family rework, 2026-09-23)
+
+Source: `_reviews_wave3/review-metagenomics.md` and the consolidated review. Offline only
+(no ingest, no live check).
+
+## What changed
+
+- **Composition bars, one per profiling run.** `catalog/taxpasta/profiles.yaml` now maps the
+  stacked render's `sample_id` role to `profiler_db`, so `tp-av-stacked` draws one bar per
+  classifier and database instead of pooling every classifier into one bar per sample (which
+  mixed naming vocabularies). Family defaults: `default_rank: genus`, `top_n: 12`,
+  `sort_by: abundance`, percentages; the platform strip became a classifier strip (constant
+  within a bar). `tp-comp-intro` rewritten to match.
+- **Links.** Added `taxpasta_profiles.profiler -> taxpasta_lineage.profiler`,
+  `taxpasta_profiles.database -> taxpasta_lineage.database` (Profiles filters reach the Krona
+  rings), `samplesheet.sample -> taxpasta_embedding.sample` and
+  `taxpasta_embedding.profiler_db -> taxpasta_lineage.profiler_db` (the lasso reaches the
+  taxonomic flow). The embedding's `sample_id` is the composite `sample | profiler / database`,
+  so the sample link targets its plain `sample` column.
+- **Ordination.** `tp-av-pcoa` carries `selection_enabled: true, selection_column: profiler_db`;
+  the duplicate `tp-fig-pcoa-select` was removed.
+- **Removed duplicates.** `tp-av-lineage-sunburst` (Krona kept), the second 4-card strip
+  `tp-lin-card-*`, `tp-comp-card-runs` and `tp-div-card-runs` (both repeated the glance card),
+  the `Read stats` filter section and its two sliders, `tp-filter-rank` (header picker only).
+- **Confidence = sylph only.** `Profile shape` dissolved: `tp-av-richness-dot` moved to Alpha
+  diversity, `tp-fig-top-share` and `tp-filter-top-share` removed. `tp-card-containment`
+  (average of a fraction) replaced by `tp-card-low-ani`, genomes below 95 percent adjusted ANI.
+- **Cards.** Shannon, evenness and Nonpareil coverage are medians with box plots (no gauge max 6,
+  no 0.6/0.4 thresholds, no average of a fraction). `tp-card-shared-frac` lost its
+  `coverage_max: 12` gauge (plain value). New `tp-comp-card-species` (species named, top_n by
+  classifier, `filter_expr` on rank) and `tp-div-card-top-share`.
+- **Tables.** Pinned tables are now the samplesheet (top) and the database sheet (bottom). The
+  per-run statistics and Nonpareil tables close Depth and diversity (`Depth tables`, collapsed);
+  the profiles, lineage and sylph clade tables close Profiles (`Profile tables`, collapsed).
+- **Sequencing run filter.** `tp-filter-run` is a MultiSelect on `object`; the samplesheet is
+  read with `polars_kwargs: {infer_schema_length: 0}` so accessions stay strings.
+- **Texts.** Intros at most 2 to 3 short sentences, no "mock", no counts, no run claims;
+  `tp-qc-general-stats` description is one generic sentence. `advanced_viz_controls: header`
+  on every tab. Melon sunburst uses `tab20` + `colour_by_rank: phylum`.
+- **Lint.** `forbidden_terms` added to `megatest.yaml`; all convention rules pass.
+
+## Still open
+
+- `tp-av-lineage-sankey` row badge "5,000 rows" for 5,652 (P25, platform): not verified here.
+- `tp-qc-general-stats` live height (204 px vs YAML `h: 5`): not re-checked live.
+- Live behaviour of the new links and the PCoA lasso (selection on `profiler_db` narrowing the
+  sankey) is unverified until the main session re-ingests the project.
+- Melon still cannot take the sample filter (no sample column in its pooled output).

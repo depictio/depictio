@@ -1,16 +1,15 @@
 # nf-core/eager 2.4.5: Depictio dashboards
 
 This template turns the output of [nf-core/eager](https://nf-co.re/eager) 2.4.5 into a
-single eight-tab Depictio dashboard. eager trims and collapses ancient-DNA reads, maps
+single six-tab Depictio dashboard. eager trims and collapses ancient-DNA reads, maps
 them, deduplicates, profiles the misincorporation damage pattern that says whether the DNA
-is really ancient, and genotypes what is left. The dashboard follows that chain and adds
-the two questions eager answers with optional branches: is this extract contaminated, and
-what else is in it.
+is really ancient, and genotypes what is left. The dashboard follows that chain; the
+optional branches (sex determination, contamination, metagenomic screening) are folded
+into the tab whose question they answer and appear only when the run enabled them.
 
-Data comes from the AWS megatest run `results-42c9d5f8602e5e88fdcec28f194d2cd4cff61c75`
-(the 2.4.5 release tag): two Atlantic cod libraries (`COD076E1bL1`, `COD092E1bL1i69`; three
-sequencing lanes each), mapped with BWA, deduplicated with Picard MarkDuplicates,
-damage-profiled with DamageProfiler and genotyped with GATK HaplotypeCaller.
+The template was validated on the AWS megatest run
+`results-42c9d5f8602e5e88fdcec28f194d2cd4cff61c75` (the 2.4.5 release tag; see
+`megatest.yaml`). No dashboard text names that run's samples, organism or contigs.
 
 > **This template reads a REPROCESSED MultiQC report.**
 > eager 2.4.5 published MultiQC 1.13.dev0, which writes `multiqc_data.json` and no
@@ -18,58 +17,68 @@ damage-profiled with DamageProfiler and genotyped with GATK HaplotypeCaller.
 > tab is bound to a report this repository generates by re-running the pinned MultiQC 1.35
 > over the run's own raw tool outputs. See `VALIDATION_REPORT.md`.
 
-> **The samplesheet is not part of the AWS megatest fetch.**
-> Unlike ampliseq or rnaseq, eager's test data carries no `input/` prefix and no
-> `pipeline_info/params.json` to recover the `--input` TSV from.
-> `input/benchmarking_vikingfish.tsv` here is a hand-reconstructed manifest against the six
-> ENA runs the megatest fetched. A real `--data-root` needs it copied to
-> `{DATA_ROOT}/input/benchmarking_vikingfish.tsv` by hand; see `VALIDATION_REPORT.md`.
+> **Copy the run's `--input` TSV under `{DATA_ROOT}/input/`.**
+> eager 2.x does not publish its samplesheet. The two recipes that read it
+> (`eager/samples.py`, `eager/lane_stats.py`) take any `input/*.tsv`, so copy the TSV the
+> run was launched with there. For the megatest, `input/benchmarking_vikingfish.tsv` in
+> this template directory is a hand-reconstructed manifest against the six ENA runs the
+> megatest fetched.
 
 ---
 
 ## How the dashboard is built
 
-- **One funnel, eight tabs.** MultiQC, then the run and library hub, then read fate, then
-  mapping and endogenous DNA and duplication, then damage authentication, then
-  contamination and sex, then coverage and genotyping, then metagenomic screening. Each tab
-  answers the question the previous one raises: what was sequenced, where every read went,
-  how much of the extract is the target organism and how much of that survives, whether the
-  damage pattern says the DNA is ancient, whether anything foreign is mixed in, how deep
-  the coverage is and what was called from it, and what the off-target remainder is.
-- **The library hub is the hub.** `samples` is one row per eager LIBRARY (`Library_ID`,
-  the name every downstream file uses once eager has merged its sequencing lanes, not
-  `Sample_Name`, which can in principle carry several libraries). A persistent
-  `Sample filters` section is pinned to the top of every tab, and the template's links fan
-  a pick there out to the MultiQC panels and every per-library table at once. The two
-  bcftools collections key on `Sample_Name` instead, because `bcftools stats` reads the
-  sample name out of the VCF header rather than the BAM's library id, so the hub carries a
-  second filter and the template two extra links on `sample_name`.
-- **A four-card glance strip on every tab.** `Run at a glance` is a persistent grid section
-  pinned to the top: endogenous DNA, terminal deamination, mean coverage and lanes merged,
-  the four numbers an ancient-DNA run is read on. It rides every tab including MultiQC,
-  which the MultiQC-only rule exempts pinned persistent sections from. Every other tab
-  opens with its own four-card row, always filling the eight-column width.
-- **Pinned library sheet and reference metrics.** The library hub sits in a collapsed
-  `Sample sheet` section pinned to the top of every tab, and the Qualimap BamQC summary in
-  a collapsed `Reference metrics` section pinned to the bottom, next to a collapsed
-  `QC thresholds` section holding the coverage, duplication-rate and endogenous-DNA floors.
-- **Every tab has its own filters.** Beyond the persistent sample scope, each tab declares
-  a local filter section on the factor that tab actually varies over: the terminal C-to-T
-  damage window on the MultiQC tab, lane and sequencing run on the hub, trimming and final fate on read fate, filter stage and duplication on
-  mapping, read end / position / strand / fragment length on damage, contig and relative
-  depth on contamination, contig and position and depth threshold on coverage.
-- **Catalog provenance.** 88 of 104 dense tiles (84.6%) carry a `use:` catalog reference.
-  The 16 without one are the tiles reading this pipeline's own lane sheet
-  (`eager_lane_stats`) and read-fate flow (`eager_read_fate`), plus the library hub itself:
-  no catalog module owns a pipeline's own sample sheet, its per-lane trimming ledger, or a
-  flow assembled from four different tools' reports, so those stay pipeline-local, the same
-  convention every other nf-core template follows.
+- **Six tabs, one question each.** MultiQC (the report), Run and library hub (which
+  libraries, from how many lanes, compared on every tool), Reads and read fate (where every
+  read stops, and what each lane returned), Mapping, endogenous DNA and duplication (how
+  much of the extract is the organism, and what the rest is when a screen ran),
+  Authentication (is it ancient, and how contaminated), Coverage, sex and genotyping (per
+  contig, distribution, locus, variants).
+- **The library hub is the hub.** `samples` is one row per eager LIBRARY (`Library_ID`).
+  The pinned `Sample scope` filters (library, sample, UDG treatment) fan out through the
+  template links to the MultiQC panels and every per-library table. The two bcftools
+  collections key on `Sample_Name` (bcftools reads it from the VCF header), so the hub
+  carries both ids and two links on `sample_name`.
+- **QC thresholds reach every tab.** The pinned, collapsed `QC thresholds` section filters
+  the Qualimap BamQC summary (coverage, duplication) and endorS.py (endogenous DNA). Both
+  collections link back to the hub, so a floor narrows the hub and the hub fans the
+  surviving libraries out (filters travel up to three links).
+- **Glance strip: run size and design.** `Run at a glance` is pinned persistent on every
+  tab: libraries (by UDG treatment), biological samples (by organism), lanes merged and
+  reads sequenced (with the share AdapterRemoval kept). No tab repeats these as cards.
+- **Pinned tables.** The library sheet (top, collapsed) and the BamQC summary (bottom,
+  collapsed, the table the thresholds read). Neither is repeated in a tab.
+- **MultiQC panels once.** The MultiQC tab holds only panels no tile redraws from a tool
+  table: general statistics, FastQC, the AdapterRemoval collapsed-read length and the
+  bcftools variant panels. Every MultiQC twin of a tile (flagstat, Picard, preseq,
+  DamageProfiler, Qualimap, AdapterRemoval retained/discarded) was removed.
+- **Every tab has local filters** (`<X> scope`, open): report sample on MultiQC, lane and
+  run on the hub, trimming outcome, final fate and lane on read fate (the lane filter
+  narrows the per-lane tiles only), filter stage, endogenous DNA after filtering and
+  duplication on mapping, read end, position, strand and fragment length on
+  authentication, relative depth, contig length, window depth and depth threshold on
+  coverage. There is no chromosome filter on the locus tab: the navigator owns the region.
+- **Optional branches as hidden tiles.** Sex.DetERRmine, MTNucRatio, ANGSD nuclear
+  contamination, MaltExtract and Kraken are `optional: true` collections, each bound to one
+  table tile. The import drops a tile whose collection is absent, so a run without the
+  branch shows only the two-sentence note of its section.
+- **Tab order inside a tab:** cards, distributions, detail, then a collapsed tables section.
 - **Everything matches on file name, never on directory names.** `deduplication/<library>/`,
   `damageprofiler/<library>_rmdup/`, `qualimap/<library>_rmdup_stats/` and
-  `adapterremoval/output/` all encode the library or lane in the PATH eager publishes it
-  under, not the file content. No scan regex matches on those directory names; the catalog
-  recipes parse them out of `source_path` instead, which is what keeps the template
-  portable to eager 3.x, whose directory layout differs.
+  `adapterremoval/output/` encode the library or lane in the path; the catalog recipes
+  parse them out of `source_path`, which keeps the template portable to eager 3.x.
+
+### Template variables
+
+| variable | default | use |
+| --- | --- | --- |
+| `DATA_ROOT` | required | eager output root, plus `input/*.tsv` and the reprocessed MultiQC parquet |
+| `SHORT_FRAGMENT_BP` | `70` | short-fragment cut-off. The `damageprofiler/authenticity` recipe receives it as a param and counts the fragments shorter than it (the column keeps the name `fraction_under_70bp`); the Authentication tab names it in its texts |
+
+The locus navigator's `default_region` opens on the first chromosome of the megatest
+reference; on a reference without that contig the navigator falls back to the
+whole-reference overview. A non-model reference has no GenomeSpy built-in assembly, so the
+contig list comes from the data and there is no gene lane.
 
 ---
 
@@ -77,7 +86,6 @@ damage-profiled with DamageProfiler and genotyped with GATK HaplotypeCaller.
 
 ```bash
 bash download_test_data.sh                       # AWS megatest fetch, no input/
-# input/benchmarking_vikingfish.tsv is not part of the fetch, copy it by hand:
 mkdir -p ~/Data/depictio-nfcore/eager/2.4.5/megatest/input
 cp input/benchmarking_vikingfish.tsv ~/Data/depictio-nfcore/eager/2.4.5/megatest/input/
 
@@ -94,173 +102,108 @@ depictio-cli run --template nf-core/eager/2.4.5 \
 ## MultiQC
 
 The landing tab, MultiQC panels only. `MultiQC overview` holds the general statistics
-table, including endorSpy's endogenous DNA percentage, which MultiQC never gives its own
-panel (it is `generalstats`-only custom content). `Read quality and trimming` holds FastQC
-on the raw lanes and AdapterRemoval's retained/discarded/collapsed counts and length
-ladder. A high collapse rate here is the expected shape of an ancient-DNA library, where
-fragments are usually shorter than the read length, not a warning sign the way it would be
-for a modern shotgun run.
+table, including endorS.py's endogenous DNA percentage (general-stats-only custom content).
+`Read quality and trimming` holds FastQC on the raw lanes (counts, per-base quality, GC,
+adapter content, duplication levels) and the AdapterRemoval collapsed-read length
+distribution. `Variant calling` holds the four bcftools panels (substitution types,
+quality, indel lengths, depths) that no tile redraws.
 
 ## Run and library hub
 
-eager 2.x trims and collapses each sequencing lane on its own, then merges the lanes into a
-library before mapping, so the lane is the only samplesheet column of this run with more
-than one value, and the AdapterRemoval `.settings` reports are the only per-lane numbers
-eager publishes. This tab recovers them: `adapterremoval/settings` parses the
-`[Trimming statistics]` block, and the pipeline-local `eager/lane_stats.py` recipe joins it
-to the samplesheet on a key rebuilt from the R1 file name plus the `Lane` column, so the
-lane, the sequencing run accession and the library each report belongs to all become real
-filter factors. The scatter reuses `adapterremoval/collapse_vs_length` with the lane as the
-label: within a library, collapse rate and retained length move together; between the two
-they separate.
-
-The organism, sequencing type, UDG treatment and strandedness columns are constant across
-this run, so no filter or card is spent on them. They stay in the hub table, where a run
-that does vary over them can still read them.
-
 `Library QC profile` pools every per-library number eager produces into one row per
 library: the pipeline-local `eager/library_qc.py` recipe left-joins the tidied endorS.py,
-Picard, Qualimap and DamageProfiler collections on the library id and turns their fractions
-into percents. A `parallel_coordinates` tile draws one polyline per library across nine
-axes (endogenous DNA before and after filtering, clonality, depth, mapping quality, error
-rate, GC, terminal C-to-T and fragment length), each rescaled to its own range. With two
-libraries that scale stretches every axis end to end, so the tick values carry the reading:
-most gaps are small, but COD076E1bL1 carries 2.4 times the terminal damage of
-COD092E1bL1i69 and more duplication.
+Picard, Qualimap and DamageProfiler collections on the library id. A
+`parallel_coordinates` tile draws one polyline per library across nine axes, each rescaled
+to its own range, so the tick values carry the reading. `Library detail` holds the
+pooled table with the `Library record` (record_card, no default record) beside it
+(`linked_component`): the card stays a thin rail until a row is picked, then opens that
+library's record. The per-lane AdapterRemoval
+table sits in a collapsed section at the bottom.
 
 ## Reads and read fate
 
 One sankey, five stages, and the reads that fall out at each. The pipeline-local
 `eager/read_fate.py` recipe chains AdapterRemoval, samtools flagstat and Picard
 MarkDuplicates into a single flow, and the accounting is exact rather than apportioned:
-AdapterRemoval's own identity `2 x total_read_pairs = retained + collapsed + discarded`
-holds per lane, and summed over a library's lanes `retained_reads` equals the pre-filter
-flagstat total to the read, so the reports chain without a fudge factor.
+AdapterRemoval's identity `2 x total_read_pairs = retained + collapsed + discarded` holds
+per lane, and summed over a library's lanes `retained_reads` equals the pre-filter flagstat
+total, so the reports chain without a fudge factor. Collapsing is an outflow at the
+trimming step: one read of each merged pair stops existing there, and no report says which
+survivors were merged.
 
-Collapsing is an outflow at the trimming step rather than a stage of its own on purpose:
-one read of each merged pair stops existing there, and no report says which of the
-survivors were merged, so a collapse stage would have to apportion the mapped reads between
-collapsed and uncollapsed, which would be invention. Terminal fates are carried forward to
-the last column so each flow ends where the read did rather than stopping mid-diagram.
+`Lane yield` (moved here from the hub) reads the pipeline-local `eager/lane_stats.py`
+output: `adapterremoval/settings` joined to the samplesheet on a key rebuilt from the R1
+file name plus the `Lane` column. Reads kept per lane, collapse rate against retained
+length (`adapterremoval/collapse_vs_length`) and the discard share per lane.
 
 ## Mapping, endogenous DNA and duplication
 
-`Endogenous DNA` binds the new `endorspy/endogenous` catalog output, which reads eager's
-`*_endogenous_dna_mqc.json` custom-content files directly rather than through MultiQC's
-general statistics table. The headline number of an ancient-DNA screen is the fraction of
-the mapper's input that placed on the reference; the scatter plots it before against after
-the quality filter and deduplication, so the distance below the diagonal is the on-target
-signal lost to ambiguous placement and PCR copies.
+`Endogenous DNA` binds `endorspy/endogenous` (the `*_endogenous_dna_mqc.json` files read
+directly): before, after, the loss between them, and the reads given to the mapper. That
+last card reads samtools flagstat scoped to `stage == pre-filter` (`filter_expr`), because
+flagstat has one row per library and filter stage and an unscoped sum counts every read
+twice. The before/after scatter puts the on-target signal lost to filtering below the
+diagonal.
 
-`Alignment` reads this template's own `samtools/flagstat` output (one row per library, per
-filter stage) next to MultiQC's Flagstat panels. A low pre-filter mapped percentage is
-normal for sediment or bone extracts, where most recovered DNA is environmental.
+`Alignment` reads `samtools/flagstat` per library and stage. `Duplication and complexity`
+binds `picard/markduplicates_metrics` next to `preseq/complexity_curve`, with the
+screening plane (endogenous DNA against clonality, marker sized by depth) between them.
 
-`Duplication and complexity` binds the new `picard/markduplicates_metrics` output, which
-parses the `## METRICS CLASS` block of eager's `*_rmdup.metrics` files by reading the
-header row rather than assuming a column order, next to `preseq/complexity_curve`. Read the
-two together: high duplication with a flattened complexity curve means the extract, not the
-sequencing, is the limit. Between them sits the screening plane: endogenous DNA against
-clonality, read from the pooled `eager_library_qc` collection, with the marker sized by the
-depth already reached. A library high on endogenous and low on clonality is the one worth
-sequencing deeper.
+`Off-target screen` holds one table per optional screen (MaltExtract authentication
+overview, Kraken report) under a two-sentence note; without a screen the section is the
+note alone.
 
-## Damage authentication
+## Authentication
 
-The tab this template was built to carry, and the one where two signals are read together
-rather than separately. `damageprofiler/authenticity` is a second-order recipe consuming
-the tidied misincorporation table and the new `damageprofiler/lgdistribution` output: it
-reduces each library to its terminal deamination at both read ends, the substitution
-background that rate is read against, and its fragment length statistics. The resulting
-plane separates the three cases a single number cannot: short and damaged is ancient, long
-and undamaged is modern contamination, and short but undamaged is usually over-sheared
-modern material rather than old DNA.
+`damageprofiler/authenticity` reduces each library to its terminal deamination at both read
+ends, the substitution background, and its fragment length statistics including the share
+under the short-fragment cut-off. The plane separates what a single number cannot: short
+and damaged is ancient, long and undamaged is modern contamination, short but undamaged is
+usually over-sheared modern DNA. Below it, one misincorporation profile
+(`damageprofiler/misincorporation`: `C>T`, `G>A` and the pooled background by position)
+and one fragment-length profile. The earlier line figure and MultiQC twins of both were
+removed. DamageProfiler 0.4.9 writes no length-binned damage table, so the profile is not
+split by length.
 
-Below it, `damageprofiler/misincorporation` tidies DamageProfiler's per-position,
-per-read-end substitution table into one row per `(library, end, position, base_change)`,
-keeping `C>T` and `G>A` as their own curves and summing the other twelve substitution types
-into `other`, the background they are read against. `damageprofiler/fragment_length_profile`
-draws the length distribution itself, one curve per library and strand, normalised so
-libraries of different depth are comparable.
+`Contamination` holds one table per optional estimate (ANGSD nuclear contamination,
+MTNucRatio) under a two-sentence note.
 
-The misincorporation curves are not split by read length. DamageProfiler 0.4.9, the version
-eager 2.4.5 runs, writes its `misincorporation.txt` per chromosome, read end, strand and
-position only, and `dmgprof.json` holds the length distribution separately from the damage
-curves, so there is no `length_bin` column for `damage_profile`'s `facet_by: length_bin`
-to split on. The tile stays on one lane per library.
+## Coverage, sex and genotyping
 
-## Contamination and sex
+`Per-contig depth and sex` parses the `Coverage per contig` block of `genome_results.txt`
+and normalises each contig by the library's own mean: the quantity a sex call (sex
+chromosome against autosome depth) and an organelle ratio are made from. The
+Sex.DetERRmine table appears here when the run enabled it.
 
-This megatest ran with Sex.DetERRmine, MTNucRatio and the ANGSD X-chromosome contamination
-estimate disabled, and the reference is Atlantic cod, which has no assembled sex chromosome
-to call from anyway. The template declares all three as `optional: true` collections with
-the file names the eager output documentation publishes, so a run that enables them ingests
-with no template edit; the tab opens with a text tile saying they did not run here.
+`Depth distribution`: `qualimap/coverage_histogram` (bases at each depth) and
+`qualimap/genome_fraction_coverage` (share covered at least that deep).
 
-What is on disk instead is the quantity all three build on. `qualimap/coverage_per_contig`
-parses the `Coverage per contig` block of `genome_results.txt` and normalises each contig's
-depth by the library's own genome-wide mean, so a sex call (a depth ratio between a sex
-chromosome and the autosomes) and a contamination baseline are both one filter away. The
-mitochondrion is visible on the scatter as the single sequence around 59 times the nuclear
-depth, which is the mitochondrial-to-nuclear ratio MTNucRatio would have reported.
+`Depth along the reference` is a locus section. `qualimap/coverage_across_reference` maps
+Qualimap's windows (written on one concatenated axis) back onto their contigs with a
+per-sample `join_asof` against the per-contig lengths. The navigator is a `genome_view` on
+those windows; a `coverage_track` under it draws mean mapping quality from the
+pipeline-local `eager/mapq_across_reference.py`, and a `region` link carries the
+navigator's chromosome and position onto that collection, so a brush or a typed locus
+moves both tracks and the cards together.
 
-## Coverage and genotyping
-
-`qualimap/coverage_across_reference` is the largest new output here: Qualimap's windowed
-depth table, 627 rows per library. Qualimap writes those windows on a single concatenated
-axis with no contig column, so the recipe takes an optional second source (the same run's
-`genome_results.txt`), builds a running sum of the per-contig lengths and maps each window
-back onto the contig it falls in with a per-sample `join_asof`. If the optional source is
-missing the recipe falls back to a single pseudo-contig rather than failing.
-
-`Depth along the reference` is a locus section. Its navigator is a `genome_view` on those
-depth windows (one lane per library, locus field and axis brush in the header), which opens
-on chromosome 1 (`NC_044048.1:1-30,875,876`, the whole contig): both libraries lose depth at
-the two ends, under 0.6X against about 1X along the arm. Under it a `coverage_track` draws
-mean mapping quality over the same windows, from the pipeline-local
-`eager/mapq_across_reference.py` recipe that places Qualimap's
-`mapping_quality_across_reference.txt` on the same contig coordinates. A `region` link in
-`template.yaml` carries the navigator's chromosome and position filters onto that second
-collection, so brushing or typing a locus moves both tracks, the cards and the windowed
-table together. The cod reference (gadMor3) has no GenomeSpy built-in assembly and no
-bundled gene lane, so the contig list comes from the data and there is no gene track.
-The earlier `coverage_track` and `genome_view` pair on the one depth collection is gone:
-they drew the same rows twice.
-
-`Depth distribution` answers what a mean depth cannot: `qualimap/coverage_histogram` is how
-many bases sit at each depth, and `qualimap/genome_fraction_coverage` is the share of the
-reference covered at least that deep. A library at 0.9X mean could be spread evenly or
-piled on a tenth of the genome, and only these two say which.
-
-The variants cannot join the locus section: `bcftools stats` reports counts, not
-positions, and the VCFs themselves (300 MB each) are not part of the megatest mirror, so no
-`indexed_file` track can be bound on this run.
-
-`Variant calls` binds the `bcftools/stats_summary` and `bcftools/stats_tstv` outputs to the
-GATK HaplotypeCaller VCFs eager published but which nothing read before. Both key on
-`Sample_Name` rather than `Library_ID`, because `bcftools stats` reads its sample name from
-the VCF header. The transition-to-transversion ratio is worth a second look on ancient
-data: deamination turns cytosines into thymines, which is a transition, so a caller with no
-damage model reads damage as extra real variants.
-
-There is no per-caller dot plot here. This run genotyped with one caller, so a comparison
-across callers would have a single column; a run with several would want one, and the
-`bcftools/stats_summary` output already carries the `caller` column it would need.
-
-## Metagenomic screening
-
-eager can hand the reads that do not map to the target reference to MALT and MaltExtract,
-or to Kraken, to say what else is in the extract. This megatest enabled none of them, so
-the MaltExtract authentication heatmap and the Kraken report are declared `optional: true`
-with the globs the eager output docs publish, and the tab opens with a text tile saying so.
-
-What it shows instead is the size of the problem: nearly two thirds of each library did not
-place on the cod reference, and that off-target fraction is exactly what a screen would
-have been given. The two FastQC panels beside it are the only screen this run actually
-carries, an unexpected GC peak or a duplication profile that does not match the target
-organism being the cheapest hint that something else is in the extract.
+`Variant calls` binds `bcftools/stats_summary` and `bcftools/stats_tstv` (keyed on
+`Sample_Name`). The Ts to Tv expectation lives in its card's description: deamination read
+as variation pushes the ratio up.
 
 ---
+
+## Cross-selection
+
+A picked row or point becomes a dashboard filter that narrows the other tiles of its
+collection and follows the project links to the collections they reach. The pinned sample
+sheet selects on `sample_id` and the Qualimap reference table on `sample`; the lane table and
+the lane yield scatter select on `lane_id`; every per-library table and scatter of the
+mapping, authentication and coverage tabs selects on `sample`, as do the fragment length
+and genome fraction profiles. Not selectable: the complexity curve and depth histogram
+profiles and the coverage track (no outgoing link and no sibling tile to narrow), and the
+raw MaltExtract, Kraken, contamination and Sex.DetERRmine tables, whose columns are not
+declared. The endogenous-against-clonality scatter emits a selection, but its collection
+has no outgoing link, so it narrows no other tile.
 
 ## Note: the preseq recipe here is pipeline-local, not the shared catalog one
 

@@ -83,3 +83,36 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root {dest}
+
+# Megatest fusion partners that must never appear in a dashboard text (lint:
+# depictio/tests/models/test_template_conventions.py). The megatest sample id,
+# `test`, is left out: it is an English word the texts use generically.
+forbidden_terms:
+  - AKAP9
+  - ALK
+  - ATF1
+  - BRAF
+  - BRD4
+  - CD74
+  - CIC
+  - CRLF2
+  - DUX4
+  - EML4
+  - ETV1
+  - ETV6
+  - EWSR1
+  - FGFR3
+  - FIP1L1
+  - FLI1
+  - GOPC
+  - HOOK3
+  - MALT1
+  - NPM1
+  - NTRK3
+  - NUTM1
+  - PDGFRA
+  - RET
+  - ROS1
+  - TACC3
+  - TMPRSS2
+  - single sample

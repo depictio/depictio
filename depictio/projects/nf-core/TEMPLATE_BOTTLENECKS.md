@@ -4,7 +4,8 @@ Companion to `MEGATEST_STATUS.md`. That file records what the **AWS megatest buc
 publishes. This one records what **Depictio itself** lacks, found while building the
 lot-1 templates (differentialabundance 2.0.0, funcscan 4.0.0, airrflow 5.1.0,
 rnafusion 4.1.3, rnaseq 3.26.0, taxprofiler 2.0.1, chipseq 1.2.0, atacseq 1.2.2 and
-cutandrun 3.1) against real runs.
+cutandrun 3.1) against real runs. Lot 2 and wave 3 appended dated notes and items 13 onwards;
+wave 3 brought the shipped set to 24 templates, 25 once rnasplice lands.
 
 Every item below was hit in this lot, not predicted. Each says what happened, why it
 costs, and the smallest fix that would remove it. Items are ordered by how much they
@@ -103,6 +104,12 @@ lot adds fifteen MultiQC catalog entries (bracken, centrifuge, deeptools, duprad
 featurecounts, kaiju, metaphlan, nanoq, nonpareil, picard, preseq, qualimap, rseqc,
 salmon, star) against fifteen pre-existing builders, so the stub file must roughly
 double for coverage to keep up.
+
+**2026-09-23 (wave 3).** The five new templates added another nine sections, each with its
+own builder: `mirtrace` and `mirtop` (smrnaseq), `sortmerna`, `ribowaltz` and `ribotish`
+(riboseq), `bcl2fastq`, `checkqc` and `falco` (demultiplex), and `percolator` (mhcquant).
+demultiplex first shipped a bundled parquet for its panels instead; that was removed in favour
+of the stub convention. Every new section still costs a hand-written builder.
 
 ## 7. Depictio has no MultiQC version gate, only a filename regex
 
@@ -365,8 +372,10 @@ features. That is the JBrowse boundary above, and nothing in it should become a 
 ### Still missing, for pipelines outside this lot
 
 V-to-J pairing at scale (airrflow full rearrangement tables), 96-context mutational
-signature and circos (oncoanalyser), knee plot (scrnaseq), isomiR ladder (smrnaseq),
-jplace reader (phyloplace), assembly graph (bacass).
+signature and circos (oncoanalyser), jplace reader (phyloplace), assembly graph (bacass).
+The knee plot shipped in lot 2 (`knee_plot`, scrnaseq). The isomiR ladder turned out not to
+need a kind: smrnaseq 2.4.1 draws isomiR composition with `stacked_taxonomy` and the
+per-miRNA landscape with `dot_plot`.
 
 Also: the `phylogenetic` kind has no catalog output binding it, and `upset_plot` and
 `sankey` can only be bound through a dashboard `config:` block because their roles are
@@ -528,6 +537,15 @@ explicit `mappings:` block on the `samples -> multiqc_data` link (20 name varian
 per sample). A template that cannot enumerate its variants up front (any pipeline
 whose caller or stage set is a parameter) still needs the resolver fixed.
 
+**2026-09-23 (wave 3), fixed in this PR.** When the samples hub is known, each MultiQC name
+is now attached to the hub id it belongs to (`canonicalize_to_hub`): exact match, then the
+name with read, lane, trimming and stage suffixes stripped, then the longest hub id that
+prefixes the name at a token boundary. sarek dropped its `mappings:` table and methylseq's
+Trim Galore names join their hub id. Explicit `mappings:` still win. Still open: demultiplex
+writes `<library>_S<n>_L<lane>` stems, which the hub reaches only through a `fastq_id`
+column holding the first lane's stem, so on a multi-lane run the other lanes' MultiQC rows
+are not narrowed by the library filter.
+
 ## 17. `depictio/cli/.venv` has no MultiQC, so a live ingest from it aborts early
 
 Any template with a `multiqc` collection fails its live ingest from
@@ -612,6 +630,17 @@ coordinates only in the locus field; HOMER's nearest-gene track stands in.
 **Smallest fix:** drop or bucket rows on contigs absent from the assembly before
 building the GenomeSpy spec; ship an hg19 gene asset, and let a template point at a
 GFF3 tabix for any other assembly (the `indexed_file` path already exists).
+
+**2026-09-23 (wave 3).** No locus tile hardcodes an assembly any more. Every template whose
+tracks name an assembly declares a `GENOME` variable (default `hg38`) and reads
+`assembly: "{GENOME}"`; the others derive the axis from the rows; runs on another build pass `--var GENOME=<assembly>`, and the bundled
+reference sets it through `reference.vars`. The gene lane (`annotation`, `locus_annotation`)
+reads `{GENOME}` too: a `BeforeValidator` maps `hg38` / `GRCh38` and `mm10` / `GRCm38` onto
+the bundled gene tables and anything else onto `none`, so a run on an assembly without a
+gene table draws no lane instead of failing validation. What is still missing is the same:
+no hg19 gene asset, no GFF3 route for other organisms, and with a built-in assembly the alt
+and unplaced contigs are not drawn, while a locus typed on a contig the assembly does not
+list can still fail the spec.
 
 ## 22. `coverage_track` crashed on a numeric `sample_col` (fixed in this PR)
 
@@ -698,12 +727,92 @@ drawn as a `heatmap` with explicit edges in data units, which a linear and a log
 axis map the same way. mag's scatter is pinned to points mode until the fix is seen
 live; any log-axis scatter past the threshold gains the same protection.
 
+## 29. Template variables did not reach recipes (fixed in this PR)
+
+A recipe received its sources and nothing else, so any per-run choice it needed, such as a
+marker gene panel or a fragment-length cut-off, could only be a constant inside the recipe.
+The first wave 3 drafts shipped such variables as text labels that changed nothing.
+`TransformConfig.params` now carries a string mapping from the template into any recipe whose
+`transform()` accepts a `params` keyword, substituted like every other placeholder; a value
+still holding an unresolved `{VAR}` is dropped before the call, so the recipe falls back to
+its own default. scrnaseq's `MARKER_PANEL`, eager's `SHORT_FRAGMENT_BP` and the `GROUP_COL`
+of the ampliseq, chipseq, methylseq and nanoseq recipes go through it. The output column of
+the eager recipe keeps its fixed name for schema stability, so only its value follows the
+variable.
+
+A related fix in the same resolver: declared variable defaults are now applied before the
+generic `GROUP_COL` / `METADATA_ID_COL` sentinels, so a template's own default wins on the CLI
+path instead of `__no_group__`. A default only resolves placeholders and never fires an
+`if_var_present` conditional.
+
+## 30. Design read from sample names
+
+The lot 1 and lot 2 templates read their experimental design out of sample names wherever the
+pipeline did not publish it, which only works for a run named the way the validation run was.
+Wave 3 moved methylseq, chipseq and nanoseq to a design table read through `METADATA_FILE`,
+`METADATA_ID_COL` and `GROUP_COL`, the ampliseq convention, and every new template starts
+there. chipseq and nanoseq still split the `<group>_R<replicate>` suffix the pipeline itself
+builds, which is exact, and read every other factor from the table. rnaseq is the template
+left: it reads the condition from `<condition>_REP<n>`.
+
+**Smallest fix:** the same optional `METADATA_FILE` join for rnaseq.
+
+Neighbouring gaps in the design path:
+
+- riboseq has no `GROUP_COL` default: it is set only by metadata auto-detection, so without a
+  design table the group filter is dropped. The contrasts file the pipeline takes already names
+  the design variable and could supply it.
+- smrnaseq's recipes look for the sample id in a `sample` column or the first column and
+  ignore `METADATA_ID_COL`.
+- methylseq's group comparison used to test the first two-level design column; it now reads
+  `GROUP_COL` through the params channel of item 29 and keeps that rule as the fallback.
+- airrflow's default `GROUP_COL` names a column the nf-core CI samplesheets do not carry, so
+  those runs need `--var GROUP_COL=<column>`.
+- The design of a pipeline that does not publish its samplesheet has to be copied into
+  `{DATA_ROOT}/input/` or passed as a path, the `SHEET` blocker of `TEST_DATASETS.md`.
+
+## 31. Route flags are still set by hand
+
+`_introspect_pipeline_params` gained one flag in wave 3, `IS_BCLCONVERT`, read from the
+demultiplex `demultiplexer` parameter. mhcquant's `NO_QUANTIFICATION` and `NO_ION_ANNOTATION`
+must still be passed by hand although `params.json` carries `quantify` and `annotate_ions`,
+as for the airrflow, rnafusion, funcscan and rnaseq flags listed in `TEST_DATASETS.md`
+Annex A. Each new flag is another branch in shared CLI code. A related wart: the CLI prints
+its `SKIP_ANCOM` and `ANNOTATION_COLS` notices on every template, not only on ampliseq.
+
+**Smallest fix:** let `template.yaml` declare a parameter-to-variable mapping, so a template
+reads its own route flags without a code change.
+
+## 32. Outputs a recipe cannot attribute or read
+
+Found while building the wave 3 templates; each is a property of what the pipeline publishes,
+worked around in the template and recorded in its `VALIDATION_REPORT.md`:
+
+- mhcquant's per-replicate intensity columns do not name the raw file they come from, so the
+  replicate index is inferred from the samplesheet id order, and every replicate tile depends
+  on that order being the pipeline's.
+- demultiplex publishes InterOp as binaries only. Reading them needs
+  `interop_summary --csv=1`, which the pipeline does not run, so the sequencer metrics section
+  is validated on a fixture only. The BCL Convert route is validated on MultiQC test data, not
+  on a real run.
+- genomeassembler's GenomeScope and jellyfish outputs are per read set, not per assembly: they
+  link to each other but not to the samplesheet. The polishing and Hi-C scaffolding stages are
+  bound by file name and have never been seen on data.
+- smrnaseq's precursor links open UCSC on `{GENOME}` with `chr`-prefixed coordinates, which an
+  assembly named without that prefix does not accept.
+- mhcquant writes its final peptide tables as `<Sample>_<Condition>.tsv` at the run root, so
+  its nine catalog outputs share a root-level `*.tsv` glob and the catalog offers any root TSV
+  of another pipeline's run as an mhcquant table. The run-directory match that would scope it
+  is not wired into ingestion yet.
+
 ## Pipelines considered and not templated in this lot
 
 | pipeline | why not |
 |---|---|
 | crisprseq | screening arm never published a megatest; 6195-file fan-in needs pre-aggregation |
-| smrnaseq | isomiR views need a kind that does not exist |
-| scrnaseq | nested `aligner_*` run roots plus a missing knee plot |
+| smrnaseq | isomiR views need a kind that does not exist. Templated in wave 3 (2.4.1): existing kinds cover them |
+| scrnaseq | nested `aligner_*` run roots plus a missing knee plot. Templated in lot 2 (4.2.0) with the new `knee_plot` |
 | oncoanalyser | signature and circos kinds missing; run root `HCC1395/` |
-| methylseq, raredisease, quantms, bacass | no usable megatest run at all |
+| raredisease, quantms, bacass | no usable megatest run at all |
+| methylseq | no usable megatest on a recent release. Templated in lot 2 on the complete 2.3.0 run |
+| rnasplice | wave 3, pending: the 1.0.4 megatest is a truncated sync with no MultiQC and no splicing output, so the template waits for an EMBL cluster `test_full` run. Fallback if that run fails twice: seqinspector 1.1.2, whose megatest is complete |

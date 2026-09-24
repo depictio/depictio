@@ -7,10 +7,10 @@ single window and would draw as one flat bar. This recipe keeps one row per
 capture target instead, so a track that follows the navigator's region shows
 the exons it covers and the depth on each.
 
-The collection is large (one row per target, sample and mosdepth pass: about
-850 000 rows on the sarek megatest) but it is only ever read narrowed to a
-region, through the region link from `mosdepth_regions`, so a tile draws a few
-hundred rows at a time.
+The collection is large (one row per target and sample, a few hundred
+thousand rows per exome sample) but it is only ever read narrowed to a region,
+through the region link from `mosdepth_windows`, so a tile draws a few hundred
+rows at a time. One mosdepth pass is kept per sample (``keep_one_stage``).
 
 Sample and stage come off the file name exactly as in `mosdepth/regions.py`
 (``<sample>.<stage>.regions.bed.gz``, stage ``all`` when the name carries
@@ -33,6 +33,32 @@ _NAME_RE = r"^(.+)\.([^.]+)\.regions\.bed(?:\.gz)?$"
 _PLAIN_NAME_RE = r"^(.+)\.regions\.bed(?:\.gz)?$"
 NO_STAGE = "all"
 
+#: When mosdepth ran more than once on a sample (sarek measures the
+#: duplicate-marked and then the recalibrated CRAM), one pass is kept: the
+#: first of these stages the sample has, else its alphabetically first one.
+#: Recalibration rewrites base qualities, not alignments, so the passes carry
+#: the same depth; keeping both doubled every sum and every track lane.
+STAGE_PREFERENCE = ("recal", "md", "sorted")
+
+
+def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
+    """Rows of one mosdepth pass per sample (see ``STAGE_PREFERENCE``)."""
+    rank = pl.col("stage").replace_strict(
+        {s: i for i, s in enumerate(STAGE_PREFERENCE)},
+        default=len(STAGE_PREFERENCE),
+        return_dtype=pl.Int64,
+    )
+    kept = (
+        df.select("sample", "stage")
+        .unique()
+        .with_columns(rank.alias("_rank"))
+        .sort(["sample", "_rank", "stage"])
+        .unique(subset="sample", keep="first", maintain_order=True)
+        .select("sample", "stage")
+    )
+    return df.join(kept, on=["sample", "stage"], how="semi")
+
+
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "chrom": pl.Utf8,
     "pos": pl.Int64,  # target start, 0-based
@@ -49,7 +75,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """One row per capture target, sample and mosdepth pass."""
     df = sources["regions"]
     basename = pl.col("source_path").str.split("/").list.last()
-    return (
+    return keep_one_stage(
         df.with_columns(
             pl.col("chrom").cast(pl.Utf8).alias("chrom"),
             pl.col("start").cast(pl.Int64, strict=False).alias("pos"),
@@ -70,5 +96,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             (pl.col("sample") + pl.lit(" (") + pl.col("stage") + pl.lit(")")).alias("sample_stage"),
         )
         .select(list(EXPECTED_SCHEMA))
-        .sort(["sample", "stage", "chrom", "pos"])
-    )
+    ).sort(["sample", "chrom", "pos"])

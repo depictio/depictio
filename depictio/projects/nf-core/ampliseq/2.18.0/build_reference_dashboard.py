@@ -968,6 +968,25 @@ def annotate_heatmap_columns(
             print(f"  {group_col} column strip on {comp.get('index', comp.get('tag'))}")
 
 
+def add_tree_group_colour(dashboard: dict[str, Any]) -> None:
+    """Offer the tree's dominant-group column as a tip colour.
+
+    The tip-metadata recipe names that column ``dominant_habitat`` after the
+    reference study's design, so base.yaml cannot list it: on another run the
+    option would name a design the run does not have. The reference run is
+    exactly that design, so the demo layer puts the option back.
+    """
+    for tab in [dashboard["main_dashboard"], *dashboard.get("tabs", [])]:
+        for comp in tab.get("components", []):
+            cfg = comp.get("config") or {}
+            if cfg.get("viz_kind") != "phylogenetic":
+                continue
+            cols = cfg.setdefault("extra_color_cols", [])
+            if "dominant_habitat" not in cols:
+                cols.append("dominant_habitat")
+                print(f"  dominant_habitat colour on {comp.get('index', comp.get('tag'))}")
+
+
 CHARS_PER_ROW = 300
 GRID_COLS = 8
 
@@ -1029,10 +1048,11 @@ def build() -> dict[str, Any]:
     strip_sections(dashboard, SINTAX_SECTIONS)
     set_upset_set_colors(dashboard, HABITAT_COLORS)
     annotate_heatmap_columns(dashboard, group_col, id_col, HABITAT_COLORS)
+    add_tree_group_colour(dashboard)
 
     main = dashboard["main_dashboard"]
     main["title"] = "nf-core/ampliseq"
-    main["subtitle"] = "Ammer catchment reference dataset — QC, diversity, campaign and environment"
+    main["subtitle"] = "Ammer catchment reference dataset: QC, diversity, campaign and environment"
     main_tab_layer(main, group_col, id_col)
 
     next_order = max(t.get("tab_order", 0) for t in dashboard["tabs"]) + 1

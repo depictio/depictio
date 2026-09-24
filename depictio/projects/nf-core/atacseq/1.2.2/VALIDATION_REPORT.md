@@ -811,3 +811,35 @@ w2b-locus-tracks.png (default region), w2b-locus-typed-nav.png and
 w2b-locus-typed-tracks.png (chr12 locus typed), w2b-tab5-consensus.png, w2b-0e-0.png (PCA
 header), w2b-tab6-differential.png, w2b-0f-0.png (volcano header), w2b-0b-0.png and
 w2b-0b-1.png (fingerprint and dot plot headers).
+
+## Wave 3 (2026-09-23)
+
+What changed:
+
+- `GENOME` template variable (default `hg38`); `reference.vars: {GENOME: hg19}` and
+  `--var GENOME=hg19` in the megatest commands. Three Locus tiles read `assembly:
+  "{GENOME}"`; the Locus chromosome filter is removed.
+- Tabs renamed `ATAC signal` to `Signal` and `Peak locus` to `Locus`.
+- `sample_design` gains `replicate_label` (`R1`, `R2`, ...); the replicate filter is a
+  MultiSelect on it. New link `design_reads.sample_id -> multiqc_data` feeds a tab-local
+  `Library scope` on the MultiQC tab, replacing `Peak QC scope`.
+- New catalog column `ataqv/metrics.median_fragment_length`, a read-weighted median over the
+  ataqv fragment histogram (megatest: 151 to 190 bp). The fragment-length card reads it
+  instead of a median over histogram rows.
+- Removed MultiQC twins and duplicates: preseq panel, fragment-length MultiQC panel, peak
+  scatter, the reads-in-peaks section, TSS-distance histogram, two redundant signal cards.
+  The ataqv MAPQ panel moved to the MultiQC tab.
+- Reads-in-peaks card is the minimum ("Lowest reads inside peaks"); annotation is a percent
+  histogram per library; q thresholds are 1.3 (warn 1.0).
+- `Sample space` moved to Differential accessibility (ward linkage, `Blues`); its tables sit in
+  `Differential tables`. Texts are generic; megatest names are `forbidden_terms`.
+
+Verified: lint clean (top_n xpass, no mean-of-percentage warning), recipe tests including
+the new fragment-median tests, CLI dry run 8/8 with `--var GENOME=hg19`.
+
+Still open:
+
+- Conformance seeds for `ataqv_metrics` need regenerating (new column).
+- `at-qc-frip` and `at-qc-peakcount` threshold filters carry no `use:`.
+- No gene lane: `annotation` does not take `{GENOME}` and the bundled tables are hg38/mm10.
+- Live rendering not verified in this wave.

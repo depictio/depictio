@@ -99,3 +99,21 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/differentialabundance/2.0.0 --data-root {dest}
+
+# Megatest sample ids, levels, genes and organism that must never appear in a
+# dashboard text (lint: depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - Sample1
+  - Sample24
+  - Uchl1
+  - ENSMUSG00000029223
+  - Mus musculus
+  - mouse
+  - KO
+  - WT
+  - Cre
+  - PBS
+  - Treated
+  - 16H
+  - Condition_genotype_WT_KO
+  - Condition_treatment_Control_Treated

@@ -15,7 +15,9 @@ publishes the next three factor-like columns as ``factor_2``, ``factor_3`` and
 knowing what any run's sheet calls them. Their source column names are published
 as ``factor_2_name`` and friends, which is what a panel shows a reader instead of
 "factor 2". Every column also keeps its own sanitised name, so nothing is hidden
-by the aliasing; a run with fewer factors simply has fewer of these columns.
+by the aliasing. The three aliases are ALWAYS published: a sheet with fewer
+factors gets the missing ones as an all-null column named ``none``, so the
+persistent filters bound to them never point at a missing column on any tab.
 
 Sources:
     samplesheet  ``input/samplesheet.tsv`` by default; the template repoints it
@@ -26,8 +28,9 @@ Sources:
 
 Output:
     sample_id : Utf8, group : Utf8, size_factor : Float64,
-    factor_2 .. factor_4 : Utf8 (when the sheet has that many factors),
-    factor_2_name .. factor_4_name : Utf8, <sanitised sheet columns> : Utf8
+    factor_2 .. factor_4 : Utf8 (null when the sheet has fewer factors),
+    factor_2_name .. factor_4_name : Utf8 ("none" for a missing factor),
+    <sanitised sheet columns> : Utf8
 """
 
 from __future__ import annotations
@@ -57,6 +60,12 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "group": pl.Utf8,
     "size_factor": pl.Float64,
+    "factor_2": pl.Utf8,
+    "factor_2_name": pl.Utf8,
+    "factor_3": pl.Utf8,
+    "factor_3_name": pl.Utf8,
+    "factor_4": pl.Utf8,
+    "factor_4_name": pl.Utf8,
 }
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
@@ -69,6 +78,8 @@ N_FACTOR_ALIASES = 4
 # A filter is only worth a control when it has at least two levels and few
 # enough to pick from; above this a column is an identifier, not a factor.
 MAX_FILTER_LEVELS = 6
+# `factor_<n>_name` of an alias the sheet has no factor for.
+MISSING_FACTOR_NAME = "none"
 
 
 def sanitise_column(name: str) -> str:
@@ -169,6 +180,14 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         samples = samples.with_columns(
             pl.col(source).fill_null("unknown").alias(f"factor_{rank}"),
             pl.lit(col).alias(f"factor_{rank}_name"),
+        )
+        ordered_aliases += [f"factor_{rank}", f"factor_{rank}_name"]
+        rank += 1
+    # Pad to the full set so the persistent factor filters always bind.
+    while rank <= N_FACTOR_ALIASES:
+        samples = samples.with_columns(
+            pl.lit(None, dtype=pl.Utf8).alias(f"factor_{rank}"),
+            pl.lit(MISSING_FACTOR_NAME).alias(f"factor_{rank}_name"),
         )
         ordered_aliases += [f"factor_{rank}", f"factor_{rank}_name"]
         rank += 1

@@ -3,24 +3,23 @@ version: 1
 #
 # A funnel over the unit that matters here, which is the bin and not the
 # sample: MultiQC -> Assembly -> Contigs -> Bins -> Taxonomy -> Annotation ->
-# Bin detail. Three samples give four assemblers over five binners over three
-# samples, so 479 metagenome-assembled genomes, 74 000 contigs and 222 000
-# contig-by-sample coverage rows. Every filter that matters is therefore an
-# assembler, a binner, a phylum or a quality threshold; the sample filter is
-# the least selective one on the dashboard.
+# Bin detail. Every assembler is crossed with every binner over every sample,
+# so the bins outnumber the samples by orders of magnitude, and the filters
+# that matter are an assembler, a binner, a phylum or a quality threshold.
 #
 # Two filter sections and three grid sections are persistent and pinned, so
 # they ride every tab: the sample scope, the assembler and binner scope, the
 # run's headline numbers, the samplesheet and the per-assembly reference table.
 # Each tab then adds its own non-persistent filter section on its own columns.
 #
-# Read QC has no tab of its own. This run publishes fastp as JSON and NanoPlot
-# as a free-text NanoStats.txt, neither of which is a table format a DC can
-# read, so the read-level numbers live in the MultiQC panels on the landing tab
-# and nowhere else. See VALIDATION_REPORT.md.
+# Read QC has no tab of its own. mag publishes fastp as JSON and NanoPlot as a
+# free-text NanoStats.txt, neither of which is a table format a DC can read, so
+# the read-level numbers live in the MultiQC panels on the landing tab and
+# nowhere else. See VALIDATION_REPORT.md.
 main_dashboard:
   title: nf-core/mag
-  subtitle: "nf-core/mag 5.5.0 megatest: 3 CaPES samples, hybrid short and long read assembly, 479 bins over 4 assemblers and 5 binners"
+  subtitle: "Metagenome assembly and binning: read QC, assembly contiguity, bin quality, taxonomy and annotation, from the run down to one bin"
+  advanced_viz_controls: header
   project_tag: Metagenome Assembly and Binning
   main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
@@ -32,7 +31,7 @@ main_dashboard:
   - name: Sample scope
     icon: mdi:test-tube
     color: teal
-    description: The three samples, carried to every tab through the project links
+    description: The samples, carried to every tab through the project links
     persistent: true
     pin: top
   - name: Binning scope
@@ -69,7 +68,7 @@ main_dashboard:
   - name: MultiQC report
     icon: mdi:view-dashboard-outline
     color: orange
-    description: The report re-generated with MultiQC 1.35 from the run's own raw tool outputs
+    description: The run's MultiQC report, one panel per module
   components:
   # ------------------------------------------------------- run at a glance
   - component_type: card
@@ -152,10 +151,9 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      One row per sample, with its co-assembly group and whether it also has a
-      long-read run. Every sample here was sequenced on both platforms, so the
-      platform columns are constant and carry no filter. The assembler and the
-      binner are what separate the rows of every other collection.
+      One row per sample, with its co-assembly group and the read platforms it
+      was sequenced on. The sample filter in the left panel is sourced on this
+      table.
     workflow_tag: mag
     data_collection_tag: samples
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -165,7 +163,8 @@ main_dashboard:
     section: Sample sheet
     workflow_tag: mag
     data_collection_tag: samples
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample_id
     title: Sample hub
     description: One row per sample, with its co-assembly group and read platforms.
     title_size: h3
@@ -184,8 +183,8 @@ main_dashboard:
     alignment: left
     body: >
       One row per assembler and sample: assembled length, contig count, N50 and
-      the fraction held in contigs a binner can use. The Assembly tab reads the
-      same rows with the contig-length ladder underneath them.
+      the fraction held in contigs a binner can use. The Assembly tab plots the
+      same rows.
     workflow_tag: mag
     data_collection_tag: assembly_report
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -196,9 +195,10 @@ main_dashboard:
     workflow_tag: mag
     data_collection_tag: assembly_report
     use: quast/assembly_report
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: assembly_id
     title: Assembly statistics
-    description: Ten assemblies, one per assembler and sample that finished.
+    description: One row per assembler and sample that finished.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 4}
@@ -208,18 +208,15 @@ main_dashboard:
     tag: mg-qc-intro
     index: mg-qc-intro
     section: MultiQC report
-    title: A report the run never wrote
+    title: Did the reads, assemblies and bins pass QC?
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      This megatest publishes no multiqc directory at all, so the report below
-      was re-generated with MultiQC 1.35 over the run's own raw outputs. Eight
-      modules parsed: fastp and NanoStat for the reads, Bowtie2 for host and
-      phiX removal, QUAST for the assemblies, CheckM2, GTDB-Tk and Prokka for
-      the bins. Read QC lives here because no read-level table is published
-      anywhere else in this run.
+      Read, host-removal, assembly and bin QC as MultiQC parsed them. Read QC
+      lives only here, so check read loss and host removal before trusting the
+      tabs that follow.
     workflow_tag: mag
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -408,7 +405,8 @@ tabs:
 # Assembly
 # ============================================================================
 - title: Assembly
-  subtitle: What four assemblers made of the same three samples, and how much of each assembly survives a minimum contig length
+  subtitle: What each assembler made of the same samples, and how much of each assembly survives a minimum contig length
+  advanced_viz_controls: header
   tab_order: 2
   tab_icon: mdi:dna
   tab_icon_color: blue
@@ -419,24 +417,20 @@ tabs:
   - name: Assembly scope
     icon: mdi:tune
     color: blue
-    description: Narrow the assemblies by contiguity and the ladder by its rung
+    description: Narrow the assemblies by contiguity and the length curves by their range of minimum contig lengths
   grid_sections:
   - name: Assemblies at a glance
     icon: mdi:counter
     color: blue
-    description: The ten assemblies this run produced
+    description: The assemblies this run produced
   - name: Size against contiguity
     icon: mdi:chart-scatter-plot
     color: blue
     description: Assembled length against N50, the two numbers that decide whether an assembly is binnable
-  - name: Contig length ladder
+  - name: Contig length
     icon: mdi:chart-line
     color: cyan
-    description: How much of each assembly survives each minimum contig length
-  - name: Nx curve
-    icon: mdi:ruler
-    color: indigo
-    description: N50 and N75 as two points of one curve, read across every percent of the assembly
+    description: How much of each assembly survives each minimum contig length, and the Nx curve N50 is one point of
   components:
   - component_type: card
     tag: mg-asm-card-length
@@ -513,16 +507,15 @@ tabs:
     tag: mg-asm-intro
     index: mg-asm-intro
     section: Size against contiguity
-    title: Long reads buy contiguity, short reads buy length
+    title: Which assemblies are binnable?
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      SPAdes and MEGAHIT assemble the most bases and scatter them over tens of
-      thousands of contigs; FLYE and METAMDBG assemble fewer bases into far
-      longer ones. Bins come out of the second shape much more cleanly, which
-      is what the Bins tab shows once the same assemblies have been binned.
+      One point per assembly: up and to the right is a long assembly in long
+      pieces, which bins cleanly. An assembly far down on the N50 axis will
+      bin into fragments whatever the binner, which the Bins tab confirms.
     workflow_tag: mag
     data_collection_tag: assembly_report
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -546,42 +539,28 @@ tabs:
     description: One point per assembly, sized by contig count. Up and to the right is a long assembly in long pieces.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: figure
-    tag: mg-asm-fig-n50
-    index: mg-asm-fig-n50
-    section: Size against contiguity
-    workflow_tag: mag
-    data_collection_tag: assembly_report
-    use: quast/assembly_report
-    visu_type: bar
-    dict_kwargs: {x: assembler, y: n50, color: sample}
-    title: Contig N50 by assembler
-    description: The same contiguity, read per assembler so the long-read and short-read routes separate.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
 
   - component_type: text
     tag: mg-ladder-intro
     index: mg-ladder-intro
-    section: Contig length ladder
+    section: Contig length
     title: Where an assembly loses its length
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      QUAST reports its contig thresholds twice, as a contig count and as a
-      base count. Read across, those pairs are the cumulative length curve: an
-      assembly that still holds its bases at 25 kbp is one a binner can work
-      with, one that loses most of them between 1 and 5 kbp will bin into
-      chimeras whatever the binner.
+      An assembly that still holds most of its bases at the longest thresholds
+      is one a binner can work with. The Nx curve below reads the same
+      contiguity across every percent of the assembly, and crosses x = 50 at
+      the N50.
     workflow_tag: mag
     data_collection_tag: length_ladder
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: mg-ladder-av-fraction
     index: mg-ladder-av-fraction
-    section: Contig length ladder
+    section: Contig length
     workflow_tag: mag
     data_collection_tag: length_ladder
     use: quast/retained_fraction
@@ -590,64 +569,31 @@ tabs:
       y_title: Fraction of the assembly retained
       log_x: true
       legend_pos: right
+      selection_enabled: true
+      selection_column: assembly_id
     title: Fraction of each assembly retained per minimum contig length
     description: One curve per assembly, normalised to its own total, so assemblies of very different sizes stay comparable.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: mg-ladder-av-cumulative
-    index: mg-ladder-av-cumulative
-    section: Contig length ladder
-    workflow_tag: mag
-    data_collection_tag: length_ladder
-    use: quast/cumulative_length
-    config:
-      x_title: Minimum contig length (bp)
-      y_title: Bases held by contigs at least that long
-      log_x: true
-      log_y: true
-      legend_pos: right
-    title: Bases surviving each minimum contig length
-    description: The same curves in absolute bases, which is where the short-read assemblies' extra length shows.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
   - component_type: table
     tag: mg-ladder-table
     index: mg-ladder-table
-    section: Contig length ladder
+    section: Contig length
     workflow_tag: mag
     data_collection_tag: length_ladder
     use: quast/length_ladder
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: assembly_id
     title: Ladder rungs
-    description: Six thresholds per assembly, with the contigs and the bases each one keeps.
+    description: The QUAST length thresholds of each assembly, with the contigs and the bases each one keeps.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 16, w: 8, h: 7}
 
-  - component_type: text
-    tag: mg-nx-intro
-    index: mg-nx-intro
-    section: Nx curve
-    title: The whole curve N50 is one point of
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Sort an assembly's contigs longest first and walk down them: Nx is the
-      length of the contig at which x percent of the bases are reached. The
-      curve crosses the line at x = 50 exactly at the QUAST N50, since both keep
-      contigs of at least 500 bp. A long-read assembly holds a high plateau far
-      to the right; a short-read one falls off early. The lengths come from
-      the depth tables, so an assembly without one has no curve.
-    workflow_tag: mag
-    data_collection_tag: assembly_nx
-    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: mg-nx-av-curve
     index: mg-nx-av-curve
-    section: Nx curve
+    section: Contig length
     workflow_tag: mag
     data_collection_tag: assembly_nx
     viz_kind: profile
@@ -663,9 +609,9 @@ tabs:
       y_title: Nx, contig length (bp)
       legend_pos: right
     title: Nx curve per assembly
-    description: One curve per assembly. The higher and the further right a curve holds, the fewer and longer the pieces the assembly is made of.
+    description: One curve per assembly, from the depth tables, so an assembly without one has no curve. The higher and the further right a curve holds, the fewer and longer the pieces the assembly is made of.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   - component_type: interactive
     tag: mg-filter-ladder-rung
@@ -674,12 +620,12 @@ tabs:
     group: Assembly scope
     workflow_tag: mag
     data_collection_tag: length_ladder
-    interactive_component_type: Slider
+    interactive_component_type: RangeSlider
     column_name: min_contig_length
     column_type: int64
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
     placement: left
-    title: Ladder rung (bp)
+    title: Minimum contig length range (bp)
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: mg-filter-asm-n50
@@ -716,6 +662,7 @@ tabs:
 # ============================================================================
 - title: Contigs
   subtitle: Length against coverage for every contig of at least 1 kbp, once per sample whose reads were mapped back onto the assembly
+  advanced_viz_controls: header
   tab_order: 3
   tab_icon: mdi:chart-scatter-plot
   tab_icon_color: cyan
@@ -825,11 +772,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Every sample's reads were mapped back onto every assembly, so each contig
-      carries three depths. Contigs of one organism sit in a band of constant
-      depth, and a contig deep in one sample and flat in another belongs to
-      something only one of them carries. That difference is the whole reason
-      differential-coverage binning works.
+      Contigs of one organism sit in a band of constant depth, one band per
+      sample whose reads were mapped back. A contig deep in one sample and flat
+      in another is the differential-coverage signal the binners use.
     workflow_tag: mag
     data_collection_tag: contig_depths
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -865,32 +810,18 @@ tabs:
     tag: mg-ctg-dist-intro
     index: mg-ctg-dist-intro
     section: Depth distribution
-    title: Three samples over the same contigs
+    title: Each sample's reads over each assembly
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
       The same contigs, read as distributions rather than as points. A sample
-      whose histogram sits far left on another sample's assembly contributed
-      little to it, which is what makes a co-assembly worth binning across
-      samples in the first place.
+      whose box sits low on another sample's assembly contributed little to
+      it.
     workflow_tag: mag
     data_collection_tag: contig_depths
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: mg-ctg-fig-hist
-    index: mg-ctg-fig-hist
-    section: Depth distribution
-    workflow_tag: mag
-    data_collection_tag: contig_depths
-    use: mag/contig_depths
-    visu_type: histogram
-    dict_kwargs: {x: depth, color: read_sample}
-    title: Contig depth distribution per sample
-    description: How deeply each sample's reads cover the contigs of the selected assemblies.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: figure
     tag: mg-ctg-fig-box
     index: mg-ctg-fig-box
@@ -903,7 +834,7 @@ tabs:
     title: Contig depth by assembly and sample
     description: The cross-mapping matrix read as boxes, each assembly against each sample's reads.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
 
   - component_type: text
     tag: mg-rec-intro
@@ -915,13 +846,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The canonical figure here is a bin by sample depth heatmap, and its input
-      (GenomeBinning/depths/bins/) is not published by this run, nor is the
-      contig to bin membership. One level up is honest: each cell is an
-      assembly's length-weighted mean depth in one sample's reads. A bright
-      diagonal means the samples carry different organisms; a bright row means
-      the other samples also carry that assembly's organisms, which is when a
-      co-assembly would have paid off.
+      Each cell is an assembly's length-weighted mean depth in one sample's
+      reads. A bright diagonal means the samples carry different organisms; a
+      bright row means the other samples carry that assembly's organisms too,
+      which is when a co-assembly pays off.
     workflow_tag: mag
     data_collection_tag: assembly_recruitment
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -995,6 +923,7 @@ tabs:
 # ============================================================================
 - title: Bins
   subtitle: Completeness against contamination for the bins CheckM2 scored, and the assembly statistics that say whether a complete-looking bin is a genome or a pile of fragments
+  advanced_viz_controls: header
   tab_order: 4
   tab_icon: mdi:bacteria-outline
   tab_icon_color: indigo
@@ -1038,8 +967,8 @@ tabs:
     title: Bins scored
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: mg-bin-card-completeness
-    index: mg-bin-card-completeness
+    tag: mg-bin-card-n50
+    index: mg-bin-card-n50
     section: Bins at a glance
     workflow_tag: mag
     data_collection_tag: checkm2_quality_report
@@ -1047,16 +976,16 @@ tabs:
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: completeness
-    column_type: float64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    column_name: contig_n50
+    column_type: int64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Completeness
+    title: Bin contig N50
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: mg-bin-card-contamination
-    index: mg-bin-card-contamination
+    tag: mg-bin-card-size
+    index: mg-bin-card-size
     section: Bins at a glance
     workflow_tag: mag
     data_collection_tag: checkm2_quality_report
@@ -1064,12 +993,12 @@ tabs:
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: contamination
-    column_type: float64
-    display: {icon_name: 'mdi:alert-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    column_name: genome_size
+    column_type: int64
+    display: {icon_name: 'mdi:ruler', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Contamination
+    title: Bin size
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     tag: mg-bin-card-score
@@ -1100,13 +1029,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Completeness on the x axis, contamination on the y axis, one point per
-      bin, sized by the bases it holds. The lines sit at the MIMAG high-quality
-      cut, 90 percent complete and under 5 percent contaminated, so the bottom
-      right quadrant holds the bins worth naming; anything above 10 percent
-      contamination is a chimera whatever its completeness says. Colour is the
-      binner, so the spread between five binners on the same assembly is
-      readable directly.
+      The bottom right quadrant, at least 90 percent complete and under 5
+      percent contaminated, holds the bins worth naming. Colour is the binner,
+      so compare how many of each binner's bins reach it on the same
+      assemblies.
     workflow_tag: mag
     data_collection_tag: checkm2_quality_report
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1147,6 +1073,8 @@ tabs:
       opacity: 0.75
       legend_pos: right
       controls_placement: header
+      selection_enabled: true
+      selection_column: bin_id
     title: Contiguity against completeness
     description: A bin with a high completeness and a low N50 carries the right genes on hundreds of fragments, which is not the same object as a closed genome.
     title_size: h3
@@ -1175,9 +1103,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      QUAST ran on every bin, CheckM2 on the subset that passed its own input
-      checks, so this section is the wider set. The numbers here are
-      measurements of the FASTA rather than predictions from its gene content.
+      QUAST measures every bin's FASTA rather than predicting from its gene
+      content. The quality filters of this tab narrow these rows to the bins
+      CheckM2 scored.
     workflow_tag: mag
     data_collection_tag: quast_bins_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1196,8 +1124,10 @@ tabs:
       opacity: 0.75
       legend_pos: right
       controls_placement: header
+      selection_enabled: true
+      selection_column: bin_id
     title: Bin length against contig N50
-    description: One point per bin, sized by contig count. The long-read binners sit an order of magnitude higher on the N50 axis.
+    description: One point per bin, sized by contig count. Bins high on the N50 axis are made of few long pieces.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: table
@@ -1207,7 +1137,8 @@ tabs:
     workflow_tag: mag
     data_collection_tag: quast_bins_summary
     use: quast/bins_summary
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: bin_id
     title: Per-bin assembly statistics
     description: Every bin QUAST measured, with its contigs, length, N50 and GC.
     title_size: h3
@@ -1264,6 +1195,7 @@ tabs:
 # ============================================================================
 - title: Taxonomy
   subtitle: What GTDB-Tk calls the bins that passed its thresholds, and how differently each binner recovered the same community
+  advanced_viz_controls: header
   tab_order: 5
   tab_icon: mdi:family-tree
   tab_icon_color: green
@@ -1274,7 +1206,7 @@ tabs:
   - name: Taxonomy scope
     icon: mdi:tune
     color: green
-    description: Narrow the placements by phylum, by rank and by how GTDB-Tk made the call
+    description: Narrow the placements by phylum and by how GTDB-Tk made the call
   grid_sections:
   - name: Placements at a glance
     icon: mdi:counter
@@ -1364,16 +1296,15 @@ tabs:
     tag: mg-tax-intro
     index: mg-tax-intro
     section: What was recovered
-    title: A few phyla, and a long tail that never got a name
+    title: What the bins are
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      GTDB-Tk only runs on the bins that pass its completeness and
-      contamination thresholds, so a minority of the recovered bins are placed
-      here. That is a filter, not a failure: the ones that are missing are the
-      ones the Bins tab already shows as low quality or contaminated.
+      GTDB-Tk only places the bins that pass its completeness and contamination
+      thresholds, so the bins missing here are the low-quality ones of the Bins
+      tab. Pick the rank in the header of the composition tile.
     workflow_tag: mag
     data_collection_tag: gtdbtk_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1402,14 +1333,15 @@ tabs:
     data_collection_tag: gtdbtk_rank_composition
     use: gtdbtk/recovered_community
     config:
-      default_rank: phylum
+      default_rank: genus
       top_n: 12
+      sort_by: abundance
       normalise_to_one: true
       sample_sort: input
       show_legend: true
       controls_placement: header
     title: The community each binning run recovered
-    description: One bar per assembler, binner and sample, composed of the bins it placed. The rank dropdown moves from phylum down to genus.
+    description: One bar per assembler, binner and sample, as the percentage of its placed bins in each taxon. The rank picker in the header moves between ranks.
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 7}
 
@@ -1463,6 +1395,8 @@ tabs:
       reference_line: vertical
       reference_value: 95
       controls_placement: header
+      selection_enabled: true
+      selection_column: bin_id
     title: How confidently each bin was named
     description: The line marks 95 percent identity, the GTDB species boundary. Points to its left were named above species level.
     title_size: h3
@@ -1474,7 +1408,8 @@ tabs:
     workflow_tag: mag
     data_collection_tag: gtdbtk_summary
     use: gtdbtk/summary
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: bin_id
     title: Bin taxonomy
     description: Every placed bin with its full lineage, its closest reference and how the call was made.
     title_size: h3
@@ -1496,20 +1431,6 @@ tabs:
     title: Phylum
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: mg-filter-tax-rank
-    index: mg-tax-rank-filter
-    section: Taxonomy scope
-    group: Taxonomy scope
-    workflow_tag: mag
-    data_collection_tag: gtdbtk_rank_composition
-    interactive_component_type: Select
-    column_name: rank
-    column_type: object
-    display: {title_size: md, custom_color: '#7CB342', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Rank
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
     tag: mg-filter-tax-method
     index: mg-tax-method-filter
     section: Taxonomy scope
@@ -1529,6 +1450,7 @@ tabs:
 # ============================================================================
 - title: Annotation
   subtitle: What Prokka found in each bin, and the ribosomal and transfer RNA counts that decide the half of the MIMAG standard completeness cannot answer
+  advanced_viz_controls: header
   tab_order: 6
   tab_icon: mdi:file-document-outline
   tab_icon_color: orange
@@ -1633,10 +1555,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Bacterial genomes carry roughly 900 coding sequences per megabase, and
-      that ratio barely moves between lineages. A bin far above it is carrying
-      a duplicated region or a second organism; a bin far below it is carrying
-      sequence that is not a genome at all.
+      Prokaryotic genomes carry roughly 900 coding sequences per megabase. A bin
+      far above that line carries a duplicated region or a second organism, a
+      bin far below it carries sequence that is not a genome.
     workflow_tag: mag
     data_collection_tag: prokka_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1656,6 +1577,8 @@ tabs:
       reference_line: horizontal
       reference_value: 900
       controls_placement: header
+      selection_enabled: true
+      selection_column: bin_id
     title: Gene density against bin size
     description: The line is the roughly 900 coding sequences per megabase a prokaryotic genome carries. Distance from it is how unlike a genome the bin is.
     title_size: h3
@@ -1684,11 +1607,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      A high-quality MIMAG draft needs the 5S, 16S and 23S ribosomal RNAs and
-      at least 18 transfer RNAs on top of 90 percent completeness and under 5
-      percent contamination. Ribosomal RNA operons are repetitive and assemble
-      badly, so bins that look finished on the completeness axis routinely fail
-      here, and only an annotation step can tell.
+      A high-quality MIMAG draft needs the 5S, 16S and 23S ribosomal RNAs and at
+      least 18 transfer RNAs on top of its completeness and contamination.
+      Ribosomal operons assemble badly, so look here for bins that look
+      finished on the completeness axis but fail on RNA.
     workflow_tag: mag
     data_collection_tag: prokka_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1707,6 +1629,8 @@ tabs:
       reference_line: vertical
       reference_value: 18
       controls_placement: header
+      selection_enabled: true
+      selection_column: bin_id
     title: Transfer RNAs against ribosomal RNAs
     description: The line marks the MIMAG floor of 18 transfer RNAs. Points on the bottom row carry no ribosomal RNA at all and cannot be high-quality drafts.
     title_size: h3
@@ -1718,7 +1642,8 @@ tabs:
     workflow_tag: mag
     data_collection_tag: prokka_summary
     use: prokka/summary
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: bin_id
     title: Annotation summary
     description: Every annotated bin with its feature counts, its gene density and whether it meets the MIMAG RNA criteria.
     title_size: h3
@@ -1775,7 +1700,8 @@ tabs:
 # Bin detail
 # ============================================================================
 - title: Bin detail
-  subtitle: The four tools joined into one row per bin, the MIMAG tier that follows from all of them together, and the locus map of a bin you pick
+  subtitle: The four tools joined into one row per bin, the MIMAG tier that follows from all of them together, and the record and locus map of a bin you pick
+  advanced_viz_controls: header
   tab_order: 7
   tab_icon: mdi:microscope
   tab_icon_color: grape
@@ -1792,31 +1718,33 @@ tabs:
     icon: mdi:counter
     color: grape
     description: The joined table's headline numbers
-  - name: The bin summary
-    icon: mdi:set-merge
-    color: grape
-    description: CheckM2, QUAST, GTDB-Tk and Prokka in one row per bin
   - name: Locus map
     icon: mdi:chart-timeline-variant
     color: violet
-    description: Where the genes sit along the contigs of one bin
+    description: Where the genes sit along the contigs of the picked bin
+  - name: Bin detail
+    icon: mdi:set-merge
+    color: grape
+    description: CheckM2, QUAST, GTDB-Tk and Prokka in one row per bin, and the record of the bin you pick
   components:
   - component_type: card
-    tag: mg-det-card-bins
-    index: mg-det-card-bins
+    tag: mg-det-card-hq
+    index: mg-det-card-hq
     section: Bin detail at a glance
     workflow_tag: mag
     data_collection_tag: bin_summary
-    use: mag/mimag_donut
+    use: mag/bin_summary
     aggregation: nunique
     column_name: bin_id
     column_type: object
-    secondary_layout: donut
-    breakdown_col: mimag_tier
-    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    filter_expr: "col('mimag_tier') == 'High quality draft'"
+    secondary_layout: top_n
+    breakdown_col: binner
+    top_n_count: 5
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Bins in the join
+    title: High-quality drafts
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     tag: mg-det-card-sources
@@ -1854,8 +1782,8 @@ tabs:
     title: Best bin score
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: mg-det-card-phyla
-    index: mg-det-card-phyla
+    tag: mg-det-card-rna
+    index: mg-det-card-rna
     section: Bin detail at a glance
     workflow_tag: mag
     data_collection_tag: bin_summary
@@ -1863,116 +1791,15 @@ tabs:
     aggregation: nunique
     column_name: bin_id
     column_type: object
+    filter_expr: "col('meets_mimag_rna') == True"
     secondary_layout: top_n
-    breakdown_col: phylum
+    breakdown_col: assembler
     top_n_count: 5
-    display: {icon_name: 'mdi:family-tree', icon_color: '#43A047', title_color: '#43A047', title_font_size: xl, value_font_size: xl}
+    display: {icon_name: 'mdi:dna', icon_color: '#43A047', title_color: '#43A047', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Bins per phylum
+    title: Bins with their RNAs
     layout: {x: 6, y: 0, w: 2, h: 2}
-
-  - component_type: text
-    tag: mg-det-intro
-    index: mg-det-intro
-    section: The bin summary
-    title: One row per bin, four tools deep
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      nf-core/mag has a process that writes exactly this table and this run did
-      not publish it, so Depictio rebuilds the join from the four tool outputs.
-      The tools see different bins, so sources_present counts how many of the
-      four reported on each row: a bin with a taxon and no CheckM2 score is a
-      real state of the run, not a missing value. Click a bin on the scatter to
-      read its whole row in the card beside it; the card opens on a
-      high-quality Klebsiella pneumoniae draft until you do.
-    workflow_tag: mag
-    data_collection_tag: bin_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: mg-det-av-mimag
-    index: mg-det-av-mimag
-    section: The bin summary
-    workflow_tag: mag
-    data_collection_tag: bin_summary
-    use: mag/mimag_scatter
-    config:
-      x_title: Completeness (%)
-      y_title: Contamination (%)
-      quadrants:
-        x: 90
-        y: 5
-        labels: [Incomplete and contaminated, Complete but contaminated, Clean but incomplete, Near-complete and clean]
-      opacity: 0.8
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: bin_id
-      controls_placement: header
-    title: The MIMAG tiers
-    description: The same axes as the Bins tab, coloured by the full MIMAG tier rather than by completeness alone. A bin in the bottom right quadrant is a high-quality draft only if it also carries its ribosomal and transfer RNAs. Click a point to open its record.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 5, h: 9}
-  - component_type: advanced_viz
-    tag: mg-det-av-record
-    index: mg-det-av-record
-    section: The bin summary
-    workflow_tag: mag
-    data_collection_tag: bin_summary
-    viz_kind: record_card
-    config:
-      viz_kind: record_card
-      id_col: bin_id
-      title_col: bin_id
-      selection_source: any
-      default_record: SPAdes-MetaBAT2-CAPES_S7.15
-      sections:
-        Origin: [sample, assembler, binner]
-        Quality: [mimag_tier, quality_tier, completeness, contamination, quality_score, meets_mimag_rna]
-        Assembly: [total_length, n_contigs, n50, gc_percent]
-        Genes: [cds, cds_per_mbp, trna, rrna]
-        Lineage: [domain, phylum, class_name, order, family, genus, species, rank_assigned]
-        Coverage: [sources_present]
-      link_templates:
-        genus: 'https://gtdb.ecogenomic.org/searches?s=al&q={value}'
-        species: 'https://gtdb.ecogenomic.org/searches?s=al&q={value}'
-    title: Bin record
-    description: Everything the four tools say about the picked bin, with its genus and species linked to GTDB. Clearing the selection returns to the default bin.
-    title_size: h3
-    layout: {x: 5, y: 2, w: 3, h: 9}
-  - component_type: advanced_viz
-    tag: mg-det-av-sankey
-    index: mg-det-av-sankey
-    section: The bin summary
-    workflow_tag: mag
-    data_collection_tag: bin_summary
-    use: mag/binner_phylum_flow
-    config:
-      value_col: total_length
-      value_label: binned bases
-      value_format: count
-      color_mode: source
-      link_opacity: 0.45
-      sort_mode: total_flow
-    title: Assembler to binner to phylum, weighted by binned bases
-    description: The same flow as the Taxonomy tab, weighted by bases rather than by bins, so one long-read genome does not count the same as one fragment.
-    title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
-  - component_type: table
-    tag: mg-det-table
-    index: mg-det-table
-    section: The bin summary
-    workflow_tag: mag
-    data_collection_tag: bin_summary
-    use: mag/bin_summary
-    row_selection_enabled: true
-    title: Bin summary
-    description: Every bin with its quality, assembly statistics, gene content and lineage. Selecting a row carries the bin to the locus map below.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 18, w: 8, h: 7}
 
   - component_type: text
     tag: mg-det-locus-intro
@@ -1984,15 +1811,13 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Prokka renames every contig it annotates, so these coordinates are
-      meaningful inside the bin and join to nothing outside it. Pick a bin in
-      the left panel: the arrows are its coding sequences, transfer RNAs and
-      ribosomal RNAs in the order they sit on the contig. Only the METAMDBG
-      bins are covered, because a Prokka GFF carries the bin's whole sequence
-      and fetching all of them would be 1.1 GB.
+      Pick a bin in the left panel or in the bin table: the arrows are its
+      coding sequences, transfer RNAs and ribosomal RNAs in contig order.
+      Prokka renames contigs, so these coordinates are only meaningful inside
+      the bin.
     workflow_tag: mag
     data_collection_tag: prokka_gene_track
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: mg-det-av-locus
     index: mg-det-av-locus
@@ -2027,12 +1852,99 @@ tabs:
     workflow_tag: mag
     data_collection_tag: prokka_gene_track
     use: prokka/gene_track
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: feature_id
     title: Annotated features
     description: Every feature of the selected bins, with its coordinates, gene symbol and product.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 17, w: 8, h: 7}
+
+  - component_type: text
+    tag: mg-det-intro
+    index: mg-det-intro
+    section: Bin detail
+    title: One row per bin, four tools deep
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per bin, joining CheckM2, QUAST, GTDB-Tk and Prokka; tools per
+      bin counts how many of the four reported on it. Select a row to read the
+      whole bin in the record card beside the table and to draw its locus map
+      above.
+    workflow_tag: mag
+    data_collection_tag: bin_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: mg-det-av-record
+    index: mg-det-av-record
+    section: Bin detail
+    workflow_tag: mag
+    data_collection_tag: bin_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: bin_id
+      title_col: bin_id
+      selection_source: table_selection
+      sections:
+        Quality: [mimag_tier, quality_tier, completeness, contamination, quality_score, meets_mimag_rna]
+        Origin: [sample, assembler, binner]
+        Assembly: [total_length, n_contigs, n50, gc_percent]
+        Genes: [cds, cds_per_mbp, trna, rrna]
+        Lineage: [domain, phylum, class_name, order, family, genus, species, rank_assigned]
+        Coverage: [sources_present]
+      labels:
+        mimag_tier: MIMAG tier
+        quality_tier: CheckM2 band
+        completeness: Completeness (%)
+        contamination: Contamination (%)
+        quality_score: Quality score
+        meets_mimag_rna: Meets MIMAG RNA
+        sample: Sample
+        assembler: Assembler
+        binner: Binner
+        total_length: Bin size (bp)
+        n_contigs: Contigs
+        n50: Contig N50 (bp)
+        gc_percent: GC (%)
+        cds: Coding sequences
+        cds_per_mbp: Coding sequences per Mbp
+        trna: Transfer RNAs
+        rrna: Ribosomal RNAs
+        domain: Domain
+        phylum: Phylum
+        class_name: Class
+        order: Order
+        family: Family
+        genus: Genus
+        species: Species
+        rank_assigned: Deepest rank named
+        sources_present: Tools per bin
+      link_templates:
+        genus: 'https://gtdb.ecogenomic.org/searches?s=al&q={value}'
+        species: 'https://gtdb.ecogenomic.org/searches?s=al&q={value}'
+      linked_component: mg-det-table
+    title: Bin record
+    description: Everything the four tools say about the bin selected in the table beside it, with its genus and species linked to GTDB.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 8}
+  - component_type: table
+    tag: mg-det-table
+    index: mg-det-table
+    section: Bin detail
+    workflow_tag: mag
+    data_collection_tag: bin_summary
+    use: mag/bin_summary
+    row_selection_enabled: true
+    title: Bin summary
+    row_selection_column: bin_id
+    description: Every bin with its quality, assembly statistics, gene content and lineage. Selecting a row opens its record and its locus map.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 5, h: 8}
 
   - component_type: interactive
     tag: mg-filter-det-tier

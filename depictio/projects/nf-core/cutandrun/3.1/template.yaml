@@ -53,10 +53,15 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing cutandrun output (01_prealign/, 02_alignment/, 03_peak_calling/, 04_reporting/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the
-  # samplesheet is part of the run's own pipeline_info/ output.
+    - name: "GENOME"
+      description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=<assembly> for a run on another build."
+      required: false
+      default: "hg38"
+  # The bundled reference dataset: the samplesheet is part of the run's own
+  # pipeline_info/ output, and the megatest was aligned to hg38.
   reference:
-    vars: {}
+    vars:
+      GENOME: "hg38"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -535,6 +540,7 @@ workflows:
               "fraction": "Share of the sample's fragments in that class"
               "median_length": "Median fragment length inside the class, in bp"
               "mono_to_sub": "Mononucleosomal over sub-nucleosomal fragments, one value per sample"
+              "sample_median_length": "Median fragment length of the whole sample, weighted by fragment count; one value per sample"
 
       # ----------------------------------------------------------------
       # FRiP. SEACR reports no read count, so the fraction is built in base

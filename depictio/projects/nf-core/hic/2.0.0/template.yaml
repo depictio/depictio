@@ -57,7 +57,7 @@
 # (compartments) or per window (insulation) rather than mixing bin sizes.
 #
 # ONE REGION ACROSS FOUR COLLECTIONS.
-# The Contact maps tab is a locus section: a genome_view on `tad_domains`
+# The Contact maps tab is the locus tab: a genome_view on `tad_domains`
 # emits a chromosome + position region (brush, locus field or its
 # default_region), and the `region` links at the end of this file rename it
 # onto the matrix (chrom1 / start1), the insulation track and the compartment
@@ -75,8 +75,14 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing hic output (compartments/, contact_maps/, distance_decay/, fastqc/, hicpro/stats/, tads/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run was mapped to (hg38, hg19, mm10, mm39, ...). Lays out the genomic axis of the Contact maps tracks; pass the UCSC spelling, not an iGenomes key such as GRCm38."
+      required: false
+      default: "hg38"
+  # The bundled reference run is mouse (mm10).
   reference:
-    vars: {}
+    vars:
+      GENOME: "mm10"
   provenance:
     sources:
       - name: "software_versions"

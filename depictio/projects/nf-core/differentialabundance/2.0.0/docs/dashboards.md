@@ -2,7 +2,8 @@
 
 This template turns the output of
 [nf-core/differentialabundance](https://nf-co.re/differentialabundance) 2.0.0 into one
-interactive Depictio dashboard with four tabs. The pipeline runs DESeq2 over a count
+interactive Depictio dashboard with four tabs: Samples, Differential expression, Genome
+view and Enrichment. The pipeline runs DESeq2 over a count
 matrix and a contrast sheet; the template surfaces the per-contrast statistics, the gene
 annotation joined onto them, and the variance-stabilised sample space the pipeline uses
 for its own exploratory plots.
@@ -34,8 +35,8 @@ s3://nf-core-awsmegatests/differentialabundance/results-30ed7741fc392127156c2fb1
 **The second contrast is deliberately kept.** A real analysis often returns nothing, and a
 dashboard has to say so rather than look broken. Its volcano is a symmetric cloud with no
 labelled points, its DA-barplot panel is empty, and its `_filtered` table on disk is a
-header with no rows. The dashboard text says this in as many words on the Differential
-expression tab.
+header with no rows. The barplot description on the Differential expression tab says what an
+empty panel means.
 
 This run was launched with two parameter sets at once, so every table sits one directory
 deeper than a normal run
@@ -49,145 +50,120 @@ template absorbs the difference: its scans match on file name and its recipe glo
 
 Is the experiment sound before any contrast is read?
 
-* **Study at a glance**: cohort size split by group (donut), the DESeq2 size-factor
-  distribution (Tukey box plot), the group census (top 3) and the largest size factor
-  against a 1.5 ceiling (threshold strip).
+* **Run at a glance** (pinned, every tab): samples split by group (donut), contrasts,
+  features tested and the DESeq2 size-factor distribution (median with a Tukey box plot).
 * **Sample space**: the sample PCA on the 500 most variable features, coloured by the
   sheet's leading factor with group centroids, then the Euclidean sample-to-sample
   distance matrix with dendrograms on both axes, then the per-sample expression
-  distributions. Lassoing the PCA carries those samples to the distance matrix, to the
-  variance-stabilised heatmap on the Expression tab and to the distributions, through the
-  PCA's own outgoing links.
+  distributions. Lassoing the PCA carries those samples to the distance matrix, the
+  variance-stabilised heatmap and the distributions, through the PCA's own outgoing links.
 
   The distribution panel is the one a PCA cannot replace. A PCA says which libraries
   differ; a density curve says whether a library is *shaped* like the others at all, which
-  is the question behind a normalisation problem. Every sample is binned on one shared
-  grid, so the curves stack and a shifted or short-tailed library shows up as a curve out
-  of the bundle rather than as a point off the cloud. Features at the matrix floor are
-  excluded from the grid, because the spike they form is tall enough to flatten everything
-  else, and published as a share on its own card instead.
+  is the question behind a normalisation problem. Features at the matrix floor are
+  excluded from the shared grid and published as a share on their own.
+* **Top variable features**: the 500 most variable features, row z-scored, clustered on
+  both axes. It moved here from the former Expression tab. The matrix has no contrast
+  column, so the pinned `Contrast scope` does not reach it.
 
 #### Filtering by more than one factor
 
-A study is rarely one factor, and until this pass only the leading one had a control: the
-rest were visible in the observation sheet and unfilterable. The ingest recipe now
-publishes the next three factor-like columns of the sheet under stable names (`factor_2`,
-`factor_3`, `factor_4`), so the persistent left rail can carry a control for each without
-the template having to know what any given run's sheet calls them. A column with more
-levels than a reader can pick from is skipped rather than turned into a dead control, and
-each alias carries its source column name alongside it (`factor_2_name` and friends), so a
-panel can say which sheet column it is actually filtering. Every column also keeps its own
-sanitised name in the sheet, so nothing is hidden by the aliasing.
+The ingest recipe publishes the next three factor-like columns of the sheet under stable
+names (`factor_2`, `factor_3`, `factor_4`), so the persistent `Sample scope` can carry a
+control for each without the template knowing what a given run's sheet calls them. All
+three columns are always present: a sheet with fewer factors gets null values and the name
+`none` in `factor_n_name`, so a one-factor study ingests against the same schema. Each alias
+carries its source column name alongside it, and every column also keeps its own sanitised
+name in the sheet.
 
 ![Samples](screenshots/samples.png)
 
-
-
-
 ### 2. Differential expression
 
-* **Calls at a glance**: features tested with the up/down/not-significant split (top 3),
-  the log2 fold-change spread, the call composition, and the strongest signal on a gauge
-  scaled to 300 (`-log10(padj)`; see the cap note below).
-* **Volcano and MA**: one `deseq2/volcano` tile with a view switch in its header
-  (`views: [volcano, ma]`), cut at the pipeline's own thresholds (padj 0.05, two-fold
-  change). The MA view reads `log2_base_mean` on x.
+All tab-local controls sit in one `Call scope` section (direction, biotype, thresholds).
+
+* **Calls at a glance**: the up/down/not-significant split per contrast, the log2
+  fold-change spread, the call composition, the median significance with a Tukey box plot
+  and the best adjusted p-value against 0.05 (warning at 0.1).
+* **Volcano, MA and QQ**: one `deseq2/volcano` tile with a view switch in its header
+  (`views: [volcano, ma, qq]`, `p_value_col: pvalue`), cut at the pipeline's own thresholds
+  (padj 0.05, two-fold change). The MA view reads `log2_base_mean` on x; the QQ view draws
+  the raw p-values against the uniform null with a confidence band and the identity line.
+  The separate QQ tile is gone.
 * **Test diagnostics**: the raw p-value histogram, one panel per contrast (flat with a
-  spike at zero is a well-specified test), beside the same volcano tile opened on its QQ
-  view against the uniform null, and below them a code-mode scatter
-  that pairs the first two contrasts (by id) gene by gene. That tile needs a per-contrast reshape, which
-  is why it is the one figure written in code rather than UI mode. Selecting a point
-  carries its `gene_id` to the annotated table and to the pinned results table.
-* **Gene table**: the annotated calls with row selection on `gene_id`, the other half of
-  the selection pair, above a gene record (`record_card`) that follows the selection, one
-  card per contrast, and opens on Uchl1. The Ensembl identifier links out through
-  `https://www.ensembl.org/id/`.
+  spike at zero is a well-specified test), and a code-mode scatter that pairs the first two
+  contrasts gene by gene. Selecting a point carries its `gene_id` to the annotated table
+  and to the pinned results table.
+* **Effect by biotype** (moved from the former Expression tab): the biotype intro,
+  `deseq2/annotated_da_barplot` (the largest effect sizes per contrast, one panel per
+  contrast, so a null contrast reads as an empty panel) and a box plot of effect size
+  within each biotype.
+* **Gene detail**: the annotated calls with row selection on `gene_id` and, beside them, a gene
+  record (`record_card`, `linked_component` on the table) that stays a thin rail until a row
+  is picked, then follows the selection. The Ensembl identifier links
+  out through `https://www.ensembl.org/id/`.
 
 ![Differential expression](screenshots/differential-expression.png)
 
+### 3. Genome view
 
-
-
-### 3. Expression
-
-* **Annotation at a glance**: biotype census (concentration strip), annotated genes by
-  direction, and mean significance on a coverage bar gauged against the significance
-  cut-off itself, `-log10(0.05)` = 1.301. The cut-off is the reference that makes the
-  bar readable: gauged against the largest value in the table instead, a mean of about
-  1 draws an empty bar.
-* **Top variable features**: the 500 most variable features, row z-scored, clustered on
-  both axes. The matrix has no contrast column, so the pinned `Contrast scope` does not reach it.
-* **Effect by biotype**: `deseq2/annotated_da_barplot` (the 15 largest effect sizes per
-  contrast, one panel per contrast, so the null contrast reads as an empty panel) beside a
-  UI-mode box plot of effect size within each biotype.
-
-![Expression](screenshots/expression.png)
-
-
-
-### 4. Genome view
+`Region scope` and `Signal scope` are open by default.
 
 * **Calls on the genome**: genes placed by direction, the chromosome census, the
   significance spread and the best adjusted p-value against a 0.05 cut-off.
 * **Signal along the genome**: the Manhattan plot, height `-log10(padj)`, threshold line
   at padj 0.05, selectable by `gene_id`.
 * **Per-chromosome detail**: the lollipop panel gives each contrast a lane and each gene a
-  head at its start coordinate, coloured by direction, sized by significance and labelled
-  for the strongest calls in each lane (pick a chromosome in the left panel first, since
-  coordinates from different contigs otherwise share one axis), above the volcano redrawn
-  with gene symbols and coloured by biotype.
+  head at its start coordinate, coloured by direction and sized by significance (pick a
+  chromosome first, since coordinates from different contigs otherwise share one axis).
+  The annotated volcano that used to sit below it duplicated the DE volcano and is gone.
 
 ![Genome view](screenshots/genome-view.png)
 
-
-
-
-### 5. Enrichment
+### 4. Enrichment
 
 Which gene sets moved, and how much of each set carries the movement.
 
 GSEA runs pre-ranked over the DESeq2 statistics and publishes one report per **pole** of
-each contrast, so a two-contrast run produces four report tables. Neither the contrast nor
-the pole is a column of any of them: both live only in the file name, so the recipe
-recovers them from the path and stacks every report into one frame. That is why each panel
-here splits on `phenotype` as well as on `contrast`; a set enriched at one pole and a set
-enriched at the other are the two ends of one comparison, not two findings.
+each contrast. Neither the contrast nor the pole is a column of any report: both live only
+in the file name, so the recipe recovers them from the path and stacks every report into
+one frame. That is why each panel splits on `phenotype` as well as on `contrast`.
 
 * **Enrichment at a glance**: sets reported with their split by pole, the strongest
-  normalised enrichment score as a Tukey box plot, the median FDR against a 0.05 cut-off,
-  and the mean leading-edge share on a gauge.
+  absolute normalised enrichment score (the recipe adds an `abs_nes` column, so a strongly
+  negative set counts as strong), the median FDR against a 0.05 cut-off, and the leading-edge
+  share as a median with a Tukey box plot.
 * **Enriched sets**: one dot per set on its normalised enrichment score, sized by how many
-  of its genes were found in the ranked list and coloured by significance. This is the
-  `dot_plot` kind on its `enrichment` view, with colour and sort in the tile header.
-* **Scores side by side**: the same scores as bars grouped by contrast, which is the view
-  that answers whether a set moved in both comparisons or only one.
-* **Set table**: one row per set and pole, selectable.
+  of its genes were found in the ranked list and coloured by significance.
+* **Scores side by side**: the same scores as bars grouped by contrast, which answers
+  whether a set moved in both comparisons or only one.
+* **Set table** (collapsed): one row per set and pole, selectable.
 
-Two details the panel makes explicit rather than leaving to be rediscovered. Read the
-**normalised** enrichment score, not the raw one: normalising for set size is what makes a
-set of twenty comparable with a set of two hundred. And an FDR q-value of zero is what GSEA
-writes for anything below its own resolution, so the significance axis is clipped at the
-smallest q-value the run actually resolved rather than sent to infinity.
+Read the **normalised** enrichment score, not the raw one: normalising for set size is what
+makes a set of twenty comparable with a set of two hundred. An FDR q-value of zero is what
+GSEA writes for anything below its own resolution, so the significance axis is clipped at
+the smallest q-value the run actually resolved.
 
-The contrast picked on the Differential expression tab reaches this tab through a link on
-`contrast`, so the enrichment panels follow the comparison being read rather than showing
-every contrast at once.
+### Sample sheet (pinned, every tab)
 
-
-
-
-### Observation sheet (pinned, every tab)
-
-Every column of the pipeline's `--input` sheet with the DESeq2 size factor joined on,
-collapsed by default and pinned to the top of every tab. The template binds `sample_id`,
-`group` and `size_factor` by name and keeps whatever else the sheet carried, so the
-covariates a contrast was blocked on are readable here even though no tile is bound to
-them.
+Formerly `Observation sheet`. Every column of the pipeline's `--input` sheet with the DESeq2
+size factor joined on, collapsed by default, persistent and pinned to every tab. The
+template binds `sample_id`, `group` and `size_factor` by name and keeps whatever else the
+sheet carried.
 
 ### Reference tables (pinned, every tab)
 
 The full DESeq2 result set, collapsed by default and pinned to the bottom of every tab. The
 results table carries row selection on `gene_id`.
+
+## Cross-selection
+
+A picked row or point becomes a dashboard filter that narrows the other tiles of its
+collection and follows the project links to the collections they reach. The pinned sample
+sheet selects on `sample_id` and so narrows the PCA, the distance matrix and the VST
+panels; the PCA selects on `sample_id` too. The results tables, the contrast-against-contrast
+scatter and the manhattan panel select on `gene_id`, and the GSEA table on `term`. The VST
+distribution profile does not select: its collection has no outgoing link.
 
 ## Reading notes
 
@@ -207,7 +183,7 @@ results table carries row selection on `gene_id`.
   samples, so the differential tables have no sample column and nothing to filter on.
 * **The contrast is a second pinned scope.** `Contrast scope` is sourced on
   `deseq2_results.contrast` and persistent, so one pick narrows the Differential expression,
-  Expression, Genome view and Enrichment tabs at once: the template carries it onto the
+  Genome view and Enrichment tabs at once: the template carries it onto the
   annotated table (`deseq2_results -> deseq2_results_annotated` on `contrast`) and onto the
   GSEA report. The tabs keep only their own local controls (direction, biotype, chromosome,
   pole, thresholds).

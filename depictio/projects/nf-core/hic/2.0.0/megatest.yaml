@@ -63,6 +63,22 @@ keys:
   - distance_decay/*.tsv
   - distance_decay/*.csv
   - distance_decay/*.bedgraph
+# Megatest facts that must never appear in a dashboard text (lint rule e in
+# depictio/tests/models/test_template_conventions.py): the sample id, its SRA
+# runs, the organism and cell type, and the loci the review named.
+forbidden_terms:
+  - HIC_ES_4
+  - SRR5339783
+  - SRR5339784
+  - SRR5339785
+  - mESC
+  - ES cell
+  - ES cells
+  - mouse
+  - Mus musculus
+  - HoxD
+  - Hoxd
+  - mm10
 prefix_keys: []
 renames: {}
 post_fetch_help: |

@@ -284,3 +284,41 @@ ASV-level tree (MAFFT alignment → FastTree), tips = ASV identifiers, taxonomy 
 ### Still to verify live (needs the running stack + ingested data)
 - `run_16s_multi` Ordination "tax heatmap failed to render" (`complex_heatmap_canonical`) — a
   render-time failure; repro against the ingested delta table and fix the data-shape/empty case.
+
+## Wave 3 (2.18.0 only; 2.14.0 and 2.16.0 untouched)
+
+What changed in `2.18.0/dashboards/base.yaml` (and the regenerated `reference_extended.yaml`):
+
+- Family conventions: persistent pinned `Run at a glance` strip (samples by group, groups,
+  phyla detected, median Shannon), collapsed `Sample sheet` section (was `Sample metadata`,
+  whose text wrongly said "pinned to the bottom"), `advanced_viz_controls: header` on every tab.
+- The persistent Sample ID filter now reads `metadata.{METADATA_ID_COL}` (source of every
+  sample link). The six per-tab sample and group filters (Alpha, Community, Ordination) are
+  gone; a non-persistent `MultiQC report` section keeps a `multiqc_data` sample list for
+  runs without `--metadata`. Alpha gets a tab-local Shannon range filter.
+- Cards that restated the strip or said nothing were removed (Alpha sample count, Community
+  overview row incl. the median relative abundance, Ordination PCoA axis medians and counts).
+  Alpha glance: observed features, Faith PD, evenness, deepest rarefaction depth.
+- Differential: "FDR calls" (median q-value) replaced by "Enriched" (count,
+  `q_val < 0.05 & lfc > 0`); section renamed `Volcano & ranked effects` (no MA: no mean
+  abundance in `ancombc_results`, and the contrast filter does not reach `ma_canonical`);
+  `Taxon detail` section at the end: full-width results table (row selection on `id`) plus a
+  record card, no default record.
+- Community: phylum bar cut to the top 15 phyla in percent (h 6); Sankey removed (restated the
+  sunburst); UpSet annotated by `Phylum`; texts cut to what is drawn.
+- `dominant_habitat` removed from the tree colour options in base.yaml; the reference layer
+  (`build_reference_dashboard.py`) adds it back. Distance heatmap `Blues`.
+- SIDLE: genus bar top 15 + Other, garbled comment fixed, em dashes removed, filter
+  description no longer claims to reach the QC collection.
+- `megatest.yaml`: `forbidden_terms` = the 12 megatest sample ids (habitat values and the
+  catchment name stay allowed: the generated reference layer names them on purpose).
+
+Verified offline: shipped-YAML, conventions (top_n and intro-length rules now xpass), catalog
+and reference-dashboard drift tests; `depictio-cli run --dry-run` on `test/`; the two edited
+code figures executed on the seed TSVs.
+
+Still open: `.db_seeds` regeneration (main session); `sankey_canonical` and `ma_canonical`
+are ingested but read by no tile; the tree recipe still names its column `dominant_habitat`
+and picks the group column heuristically instead of reading `GROUP_COL`; the matrix kinds
+(`upset`, `bray_curtis`, `abundance_heatmap`) still carry seed-era `matrix_dc_id` values
+(import remap not verified); not checked live.

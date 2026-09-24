@@ -601,3 +601,37 @@ Commands and results:
   rescaled. The navigator itself stays at 9 920 rows (its chr9 rows, not narrowed by its own
   position filter) and its axis zoomed to about chr9:130.3-133.0 Mb rather than the exact
   window typed (CR-D22 reading: the navigator shows its chromosome, the tracks the region).
+
+## Wave 3 (2026-09-23)
+
+What changed:
+
+- `GENOME` template variable (default `hg38`, matching the megatest). The navigator, the
+  MACS2 and consensus tracks read `assembly: "{GENOME}"`, the fragment track
+  `locus_assembly: "{GENOME}"`.
+- New `Locus` tab (tab 5): four region cards, the four locus tiles moved out of Peaks, and a
+  `Locus scope` rail (SEACR coverage per base, MACS2 q-value, replicate support). Tabs renamed
+  `Peak calls` to `Peaks` and `Consensus and reproducibility` to `Consensus`.
+- `Cohort at a glance` (role, target, peaks called, FRiP) split from a collapsed `Sample
+  sheet`; replicate and role filters are MultiSelects.
+- New catalog column `seacr/fragment_classes.sample_median_length`, a fragment-weighted
+  median over the whole sample; the fragment-length card reads it. Fragment vrects are now the
+  0 to 120 and 120 to 250 bp windows, labelled.
+- FRiP card reads `frip` ("Lowest FRiP"); FRiP table moved to `Peak tables`; the fragment
+  pile-up moved to Peaks. SEACR density card is a histogram; width histograms use a log x
+  axis. MACS2 q threshold 1.3 (warn 1.0).
+- Removed the three MultiQC deepTools twins, the caller dot plot, the divergence share figure,
+  the class-share card and several redundant FRiP tiles. Every advanced viz has
+  `controls_placement: header`. Texts are generic; megatest names are `forbidden_terms`.
+
+Verified: lint clean (top_n and text_intro xpass), recipe tests including the new weighted
+median test, CLI dry run 8/8.
+
+Still open:
+
+- Conformance seeds for `seacr_fragment_classes` need regenerating (new column).
+- The gene lane stays `annotation: hg38` (the field is a Literal and rejects `{GENOME}`).
+- With a built-in assembly, alt and unplaced contigs are not drawn, and a locus typed on a
+  contig the assembly does not list can fail the GenomeSpy spec.
+- The region cards paint genome-wide until the navigator's default region lands (platform).
+- Live rendering not verified in this wave.

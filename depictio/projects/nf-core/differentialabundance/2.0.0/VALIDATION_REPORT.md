@@ -271,3 +271,38 @@ Discrepancies:
   Likewise `deseq2/ma` and `deseq2/qq` still exist as alias renders, now unused here.
 - DA-D2: no parallel-coordinates QC profile: the pipeline runs no MultiQC, and the samples
   sheet has one numeric column (size factor).
+
+## 2026-09-23: Wave 3 (bulk RNA family rework)
+
+What changed:
+
+- The DE tile is one `deseq2/volcano` with `views: [volcano, ma, qq]` and
+  `p_value_col: pvalue`. The separate QQ tile and the Genome view annotated volcano are
+  deleted.
+- `da-de-card-signal` is a median with a Tukey box plot; `da-de-card-tested` is gone
+  (features tested moved to the pinned `Run at a glance`); new `da-de-card-padj` (min
+  adjusted p-value, 0.05 threshold, warning at 0.1).
+- Enrichment NES card reads the new `gsea/report` column `abs_nes` and is titled
+  "Strongest NES (absolute)"; the leading-edge card is a median with a box plot.
+- `samples.py` always emits `factor_2..4` and their `_name` columns: missing factors are
+  null with the name `none`, so one-factor sheets ingest against the same schema.
+- The Expression tab is folded: the VST heatmap moved to a new `Top variable features`
+  section on Samples, the biotype views and filter moved to Differential expression.
+- Pinned, persistent `Run at a glance` (samples, contrasts, features tested, size factor)
+  and `Sample sheet` (renamed from `Observation sheet`, collapsed). Filter sections renamed
+  to `Sample scope`, `Library scope`, `Call scope`; the other scopes are open by default.
+- Prose made generic (no gene named, no default record); `forbidden_terms` added to
+  `megatest.yaml`.
+
+Verified (offline): template lint clean except a warn-only `no_mean_of_percentages` hint on
+the leading-edge card (it is a median of a percentage); shipped YAML and template
+convention tests pass; `samples.py` checked on the full sheet and on a one-factor sheet;
+`gsea/report` recipe tests pass; CLI dry run on the megatest 8/8.
+
+Still open:
+
+- No default contrast is set, so the DE volcano pools both contrasts until one is picked in
+  `Contrast scope`.
+- Volcano labels still read `gene_id`, not `gene_name` (S1 not done).
+- Live render not checked in this wave; screenshots are stale.
+- Conformance fixtures and `.db_seeds` need regenerating (main session).

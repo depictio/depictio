@@ -67,12 +67,36 @@ keys:
   #     same rearrangements as the repertoire-pass table above, before and
   #     after clone definition.
 prefix_keys: []
+# Megatest-specific values that must never appear in dashboard texts, titles or
+# defaults (checked by depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - SRR1383451
+  - SRR1383452
+  - SRR1383453
+  - SRR1383456
+  - SRR1383463
+  - SRR1383464
+  - SRR1383465
+  - SRR1383466
+  - SRR1383467
+  - SRR1383468
+  - M4
+  - M5
+  - Lymph_node
+  - lymph node
+  - Brain_lesion
+  - brain lesion
+  - sampling site
+  - uni_tue
+  - IGHJ4
+  - 12 to 16
 renames: {}
 post_fetch_help: |
   === Quick test commands ===
 
-  # The samplesheet is fetched with the run and the dashboard binds only the
-  # columns airrflow's samplesheet schema guarantees, so no --var is needed. The
+  # The samplesheet is fetched with the run. The design column defaults to
+  # GROUP_COL=treatment, which this run's samplesheet has; another run whose
+  # samplesheet names it differently passes --var GROUP_COL=<column>. The
   # route flags (SKIP_CLONAL_ANALYSIS, ASSEMBLED_MODE, ...) are not read from
   # params.json yet: pass them by hand if the run skipped a step.
 

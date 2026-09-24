@@ -83,8 +83,20 @@ keys:
   - bwa/mergedLibrary/macs/narrowPeak/consensus/*/deseq2/*/*.deseq2.FDR0.05.results.txt
   - bwa/mergedLibrary/macs/narrowPeak/consensus/*/deseq2/*_mqc.tsv
 prefix_keys: []
+# The megatest is aligned to hg19; the template's GENOME default is hg38, so
+# ingest it with --var GENOME=hg19 (the bundled reference sets it through
+# template.yaml reference.vars).
+# Megatest-specific names the dashboard texts must never carry (lint:
+# depictio/tests/models/test_template_conventions.py, rule e).
+forbidden_terms: [EZH2, FOXA1, NTKO, TKO, E2, VEH, TFF1, hg19, EZH2_IP, FOXA1_IP, EZH2_INPUT, FOXA1_INPUT]
 renames: {}
 post_fetch_help: |
+  === Design table ===
+
+  # The run's design (one condition per library) is vendored with the template;
+  # the reference seed reads it from {dest}/input/, so copy it there first:
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/chipseq/1.2.0/input/sample_metadata.tsv {dest}/input/
+
   === Reprocess MultiQC (the run wrote MultiQC 1.9, Depictio reads >= 1.31 parquet) ===
 
   python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
@@ -94,7 +106,9 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest} --dry-run
+  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest} --var GENOME=hg19 --dry-run \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest}
+  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest} --var GENOME=hg19 \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv

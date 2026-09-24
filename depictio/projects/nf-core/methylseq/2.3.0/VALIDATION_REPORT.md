@@ -411,224 +411,6 @@ infix, so every sample id on the `bismark_hisat` route would have kept the align
 to it. All five now match `bismark_[a-z0-9]+`, and the test suite pins both spellings.
 MS-D4 is closed by `bismark_binned_methylation`: the deduplicated bedGraph is now read.
 
-### MS-D10: screenshots are deferred, the dev viewer needs an image rebuild
-
-The lot 2 dev viewer on :5612 predates the `@genome-spy/core` install, so every
-`advanced_viz` tile fails with "Failed to fetch dynamically imported module" and the
-dashboard shell reports SERVER OFFLINE. It affects every tab of every project on this
-instance, not this template, and clearing it needs a viewer image rebuild that only the
-instance owner can run. The eight tabs were validated through the API instead: schema,
-bindings, `use:` resolution, per-collection row and column shapes, and the statistics
-above. Screenshots are the main session's to take after the rebuild; the tab ids are in
-the table below.
-
-## Snippets for shared files (not applied, see brief's hard rules)
-
-**`multiqc_stubs.py`**: no `bismark` builder exists yet, so
-`depictio/catalog/multiqc/bismark.yaml`'s fixture is the shared conformance parquet (matching
-`preseq.yaml`'s own approach), which carries no `bismark` section. `test_every_fixture_reads_
-and_grounds_its_renders` still passes because the `multiqc` component declares no `roles:` (no
-bound columns to check against); coverage-exemption tooling would need to key a `bismark`
-stub off `section.name` values from `multiqc.list_plots()` on the real parquet ("Alignment
-Rates", "Deduplication", "Strand Alignment", "Cytosine Methylation", and a 6-dataset "M-Bias"
-plot keyed `{"M-Bias": ["CpG R1", "CHG R1", "CHH R1", "CpG R2", "CHG R2", "CHH R2"]}`).
-A parser-valid stub needs, per sample: a Bismark alignment report
-(`<sample>_bismark_bt2_PE_report.txt`), a deduplication report
-(`<sample>_bismark_bt2_pe.deduplication_report.txt`), a splitting report
-(`<sample>_bismark_bt2_pe.deduplicated_splitting_report.txt`) and an M-bias file
-(`<sample>_bismark_bt2_pe.deduplicated.M-bias.txt`, all 6 sections), the four real-file
-excerpts in `depictio/catalog/bismark/*.py`'s docstrings are ready-made templates for the four
-builder functions.
-
-**`.gitignore`**: no new lines needed; nothing this template writes falls outside the existing
-patterns (no BAM/FASTQ/bedGraph is committed).
-
-**`TEMPLATE_BOTTLENECKS.md` §10 row:**
-`| methylseq | 2.3.0 | Bismark | bismark (4 outputs, new) | multiqc/bismark (new) | Bismark reports are prose + Key:Value, not tables: raw-scan-as-lines + regex idiom used for all 4 outputs |`
-
-**`MEGATEST_STATUS.md` row:**
-`| methylseq | 2.3.0 | bismark | fetched, MultiQC-reprocessed to 1.35, template + dashboard built, dry-run validated | preseq mostly failed on this run (6/7 samples); no picard_metrics |`
-
-**`VALIDATION_SCENARIOS.md` section (draft):**
-```
-## nf-core/methylseq 2.3.0
-
-- **M1 (default).** Bismark route, both cell lines present. Every collection populated,
-  dashboard funnel intact.
-- **M2 (single cell line).** Sample filter narrowed to one cell_line value: MultiQC panels,
-  alignment/dedup/methylation tables and the M-bias curve all narrow together through the
-  project links; no tile empties (no collection is `optional: true` in this template).
-- **M3 (bismark_hisat / bwameth route).** Out of scope for this template (see docs/
-  dashboards.md's "Bismark route only" note), `bismark/` file-name patterns would not match
-  a HISAT2 or bwa-meth route's output names, and ingestion would report 0 rows for every
-  Bismark-tagged collection rather than erroring.
-```
-
-**`nfcore_showcase.py` Scenario (draft):**
-```python
-(
-    Scenario(
-        pipeline="methylseq",
-        version="2.3.0",
-        data_root="~/Data/depictio-nfcore/methylseq/2.3.0/megatest",
-        description="Bismark bisulfite alignment, dedup and per-context methylation, 2 hESC lines",
-    ),
-)
-```
-
-## Open questions
-
-1. Should a fifth catalog output read the per-sample deduplicated bedGraph
-   (`coverage_track` kind) in a follow-up, per MS-D4?
-2. Should a future megatest re-fetch re-add `preseq/*.txt` once a run exists where
-   `PRESEQ_LCEXTRAP` succeeds for every sample (MS-D2)?
-3. `depictio/catalog/qualimap/` appeared mid-session as another agent's untracked work; if it
-   lands with a `bamqc_genome_results`-style per-sample output before this PR merges, the
-   Coverage section's 4 MultiQC-only tiles could gain a 5th, recipe-backed coverage-depth tile
-   referencing it, not attempted here per the brief's "reference, don't create" rule for tools
-   another pipeline owns.
-
----
-
-# 2026-09-22: lot 2 remediation, 3 tabs to 8
-
-Second pass over the same megatest run. The first pass shipped the tables the run
-publishes as tables; this one reads the file the run publishes as a methylome and
-builds the tabs that file makes possible.
-
-## What changed
-
-**New shared helper.** `depictio/recipes/lib/genomic_bins.py`: streaming binning of any
-chrom / pos / value frame into fixed windows. `bin_coordinate_frame` (a `LazyFrame` in,
-a binned `DataFrame` out), `bin_delimited_file` (a delimited file on disk, `scan_csv`
-lazy, transparent `.gz`), `window_id_expr` (`chr1:10000-20000`) and `window_matrix`
-(long to sample-by-window wide). Returns `chrom, start, end, mean, n`. It exists
-because three methylseq recipes needed it and every future coverage or signal track
-will too; recipes cannot import one another, so a shared lib is the only place it fits.
-
-**The index-DC idiom.** `pl.read_csv` takes no `include_file_paths`, and a `glob_pattern`
-`RecipeSource` reads every matched file eagerly, which for 756 MB of bedGraph is not an
-option. The CLI's scan path uses `pl.scan_csv`, which is lazy and does take
-`include_file_paths`, so `bismark_bedgraph_index` is a scan DC with `n_rows: 1`: one row
-per file, carrying its absolute `source_path`. The recipes then stream those files
-themselves and 300 million rows never enter Delta. Reusable by any template with a file
-too large to ingest.
-
-**8 new bismark catalog outputs** (4 to 12), all recipe-backed:
-
-| Output | Rows on this run | What it is |
-| --- | --- | --- |
-| `bismark_summary_report` | 7 | `bismark2summary`'s table plus the derived ratios, including `conversion_efficiency_pct = 100 - %CHH` |
-| `bismark_mbias_all_contexts` | 5,208 | all six M-bias tables, context and read as columns |
-| `bismark_binned_methylation` | 135,450 | 19,350 windows x 7 libraries, 10 kb, complete in every library |
-| `bismark_methylation_density` | 350 | per-CpG methylation histogram, 50 buckets per library |
-| `bismark_window_pca` | 7 | numpy SVD over the window matrix, 3 components |
-| `bismark_window_correlation` | 7 | Pearson between libraries, square |
-| `bismark_top_variable_windows` | 150 | the windows with the highest cross-library variance |
-| `bismark_window_group_compare` | 19,350 | every window tested between the design's two arms |
-
-**9 new qualimap DCs** bound from `depictio/catalog/qualimap/`, which nf-core/eager owns:
-`bamqc_genome_results` (7), `coverage_across_reference` (4,158), `coverage_histogram`
-(30,655), `genome_fraction_coverage` (357), each with its raw scan. Referenced, not
-recreated.
-
-**Template**: 11 DCs to 28, 5 links to 14. **Dashboard**: 2 tabs to 8, 39 components on
-the MultiQC tab and 105 across the other seven.
-
-## Statistics, written out because they are not imported
-
-`window_group_compare` evaluates the Student t tail itself. The slim CLI environment
-(`depictio/cli/.venv`) ships numpy and polars and no SciPy, so a recipe that imported
-SciPy would fail at ingestion time on a machine where the tests pass.
-
-- pooled two-sample t on the **arcsine square-root transform** of the window's
-  methylation proportion (the classical variance-stabilising map for a proportion bounded
-  at 0 and 1, which is what stops a window at 97 % being called for being near the
-  ceiling). The effect size reported back is the untransformed difference in percentage
-  points, because that is the quantity a reader can judge;
-- two-sided p from the regularised incomplete beta, `I_{df/(df+t^2)}(df/2, 1/2)`,
-  evaluated with a Lentz continued fraction on `math.lgamma`, numpy-vectorised;
-- Benjamini-Hochberg by sort plus reverse cumulative minimum.
-
-Validated against `scipy.stats.t.sf` in a scratch environment: 4e-15 relative error in
-the tail, 7.6e-10 absolute overall. `depictio/tests/recipes/test_bismark_methylome.py`
-pins four reference points of the t tail, the tail's symmetry and monotonicity, and BH's
-monotonicity and its cap at 1.
-
-## Decimation policy, stated because it changes what the panels mean
-
-287,394 windows binned. Windows with fewer than 20 CpGs in a library are dropped (a mean
-over three CpGs is not that window's methylation); only windows surviving that cut in
-**every** library are kept, so the PCA, the correlation and the t-test read the same rows
-rather than each imputing its own holes (174,150 left); contigs with fewer than 50
-windows go, which removes the unplaced scaffolds and the mitochondrion without naming an
-assembly (24 contigs left, chr1-22, X, Y); what remains is strided **uniformly** over the
-genome-ordered windows down to 20,000 per library, leaving 19,350.
-
-The stride is uniform on purpose. Keeping the CpG-densest windows instead would have been
-the obvious decimation and would have quietly turned every downstream panel into a
-CpG-island panel.
-
-## Validation run
-
-```
-uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k methylseq
-  -> 10 passed
-uv run pytest depictio/tests/recipes/test_bismark_methylome.py -q
-  -> 16 passed
-uv run pytest depictio/tests/models/test_catalog.py -q
-  -> 93 passed, 6 failed; none in bismark or qualimap (cellbender/kallisto/qcatch/
-     simpleaf cards, cooltools and gtdbtk aggregations, and the two *.schema.json
-     files, all other agents' in-flight work on this branch)
-python -m depictio.cli run --template nf-core/methylseq/2.3.0 \
-  --data-root ~/Data/depictio-nfcore/methylseq/2.3.0/megatest \
-  --project-name lot2-methylseq --dry-run
-  -> 8/8 steps
-```
-
-Project `lot2-methylseq` was deleted and re-ingested once. Every recipe wrote rows; the
-16 bismark and qualimap recipes together added about 20 seconds over a tables-only
-template, streaming 756 MB on the way through. All eight tabs imported
-(39/15/16/14/20/16/14/10 components).
-
-Every `use:` in the dashboard was resolved against the live catalog: 90 references, 29
-distinct, all resolve. Every `data_collection_tag` in the dashboard exists in the
-template; the ten template DCs with no tile are the nine raw scans and the index, which
-are recipe inputs and not meant to have one.
-
-## Discrepancies
-
-### MS-D6: `genomespy_track` no longer exists, the tiles bind `genome_view`
-
-The brief asked for a `genomespy_track` per sample. A concurrent kind agent superseded
-that kind with `genome_view` while this work was in flight. The tile is bound to
-`genome_view` with roles `chr / pos / score / end / sample` and
-`facet_by_sample: true`, which is the same panel under the new name. Nothing was lost;
-the name in the brief is stale.
-
-### MS-D7: only one window clears the screen, and that is the honest answer
-
-19,350 windows tested, 1 called (Hypomethylated, min padj 0.0134, largest absolute
-difference 38.5 points), 19,349 Not significant. Three libraries against four, with no
-per-CpG coverage weights, is a low-powered screen by construction. The tab says so in
-prose rather than hiding the count. `methylation_coverage/*.cov.gz` would allow a
-beta-binomial model instead; this run does not publish it.
-
-### MS-D8: cell line and oxygen condition are the same split
-
-MShef11 is exactly the low-oxygen arm and MShef4 exactly the normoxic one, so the
-comparison cannot attribute a difference to either. `samples.py` now emits `treatment`
-and `replicate` separately instead of one `condition` that was 1:1 with the sample, and
-`group` is documented as the cell line for that reason. The sample-sheet intro on the
-dashboard states the confound.
-
-### MS-D9: `_bismark_bt2_` was pinned in five places
-
-`template.yaml`'s alignment scan regex and four recipes matched the literal `bismark_bt2`
-infix, so every sample id on the `bismark_hisat` route would have kept the aligner glued
-to it. All five now match `bismark_[a-z0-9]+`, and the test suite pins both spellings.
-MS-D4 is closed by `bismark_binned_methylation`: the deduplicated bedGraph is now read.
-
 ### MS-D10: screenshots are blocked by the shared dev viewer, not by this template
 
 `packages/depictio-react-core/node_modules/@genome-spy/core` holds only `LICENSE`,
@@ -742,3 +524,97 @@ navigator, the lanes (35 rows) and the difference track (5 rows). The parallel_c
 (7 lines, 8 axes, header controls) and the faceted M-bias figure (CpG, CHG, CHH by R1 and R2)
 render. A mouse brush was not exercised; the locus field emits the same filter pair.
 Screenshots: /tmp/claude-502/shots-methylseq/.
+
+## 2026-09-23 wave 3: genericity, 8 tabs to 6, every eligible window tested
+
+What changed:
+
+- **Design is a variable, never parsed.** `recipes/samples.py` no longer splits the megatest's
+  `<SRR>_<GSM>_<cell_line>_<condition>` names. The hub is the samplesheet (`sample_id`,
+  `fastq_1`, `fastq_2`) joined to an optional design table declared through `METADATA_FILE`
+  (new optional `metadata` DC, ampliseq convention: id in `sample` or the first column, every
+  other column a factor, carried in file order). New variables `METADATA_FILE`,
+  `METADATA_ID_COL`, `GROUP_COL`, `GROUP_COL_DISPLAY`, `ANNOTATION_COLS`; the dashboards read
+  `{GROUP_COL}` / `{GROUP_COL_DISPLAY}` (Sample filters, glance donut, parallel coordinates,
+  conversion bar, PCA colour). The megatest design is vendored as `input/sample_metadata.tsv`
+  (`sample, cell_line, condition, replicate`, built once from the samplesheet names) and wired
+  in `reference.vars` with `GROUP_COL: cell_line`. `if_var_absent: METADATA_FILE` prunes
+  `metadata` and `bismark_window_group_compare`.
+- **`GENOME` variable** (default hg38) feeds `assembly:` on the three locus tracks. The
+  navigator's gene lane is `annotation: none` until `annotation` accepts a placeholder (the
+  field is `Literal["none", "hg38", "mm10"]` and the raw YAML is validated before
+  substitution); the lane stays one click away in the header control.
+- **`window_group_compare.py` tests every eligible window.** It re-bins the bedGraphs through
+  the same eligibility rules as `bismark_binned_methylation` (shared in
+  `depictio/recipes/lib/bismark_names.py:eligible_methylation_windows`, built on the new
+  `genomic_bins.complete_window_frame`), without the drawing stride. `binned_methylation`
+  keeps its uniform stride to 20,000 windows as the drawing and cohort-structure matrix. The
+  factor tested is the first hub design column with exactly two levels; a run without one (or
+  with fewer than two libraries a side) raises a clear error and the DC is `optional: true`,
+  so ingestion skips it and its tiles are pruned. The recipe runner rejects an empty frame
+  (`execute_recipe` checkpoint 3), so a skipped optional DC is the platform's form of "empty".
+- **Tabs 8 to 6.** Alignment and duplication merged into Run QC (the two floor cards and the
+  two tables, now in a collapsed `Library detail` section with the run summary); Features and
+  metagenes folded into Global methylome as a `CpG density` section (box + two cards + class
+  filter; roadmap prose moved to docs/dashboards.md); the locus section moved from Global
+  methylome to Group comparison, below the Manhattan, volcano and effect-size histogram. The
+  pinned `Reference tables` section is gone (its tables were repeated on a tab).
+- **Glance strip**, 4 pinned cards on every tab: samples by `{GROUP_COL_DISPLAY}` (donut), reads
+  to CpG calls (attrition), CpG methylation (box), lowest conversion efficiency (gauge). None is
+  repeated as a tab card.
+- **Redundancies removed**: CpG-only M-bias section and table, the faceted M-bias figure, the
+  pooled-context M-bias and methylation-by-context cards (they averaged CpG with CHG and CHH),
+  `ms-cov-fig-global`, `ms-density-card-peak`, `ms-density-card-window`, `ms-run-card-conversion`,
+  `ms-run-card-cpgmeth`, `ms-run-card-cpgs`, `ms-aln-card-eff`, the alignment and dedup bar
+  figures, the lateral contig filters on the binned windows and on the comparison. M-bias is
+  one explorer (`ms-mbias-all-av-curve`, context filter `default_value: CpG`) plus its table.
+- **Threshold cards (P17)**: `ms-aln-card-eff-threshold` is now `min` with pass at 70 and warn
+  from 60; `ms-dedup-card-rate-threshold` is `max` with pass up to 10 and warn to 20. Both warn
+  bands sit on the failing side.
+- **Cards**: coverage mean and GC now `box_plot` (no top_n of averages, no donut of averages);
+  per-CpG section reads bimodality directly (share of CpGs at 98 to 100 % and at 0 to 2 %, each
+  scoped by `filter_expr`); Group comparison counts called windows (`filter_expr` on
+  `direction`) instead of a 100 % "Not significant" donut.
+- **Texts**: every intro at most 3 sentences, no megatest facts (sample names, cell lines,
+  locus, counts, "under 1X"); the conversion texts carry "assumes a mammalian genome; for
+  plants judge conversion on a lambda spike-in". `ms-track-av-delta` is "group_a minus group_b
+  on the same region", score title "Difference (pp)". `megatest.yaml` gains `forbidden_terms`.
+- **Default region**: the navigator keeps `chr14:35,500,000-37,500,000`, documented as a default
+  in `ms-track-intro`. Rationale (kept here, not in the dashboard): with every eligible window
+  tested, the chr14:36,490,000-36,500,000 window is tied for the strongest of the run
+  (padj 0.072), so the default opens on the run's strongest signal.
+- **MultiQC names**: `_1_val_1` / `_1_val_1_bismark_bt2_pe` spellings canonicalise to the hub
+  id (`depictio/tests/cli/utils/test_sample_mapping_hub.py::test_methylseq_names_join_their_hub_id`
+  passes), so the pinned Sample filter reaches the `ms-qc-*` panels.
+
+Validation (offline, no ingestion):
+
+- Recipes on `~/Data/depictio-nfcore/methylseq/2.3.0/megatest`: hub 7 rows with `cell_line`,
+  `condition`, `replicate`; `bismark_binned_methylation` 135,450 rows (19,350 strided windows,
+  6.4 s); `bismark_window_group_compare` **174,150 windows tested** (was 19,350), 6.5 s,
+  `group_a` MShef11 against `group_b` MShef4, **0 windows** clear padj 0.05 (min padj 0.072):
+  the stricter correction over nine times the windows removes the single hit the strided screen
+  reported. Without a design the recipe raises "no two-group comparison" as intended.
+- `uv run python -m depictio.cli run --template nf-core/methylseq/2.3.0 --dry-run`, with and
+  without `--var METADATA_FILE=.../input/sample_metadata.tsv`: 8/8 both ways; without it the
+  resolved config drops `metadata` and `bismark_window_group_compare`.
+- `test_shipped_dashboard_yamls.py` + `test_template_conventions.py -k methylseq`: 12 passed,
+  4 xpassed (pinned table, top_n, warn side, intro length now clean; forbidden terms clean).
+  The warn-only rule f still lists `ms-feat-card-level` (median of `methylation_pct`): a median
+  of CpG window means inside one density class, which is meaningful and kept.
+- `depictio/tests/recipes/test_bismark_methylome.py` (+3 tests: first two-level factor, no
+  design, every eligible window tested from the bedGraphs), `test_bismark_report_ids.py`,
+  `test_sample_mapping_hub.py`: 66 passed.
+
+Still open:
+
+- Not seen live: the reworked tabs, the `{GROUP_COL}` bindings after substitution, the new
+  filter_expr cards and the `default_value: CpG` context filter.
+- `.db_seeds` and the conformance seeds are not regenerated (main-owned). The `bismark`
+  fixtures are unchanged: `summary_report.tsv` / `window_pca.tsv` still carry
+  `cell_line, treatment, group`, which are now read as example design columns, not schema.
+- Without `METADATA_FILE` the CLI sets `GROUP_COL=__no_group__`; the tiles bound to it rely on
+  the platform's import-time pruning, as in smrnaseq.
+- The per-library lanes draw the strided windows (1 in 9 on the megatest) while the navigator
+  and the difference track draw every tested window; a follower lane over an unstrided DC would
+  need 1.2 M rows in Delta.

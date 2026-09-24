@@ -54,11 +54,16 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag of the catalog-tidied AdapterRemoval reports.
 SETTINGS_DC_TAG = "adapterremoval_settings"
 
+#: The run's `--input` TSV (one row per lane), copied under DATA_ROOT/input/.
+#: eager 2.x does not publish it, so any TSV there is read; several are
+#: concatenated, which lets a multi-batch project ship one sheet per batch.
+SAMPLESHEET_GLOB = "input/*.tsv"
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lanes", dc_ref=SETTINGS_DC_TAG),
     RecipeSource(
         ref="samplesheet",
-        path="input/benchmarking_vikingfish.tsv",
+        glob_pattern=SAMPLESHEET_GLOB,
         format="tsv",
         read_kwargs={"infer_schema_length": 0},
     ),
@@ -160,8 +165,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if unresolved == joined.height:
         raise ValueError(
             "eager_lane_stats: no AdapterRemoval report could be matched to a "
-            "samplesheet row; check that input/benchmarking_vikingfish.tsv "
-            "describes this run"
+            "samplesheet row; check that the TSV under input/ "
+            "is this run's --input samplesheet"
         )
 
     return (
