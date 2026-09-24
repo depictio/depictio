@@ -233,26 +233,39 @@ body.panel-transitioning .react-grid-layout {
   border-radius: 6px;
 }
 
-/* Same pulse for a component focused from a comment thread, in the theme's
- * primary colour rather than the editor's teal, so it reads as "this is what
- * the comment is about" and not as a freshly added tile. Applied and removed
- * by `lib/focusComponent.ts`. */
+/* A component focused from a comment thread. Drawn on an overlay above the
+ * tile's content (an inset shadow on the grid item is hidden under the card
+ * background), in the theme's primary colour, pulsing twice so it is still
+ * visible once the smooth scroll lands. Applied and removed by
+ * `lib/focusComponent.ts`. */
 @keyframes depictio-comment-flash {
-  0% {
-    box-shadow: inset 0 0 0 0 transparent;
-  }
-  20% {
-    box-shadow:
-      inset 0 0 0 3px var(--mantine-primary-color-filled),
-      inset 0 0 24px var(--mantine-primary-color-light);
-  }
+  0%,
   100% {
-    box-shadow: inset 0 0 0 0 transparent;
+    opacity: 0;
+  }
+  15%,
+  45%,
+  75% {
+    opacity: 1;
+  }
+  30%,
+  60% {
+    opacity: 0.35;
   }
 }
-.depictio-comment-flash {
-  animation: depictio-comment-flash 1.8s ease-out;
-  border-radius: 6px;
+.depictio-comment-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  border-radius: 8px;
+  border: 3px solid var(--mantine-primary-color-filled);
+  box-shadow:
+    0 0 0 4px var(--mantine-primary-color-light),
+    0 0 24px 4px var(--mantine-primary-color-light);
+  background: var(--mantine-primary-color-light);
+  animation: depictio-comment-flash 2.8s ease-in-out forwards;
 }
 
 /* ── Boot splash ───────────────────────────────────────────────────────────

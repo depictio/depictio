@@ -4,16 +4,21 @@ import {
   AnnotationLayerProvider,
   CommentsControlProvider,
   createCommentThread,
+  deleteCommentThread,
   fetchCommentAccess,
   fetchCommentCounts,
   fetchCommentThreads,
   fetchPublishedAnnotations,
   publishedToRenderable,
+  TAB_THREAD_KEY,
   threadsToRenderable,
+  updateCommentThread,
 } from 'depictio-react-core';
 import type {
   AnnotateState,
   AnnotationDraft,
+  AnnotationPatchInput,
+  AnnotationStats,
   CommentCounts,
   CommentsControl,
   CommentThread,
@@ -30,6 +35,13 @@ import { buildViewState, componentLabel } from './viewState';
 
 const EMPTY_COUNTS: CommentCounts = { open: {}, proposed: {} };
 const NO_ITEMS: Record<string, RenderableAnnotation[]> = {};
+const NO_STATS: Record<string, AnnotationStats> = {};
+
+function sameStats(a: AnnotationStats | undefined, b: AnnotationStats): boolean {
+  return (
+    a !== undefined && a.expected === b.expected && a.found === b.found && a.inRange === b.inRange
+  );
+}
 
 type Access = 'unknown' | 'editor' | 'viewer';
 
@@ -74,6 +86,9 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
   const [threads, setThreads] = useState<CommentThread[] | null>(null);
   const [threadsError, setThreadsError] = useState<string | null>(null);
   const [published, setPublished] = useState<Record<string, RenderableAnnotation[]>>(NO_ITEMS);
+  // What each chart measured of its annotations (points found, points in a
+  // range), keyed by thread id, shown on the drawer's annotation cards.
+  const [stats, setStats] = useState<Record<string, AnnotationStats>>(NO_STATS);
 
   const openComments = useUiStore((s) => s.openComments);
   const resetComments = useUiStore((s) => s.resetComments);
@@ -81,6 +96,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
   const annotateComponentIndex = useUiStore((s) => s.annotateComponentIndex);
   const annotateTool = useUiStore((s) => s.annotateTool);
   const setAnnotate = useUiStore((s) => s.setAnnotate);
+  const editAnnotation = useUiStore((s) => s.editAnnotation);
 
   // Responses are only applied while they still belong to the current
   // dashboard: a slow answer for the previous tab must not land on this one.
@@ -97,6 +113,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
     setThreads(null);
     setThreadsError(null);
     setPublished(NO_ITEMS);
+    setStats(NO_STATS);
     resetComments();
     if (!dashboardId) return;
     let cancelled = false;
@@ -186,17 +203,31 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
 
   const isEditor = access === 'editor' && !!dashboardId;
 
+  // Unsettled threads whose data or component changed since they were
+  // written, per component: the chrome's comments icon turns orange on them.
+  const staleCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    (threads ?? []).forEach((t) => {
+      if (t.status === 'resolved' || t.status === 'rejected') return;
+      if (!t.staleness?.data_changed && !t.staleness?.component_changed) return;
+      const key = t.anchor.component_index ?? TAB_THREAD_KEY;
+      c[key] = (c[key] ?? 0) + 1;
+    });
+    return c;
+  }, [threads]);
+
   const control = useMemo<CommentsControl | null>(
     () =>
       isEditor
         ? {
             openCounts: counts.open ?? {},
             proposedCounts: counts.proposed ?? {},
+            staleCounts,
             openDrawer: (componentIndex) => openComments(componentIndex ?? null),
             canComment: true,
           }
         : null,
-    [isEditor, counts, openComments],
+    [isEditor, counts, staleCounts, openComments],
   );
 
   // ── Annotation layer ──────────────────────────────────────────────────────
@@ -244,6 +275,53 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
     [dashboardId, addThread],
   );
 
+  // In-place edits from the inline editor on a chart or table. Both rethrow
+  // so the editor stays open (with the user's changes) on failure.
+  const updateAnnotation = useCallback(
+    async (threadId: string, _componentIndex: string, patch: AnnotationPatchInput) => {
+      try {
+        const next = await updateCommentThread(threadId, { annotation: patch });
+        if (dashboardRef.current === dashboardId) replaceThread(next);
+      } catch (err) {
+        notifications.show({
+          color: 'red',
+          title: 'Could not update annotation',
+          message: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    },
+    [dashboardId, replaceThread],
+  );
+  const deleteAnnotation = useCallback(
+    async (threadId: string) => {
+      try {
+        await deleteCommentThread(threadId);
+        if (dashboardRef.current === dashboardId) removeThread(threadId);
+      } catch (err) {
+        notifications.show({
+          color: 'red',
+          title: 'Could not delete annotation',
+          message: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    },
+    [dashboardId, removeThread],
+  );
+
+  // Charts report their stats on every render: an unchanged report keeps the
+  // same map, or each one would re-render the drawer and loop.
+  const mergeStats = useCallback(
+    (_componentIndex: string, next: Record<string, AnnotationStats>) => {
+      setStats((prev) => {
+        const changed = Object.entries(next).filter(([id, st]) => !sameStats(prev[id], st));
+        return changed.length ? { ...prev, ...Object.fromEntries(changed) } : prev;
+      });
+    },
+    [],
+  );
+
   return (
     <CommentsControlProvider value={control}>
       <AnnotationLayerProvider
@@ -253,6 +331,12 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
         annotate={annotate}
         setAnnotate={setAnnotate}
         onSave={saveAnnotation}
+        // Editors only: annotations published to viewers open nothing. A click
+        // edits the annotation in place; "Open discussion" goes to the drawer.
+        onAnnotationClick={isEditor ? editAnnotation : undefined}
+        onAnnotationUpdate={isEditor ? updateAnnotation : undefined}
+        onAnnotationDelete={isEditor ? deleteAnnotation : undefined}
+        onStats={isEditor ? mergeStats : undefined}
       >
         {children}
         {isEditor && dashboardId && (
@@ -263,6 +347,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
             onApplyViewState={onApplyViewState}
             currentUser={currentUser}
             threads={threads}
+            stats={stats}
             loadError={threadsError}
             onReload={loadThreads}
             onCreated={addThread}

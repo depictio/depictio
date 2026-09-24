@@ -12,9 +12,12 @@ const CommentsHeaderButton: React.FC = () => {
   if (!control) return null;
   const open = sum(control.openCounts);
   const proposed = sum(control.proposedCounts);
+  const stale = sum(control.staleCounts);
   const tooltip =
     open || proposed
-      ? `${open} open thread${open === 1 ? '' : 's'}${proposed ? `, ${proposed} awaiting review` : ''}`
+      ? `${open} open thread${open === 1 ? '' : 's'}${proposed ? `, ${proposed} awaiting review` : ''}${
+          stale ? `, ${stale} with changed data` : ''
+        }`
       : 'Comment on this dashboard';
   return (
     <Tooltip label={tooltip} withArrow openDelay={400}>
