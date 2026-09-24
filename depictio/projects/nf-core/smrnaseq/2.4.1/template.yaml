@@ -1,0 +1,826 @@
+# nf-core/smrnaseq Template v2.4.1 - small RNA sequencing (miRNA expression,
+# isomiRs, novel miRNA discovery)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/smrnaseq/2.4.1 --data-root /path/to/your/data \
+#     [--var METADATA_FILE=/path/to/design.tsv]
+#
+# Tested against the nf-core/smrnaseq AWS megatest results:
+#   s3://nf-core-awsmegatests/smrnaseq/results-cb0af579b24cb8d5a3accd87b2f14ea93fe04832/
+# `megatest.yaml` next to this file lists the exact subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# What the run publishes, and so what this template reads:
+#   - multiqc/multiqc_data/multiqc.parquet: fastp, FastQC (raw and trimmed),
+#     miRTrace, mirtop and samtools. miRTrace publishes no statistics table of
+#     its own, so the composition, length and complexity views read the plot
+#     input MultiQC keeps in the parquet (catalog multiqc/mirtrace_*.py).
+#   - mirna_quant/mirtop/joined_samples_mirtop.tsv: every isomiR of every
+#     sample in one table. Expression, the sample PCA, the heatmap, the
+#     two-group comparison and the isomiR views are all aggregated from it
+#     (catalog mirtop/*.py). The mature / hairpin count matrices and the
+#     edgeR QC tables were not published by the 2.4.1 megatest.
+#   - result_<sample>.csv at the run root: miRDeep2's per-sample predictions
+#     (catalog mirdeep2/*.py). Absent with --skip_mirdeep.
+#
+# Design. The pipeline samplesheet carries no design column, so the design is
+# an optional table declared through METADATA_FILE (sample id in the first
+# column, or in a column named `sample`; every other column a factor), the
+# ampliseq convention. GROUP_COL defaults to its first factor column. Without
+# it the metadata collection and its links are pruned, the recipes carry no
+# design columns, and every tile bound to the sample hub keeps working.
+# ============================================================================
+template:
+  template_id: "nf-core/smrnaseq/2.4.1"
+  description: "nf-core/smrnaseq template for small RNA sequencing: MultiQC funnel, library QC, miRNA expression and two-group comparison, isomiRs, novel miRNAs"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one smrnaseq run (multiqc/, mirna_quant/, the miRDeep2 result_*.csv tables, pipeline_info/)"
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV or CSV): sample id in the first column (or a column named sample), one column per factor. Enables the design filters, colouring and the group comparison defaults."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table sample-id column (links join on it). Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group and colour by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "GENOME"
+      description: "UCSC assembly name the novel precursor coordinates are linked out to (the genome the run mapped to)."
+      required: false
+      default: "hg38"
+    - name: "SKIP_MIRDEEP"
+      description: "Set (--var SKIP_MIRDEEP=true) for a run with --skip_mirdeep: no result_*.csv tables, so the miRDeep2 collections are pruned."
+      required: false
+    - name: "SKIP_MULTIQC"
+      description: "Set (--var SKIP_MULTIQC=true) for a run with --skip_multiqc: no report, so the MultiQC and miRTrace collections are pruned."
+      required: false
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # design table vendored in input/ (built once from the samplesheet; see
+  # docs/dashboards.md) and the assembly the megatest mapped to.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
+      GENOME: "hg19"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"    # the whole iGenomes catalogue
+          - "hook_url"   # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Trimming & adapters"
+        key_patterns: ["trim_fastq", "clip_r1", "three_prime_clip_r1", "three_prime_adapter", "fastp_*", "min_trimmed_reads", "save_trimmed_fail", "save_merged", "phred_offset"]
+      - group: "UMI"
+        key_patterns: ["with_umi", "umi_*", "umitools_*", "skip_umi_extract_before_dedup", "save_umi_intermeds"]
+      - group: "miRNA references"
+        key_patterns: ["mature", "hairpin", "mirna_gtf", "mirgenedb*", "mirtrace_species", "genome", "fasta", "bowtie_index", "igenomes_*", "save_reference"]
+      - group: "Contamination filtering"
+        key_patterns: ["filter_contamination", "rrna", "trna", "cdna", "ncrna", "pirna", "other_contamination"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "email*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "publish_dir_mode", "trace_report_suffix", "validate_params", "version", "help*", "show_hidden", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path", "save_intermediates"]
+    highlight:
+      - "mirtrace_species"
+      - "mature"
+      - "hairpin"
+      - "mirgenedb"
+      - "three_prime_adapter"
+      - "fastp_min_length"
+      - "fastp_max_length"
+      - "filter_contamination"
+      - "skip_mirdeep"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_MIRDEEP"
+      remove_dc_tags:
+        ["mirdeep2_results_raw", "mirdeep2_predictions", "mirdeep2_novel_precursors", "mirdeep2_score_summary"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_MULTIQC"
+      remove_dc_tags: ["multiqc_data", "mirtrace_composition", "mirtrace_length", "mirtrace_complexity"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Small RNA-seq Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "smrnaseq"
+    version: "2.4.1"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/smrnaseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC: the QC funnel of the run, read from the parquet.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data: fastp, FastQC raw and trimmed, miRTrace, mirtop, samtools"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc(?:_report)?_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "fastp"
+              - "fastqc"
+              - "fastqc-1"
+              - "mirtrace"
+              - "mirtop"
+              - "samtools"
+            plots:
+              fastp:
+                - "Filtered Reads"
+                - "Sequence Quality":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                - "GC Content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                - "N content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Adapter Content"
+                - "Status Checks"
+              fastqc-1:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Sequence Length Distribution"
+                - "Adapter Content"
+                - "Status Checks"
+              mirtrace:
+                - "QC Plot"
+                - "RNA Categories"
+                - "Read Length Distribution"
+                - "Contamination Check"
+                - "miRNA Complexity"
+              mirtop:
+                - "IsomiR read counts"
+                - "IsomiR unique read counts"
+                - "Mean isomiR read counts"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+
+      # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the sample id.
+      # Pruned with its links when METADATA_FILE is absent.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # miRNA expression from the joined mirtop table (catalog mirtop/*).
+      # mirtop_mirna_counts is the long base every other expression view
+      # derives from through dc_ref; it joins the design table when there is one.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mirtop_mirna_counts"
+        description: "Reads, CPM and isomiR summary per mature miRNA and sample, summed over isomiRs from the joined mirtop table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/mirna_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "mirna": "Mature miRNA name"
+              "reads": "Reads assigned to the miRNA, all isomiRs"
+              "cpm": "Reads per million miRNA-assigned reads of the sample"
+              "log2_cpm": "log2(CPM + 1)"
+              "isomirs": "Distinct isomiR sequences with at least one read"
+              "reference_pct": "Share of the miRNA's reads matching the reference mature sequence, %"
+
+      # ----------------------------------------------------------------
+      # Sample hub: one row per sample, every tab filters through it. Built
+      # from the always-present counts, enriched with miRTrace and miRDeep2
+      # when those ran, and carrying the design columns when given.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "One row per sample: miRNA library size and detection, miRTrace RNA composition, miRDeep2 calls, design factors"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/smrnaseq/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, the key every link joins on"
+              "mirna_reads": "Reads mirtop assigned to miRNAs"
+              "mirnas_detected": "miRNAs with at least one read"
+              "mirnas_10cpm": "miRNAs at 10 CPM or more"
+              "reference_isoform_pct": "miRNA reads matching the reference mature sequence exactly, %"
+              "mirna_pct": "miRTrace: reads classified as miRNA, %"
+              "rrna_pct": "miRTrace: reads classified as rRNA, %"
+              "trna_pct": "miRTrace: reads classified as tRNA, %"
+              "artifact_pct": "miRTrace: artifact reads, %"
+              "unknown_pct": "miRTrace: unclassified reads, %"
+              "top_clade": "miRTrace: organism clade holding most detected miRNAs"
+              "top_clade_pct": "Share of the detected miRNAs in that clade, %"
+              "novel_candidates": "miRDeep2 novel precursor calls"
+              "known_recovered": "miRBase precursors miRDeep2 re-discovered"
+
+      - data_collection_tag: "mirtop_sample_matrix"
+        description: "Samples x miRNAs CPM matrix (most expressed miRNAs) with the design columns, the input of the two-group comparison"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/sample_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier; every numeric column is one miRNA's CPM"
+
+      - data_collection_tag: "mirtop_sample_pca"
+        description: "Sample PCA of log2(CPM + 1) over the most variable expressed miRNAs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/sample_pca.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "dim_1": "First principal component"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "mirna_reads": "Reads assigned to miRNAs"
+              "mirnas_detected": "miRNAs with at least one read"
+
+      - data_collection_tag: "mirtop_top_variable_heatmap"
+        description: "Most variable expressed miRNAs x samples, log2(CPM + 1), with design annotations"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/top_variable_heatmap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "mirna": "Mature miRNA name; every numeric column is one sample's log2(CPM + 1)"
+              "_col_annotations_json": "Design factors as heatmap column annotations"
+
+      - data_collection_tag: "mirtop_mirna_summary"
+        description: "One row per miRNA: expression level, spread, detection, isomiR diversity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/mirna_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "mirna": "Mature miRNA name"
+              "arm": "Precursor arm, 5p or 3p, from the name"
+              "expression_rank": "Rank by mean CPM, 1 = highest"
+              "total_reads": "Reads over all samples"
+              "mean_cpm": "Mean CPM over samples"
+              "median_cpm": "Median CPM over samples"
+              "mean_log2_cpm": "Mean log2(CPM + 1)"
+              "sd_log2_cpm": "Standard deviation of log2(CPM + 1) across samples"
+              "samples_detected": "Samples with at least one read"
+              "detection_pct": "Samples with at least one read, %"
+              "max_isomirs": "Most distinct isomiRs seen in one sample"
+              "reference_pct": "Reads matching the reference sequence over all samples, %"
+
+      # ----------------------------------------------------------------
+      # isomiRs (catalog mirtop/isomir_*).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mirtop_isomir_composition"
+        description: "Each sample's miRNA reads partitioned by 3' end, 5' end, 3' addition and nucleotide change"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/isomir_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "rank": "Partition: 3' end, 5' end, 3' addition, Nucleotide change"
+              "taxon": "isomiR class within the partition"
+              "abundance": "Reads in the class"
+              "percent": "Of the sample's miRNA reads, %"
+
+      - data_collection_tag: "mirtop_isomir_landscape"
+        description: "Mean share and prevalence of each isomiR class for the most expressed miRNAs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirtop/isomir_landscape.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "mirna": "Mature miRNA name"
+              "variant_class": "isomiR class (classes overlap: a read can be trimmed and carry an addition)"
+              "mean_share_pct": "Mean share of the miRNA's reads in the class, %"
+              "samples_fraction": "Fraction of samples where the class holds at least 5 % of the miRNA's reads"
+              "class_reads": "Reads in the class, all samples"
+              "mirna_rank": "Rank of the miRNA by reads, 1 = most"
+
+      # ----------------------------------------------------------------
+      # miRTrace, read from the MultiQC parquet (catalog multiqc/mirtrace_*).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mirtrace_composition"
+        optional: true
+        description: "miRTrace per-library composition: reads by RNA type and by QC outcome, detected miRNAs by clade"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "multiqc/mirtrace_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "rank": "Partition: RNA type, Read QC, Clade"
+              "taxon": "Category within the partition"
+              "abundance": "Reads (RNA type, Read QC) or detected miRNAs (Clade)"
+              "percent": "Of the library's total in the partition, %"
+
+      - data_collection_tag: "mirtrace_length"
+        optional: true
+        description: "miRTrace read length distribution per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "multiqc/mirtrace_length.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "length": "Read length, nt"
+              "reads": "Reads of that length"
+              "percent": "Of the library's reads, %"
+              "length_class": "miRTrace length band"
+
+      - data_collection_tag: "mirtrace_complexity"
+        optional: true
+        description: "miRTrace complexity curves: distinct miRNAs detected against reads sampled"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "multiqc/mirtrace_complexity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "reads": "Reads sampled"
+              "distinct_mirnas": "Distinct miRNAs detected at that depth"
+
+      # ----------------------------------------------------------------
+      # miRDeep2 (catalog mirdeep2/*). The result tables are block-structured
+      # text, scanned one line per row; the sample is in the file name.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mirdeep2_results_raw"
+        optional: true
+        description: "Raw miRDeep2 result tables, one line per row (input of the mirdeep2 collections)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "result_.+\\.csv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              quote_char: null
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the miRDeep2 result table"
+              "source_path": "File the line came from; the sample id is derived from its name"
+
+      - data_collection_tag: "mirdeep2_predictions"
+        optional: true
+        description: "Every novel and known precursor miRDeep2 scored, one row per sample and candidate"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirdeep2/predictions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "prediction_id": "Sample and candidate id, unique per row"
+              "sample": "Sample identifier"
+              "category": "novel (not in miRBase) or known (a miRBase precursor re-discovered)"
+              "candidate_id": "miRDeep2 provisional or tag id"
+              "score": "miRDeep2 score, log-odds that the hairpin is a real precursor"
+              "true_positive_pct": "Estimated probability a candidate at this score is real, %"
+              "true_positive_sd": "Spread of that estimate, %"
+              "rfam_alert": "Rfam family the precursor also matches, or -"
+              "total_reads": "Reads on the precursor"
+              "mature_reads": "Reads on the mature arm"
+              "loop_reads": "Reads on the loop"
+              "star_reads": "Reads on the star arm"
+              "randfold_significant": "yes when the fold is more stable than shuffled sequences"
+              "mirbase_mirna": "miRBase mature miRNA matched, or -"
+              "seed_match": "A miRBase miRNA sharing the seed, or -"
+              "mature_sequence": "Consensus mature sequence"
+              "star_sequence": "Consensus star sequence"
+              "precursor_sequence": "Consensus precursor sequence"
+              "precursor_length": "Precursor length, nt"
+              "chromosome": "Chromosome of the precursor"
+              "start": "Precursor start"
+              "end": "Precursor end"
+              "strand": "Precursor strand"
+              "locus": "chromosome:start-end:strand"
+
+      - data_collection_tag: "mirdeep2_novel_precursors"
+        optional: true
+        description: "Novel miRDeep2 precursors merged across samples by overlapping locus, one row per hairpin"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirdeep2/novel_precursors.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "precursor_id": "chromosome:start-end:strand of the merged locus"
+              "chromosome": "Chromosome"
+              "start": "Locus start"
+              "end": "Locus end"
+              "strand": "Strand"
+              "samples_detected": "Samples with a call on the locus"
+              "detection_pct": "Of the samples miRDeep2 ran on, %"
+              "calls": "Calls merged into the locus"
+              "max_score": "Best miRDeep2 score among the calls"
+              "median_score": "Median miRDeep2 score"
+              "max_true_positive_pct": "Best estimated true-positive probability, %"
+              "total_reads": "Reads on the precursor, summed over samples"
+              "mature_reads": "Mature-arm reads, summed"
+              "star_reads": "Star-arm reads, summed"
+              "loop_reads": "Loop reads, summed"
+              "star_support": "yes when any call has star-arm reads"
+              "randfold_pct": "Calls with a significant randfold test, %"
+              "rfam_alert": "Rfam family any call matched, or -"
+              "seed_match": "A miRBase miRNA sharing the seed, or -"
+              "best_sample": "Sample of the best-scoring call"
+              "mature_sequence": "Consensus mature sequence of that call"
+              "star_sequence": "Consensus star sequence of that call"
+              "precursor_sequence": "Consensus precursor sequence of that call"
+              "precursor_length": "Precursor length, nt"
+              "genome_position": "chrN:start-end, for genome browsers"
+
+      - data_collection_tag: "mirdeep2_score_summary"
+        optional: true
+        description: "miRDeep2 score-cutoff calibration per sample: novel calls, estimated false positives, known recovery, signal-to-noise"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mirdeep2/score_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "score_cutoff": "miRDeep2 score threshold"
+              "novel_reported": "Novel candidates at or above the cutoff"
+              "novel_false_positives": "Estimated false positives among them"
+              "novel_true_positives": "Estimated true positives among them"
+              "known_in_species": "miRBase precursors of the species"
+              "known_in_data": "Of those, with reads in the sample"
+              "known_detected": "Of those, recovered at this cutoff"
+              "known_detected_pct": "Known recovered over known in data, %"
+              "signal_to_noise": "Real over permuted candidate counts"
+
+links:
+  # Hub to everything keyed on a sample. The design table sends the same
+  # links (pruned with it when METADATA_FILE is absent), so a design filter
+  # narrows every tab directly. The per-miRNA and per-locus collections
+  # (mirna_summary, isomir_landscape, novel_precursors) aggregate over
+  # samples and are not sample-filterable.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtop_mirna_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-sample miRNA counts by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtop_sample_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the comparison matrix by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtop_sample_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the sample PCA by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtop_top_variable_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the heatmap columns (column subset on a wide matrix) by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtop_isomir_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the isomiR composition by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtrace_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the miRTrace composition by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtrace_length"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the length profiles by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirtrace_complexity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the complexity curves by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirdeep2_predictions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the miRDeep2 calls by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mirdeep2_score_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the miRDeep2 score calibration by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the sample hub by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtop_mirna_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-sample miRNA counts by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtop_sample_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the comparison matrix by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtop_sample_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the sample PCA by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtop_top_variable_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the heatmap columns (column subset on a wide matrix) by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtop_isomir_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the isomiR composition by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtrace_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the miRTrace composition by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtrace_length"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the length profiles by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirtrace_complexity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the complexity curves by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirdeep2_predictions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the miRDeep2 calls by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "mirdeep2_score_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the miRDeep2 score calibration by the design table selection"
+    enabled: true
+
+  # Reverse link: miRNAs picked on the mean-variance plane narrow the
+  # per-sample counts behind the expression boxes.
+  - source_dc_tag: "mirtop_mirna_summary"
+    source_column: "mirna"
+    target_dc_tag: "mirtop_mirna_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "mirna"
+    description: "Narrow the per-sample counts to the miRNAs picked in the summary"
+    enabled: true
+
+  - source_dc_tag: "mirtop_mirna_summary"
+    source_column: "mirna"
+    target_dc_tag: "mirtop_isomir_landscape"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "mirna"
+    description: "Narrow the isomiR landscape to the miRNAs picked in the summary"
+    enabled: true
