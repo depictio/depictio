@@ -1266,6 +1266,17 @@ class PerformanceConfig(BaseSettings):
     browser_page_load_timeout: int = Field(default=90000)  # 90s default
     browser_element_timeout: int = Field(default=30000)  # 30s default
 
+    screenshots_enabled: bool = Field(
+        default=True,
+        description="Generate dashboard thumbnails with Playwright. Off when no Chromium is "
+        "available, e.g. `depictio local up` without --screenshots.",
+    )
+    screenshots_dir: str = Field(
+        default="",
+        description="Where dashboard thumbnails are written and served from. Empty means "
+        "the package's depictio/api/static/screenshots, which ships the reference thumbnails.",
+    )
+
     # Screenshot-specific timeouts (production typically needs longer)
     screenshot_navigation_timeout: int = Field(default=60000)  # 60s for navigation
     screenshot_content_wait: int = Field(default=30000)  # 30s for content
@@ -1313,6 +1324,12 @@ class PerformanceConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+    @property
+    def screenshots_path(self) -> Path:
+        if self.screenshots_dir:
+            return Path(self.screenshots_dir).expanduser()
+        return Path(__file__).resolve().parents[2] / "static" / "screenshots"
 
 
 class AnalyticsConfig(BaseSettings):
