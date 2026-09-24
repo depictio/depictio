@@ -1,0 +1,1190 @@
+# nf-core/genomeassembler 2.0.0 dashboard.
+#
+# The pipeline has no MultiQC report, so the landing tab is an Overview. The
+# unit of every tile is an assessed assembly, `<sample>_<stage>`: the raw
+# assembly, each polishing step and each scaffolder of a sample. The tabs are a
+# funnel:
+#   Overview        which strategy gives the best contiguity, accuracy and gene
+#                   completeness, one row per assessed assembly;
+#   Stages          what polishing and scaffolding add to each sample's assembly;
+#   Contiguity      the Nx curves and QUAST's view, reference-based when the run
+#                   had a reference;
+#   Genome profile  the read k-mer spectrum and GenomeScope's genome size,
+#                   heterozygosity and repeat estimates, the yardstick;
+#   Accuracy and genes  Merqury's QV, completeness and copy-number spectra, and
+#                   BUSCO.
+# Two pinned persistent sections ride every tab: the four run-design cards and
+# the collapsed sample sheet. The sample filters are persistent too; the design
+# column they group on is GROUP_COL (default `strategy`).
+version: 1
+main_dashboard:
+  title: nf-core/genomeassembler
+  subtitle: "De novo genome assembly QC: contiguity, k-mer accuracy and gene completeness per assembly and stage"
+  advanced_viz_controls: header
+  project_tag: Genome Assembly QC
+  main_tab_name: Overview
+  tab_icon: mdi:view-dashboard-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the samplesheet links
+    persistent: true
+    pin: top
+  - name: Assembly filters
+    icon: mdi:tune
+    color: indigo
+    description: Narrows the Overview to some stages, assemblers or a QV band
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:table-account
+    color: teal
+    description: The size and design of the run, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:file-document-outline
+    color: gray
+    description: The samplesheet rows and what assembly QC each sample reached
+    persistent: true
+    pin: top
+    collapsed: true
+  - name: Best assembly
+    icon: mdi:star-outline
+    color: indigo
+    description: Contiguity, accuracy and gene completeness side by side, one mark per assessed assembly
+  - name: Gene completeness
+    icon: mdi:chart-bar
+    color: violet
+    description: BUSCO classes per assessed assembly
+  - name: Assembly table
+    icon: mdi:table
+    color: gray
+    description: The per-assembly rows behind every tile of this tab
+    collapsed: true
+  components:
+  # ------------------------------------------------------------ run at a glance
+  - component_type: card
+    tag: ga-glance-samples
+    section: Run at a glance
+    workflow_tag: genomeassembler
+    data_collection_tag: sample_status
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: qc_status
+    icon_name: mdi:test-tube
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ga-glance-groups
+    section: Run at a glance
+    workflow_tag: genomeassembler
+    data_collection_tag: samplesheet
+    aggregation: nunique
+    column_name: '{GROUP_COL}'
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    icon_name: mdi:shape-outline
+    title_size: sm
+    title_align: left
+    title: '{GROUP_COL_DISPLAY} levels'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ga-glance-assemblers
+    section: Run at a glance
+    workflow_tag: genomeassembler
+    data_collection_tag: sample_status
+    aggregation: nunique
+    column_name: assembler_used
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: assembler_used
+    icon_name: mdi:family-tree
+    title_size: sm
+    title_align: left
+    title: Assemblers
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ga-glance-stages
+    section: Run at a glance
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    aggregation: nunique
+    column_name: stage
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: stage_class
+    icon_name: mdi:chart-timeline-variant
+    title_size: sm
+    title_align: left
+    title: Stages assessed
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ----------------------------------------------------------------- sample sheet
+  - component_type: text
+    tag: ga-sheet-intro
+    section: Sample sheet
+    title: Sample sheet
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      One row per samplesheet sample with its design columns and how many of its
+      assemblies the QC tools reported on. A sample marked No assembly QC appears
+      in no other tile.
+    workflow_tag: genomeassembler
+    data_collection_tag: sample_status
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: ga-sheet-table
+    section: Sample sheet
+    workflow_tag: genomeassembler
+    data_collection_tag: sample_status
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Samples and their assembly QC
+    description: The samplesheet columns, the assembler and scaffolders they resolve to, and the best QV, BUSCO and N50 over the sample's stages.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+
+  # ---------------------------------------------------------------- best assembly
+  - component_type: text
+    tag: ga-ovw-intro
+    section: Best assembly
+    title: Which strategy gives the best assembly
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Every mark is one assessed assembly, a sample at one stage. Look for the
+      assemblies that sit high on every axis at once: long N50, high QV, high
+      k-mer and BUSCO completeness, few duplicated BUSCOs.
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: ga-ovw-card-assemblies
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    aggregation: nunique
+    column_name: assembly_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: stage_class
+    icon_name: mdi:counter
+    title_size: sm
+    title_align: left
+    title: Assemblies assessed
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-ovw-card-qv
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_assembly_qv
+    use: merqury/assembly_qv
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: qv
+    column_type: float64
+    icon_name: mdi:check-decagram
+    title_size: sm
+    title_align: left
+    title: Best QV
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-ovw-card-busco
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: busco_batch_summary
+    use: busco/batch_summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: complete_pct
+    column_type: float64
+    icon_name: mdi:shield-check-outline
+    title_size: sm
+    title_align: left
+    title: Best BUSCO complete (%)
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-ovw-card-genome-size
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    use: genomescope/summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: haploid_length_max
+    column_type: int64
+    icon_name: mdi:ruler
+    title_size: sm
+    title_align: left
+    title: Genome size estimate (bp)
+    layout: {x: 6, y: 1, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ga-ovw-av-parallel
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      sample_col: assembly_id
+      group_col: '{GROUP_COL}'
+      scale: minmax
+      metric_cols: [n50, l50, total_length, n_sequences, qv, kmer_completeness, busco_complete, busco_duplicated]
+      controls_placement: header
+    title: Every assembly across the QC axes
+    description: One line per assessed assembly, coloured by {GROUP_COL_DISPLAY}. Brush an axis to keep the assemblies inside a range; axes with no value for an assembly leave its line open there.
+    title_size: h3
+    layout: {x: 0, y: 3, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-ovw-av-n50-qv
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: n50
+      y_col: qv
+      label_col: assembly_id
+      color_col: assembler_used
+      size_col: total_length
+      log_x: true
+      x_title: N50 (bp)
+      y_title: Consensus QV (Merqury)
+      selection_enabled: true
+      selection_column: assembly_id
+      legend_pos: bottom
+      controls_placement: header
+    title: Contiguity against accuracy
+    description: N50 against Merqury QV per assessed assembly, coloured by assembler and sized by assembled length. Top right is long and accurate; click a point to open its record beside the scatter.
+    title_size: h3
+    layout: {x: 0, y: 10, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: ga-ovw-av-record
+    section: Best assembly
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: assembly_id
+      title_col: assembly_id
+      selection_source: any
+      sections:
+        Design: [sample, stage, stage_class, assembler_used, scaffolders]
+        Contiguity: [n_sequences, total_length, largest_sequence, n50, l50, n90, l90, aun]
+        Accuracy: [qv, error_rate, kmer_completeness]
+        Genes: [busco_lineage, busco_complete, busco_single, busco_duplicated, busco_fragmented, busco_missing]
+        Reference: [genome_fraction, misassemblies, mismatches_per_100kbp, nga50]
+        QC coverage: [qc_tools, n_qc_tools]
+      linked_component: ga-ovw-av-n50-qv
+    title: Assembly record
+    description: The assembly picked in the scatter beside it, every metric the QC tools reported for it.
+    title_size: h3
+    layout: {x: 5, y: 10, w: 3, h: 7}
+
+  # ------------------------------------------------------------ gene completeness
+  - component_type: advanced_viz
+    tag: ga-ovw-av-busco-bars
+    section: Gene completeness
+    workflow_tag: genomeassembler
+    data_collection_tag: busco_composition
+    use: busco/class_composition
+    config:
+      normalise_to_one: false
+      sort_by: abundance
+      sample_sort: input
+      top_n: 12
+      controls_placement: header
+    title: BUSCO classes per assembly
+    description: Complete single-copy, complete duplicated, fragmented and missing BUSCOs as a share of the lineage set, one bar per assessed assembly.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  # ---------------------------------------------------------------- assembly table
+  - component_type: table
+    tag: ga-ovw-table-assemblies
+    section: Assembly table
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    page_size: 25
+    title: Assessed assemblies
+    description: One row per sample and stage with every QC block joined; select rows to narrow the other tiles to them.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+  # ------------------------------------------------------------------ left panel
+  - component_type: interactive
+    tag: ga-filter-sample
+    index: ga-filter-sample
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: genomeassembler
+    data_collection_tag: samplesheet
+    interactive_component_type: MultiSelect
+    column_name: '{METADATA_ID_COL}'
+    column_type: object
+    display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ga-filter-group
+    index: ga-filter-group
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: genomeassembler
+    data_collection_tag: samplesheet
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ga-ovw-filter-stage-class
+    index: ga-ovw-filter-stage-class
+    section: Assembly filters
+    group: Assembly scope
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    interactive_component_type: MultiSelect
+    column_name: stage_class
+    column_type: object
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:chart-timeline-variant'}
+    placement: left
+    title: Stage class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ga-ovw-filter-assembler
+    index: ga-ovw-filter-assembler
+    section: Assembly filters
+    group: Assembly scope
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    interactive_component_type: MultiSelect
+    column_name: assembler_used
+    column_type: object
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:family-tree'}
+    placement: left
+    title: Assembler
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ga-ovw-filter-qv
+    index: ga-ovw-filter-qv
+    section: Assembly filters
+    group: Assembly scope
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    interactive_component_type: RangeSlider
+    column_name: qv
+    column_type: float64
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Consensus QV
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+tabs:
+# =============================================================================
+# Stages: what polishing and scaffolding add
+# =============================================================================
+- title: Stages
+  subtitle: What polishing and scaffolding add to each sample's assembly, step by step
+  advanced_viz_controls: header
+  tab_order: 2
+  tab_icon: mdi:chart-timeline-variant
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Route filters
+    icon: mdi:tune
+    color: grape
+    description: Narrows the stage routes to some final stages
+  grid_sections:
+  - name: What each stage adds
+    icon: mdi:chart-timeline-variant
+    color: grape
+    description: QV and N50 along each sample's route from raw assembly to scaffolds
+  - name: Stage comparison
+    icon: mdi:scale-balance
+    color: grape
+    description: Two stage classes compared metric by metric
+  - name: Route table
+    icon: mdi:table
+    color: gray
+    description: The per-step rows behind this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: ga-stg-intro
+    section: What each stage adds
+    title: What each stage adds
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Each line follows one sample from its raw assembly through polishing to one
+      scaffolder. A line that climbs gained at that step; a flat line means the
+      step changed nothing the metric can see.
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: ga-stg-card-routes
+    section: What each stage adds
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    aggregation: nunique
+    column_name: route
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: final_stage
+    icon_name: mdi:family-tree
+    title_size: sm
+    title_align: left
+    title: Routes
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-stg-card-qv-gain
+    section: What each stage adds
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: qv_gain
+    column_type: float64
+    icon_name: mdi:check-decagram
+    title_size: sm
+    title_align: left
+    title: Largest QV gain
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-stg-card-n50-fold
+    section: What each stage adds
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n50_fold
+    column_type: float64
+    icon_name: mdi:ruler
+    title_size: sm
+    title_align: left
+    title: Largest N50 fold change
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-stg-card-busco
+    section: What each stage adds
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: busco_complete
+    column_type: float64
+    icon_name: mdi:shield-check-outline
+    title_size: sm
+    title_align: left
+    title: Lowest BUSCO complete (%)
+    layout: {x: 6, y: 1, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ga-stg-av-qv
+    section: What each stage adds
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: route
+      x_col: stage_rank
+      y_col: qv
+      x_title: Stage (0 assembly, 1 long-read polish, 2 short-read polish, 3 scaffold)
+      y_title: Consensus QV (Merqury)
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: route
+      controls_placement: header
+    title: QV along each route
+    description: Merqury QV at every assessed step of every sample. Polishing should lift the line; scaffolding joins sequences and should leave it flat.
+    title_size: h3
+    layout: {x: 0, y: 3, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-stg-av-n50
+    section: What each stage adds
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: route
+      x_col: stage_rank
+      y_col: n50_fold
+      x_title: Stage (0 assembly, 1 long-read polish, 2 short-read polish, 3 scaffold)
+      y_title: N50 relative to the raw assembly
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: route
+      controls_placement: header
+    title: N50 gain along each route
+    description: N50 of every step divided by the N50 of the sample's raw assembly. Scaffolding should lift the line; polishing should leave it at one.
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-stg-av-compare
+    section: Stage comparison
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    viz_kind: group_compare
+    config:
+      viz_kind: group_compare
+      index_col: assembly_id
+      group_col: stage_class
+      test: wilcoxon
+      min_observations: 2
+      default_group_a: assembly
+      default_group_b: scaffold
+      controls_placement: header
+    title: Raw assemblies against scaffolds
+    description: Every numeric metric compared between two stage classes (or two saved selections). With a handful of assemblies per class the test is a screen, not a verdict.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: ga-stg-table
+    section: Route table
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    row_selection_enabled: true
+    row_selection_column: route
+    page_size: 25
+    title: Stage routes
+    description: One row per step of every route, with the change from the raw assembly.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: interactive
+    tag: ga-stg-filter-final
+    index: ga-stg-filter-final
+    section: Route filters
+    group: Route scope
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    interactive_component_type: MultiSelect
+    column_name: final_stage
+    column_type: object
+    display: {title_size: md, custom_color: '#AE3EC9', icon_name: 'mdi:flag-checkered'}
+    placement: left
+    title: Final stage
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ga-stg-filter-route
+    index: ga-stg-filter-route
+    section: Route filters
+    group: Route scope
+    workflow_tag: genomeassembler
+    data_collection_tag: stage_steps
+    interactive_component_type: MultiSelect
+    column_name: route
+    column_type: object
+    display: {title_size: md, custom_color: '#AE3EC9', icon_name: 'mdi:family-tree'}
+    placement: left
+    title: Route
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =============================================================================
+# Contiguity
+# =============================================================================
+- title: Contiguity
+  subtitle: Nx curves for every assessed assembly and QUAST's view of the assemblies it scored
+  advanced_viz_controls: header
+  tab_order: 3
+  tab_icon: mdi:ruler
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Curve filters
+    icon: mdi:tune
+    color: blue
+    description: Narrows the Nx curves to some stages
+  grid_sections:
+  - name: Nx curves
+    icon: mdi:chart-line
+    color: blue
+    description: Sequence length against the share of the assembly, every assessed assembly
+  - name: QUAST
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: QUAST's reference-free statistics and, with a reference, its misassembly view
+  - name: QUAST tables
+    icon: mdi:table
+    color: gray
+    description: The QUAST rows behind this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: ga-ctg-intro
+    section: Nx curves
+    title: How the length is distributed
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      N50 is the point at 50 percent of these curves. Compare whole curves: a
+      curve that stays high far to the right holds its length in few long
+      sequences, one that drops early is fragmented.
+    workflow_tag: genomeassembler
+    data_collection_tag: nx_curve
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: ga-ctg-card-length
+    section: Nx curves
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: total_length
+    column_type: int64
+    icon_name: mdi:ruler
+    title_size: sm
+    title_align: left
+    title: Assembled length (bp)
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-ctg-card-n50
+    section: Nx curves
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n50
+    column_type: int64
+    icon_name: mdi:chart-bar
+    title_size: sm
+    title_align: left
+    title: Best N50 (bp)
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-ctg-card-l50
+    section: Nx curves
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: l50
+    column_type: int64
+    icon_name: mdi:counter
+    title_size: sm
+    title_align: left
+    title: Fewest sequences to half (L50)
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-ctg-card-sequences
+    section: Nx curves
+    workflow_tag: genomeassembler
+    data_collection_tag: assemblies
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n_sequences
+    column_type: int64
+    icon_name: mdi:dna
+    title_size: sm
+    title_align: left
+    title: Sequences per assembly
+    layout: {x: 6, y: 1, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ga-ctg-av-nx
+    section: Nx curves
+    workflow_tag: genomeassembler
+    data_collection_tag: nx_curve
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: assembly_id
+      x_col: nx
+      y_col: sequence_length
+      log_y: true
+      reference_x: 50
+      reference_label: N50
+      x_title: Share of the assembly (percent)
+      y_title: Sequence length (bp)
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: assembly_id
+      controls_placement: header
+    title: Nx curve per assembly
+    description: For every x, the length of the sequence at which the longest sequences reach x percent of the assembly. Computed from the sequence lengths samtools idxstats lists for the reads mapped back.
+    title_size: h3
+    layout: {x: 0, y: 3, w: 8, h: 7}
+  - component_type: text
+    tag: ga-ctg-quast-intro
+    section: QUAST
+    title: QUAST
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      QUAST reports only on the assemblies the run sent to it. With a reference,
+      a high N50 over a much lower NGA50 is contiguity bought with joins the
+      reference does not support.
+    workflow_tag: genomeassembler
+    data_collection_tag: quast_assembly_report
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: ga-ctg-av-quast-n50
+    section: QUAST
+    workflow_tag: genomeassembler
+    data_collection_tag: quast_assembly_report
+    use: quast/n50_vs_length
+    config: {x_title: Assembled length (bp), y_title: N50 (bp), log_y: true, controls_placement: header, selection_enabled: true, selection_column: assembly_id}
+    title: N50 against assembled length (QUAST)
+    description: One point per QUAST report, sized by contig count.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-ctg-av-quast-ladder
+    section: QUAST
+    workflow_tag: genomeassembler
+    data_collection_tag: quast_length_ladder
+    use: quast/cumulative_length
+    config: {x_title: Minimum contig length (bp), y_title: Bases in contigs at least that long, controls_placement: header}
+    title: Length kept above each contig length (QUAST)
+    description: The assembled bases that survive each minimum contig length, per QUAST report.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-ctg-av-quast-ref
+    section: QUAST
+    workflow_tag: genomeassembler
+    data_collection_tag: quast_reference_report
+    use: quast/fraction_vs_misassemblies
+    config: {x_title: Reference covered (percent), y_title: Misassemblies, controls_placement: header, selection_enabled: true, selection_column: assembly_id}
+    title: Reference coverage against misassemblies (QUAST)
+    description: Written only when the run gave QUAST a reference. Bottom right covers the reference with few breaks; points are sized by NGA50.
+    title_size: h3
+    layout: {x: 0, y: 15, w: 8, h: 7}
+  - component_type: table
+    tag: ga-ctg-table-quast-ref
+    section: QUAST tables
+    workflow_tag: genomeassembler
+    data_collection_tag: quast_reference_report
+    use: quast/reference_report
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    title: QUAST against the reference
+    description: Genome fraction, misassemblies, mismatch and indel rates and NGA50 per assessed assembly.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    tag: ga-ctg-table-quast
+    section: QUAST tables
+    workflow_tag: genomeassembler
+    data_collection_tag: quast_assembly_report
+    use: quast/assembly_report
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    title: QUAST reference-free statistics
+    description: Contig counts, N50, L50 and GC per QUAST report.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 5}
+  - component_type: interactive
+    tag: ga-ctg-filter-stage
+    index: ga-ctg-filter-stage
+    section: Curve filters
+    group: Curve scope
+    workflow_tag: genomeassembler
+    data_collection_tag: nx_curve
+    interactive_component_type: MultiSelect
+    column_name: stage
+    column_type: object
+    display: {title_size: md, custom_color: '#228BE6', icon_name: 'mdi:chart-timeline-variant'}
+    placement: left
+    title: Stage
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+# =============================================================================
+# Genome profile: the yardstick from the reads
+# =============================================================================
+- title: Genome profile
+  subtitle: The read k-mer spectrum and GenomeScope's estimates, the yardstick for every assembly
+  advanced_viz_controls: header
+  tab_order: 4
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Read set filters
+    icon: mdi:tune
+    color: orange
+    description: Narrows the genome profile to some read sets
+  grid_sections:
+  - name: Genome from the reads
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: GenomeScope's fit to the read k-mer spectrum and the spectrum itself
+  - name: Genome profile table
+    icon: mdi:table
+    color: gray
+    description: The GenomeScope rows behind this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: ga-gp-intro
+    section: Genome from the reads
+    title: The genome the reads describe
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      GenomeScope fits the read k-mer spectrum before any assembly, and its
+      haploid length is the size an assembly should approach. A high
+      heterozygosity warns of duplicated haplotigs; a poor model fit means the
+      other estimates are not to be trusted.
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: ga-gp-card-het
+    section: Genome from the reads
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    use: genomescope/summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: heterozygosity_max
+    column_type: float64
+    icon_name: mdi:dna
+    title_size: sm
+    title_align: left
+    title: Heterozygosity (%)
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-gp-card-repeats
+    section: Genome from the reads
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    use: genomescope/summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: repeat_fraction
+    column_type: float64
+    icon_name: mdi:set-merge
+    title_size: sm
+    title_align: left
+    title: Repeat share (%)
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-gp-card-fit
+    section: Genome from the reads
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    use: genomescope/summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: model_fit_max
+    column_type: float64
+    icon_name: mdi:check-decagram
+    title_size: sm
+    title_align: left
+    title: Worst model fit (%)
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-gp-card-error
+    section: Genome from the reads
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    use: genomescope/summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: read_error_rate_max
+    column_type: float64
+    icon_name: mdi:alert-outline
+    title_size: sm
+    title_align: left
+    title: Read error rate (%)
+    layout: {x: 6, y: 1, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ga-gp-av-spectrum
+    section: Genome from the reads
+    workflow_tag: genomeassembler
+    data_collection_tag: jellyfish_histogram
+    use: jellyfish/kmer_spectrum
+    config:
+      log_y: true
+      x_title: K-mer multiplicity
+      y_title: Distinct k-mers
+      legend_pos: bottom
+      controls_placement: header
+    title: Read k-mer spectrum
+    description: The jellyfish histogram GenomeScope fits, one line per read set. The main peak is the k-mer depth; a shoulder at half of it is the heterozygous share.
+    title_size: h3
+    layout: {x: 0, y: 3, w: 8, h: 7}
+  - component_type: table
+    tag: ga-gp-table
+    section: Genome profile table
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    use: genomescope/summary
+    row_selection_enabled: true
+    row_selection_column: read_set
+    title: GenomeScope estimates
+    description: Every GenomeScope range per read set, min and max.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: interactive
+    tag: ga-gp-filter-readset
+    index: ga-gp-filter-readset
+    section: Read set filters
+    group: Read set scope
+    workflow_tag: genomeassembler
+    data_collection_tag: genomescope_summary
+    interactive_component_type: MultiSelect
+    column_name: read_set
+    column_type: object
+    display: {title_size: md, custom_color: '#F76707', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Read set
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+# =============================================================================
+# Accuracy and genes: Merqury and BUSCO
+# =============================================================================
+- title: Accuracy and genes
+  subtitle: Merqury k-mer accuracy and copy number, and BUSCO gene completeness per assembly
+  advanced_viz_controls: header
+  tab_order: 5
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sequence filters
+    icon: mdi:tune
+    color: teal
+    description: Narrows the per-sequence QV to error-free or erroneous sequences
+  grid_sections:
+  - name: K-mer accuracy
+    icon: mdi:check-decagram
+    color: teal
+    description: Merqury QV, k-mer completeness and the copy number of the read k-mers
+  - name: Per-sequence errors
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Where the error k-mers sit, sequence by sequence
+  - name: BUSCO
+    icon: mdi:shield-check-outline
+    color: violet
+    description: Complete against duplicated BUSCOs per assembly
+  - name: Accuracy tables
+    icon: mdi:table
+    color: gray
+    description: The Merqury and BUSCO rows behind this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: ga-acc-intro
+    section: K-mer accuracy
+    title: Accuracy and completeness from k-mers
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      The read k-mers are the truth set: assembly k-mers missing from the reads
+      are errors (the QV), solid read k-mers missing from the assembly are lost
+      sequence. The copy-number bars show lost, collapsed and duplicated sequence.
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_assembly_qv
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: ga-acc-card-completeness
+    section: K-mer accuracy
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_assembly_qv
+    use: merqury/assembly_qv
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: kmer_completeness
+    column_type: float64
+    icon_name: mdi:check-decagram
+    title_size: sm
+    title_align: left
+    title: K-mer completeness (%)
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-acc-card-error-kmers
+    section: K-mer accuracy
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_assembly_qv
+    use: merqury/assembly_qv
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: assembly_id
+    top_n_count: 4
+    column_name: asm_only_kmers
+    column_type: int64
+    icon_name: mdi:alert-outline
+    title_size: sm
+    title_align: left
+    title: Error k-mers
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-acc-card-error-free
+    section: K-mer accuracy
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_sequence_qv
+    use: merqury/sequence_qv
+    aggregation: count
+    secondary_layout: donut
+    breakdown_col: error_free
+    column_name: sequence
+    column_type: object
+    icon_name: mdi:dna
+    title_size: sm
+    title_align: left
+    title: Sequences assessed
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: ga-acc-card-duplicated
+    section: K-mer accuracy
+    workflow_tag: genomeassembler
+    data_collection_tag: busco_batch_summary
+    use: busco/batch_summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: duplicated_pct
+    column_type: float64
+    icon_name: mdi:set-merge
+    title_size: sm
+    title_align: left
+    title: Most BUSCOs duplicated (%)
+    layout: {x: 6, y: 1, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ga-acc-av-qv
+    section: K-mer accuracy
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_assembly_qv
+    use: merqury/qv_vs_completeness
+    config: {x_title: K-mer completeness (percent), y_title: Consensus QV, legend_pos: bottom, controls_placement: header, selection_enabled: true, selection_column: assembly_id}
+    title: QV against k-mer completeness
+    description: One point per assessed assembly, sized by its k-mer count. Top right is accurate and complete.
+    title_size: h3
+    layout: {x: 0, y: 3, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-acc-av-copy
+    section: K-mer accuracy
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_copy_number
+    use: merqury/copy_number_bars
+    config:
+      normalise_to_one: false
+      sort_by: abundance
+      sample_sort: input
+      top_n: 12
+      controls_placement: header
+    title: Copy number of the read k-mers in each assembly
+    description: Share of the solid read k-mers the assembly lacks, holds once, twice or more. Absent is lost sequence; two copies on a collapsed assembly is duplicated sequence.
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-acc-av-seq-qv
+    section: Per-sequence errors
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_sequence_qv
+    use: merqury/sequence_qv_scatter
+    config: {log_x: true, x_title: Sequence k-mers (about its length), y_title: Per-sequence QV, legend_pos: bottom, controls_placement: header, selection_enabled: true, selection_column: sequence}
+    title: Per-sequence QV against sequence length
+    description: One point per contig or scaffold. Short low-QV sequences are the usual carriers of most error k-mers; error-free sequences have no finite QV and are counted in the card above.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ga-acc-av-busco
+    section: BUSCO
+    workflow_tag: genomeassembler
+    data_collection_tag: busco_batch_summary
+    use: busco/completeness_vs_duplication
+    config: {x_title: Complete BUSCOs (percent), y_title: Duplicated BUSCOs (percent), legend_pos: bottom, controls_placement: header, selection_enabled: true, selection_column: assembly_id}
+    title: Complete against duplicated BUSCOs
+    description: One point per assessed assembly and lineage, sized by contig N50. High and to the left means retained haplotigs or duplicated contigs.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: ga-acc-table-merqury
+    section: Accuracy tables
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_assembly_qv
+    use: merqury/assembly_qv
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    title: Merqury QV and completeness
+    description: QV, error rate and k-mer completeness per assessed assembly.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    tag: ga-acc-table-busco
+    section: Accuracy tables
+    workflow_tag: genomeassembler
+    data_collection_tag: busco_batch_summary
+    use: busco/batch_summary
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    title: BUSCO batch summary
+    description: BUSCO class percentages per assessed assembly and lineage.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 5}
+  - component_type: interactive
+    tag: ga-acc-filter-error-free
+    index: ga-acc-filter-error-free
+    section: Sequence filters
+    group: Sequence scope
+    workflow_tag: genomeassembler
+    data_collection_tag: merqury_sequence_qv
+    interactive_component_type: MultiSelect
+    column_name: error_free
+    column_type: object
+    display: {title_size: md, custom_color: '#12B886', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Error-free sequence
+    layout: {x: 0, y: 0, w: 1, h: 3}
