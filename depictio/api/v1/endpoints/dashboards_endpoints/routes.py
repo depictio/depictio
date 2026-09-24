@@ -20,6 +20,7 @@ from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_pr
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     get_child_tabs,
     get_parent_dashboard_title,
@@ -859,7 +860,15 @@ async def delete_dashboard(
 
     # Check if this is a main tab - if so, delete all child tabs first
     child_tabs_deleted = 0
+    # Collected before the child tabs go, so their comment threads can follow.
+    tab_ids_for_threads = [dashboard_id]
     if dashboard.get("is_main_tab", True):
+        tab_ids_for_threads += [
+            d["dashboard_id"]
+            for d in dashboards_collection.find(
+                {"parent_dashboard_id": dashboard_id}, {"dashboard_id": 1}
+            )
+        ]
         # Delete all child tabs
         child_result = dashboards_collection.delete_many({"parent_dashboard_id": dashboard_id})
         child_tabs_deleted = child_result.deleted_count
@@ -872,6 +881,7 @@ async def delete_dashboard(
         # The dashboard's uploaded logo has no other referent, so it goes with
         # it rather than sitting in `branding_assets` forever.
         delete_logo_asset(dashboard_logo_key(dashboard_id))
+        delete_threads_for_dashboards(tab_ids_for_threads)
         message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
         if child_tabs_deleted > 0:
             message += f" Also deleted {child_tabs_deleted} child tabs."
@@ -1019,6 +1029,7 @@ async def delete_tab(
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        delete_threads_for_dashboards([dashboard_id])
         return {
             "success": True,
             "message": f"Tab '{tab_title}' deleted successfully.",
@@ -5684,6 +5695,7 @@ def _import_multi_tab_dashboard(
             )
             if existing_tab is not None:
                 dashboards_collection.delete_one({"_id": existing_tab["_id"]})
+                delete_threads_for_dashboards([existing_tab["dashboard_id"]])
             continue
 
         # Validate and insert/update tab
