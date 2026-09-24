@@ -1,0 +1,765 @@
+# nf-core/demultiplex Template v1.8.0 - Sequencing-facility run QC
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/demultiplex/1.8.0 --data-root /path/to/your/data
+#
+# Tested against the nf-core/demultiplex AWS megatest results:
+#   s3://nf-core-awsmegatests/demultiplex/results-daade37c4a75a4c1709ccf12434deb3424141319/
+# `megatest.yaml` next to this file lists the exact subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# One DATA_ROOT is one pipeline run: one or more flowcells, each demultiplexed
+# with bcl2fastq (the default) or BCL Convert. The two demultiplexers write
+# different reports (bcl2fastq `Stats/Stats.json`, BCL Convert
+# `Reports/*.csv`), so each run-level collection below (demux_stats,
+# lane_summary, read_quality, unknown_barcodes) reads bcl2fastq by default and
+# is repointed at the BCL Convert recipe of the same name, which writes the
+# same schema, when IS_BCLCONVERT is set. The megatest is a bcl2fastq run.
+#
+# Lanes and reads are never spelled out: every lane and read collection is one
+# row per lane (and read) found in the reports, so a one-lane MiSeq and a
+# four-lane NovaSeq ingest through the same template.
+#
+# Design metadata (organism, input amount, anything the library names encode)
+# is NEVER parsed out of library names. It comes from an optional metadata
+# file (METADATA_FILE, first column = library name), the ampliseq 2.18.0
+# convention; the `libraries` hub passes its columns through, and GROUP_COL
+# picks the one the dashboards group by. Without a metadata file the hub
+# carries a single `__no_group__` group and every tile still renders.
+# ============================================================================
+template:
+  template_id: "nf-core/demultiplex/1.8.0"
+  description: "nf-core/demultiplex template for sequencing-facility run QC: run health per lane and read, demultiplexing balance, undetermined reads and index swaps, per-library read QC"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one nf-core/demultiplex run (the flowcell folders, multiqc/, pipeline_info/)"
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional library metadata TSV. First column: the library name as written in the sample sheet; every other column (organism, input amount, project, ...) becomes a design column of the library hub."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Metadata library-name column. Auto-detected as the first metadata column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Metadata column the dashboards group and colour libraries by. Auto-detected as the first annotation column of METADATA_FILE; without metadata it falls back to a single group."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for chart titles."
+      required: false
+    - name: "IS_BCLCONVERT"
+      description: "Set (--var IS_BCLCONVERT=true) for a run demultiplexed with --demultiplexer bclconvert: the run-level collections read the BCL Convert Reports/*.csv instead of the bcl2fastq Stats.json. Matches the run's params.json demultiplexer."
+      required: false
+  # Variables supplied when materialising the BUNDLED reference dataset: the
+  # megatest libraries with the vendored metadata file, grouped by organism.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/library_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "organism"
+      GROUP_COL_DISPLAY: "Organism"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"   # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Demultiplexing"
+        key_patterns: ["demultiplexer", "flowcell_*", "v1_schema", "remove_samplesheet_adapter", "*_schema_validator"]
+      - group: "Read processing"
+        key_patterns: ["trim_fastq", "publish_raw_fastq", "sample_size", "kraken_db", "strandedness", "optional_outputs"]
+      - group: "Run QC"
+        key_patterns: ["checkqc_config", "skip_tools"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "email*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "publish_dir_mode", "trace_report_suffix", "validate_params", "version", "help*", "show_hidden", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path"]
+    highlight:
+      - "demultiplexer"
+      - "trim_fastq"
+      - "remove_samplesheet_adapter"
+      - "skip_tools"
+      - "checkqc_config"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # No metadata file: the metadata collection has nothing to read. The hub's
+    # metadata source is optional, so it falls back to a single group.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    # bcl2fastq route (the default): the BCL Convert raw scans have nothing to
+    # read, drop them so the ingestion report does not list them as skipped.
+    - if_var_absent: "IS_BCLCONVERT"
+      remove_dc_tags: ["bclconvert_demux_raw", "bclconvert_quality_raw", "bclconvert_unknown_raw"]
+      dashboards: ["dashboards/base.yaml"]
+    # BCL Convert route: same four collections, same schemas, BCL Convert
+    # recipes. The bcl2fastq Stats.json scan is dropped.
+    - if_var_present: "IS_BCLCONVERT"
+      remove_dc_tags: ["bcl2fastq_stats_raw"]
+      override_dcs:
+        - data_collection_tag: "demux_stats"
+          recipe: "bclconvert/demux_stats.py"
+        - data_collection_tag: "lane_summary"
+          recipe: "bclconvert/lane_summary.py"
+        - data_collection_tag: "read_quality"
+          recipe: "bclconvert/read_quality.py"
+        - data_collection_tag: "unknown_barcodes"
+          recipe: "bclconvert/unknown_barcodes.py"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Sequencing Run Demultiplexing QC"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "demultiplex"
+    version: "1.8.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/demultiplex"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC: the per-library report (bcl2fastq, CheckQC, fastp, Falco).
+      # The run also writes multiqcsav/, a run-level report fed with the
+      # InterOp folder; it is not read here (see docs/dashboards.md).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data: demultiplexing, CheckQC verdicts, fastp and Falco read QC"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc/multiqc(?:_report)?_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "bcl2fastq"
+              - "checkqc"
+              - "fastp"
+              - "falco"
+            plots:
+              bcl2fastq:
+                - "Lane Statistics"
+                - "Clusters by lane"
+                - "Clusters by sample"
+                - "Undetermined barcodes by lane"
+              checkqc:
+                - "Too few reads per sample"
+                - "% Undetermined indexes"
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+                - "Sequence Quality":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+                - "GC Content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+                - "N content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+              falco:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
+
+      # ----------------------------------------------------------------
+      # Library metadata (optional, METADATA_FILE). Its first column is the
+      # library name; the `libraries` hub passes every other column through.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Library metadata TSV (optional, --var METADATA_FILE=...)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "{METADATA_ID_COL}": "Library name as written in the sample sheet. Every other column is a design annotation."
+
+      # ----------------------------------------------------------------
+      # bcl2fastq Stats.json, one line per row (the recipes rebuild the JSON).
+      # One file per demultiplexing run, i.e. per flowcell or per lane when
+      # the sample sheet is split by lane.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bcl2fastq_stats_raw"
+        optional: true
+        description: "Raw bcl2fastq Stats.json reports, one line per row (input of the four run-level collections)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "Stats\\.json$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a Stats.json report"
+              "source_path": "File the line came from"
+
+      # ----------------------------------------------------------------
+      # BCL Convert Reports/*.csv (IS_BCLCONVERT route only).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bclconvert_demux_raw"
+        optional: true
+        description: "Raw BCL Convert Demultiplex_Stats.csv reports"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "Demultiplex_Stats\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Lane": "Lane number"
+              "SampleID": "Library, or Undetermined"
+              "Index": "Index sequence(s), i7-i5"
+              "# Reads": "Reads assigned"
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "bclconvert_quality_raw"
+        optional: true
+        description: "Raw BCL Convert Quality_Metrics.csv reports"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "Quality_Metrics\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Lane": "Lane number"
+              "SampleID": "Library, or Undetermined"
+              "ReadNumber": "Read number"
+              "Yield": "Bases"
+              "YieldQ30": "Bases at Q30 or above"
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "bclconvert_unknown_raw"
+        optional: true
+        description: "Raw BCL Convert Top_Unknown_Barcodes.csv reports"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "Top_Unknown_Barcodes\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Lane": "Lane number"
+              "index": "Observed i7"
+              "index2": "Observed i5"
+              "# Reads": "Reads carrying the pair"
+              "source_path": "File the row came from"
+
+      # ----------------------------------------------------------------
+      # Run-level collections (bcl2fastq recipes; BCL Convert when
+      # IS_BCLCONVERT is set, same schemas).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "demux_stats"
+        description: "Reads per library and lane, with the Undetermined reads of each lane, yield, base quality and index purity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcl2fastq/demux_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "flowcell": "Flowcell (bcl2fastq) or run folder (BCL Convert)"
+              "lane": "Lane number"
+              "lane_label": "Lane, as a label"
+              "sample": "Library name, or Undetermined"
+              "index": "Index sequence(s), i7+i5; empty on the Undetermined row"
+              "is_undetermined": "True on the per-lane Undetermined row"
+              "level": "Composition rank, Library on every row"
+              "reads": "Read clusters assigned (a pair counts once)"
+              "pct_of_lane": "Reads over every read of the lane, percent"
+              "yield_mb": "Bases passing filter, megabases"
+              "pct_q30": "Bases at Q30 or above, percent"
+              "mean_quality": "Mean Phred score"
+              "pct_perfect_index": "Reads whose index matched with no mismatch, percent"
+              "pct_one_mismatch_index": "Reads whose index matched with one mismatch, percent"
+
+      - data_collection_tag: "lane_summary"
+        description: "Run health per lane: clusters, pass-filter rate, yield, base quality, Undetermined share and library balance"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcl2fastq/lane_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "flowcell": "Flowcell (bcl2fastq) or run folder (BCL Convert)"
+              "lane": "Lane number"
+              "lane_label": "Lane, as a label"
+              "clusters_raw": "Clusters detected (null for BCL Convert)"
+              "clusters_pf": "Clusters passing filter"
+              "pct_pf": "Clusters passing filter over clusters detected, percent"
+              "yield_gb": "Bases passing filter, gigabases"
+              "pct_q30": "Bases at Q30 or above, percent"
+              "mean_quality": "Mean Phred score"
+              "n_libraries": "Libraries demultiplexed on the lane"
+              "library_reads": "Reads assigned to a library"
+              "undetermined_reads": "Reads no index matched"
+              "pct_undetermined": "Undetermined reads over all reads, percent"
+              "library_reads_cv": "Coefficient of variation of the reads per library, percent"
+              "lowest_library_pct_of_mean": "Smallest library over the mean library, percent"
+
+      - data_collection_tag: "read_quality"
+        description: "Yield and base quality per lane and read"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcl2fastq/read_quality.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "flowcell": "Flowcell (bcl2fastq) or run folder (BCL Convert)"
+              "lane": "Lane number"
+              "lane_label": "Lane, as a label"
+              "read": "Read number"
+              "read_label": "Read, as a label"
+              "yield_gb": "Bases passing filter in that read, gigabases"
+              "pct_q30": "Bases at Q30 or above, percent"
+              "frac_q30": "Bases at Q30 or above, fraction"
+              "mean_quality": "Mean Phred score"
+
+      - data_collection_tag: "unknown_barcodes"
+        optional: true
+        description: "Most frequent unassigned index pairs per lane, classed by whether their i7 and i5 are in use on the lane"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcl2fastq/unknown_barcodes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "flowcell": "Flowcell (bcl2fastq) or run folder (BCL Convert)"
+              "lane": "Lane number"
+              "lane_label": "Lane, as a label"
+              "barcode": "Observed index pair, i7+i5"
+              "index1": "Observed i7"
+              "index2": "Observed i5, empty on a single-index run"
+              "reads": "Reads carrying that barcode"
+              "rank": "1 for the most frequent barcode of the lane"
+              "pct_of_lane": "Reads over all reads of the lane, percent"
+              "pct_of_undetermined": "Reads over the Undetermined reads of the lane, percent"
+              "i7_in_use": "The i7 belongs to a library of the lane"
+              "i5_in_use": "The i5 belongs to a library of the lane"
+              "swap_class": "Both indexes in use, only one, neither, or a poly-G / N index"
+
+      # ----------------------------------------------------------------
+      # InterOp summary (optional). nf-core/demultiplex 1.8.0 does not run
+      # `interop_summary`; a facility that drops its `--csv=1` output in the
+      # run folder gets the SAV numbers (error rate, phasing) this way.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "interop_summary_raw"
+        optional: true
+        description: "Raw interop_summary --csv=1 tables, one line per row"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*interop_summary.*\\.csv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the summary table"
+              "source_path": "File the line came from"
+
+      - data_collection_tag: "interop_summary"
+        optional: true
+        description: "SAV run summary per lane and read: density, pass-filter rate, phasing, Q30 share, yield, PhiX error rate"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "interop/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run the summary names"
+              "lane": "Lane number"
+              "lane_label": "Lane, as a label"
+              "read": "Read number, index reads included"
+              "read_label": "Read, as a label, (I) on an index read"
+              "is_index_read": "True on an index read"
+              "tiles": "Tiles imaged"
+              "density_k_mm2": "Cluster density, thousands per square millimetre"
+              "pct_cluster_pf": "Clusters passing filter, percent"
+              "pct_cluster_pf_sd": "Its standard deviation over tiles"
+              "phasing": "Phasing, percent per cycle"
+              "prephasing": "Prephasing, percent per cycle"
+              "reads_m": "Clusters, millions"
+              "reads_pf_m": "Clusters passing filter, millions"
+              "pct_q30": "Bases at Q30 or above, percent"
+              "frac_q30": "Bases at Q30 or above, fraction"
+              "yield_gb": "Yield, gigabases"
+              "pct_aligned": "Reads aligned to PhiX, percent"
+              "error_rate": "PhiX error rate, percent"
+              "error_rate_sd": "Its standard deviation over tiles"
+
+      # ----------------------------------------------------------------
+      # fastp per-library reports, one line per row. Absent when the run
+      # skipped fastp (--skip_tools fastp or --trim_fastq false).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "fastp_json_raw"
+        optional: true
+        description: "Raw fastp JSON reports, one line per row (input of fastp_library_qc and cycle_quality)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.fastp\\.json$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a fastp JSON report"
+              "source_path": "File the line came from; the library and lane come from its name"
+
+      - data_collection_tag: "fastp_library_qc"
+        optional: true
+        description: "Read QC per library and lane after demultiplexing: reads kept, duplication, adapter, GC, base quality, insert size"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/demultiplex/fastp_library_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library name"
+              "lane": "Lane, null when the FASTQ name carries none"
+              "lane_label": "Lane, as a label"
+              "fastq_id": "FASTQ stem, the MultiQC name of the report"
+              "reads_before": "Reads fastp was given (both mates)"
+              "reads_after": "Reads it kept"
+              "pct_passed": "Reads kept, percent"
+              "pct_low_quality": "Reads dropped for low quality, percent"
+              "pct_too_many_n": "Reads dropped for too many N, percent"
+              "pct_too_short": "Reads dropped as too short, percent"
+              "pct_duplication": "Duplication rate, percent"
+              "pct_adapter_trimmed": "Reads with adapter trimmed, percent"
+              "gc_pct": "GC content after filtering, percent"
+              "pct_q30_before": "Bases at Q30 or above before filtering, percent"
+              "pct_q30_after": "Bases at Q30 or above after filtering, percent"
+              "mean_length_after": "Mean read 1 length after trimming, bp"
+              "insert_size_peak": "Most frequent insert size, bp"
+
+      - data_collection_tag: "cycle_quality"
+        optional: true
+        description: "Mean base quality per cycle, lane and read, pooled over the libraries (median and 10th to 90th percentile band)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/demultiplex/cycle_quality.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "series": "Lane and read, one curve each"
+              "lane": "Lane number"
+              "lane_label": "Lane, as a label"
+              "read": "Read number"
+              "cycle": "Sequencing cycle"
+              "median_quality": "Median over libraries of the mean Phred score"
+              "p10_quality": "10th percentile over libraries"
+              "p90_quality": "90th percentile over libraries"
+              "n_libraries": "Libraries contributing at that cycle"
+
+      # ----------------------------------------------------------------
+      # CheckQC verdicts, one line per row.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "checkqc_raw"
+        optional: true
+        description: "Raw CheckQC JSON reports, one line per row (input of checkqc_verdicts)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "checkqc_report\\.json$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a CheckQC report"
+              "source_path": "File the line came from"
+
+      - data_collection_tag: "checkqc_verdicts"
+        optional: true
+        description: "CheckQC findings per lane and handler, with a pass row for each check that reported nothing"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/demultiplex/checkqc_verdicts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "report": "Run folder the report sits in"
+              "handler": "CheckQC check"
+              "severity": "error, warning or pass"
+              "lane": "Lane of the finding"
+              "sample": "Library of a per-sample finding"
+              "index": "Index pair of an unidentified-index finding"
+              "value": "Measured number"
+              "threshold": "Limit it was held to"
+              "message": "CheckQC's sentence"
+              "instrument": "Instrument and reagent type CheckQC resolved"
+
+      # ----------------------------------------------------------------
+      # The library hub: every library filter and the record card read it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "libraries"
+        description: "One row per library: demultiplexing counts, fastp read QC and the metadata design columns"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/demultiplex/libraries.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library name, the key every link joins on"
+              "flowcell": "Flowcell the library was read on"
+              "lanes": "Lanes it was read on"
+              "n_lanes": "How many lanes"
+              "index": "Index sequence(s), i7+i5"
+              "fastq_id": "FASTQ stem of its first lane, the MultiQC name of its fastp and Falco rows"
+              "reads": "Read clusters assigned, all lanes"
+              "pct_of_run": "Reads over every read of the run, percent"
+              "pct_of_expected": "Reads over an even share of the run's assigned reads, percent"
+              "yield_mb": "Bases passing filter, megabases"
+              "pct_q30": "Bases at Q30 or above, percent"
+              "mean_quality": "Mean Phred score"
+              "pct_perfect_index": "Reads whose index matched with no mismatch, percent"
+              "reads_after_filter": "Reads fastp kept (both mates)"
+              "pct_passed": "Reads fastp kept, percent"
+              "pct_duplication": "Duplication rate, percent"
+              "pct_adapter_trimmed": "Reads with adapter trimmed, percent"
+              "gc_pct": "GC content after filtering, percent"
+              "pct_q30_after": "Bases at Q30 or above after filtering, percent"
+              "insert_size_peak": "Most frequent insert size, bp"
+              "{GROUP_COL}": "Design column the dashboards group by (from the metadata file, or a single group without one)"
+
+# ============================================================================
+# LINKS: the library hub fans out to every per-library collection and to
+# MultiQC; the lane summary fans out to every per-lane collection.
+# ============================================================================
+links:
+  # CheckQC and bcl2fastq name MultiQC rows by the bare library name.
+  - source_dc_tag: "libraries"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Narrow the CheckQC and bcl2fastq MultiQC panels to the selected libraries"
+    enabled: true
+  # fastp and Falco name them by the FASTQ stem (`<library>_S<n>_L<lane>`,
+  # plus `_R1` / `_R2` for Falco, which sample_mapping strips).
+  - source_dc_tag: "libraries"
+    source_column: "fastq_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Narrow the fastp and Falco MultiQC panels to the selected libraries"
+    enabled: true
+  - source_dc_tag: "libraries"
+    source_column: "sample"
+    target_dc_tag: "demux_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the per-lane library counts to the selected libraries"
+    enabled: true
+  - source_dc_tag: "libraries"
+    source_column: "sample"
+    target_dc_tag: "fastp_library_qc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the fastp read QC to the selected libraries"
+    enabled: true
+  # Reverse: a pick on the per-lane counts narrows the hub (and through it
+  # the record card and the library QC tiles).
+  - source_dc_tag: "demux_stats"
+    source_column: "sample"
+    target_dc_tag: "libraries"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the library hub to the libraries picked on the demultiplexing tiles"
+    enabled: true
+  # Lane scope.
+  - source_dc_tag: "lane_summary"
+    source_column: "lane_label"
+    target_dc_tag: "demux_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "lane_label"
+    description: "Narrow the per-lane library counts to the selected lanes"
+    enabled: true
+  - source_dc_tag: "lane_summary"
+    source_column: "lane_label"
+    target_dc_tag: "read_quality"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "lane_label"
+    description: "Narrow the lane by read quality to the selected lanes"
+    enabled: true
+  - source_dc_tag: "lane_summary"
+    source_column: "lane_label"
+    target_dc_tag: "unknown_barcodes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "lane_label"
+    description: "Narrow the unknown barcodes to the selected lanes"
+    enabled: true
+  - source_dc_tag: "lane_summary"
+    source_column: "lane_label"
+    target_dc_tag: "cycle_quality"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "lane_label"
+    description: "Narrow the per-cycle quality curves to the selected lanes"
+    enabled: true
+  - source_dc_tag: "lane_summary"
+    source_column: "lane_label"
+    target_dc_tag: "fastp_library_qc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "lane_label"
+    description: "Narrow the fastp read QC to the selected lanes"
+    enabled: true
+  - source_dc_tag: "lane_summary"
+    source_column: "lane_label"
+    target_dc_tag: "checkqc_verdicts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "lane"
+    description: "Narrow the CheckQC verdicts to the selected lanes"
+    enabled: false
