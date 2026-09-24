@@ -12,7 +12,7 @@ import CommentsButton from './CommentsButton';
 import { useCommentsControl } from './CommentsContext';
 import AnnotateButton from './AnnotateButton';
 import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
-import { supportsAnnotation } from '../../annotations/layer';
+import { componentSupportsAnnotation } from '../../annotations/plotDecorate';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
@@ -175,13 +175,13 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   // the count is the point, and a hover-only badge would hide it.
   const persistentComments = commentOpenCount > 0 || commentProposedCount > 0;
   if (comments) actions.push('comments');
-  // Annotate mode: cartesian Plotly figures only, and only when the app's
-  // annotation layer lets this user create annotations.
+  // Annotate mode: cartesian Plotly figures, the advanced_viz kinds whose
+  // renderer wires the annotation layer, and tables with a row-id column; and
+  // only when the app's annotation layer lets this user create annotations.
   const annotationLayer = useAnnotationLayer();
   const canAnnotateHere =
     Boolean(annotationLayer?.canAnnotate) &&
-    componentType === 'figure' &&
-    supportsAnnotation(metadata);
+    componentSupportsAnnotation(componentType, metadata as Record<string, unknown>);
   const annotateActive =
     canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
   if (canAnnotateHere) actions.push('annotate');

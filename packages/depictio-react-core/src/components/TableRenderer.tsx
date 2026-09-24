@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Paper,
   Text,
@@ -13,12 +13,14 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type {
   ColDef,
   GridReadyEvent,
+  ValueGetterParams,
   IDatasource,
   IGetRowsParams,
   GridApi,
   SelectionChangedEvent,
   SortChangedEvent,
 } from 'ag-grid-community';
+import { isSelectionUIEvent } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { LoadAllState } from './chrome/LoadAllButton';
@@ -32,6 +34,24 @@ import { useUiScale } from '../uiScale';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
+import { useAnnotationLayer } from '../annotations/AnnotationLayerContext';
+import { DEFAULT_ANNOTATE_OPTIONS } from '../annotations/layer';
+import {
+  buildRowAnnotationMap,
+  markedRowsFromSelection,
+  rowAnnotationBadge,
+  rowAnnotationClasses,
+} from '../annotations/tableRows';
+import type { RowAnnotationMap } from '../annotations/tableRows';
+import type { RenderableAnnotation } from '../annotations/types';
+import AnnotateToolbar from './annotations/AnnotateToolbar';
+import '../styles/table-annotations.css';
+
+const NO_ANNOTATIONS: RenderableAnnotation[] = [];
+/** Pinned-left column carrying the ①② badges of annotated rows. Hidden while
+ *  the table has no marked rows (toggled via the column API, never by
+ *  replacing ``columnDefs``, which would reset the user's sort). */
+const ANNOTATION_COL_ID = '__depictio_annotation';
 
 interface TableRendererProps {
   dashboardId: string;
@@ -249,8 +269,35 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           ? ((res.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc')
           : 'desc';
         sortRef.current = { sortBy: defaultSortField, sortDir: defaultSortDir };
-        setColDefs(
-          visibleColumns.map((c, i) => {
+        const annotationCol: ColDef[] = rowIdCol
+          ? [
+              {
+                colId: ANNOTATION_COL_ID,
+                headerName: '',
+                headerTooltip: 'Annotations',
+                pinned: 'left',
+                lockPinned: true,
+                lockPosition: 'left',
+                suppressMovable: true,
+                suppressHeaderMenuButton: true,
+                sortable: false,
+                filter: false,
+                resizable: false,
+                flex: 0,
+                width: 48,
+                minWidth: 36,
+                hide: true,
+                cellClass: 'depictio-annot-badge-cell',
+                valueGetter: (p: ValueGetterParams) => {
+                  const v = (p.data as Record<string, unknown> | undefined)?.[rowIdCol];
+                  return v == null ? '' : rowAnnotationBadge(rowAnnotationsRef.current.get(String(v)));
+                },
+              },
+            ]
+          : [];
+        setColDefs([
+          ...annotationCol,
+          ...visibleColumns.map((c, i) => {
             const isNumeric = c.type === 'numericColumn';
             const isDefaultSort = c.field === defaultSortField;
             // ``type: 'numericColumn'`` is a built-in AG Grid type alias that
@@ -279,7 +326,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               headerCheckboxSelection: selectionOn && i === 0 ? true : undefined,
             };
           }),
-        );
+        ]);
         setTotal(res.total);
         setReady(true);
       })
@@ -445,14 +492,44 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const batchHighlightOn = batchDcMatch && (activeHighlight!.sticky || batchFadeActive);
   const batchSticky = !!activeHighlight?.sticky;
 
+  // ── Annotation layer ──────────────────────────────────────────────────────
+  // A table takes "points" annotations keyed by its row-id column: marked rows
+  // get a coloured stripe + tint and a ①② badge (see annotations/tableRows.ts).
+  // The app decides which annotations are visible (all threads for editors,
+  // published ones for viewers); a null layer means none and no annotate mode.
+  const layer = useAnnotationLayer();
+  const componentIndex = String(metadata.index);
+  const layerItems = layer && rowIdColumn ? layer.itemsFor(componentIndex) : NO_ANNOTATIONS;
+  const highlightAnnotationId = layer?.highlightId ?? null;
+  const rowAnnotations = useMemo<RowAnnotationMap>(
+    () => buildRowAnnotationMap(layerItems, rowIdColumn, highlightAnnotationId),
+    [layerItems, rowIdColumn, highlightAnnotationId],
+  );
+  // The badge column's valueGetter lives in the one-shot ``columnDefs``; it
+  // reads the latest map through this ref.
+  const rowAnnotationsRef = useRef<RowAnnotationMap>(rowAnnotations);
+  rowAnnotationsRef.current = rowAnnotations;
+  const hasRowAnnotations = rowAnnotations.size > 0;
+  const hasRowAnnotationsRef = useRef(hasRowAnnotations);
+  hasRowAnnotationsRef.current = hasRowAnnotations;
+
+  // Annotate mode: the grid's row selection marks rows instead of filtering
+  // the dashboard. Needs the row-id column to key the marked rows.
+  const annotating =
+    !!layer && layer.canAnnotate && !!rowIdColumn && layer.annotate?.componentIndex === componentIndex;
+  const annotatingRef = useRef(annotating);
+  annotatingRef.current = annotating;
+  const pendingHere =
+    layer?.pending && layer.pending.componentIndex === componentIndex ? layer.pending : null;
+  const [annotateSelectedCount, setAnnotateSelectedCount] = useState(0);
+
   const getRowClass = useMemo(() => {
     const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
     const batchOn =
       batchHighlightOn && !!batchIds && !!batchIdColumn && batchIds.size > 0;
-    if (!legacyOn && !batchOn) return undefined;
-    return (params: { data?: Record<string, unknown> }) => {
-      const data = params.data;
-      if (!data) return undefined;
+    const annotOn = !!rowIdColumn && rowAnnotations.size > 0;
+    if (!legacyOn && !batchOn && !annotOn) return undefined;
+    const realtimeClass = (data: Record<string, unknown>): string | undefined => {
       // A pinned batch gets the steady ``-pinned`` class (stays until cleared);
       // live arrivals (batch or legacy diff) get the one-shot ``-new`` flash.
       if (batchOn) {
@@ -467,7 +544,28 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       }
       return undefined;
     };
-  }, [rowIdColumn, highlightActive, newRowIds, batchIds, batchIdColumn, batchHighlightOn, batchSticky]);
+    return (params: { data?: Record<string, unknown> }) => {
+      const data = params.data;
+      if (!data) return undefined;
+      const classes: string[] = [];
+      if (annotOn) {
+        const av = data[rowIdColumn!];
+        if (av != null) classes.push(...rowAnnotationClasses(rowAnnotations.get(String(av))));
+      }
+      const rt = realtimeClass(data);
+      if (rt) classes.push(rt);
+      return classes.length ? classes : undefined;
+    };
+  }, [
+    rowIdColumn,
+    highlightActive,
+    newRowIds,
+    batchIds,
+    batchIdColumn,
+    batchHighlightOn,
+    batchSticky,
+    rowAnnotations,
+  ]);
 
   // AG Grid only evaluates ``getRowClass`` when a row is first drawn. The
   // new-row highlight resolves via an async snapshot fetch that lands *after*
@@ -477,6 +575,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   useEffect(() => {
     gridApiRef.current?.redrawRows();
   }, [getRowClass]);
+
+  // Show the badge column only while some row is marked.
+  const syncAnnotationColumn = useCallback((api: GridApi | null) => {
+    if (!api || api.isDestroyed() || !api.getColumn(ANNOTATION_COL_ID)) return;
+    api.setColumnsVisible([ANNOTATION_COL_ID], hasRowAnnotationsRef.current);
+  }, []);
+  useEffect(() => {
+    syncAnnotationColumn(gridApiRef.current);
+  }, [hasRowAnnotations, ready, colDefs, syncAnnotationColumn]);
 
   const datasource = useMemo<IDatasource>(
     () => ({
@@ -584,6 +691,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     if (!showAll) {
       event.api.setGridOption('datasource', datasource);
     }
+    syncAnnotationColumn(event.api);
   };
 
   const selectionEnabled = Boolean(metadata.row_selection_enabled) && !!onFilterChange;
@@ -592,7 +700,82 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       ? (metadata.row_selection_column as string)
       : undefined;
 
+  // Programmatic selection changes around annotate mode (clearing it on entry,
+  // restoring the dashboard selection on exit) must not re-emit the filter.
+  // Grid callbacks may be dispatched on the next tick, so the flag is cleared
+  // by a timeout queued after them rather than synchronously.
+  const restoringSelectionRef = useRef(false);
+  const withQuietSelection = (fn: () => void) => {
+    restoringSelectionRef.current = true;
+    try {
+      fn();
+    } finally {
+      window.setTimeout(() => {
+        restoringSelectionRef.current = false;
+      }, 0);
+    }
+  };
+
+  useEffect(() => {
+    if (!annotating) return;
+    const api = gridApiRef.current;
+    let saved: string[] = [];
+    if (api && !api.isDestroyed()) {
+      saved = api
+        .getSelectedNodes()
+        .map((n) => n.id)
+        .filter((id): id is string => typeof id === 'string');
+      withQuietSelection(() => api.deselectAll());
+    }
+    setAnnotateSelectedCount(0);
+    return () => {
+      setAnnotateSelectedCount(0);
+      const api2 = gridApiRef.current;
+      if (!api2 || api2.isDestroyed()) return;
+      withQuietSelection(() => {
+        api2.deselectAll();
+        const nodes = saved
+          .map((id) => api2.getRowNode(id))
+          .filter((n): n is NonNullable<typeof n> => !!n);
+        if (nodes.length) api2.setNodesSelected({ nodes, newValue: true, source: 'api' });
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotating]);
+
+  const markSelectedRows = () => {
+    const api = gridApiRef.current;
+    if (!layer || !rowIdColumn || !api || pendingHere) return;
+    const geometry = markedRowsFromSelection(
+      api.getSelectedRows() as Array<Record<string, unknown>>,
+      rowIdColumn,
+    );
+    if (!geometry) return;
+    layer.onCaptured(componentIndex, geometry, 'points');
+    api.deselectAll();
+    setAnnotateSelectedCount(0);
+  };
+
+  // Esc cancels the pending label first, then leaves annotate mode.
+  useEffect(() => {
+    if (!annotating || !layer) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (pendingHere) layer.cancelPending();
+      else layer.setAnnotate(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [annotating, layer, pendingHere]);
+
   const onSelectionChanged = (event: SelectionChangedEvent) => {
+    // Annotate mode: selecting rows prepares a marked-rows annotation and
+    // never filters the dashboard.
+    if (annotatingRef.current) {
+      setAnnotateSelectedCount(event.api.getSelectedRows().length);
+      return;
+    }
+    if (restoringSelectionRef.current && !isSelectionUIEvent(event.source)) return;
     if (!selectionEnabled || !selectionColumn || !onFilterChange) return;
     const selectedRows = event.api.getSelectedRows() as Array<Record<string, unknown>>;
     const values = extractRowSelection(selectedRows, selectionColumn);
@@ -610,6 +793,17 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       },
     });
   };
+
+  // Keep the badge column out of the chrome's CSV download.
+  const csvExportParams = useMemo(() => {
+    if (!colDefs.some((c) => c.colId === ANNOTATION_COL_ID)) return undefined;
+    return {
+      columnKeys: colDefs
+        .filter((c) => c.colId !== ANNOTATION_COL_ID)
+        .map((c) => c.field)
+        .filter((f): f is string => typeof f === 'string'),
+    };
+  }, [colDefs]);
 
   const defaultColDef = useMemo<ColDef>(
     () => ({ flex: 1, minWidth: 100, resizable: true }),
@@ -731,6 +925,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               key={`${showAll ? 'client' : 'infinite'}-${uiScale}`}
               columnDefs={colDefs}
               defaultColDef={defaultColDef}
+              defaultCsvExportParams={csvExportParams}
               {...(showAll
                 ? { rowData: allRows ?? [] }
                 : {
@@ -759,16 +954,32 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               // path separator and tries ``row.sepal.length`` (nested), which
               // fails because the row has flat keys → empty cells.
               suppressFieldDotNotation
-              rowSelection={selectionEnabled ? 'multiple' : undefined}
+              rowSelection={selectionEnabled || annotating ? 'multiple' : undefined}
               // Plain click adds/removes from the selection set — without this
               // AG Grid Community requires Ctrl/Shift modifiers, which is not
               // discoverable. The checkbox column rendered on the first column
               // (configured in ``setColDefs`` above) gives users a visual cue.
-              rowMultiSelectWithClick={selectionEnabled || undefined}
-              suppressRowClickSelection={selectionEnabled ? false : undefined}
-              onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
+              rowMultiSelectWithClick={selectionEnabled || annotating || undefined}
+              suppressRowClickSelection={selectionEnabled || annotating ? false : undefined}
+              onSelectionChanged={
+                selectionEnabled || annotating ? onSelectionChanged : undefined
+              }
               onSortChanged={onSortChanged}
             />
+            {annotating && layer && (
+              <AnnotateToolbar
+                variant="rows"
+                tool="points"
+                options={DEFAULT_ANNOTATE_OPTIONS}
+                onChange={() => undefined}
+                onDone={() => layer.setAnnotate(null)}
+                pending={pendingHere}
+                onSave={layer.savePending}
+                onCancel={layer.cancelPending}
+                selectedCount={annotateSelectedCount}
+                onMarkRows={markSelectedRows}
+              />
+            )}
             <RefetchOverlay visible={showRefetchOverlay || (showAll && allLoading)} />
           </div>
         </>

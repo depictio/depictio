@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Button, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { AnnotationDraft, PendingAnnotation } from '../../annotations/AnnotationLayerContext';
@@ -17,6 +17,16 @@ export interface AnnotateToolbarProps {
   pending: PendingAnnotation | null;
   onSave: (draft: AnnotationDraft) => Promise<void>;
   onCancel: () => void;
+  /**
+   * `figure` (default): the Plotly drawing tools. `rows`: a table, where the
+   * only tool is marking the selected rows (a "points" annotation keyed on the
+   * row-id column) with a "Mark N rows" button.
+   */
+  variant?: 'figure' | 'rows';
+  /** `rows` variant: how many rows are selected in the grid. */
+  selectedCount?: number;
+  /** `rows` variant: capture the selected rows. */
+  onMarkRows?: () => void;
 }
 
 interface ToolButton {
@@ -40,8 +50,12 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
   pending,
   onSave,
   onCancel,
+  variant = 'figure',
+  selectedCount = 0,
+  onMarkRows,
 }) => {
-  const tools: ToolButton[] = [
+  const rowsMode = variant === 'rows';
+  const figureTools: ToolButton[] = [
     {
       key: 'range-x',
       label: 'Range on x',
@@ -78,6 +92,22 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
       select: () => onChange('note', options),
     },
   ];
+  const tools: ToolButton[] = rowsMode
+    ? [
+        {
+          key: 'rows',
+          label: 'Mark rows',
+          icon: 'mdi:table-row',
+          active: true,
+          select: () => undefined,
+        },
+      ]
+    : figureTools;
+  const hint = rowsMode
+    ? selectedCount > 0
+      ? `${selectedCount} row${selectedCount === 1 ? '' : 's'} selected`
+      : 'Click rows to select them, then mark them'
+    : annotateHint(tool, options);
 
   // Rendered in the fullscreen element when there is one: a portal to <body>
   // would be invisible behind a fullscreen card.
@@ -92,7 +122,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     <Popover
       opened={pending != null}
       onClose={onCancel}
-      position="bottom-start"
+      position={rowsMode ? 'bottom-end' : 'bottom-start'}
       width={300}
       shadow="md"
       withArrow
@@ -113,7 +143,9 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
           onMouseDown={stop}
           onPointerDown={stop}
           onTouchStart={stop}
-          style={{ position: 'absolute', top: 4, left: 4, zIndex: 2 }}
+          // A table keeps its header checkbox and badge column (top-left)
+          // reachable: the rows palette sits top-right instead.
+          style={{ position: 'absolute', top: 4, ...(rowsMode ? { right: 4 } : { left: 4 }), zIndex: 2 }}
         >
           <Stack gap={2}>
             <Group gap={4} wrap="nowrap">
@@ -132,7 +164,20 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
                   </Tooltip>
                 ))}
               </ActionIcon.Group>
-              {tool === 'line' && (
+              {rowsMode && (
+                <Button
+                  size="compact-xs"
+                  variant="filled"
+                  disabled={selectedCount === 0 || pending != null}
+                  onClick={onMarkRows}
+                  data-testid="annotate-mark-rows"
+                >
+                  {selectedCount > 0
+                    ? `Mark ${selectedCount} selected row${selectedCount === 1 ? '' : 's'}`
+                    : 'Mark selected rows'}
+                </Button>
+              )}
+              {!rowsMode && tool === 'line' && (
                 <Tooltip
                   label={options.lineAxis === 'x' ? 'Vertical line (at an x value)' : 'Horizontal line (at a y value)'}
                   withArrow
@@ -151,7 +196,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
                   </ActionIcon>
                 </Tooltip>
               )}
-              {tool === 'points' && (
+              {!rowsMode && tool === 'points' && (
                 <Tooltip
                   label={options.selectMode === 'lasso' ? 'Lasso (switch to box)' : 'Box (switch to lasso)'}
                   withArrow
@@ -181,7 +226,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
               </Tooltip>
             </Group>
             <Text size="xs" c="dimmed" px={2}>
-              {annotateHint(tool, options)}
+              {hint}
             </Text>
           </Stack>
         </Paper>

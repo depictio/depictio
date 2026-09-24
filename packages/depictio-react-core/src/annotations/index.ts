@@ -4,3 +4,5 @@ export * from './capture';
 export * from './resolveColor';
 export * from './layer';
 export * from './AnnotationLayerContext';
+export * from './tableRows';
+export * from './plotDecorate';
