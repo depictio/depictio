@@ -4966,6 +4966,8 @@ export interface CommentThread {
   updated_at: string;
   resolved_by?: string | null;
   resolved_at?: string | null;
+  /** A person edited this agent-created thread (its annotation or text). */
+  human_edited?: boolean;
   comments: ThreadComment[];
   staleness: ThreadStaleness;
 }

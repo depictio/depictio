@@ -291,6 +291,22 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
                   Rejected
                 </Badge>
               )}
+              {thread.created_by.kind === 'agent' && thread.human_edited && (
+                <Tooltip
+                  label="A person changed this agent proposal"
+                  withArrow
+                  zIndex={Z_LAYERS.tooltip}
+                >
+                  <Badge
+                    size="xs"
+                    color="blue"
+                    variant="light"
+                    leftSection={<Icon icon="mdi:account-edit-outline" width={11} />}
+                  >
+                    Edited by a human
+                  </Badge>
+                </Tooltip>
+              )}
               {staleness?.component_missing && (
                 <Badge size="xs" color="gray" variant="light">
                   Component removed

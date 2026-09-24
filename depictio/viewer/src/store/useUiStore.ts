@@ -14,7 +14,7 @@ export type InspectorTab = 'controls' | 'data' | 'info' | 'notes';
 
 /** What the comments drawer lists: one component's threads, or the whole tab. */
 export type CommentsScope = 'component' | 'tab';
-/** Drawing tool of the (upcoming) annotate mode. */
+/** Drawing tool of the annotate mode (same union as react-core's `AnnotateTool`). */
 export type AnnotateTool = 'range' | 'line' | 'points' | 'note';
 
 interface UiState {
@@ -38,7 +38,7 @@ interface UiState {
   commentsComponentIndex: string | null;
   /** Thread last clicked in the drawer, highlighted until another is. */
   focusedThreadId: string | null;
-  /** Component in annotate mode, and the active drawing tool (not wired yet). */
+  /** Component in annotate mode, and the active drawing tool. */
   annotateComponentIndex: string | null;
   annotateTool: AnnotateTool | null;
 }
@@ -60,6 +60,9 @@ interface UiActions {
   setCommentsScope: (scope: CommentsScope) => void;
   setFocusedThread: (threadId: string | null) => void;
   setAnnotate: (componentIndex: string | null, tool?: AnnotateTool | null) => void;
+  /** Drops every comments/annotate state: called when the dashboard changes,
+   *  so nothing from the previous dashboard leaks into the next one. */
+  resetComments: () => void;
 }
 
 const INITIAL: UiState = {
@@ -104,11 +107,21 @@ export const useUiStore = create<UiState & UiActions>((set) => ({
             commentsComponentIndex: s.commentsComponentIndex,
           },
     ),
-  closeComments: () => set({ commentsOpen: false, focusedThreadId: null }),
+  closeComments: () =>
+    set({ commentsOpen: false, focusedThreadId: null, commentsComponentIndex: null }),
   setCommentsScope: (scope) => set({ commentsScope: scope }),
   setFocusedThread: (threadId) => set({ focusedThreadId: threadId }),
   setAnnotate: (componentIndex, tool = null) =>
     set({ annotateComponentIndex: componentIndex, annotateTool: componentIndex ? tool : null }),
+  resetComments: () =>
+    set({
+      commentsOpen: false,
+      commentsScope: 'tab',
+      commentsComponentIndex: null,
+      focusedThreadId: null,
+      annotateComponentIndex: null,
+      annotateTool: null,
+    }),
 }));
 
 export default useUiStore;

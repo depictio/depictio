@@ -10,6 +10,9 @@ import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
 import CommentsButton from './CommentsButton';
 import { useCommentsControl } from './CommentsContext';
+import AnnotateButton from './AnnotateButton';
+import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
+import { supportsAnnotation } from '../../annotations/layer';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
@@ -20,6 +23,7 @@ import './chrome.css';
 export type ChromeAction =
   | 'inspect'
   | 'comments'
+  | 'annotate'
   | 'catalog'
   | 'description'
   | 'metadata'
@@ -171,6 +175,16 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   // the count is the point, and a hover-only badge would hide it.
   const persistentComments = commentOpenCount > 0 || commentProposedCount > 0;
   if (comments) actions.push('comments');
+  // Annotate mode: cartesian Plotly figures only, and only when the app's
+  // annotation layer lets this user create annotations.
+  const annotationLayer = useAnnotationLayer();
+  const canAnnotateHere =
+    Boolean(annotationLayer?.canAnnotate) &&
+    componentType === 'figure' &&
+    supportsAnnotation(metadata);
+  const annotateActive =
+    canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
+  if (canAnnotateHere) actions.push('annotate');
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
@@ -234,6 +248,20 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             openCount={commentOpenCount}
             proposedCount={commentProposedCount}
             onOpen={comments.openDrawer}
+          />
+        );
+      case 'annotate':
+        if (!canAnnotateHere || !annotationLayer) return null;
+        return (
+          <AnnotateButton
+            key="annotate"
+            active={annotateActive}
+            onToggle={() =>
+              annotationLayer.setAnnotate(
+                annotateActive ? null : String(metadata.index),
+                annotateActive ? null : 'range',
+              )
+            }
           />
         );
       case 'catalog':
@@ -427,13 +455,15 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           if (!node) return null;
           const isActiveReset = a === 'reset' && persistentReset;
           const isPersistentComments = a === 'comments' && persistentComments;
+          const isActiveAnnotate = a === 'annotate' && annotateActive;
           return (
             <span
               key={a}
               className={
                 'dgl-no-drag' +
                 (isActiveReset ? ' depictio-active-reset' : '') +
-                (isPersistentComments ? ' depictio-comments-persistent' : '')
+                (isPersistentComments ? ' depictio-comments-persistent' : '') +
+                (isActiveAnnotate ? ' depictio-annotate-active' : '')
               }
               style={{ display: 'inline-flex', alignItems: 'center' }}
               onMouseDown={(e) => e.stopPropagation()}

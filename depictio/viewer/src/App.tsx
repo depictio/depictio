@@ -537,8 +537,12 @@ const App: React.FC = () => {
           [],
         ),
       );
+      // Group filters narrow the dashboard outside the filter list, and a
+      // thread's view does not record them: release them, as "Reset all"
+      // does, so the restored view matches what the author saw.
+      groupsApi.deactivateAllGroupFilters();
     },
-    [summaryMetadata],
+    [summaryMetadata, groupsApi.deactivateAllGroupFilters],
   );
 
   const handleResetAllFilters = useCallback(() => {

@@ -230,3 +230,10 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Annotate mode is a state, not a hover affordance: its toggle stays visible
+ * while the figure is being annotated so the way out is always on screen. */
+.depictio-component-actions > .depictio-annotate-active {
+  opacity: 1;
+  pointer-events: auto;
+}

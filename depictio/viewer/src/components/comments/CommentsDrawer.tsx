@@ -21,7 +21,6 @@ import { notifications } from '@mantine/notifications';
 import {
   componentTypeVisual,
   createCommentThread,
-  fetchCommentThreads,
   Z_LAYERS,
 } from 'depictio-react-core';
 import type {
@@ -52,8 +51,14 @@ export interface CommentsDrawerProps {
   filters: InteractiveFilter[];
   onApplyViewState: (viewState: CommentViewState) => void;
   currentUser: CurrentUser | null;
-  /** Called after every successful mutation, to refresh the chrome badges. */
-  onMutated: () => void;
+  /** Every thread of the tab, owned by CommentsProvider (null while loading). */
+  threads: CommentThread[] | null;
+  loadError: string | null;
+  /** Reloads the tab's threads (on opening, and from the error's Retry). */
+  onReload: () => void | Promise<void>;
+  onCreated: (thread: CommentThread) => void;
+  onChanged: (thread: CommentThread) => void;
+  onDeleted: (threadId: string) => void;
 }
 
 interface ThreadGroup {
@@ -77,7 +82,12 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   filters,
   onApplyViewState,
   currentUser,
-  onMutated,
+  threads,
+  loadError,
+  onReload,
+  onCreated,
+  onChanged,
+  onDeleted,
 }) => {
   const opened = useUiStore((s) => s.commentsOpen);
   const scope = useUiStore((s) => s.commentsScope);
@@ -88,8 +98,6 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   const openComments = useUiStore((s) => s.openComments);
   const setFocusedThread = useUiStore((s) => s.setFocusedThread);
 
-  const [threads, setThreads] = useState<CommentThread[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<StatusFilter[]>(DEFAULT_STATUSES);
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
@@ -100,24 +108,12 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
     return m;
   }, [metadata]);
 
-  // Every thread of the tab is loaded once per opening; the component scope
-  // and the status chips filter client-side, so switching them is instant.
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
-      setThreads(await fetchCommentThreads(dashboardId, { scope: 'tab' }));
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : String(err));
-    }
-  }, [dashboardId]);
-
+  // Every thread of the tab is reloaded on each opening (the provider holds
+  // them for the annotation layer too); the component scope and the status
+  // chips filter client-side, so switching them is instant.
   useEffect(() => {
-    setThreads(null);
-  }, [dashboardId]);
-
-  useEffect(() => {
-    if (opened) void load();
-  }, [opened, load]);
+    if (opened) void onReload();
+  }, [opened, onReload]);
 
   const effectiveScope = scope === 'component' && componentIndex ? 'component' : 'tab';
   const targetIndex = effectiveScope === 'component' ? componentIndex : null;
@@ -184,22 +180,6 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   const viewState = useMemo(() => buildViewState(filters, targetIndex), [filters, targetIndex]);
   const attachHint = selectionHint(viewState.selection);
 
-  const replaceThread = useCallback(
-    (next: CommentThread) => {
-      setThreads((prev) => (prev ?? []).map((t) => (t.id === next.id ? next : t)));
-      onMutated();
-    },
-    [onMutated],
-  );
-
-  const removeThread = useCallback(
-    (id: string) => {
-      setThreads((prev) => (prev ?? []).filter((t) => t.id !== id));
-      onMutated();
-    },
-    [onMutated],
-  );
-
   const post = async () => {
     const body = draft.trim();
     if (!body) return;
@@ -214,7 +194,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
         },
         body,
       });
-      setThreads((prev) => [created, ...(prev ?? [])]);
+      onCreated(created);
       setDraft('');
       // Make sure the new thread is not hidden by the status chips.
       setStatuses((prev) =>
@@ -222,7 +202,6 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
           ? prev
           : [...prev, created.status as StatusFilter],
       );
-      onMutated();
     } catch (err) {
       notifications.show({
         color: 'red',
@@ -260,8 +239,8 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
         currentUser={currentUser}
         focused={t.id === focusedThreadId}
         onFocus={focusThread}
-        onChange={replaceThread}
-        onDeleted={removeThread}
+        onChange={onChanged}
+        onDeleted={onDeleted}
       />
     ));
 
@@ -380,7 +359,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
             <Alert color="red" variant="light" title="Could not load comments">
               <Stack gap="xs">
                 <Text size="xs">{loadError}</Text>
-                <Button size="compact-xs" variant="light" color="red" onClick={() => void load()}>
+                <Button size="compact-xs" variant="light" color="red" onClick={() => void onReload()}>
                   Retry
                 </Button>
               </Stack>
