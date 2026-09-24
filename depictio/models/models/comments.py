@@ -1,8 +1,13 @@
-"""Comment threads and annotations pinned to a dashboard component.
+"""Comment threads pinned to a dashboard component, optionally carrying an annotation.
 
-Both hang off an :class:`Anchor`: the tab, the component, and the view the
-author was looking at (filters and selection). Clicking a thread or an
-annotation restores that view on today's data.
+A thread hangs off an :class:`Anchor`: the tab, the component (or the tab
+itself), and the view the author was looking at (filters and selection).
+Clicking a thread restores that view on today's data.
+
+Threads are internal to a project's editors and owners. An annotation is a
+thread that also carries a shape drawn in data coordinates (a range, a
+reference line, marked points, an arrow note). Its ``published`` switch lets
+viewers see the shape and its label, never the discussion.
 
 What an anchor cannot do yet is bring back the *exact* state: a later save can
 change the component and a re-ingest can change its data. The anchor records
@@ -10,29 +15,29 @@ cheap fingerprints of both (a hash of the component's definition, the latest
 aggregation hash of every data collection it reads) so the viewer can say
 "changed since this comment" instead of silently showing something else.
 ``version_id`` and ``pins`` are reserved for dashboard and dataset versioning;
-they stay empty until that lands, and an anchor without them simply cannot
-travel back in time.
+they stay empty until that lands.
 
-Annotations are a reader overlay: they are stored apart from the dashboard and
-never enter its definition, so annotating needs no edit rights and a
-dashboard save never drops them.
+Agents are first-class authors: a thread written by an agent is always on
+behalf of a user, starts as ``proposed`` and needs a human review before it
+counts, and before its annotation can be published. The text of a comment is
+data, never an instruction for an agent.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_BODY_CHARS = 4000
-MAX_NOTE_CHARS = 2000
 MAX_LABEL_CHARS = 120
+MAX_REASON_CHARS = 1000
 MAX_POINT_IDS = 5000
 MAX_COMMENTS_PER_THREAD = 500
+MAX_EVIDENCE_ITEMS = 20
 
 # Mantine palette names: annotations pick a theme colour, never a raw value, so
 # they follow light and dark mode like the rest of the viewer.
@@ -52,7 +57,11 @@ AnnotationColor = Literal[
     "gray",
 ]
 
-ThreadStatus = Literal["open", "resolved"]
+ThreadStatus = Literal["open", "resolved", "proposed", "rejected"]
+AnnotationKind = Literal["range", "line", "points", "note"]
+
+# Keys of a stored component that do not change what a comment on it is about.
+_FINGERPRINT_IGNORED_KEYS = frozenset({"layout", "last_updated", "parent_index"})
 
 
 def utcnow() -> datetime:
@@ -67,7 +76,7 @@ def component_fingerprint(component: dict[str, Any] | None) -> str | None:
     """
     if not component:
         return None
-    relevant = {k: v for k, v in component.items() if k not in {"layout", "last_updated"}}
+    relevant = {k: v for k, v in component.items() if k not in _FINGERPRINT_IGNORED_KEYS}
     digest = hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode())
     return digest.hexdigest()[:16]
 
@@ -89,7 +98,7 @@ class ViewState(_Strict):
 
 
 class Anchor(_Strict):
-    """Where a thread or an annotation points."""
+    """Where a thread points."""
 
     dashboard_id: str
     """The tab the component lives on (a main dashboard or a child tab)."""
@@ -111,48 +120,159 @@ class Anchor(_Strict):
 # ---------------------------------------------------------------------------
 # Annotation geometry, in data coordinates so it survives resizing and redraws
 # ---------------------------------------------------------------------------
+AxisValue = float | int | str
+"""A numeric value, a category, or a date string, as Plotly takes it."""
+
+
 class XRange(_Strict):
+    """A band across the x axis, drawn behind the data."""
+
     kind: Literal["x_range"] = "x_range"
-    x0: float | str
-    x1: float | str
+    x0: AxisValue
+    x1: AxisValue
 
 
 class YRange(_Strict):
+    """A band across the y axis, drawn behind the data."""
+
     kind: Literal["y_range"] = "y_range"
     y0: float
     y1: float
 
 
-class Box(_Strict):
-    kind: Literal["box"] = "box"
-    x0: float | str
-    x1: float | str
-    y0: float
-    y1: float
+class RefLine(_Strict):
+    """A dashed reference line, drawn in front of the data."""
+
+    kind: Literal["ref_line"] = "ref_line"
+    axis: Literal["x", "y"]
+    value: AxisValue
 
 
-class Points(_Strict):
-    """A set of rows, identified by the component's selection column."""
+class PointCoord(_Strict):
+    x: AxisValue
+    y: AxisValue
+    trace: int | None = None
+    """Index of the trace the point belongs to, when the figure has several."""
+
+
+class MarkedPoints(_Strict):
+    """Points, bars or table rows to circle or outline.
+
+    Rows are identified by the component's selection column when it has one
+    (``column`` + ``ids``), which survives re-sorting and re-ingest. Charts
+    without one (bars, histograms) fall back to plain coordinates.
+    """
 
     kind: Literal["points"] = "points"
-    column: str
-    ids: list[str | int | float] = Field(min_length=1, max_length=MAX_POINT_IDS)
-
-
-class GenomicRegion(_Strict):
-    kind: Literal["region"] = "region"
-    chrom: str
-    start: int = Field(ge=0)
-    end: int = Field(ge=0)
+    column: str | None = None
+    ids: list[str | int | float] = Field(default_factory=list, max_length=MAX_POINT_IDS)
+    coords: list[PointCoord] = Field(default_factory=list, max_length=MAX_POINT_IDS)
 
     @model_validator(mode="after")
-    def _ordered(self) -> GenomicRegion:
-        if self.end < self.start:
-            raise ValueError("region end must not precede its start")
+    def _something_marked(self) -> MarkedPoints:
+        if not self.ids and not self.coords:
+            raise ValueError("marked points need ids or coords")
+        if self.ids and not self.column:
+            raise ValueError("ids need the column they come from")
         return self
 
 
-Geometry = Annotated[XRange | YRange | Box | Points | GenomicRegion, Field(discriminator="kind")]
+class ArrowNote(_Strict):
+    """A numbered note with an arrow pointing at a data point.
+
+    ``x``/``y`` are the arrow head in data coordinates; ``ax``/``ay`` offset
+    the label from it in pixels, so the label keeps its place on resize.
+    """
+
+    kind: Literal["arrow_note"] = "arrow_note"
+    x: AxisValue
+    y: AxisValue
+    ax: float = -40
+    ay: float = -40
+
+
+Geometry = Annotated[XRange | YRange | RefLine | MarkedPoints | ArrowNote, Field(discriminator="kind")]
+
+_GEOMETRY_KINDS: dict[str, frozenset[str]] = {
+    "range": frozenset({"x_range", "y_range"}),
+    "line": frozenset({"ref_line"}),
+    "points": frozenset({"points"}),
+    "note": frozenset({"arrow_note"}),
+}
+
+
+class AnnotationStyle(_Strict):
+    opacity: float | None = Field(default=None, ge=0, le=1)
+    dash: Literal["solid", "dash", "dot"] | None = None
+    width: float | None = Field(default=None, gt=0, le=10)
+
+
+class Annotation(_Strict):
+    """The shape a thread carries."""
+
+    kind: AnnotationKind
+    geometry: Geometry
+    label: str = Field(min_length=1, max_length=MAX_LABEL_CHARS)
+    color: AnnotationColor = "yellow"
+    style: AnnotationStyle = Field(default_factory=AnnotationStyle)
+    published: bool = False
+    """Visible to viewers of the dashboard (shape and label only)."""
+
+    @model_validator(mode="after")
+    def _geometry_matches_kind(self) -> Annotation:
+        if self.geometry.kind not in _GEOMETRY_KINDS[self.kind]:
+            raise ValueError(f"a {self.kind!r} annotation cannot use a {self.geometry.kind!r} geometry")
+        return self
+
+
+class AnnotationPatch(_Strict):
+    """Partial update of a thread's annotation."""
+
+    geometry: Geometry | None = None
+    label: str | None = Field(default=None, min_length=1, max_length=MAX_LABEL_CHARS)
+    color: AnnotationColor | None = None
+    style: AnnotationStyle | None = None
+    published: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Authors: humans, and agents acting on behalf of one
+# ---------------------------------------------------------------------------
+class AgentInfo(_Strict):
+    name: str = Field(min_length=1, max_length=120)
+    model: str | None = Field(default=None, max_length=120)
+    run_id: str | None = Field(default=None, max_length=120)
+    on_behalf_of: str | None = None
+    """User id of the person who launched the agent. Set by the API."""
+
+
+class Author(_Strict):
+    kind: Literal["human", "agent"] = "human"
+    user_id: str
+    email: str | None = None
+    agent: AgentInfo | None = None
+
+    @model_validator(mode="after")
+    def _agent_iff_agent_kind(self) -> Author:
+        if (self.kind == "agent") != (self.agent is not None):
+            raise ValueError("agent details are required for, and only for, an agent author")
+        return self
+
+
+class Evidence(_Strict):
+    """A structured claim an agent backs its comment with, for one-click checks."""
+
+    claim: str = Field(min_length=1, max_length=MAX_BODY_CHARS)
+    query: str | None = Field(default=None, max_length=MAX_BODY_CHARS)
+    values: dict[str, Any] | list[Any] | None = None
+    view_state: ViewState | None = None
+
+
+class Review(_Strict):
+    decision: Literal["accepted", "rejected"]
+    by: str
+    at: datetime
+    reason: str | None = Field(default=None, max_length=MAX_REASON_CHARS)
 
 
 # ---------------------------------------------------------------------------
@@ -160,11 +280,8 @@ Geometry = Annotated[XRange | YRange | Box | Points | GenomicRegion, Field(discr
 # ---------------------------------------------------------------------------
 class Comment(_Strict):
     id: str
-    author_id: str
-    author_email: str | None = None
+    author: Author
     body: str
-    mentions: list[str] = Field(default_factory=list)
-    """User ids mentioned in the body. Notifications read this."""
     created_at: datetime
     edited_at: datetime | None = None
     deleted: bool = False
@@ -173,92 +290,115 @@ class Comment(_Strict):
 class CommentThread(BaseModel):
     id: str
     project_id: str
+    parent_dashboard_id: str
+    """The main tab of the dashboard family, for tab-wide listing and cascade deletes."""
     anchor: Anchor
-    annotation_id: str | None = None
+    annotation: Annotation | None = None
+    number: int | None = None
+    """Per-tab number of the annotation, shown as a numbered dot in the chart and drawer."""
     status: ThreadStatus = "open"
-    created_by: str
+    review: Review | None = None
+    evidence: list[Evidence] | None = None
+    dedupe_key: str | None = None
+    run_id: str | None = None
+    created_by: Author
     created_at: datetime
     updated_at: datetime
     resolved_by: str | None = None
     resolved_at: datetime | None = None
     comments: list[Comment] = Field(default_factory=list)
 
-
-class Annotation(BaseModel):
-    id: str
-    project_id: str
-    anchor: Anchor
-    geometry: Geometry
-    label: str
-    note: str | None = None
-    color: AnnotationColor = "yellow"
-    author_id: str
-    author_email: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    @property
+    def is_agent_proposal(self) -> bool:
+        return self.created_by.kind == "agent" and (self.review is None or self.review.decision != "accepted")
 
 
 # ---------------------------------------------------------------------------
 # Request bodies
 # ---------------------------------------------------------------------------
-_MENTION = re.compile(r"^[0-9a-f]{24}$")
+def _not_blank(v: str | None) -> str | None:
+    if v is not None and not v.strip():
+        raise ValueError("comment body must not be blank")
+    return v
 
 
-class _Body(_Strict):
-    body: str = Field(min_length=1, max_length=MAX_BODY_CHARS)
-    mentions: list[str] = Field(default_factory=list, max_length=50)
+class ThreadCreate(_Strict):
+    anchor: Anchor
+    body: str | None = Field(default=None, max_length=MAX_BODY_CHARS)
+    """First comment. Optional when the thread carries an annotation."""
+    annotation: Annotation | None = None
+    evidence: list[Evidence] | None = Field(default=None, max_length=MAX_EVIDENCE_ITEMS)
+    dedupe_key: str | None = Field(default=None, max_length=200)
+    agent: AgentInfo | None = None
+    """Set when an agent writes the thread on behalf of the calling user."""
 
     @field_validator("body")
     @classmethod
-    def _not_blank(cls, v: str) -> str:
+    def _body_not_blank(cls, v: str | None) -> str | None:
+        return _not_blank(v)
+
+    @model_validator(mode="after")
+    def _has_content(self) -> ThreadCreate:
+        if self.body is None and self.annotation is None:
+            raise ValueError("a thread needs a comment or an annotation")
+        if self.agent is not None and self.annotation is not None and self.annotation.published:
+            raise ValueError("an agent annotation cannot be published before a human accepts it")
+        return self
+
+
+class CommentCreate(_Strict):
+    body: str = Field(min_length=1, max_length=MAX_BODY_CHARS)
+
+    @field_validator("body")
+    @classmethod
+    def _body_not_blank(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("comment body must not be blank")
         return v
 
-    @field_validator("mentions")
-    @classmethod
-    def _object_ids(cls, v: list[str]) -> list[str]:
-        bad = [m for m in v if not _MENTION.match(m)]
-        if bad:
-            raise ValueError(f"mentions must be user ids, got {bad[:3]}")
-        return list(dict.fromkeys(v))
 
-
-class ThreadCreate(_Body):
-    anchor: Anchor
-    annotation_id: str | None = None
-
-
-class CommentCreate(_Body):
+class CommentUpdate(CommentCreate):
     pass
 
 
-class CommentUpdate(_Body):
-    pass
+class ThreadUpdate(_Strict):
+    status: Literal["open", "resolved"] | None = None
+    annotation: AnnotationPatch | None = None
 
 
-class ThreadStatusUpdate(_Strict):
-    status: ThreadStatus
+class ThreadReview(_Strict):
+    decision: Literal["accepted", "rejected"]
+    reason: str | None = Field(default=None, max_length=MAX_REASON_CHARS)
 
 
-class AnnotationCreate(_Strict):
-    anchor: Anchor
-    geometry: Geometry
-    label: str = Field(min_length=1, max_length=MAX_LABEL_CHARS)
-    note: str | None = Field(default=None, max_length=MAX_NOTE_CHARS)
-    color: AnnotationColor = "yellow"
-
-
-class AnnotationUpdate(_Strict):
-    geometry: Geometry | None = None
-    label: str | None = Field(default=None, min_length=1, max_length=MAX_LABEL_CHARS)
-    note: str | None = Field(default=None, max_length=MAX_NOTE_CHARS)
-    color: AnnotationColor | None = None
-
-
+# ---------------------------------------------------------------------------
+# Responses
+# ---------------------------------------------------------------------------
 class Staleness(BaseModel):
     """How an anchor compares with the dashboard as it is now."""
 
     component_missing: bool = False
     component_changed: bool = False
     data_changed: bool = False
+
+
+class ThreadOut(CommentThread):
+    staleness: Staleness = Field(default_factory=Staleness)
+
+
+class PublishedAnnotation(BaseModel):
+    """What a viewer gets of a published annotation: the shape and its label."""
+
+    thread_id: str
+    dashboard_id: str
+    component_index: str | None
+    number: int | None
+    kind: AnnotationKind
+    geometry: Geometry
+    label: str
+    color: AnnotationColor
+    style: AnnotationStyle
+
+
+class CommentAccess(BaseModel):
+    can_comment: bool
