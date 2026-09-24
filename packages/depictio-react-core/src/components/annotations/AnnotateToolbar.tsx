@@ -8,15 +8,17 @@ import type {
   PendingDraftPatch,
 } from '../../annotations/AnnotationLayerContext';
 import { ANNOTATE_UI_ATTR } from '../../annotations/escape';
-import { annotateHint, NAVIGATING_HINT } from '../../annotations/layer';
+import { annotateHint, NAVIGATING_HINT, SURFACE_TOOLS } from '../../annotations/layer';
 import type { AnnotationStats } from '../../annotations/summary';
-import type { AnnotateOptions, AnnotateTool } from '../../annotations/layer';
+import type { AnnotateOptions, AnnotateSurface, AnnotateTool } from '../../annotations/layer';
 import { Z_LAYERS } from '../../zLayers';
 import AnnotationForm from './AnnotationForm';
 
 export interface AnnotateToolbarProps {
   tool: AnnotateTool;
   options: AnnotateOptions;
+  /** `map`: only the tools a map can take (marked points, notes). Default `cartesian`. */
+  surface?: AnnotateSurface;
   onChange: (tool: AnnotateTool, options: AnnotateOptions) => void;
   onDone: () => void;
   /** The capture waiting for a label on this component, if any. */
@@ -46,6 +48,7 @@ export interface AnnotateToolbarProps {
 
 interface ToolButton {
   key: string;
+  tool: AnnotateTool;
   label: string;
   icon: string;
   active: boolean;
@@ -60,6 +63,7 @@ interface ToolButton {
 const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
   tool,
   options,
+  surface = 'cartesian',
   onChange,
   onDone,
   pending,
@@ -73,9 +77,10 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
   onMarkRows,
 }) => {
   const rowsMode = variant === 'rows';
-  const figureTools: ToolButton[] = [
+  const allFigureTools: ToolButton[] = [
     {
       key: 'range-x',
+      tool: 'range',
       label: 'Range on x',
       icon: 'mdi:arrow-expand-horizontal',
       active: tool === 'range' && options.rangeAxis === 'x',
@@ -83,6 +88,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     },
     {
       key: 'range-y',
+      tool: 'range',
       label: 'Range on y',
       icon: 'mdi:arrow-expand-vertical',
       active: tool === 'range' && options.rangeAxis === 'y',
@@ -90,6 +96,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     },
     {
       key: 'line-x',
+      tool: 'line',
       label: 'Vertical line (at an x value)',
       icon: 'mdi:border-vertical',
       active: tool === 'line' && options.lineAxis === 'x',
@@ -97,6 +104,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     },
     {
       key: 'line-y',
+      tool: 'line',
       label: 'Horizontal line (at a y value)',
       icon: 'mdi:border-horizontal',
       active: tool === 'line' && options.lineAxis === 'y',
@@ -104,6 +112,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     },
     {
       key: 'points-lasso',
+      tool: 'points',
       label: 'Mark points (lasso)',
       icon: 'mdi:lasso',
       active: tool === 'points' && options.selectMode === 'lasso',
@@ -111,6 +120,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     },
     {
       key: 'points-box',
+      tool: 'points',
       label: 'Mark points (box)',
       icon: 'mdi:selection-drag',
       active: tool === 'points' && options.selectMode === 'select',
@@ -118,16 +128,19 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
     },
     {
       key: 'note',
+      tool: 'note',
       label: 'Note',
       icon: 'mdi:message-arrow-left-outline',
       active: tool === 'note',
       select: () => onChange('note', options),
     },
   ];
+  const figureTools = allFigureTools.filter((t) => SURFACE_TOOLS[surface].includes(t.tool));
   const tools: ToolButton[] = rowsMode
     ? [
         {
           key: 'rows',
+          tool: 'points',
           label: 'Mark rows',
           icon: 'mdi:table-row',
           active: true,
@@ -143,7 +156,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
       : 'Click rows to select them, then mark them'
     : navigating
       ? NAVIGATING_HINT
-      : annotateHint(tool, options);
+      : annotateHint(tool, options, surface);
 
   // Rendered in the fullscreen element when there is one: a portal to <body>
   // would be invisible behind a fullscreen card.

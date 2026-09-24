@@ -57,8 +57,21 @@ export function tableAnnotationColumn(meta: {
 }
 
 /**
+ * Map types whose renderer wires the annotation layer: points and regions can
+ * be marked on them. A density map has no mark to point at.
+ */
+export const ANNOTATABLE_MAP_TYPES: ReadonlySet<string> = new Set(['scatter_map', 'choropleth_map']);
+
+/** Whether a map component can be annotated (`map_type` defaults to scatter_map). */
+export function mapSupportsAnnotation(meta: { map_type?: unknown }): boolean {
+  const type = meta.map_type == null || meta.map_type === '' ? 'scatter_map' : meta.map_type;
+  return typeof type === 'string' && ANNOTATABLE_MAP_TYPES.has(type);
+}
+
+/**
  * Whether a component of this type can be annotated: cartesian figures, the
- * advanced_viz kinds of ANNOTATABLE_VIZ_KINDS, and tables with a row-id column.
+ * advanced_viz kinds of ANNOTATABLE_VIZ_KINDS, tables with a row-id column,
+ * and scatter and choropleth maps.
  */
 export function componentSupportsAnnotation(
   componentType: string | null | undefined,
@@ -71,6 +84,8 @@ export function componentSupportsAnnotation(
       return supportsAdvancedVizAnnotation(meta);
     case 'table':
       return tableAnnotationColumn(meta) != null;
+    case 'map':
+      return mapSupportsAnnotation(meta);
     case 'multiqc':
       // Figures and the General Stats table; the renderer reports which
       // views can take them (not multi-panel figures, not the violin view).

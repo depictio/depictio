@@ -20,6 +20,7 @@ from depictio.models.models.comments import (
     CommentCreate,
     CommentThread,
     Geometry,
+    GeoNote,
     LassoRegion,
     MarkedPoints,
     PublishedAnnotation,
@@ -144,6 +145,79 @@ class TestGeometry:
     def test_extra_field_rejected(self):
         with pytest.raises(ValidationError):
             GEOMETRY.validate_python({"kind": "x_range", "x0": 0, "x1": 1, "y0": 0})
+
+
+class TestGeoGeometry:
+    def test_geo_note_parses_as_note(self):
+        geom = GEOMETRY.validate_python({"kind": "geo_note", "lat": 48.85, "lon": 2.35})
+        assert isinstance(geom, GeoNote)
+        ann = Annotation.model_validate({"kind": "note", "geometry": geom, "label": "Paris"})
+        assert ann.geometry.kind == "geo_note"
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"lat": 91, "lon": 0},
+            {"lat": 0, "lon": -180.5},
+            {"lat": float("nan"), "lon": 0},
+            {"lat": 0},
+        ],
+    )
+    def test_geo_note_out_of_range_rejected(self, data):
+        with pytest.raises(ValidationError):
+            GEOMETRY.validate_python({"kind": "geo_note", **data})
+
+    def test_geo_note_not_a_points_or_range_kind(self):
+        with pytest.raises(ValidationError, match="cannot use"):
+            Annotation.model_validate(
+                {
+                    "kind": "points",
+                    "geometry": {"kind": "geo_note", "lat": 0, "lon": 0},
+                    "label": "x",
+                }
+            )
+
+    def test_geo_points_by_id_and_by_coords(self):
+        by_id = MarkedPoints.model_validate(
+            {
+                "geo": True,
+                "column": "site",
+                "ids": ["s1"],
+                "region": {"shape": "box", "x0": -10, "x1": 10, "y0": 40, "y1": 60},
+            }
+        )
+        assert by_id.geo is True
+        by_coords = MarkedPoints.model_validate(
+            {
+                "geo": True,
+                "coords": [{"x": 180, "y": -90, "trace": 0}],
+                "region": {"shape": "lasso", "x": [0, 10, 5], "y": [0, 0, 8]},
+            }
+        )
+        assert by_coords.coords[0].x == 180
+
+    def test_geo_defaults_off(self):
+        assert MarkedPoints(coords=[{"x": "A", "y": 500}]).geo is False
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"coords": [{"x": 181, "y": 0}]},
+            {"coords": [{"x": 0, "y": -90.1}]},
+            {"coords": [{"x": "Paris", "y": 0}]},
+            {
+                "coords": [{"x": 0, "y": 0}],
+                "region": {"shape": "box", "x0": 0, "x1": 200, "y0": 0, "y1": 1},
+            },
+            {
+                "coords": [{"x": 0, "y": 0}],
+                "region": {"shape": "lasso", "x": [0, 1, 2], "y": [0, 95, 1]},
+            },
+        ],
+    )
+    def test_geo_points_out_of_range_rejected(self, extra):
+        with pytest.raises(ValidationError, match="map (longitude|latitude)"):
+            MarkedPoints.model_validate({"geo": True, **extra})
 
 
 class TestMarkedPoints:

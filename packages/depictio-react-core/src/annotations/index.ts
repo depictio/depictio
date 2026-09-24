@@ -12,3 +12,4 @@ export * from './summary';
 export * from './inlineEdit';
 export * from './renderedPoints';
 export * from './multiqc';
+export * from './geo';

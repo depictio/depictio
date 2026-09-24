@@ -13,9 +13,15 @@ import {
   pixelToData,
   pointMisses,
   stripOverlayPoints,
+  toolForSurface,
   withSelectableLines,
 } from '../../annotations/layer';
-import type { AnnotateInteraction, AnnotateOptions, AnnotateTool } from '../../annotations/layer';
+import type {
+  AnnotateInteraction,
+  AnnotateOptions,
+  AnnotateSurface,
+  AnnotateTool,
+} from '../../annotations/layer';
 import { annotationsToPlotly } from '../../annotations/toPlotly';
 import type { AnnotationsToPlotlyResult } from '../../annotations/toPlotly';
 import type { AnnotationStats } from '../../annotations/summary';
@@ -25,6 +31,16 @@ import {
   rangeFromSelection,
   refLineFromClick,
 } from '../../annotations/capture';
+import {
+  centroidsSignature,
+  geoAnnotationsToPlotly,
+  geoCentroidsFromGraph,
+  geoNoteAt,
+  geoPointsFromSelection,
+  mapSubplotOf,
+  normalizeGeoTraces,
+  pixelToLonLat,
+} from '../../annotations/geo';
 import { makeColorResolver } from '../../annotations/resolveColor';
 import { renderedPointsFromGraph, renderedPointsSignature } from '../../annotations/renderedPoints';
 import type { GraphLike, RenderedPoints } from '../../annotations/renderedPoints';
@@ -125,6 +141,9 @@ function mergePlotly(
 const hasMarkedPoints = (items: RenderableAnnotation[]) =>
   items.some((i) => i.annotation.geometry.kind === 'points');
 
+/** Pointer travel (px) past which a press is a drag (a map pan), not a click. */
+const CLICK_SLOP_PX = 5;
+
 const needsTraces = (items: RenderableAnnotation[]) =>
   items.some((i) => {
     const k = i.annotation.geometry.kind;
@@ -156,6 +175,18 @@ export interface UsePlotAnnotationLayerOptions {
    * Undefined for a component with a single view: every annotation is shown.
    */
   variant?: string | null;
+  /**
+   * `map`: a Plotly map (scattermap / choroplethmap). Its annotations are in
+   * longitude / latitude and drawn as overlay traces, and only the tools a
+   * map can take (marked points, notes) are offered. Default `cartesian`.
+   */
+  surface?: AnnotateSurface;
+  /**
+   * Map only: where point ids are read. `customdata` (default) uses
+   * `pointIdIndex`; `location` uses the region id of a choropleth, with
+   * `pointIdColumn` naming the locations column.
+   */
+  pointIdFrom?: 'customdata' | 'location';
 }
 
 export interface PlotAnnotationLayer {
@@ -181,6 +212,11 @@ export interface PlotAnnotationLayer {
   toolbar: React.ReactNode;
   /** "12/15 points found" badges for marked points missing from the data. */
   badges: React.ReactNode[];
+  /**
+   * Hand the graph div over directly, for a plot whose `onInitialized` /
+   * `onUpdate` may never fire (a map waiting on its basemap).
+   */
+  trackGraph: (gd: unknown) => void;
 }
 
 export interface PlotGraphHandlers {
@@ -206,7 +242,10 @@ export function usePlotAnnotationLayer({
   pointIdIndex = 0,
   pointIdColumn,
   variant,
+  surface = 'cartesian',
+  pointIdFrom = 'customdata',
 }: UsePlotAnnotationLayerOptions): PlotAnnotationLayer {
+  const onMap = surface === 'map';
   const layer = useAnnotationLayer();
   const annotatable = !!layer && enabled;
   const componentItems = annotatable ? layer!.itemsFor(componentIndex) : NO_ANNOTATIONS;
@@ -248,8 +287,24 @@ export function usePlotAnnotationLayer({
   const wantsTraces = needsTraces(layerItems) || needsTraces(previewItems);
   const matchData = sourceData ?? data;
   const annotationTraces = useMemo(
-    () => (wantsTraces && matchData ? normalizeTraces(matchData, pointIdIndex) : undefined),
-    [wantsTraces, matchData, pointIdIndex],
+    () => (!onMap && wantsTraces && matchData ? normalizeTraces(matchData, pointIdIndex) : undefined),
+    [onMap, wantsTraces, matchData, pointIdIndex],
+  );
+
+  // Map: where Plotly drew each choropleth region (its centroid), read from
+  // the graph div after every plot, so a marked region carries its label.
+  const [centroids, setCentroids] = useState<Map<string, [number, number]> | null>(null);
+  const centroidsSignatureRef = useRef('');
+  const syncCentroids = useCallback((gd: unknown) => {
+    const next = geoCentroidsFromGraph(gd);
+    const signature = centroidsSignature(next);
+    if (signature === centroidsSignatureRef.current) return;
+    centroidsSignatureRef.current = signature;
+    setCentroids(next);
+  }, []);
+  const geoTraces = useMemo(
+    () => (onMap && wantsTraces && matchData ? normalizeGeoTraces(matchData, pointIdIndex, centroids) : undefined),
+    [onMap, wantsTraces, matchData, pointIdIndex, centroids],
   );
   const highlightAnnotationId = layer?.highlightId ?? null;
 
@@ -257,7 +312,7 @@ export function usePlotAnnotationLayer({
   // jitter), read from the graph div after every plot, so marked points are
   // ringed on the mark. Set only when the positions changed: the rings
   // redraw the figure, which reports back the same positions.
-  const wantsRendered = hasMarkedPoints(layerItems) || hasMarkedPoints(previewItems);
+  const wantsRendered = !onMap && (hasMarkedPoints(layerItems) || hasMarkedPoints(previewItems));
   const wantsRenderedRef = useRef(wantsRendered);
   wantsRenderedRef.current = wantsRendered;
   const [renderedPoints, setRenderedPoints] = useState<RenderedPoints | null>(null);
@@ -283,21 +338,28 @@ export function usePlotAnnotationLayer({
     }),
     [colorResolver, annotationFontColor, annotationTraces, highlightAnnotationId, renderedPoints],
   );
-  const savedPlotly = useMemo(
-    () => (layerItems.length ? annotationsToPlotly(layerItems, toPlotlyOptions) : null),
-    [layerItems, toPlotlyOptions],
+  const geoOptions = useMemo(
+    () => ({
+      resolveColor: colorResolver,
+      fontColor: annotationFontColor,
+      traces: geoTraces,
+      highlightId: highlightAnnotationId,
+    }),
+    [colorResolver, annotationFontColor, geoTraces, highlightAnnotationId],
   );
+  const savedPlotly = useMemo(() => {
+    if (!layerItems.length) return null;
+    return onMap ? geoAnnotationsToPlotly(layerItems, geoOptions) : annotationsToPlotly(layerItems, toPlotlyOptions);
+  }, [layerItems, onMap, geoOptions, toPlotlyOptions]);
   // Rebuilt on every keystroke of the label: kept apart from the saved ones.
-  const previewPlotly = useMemo(
-    () =>
-      previewItems.length
-        ? annotationsToPlotly(previewItems, {
-            ...toPlotlyOptions,
-            topLabelOffset: savedPlotly?.topLabelCount ?? 0,
-          })
-        : null,
-    [previewItems, toPlotlyOptions, savedPlotly],
-  );
+  const previewPlotly = useMemo(() => {
+    if (!previewItems.length) return null;
+    if (onMap) return geoAnnotationsToPlotly(previewItems, geoOptions);
+    return annotationsToPlotly(previewItems, {
+      ...toPlotlyOptions,
+      topLabelOffset: savedPlotly?.topLabelCount ?? 0,
+    });
+  }, [previewItems, onMap, geoOptions, toPlotlyOptions, savedPlotly]);
   const plotlyAnnotations = useMemo(() => mergePlotly(savedPlotly, previewPlotly), [savedPlotly, previewPlotly]);
   const pendingStats = previewPlotly?.stats[PREVIEW_ANNOTATION_ID];
   const missingPoints = useMemo(
@@ -314,13 +376,15 @@ export function usePlotAnnotationLayer({
   }, [reportStats, componentIndex, savedStats]);
 
   // Annotate mode for this plot: which tool, and how Plotly must behave.
+  // A tool the surface does not offer (the chrome starts every component on
+  // "range") falls back to marked points.
   const annotateTool: AnnotateTool | null =
     annotatable && layer!.canAnnotate && layer!.annotate?.componentIndex === componentIndex
-      ? layer!.annotate.tool
+      ? toolForSurface(layer!.annotate.tool, surface)
       : null;
   const annotating = annotateTool != null;
   const [annotateOptions, setAnnotateOptions] = useState<AnnotateOptions>(DEFAULT_ANNOTATE_OPTIONS);
-  const interaction = annotateTool ? annotateInteraction(annotateTool, annotateOptions) : null;
+  const interaction = annotateTool ? annotateInteraction(annotateTool, annotateOptions, surface) : null;
   // The modebar's zoom or pan took over the drag gesture (see onAnnotateRelayout).
   const [navigating, setNavigating] = useState(false);
   const navigatingRef = useRef(navigating);
@@ -374,6 +438,8 @@ export function usePlotAnnotationLayer({
     pointIdIndex,
     pointIdColumn,
     variant,
+    surface,
+    pointIdFrom,
   });
   latest.current = {
     layer,
@@ -383,6 +449,8 @@ export function usePlotAnnotationLayer({
     pointIdIndex,
     pointIdColumn,
     variant,
+    surface,
+    pointIdFrom,
   };
 
   // ── Zoom / pan from the modebar: while one of them holds the drag
@@ -391,9 +459,9 @@ export function usePlotAnnotationLayer({
   // user's modebar choice.
   const onAnnotateRelayout = useCallback((event: Record<string, unknown>) => {
     if (!event || !('dragmode' in event)) return;
-    const { annotateTool: tool, annotateOptions: opts } = latest.current;
+    const { annotateTool: tool, annotateOptions: opts, surface: where } = latest.current;
     if (!tool) return;
-    setNavigating(event.dragmode !== annotateInteraction(tool, opts).dragmode);
+    setNavigating(event.dragmode !== annotateInteraction(tool, opts, where).dragmode);
   }, []);
   const [toolPicks, setToolPicks] = useState(0);
   const toolDragmode = interaction?.dragmode;
@@ -434,6 +502,8 @@ export function usePlotAnnotationLayer({
       pointIdIndex: slot,
       pointIdColumn: col,
       variant: view,
+      surface: where,
+      pointIdFrom: idFrom,
     } = latest.current;
     if (!l || !event) return;
     if (tool === 'range') {
@@ -446,23 +516,28 @@ export function usePlotAnnotationLayer({
     if (tool !== 'points') return;
     // The selected area (range / lassoPoints / selections) rides along with
     // the filtered points, so the annotation can shade it.
-    const geometry = markedPointsFromSelection(
-      { ...event, ...stripOverlayPoints(event) },
-      col ? slot : undefined,
-      col,
-    );
+    const stripped = { ...event, ...stripOverlayPoints(event) };
+    const geometry =
+      where === 'map'
+        ? geoPointsFromSelection(stripped, col ? { column: col, from: idFrom, slot } : null)
+        : markedPointsFromSelection(stripped, col ? slot : undefined, col);
     if (selectionSnapshotRef.current) restoreSelection(gdRef.current, selectionSnapshotRef.current);
     else clearDrawnSelection(gdRef.current);
     if (geometry && !pendingRef.current) l.onCaptured(idx, geometry, 'points', view);
   }, []);
 
   // ── Line / note: any click in the plot area. Snaps to the hovered data
-  // point when there is one, else converts the click position to data coords.
-  const hoverPointRef = useRef<{ x: unknown; y: unknown } | null>(null);
+  // point when there is one, else converts the click position to data coords
+  // (on a map: longitude / latitude through the map's own projection).
+  const hoverPointRef = useRef<{ x: unknown; y: unknown; lon?: unknown; lat?: unknown } | null>(null);
   const onAnnotateHover = useCallback((event: any) => {
-    const p = stripOverlayPoints(event).points[0];
-    hoverPointRef.current = p ? { x: p.x, y: p.y } : null;
+    const p = stripOverlayPoints(event).points[0] as
+      | { x?: unknown; y?: unknown; lon?: unknown; lat?: unknown }
+      | undefined;
+    hoverPointRef.current = p ? { x: p.x, y: p.y, lon: p.lon, lat: p.lat } : null;
   }, []);
+  // Where the last press started: a press that moved is a pan, not a click.
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
   const onAnnotateUnhover = useCallback(() => {
     hoverPointRef.current = null;
   }, []);
@@ -471,10 +546,22 @@ export function usePlotAnnotationLayer({
     if (!layer || (annotateTool !== 'line' && annotateTool !== 'note') || pendingRef.current) return;
     // A click while zoom/pan holds the gesture belongs to the navigation.
     if (navigatingRef.current) return;
+    const press = pressRef.current;
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > CLICK_SLOP_PX) return;
     const target = e.target as Element | null;
-    if (target?.closest?.('.modebar, .legend')) return;
+    if (target?.closest?.('.modebar, .legend, .maplibregl-ctrl')) return;
     const gd = gdRef.current;
     if (!gd) return;
+    if (onMap) {
+      const hovered = hoverPointRef.current;
+      const at =
+        hovered && hovered.lon != null && hovered.lat != null
+          ? { lon: hovered.lon, lat: hovered.lat }
+          : pixelToLonLat(e.clientX, e.clientY, mapSubplotOf(readFullLayout(gd)));
+      const note = at ? geoNoteAt(at.lon, at.lat) : null;
+      if (note) layer.onCaptured(componentIndex, note, 'note', variant);
+      return;
+    }
     const point =
       hoverPointRef.current ??
       pixelToData(e.clientX, e.clientY, gd.getBoundingClientRect(), readFullLayout(gd));
@@ -485,9 +572,18 @@ export function usePlotAnnotationLayer({
   };
   useEffect(() => {
     if (interaction?.capture !== 'click' || !graphDiv) return;
+    const onDown = (e: PointerEvent) => {
+      pressRef.current = { x: e.clientX, y: e.clientY };
+    };
     const onClick = (e: MouseEvent) => clickCaptureRef.current(e);
+    // Capture phase: the map canvas handles the press before it bubbles.
+    graphDiv.addEventListener('pointerdown', onDown, true);
     graphDiv.addEventListener('click', onClick);
-    return () => graphDiv.removeEventListener('click', onClick);
+    return () => {
+      graphDiv.removeEventListener('pointerdown', onDown, true);
+      graphDiv.removeEventListener('click', onClick);
+      pressRef.current = null;
+    };
   }, [interaction?.capture, graphDiv]);
 
   // Esc cancels the pending label first, then leaves annotate mode.
@@ -506,11 +602,13 @@ export function usePlotAnnotationLayer({
   // Runs after every plot, relayout and resize (react-plotly's onUpdate).
   const trackGraph = useCallback(
     (gd: unknown) => {
+      if (!gd) return;
       gdRef.current = gd as HTMLElement;
       setGraphDiv(gd as HTMLElement);
-      syncRenderedPoints(gd);
+      if (onMap) syncCentroids(gd);
+      else syncRenderedPoints(gd);
     },
-    [syncRenderedPoints],
+    [onMap, syncCentroids, syncRenderedPoints],
   );
   // A first marked-points annotation (or its preview) on an already plotted
   // figure: read the positions now rather than at the next plot.
@@ -567,6 +665,7 @@ export function usePlotAnnotationLayer({
       <AnnotateToolbar
         tool={annotateTool}
         options={annotateOptions}
+        surface={surface}
         onChange={(tool, options) => {
           setAnnotateOptions(options);
           setToolPicks((n) => n + 1);
@@ -614,6 +713,7 @@ export function usePlotAnnotationLayer({
     plotProps,
     toolbar,
     badges,
+    trackGraph,
   };
 }
 

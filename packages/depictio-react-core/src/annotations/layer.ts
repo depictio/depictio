@@ -37,9 +37,26 @@ export const DEFAULT_ANNOTATE_OPTIONS: AnnotateOptions = {
 
 export type CaptureEvent = 'click' | 'selected';
 
+/** Where the tools draw: a cartesian x/y plot, or a map (longitude / latitude). */
+export type AnnotateSurface = 'cartesian' | 'map';
+
+/**
+ * Tools offered per surface. A map has no x/y axis to range over or draw a
+ * line across: it keeps marked points and notes.
+ */
+export const SURFACE_TOOLS: Record<AnnotateSurface, readonly AnnotateTool[]> = {
+  cartesian: ['range', 'line', 'points', 'note'],
+  map: ['points', 'note'],
+};
+
+/** `tool` when the surface offers it, else marked points (offered everywhere). */
+export function toolForSurface(tool: AnnotateTool, surface: AnnotateSurface): AnnotateTool {
+  return SURFACE_TOOLS[surface].includes(tool) ? tool : 'points';
+}
+
 export interface AnnotateInteraction {
   /** `layout.dragmode` while the tool is active. */
-  dragmode: 'lasso' | 'select' | false;
+  dragmode: 'lasso' | 'select' | 'pan' | false;
   /** Which Plotly event produces the geometry. */
   capture: CaptureEvent;
 }
@@ -49,26 +66,32 @@ export interface AnnotateInteraction {
  * selection (only the tool's axis is kept), points from a lasso/box selection,
  * both then cleared; lines and notes from a click (no drag gesture at all).
  * Zoom and pan stay available from the modebar: axis changes are never
- * captured.
+ * captured. On a map a note is placed by a click while dragging still pans,
+ * and the tools it does not offer fall back to marked points.
  */
 export function annotateInteraction(
   tool: AnnotateTool,
   opts: AnnotateOptions = DEFAULT_ANNOTATE_OPTIONS,
+  surface: AnnotateSurface = 'cartesian',
 ): AnnotateInteraction {
-  switch (tool) {
+  switch (toolForSurface(tool, surface)) {
     case 'range':
       return { dragmode: 'select', capture: 'selected' };
     case 'points':
       return { dragmode: opts.selectMode, capture: 'selected' };
     case 'line':
     case 'note':
-      return { dragmode: false, capture: 'click' };
+      return { dragmode: surface === 'map' ? 'pan' : false, capture: 'click' };
   }
 }
 
 /** One-line instruction shown under the annotate toolbar. */
-export function annotateHint(tool: AnnotateTool, opts: AnnotateOptions): string {
-  switch (tool) {
+export function annotateHint(
+  tool: AnnotateTool,
+  opts: AnnotateOptions,
+  surface: AnnotateSurface = 'cartesian',
+): string {
+  switch (toolForSurface(tool, surface)) {
     case 'range':
       return opts.rangeAxis === 'x'
         ? 'Drag a box: its x extent becomes the range'
@@ -80,7 +103,9 @@ export function annotateHint(tool: AnnotateTool, opts: AnnotateOptions): string 
     case 'points':
       return opts.selectMode === 'lasso' ? 'Lasso the points to mark' : 'Box-select the points to mark';
     case 'note':
-      return 'Click a point to attach a note';
+      return surface === 'map'
+        ? 'Click a point or a place on the map to attach a note'
+        : 'Click a point to attach a note';
   }
 }
 
@@ -98,6 +123,7 @@ export function kindForGeometry(geometry: Geometry): AnnotationKind {
     case 'points':
       return 'points';
     case 'arrow_note':
+    case 'geo_note':
       return 'note';
   }
 }
@@ -191,14 +217,14 @@ export function stripOverlayPoints<P extends EventPointLike>(
   };
 }
 
-function asPlainArray(field: unknown): unknown[] | undefined {
+export function asPlainArray(field: unknown): unknown[] | undefined {
   if (Array.isArray(field)) return field;
   if (isPlotlyTypedArray(field)) return decodeBdata(field);
   if (ArrayBuffer.isView(field)) return Array.from(field as unknown as ArrayLike<unknown>);
   return undefined;
 }
 
-function customdataIds(customdata: unknown, col: number): unknown[] | undefined {
+export function customdataIds(customdata: unknown, col: number): unknown[] | undefined {
   if (Array.isArray(customdata)) {
     return customdata.map((row) => {
       const r = customdataRow(row);

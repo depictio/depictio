@@ -32,6 +32,8 @@ export const MAX_POINT_IDS = 5000;
 export const MAX_REGION_VERTICES = 1000;
 export const MAX_LABEL_CHARS = 120;
 export const MAX_VARIANT_CHARS = 200;
+export const MAX_LATITUDE = 90;
+export const MAX_LONGITUDE = 180;
 
 /** A band across the x axis, drawn behind the data. */
 export interface XRange {
@@ -88,6 +90,8 @@ export type SelectionRegion = BoxRegion | LassoRegion;
  * Points to circle. Identified by the selection column (`column` + `ids`)
  * when the component has one, else by plain coordinates. `region` keeps the
  * area the selection gesture covered, drawn as a shaded background.
+ * `geo` marks points on a map: coords and region vertices are then longitude
+ * (`x`, within +-MAX_LONGITUDE) and latitude (`y`, within +-MAX_LATITUDE).
  */
 export interface MarkedPoints {
   kind: 'points';
@@ -95,6 +99,7 @@ export interface MarkedPoints {
   ids?: Array<string | number>;
   coords?: PointCoord[];
   region?: SelectionRegion | null;
+  geo?: boolean;
 }
 
 /** Arrow head at (`x`, `y`) in data coords; label offset `ax`/`ay` in pixels. */
@@ -106,7 +111,14 @@ export interface ArrowNote {
   ay?: number;
 }
 
-export type Geometry = XRange | YRange | RefLine | MarkedPoints | ArrowNote;
+/** A note pinned to a place on a map (degrees, lat within +-90, lon within +-180). */
+export interface GeoNote {
+  kind: 'geo_note';
+  lat: number;
+  lon: number;
+}
+
+export type Geometry = XRange | YRange | RefLine | MarkedPoints | ArrowNote | GeoNote;
 export type GeometryKind = Geometry['kind'];
 
 /** Which geometries each annotation kind accepts (mirrors `_GEOMETRY_KINDS`). */
@@ -114,7 +126,7 @@ export const GEOMETRY_KINDS: Record<AnnotationKind, readonly GeometryKind[]> = {
   range: ['x_range', 'y_range'],
   line: ['ref_line'],
   points: ['points'],
-  note: ['arrow_note'],
+  note: ['arrow_note', 'geo_note'],
 };
 
 export interface AnnotationStyle {

@@ -597,6 +597,9 @@ export function annotationsToPlotly(
         });
         break;
       }
+      case 'geo_note':
+        // Map only: drawn by `geoAnnotationsToPlotly`.
+        break;
     }
     if (!preview) {
       const hovertext = annotationHoverText(annotation, stats[item.id]);

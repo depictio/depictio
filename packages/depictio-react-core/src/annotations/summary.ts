@@ -25,6 +25,12 @@ export function formatAxisValue(v: AxisValue): string {
   return String(Number(v.toFixed(decimals)));
 }
 
+/** A map position for a summary, e.g. "48.86° N, 2.35° E". */
+export function formatLatLon(lat: number, lon: number): string {
+  const part = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? neg : pos}`;
+  return `${part(lat, 'N', 'S')}, ${part(lon, 'E', 'W')}`;
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function markedCount(geometry: Geometry & { kind: 'points' }): number {
@@ -53,6 +59,8 @@ export function annotationSummary(annotation: Annotation, stats?: AnnotationStat
     }
     case 'arrow_note':
       return `Note at (${formatAxisValue(g.x)}, ${formatAxisValue(g.y)})`;
+    case 'geo_note':
+      return `Note at ${formatLatLon(g.lat, g.lon)}`;
   }
 }
 
@@ -79,6 +87,7 @@ export function annotationHoverText(annotation: Annotation, stats?: AnnotationSt
     }
     case 'ref_line':
     case 'arrow_note':
+    case 'geo_note':
       return annotationSummary(annotation, stats);
   }
 }

@@ -6,8 +6,9 @@ Clicking a thread restores that view on today's data.
 
 Threads are internal to a project's editors and owners. An annotation is a
 thread that also carries a shape drawn in data coordinates (a range, a
-reference line, marked points, an arrow note). Its ``published`` switch lets
-viewers see the shape and its label, never the discussion.
+reference line, marked points, an arrow note; on a map, marked points and a
+note in longitude / latitude). Its ``published`` switch lets viewers see the
+shape and its label, never the discussion.
 
 What an anchor cannot do yet is bring back the *exact* state: a later save can
 change the component and a re-ingest can change its data. The anchor records
@@ -40,6 +41,8 @@ MAX_REGION_VERTICES = 1000
 MAX_COMMENTS_PER_THREAD = 500
 MAX_EVIDENCE_ITEMS = 20
 MAX_VARIANT_CHARS = 200
+MAX_LATITUDE = 90.0
+MAX_LONGITUDE = 180.0
 
 # Mantine palette names: annotations pick a theme colour, never a raw value, so
 # they follow light and dark mode like the rest of the viewer.
@@ -187,6 +190,15 @@ class LassoRegion(_Strict):
 SelectionRegion = Annotated[BoxRegion | LassoRegion, Field(discriminator="shape")]
 
 
+def _check_lon_lat(lon: AxisValue, lat: AxisValue) -> None:
+    """Raise unless (``lon``, ``lat``) is a finite position on the globe."""
+    for value, bound, name in ((lon, MAX_LONGITUDE, "longitude"), (lat, MAX_LATITUDE, "latitude")):
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError(f"a map {name} must be a number")
+        if not -bound <= value <= bound:
+            raise ValueError(f"a map {name} must be within [-{bound:g}, {bound:g}]")
+
+
 class MarkedPoints(_Strict):
     """Points, bars or table rows to circle or outline.
 
@@ -195,6 +207,9 @@ class MarkedPoints(_Strict):
     without one (bars, histograms) fall back to plain coordinates.
     ``region`` keeps the area the selection gesture covered, drawn as a
     shaded background behind the points.
+
+    ``geo`` marks points on a map: coordinates and region vertices are then
+    longitude (``x``) and latitude (``y``).
     """
 
     kind: Literal["points"] = "points"
@@ -202,6 +217,7 @@ class MarkedPoints(_Strict):
     ids: list[str | int | float] = Field(default_factory=list, max_length=MAX_POINT_IDS)
     coords: list[PointCoord] = Field(default_factory=list, max_length=MAX_POINT_IDS)
     region: SelectionRegion | None = None
+    geo: bool = False
 
     @model_validator(mode="after")
     def _something_marked(self) -> MarkedPoints:
@@ -209,6 +225,15 @@ class MarkedPoints(_Strict):
             raise ValueError("marked points need ids or coords")
         if self.ids and not self.column:
             raise ValueError("ids need the column they come from")
+        if self.geo:
+            for c in self.coords:
+                _check_lon_lat(c.x, c.y)
+            if isinstance(self.region, BoxRegion):
+                _check_lon_lat(self.region.x0, self.region.y0)
+                _check_lon_lat(self.region.x1, self.region.y1)
+            elif isinstance(self.region, LassoRegion):
+                for lon, lat in zip(self.region.x, self.region.y, strict=True):
+                    _check_lon_lat(lon, lat)
         return self
 
 
@@ -226,15 +251,24 @@ class ArrowNote(_Strict):
     ay: float = -40
 
 
+class GeoNote(_Strict):
+    """A numbered note pinned to a place on a map."""
+
+    kind: Literal["geo_note"] = "geo_note"
+    lat: float = Field(ge=-MAX_LATITUDE, le=MAX_LATITUDE)
+    lon: float = Field(ge=-MAX_LONGITUDE, le=MAX_LONGITUDE)
+
+
 Geometry = Annotated[
-    XRange | YRange | RefLine | MarkedPoints | ArrowNote, Field(discriminator="kind")
+    XRange | YRange | RefLine | MarkedPoints | ArrowNote | GeoNote,
+    Field(discriminator="kind"),
 ]
 
 _GEOMETRY_KINDS: dict[str, frozenset[str]] = {
     "range": frozenset({"x_range", "y_range"}),
     "line": frozenset({"ref_line"}),
     "points": frozenset({"points"}),
-    "note": frozenset({"arrow_note"}),
+    "note": frozenset({"arrow_note", "geo_note"}),
 }
 
 
