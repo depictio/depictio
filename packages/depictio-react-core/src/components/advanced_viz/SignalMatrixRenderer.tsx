@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -17,6 +9,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizFullRow, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import {
   applyDataTheme,
@@ -640,9 +633,7 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const primaryControls = useMemo(
     () => (
       <>
-        <Select
-          size="xs"
-          w={190}
+        <VizSelect
           label="Row order"
           value={sortBy}
           onChange={(v) => v && setSortBy(v as SortBy)}
@@ -651,11 +642,8 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
             { value: 'none', label: 'As delivered' },
           ]}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
         />
-        <NumberInput
-          size="xs"
-          w={120}
+        <VizNumberInput
           label="Max rows"
           value={maxRows}
           onChange={(v) => {
@@ -674,41 +662,35 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Select
-          size="xs"
+      <>
+        <VizSelect
           label="Colour scale"
           value={colourScale}
           onChange={(v) => v && setColourScale(v as ColourScale)}
           data={COLOUR_SCALES as unknown as string[]}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
         />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Profile
-          </Text>
-          <Switch
-            size="xs"
-            checked={showProfile}
-            onChange={(e) => setShowProfile(e.currentTarget.checked)}
-            label="Mean profile above the matrix"
-          />
-        </Stack>
+        <VizSwitch
+          checked={showProfile}
+          onChange={(e) => setShowProfile(e.currentTarget.checked)}
+          label="Mean profile above the matrix"
+        />
         {matrix ? (
-          <Text size="xs" c="dimmed">
-            {matrix.drawnRows} row{matrix.drawnRows === 1 ? '' : 's'} drawn from{' '}
-            {matrix.totalRegions} region{matrix.totalRegions === 1 ? '' : 's'} ×{' '}
-            {matrix.positions.length} positions
-            {matrix.drawnRows < matrix.totalRegions ? ' (binned by averaging)' : ''}
-            {matrix.droppedGroups > 0
-              ? ` · ${matrix.droppedGroups} further group${
-                  matrix.droppedGroups === 1 ? '' : 's'
-                } not drawn`
-              : ''}
-          </Text>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {matrix.drawnRows} row{matrix.drawnRows === 1 ? '' : 's'} drawn from{' '}
+              {matrix.totalRegions} region{matrix.totalRegions === 1 ? '' : 's'} ×{' '}
+              {matrix.positions.length} positions
+              {matrix.drawnRows < matrix.totalRegions ? ' (binned by averaging)' : ''}
+              {matrix.droppedGroups > 0
+                ? ` · ${matrix.droppedGroups} further group${
+                    matrix.droppedGroups === 1 ? '' : 's'
+                  } not drawn`
+                : ''}
+            </Text>
+          </VizFullRow>
         ) : null}
-      </Stack>
+      </>
     ),
     [colourScale, showProfile, matrix],
   );

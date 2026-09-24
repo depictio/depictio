@@ -126,3 +126,43 @@ function capFields(sections: RecordSection[], maxFields: number): RecordSectionL
   }
   return { sections: out, truncated };
 }
+
+/** Longest description still short enough to stand in as a field label. A
+ *  longer one is a sentence about the column, not a name for it, and stays in
+ *  the tooltip. */
+const MAX_DESCRIPTION_LABEL_CHARS = 24;
+
+/**
+ * The label a field reads under, most explicit source first.
+ *
+ * 1. The author's own `labels` entry for the column.
+ * 2. The text after a `"Group: label"` description, whose prefix already
+ *    names the section.
+ * 3. A description short enough to be a name (`"GTDB genus"`, `"Bases in the
+ *    bin"`) and carrying no comma, which is where an enumeration of values
+ *    (`"FLYE, MEGAHIT or SPAdes"`) or a unit aside starts.
+ * 4. The raw column name, so a field is never unlabelled.
+ */
+export function fieldLabel(
+  column: string,
+  options: {
+    labels?: Record<string, string> | null;
+    description?: string | null;
+  } = {},
+): string {
+  const explicit = options.labels?.[column]?.trim();
+  if (explicit) return explicit;
+  const description = options.description?.trim();
+  if (description) {
+    if (descriptionGroup(description)) {
+      const rest = description.slice(description.indexOf(':') + 1).trim();
+      if (rest.length <= MAX_DESCRIPTION_LABEL_CHARS) return rest;
+    } else if (
+      description.length <= MAX_DESCRIPTION_LABEL_CHARS &&
+      !description.includes(',')
+    ) {
+      return description;
+    }
+  }
+  return column;
+}

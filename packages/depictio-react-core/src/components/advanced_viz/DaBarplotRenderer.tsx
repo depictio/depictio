@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { NumberInput, ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizNumberInput } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
@@ -265,18 +266,14 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   const primaryControls = useMemo(
     () => (
       <>
-        <NumberInput
-          size="xs"
-          w={130}
+        <VizNumberInput
           label="Top-N per panel"
           value={topN}
           onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
           min={1}
           max={50}
         />
-        <NumberInput
-          size="xs"
-          w={150}
+        <VizNumberInput
           label="Significance threshold"
           value={sigThreshold}
           onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}

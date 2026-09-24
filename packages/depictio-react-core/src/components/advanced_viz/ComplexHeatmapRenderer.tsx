@@ -1,10 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
-  MultiSelect,
-  Select,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -21,6 +17,13 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -348,44 +351,42 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const primaryControls = useMemo(
     () => (
       <>
-        <Select
-          size="xs"
-          w={170}
-          label="Normalisation"
-          value={normalize}
-          onChange={(v) => v && setNormalize(v as typeof normalize)}
-          data={[
-            { value: 'none', label: 'None' },
-            { value: 'row_z', label: 'Row z-score' },
-            { value: 'col_z', label: 'Column z-score' },
-            { value: 'log1p', label: 'log1p' },
-          ]}
-        />
-        <Select
-          size="xs"
-          w={150}
-          label="Clustering method"
-          value={clusterMethod}
-          onChange={(v) => v && setClusterMethod(v as typeof clusterMethod)}
-          data={[
-            { value: 'ward', label: 'Ward' },
-            { value: 'single', label: 'Single' },
-            { value: 'complete', label: 'Complete' },
-            { value: 'average', label: 'Average' },
-          ]}
-        />
-        <Switch
-          size="xs"
-          checked={clusterRows}
-          onChange={(e) => setClusterRows(e.currentTarget.checked)}
-          label="Cluster rows"
-        />
-        <Switch
-          size="xs"
-          checked={clusterCols}
-          onChange={(e) => setClusterCols(e.currentTarget.checked)}
-          label="Cluster columns"
-        />
+        <VizControlGroup title="Values">
+          <VizSelect
+            label="Normalisation"
+            value={normalize}
+            onChange={(v) => v && setNormalize(v as typeof normalize)}
+            data={[
+              { value: 'none', label: 'None' },
+              { value: 'row_z', label: 'Row z-score' },
+              { value: 'col_z', label: 'Column z-score' },
+              { value: 'log1p', label: 'log1p' },
+            ]}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Clustering">
+          <VizSelect
+            label="Clustering method"
+            value={clusterMethod}
+            onChange={(v) => v && setClusterMethod(v as typeof clusterMethod)}
+            data={[
+              { value: 'ward', label: 'Ward' },
+              { value: 'single', label: 'Single' },
+              { value: 'complete', label: 'Complete' },
+              { value: 'average', label: 'Average' },
+            ]}
+          />
+          <VizSwitch
+            checked={clusterRows}
+            onChange={(e) => setClusterRows(e.currentTarget.checked)}
+            label="Cluster rows"
+          />
+          <VizSwitch
+            checked={clusterCols}
+            onChange={(e) => setClusterCols(e.currentTarget.checked)}
+            label="Cluster columns"
+          />
+        </VizControlGroup>
       </>
     ),
     [normalize, clusterMethod, clusterRows, clusterCols],
@@ -393,42 +394,46 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <MultiSelect
-          size="xs"
-          label="Row annotations"
-          description="Metadata columns drawn as side tracks (categorical auto-coloured, numeric → bar)"
-          value={rowAnnotationCols}
-          onChange={setRowAnnotationCols}
-          data={annotationOptions}
-          placeholder={annotationOptions.length === 0 ? 'No DC columns loaded yet' : 'Pick columns'}
-          searchable
-          clearable
-        />
-        {colAnnotationData.length > 0 ? (
-          <MultiSelect
-            size="xs"
-            label="Column annotations"
-            description="Sample metadata drawn as strips above the columns"
-            value={drawnColAnnotations}
-            onChange={setColAnnotationCols}
-            data={colAnnotationData}
-            placeholder={drawnColAnnotations.length === 0 ? 'Pick columns' : ''}
+      <>
+        <VizControlGroup title="Annotations">
+          <VizMultiSelect
+            label="Row annotations"
+            description="Metadata columns drawn as side tracks (categorical auto-coloured, numeric → bar)"
+            value={rowAnnotationCols}
+            onChange={setRowAnnotationCols}
+            data={annotationOptions}
+            placeholder={annotationOptions.length === 0 ? 'No DC columns loaded yet' : 'Pick columns'}
             searchable
             clearable
           />
-        ) : null}
-        {computeStatus ? (
-          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-            {computeStatus}
-          </Badge>
-        ) : null}
-        {computeMs != null && !computeStatus ? (
-          <Text size="xs" c="dimmed">
-            Built in {computeMs} ms ({dims?.rows ?? '?'} rows × {dims?.cols ?? '?'} cols)
-          </Text>
-        ) : null}
-      </Stack>
+          {colAnnotationData.length > 0 ? (
+            <VizMultiSelect
+              label="Column annotations"
+              description="Sample metadata drawn as strips above the columns"
+              value={drawnColAnnotations}
+              onChange={setColAnnotationCols}
+              data={colAnnotationData}
+              placeholder={drawnColAnnotations.length === 0 ? 'Pick columns' : ''}
+              searchable
+              clearable
+            />
+          ) : null}
+          {computeStatus ? (
+            <VizFullRow>
+              <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                {computeStatus}
+              </Badge>
+            </VizFullRow>
+          ) : null}
+          {computeMs != null && !computeStatus ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Built in {computeMs} ms ({dims?.rows ?? '?'} rows × {dims?.cols ?? '?'} cols)
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+      </>
     ),
     [
       rowAnnotationCols,

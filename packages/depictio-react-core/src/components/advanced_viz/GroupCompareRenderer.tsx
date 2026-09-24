@@ -3,11 +3,8 @@ import {
   Badge,
   Button,
   Group,
-  NumberInput,
   ScrollArea,
-  Select,
   Stack,
-  Switch,
   Table,
   Text,
   useMantineColorScheme,
@@ -26,6 +23,7 @@ import {
 import type { GroupRenderState } from '../../selectionGroups';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
+import { VizControlGroup, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -435,39 +433,35 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const primaryControls = useMemo(
     () => (
       <>
-        <Select
-          size="xs"
-          w={150}
-          label="Group A"
-          placeholder="Pick a group"
-          value={pickA}
-          onChange={setPickA}
-          data={selectData}
-          searchable
-          data-testid="group-compare-pick-a"
-        />
-        <Select
-          size="xs"
-          w={150}
-          label="Group B"
-          placeholder="Pick a group"
-          value={pickB}
-          onChange={setPickB}
-          data={selectData}
-          searchable
-          data-testid="group-compare-pick-b"
-        />
-        <Select
-          size="xs"
-          w={160}
-          label="Test"
-          value={test}
-          onChange={(v) => v && setTest(v as 'wilcoxon' | 't_test')}
-          data={[
-            { value: 'wilcoxon', label: 'Wilcoxon rank-sum' },
-            { value: 't_test', label: 'Welch t-test' },
-          ]}
-        />
+        <VizControlGroup title="Comparison">
+          <VizSelect
+            label="Group A"
+            placeholder="Pick a group"
+            value={pickA}
+            onChange={setPickA}
+            data={selectData}
+            searchable
+            data-testid="group-compare-pick-a"
+          />
+          <VizSelect
+            label="Group B"
+            placeholder="Pick a group"
+            value={pickB}
+            onChange={setPickB}
+            data={selectData}
+            searchable
+            data-testid="group-compare-pick-b"
+          />
+          <VizSelect
+            label="Test"
+            value={test}
+            onChange={(v) => v && setTest(v as 'wilcoxon' | 't_test')}
+            data={[
+              { value: 'wilcoxon', label: 'Wilcoxon rank-sum' },
+              { value: 't_test', label: 'Welch t-test' },
+            ]}
+          />
+        </VizControlGroup>
       </>
     ),
     [pickA, pickB, selectData, test],
@@ -476,42 +470,39 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const controls = useMemo(
     () => (
       <>
-        <Switch
-          size="xs"
-          checked={logTransform}
-          onChange={(e) => setLogTransform(e.currentTarget.checked)}
-          label="log1p before testing"
-        />
-        <NumberInput
-          size="xs"
-          w={120}
-          label="FDR threshold"
-          value={fdrThreshold}
-          onChange={(v) => setFdrThreshold(Math.min(0.999, Math.max(0.0001, Number(v) || 0.05)))}
-          step={0.01}
-          min={0.0001}
-          max={0.999}
-          decimalScale={4}
-        />
-        <NumberInput
-          size="xs"
-          w={130}
-          label="|log2FC| threshold"
-          value={log2fcThreshold}
-          onChange={(v) => setLog2fc(Math.max(0, Number(v) || 0))}
-          step={0.25}
-          min={0}
-          decimalScale={2}
-        />
-        <NumberInput
-          size="xs"
-          w={110}
-          label="Top-N labels"
-          value={topN}
-          onChange={(v) => setTopN(Math.max(0, Math.min(200, Number(v) || 0)))}
-          min={0}
-          max={200}
-        />
+        <VizControlGroup title="Thresholds">
+          <VizSwitch
+            checked={logTransform}
+            onChange={(e) => setLogTransform(e.currentTarget.checked)}
+            label="log1p before testing"
+          />
+          <VizNumberInput
+            label="FDR threshold"
+            value={fdrThreshold}
+            onChange={(v) => setFdrThreshold(Math.min(0.999, Math.max(0.0001, Number(v) || 0.05)))}
+            step={0.01}
+            min={0.0001}
+            max={0.999}
+            decimalScale={4}
+          />
+          <VizNumberInput
+            label="|log2FC| threshold"
+            value={log2fcThreshold}
+            onChange={(v) => setLog2fc(Math.max(0, Number(v) || 0))}
+            step={0.25}
+            min={0}
+            decimalScale={2}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label="Top-N labels"
+            value={topN}
+            onChange={(v) => setTopN(Math.max(0, Math.min(200, Number(v) || 0)))}
+            min={0}
+            max={200}
+          />
+        </VizControlGroup>
       </>
     ),
     [logTransform, fdrThreshold, log2fcThreshold, topN],

@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   fetchAdvancedVizData,
@@ -413,18 +411,14 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const primaryControls = useMemo(
     () => (
       <>
-        <Select
-          size="xs"
-          w={140}
+        <VizSelect
           label="Rank"
           value={rank}
           onChange={setRank}
           data={allRanks}
           clearable
         />
-        <Select
-          size="xs"
-          w={160}
+        <VizSelect
           label="Sort samples"
           value={sampleSort}
           onChange={(v) => v && setSampleSort(v as SampleSort)}
@@ -435,17 +429,14 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           ]}
           allowDeselect={false}
         />
-        <NumberInput
-          size="xs"
-          w={110}
+        <VizNumberInput
           label="Top-N taxa"
           value={topN}
           onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
           min={1}
           max={50}
         />
-        <Switch
-          size="xs"
+        <VizSwitch
           checked={normalise}
           onChange={(e) => setNormalise(e.currentTarget.checked)}
           label="Normalise"
@@ -457,22 +448,20 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Switch
-          size="xs"
+      <VizControlGroup title="Display">
+        <VizSwitch
           checked={showLegend}
           onChange={(e) => setShowLegend(e.currentTarget.checked)}
           label="Legend"
         />
         {!normalise ? (
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={logY}
             onChange={(e) => setLogY(e.currentTarget.checked)}
             label="Log y"
           />
         ) : null}
-      </Stack>
+      </VizControlGroup>
     ),
     [normalise, showLegend, logY],
   );

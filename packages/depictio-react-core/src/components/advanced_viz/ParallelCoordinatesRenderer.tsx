@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Button,
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Button, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlCell,
+  VizFullRow,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+} from './controls/VizControls';
 
 import {
   AdvancedVizKind,
@@ -542,26 +540,18 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
   // brushes that narrow them. Colourscale and opacity are paint.
   const primaryControls = (
     <>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Axis scale
-        </Text>
-        <SegmentedControl
-          size="xs"
-          w={210}
-          value={scaleMode}
-          onChange={(value) => setScaleMode(value as AxisScaleMode)}
-          data={[
-            { value: 'minmax', label: 'Min-max' },
-            { value: 'zscore', label: 'Z-score' },
-            { value: 'raw', label: 'Raw' },
-          ]}
-        />
-      </Stack>
+      <VizSegmented
+        label="Axis scale"
+        value={scaleMode}
+        onChange={(value) => setScaleMode(value as AxisScaleMode)}
+        data={[
+          { value: 'minmax', label: 'Min-max' },
+          { value: 'zscore', label: 'Z-score' },
+          { value: 'raw', label: 'Raw' },
+        ]}
+      />
       {colourCandidates.length > 1 ? (
-        <Select
-          size="xs"
-          w={170}
+        <VizSelect
           label="Colour by"
           value={groupCol ?? NO_COLOUR}
           onChange={(value) => setGroupCol(!value || value === NO_COLOUR ? null : value)}
@@ -570,54 +560,50 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
             ...colourCandidates.map((column) => ({ value: column, label: column })),
           ]}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
         />
       ) : null}
-      <Button
-        size="xs"
-        variant="light"
-        onClick={resetBrushes}
-        disabled={brushedColumns.length === 0}
-      >
-        Reset brushes
-      </Button>
+      <VizControlCell>
+        <Button
+          size="xs"
+          variant="light"
+          onClick={resetBrushes}
+          disabled={brushedColumns.length === 0}
+        >
+          Reset brushes
+        </Button>
+      </VizControlCell>
     </>
   );
 
   const controls = (
-    <Stack gap="xs">
+    <>
       {colourValues && numericColour ? (
-        <Select
-          size="xs"
+        <VizSelect
           label="Colourscale"
           value={colourScale}
           onChange={(value) => value && setColourScale(value)}
           data={COLOUR_SCALES as unknown as string[]}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
         />
       ) : (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Line opacity
-          </Text>
-          <Slider
-            size="xs"
-            value={lineOpacity}
-            onChangeEnd={setLineOpacity}
-            min={0.05}
-            max={1}
-            step={0.05}
-            label={(value) => value.toFixed(2)}
-          />
-        </Stack>
+        <VizSlider
+          label="Line opacity"
+          value={lineOpacity}
+          onChangeEnd={setLineOpacity}
+          min={0.05}
+          max={1}
+          step={0.05}
+          thumbLabel={(value) => value.toFixed(2)}
+        />
       )}
       {axisChoice.truncated > 0 ? (
-        <Text size="xs" c="dimmed">
-          {`${axisChoice.truncated} further numeric column(s) not drawn`}
-        </Text>
+        <VizFullRow>
+          <Text size="xs" c="dimmed">
+            {`${axisChoice.truncated} further numeric column(s) not drawn`}
+          </Text>
+        </VizFullRow>
       ) : null}
-    </Stack>
+    </>
   );
 
   return (

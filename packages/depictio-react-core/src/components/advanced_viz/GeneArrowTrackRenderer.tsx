@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  MultiSelect,
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import {
   AdvancedVizKind,
@@ -19,6 +9,15 @@ import {
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import AdvancedVizPlot from './AdvancedVizPlot';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -695,51 +694,38 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const primaryControls = useMemo(
     () => (
       <>
-        <MultiSelect
-          size="xs"
-          w={220}
-          label={
-            followedRegion && allContigs.includes(followedRegion.chrom)
-              ? `Contigs (following ${followedRegion.chrom})`
-              : 'Contigs'
-          }
-          value={selectedContigs}
-          onChange={setSelectedContigs}
-          data={allContigs.map((c) => ({ value: c, label: c }))}
-          placeholder={rows ? 'All contigs' : 'Loading…'}
-          searchable
-          clearable
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Select
-          size="xs"
-          w={100}
-          label="Lanes shown"
-          value={String(maxLanes)}
-          onChange={(v) => setMaxLanes(Number(v ?? '8'))}
-          data={LANE_CHOICES}
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Select
-          size="xs"
-          w={170}
-          label="Lane order"
-          value={laneOrder}
-          onChange={(v) => setLaneOrder((v as 'features' | 'name') ?? 'features')}
-          data={[
-            { value: 'features', label: 'Most features first' },
-            { value: 'name', label: 'Contig name' },
-          ]}
-          comboboxProps={{ withinPortal: true }}
-        />
-        {hasRegions ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Align lanes
-            </Text>
-            <SegmentedControl
-              size="xs"
-              w={200}
+        <VizControlGroup title="Lanes">
+          <VizMultiSelect
+            label={
+              followedRegion && allContigs.includes(followedRegion.chrom)
+                ? `Contigs (following ${followedRegion.chrom})`
+                : 'Contigs'
+            }
+            value={selectedContigs}
+            onChange={setSelectedContigs}
+            data={allContigs.map((c) => ({ value: c, label: c }))}
+            placeholder={rows ? 'All contigs' : 'Loading…'}
+            searchable
+            clearable
+          />
+          <VizSelect
+            label="Lanes shown"
+            value={String(maxLanes)}
+            onChange={(v) => setMaxLanes(Number(v ?? '8'))}
+            data={LANE_CHOICES}
+          />
+          <VizSelect
+            label="Lane order"
+            value={laneOrder}
+            onChange={(v) => setLaneOrder((v as 'features' | 'name') ?? 'features')}
+            data={[
+              { value: 'features', label: 'Most features first' },
+              { value: 'name', label: 'Contig name' },
+            ]}
+          />
+          {hasRegions ? (
+            <VizSegmented
+              label="Align lanes"
               value={align}
               onChange={(v) => setAlign(v as 'absolute' | 'region')}
               data={[
@@ -747,8 +733,8 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
                 { value: 'region', label: 'Region start' },
               ]}
             />
-          </Stack>
-        ) : null}
+          ) : null}
+        </VizControlGroup>
       </>
     ),
     [selectedContigs, allContigs, followedRegion, rows, maxLanes, laneOrder, hasRegions, align],
@@ -756,47 +742,41 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         {truncatedLanes > 0 ? (
-          <Text size="xs" c="dimmed">
-            {truncatedLanes} more contig{truncatedLanes === 1 ? '' : 's'} not shown: raise the lane
-            budget or pick contigs.
-          </Text>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {truncatedLanes} more contig{truncatedLanes === 1 ? '' : 's'} not shown: raise the
+              lane budget or pick contigs.
+            </Text>
+          </VizFullRow>
         ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Annotations
-          </Text>
+        <VizControlGroup title="Annotations">
           {hasRegions ? (
-            <Switch
-              size="xs"
+            <VizSwitch
               checked={showRegions}
               onChange={(e) => setShowRegions(e.currentTarget.checked)}
               label="Highlight region"
             />
           ) : null}
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={showLabels}
             onChange={(e) => setShowLabels(e.currentTarget.checked)}
             label="Feature labels"
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Arrow height
-          </Text>
-          <Slider
-            size="xs"
+        </VizControlGroup>
+        <VizControlGroup title="Arrows">
+          <VizSlider
+            label="Arrow height"
             min={0.2}
             max={0.9}
             step={0.05}
             value={arrowHeight}
             onChange={setArrowHeight}
-            label={(v) => v.toFixed(2)}
+            thumbLabel={(v) => v.toFixed(2)}
           />
-        </Stack>
-      </Stack>
+        </VizControlGroup>
+      </>
     ),
     [
       truncatedLanes,

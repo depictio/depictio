@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -21,6 +12,13 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import {
   chooseResolution,
@@ -32,6 +30,8 @@ import {
 } from './contactMapBinning';
 import { displayForRegion, rotateToTriangle } from './contactMapTriangle';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import { clipContactCells, inferContactWindow } from './contactMapWindow';
+import { regionFilterActive } from './genomespy/defaultRegionGate';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -483,6 +483,10 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     (region?.chrom && chromOptions.includes(region.chrom) ? region.chrom : null) ??
     (chrom && chromOptions.includes(chrom) ? chrom : (chromOptions[0] ?? null));
 
+  // Some tile's region is in force, so the rows may have come back narrowed
+  // through a `region` link even when `region` above is null.
+  const regionActive = regionFilterActive(filters);
+
   // The window the axis is pinned to when the tile is following a region.
   const xRange = useMemo(
     () => regionXRange(wantedWindow ? { chrom: '', ...wantedWindow } : null),
@@ -500,9 +504,8 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     // partition is read out of a multi-resolution frame.
     const res = (rows[resolutionCol] || null) as unknown[] | null;
 
-    const startSet = new Set<number>();
     type Cell = { a: number; b: number; count: number };
-    const cells: Cell[] = [];
+    const rawCells: Cell[] = [];
     const n = Math.min(c1.length, s1.length, c2.length, s2.length, counts.length);
     for (let i = 0; i < n; i++) {
       if (String(c1[i]) !== effectiveChrom || String(c2[i]) !== effectiveChrom) continue;
@@ -511,11 +514,24 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       const b = num(s2[i]);
       const count = num(counts[i]);
       if (a === null || b === null || count === null) continue;
+      rawCells.push({ a, b, count });
+    }
+    // Both bins of a pair on the window, by role (`contactMapWindow.ts`): the
+    // window the tile fetched, or, when a region reached it only through a
+    // `region` link on other column names, the first-bin extent of the
+    // narrowed rows. Without that the second bin ran to the chromosome end.
+    const axisWindow =
+      wantedWindow ??
+      (regionActive ? inferContactWindow(rawCells, effectiveResolution) : null);
+    const cells = clipContactCells(rawCells, axisWindow, effectiveResolution);
+    if (cells.length === 0) return null;
+    const startSet = new Set<number>();
+    for (const { a, b } of cells) {
       startSet.add(a);
       startSet.add(b);
-      cells.push({ a, b, count });
     }
-    if (cells.length === 0) return null;
+    const axisRange =
+      xRange ?? (axisWindow ? regionXRange({ chrom: '', ...axisWindow }) : null);
 
     const sortedStarts = Array.from(startSet).sort((x, y) => x - y);
     const { buckets, index } = coarsenBins(sortedStarts, maxBins);
@@ -591,7 +607,7 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
             automargin: true,
             showgrid: false,
             title: { text: effectiveChrom },
-            ...(xRange ? { range: xRange } : {}),
+            ...(axisRange ? { range: axisRange } : {}),
           },
           yaxis: { automargin: true, showgrid: false, title: { text: 'separation (bp)' } },
           autosize: true,
@@ -637,6 +653,8 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     effectiveDisplay,
     maxSeparationBins,
     xRange,
+    wantedWindow,
+    regionActive,
     isDark,
     theme,
   ]);
@@ -671,23 +689,18 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
 
   const primaryControls = (
     <>
-      {chromOptions.length > 0 ? (
-        <Select
-          size="xs"
-          w={150}
-          label="Chromosome"
-          value={effectiveChrom}
-          onChange={(v) => setChrom(v)}
-          data={chromOptions}
-          allowDeselect={false}
-        />
-      ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Display
-        </Text>
-        <SegmentedControl
-          size="xs"
+      <VizControlGroup title="View">
+        {chromOptions.length > 0 ? (
+          <VizSelect
+            label="Chromosome"
+            value={effectiveChrom}
+            onChange={(v) => setChrom(v)}
+            data={chromOptions}
+            allowDeselect={false}
+          />
+        ) : null}
+        <VizSegmented
+          label="Display"
           value={effectiveDisplay}
           onChange={onDisplayChange}
           data={[
@@ -695,64 +708,60 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
             { value: 'triangle', label: 'Triangle' },
           ]}
         />
-      </Stack>
-      <Select
-        size="xs"
-        w={170}
-        label="Resolution"
-        value={pinnedResolution === null ? '' : String(pinnedResolution)}
-        onChange={(v) => setPinnedResolution(v ? Number(v) : null)}
-        data={resolutionData}
-        disabled={resolutions.length < 2}
-        allowDeselect={false}
-      />
+        <VizSelect
+          label="Resolution"
+          value={pinnedResolution === null ? '' : String(pinnedResolution)}
+          onChange={(v) => setPinnedResolution(v ? Number(v) : null)}
+          data={resolutionData}
+          disabled={resolutions.length < 2}
+          allowDeselect={false}
+        />
+      </VizControlGroup>
     </>
   );
 
   const controls = (
-    <Stack gap="xs">
-      <Select
-        size="xs"
-        label="Colour scale"
-        value={colourScale}
-        onChange={(v) => setColourScale((v as ColourScale) || 'Viridis')}
-        data={COLOUR_SCALES as unknown as string[]}
-        allowDeselect={false}
-      />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Scaling
-        </Text>
-        <Switch size="xs" checked={logScale} onChange={(e) => setLogScale(e.currentTarget.checked)} label="Log colour scale" />
-        <Switch
-          size="xs"
+    <>
+      <VizControlGroup title="Colour">
+        <VizSelect
+          label="Colour scale"
+          value={colourScale}
+          onChange={(v) => setColourScale((v as ColourScale) || 'Viridis')}
+          data={COLOUR_SCALES as unknown as string[]}
+          allowDeselect={false}
+        />
+      </VizControlGroup>
+      <VizControlGroup title="Scaling">
+        <VizSwitch
+          checked={logScale}
+          onChange={(e) => setLogScale(e.currentTarget.checked)}
+          label="Log colour scale"
+        />
+        <VizSwitch
           checked={balance}
           onChange={(e) => setBalance(e.currentTarget.checked)}
           label="Row/column balance"
         />
-      </Stack>
+      </VizControlGroup>
       {effectiveDisplay === 'triangle' ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Separation drawn (bins)
-          </Text>
-          <Slider
-            size="xs"
+        <VizControlGroup title="Triangle">
+          <VizSlider
+            label="Separation drawn (bins)"
             min={0}
             max={200}
             step={5}
             value={maxSeparationBins}
             onChangeEnd={(v) => setMaxSeparationBins(v)}
-            label={(v) => (v === 0 ? 'all' : String(v))}
+            thumbLabel={(v) => (v === 0 ? 'all' : String(v))}
             marks={[
               { value: 0, label: 'all' },
               { value: 100, label: '100' },
               { value: 200, label: '200' },
             ]}
           />
-        </Stack>
+        </VizControlGroup>
       ) : null}
-    </Stack>
+    </>
   );
 
   return (

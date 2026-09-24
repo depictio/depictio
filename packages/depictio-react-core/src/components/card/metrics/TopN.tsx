@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Group, Stack, Tooltip } from '@mantine/core';
 
-import { hexWithAlpha, percent } from './format';
+import { formatCardNumber, hexWithAlpha, percent } from './format';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import type { BreakdownPayload } from './types';
 
@@ -25,15 +25,28 @@ const MIN_BAR_PCT = 1.5;
  * Each row carries its own tooltip rather than sharing the strip's: with three
  * or five rows the interesting question is per-row ("what is this one exactly"),
  * and a single strip-wide tooltip cannot answer it.
+ *
+ * With ``shares={false}`` (a max / average / ... card) each row is that
+ * aggregation per group, in the card's unit: no percentage, and bars scaled to
+ * the largest shown value instead of a total that does not exist.
  */
 const TopNMetric: React.FC<{
   payload: BreakdownPayload;
   color?: string | null;
-}> = ({ payload, color }) => {
+  shares?: boolean;
+}> = ({ payload, color, shares = true }) => {
   if (!payload.top.length) return null;
   const barFill = hexWithAlpha(color, 0.75);
   const tailRows = Math.max(0, payload.unique_values - payload.top.length);
-  const tailShare = Math.max(0, 1 - payload.top_share);
+  const tailShare = Math.max(0, 1 - (payload.top_share ?? 0));
+  const kind = payload.breakdown_kind || 'count';
+  const maxAbs = Math.max(0, ...payload.top.map((r) => Math.abs(Number(r.count) || 0)));
+  const barPct = (row: BreakdownPayload['top'][number]): number =>
+    shares
+      ? (row.percent ?? 0) * 100
+      : maxAbs > 0
+      ? (Math.abs(Number(row.count) || 0) / maxAbs) * 100
+      : 0;
 
   return (
     <MetricStrip gap={METRIC.rowGap} mt={10} ariaLabel={`Top values of ${payload.column}`}>
@@ -43,15 +56,22 @@ const TopNMetric: React.FC<{
           label={
             <Stack gap={2}>
               <TooltipStat label={row.name} value={`#${idx + 1}`} strong />
-              <TooltipStat label="count" value={row.count.toLocaleString()} />
-              <TooltipStat label="share" value={percent(row.percent, 1)} />
+              <TooltipStat
+                label={shares ? 'count' : kind}
+                value={formatCardNumber(Number(row.count))}
+              />
+              {shares ? <TooltipStat label="share" value={percent(row.percent, 1)} /> : null}
               {idx === payload.top.length - 1 && tailRows > 0 ? (
                 <>
                   <TooltipDivider />
                   <TooltipStat label="column" value={payload.column} />
                   <TooltipStat
                     label="tail"
-                    value={`${tailRows.toLocaleString()} more · ${percent(tailShare)}`}
+                    value={
+                      shares
+                        ? `${tailRows.toLocaleString()} more · ${percent(tailShare)}`
+                        : `${tailRows.toLocaleString()} more`
+                    }
                   />
                 </>
               ) : null}
@@ -80,7 +100,7 @@ const TopNMetric: React.FC<{
             >
               <Box
                 style={{
-                  width: `${Math.max(MIN_BAR_PCT, row.percent * 100)}%`,
+                  width: `${Math.max(MIN_BAR_PCT, barPct(row))}%`,
                   height: '100%',
                   background: barFill,
                   borderRadius: 2,
@@ -89,7 +109,9 @@ const TopNMetric: React.FC<{
             </Box>
             <Box style={{ flexShrink: 0 }}>
               <MetricCaption>
-                {row.count.toLocaleString()} ({percent(row.percent)})
+                {shares
+                  ? `${formatCardNumber(Number(row.count))} (${percent(row.percent)})`
+                  : formatCardNumber(Number(row.count))}
               </MetricCaption>
             </Box>
           </Group>

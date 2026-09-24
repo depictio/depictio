@@ -4,6 +4,7 @@ import {
   buildRecordSections,
   DEFAULT_SECTION_TITLE,
   descriptionGroup,
+  fieldLabel,
 } from './recordSections';
 
 describe('descriptionGroup', () => {
@@ -85,5 +86,40 @@ describe('buildRecordSections', () => {
     const layout = buildRecordSections({ columns, maxFields: 0 });
     expect(layout.sections).toEqual([{ title: DEFAULT_SECTION_TITLE, columns: ['sample'] }]);
     expect(layout.truncated).toBe(3);
+  });
+});
+
+describe('buildRecordSections order', () => {
+  it('keeps the declared section and field order, not the alphabet', () => {
+    const layout = buildRecordSections({
+      columns: ['a', 'b', 'c', 'd'],
+      sections: { Origin: ['d', 'b'], Assembly: ['c'], Coverage: ['a'] },
+      maxFields: 10,
+    });
+    expect(layout.sections.map((s) => s.title)).toEqual(['Origin', 'Assembly', 'Coverage']);
+    expect(layout.sections[0].columns).toEqual(['d', 'b']);
+  });
+});
+
+describe('fieldLabel', () => {
+  it('prefers the author label', () => {
+    expect(fieldLabel('gc', { labels: { gc: 'GC %' }, description: 'Percent G plus C' })).toBe(
+      'GC %',
+    );
+  });
+
+  it('uses a short description, or the part after a group prefix', () => {
+    expect(fieldLabel('genus', { description: 'GTDB genus' })).toBe('GTDB genus');
+    expect(fieldLabel('dup', { description: 'FastQC: percent duplicates' })).toBe(
+      'percent duplicates',
+    );
+  });
+
+  it('falls back to the column for prose, enumerations and no description', () => {
+    expect(
+      fieldLabel('n50', { description: 'Half the assembly sits in contigs at least this long' }),
+    ).toBe('n50');
+    expect(fieldLabel('assembler', { description: 'FLYE, MEGAHIT or SPAdes' })).toBe('assembler');
+    expect(fieldLabel('x')).toBe('x');
   });
 });

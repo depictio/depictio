@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import CnvLocusView from './cnv_profile/CnvLocusView';
 import { MAX_LOCUS_LANES, toLocusData } from './cnv_profile/cnvLocusSpec';
 import type { CnvLocusColors } from './cnv_profile/cnvLocusSpec';
@@ -627,111 +626,110 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // draws it in the header, the rail or ahead of the popover, per placement.
   const primaryControls = (
     <>
-      {offeredViews.length > 1 ? (
-        <SegmentedControl
-          size="xs"
-          value={activeView}
-          onChange={(v) => setView(v as CnvView)}
-          data={offeredViews.map((v) => ({ value: v, label: VIEW_LABEL[v] }))}
-        />
-      ) : null}
-      {samples.length > 1 && !facetOn ? (
-        <Select
-          size="xs"
-          w={150}
-          aria-label="Sample"
-          data={samples}
-          value={activeSample}
-          onChange={(value) => setSample(value)}
-          allowDeselect={false}
-          searchable={samples.length > 8}
-        />
-      ) : null}
-      {locus && samples.length > 1 ? (
-        <Switch
-          size="xs"
-          checked={facetBySample}
-          onChange={(e) => setFacetBySample(e.currentTarget.checked)}
-          label={`All samples (up to ${MAX_LOCUS_LANES})`}
-        />
-      ) : null}
-      {!locus ? (
-        <Select
-          size="xs"
-          w={150}
-          aria-label="Chromosome"
-          data={[
-            { value: ALL_CHROMOSOMES, label: 'Whole genome' },
-            ...allChroms.map((c) => ({ value: c, label: c })),
-          ]}
-          value={activeChrom ?? ALL_CHROMOSOMES}
-          onChange={(value) => setChrom(value === ALL_CHROMOSOMES ? null : value)}
-          allowDeselect={false}
-          searchable={allChroms.length > 8}
-        />
-      ) : null}
+      <VizControlGroup title="Data">
+        {offeredViews.length > 1 ? (
+          <VizSegmented
+            aria-label="View"
+            value={activeView}
+            onChange={(v) => setView(v as CnvView)}
+            data={offeredViews.map((v) => ({ value: v, label: VIEW_LABEL[v] }))}
+          />
+        ) : null}
+        {samples.length > 1 && !facetOn ? (
+          <VizSelect
+            label="Sample"
+            data={samples}
+            value={activeSample}
+            onChange={(value) => setSample(value)}
+            allowDeselect={false}
+            searchable={samples.length > 8}
+          />
+        ) : null}
+        {locus && samples.length > 1 ? (
+          <VizSwitch
+            checked={facetBySample}
+            onChange={(e) => setFacetBySample(e.currentTarget.checked)}
+            label={`All samples (up to ${MAX_LOCUS_LANES})`}
+          />
+        ) : null}
+        {!locus ? (
+          <VizSelect
+            label="Chromosome"
+            data={[
+              { value: ALL_CHROMOSOMES, label: 'Whole genome' },
+              ...allChroms.map((c) => ({ value: c, label: c })),
+            ]}
+            value={activeChrom ?? ALL_CHROMOSOMES}
+            onChange={(value) => setChrom(value === ALL_CHROMOSOMES ? null : value)}
+            allowDeselect={false}
+            searchable={allChroms.length > 8}
+          />
+        ) : null}
+      </VizControlGroup>
     </>
   );
 
   // Cosmetic tier: how the chosen plot looks.
   const controls = (
-    <Stack gap="xs">
-      {regionChrom && !locus ? (
-        <Text size="xs" c="dimmed">
-          Following the dashboard region on {regionChrom}.
-        </Text>
-      ) : null}
-      {locus ? (
-        <Text size="xs" c="dimmed">
-          Scroll to zoom, drag to pan. {onFilterChange ? 'Shift-drag brushes a region the other genomic tiles follow.' : ''}
-        </Text>
-      ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          log2 axis limit
-        </Text>
-        <Slider
-          size="xs"
+    <>
+      <VizControlGroup title="Display">
+        {regionChrom && !locus ? (
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Following the dashboard region on {regionChrom}.
+            </Text>
+          </VizFullRow>
+        ) : null}
+        {locus ? (
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Scroll to zoom, drag to pan.{' '}
+              {onFilterChange ? 'Shift-drag brushes a region the other genomic tiles follow.' : ''}
+            </Text>
+          </VizFullRow>
+        ) : null}
+        <VizSlider
+          label="log2 axis limit"
           min={0.5}
           max={6}
           step={0.5}
           value={yRange}
           onChange={setYRange}
-          label={(v) => `+/- ${v}`}
+          thumbLabel={(v) => `+/- ${v}`}
         />
-      </Stack>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Bin marker size
-        </Text>
-        <Slider size="xs" min={1} max={12} step={1} value={pointSize} onChange={setPointSize} />
-      </Stack>
-      {config.baf_col ? (
-        <Switch
-          size="xs"
-          checked={showBaf}
-          onChange={(e) => setShowBaf(e.currentTarget.checked)}
-          label="Show BAF panel"
+        <VizSlider
+          label="Bin marker size"
+          min={1}
+          max={12}
+          step={1}
+          value={pointSize}
+          onChange={setPointSize}
         />
+      </VizControlGroup>
+      {config.baf_col || locus ? (
+        <VizControlGroup title="Panels">
+          {config.baf_col ? (
+            <VizSwitch
+              checked={showBaf}
+              onChange={(e) => setShowBaf(e.currentTarget.checked)}
+              label="Show BAF panel"
+            />
+          ) : null}
+          {locus ? (
+            <VizSelect
+              label="Gene lane"
+              value={annotation}
+              onChange={(v) => setAnnotation((v as GeneLane) ?? 'none')}
+              data={[
+                { value: 'none', label: 'None' },
+                ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
+              ]}
+              allowDeselect={false}
+            />
+          ) : null}
+        </VizControlGroup>
       ) : null}
-      {locus ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Gene lane
-          </Text>
-          <Select
-            size="xs"
-            value={annotation}
-            onChange={(v) => setAnnotation((v as GeneLane) ?? 'none')}
-            data={[
-              { value: 'none', label: 'None' },
-              ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
-            ]}
-            allowDeselect={false}
-          />
-        </Stack>
-      ) : null}
-    </Stack>
+    </>
   );
 
   // The frame appends the region filter itself, brushed here or elsewhere.

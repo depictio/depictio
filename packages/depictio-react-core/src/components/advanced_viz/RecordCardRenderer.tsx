@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Anchor,
   Badge,
@@ -21,8 +21,12 @@ import {
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { formatFieldValue, NULL_DISPLAY, recordLinks } from './record_card/recordFields';
-import { buildRecordSections } from './record_card/recordSections';
-import { distinguishingColumns, rowLabel } from './record_card/recordRows';
+import { buildRecordSections, fieldLabel } from './record_card/recordSections';
+import {
+  distinguishingColumns,
+  latestPickedValue,
+  recordOptionLabel,
+} from './record_card/recordRows';
 import { readRecordSelection, type RecordSelectionSource } from './record_card/recordSelection';
 import {
   defaultRecordFilter,
@@ -49,8 +53,11 @@ interface RecordCardConfig {
   id_col: string;
   title_col?: string | null;
   sections?: Record<string, string[]> | null;
+  labels?: Record<string, string> | null;
   link_templates?: Record<string, string> | null;
   selection_source?: RecordSelectionSource;
+  /** The source tile's index once imported (the YAML names it by tag). */
+  linked_component?: string | null;
   max_fields?: number;
   default_record?: string | null;
 }
@@ -114,8 +121,9 @@ const RecordCardRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       readRecordSelection(filters, {
         dcId: metadata.dc_id,
         selectionSource: config.selection_source,
+        linkedIndex: config.linked_component,
       }),
-    [filters, metadata.dc_id, config.selection_source],
+    [filters, metadata.dc_id, config.selection_source, config.linked_component],
   );
 
   // The selection when there is one, else the configured default record. A
@@ -279,34 +287,65 @@ const RecordCardRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     [fieldColumns, requiredCols, config.sections, descriptions, idCol, titleCol, maxFields],
   );
 
-  // One card at a time. A record that spans several rows (a gene at every
-  // clustering resolution) gets a picker over the columns that tell its rows
-  // apart; the pick is reader state, so it starts over with each new record.
+  // One card at a time. Several rows reach it when the reader selects several
+  // records at once (a multi-row table pick) or when one record spans several
+  // rows (a gene at every clustering resolution); a searchable picker over
+  // them opens on the record picked last. The pick is reader state, so it
+  // starts over with each new selection.
   const rowCount = records?.length ?? 0;
-  const [rowIndex, setRowIndex] = useState(0);
+  const [rowIndex, setRowIndex] = useState<number | null>(null);
   const recordKey = `${match?.column ?? ''}:${(match?.values ?? []).join('|')}`;
+  const previousValuesRef = useRef<string[] | null>(null);
+  const [latestValue, setLatestValue] = useState<string | null>(null);
   useEffect(() => {
-    setRowIndex(0);
+    const values = match?.values ?? [];
+    setLatestValue(latestPickedValue(previousValuesRef.current, values));
+    previousValuesRef.current = values;
+    setRowIndex(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordKey]);
   const labelColumns = useMemo(
     () =>
       records
         ? distinguishingColumns(
             records,
-            layout.sections.flatMap((section) => section.columns),
+            layout.sections
+              .flatMap((section) => section.columns)
+              .filter((column) => column !== idCol && column !== titleCol),
           )
         : [],
-    [records, layout.sections],
+    [records, layout.sections, idCol, titleCol],
   );
   const rowOptions = useMemo(
     () =>
       (records ?? []).map((row, i) => ({
         value: String(i),
-        label: rowLabel(row, labelColumns, i),
+        label: recordOptionLabel(row, { idCol, titleCol, labelColumns, position: i }),
       })),
-    [records, labelColumns],
+    [records, labelColumns, idCol, titleCol],
   );
-  const current = records?.[Math.min(rowIndex, Math.max(rowCount - 1, 0))] ?? null;
+  // The record picked last, matched on the column the pick names when this
+  // collection has it, else on the card's id column.
+  const defaultIndex = useMemo(() => {
+    if (!records || latestValue == null) return 0;
+    const column =
+      match?.column && records.some((row) => match.column! in row) ? match.column : idCol;
+    const at = records.findIndex((row) => String(row[column] ?? '') === latestValue);
+    return at < 0 ? 0 : at;
+  }, [records, latestValue, match, idCol]);
+  const currentIndex = Math.min(rowIndex ?? defaultIndex, Math.max(rowCount - 1, 0));
+  const current = records?.[currentIndex] ?? null;
+  // The picker's search text. Opening the list clears it, so typing searches
+  // every selected record instead of editing the current record's label.
+  const [pickerSearch, setPickerSearch] = useState('');
+  const currentLabel = rowOptions[currentIndex]?.label ?? '';
+  useEffect(() => {
+    setPickerSearch(currentLabel);
+  }, [currentLabel]);
+  const distinctRecords = useMemo(
+    () => new Set((records ?? []).map((row) => String(row[idCol] ?? ''))).size,
+    [records, idCol],
+  );
   const shown = current ? [current] : [];
 
   // Fields and section headings are the card's height. Nothing here is a plot
@@ -370,14 +409,30 @@ const RecordCardRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           {rowCount > 1 ? (
             <Select
               size="xs"
-              label={`${rowCount} rows for this record${
-                labelColumns.length ? `, by ${labelColumns.join(' / ')}` : ''
-              }`}
-              value={String(Math.min(rowIndex, rowCount - 1))}
-              onChange={(v) => setRowIndex(v == null ? 0 : Number(v))}
+              label={
+                distinctRecords > 1
+                  ? `${distinctRecords} records selected${
+                      rowCount > distinctRecords ? ` (${rowCount} rows)` : ''
+                    }`
+                  : `${rowCount} rows for this record${
+                      labelColumns.length ? `, by ${labelColumns.join(' / ')}` : ''
+                    }`
+              }
+              placeholder="Type to find a record"
+              value={String(currentIndex)}
+              onChange={(v) => setRowIndex(v == null ? null : Number(v))}
               data={rowOptions}
               allowDeselect={false}
-              searchable={rowCount > 8}
+              searchable
+              searchValue={pickerSearch}
+              onSearchChange={setPickerSearch}
+              onDropdownOpen={() => setPickerSearch('')}
+              onDropdownClose={() => setPickerSearch(currentLabel)}
+              nothingFoundMessage="No selected record matches"
+              // The rows are capped server-side (MAX_FETCHED_ROWS); the limit
+              // keeps the open list short and typing narrows the rest.
+              limit={50}
+              maxDropdownHeight={260}
               comboboxProps={{ withinPortal: true }}
             />
           ) : null}
@@ -440,13 +495,20 @@ const RecordCardRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
                             wrap="nowrap"
                           >
                             <Tooltip
-                              label={descriptions[column] || column}
+                              label={
+                                descriptions[column]
+                                  ? `${descriptions[column]} (${column})`
+                                  : column
+                              }
                               withArrow
                               multiline
                               w={240}
                             >
                               <Text size="xs" c="dimmed" lineClamp={1}>
-                                {column}
+                                {fieldLabel(column, {
+                                  labels: config.labels,
+                                  description: descriptions[column],
+                                })}
                               </Text>
                             </Tooltip>
                             <Text

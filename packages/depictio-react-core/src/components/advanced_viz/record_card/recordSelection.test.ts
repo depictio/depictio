@@ -74,3 +74,17 @@ describe('readRecordSelection', () => {
     expect(picked?.ownCollection).toBe(false);
   });
 });
+
+describe('readRecordSelection with a linked component', () => {
+  it('follows only the linked tile, whatever the configured source', () => {
+    const filters = [scatter(['S1']), table(['R1'])];
+    expect(
+      readRecordSelection(filters, {
+        dcId: 'dc-1',
+        selectionSource: 'scatter_selection',
+        linkedIndex: 'tile-b',
+      })?.values,
+    ).toEqual(['R1']);
+    expect(readRecordSelection([scatter(['S1'])], { linkedIndex: 'tile-b' })).toBeNull();
+  });
+});

@@ -618,10 +618,22 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     });
   };
 
+  // Columns size to their header and visible values rather than splitting the
+  // width evenly, which truncated long headers next to half-empty flag columns.
+  // Capped so one free-text column cannot push the rest off screen; when the
+  // fitted columns leave room, they stretch to fill the tile.
   const defaultColDef = useMemo<ColDef>(
-    () => ({ flex: 1, minWidth: 100, resizable: true }),
+    () => ({ minWidth: 70, maxWidth: 420, resizable: true }),
     [],
   );
+
+  const fitColumns = (api: GridApi) => {
+    api.autoSizeAllColumns(false);
+    const { left, right } = api.getHorizontalPixelRange();
+    const viewport = right - left;
+    const used = (api.getColumns() ?? []).reduce((sum, c) => sum + c.getActualWidth(), 0);
+    if (viewport > 0 && used < viewport) api.sizeColumnsToFit();
+  };
 
   // Page-size options for the pagination footer — always include the
   // configured page size so AG Grid doesn't warn about a missing selector value.
@@ -785,6 +797,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               rowHeight={metadata.compact ? Math.round(28 * uiScale) : undefined}
               headerHeight={metadata.compact ? Math.round(32 * uiScale) : undefined}
               onGridReady={onGridReady}
+              onFirstDataRendered={(e) => fitColumns(e.api)}
+              onGridSizeChanged={(e) => fitColumns(e.api)}
               getRowClass={getRowClass}
               getRowId={
                 rowIdColumn

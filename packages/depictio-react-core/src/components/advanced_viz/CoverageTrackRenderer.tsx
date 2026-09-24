@@ -3,11 +3,8 @@ import {
   Badge,
   Box,
   Group,
-  MultiSelect,
   SegmentedControl,
-  Select,
   Stack,
-  Switch,
   Text,
   Tooltip,
   useMantineColorScheme,
@@ -31,7 +28,17 @@ import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 import GenomeViewRenderer from './GenomeViewRenderer';
+import {
+  VizControlCell,
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizSegmented,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import type { GenomeViewConfig } from './genomespy/genomeSpySpec';
+import { useDefaultRegionGate } from './genomespy/defaultRegionGate';
 
 interface CoverageTrackConfig {
   chromosome_col: string;
@@ -103,6 +110,11 @@ const MAX_FACETED_SAMPLES_AUTO = 8;
  *  become illegible past ~10 samples regardless of layout, so we collapse to a
  *  cohort median + IQR ribbon with optional dimmed individual traces. */
 const AGGREGATE_DEFAULT_THRESHOLD = 10;
+
+/** Bins per sample track the server reduces a wide region to. A track is a few
+ *  hundred to a couple of thousand pixels wide, so more rows than this only
+ *  cost transfer and Plotly layout time without adding a visible detail. */
+const MAX_BINS_PER_TRACK = 4000;
 
 type ViewMode = 'aggregate' | 'facet' | 'overlay';
 
@@ -226,6 +238,11 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     );
   }, [followedRegion]);
 
+  // A navigator above that still has its `default_region` to emit holds the
+  // first fetch (at most `DEFAULT_REGION_GATE_MS`), so the track reads the
+  // region rather than the whole genome it would replace a moment later.
+  const regionGateOpen = useDefaultRegionGate(filters, metadata.index);
+
   const [data, setData] = useState<CoverageTrackResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -246,6 +263,11 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       setLoading(false);
       return;
     }
+    if (!regionGateOpen) {
+      setLoading(true);
+      setComputeStatus('Waiting for the section region…');
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -264,6 +286,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       chromosomes_filter: selectedChromosomes.length ? selectedChromosomes : null,
       samples_filter: selectedSamples.length ? selectedSamples : null,
       smoothing_window: smoothingWindow,
+      max_bins_per_track: MAX_BINS_PER_TRACK,
       filter_metadata: filters,
     };
 
@@ -320,6 +343,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     };
   }, [
     activeView,
+    regionGateOpen,
     metadata.wf_id,
     metadata.dc_id,
     JSON.stringify(filters),
@@ -596,8 +620,17 @@ const CoverageTrackRenderer: React.FC<Props> = ({
             marker: { color: markerColor ?? traceColor, size: 4, line: { width: 0 } },
           });
         } else if (mark === 'rect') {
+          // A bar needs a finite height: a null value (or a non-positive one
+          // on a log axis) becomes a `d="M…,NaNVNaN"` path Plotly still
+          // writes into the DOM. Dropping the row draws the same picture.
+          const keep = ys.map((y) => Number.isFinite(y) && (yScale !== 'log' || y > 0));
+          const pick = <T,>(arr: T[]): T[] => arr.filter((_, i) => keep[i]);
           traces.push({
             ...shared,
+            x: pick(xs),
+            y: pick(ys),
+            text: pick(text),
+            customdata: pick(shared.customdata),
             type: 'bar',
             marker: { color: markerColor ?? traceColor },
             // `text` is for the hover only. Left to its default `auto`, Plotly
@@ -833,88 +866,90 @@ const CoverageTrackRenderer: React.FC<Props> = ({
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        {viewMode === 'facet' &&
-        data &&
-        data.summary.samples.length > MAX_FACETED_SAMPLES_AUTO ? (
-          <Text size="xs" c="dimmed">
-            {data.summary.samples.length} samples stacked. Aggregate is usually
-            more legible past ~{MAX_FACETED_SAMPLES_AUTO}.
-          </Text>
-        ) : null}
-        {viewMode !== 'aggregate' ? (
-          <Select
-            size="xs"
-            label="Mark"
-            value={mark}
-            onChange={(v) => setMark((v as typeof mark) || 'line')}
-            data={[
-              { value: 'line', label: 'Line' },
-              { value: 'rect', label: 'Rect (bar per bin)' },
-              { value: 'point', label: 'Point' },
-            ]}
-            allowDeselect={false}
+      <>
+        <VizControlGroup title="Traces">
+          {viewMode === 'facet' &&
+          data &&
+          data.summary.samples.length > MAX_FACETED_SAMPLES_AUTO ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {data.summary.samples.length} samples stacked. Aggregate is usually
+                more legible past ~{MAX_FACETED_SAMPLES_AUTO}.
+              </Text>
+            </VizFullRow>
+          ) : null}
+          {viewMode !== 'aggregate' ? (
+            <VizSelect
+              label="Mark"
+              value={mark}
+              onChange={(v) => setMark((v as typeof mark) || 'line')}
+              data={[
+                { value: 'line', label: 'Line' },
+                { value: 'rect', label: 'Rect (bar per bin)' },
+                { value: 'point', label: 'Point' },
+              ]}
+              allowDeselect={false}
+            />
+          ) : null}
+          {viewMode !== 'aggregate' ? (
+            <VizSegmented
+              label="Colour by"
+              value={colorBy}
+              onChange={(v) => setColorBy(v as typeof colorBy)}
+              data={[
+                { value: 'single', label: 'Single' },
+                { value: 'sample', label: 'Sample' },
+                ...(config.category_col ? [{ value: 'category', label: 'Region' }] : []),
+              ]}
+            />
+          ) : (
+            <VizSwitch
+              checked={showIndividuals}
+              onChange={(e) => setShowIndividuals(e.currentTarget.checked)}
+              label="Show individual traces"
+            />
+          )}
+          {viewMode === 'aggregate' && data && data.summary.samples.length > AGGREGATE_DEFAULT_THRESHOLD ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Showing cohort median + IQR ribbon. Switch to Per-sample to drill in.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Annotations">
+          <VizSwitch
+            checked={showAnnotationStrip}
+            onChange={(e) => setShowAnnotationStrip(e.currentTarget.checked)}
+            disabled={!annotation}
+            label={annotation ? `Gene strip (${annotation.displayName})` : 'Gene strip (no map)'}
           />
-        ) : null}
-        {viewMode !== 'aggregate' ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Colour by
-            </Text>
-            <SegmentedControl
-            size="xs"
-            fullWidth
-            value={colorBy}
-            onChange={(v) => setColorBy(v as typeof colorBy)}
-            data={[
-              { value: 'single', label: 'Single' },
-              { value: 'sample', label: 'Sample' },
-              ...(config.category_col ? [{ value: 'category', label: 'Region' }] : []),
-            ]}
-          />
-          </Stack>
-        ) : (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Per-sample traces
-            </Text>
-            <Switch
-            size="xs"
-            checked={showIndividuals}
-            onChange={(e) => setShowIndividuals(e.currentTarget.checked)}
-            label="Show individual traces"
-          />
-          </Stack>
-        )}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Gene strip
-          </Text>
-          <Switch
-          size="xs"
-          checked={showAnnotationStrip}
-          onChange={(e) => setShowAnnotationStrip(e.currentTarget.checked)}
-          disabled={!annotation}
-          label={annotation ? `Gene strip (${annotation.displayName})` : 'Gene strip (no map)'}
-        />
-        </Stack>
+        </VizControlGroup>
         {computeStatus ? (
-          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-            {computeStatus}
-          </Badge>
+          <VizFullRow>
+            <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+              {computeStatus}
+            </Badge>
+          </VizFullRow>
         ) : null}
         {computeMs != null && !computeStatus ? (
-          <Text size="xs" c="dimmed">
-            Built in {computeMs} ms ({data?.row_count?.toLocaleString() ?? '?'} bins,
-            {' '}{data?.summary.samples.length ?? 0} samples)
-          </Text>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Built in {computeMs} ms ({data?.row_count?.toLocaleString() ?? '?'} bins,
+              {' '}{data?.summary.samples.length ?? 0} samples)
+            </Text>
+          </VizFullRow>
         ) : null}
-        {viewMode === 'aggregate' && data && data.summary.samples.length > AGGREGATE_DEFAULT_THRESHOLD ? (
-          <Text size="xs" c="dimmed">
-            Showing cohort median + IQR ribbon. Switch to Per-sample to drill in.
-          </Text>
+        {data?.summary.bin_width ? (
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Averaged into {data.summary.bin_width.toLocaleString()} bp bins from{' '}
+              {(data.summary.input_rows ?? 0).toLocaleString()} rows; narrow the region for full
+              resolution.
+            </Text>
+          </VizFullRow>
         ) : null}
-      </Stack>
+      </>
     ),
     [
       viewMode,
@@ -957,80 +992,80 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   );
 
   // Encoding tier: which view, how samples are laid out, the y scale and
-  // smoothing, and which chromosomes and samples are drawn. Drawn as chips in
-  // the header, so every control carries a fixed width and no description.
+  // smoothing, and which chromosomes and samples are drawn. Handed to the
+  // frame as a flat fragment; the strip's grid owns the widths.
   const primaryControls = useMemo(
     () => (
       <>
-        {viewControl}
-        <SegmentedControl
-          size="xs"
-          value={viewMode ?? 'overlay'}
-          onChange={(v) => {
-            setViewMode(v as ViewMode);
-            writeConfig({ view_mode: v });
-          }}
-          data={[
-            { value: 'aggregate', label: 'Aggregate' },
-            { value: 'facet', label: 'Per-sample' },
-            { value: 'overlay', label: 'Overlay' },
-          ]}
-        />
-        <SegmentedControl
-          size="xs"
-          value={yScale}
-          onChange={(v) => setYScale(v as 'linear' | 'log')}
-          data={[
-            { value: 'linear', label: 'Linear' },
-            { value: 'log', label: 'Log' },
-          ]}
-        />
-        <Select
-          size="xs"
-          w={160}
-          label="Smoothing"
-          value={String(smoothingWindow)}
-          onChange={(v) => setSmoothingWindow(Number(v ?? '0'))}
-          data={SMOOTHING_CHOICES}
-        />
-        <Tooltip
-          label={
-            followedRegion
-              ? `Following the dashboard region ${followedRegion.chrom}${
-                  regionRange
-                    ? `:${Math.round(regionRange[0])}-${Math.round(regionRange[1])}`
-                    : ''
-                }`
-              : ''
-          }
-          disabled={!followedRegion}
-        >
-          <MultiSelect
-            size="xs"
-            w={200}
-            label="Chromosomes"
-            value={selectedChromosomes}
-            onChange={setSelectedChromosomes}
-            data={(data?.summary.chromosomes ?? []).map((c) => ({ value: String(c), label: String(c) }))}
-            placeholder={data ? 'All chromosomes' : 'Loading…'}
+        <VizControlGroup title="Layout">
+          {viewControl ? <VizControlCell>{viewControl}</VizControlCell> : null}
+          <VizSegmented
+            aria-label="Sample layout"
+            value={viewMode ?? 'overlay'}
+            onChange={(v) => {
+              setViewMode(v as ViewMode);
+              writeConfig({ view_mode: v });
+            }}
+            data={[
+              { value: 'aggregate', label: 'Aggregate' },
+              { value: 'facet', label: 'Per-sample' },
+              { value: 'overlay', label: 'Overlay' },
+            ]}
+          />
+          <VizSegmented
+            aria-label="Y scale"
+            value={yScale}
+            onChange={(v) => setYScale(v as 'linear' | 'log')}
+            data={[
+              { value: 'linear', label: 'Linear' },
+              { value: 'log', label: 'Log' },
+            ]}
+          />
+          <VizSelect
+            label="Smoothing"
+            value={String(smoothingWindow)}
+            onChange={(v) => setSmoothingWindow(Number(v ?? '0'))}
+            data={SMOOTHING_CHOICES}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Data">
+          <Tooltip
+            label={
+              followedRegion
+                ? `Following the dashboard region ${followedRegion.chrom}${
+                    regionRange
+                      ? `:${Math.round(regionRange[0])}-${Math.round(regionRange[1])}`
+                      : ''
+                  }`
+                : ''
+            }
+            disabled={!followedRegion}
+          >
+            <Box>
+              <VizMultiSelect
+                label="Chromosomes"
+                value={selectedChromosomes}
+                onChange={setSelectedChromosomes}
+                data={(data?.summary.chromosomes ?? []).map((c) => ({ value: String(c), label: String(c) }))}
+                placeholder={data ? 'All chromosomes' : 'Loading…'}
+                searchable
+                clearable
+              />
+            </Box>
+          </Tooltip>
+          <VizMultiSelect
+            label="Samples"
+            value={selectedSamples}
+            onChange={setSelectedSamples}
+            // A numeric sample column (hic binds `window` and `resolution`) arrives as
+            // numbers; Mantine's search lowercases the value, so coerce here.
+            data={(data?.summary.samples ?? []).map((s) => ({ value: String(s), label: String(s) }))}
+            placeholder={data ? 'All samples' : 'Loading…'}
             searchable
             clearable
+            disabled={!config.sample_col}
           />
-        </Tooltip>
-        <MultiSelect
-          size="xs"
-          w={200}
-          label="Samples"
-          value={selectedSamples}
-          onChange={setSelectedSamples}
-          // A numeric sample column (hic binds `window` and `resolution`) arrives as
-          // numbers; Mantine's search lowercases the value, so coerce here.
-          data={(data?.summary.samples ?? []).map((s) => ({ value: String(s), label: String(s) }))}
-          placeholder={data ? 'All samples' : 'Loading…'}
-          searchable
-          clearable
-          disabled={!config.sample_col}
-        />
+        </VizControlGroup>
       </>
     ),
     [

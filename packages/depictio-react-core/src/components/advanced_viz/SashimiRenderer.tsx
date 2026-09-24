@@ -3,12 +3,6 @@ import {
   Button,
   ColorInput,
   Group,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -27,6 +21,17 @@ import {
 } from '../../colors';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlCell,
+  VizControlGroup,
+  VizFullRow,
+  VizInlineField,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import AdvancedVizPlot from './AdvancedVizPlot';
 import {
   applyDataTheme,
@@ -1598,16 +1603,14 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     () => (
       <>
         {allowedViews.length > 1 ? (
-          <SegmentedControl
-            size="xs"
+          <VizSegmented
+            aria-label="View"
             value={vizView}
             onChange={(v) => setVizView(v as SashimiView)}
             data={allowedViews.map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
           />
         ) : null}
-        <Select
-          size="xs"
-          w={250}
+        <VizSelect
           aria-label="Locus"
           value={activeRegion?.key ?? null}
           onChange={setSelectedRegion}
@@ -1624,24 +1627,18 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           placeholder={rows ? 'No junctions' : 'Loading…'}
           disabled={regions.length < 2}
           searchable
-          comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+          comboboxProps={{ portalProps: { target: fsPortalTarget } }}
         />
-        <Group gap={6} wrap="nowrap" w={210}>
-          <Text size="xs" fw={500} style={{ whiteSpace: 'nowrap' }}>
-            Min reads {minDraft}
-          </Text>
-          <Slider
-            size="xs"
-            w={120}
-            min={0}
-            max={sliderMax}
-            step={1}
-            value={Math.min(minDraft, sliderMax)}
-            onChange={setMinDraft}
-            onChangeEnd={(v) => setMinCount(v)}
-            label={(v) => `at least ${v}`}
-          />
-        </Group>
+        <VizSlider
+          label={`Min reads ${minDraft}`}
+          min={0}
+          max={sliderMax}
+          step={1}
+          value={Math.min(minDraft, sliderMax)}
+          onChange={setMinDraft}
+          onChangeEnd={(v) => setMinCount(v)}
+          thumbLabel={(v) => `at least ${v}`}
+        />
       </>
     ),
     [
@@ -1660,186 +1657,180 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
 
   const controls = useMemo(
     () => (
-      <Stack gap="sm">
-        {regionLocus ? (
-          <Text size="xs" c="dimmed">
-            Following the dashboard region on {regionLocus.chrom}.
-          </Text>
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Junctions kept
-          </Text>
-          <NumberInput
-            size="xs"
+      <>
+        <VizControlGroup title="Junctions kept">
+          <VizNumberInput
             label={config.sample_col ? 'Max junctions per sample' : 'Max junctions'}
             min={1}
             step={5}
             value={topN}
             onChange={(v) => setTopN(Math.max(1, Number(v) || 1))}
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Zoom
-          </Text>
-          <Group gap={4} wrap="nowrap">
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => panBy(-0.25)}
-            >
-              ←
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => zoomBy(ZOOM_FACTOR)}
-            >
-              +
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => zoomBy(1 / ZOOM_FACTOR)}
-            >
-              −
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => panBy(0.25)}
-            >
-              →
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              onClick={() => setView(null)}
-              disabled={!view}
-            >
-              Fit
-            </Button>
-          </Group>
-          <Text size="xs" c="dimmed">
-            {view
-              ? `${bp(Math.round(view[0]))}-${bp(Math.round(view[1]))} · ${bp(
-                  Math.round(view[1] - view[0]),
-                )} bp`
-              : 'Whole region. Drag on the plot to zoom into a span.'}
-          </Text>
-        </Stack>
-        {config.coverage_dc_id ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Coverage
+          {rows ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {visible.length.toLocaleString()} of {junctions.length.toLocaleString()} junctions
+                {activeRegion ? ` in ${activeRegion.chrom}` : ''}
+                {minCount > 1 ? `, at least ${minCount} reads` : ''}
+              </Text>
+            </VizFullRow>
+          ) : null}
+          {lanes.length > MAX_LANES_HINT ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {lanes.length} samples stacked. Filter down to a few for a readable panel.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Zoom">
+          <VizControlCell>
+            <Group gap={4} wrap="nowrap">
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => panBy(-0.25)}
+              >
+                ←
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => zoomBy(ZOOM_FACTOR)}
+              >
+                +
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => zoomBy(1 / ZOOM_FACTOR)}
+              >
+                −
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => panBy(0.25)}
+              >
+                →
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                onClick={() => setView(null)}
+                disabled={!view}
+              >
+                Fit
+              </Button>
+            </Group>
+          </VizControlCell>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {view
+                ? `${bp(Math.round(view[0]))}-${bp(Math.round(view[1]))} · ${bp(
+                    Math.round(view[1] - view[0]),
+                  )} bp`
+                : 'Whole region. Drag on the plot to zoom into a span.'}
             </Text>
-            <Switch
-              size="xs"
+          </VizFullRow>
+          {regionLocus ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Following the dashboard region on {regionLocus.chrom}.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+        {config.coverage_dc_id ? (
+          <VizControlGroup title="Coverage">
+            <VizSwitch
               checked={showCoverage}
               onChange={(e) => setShowCoverage(e.currentTarget.checked)}
               label="Read depth under the arcs"
             />
             {showCoverage ? (
               <>
-                <Text size="xs" c="dimmed">
-                  Coverage height: {Math.round(coverageHeight * 100)}% of each lane
-                </Text>
-                <Slider
-                  size="xs"
+                <VizSlider
+                  label={`Coverage height: ${Math.round(coverageHeight * 100)}% of each lane`}
                   min={10}
                   max={80}
                   value={Math.round(coverageHeight * 100)}
                   onChange={(v) => setCoverageHeight(v / 100)}
                 />
-                <Switch
-                  size="xs"
+                <VizSwitch
                   checked={coverageLog}
                   onChange={(e) => setCoverageLog(e.currentTarget.checked)}
                   label="Log depth axis"
                 />
-                <ColorInput
-                  size="xs"
-                  format="hex"
-                  label="Coverage fill"
-                  withEyeDropper={false}
-                  popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
-                  swatches={paletteDefaults.palette.slice(0, 12)}
-                  value={coverageColor}
-                  onChange={(v) => setCoverageColor(v || '')}
-                />
+                <VizInlineField label="Coverage fill">
+                  <ColorInput
+                    size="xs"
+                    aria-label="Coverage fill"
+                    format="hex"
+                    withEyeDropper={false}
+                    popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+                    swatches={paletteDefaults.palette.slice(0, 12)}
+                    value={coverageColor}
+                    onChange={(v) => setCoverageColor(v || '')}
+                  />
+                </VizInlineField>
               </>
             ) : null}
-            <Text size="xs" c="dimmed">
-              {coverageError
-                ? `Coverage collection failed to load: ${coverageError}`
-                : coverageActive
-                  ? `Measured depth, peaking at ${coverage.max.toLocaleString()}` +
-                    (coverage.shared && lanes.length > 1
-                      ? '. One profile for the locus: the coverage collection has no sample column, so the same depth is drawn under every lane.'
-                      : '. Replaces the inferred exon support, which estimates the same thing from spliced reads only.')
-                : 'No coverage in this region.'}
-            </Text>
-          </Stack>
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {coverageError
+                  ? `Coverage collection failed to load: ${coverageError}`
+                  : coverageActive
+                    ? `Measured depth, peaking at ${coverage.max.toLocaleString()}` +
+                      (coverage.shared && lanes.length > 1
+                        ? '. One profile for the locus: the coverage collection has no sample column, so the same depth is drawn under every lane.'
+                        : '. Replaces the inferred exon support, which estimates the same thing from spliced reads only.')
+                    : 'No coverage in this region.'}
+              </Text>
+            </VizFullRow>
+          </VizControlGroup>
         ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Tracks
-          </Text>
-          <Switch
-            size="xs"
+        <VizControlGroup title="Tracks">
+          <VizSwitch
             checked={showSupport}
             onChange={(e) => setShowSupport(e.currentTarget.checked)}
             label="Exon support under the arcs"
             disabled={coverageActive}
           />
           {showSupport ? (
-            <>
-              <Text size="xs" c="dimmed">
-                Support height: {Math.round(supportHeight * 100)}% of each lane
-              </Text>
-              <Slider
-                size="xs"
-                min={10}
-                max={60}
-                value={Math.round(supportHeight * 100)}
-                onChange={(v) => setSupportHeight(v / 100)}
-              />
-            </>
+            <VizSlider
+              label={`Support height: ${Math.round(supportHeight * 100)}% of each lane`}
+              min={10}
+              max={60}
+              value={Math.round(supportHeight * 100)}
+              onChange={(v) => setSupportHeight(v / 100)}
+            />
           ) : null}
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={showGeneModel}
             onChange={(e) => setShowGeneModel(e.currentTarget.checked)}
             label="Exon model lane"
           />
           {showGeneModel ? (
-            <>
-              <Text size="xs" c="dimmed">
-                Exon lane height: {Math.round(geneModelHeight * 100)}% of the panel
-              </Text>
-              <Slider
-                size="xs"
-                min={5}
-                max={40}
-                value={Math.round(geneModelHeight * 100)}
-                onChange={(v) => setGeneModelHeight(v / 100)}
-              />
-            </>
+            <VizSlider
+              label={`Exon lane height: ${Math.round(geneModelHeight * 100)}% of the panel`}
+              min={5}
+              max={40}
+              value={Math.round(geneModelHeight * 100)}
+              onChange={(v) => setGeneModelHeight(v / 100)}
+            />
           ) : null}
-          <Text size="xs" c="dimmed">
-            {coverageActive
-              ? 'The exon model is inferred from the junction ends in this table. Support is off while measured coverage is shown.'
-              : 'Both are inferred from the junction ends in this table, not read from an alignment or an annotation file. Support counts spliced reads only.'}
-          </Text>
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Arcs
-          </Text>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {coverageActive
+                ? 'The exon model is inferred from the junction ends in this table. Support is off while measured coverage is shown.'
+                : 'Both are inferred from the junction ends in this table, not read from an alignment or an annotation file. Support counts spliced reads only.'}
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+        <VizControlGroup title="Arcs">
           {annotationValues.length > 1 ? (
-            <Select
-              size="xs"
+            <VizSelect
               label="Sides"
               value={arcSplit}
               onChange={(v) => setArcSplit(v === 'alternate' ? 'alternate' : 'annotation')}
@@ -1851,45 +1842,44 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
                 { value: 'alternate', label: 'Alternate along the locus' },
               ]}
               allowDeselect={false}
-              comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+              comboboxProps={{ portalProps: { target: fsPortalTarget } }}
             />
           ) : null}
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={widthBySupport}
             onChange={(e) => setWidthBySupport(e.currentTarget.checked)}
             label="Scale width by read support"
           />
           {widthBySupport ? (
-            <Switch
-              size="xs"
+            <VizSwitch
               checked={logWidth}
               onChange={(e) => setLogWidth(e.currentTarget.checked)}
               label="Log-scaled arc width"
             />
           ) : null}
-          <Text size="xs" c="dimmed">
-            {widthBySupport ? `Thickest arc: ${maxArcWidth} px` : `Arc width: ${maxArcWidth} px`}
-          </Text>
-          <Slider size="xs" min={1} max={18} value={maxArcWidth} onChange={setMaxArcWidth} />
-          <Text size="xs" c="dimmed">
-            Arc height: {Math.round(arcHeight * 100)}%
-          </Text>
-          <Slider
-            size="xs"
+          <VizSlider
+            label={widthBySupport ? `Thickest arc: ${maxArcWidth} px` : `Arc width: ${maxArcWidth} px`}
+            min={1}
+            max={18}
+            value={maxArcWidth}
+            onChange={setMaxArcWidth}
+          />
+          <VizSlider
+            label={`Arc height: ${Math.round(arcHeight * 100)}%`}
             min={30}
             max={150}
             value={Math.round(arcHeight * 100)}
             onChange={(v) => setArcHeight(v / 100)}
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Arc colours
-          </Text>
+          <VizSwitch
+            checked={showCounts}
+            onChange={(e) => setShowCounts(e.currentTarget.checked)}
+            label="Read count at each apex"
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Arc colours">
           {annotationValues.length ? (
-            <Select
-              size="xs"
+            <VizSelect
               label="Colour arcs by"
               value={colorBy}
               onChange={(v) => setColorBy(v === 'sample' ? 'sample' : 'annotation')}
@@ -1898,65 +1888,47 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
                 { value: 'sample', label: config.sample_col || 'Sample' },
               ]}
               allowDeselect={false}
-              comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+              comboboxProps={{ portalProps: { target: fsPortalTarget } }}
             />
           ) : null}
           {annotationValues.length ? (
             annotationValues.map((value) => (
+              <VizInlineField key={value} label={value}>
+                <ColorInput
+                  size="xs"
+                  aria-label={value}
+                  format="hex"
+                  withEyeDropper={false}
+                  popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+                  swatches={paletteDefaults.palette.slice(0, 12)}
+                  value={arcColors[value] || paletteDefaults.map.get(value) || ''}
+                  onChange={(v) => setArcColor(value, v)}
+                />
+              </VizInlineField>
+            ))
+          ) : (
+            <VizInlineField label="All junctions">
               <ColorInput
-                key={value}
                 size="xs"
+                aria-label="All junctions"
                 format="hex"
-                label={value}
                 withEyeDropper={false}
                 popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
                 swatches={paletteDefaults.palette.slice(0, 12)}
-                value={arcColors[value] || paletteDefaults.map.get(value) || ''}
-                onChange={(v) => setArcColor(value, v)}
+                value={arcColors[ARC_COLOR_ALL] || paletteDefaults.palette[0] || ''}
+                onChange={(v) => setArcColor(ARC_COLOR_ALL, v)}
               />
-            ))
-          ) : (
-            <ColorInput
-              size="xs"
-              format="hex"
-              label="All junctions"
-              withEyeDropper={false}
-              popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
-              swatches={paletteDefaults.palette.slice(0, 12)}
-              value={arcColors[ARC_COLOR_ALL] || paletteDefaults.palette[0] || ''}
-              onChange={(v) => setArcColor(ARC_COLOR_ALL, v)}
-            />
+            </VizInlineField>
           )}
           {Object.keys(arcColors).length ? (
-            <Button size="compact-xs" variant="subtle" onClick={() => setArcColors({})}>
-              Back to theme colours
-            </Button>
+            <VizControlCell>
+              <Button size="compact-xs" variant="subtle" onClick={() => setArcColors({})}>
+                Back to theme colours
+              </Button>
+            </VizControlCell>
           ) : null}
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Labels
-          </Text>
-          <Switch
-            size="xs"
-            checked={showCounts}
-            onChange={(e) => setShowCounts(e.currentTarget.checked)}
-            label="Read count at each apex"
-          />
-        </Stack>
-        {lanes.length > MAX_LANES_HINT ? (
-          <Text size="xs" c="dimmed">
-            {lanes.length} samples stacked. Filter down to a few for a readable panel.
-          </Text>
-        ) : null}
-        {rows ? (
-          <Text size="xs" c="dimmed">
-            {visible.length.toLocaleString()} of {junctions.length.toLocaleString()} junctions
-            {activeRegion ? ` in ${activeRegion.chrom}` : ''}
-            {minCount > 1 ? `, at least ${minCount} reads` : ''}
-          </Text>
-        ) : null}
-      </Stack>
+        </VizControlGroup>
+      </>
     ),
     [
       activeRegion,

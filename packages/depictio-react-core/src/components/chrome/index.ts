@@ -15,6 +15,7 @@ export { InspectorProvider, useInspectorControl } from './InspectorContext';
 export type { InspectorControl } from './InspectorContext';
 export { default as DownloadButton } from './DownloadButton';
 export { default as ResetButton } from './ResetButton';
+export { default as ClearSelectionButton } from './ClearSelectionButton';
 
 export interface WrapWithChromeOpts {
   onResetFilter?: () => void;
@@ -23,6 +24,7 @@ export interface WrapWithChromeOpts {
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
   sourceFilterActive?: boolean;
+  selectionCount?: number;
   compact?: boolean;
 }
 
@@ -51,6 +53,7 @@ export function wrapWithChrome(
       extraActions: opts?.extraActions,
       showDragHandle: opts?.showDragHandle,
       sourceFilterActive: opts?.sourceFilterActive,
+      selectionCount: opts?.selectionCount,
       compact: opts?.compact,
     },
   );

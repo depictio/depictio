@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { plotlyColorscale } from '../../utils/colorScale';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import AdvancedVizPlot from './AdvancedVizPlot';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import {
   applyDataTheme,
@@ -568,43 +567,33 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
   const primaryControls = useMemo(
     () => (
       <>
-        <Select
-          size="xs"
-          w={240}
-          label={regionGene ? 'Gene (following the region)' : 'Gene'}
-          value={effectiveGene}
-          onChange={(v) => setGene(v)}
-          data={geneOptions.map((g) => ({
-            value: g.id,
-            label: `${g.name && g.name !== g.id ? `${g.name} (${g.id})` : g.id} · ${g.transcripts} isoform${g.transcripts === 1 ? '' : 's'}`,
-          }))}
-          placeholder={rows ? 'No gene in this frame' : 'Loading…'}
-          searchable
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-        />
-        {samples.length > 1 ? (
-          <Select
-            size="xs"
-            w={160}
-            label="Sample"
-            value={sample}
-            onChange={(v) => setSample(v ?? ALL_SAMPLES)}
-            data={[
-              { value: ALL_SAMPLES, label: 'All samples' },
-              ...samples.map((s) => ({ value: s, label: s })),
-            ]}
+        <VizControlGroup title="Data">
+          <VizSelect
+            label={regionGene ? 'Gene (following the region)' : 'Gene'}
+            value={effectiveGene}
+            onChange={(v) => setGene(v)}
+            data={geneOptions.map((g) => ({
+              value: g.id,
+              label: `${g.name && g.name !== g.id ? `${g.name} (${g.id})` : g.id} · ${g.transcripts} isoform${g.transcripts === 1 ? '' : 's'}`,
+            }))}
+            placeholder={rows ? 'No gene in this frame' : 'Loading…'}
+            searchable
             allowDeselect={false}
-            comboboxProps={{ withinPortal: true }}
           />
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Colour lanes by
-          </Text>
-          <SegmentedControl
-            size="xs"
-            w={230}
+          {samples.length > 1 ? (
+            <VizSelect
+              label="Sample"
+              value={sample}
+              onChange={(v) => setSample(v ?? ALL_SAMPLES)}
+              data={[
+                { value: ALL_SAMPLES, label: 'All samples' },
+                ...samples.map((s) => ({ value: s, label: s })),
+              ]}
+              allowDeselect={false}
+            />
+          ) : null}
+          <VizSegmented
+            label="Colour lanes by"
             value={colourMode}
             onChange={(v) => setColourBy(v as ColourMode)}
             data={[
@@ -613,7 +602,7 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
               { value: 'none', label: 'Off' },
             ]}
           />
-        </Stack>
+        </VizControlGroup>
       </>
     ),
     [
@@ -633,52 +622,48 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        {colourMode === 'expression' ? (
-          <Select
-            size="xs"
-            label="Colour scale"
-            value={colourScale}
-            onChange={(v) => setColourScale((v as ColourScale) || 'Viridis')}
-            data={COLOUR_SCALES as unknown as string[]}
-            allowDeselect={false}
-          />
+      <>
+        {colourMode === 'expression' || hasExpression ? (
+          <VizControlGroup title="Expression">
+            {colourMode === 'expression' ? (
+              <VizSelect
+                label="Colour scale"
+                value={colourScale}
+                onChange={(v) => setColourScale((v as ColourScale) || 'Viridis')}
+                data={COLOUR_SCALES as unknown as string[]}
+                allowDeselect={false}
+              />
+            ) : null}
+            {hasExpression && colourMode !== 'expression' ? (
+              <VizSwitch
+                checked={showExpressionPanel}
+                onChange={(e) => setShowExpressionPanel(e.currentTarget.checked)}
+                label="Bar beside each lane"
+              />
+            ) : null}
+          </VizControlGroup>
         ) : null}
-        {hasExpression && colourMode !== 'expression' ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Expression
-            </Text>
-            <Switch
-              size="xs"
-              checked={showExpressionPanel}
-              onChange={(e) => setShowExpressionPanel(e.currentTarget.checked)}
-              label="Bar beside each lane"
-            />
-          </Stack>
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Isoforms drawn
-          </Text>
-          <Slider
-            size="xs"
+        <VizControlGroup title="Isoforms">
+          <VizSlider
+            label="Isoforms drawn"
             min={5}
             max={60}
             step={5}
             value={maxTranscripts}
             onChange={setMaxTranscripts}
             marks={MAX_TRANSCRIPT_MARKS}
-            label={(v) => String(v)}
+            thumbLabel={(v) => String(v)}
           />
-        </Stack>
-        {truncated > 0 ? (
-          <Text size="xs" c="dimmed">
-            {truncated} lower-expressed isoform{truncated === 1 ? '' : 's'} not shown. Raise the
-            budget above to see them.
-          </Text>
-        ) : null}
-      </Stack>
+          {truncated > 0 ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {truncated} lower-expressed isoform{truncated === 1 ? '' : 's'} not shown. Raise the
+                budget above to see them.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+      </>
     ),
     [
       colourMode,

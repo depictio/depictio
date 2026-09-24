@@ -22,10 +22,9 @@ export const DE_VIEWS: readonly DeView[] = ['volcano', 'ma', 'qq'] as const;
 /**
  * UP / DN / NS per row, from a signed effect and an optional significance.
  *
- * `significance` is already on the scale `passesSignificance` expects: for the
- * volcano that is -log10 and the test is "at or above", for the MA view it is a
- * raw p-value and the test is "below". Passing the predicate in rather than a
- * flag keeps the two callers honest about which way their column runs.
+ * Both the volcano and the MA view pass `significancePredicate` over the same
+ * configured significance column, so the tile's tier counts do not change when
+ * the reader switches view.
  */
 export function classifyTiers(
   effects: readonly (number | null | undefined)[],
@@ -38,6 +37,35 @@ export function classifyTiers(
     if (Math.abs(effect) < effectThreshold) return 'NS';
     return effect > 0 ? 'UP' : 'DN';
   });
+}
+
+/**
+ * Whether row `index` clears the significance cutoff, read the same way by
+ * every view of the tile so their UP / DN / NS counts agree.
+ *
+ * `significance` is the configured significance column as stored: raw
+ * (p or padj, significant at or below `threshold`) or already -log10
+ * (significant at or above `-log10(threshold)`). A raw value of exactly 0 is a
+ * p-value that underflowed, the most significant row there is, so it passes;
+ * only null, NaN and out-of-range values fail. An absent column (a table bound
+ * without one) lets every row through, leaving the effect cutoff to decide.
+ */
+export function significancePredicate(
+  significance: readonly (number | null | undefined)[],
+  options: { isNegLog10: boolean; threshold: number },
+): (index: number) => boolean {
+  if (significance.length === 0) return () => true;
+  if (options.isNegLog10) {
+    const cutoff = -Math.log10(options.threshold);
+    return (index) => {
+      const v = significance[index];
+      return v != null && !Number.isNaN(v) && v >= cutoff;
+    };
+  }
+  return (index) => {
+    const v = significance[index];
+    return v != null && Number.isFinite(v) && v >= 0 && v <= options.threshold;
+  };
 }
 
 /** Count each tier, in UP / DN / NS order so the frame's badges keep that order. */

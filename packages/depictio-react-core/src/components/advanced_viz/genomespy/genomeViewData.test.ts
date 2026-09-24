@@ -9,7 +9,13 @@ import {
 } from '../../../selection';
 import { buildGenomeSpySpec, regionFromInterval } from './genomeSpySpec';
 import type { GenomeViewConfig } from './genomeSpySpec';
-import { filtersForGenomeViewFetch, loadGenomeViewRows } from './genomeViewData';
+import {
+  filtersForGenomeViewFetch,
+  loadGenomeViewRows,
+  navigatorWindow,
+  navigatorWindowFilters,
+  ownRegion,
+} from './genomeViewData';
 
 const metadata = {
   index: 'gv-depth',
@@ -229,5 +235,57 @@ describe('regionFromFilters (the following tile)', () => {
       start: 0,
       end: Number.POSITIVE_INFINITY,
     });
+  });
+});
+
+describe('navigator window', () => {
+  it('reads only the tile’s own region', () => {
+    const own = genomeRegionFilters(metadata, 'chrom', 'start', {
+      chroms: ['chr7'],
+      range: [1_000_000, 1_400_000],
+    });
+    const foreign: InteractiveFilter[] = [
+      { index: 'other', value: ['chr1'], source: 'genome_selection', column_name: 'chrom' },
+    ];
+    expect(ownRegion([...foreign, ...own], metadata.index, 'chrom', 'start')).toEqual({
+      chrom: 'chr7',
+      start: 1_000_000,
+      end: 1_400_000,
+    });
+    expect(ownRegion(foreign, metadata.index, 'chrom', 'start')).toBeNull();
+  });
+
+  it('fetches the region’s whole chromosome', () => {
+    expect(navigatorWindow({ chrom: 'chr7', start: 1_000_000, end: 1_400_000 })).toEqual({
+      chroms: ['chr7'],
+      range: null,
+    });
+    expect(navigatorWindow({ chrom: 'chr7', start: 0, end: Infinity })).toEqual({
+      chroms: ['chr7'],
+      range: null,
+    });
+    expect(navigatorWindow(null)).toBeNull();
+  });
+
+  it('rides the fetch on a private index, never the published one', async () => {
+    const extra = navigatorWindowFilters(metadata, 'chrom', 'start', {
+      chroms: ['chr1'],
+      range: [0, 100],
+    });
+    expect(extra.map((f) => f.index)).toEqual([
+      `${metadata.index}::window`,
+      `${metadata.index}::window::pos`,
+    ]);
+    const fetcher = mockFetcher();
+    await loadGenomeViewRows(fetcher, { metadata, config, filters: [], windowFilters: extra });
+    const sent = (fetcher.mock.calls[0] as unknown as [{ filters: InteractiveFilter[] }])[0].filters;
+    expect(sent).toEqual(extra);
+    // The fetch-side strip of the tile's own region leaves the window alone.
+    expect(filtersForGenomeViewFetch(extra, metadata.index)).toEqual(extra);
+  });
+
+  it('drops the empty position half of a chromosome-only window', () => {
+    const extra = navigatorWindowFilters(metadata, 'chrom', 'start', { chroms: ['chr1'], range: null });
+    expect(extra).toHaveLength(1);
   });
 });

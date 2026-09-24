@@ -347,10 +347,27 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho],
   );
 
-  const body = loading ? (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+  // Once the plot has drawn, a refetch keeps it mounted under the skeleton
+  // instead of swapping it out. Unmounting purges Plotly, and a purged GL plot
+  // leaves its WebGL contexts alive until GC, so every filter change on a busy
+  // tab used to churn contexts until Chrome evicted a live plot's (a blank
+  // UMAP after creating a group). It also removes the flash between renders.
+  const hasDrawnRef = useRef(false);
+  if (!loading && !error && !emptyMessage) hasDrawnRef.current = true;
+  const skeleton = (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', zIndex: 1 }}>
       <ComponentSkeleton variant="block" />
     </div>
+  );
+  const body = loading ? (
+    hasDrawnRef.current ? (
+      <>
+        {children}
+        {skeleton}
+      </>
+    ) : (
+      skeleton
+    )
   ) : error ? (
     <Alert color="red" title="Failed to render" variant="light">
       <Text size="xs">{error}</Text>

@@ -1,17 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Badge,
-  Group,
-  MultiSelect,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Badge, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
@@ -33,6 +21,15 @@ import {
   hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
@@ -947,27 +944,22 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const primaryControls = useMemo(
     () => (
       <>
-        {liveMode ? (
-          <Select
-            size="xs"
-            w={130}
-            label="Method"
-            value={method}
-            onChange={(v) => v && setMethod(v as ComputeMethod)}
-            data={[
-              { value: 'pca', label: 'PCA' },
-              { value: 'umap', label: 'UMAP' },
-              { value: 'tsne', label: 't-SNE' },
-              { value: 'pcoa', label: 'PCoA' },
-            ]}
-          />
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            View
-          </Text>
-          <SegmentedControl
-            size="xs"
+        <VizControlGroup title="Projection">
+          {liveMode ? (
+            <VizSelect
+              label="Method"
+              value={method}
+              onChange={(v) => v && setMethod(v as ComputeMethod)}
+              data={[
+                { value: 'pca', label: 'PCA' },
+                { value: 'umap', label: 'UMAP' },
+                { value: 'tsne', label: 't-SNE' },
+                { value: 'pcoa', label: 'PCoA' },
+              ]}
+            />
+          ) : null}
+          <VizSegmented
+            label="View"
             value={view3D ? '3d' : '2d'}
             onChange={(v) => setView3D(v === '3d')}
             data={[
@@ -976,18 +968,18 @@ const EmbeddingRenderer: React.FC<Props> = ({
             ]}
             disabled={!liveMode && !has3DConfigured}
           />
-        </Stack>
+        </VizControlGroup>
         {colorOptions.length > 0 ? (
-          <Select
-            size="xs"
-            w={170}
-            label="Colour by"
-            value={colorBy}
-            onChange={setColorBy}
-            data={colorOptions}
-            searchable
-            clearable
-          />
+          <VizControlGroup title="Colour">
+            <VizSelect
+              label="Colour by"
+              value={colorBy}
+              onChange={setColorBy}
+              data={colorOptions}
+              searchable
+              clearable
+            />
+          </VizControlGroup>
         ) : null}
       </>
     ),
@@ -996,24 +988,20 @@ const EmbeddingRenderer: React.FC<Props> = ({
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         {liveMode ? (
-          <>
+          <VizControlGroup title="Method parameters">
             {method === 'umap' ? (
-              <Group gap="xs" grow>
-                <NumberInput
-                  size="xs"
+              <>
+                <VizNumberInput
                   label="n_neighbors"
-                  description="2–100"
                   value={nNeighbors}
                   onChange={(v) => setNNeighbors(Math.max(2, Math.min(100, Number(v) || 15)))}
                   min={2}
                   max={100}
                 />
-                <NumberInput
-                  size="xs"
+                <VizNumberInput
                   label="min_dist"
-                  description="0–1"
                   value={minDist}
                   onChange={(v) => setMinDist(Math.max(0, Math.min(1, Number(v) || 0.1)))}
                   min={0}
@@ -1021,136 +1009,105 @@ const EmbeddingRenderer: React.FC<Props> = ({
                   step={0.05}
                   decimalScale={2}
                 />
-              </Group>
+                <VizFullRow>
+                  <Text size="xs" c="dimmed">
+                    n_neighbors 2–100, min_dist 0–1
+                  </Text>
+                </VizFullRow>
+              </>
             ) : null}
             {method === 'tsne' ? (
-              <NumberInput
-                size="xs"
-                label="perplexity"
-                description="2–100 (clamped below sample count)"
-                value={perplexity}
-                onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
-                min={2}
-                max={100}
-              />
+              <>
+                <VizNumberInput
+                  label="perplexity"
+                  value={perplexity}
+                  onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
+                  min={2}
+                  max={100}
+                />
+                <VizFullRow>
+                  <Text size="xs" c="dimmed">
+                    2–100 (clamped below sample count)
+                  </Text>
+                </VizFullRow>
+              </>
             ) : null}
             {computeStatus ? (
-              <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-                {computeStatus}
-              </Badge>
+              <VizFullRow>
+                <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                  {computeStatus}
+                </Badge>
+              </VizFullRow>
             ) : null}
             {computeMs != null && computeStatus == null ? (
-              <Text size="xs" c="dimmed">
-                {method.toUpperCase()} computed in {computeMs} ms
-              </Text>
+              <VizFullRow>
+                <Text size="xs" c="dimmed">
+                  {method.toUpperCase()} computed in {computeMs} ms
+                </Text>
+              </VizFullRow>
             ) : null}
-          </>
+          </VizControlGroup>
         ) : null}
-        <Select
-          size="xs"
-          label="Plot style"
-          value={plotStyle}
-          onChange={(v) => v && setPlotStyle(v as PlotStyle)}
-          data={[
-            { value: 'default', label: 'Axis lines' },
-            { value: 'grid', label: 'Gridlines + ticks' },
-            { value: 'clean', label: 'No axes' },
-          ]}
-          description="Axis furniture drawn around the points"
-          allowDeselect={false}
-        />
-        <NumberInput
-          size="xs"
-          label="Point size"
-          value={pointSize}
-          onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
-          min={1}
-          max={30}
-        />
-        {colorByIsNumeric ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Colourscale
-            </Text>
-            <Switch
-              size="xs"
+        <VizControlGroup title="Display">
+          <VizSelect
+            label="Plot style"
+            value={plotStyle}
+            onChange={(v) => v && setPlotStyle(v as PlotStyle)}
+            data={[
+              { value: 'default', label: 'Axis lines' },
+              { value: 'grid', label: 'Gridlines + ticks' },
+              { value: 'clean', label: 'No axes' },
+            ]}
+            description="Axis furniture drawn around the points"
+            allowDeselect={false}
+          />
+          <VizSelect
+            label="Legend"
+            value={legendPos}
+            onChange={(v) => v && setLegendPos(v as LegendPos)}
+            data={[
+              { value: 'right', label: 'Right (outside)' },
+              { value: 'bottom', label: 'Bottom' },
+              { value: 'in-tr', label: 'Inside, top-right' },
+              { value: 'hidden', label: 'Hidden' },
+            ]}
+            allowDeselect={false}
+          />
+          {hoverCandidates.length > 0 ? (
+            <VizMultiSelect
+              label="Hover columns"
+              placeholder="Pick extra columns…"
+              value={hoverCols}
+              onChange={setHoverCols}
+              data={hoverCandidates}
+              searchable
+              clearable
+              maxValues={6}
+            />
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Markers">
+          <VizNumberInput
+            label="Point size"
+            value={pointSize}
+            onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
+            min={1}
+            max={30}
+          />
+          {colorByIsNumeric ? (
+            <VizSwitch
               checked={reverseScale}
               onChange={(e) => setReverseScale(e.currentTarget.checked)}
-              label="Reverse"
+              label="Reverse colourscale"
             />
-          </Stack>
-        ) : null}
-        {hoverCandidates.length > 0 ? (
-          <MultiSelect
-            size="xs"
-            label="Hover columns"
-            placeholder="Pick extra columns…"
-            value={hoverCols}
-            onChange={setHoverCols}
-            data={hoverCandidates}
-            searchable
-            clearable
-            maxValues={6}
-          />
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Density
-          </Text>
-          <Switch
-            size="xs"
-            checked={showDensity}
-            onChange={(e) => setShowDensity(e.currentTarget.checked)}
-            label="Density overlay"
-            disabled={view3D}
-          />
-        </Stack>
-        {showDensity && !view3D ? (
-          <Group gap="xs" grow>
-            <NumberInput
-              size="xs"
-              label="Contours"
-              value={ncontours}
-              onChange={(v) => setNcontours(Math.max(2, Math.min(40, Number(v) || 14)))}
-              min={2}
-              max={40}
-            />
-            <NumberInput
-              size="xs"
-              label="Opacity"
-              value={densityOpacity}
-              onChange={(v) => setDensityOpacity(Math.max(0.05, Math.min(1, Number(v) || 0.45)))}
-              min={0.05}
-              max={1}
-              step={0.05}
-              decimalScale={2}
-            />
-          </Group>
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Annotations
-          </Text>
-          <Switch
-            size="xs"
-            checked={showCentroids}
-            onChange={(e) => setShowCentroids(e.currentTarget.checked)}
-            label="Cluster centroids"
-          />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Markers
-          </Text>
-          <Switch
-            size="xs"
+          ) : null}
+          <VizSwitch
             checked={markerOutline}
             onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
             label="Outline"
           />
           {markerOutline ? (
-            <NumberInput
-              size="xs"
+            <VizNumberInput
               label="Outline width"
               value={outlineWidth}
               onChange={(v) => setOutlineWidth(Math.max(0.5, Math.min(4, Number(v) || 1.5)))}
@@ -1160,21 +1117,41 @@ const EmbeddingRenderer: React.FC<Props> = ({
               decimalScale={1}
             />
           ) : null}
-        </Stack>
-        <Select
-          size="xs"
-          label="Legend"
-          value={legendPos}
-          onChange={(v) => v && setLegendPos(v as LegendPos)}
-          data={[
-            { value: 'right', label: 'Right (outside)' },
-            { value: 'bottom', label: 'Bottom' },
-            { value: 'in-tr', label: 'Inside, top-right' },
-            { value: 'hidden', label: 'Hidden' },
-          ]}
-          allowDeselect={false}
-        />
-      </Stack>
+        </VizControlGroup>
+        <VizControlGroup title="Overlays">
+          <VizSwitch
+            checked={showDensity}
+            onChange={(e) => setShowDensity(e.currentTarget.checked)}
+            label="Density overlay"
+            disabled={view3D}
+          />
+          {showDensity && !view3D ? (
+            <>
+              <VizNumberInput
+                label="Contours"
+                value={ncontours}
+                onChange={(v) => setNcontours(Math.max(2, Math.min(40, Number(v) || 14)))}
+                min={2}
+                max={40}
+              />
+              <VizNumberInput
+                label="Opacity"
+                value={densityOpacity}
+                onChange={(v) => setDensityOpacity(Math.max(0.05, Math.min(1, Number(v) || 0.45)))}
+                min={0.05}
+                max={1}
+                step={0.05}
+                decimalScale={2}
+              />
+            </>
+          ) : null}
+          <VizSwitch
+            checked={showCentroids}
+            onChange={(e) => setShowCentroids(e.currentTarget.checked)}
+            label="Cluster centroids"
+          />
+        </VizControlGroup>
+      </>
     ),
     [
       liveMode,

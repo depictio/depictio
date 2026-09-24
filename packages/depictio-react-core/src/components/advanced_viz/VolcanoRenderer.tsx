@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
-  Group,
-  NumberInput,
-  SegmentedControl,
+  Box,
   Stack,
-  Switch,
-  Text,
   TextInput,
   Tooltip,
   useMantineColorScheme,
@@ -23,6 +19,14 @@ import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../
 import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizInlineField,
+  VizNumberInput,
+  VizSegmented,
+  VizSwitch,
+} from './controls/VizControls';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
@@ -37,6 +41,7 @@ import {
   qqSeries,
   rankTopN,
   resolveDeView,
+  significancePredicate,
   tierCounts,
   type DeTier,
   type DeView,
@@ -298,6 +303,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         xTitle: config.avg_log_intensity_col ?? '',
         yTitle: maYCol,
         sigTitle: config.significance_col,
+        isNegLog10: Boolean(config.significance_is_neg_log10),
         sigThreshold,
         fcThreshold,
         topN,
@@ -352,8 +358,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const viewControl = useMemo(
     () =>
       offered.length > 1 ? (
-        <SegmentedControl
-          size="xs"
+        <VizSegmented
+          aria-label="View"
           value={activeView}
           onChange={(next) => setView(next as DeView)}
           data={offered.map((name) => ({ value: name, label: VIEW_LABELS[name] }))}
@@ -363,70 +369,69 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   );
 
   // Encoding tier: which view, which features count as significant, which get
-  // labelled and which are searched for. Drawn as chips in the header, so every
-  // control carries a fixed width and no description.
+  // labelled and which are searched for. Handed to the frame as a flat
+  // fragment; the strip's grid owns the widths.
   const primaryControls = useMemo(
     () => (
       <>
         {viewControl}
         {activeView !== 'qq' ? (
-          <Tooltip label="Significance threshold (raw p/padj)">
-            <NumberInput
-              size="xs"
-              w={110}
-              label="p / padj"
-              value={sigThreshold}
-              onChange={(v) => setSigThreshold(Number(v) || 0.05)}
-              step={0.01}
-              min={0}
-              max={1}
-              decimalScale={3}
-            />
-          </Tooltip>
+          <VizControlGroup title="Thresholds">
+            <Tooltip label="Significance threshold (raw p/padj)">
+              <Box>
+                <VizNumberInput
+                  label="p / padj"
+                  value={sigThreshold}
+                  onChange={(v) => setSigThreshold(Number(v) || 0.05)}
+                  step={0.01}
+                  min={0}
+                  max={1}
+                  decimalScale={3}
+                />
+              </Box>
+            </Tooltip>
+            {activeView === 'volcano' ? (
+              <VizNumberInput
+                label="|effect|"
+                value={effectThreshold}
+                onChange={(v) => setEffectThreshold(Number(v) || 0)}
+                step={0.1}
+                min={0}
+                decimalScale={2}
+              />
+            ) : null}
+            {activeView === 'ma' ? (
+              <VizNumberInput
+                label="|log2 FC|"
+                value={fcThreshold}
+                onChange={(v) => setFcThreshold(Number(v) || 0)}
+                step={0.1}
+                min={0}
+                decimalScale={2}
+              />
+            ) : null}
+          </VizControlGroup>
         ) : null}
-        {activeView === 'volcano' ? (
-          <NumberInput
-            size="xs"
-            w={110}
-            label="|effect|"
-            value={effectThreshold}
-            onChange={(v) => setEffectThreshold(Number(v) || 0)}
-            step={0.1}
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label="Top-N labels"
+            value={topN}
+            onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
             min={0}
-            decimalScale={2}
+            max={500}
           />
-        ) : null}
-        {activeView === 'ma' ? (
-          <NumberInput
-            size="xs"
-            w={110}
-            label="|log2 FC|"
-            value={fcThreshold}
-            onChange={(v) => setFcThreshold(Number(v) || 0)}
-            step={0.1}
-            min={0}
-            decimalScale={2}
-          />
-        ) : null}
-        <NumberInput
-          size="xs"
-          w={110}
-          label="Top-N labels"
-          value={topN}
-          onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
-          min={0}
-          max={500}
-        />
-        {activeView !== 'qq' ? (
-          <TextInput
-            size="xs"
-            w={160}
-            label="Search"
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            placeholder="gene / taxon"
-          />
-        ) : null}
+          {activeView !== 'qq' ? (
+            <VizInlineField label="Search">
+              <TextInput
+                size="xs"
+                aria-label="Search"
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                placeholder="gene / taxon"
+              />
+            </VizInlineField>
+          ) : null}
+        </VizControlGroup>
       </>
     ),
     [viewControl, activeView, sigThreshold, effectThreshold, fcThreshold, topN, search],
@@ -439,72 +444,57 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // (combined with controlled `sort`) was clobbering user filter/sort.
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        {activeView === 'qq' && figure?.lambdaOverall != null && !Number.isNaN(figure.lambdaOverall) ? (
-          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-            λ = {figure.lambdaOverall.toFixed(3)}
-          </Badge>
-        ) : null}
-        {activeView === 'qq' && figure?.lambdaByCat?.length ? (
-          <Stack gap={2}>
-            {figure.lambdaByCat.map((entry) => (
-              <Badge key={entry.cat} size="xs" variant="light" radius="sm" fullWidth>
-                {entry.cat}: λ = {entry.lambda.toFixed(3)}
-              </Badge>
-            ))}
-          </Stack>
-        ) : null}
+      <>
         {activeView !== 'qq' ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Labels
-            </Text>
-            <Switch
-              size="xs"
+          <VizControlGroup title="Labels">
+            <VizSwitch
               checked={showLabels}
               onChange={(e) => setShowLabels(e.currentTarget.checked)}
-              label="Top-N labels"
+              label="Show top-N labels"
             />
-          </Stack>
+          </VizControlGroup>
         ) : null}
         {activeView === 'qq' ? (
-          <>
-            <Stack gap={4}>
-              <Text size="xs" fw={500}>
-                Identity
-              </Text>
-              <Switch
-                size="xs"
-                checked={showIdentity}
-                onChange={(e) => setShowIdentity(e.currentTarget.checked)}
-                label="Identity line"
-              />
-            </Stack>
-            <Stack gap={4}>
-              <Text size="xs" fw={500}>
-                95%
-              </Text>
-              <Switch
-                size="xs"
-                checked={showCi}
-                onChange={(e) => setShowCi(e.currentTarget.checked)}
-                label="95% null CI band"
-                disabled={Boolean(config.category_col)}
-              />
-            </Stack>
-            <Group gap="xs" grow>
-              <NumberInput
-                size="xs"
-                label="Point size"
-                value={pointSize}
-                onChange={(v) => setPointSize(Math.max(2, Math.min(14, Number(v) || 5)))}
-                min={2}
-                max={14}
-              />
-            </Group>
-          </>
+          <VizControlGroup title="QQ plot">
+            {figure?.lambdaOverall != null && !Number.isNaN(figure.lambdaOverall) ? (
+              <VizFullRow>
+                <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                  λ = {figure.lambdaOverall.toFixed(3)}
+                </Badge>
+              </VizFullRow>
+            ) : null}
+            {figure?.lambdaByCat?.length ? (
+              <VizFullRow>
+                <Stack gap={2}>
+                  {figure.lambdaByCat.map((entry) => (
+                    <Badge key={entry.cat} size="xs" variant="light" radius="sm" fullWidth>
+                      {entry.cat}: λ = {entry.lambda.toFixed(3)}
+                    </Badge>
+                  ))}
+                </Stack>
+              </VizFullRow>
+            ) : null}
+            <VizSwitch
+              checked={showIdentity}
+              onChange={(e) => setShowIdentity(e.currentTarget.checked)}
+              label="Identity line"
+            />
+            <VizSwitch
+              checked={showCi}
+              onChange={(e) => setShowCi(e.currentTarget.checked)}
+              label="95% null CI band"
+              disabled={Boolean(config.category_col)}
+            />
+            <VizNumberInput
+              label="Point size"
+              value={pointSize}
+              onChange={(v) => setPointSize(Math.max(2, Math.min(14, Number(v) || 5)))}
+              min={2}
+              max={14}
+            />
+          </VizControlGroup>
         ) : null}
-      </Stack>
+      </>
     ),
     [
       activeView,
@@ -629,15 +619,18 @@ function buildVolcano(input: {
   const ys = isNegLog10
     ? sigRaw
     : sigRaw.map((p) => (p == null || p <= 0 ? null : -Math.log10(p)));
-  const sigThresholdY = isNegLog10 ? input.sigThreshold : -Math.log10(input.sigThreshold);
+  // The threshold is always a raw p / padj cutoff (the control says so, and the
+  // fetch's tail keeps rows past its -log10), whichever scale the column is on.
+  const sigThresholdY = -Math.log10(input.sigThreshold);
 
   // Classify each point: significant + above-threshold effect ⇒ "hit".
   // The `tiers` array carries UP / DN / NS for the hover badge so the user
   // doesn't have to mentally re-derive it from x/y.
-  const tiers = classifyTiers(xs, input.effectThreshold, (i) => {
-    const y = ys[i];
-    return y != null && y >= sigThresholdY;
-  });
+  const tiers = classifyTiers(
+    xs,
+    input.effectThreshold,
+    significancePredicate(sigRaw, { isNegLog10, threshold: input.sigThreshold }),
+  );
 
   // Top-N label selection, by combined (|x| × y) so both axes matter.
   const topIdx = rankTopN(
@@ -747,6 +740,7 @@ function buildMa(input: {
   xTitle: string;
   yTitle: string;
   sigTitle: string;
+  isNegLog10: boolean;
   sigThreshold: number;
   fcThreshold: number;
   topN: number;
@@ -761,7 +755,10 @@ function buildMa(input: {
   const tiers = classifyTiers(
     ys,
     input.fcThreshold,
-    (i) => !hasSig || (sigRaw[i] != null && sigRaw[i] < input.sigThreshold),
+    significancePredicate(sigRaw, {
+      isNegLog10: input.isNegLog10,
+      threshold: input.sigThreshold,
+    }),
   );
 
   // Top-N by |fold change| × -log10(sig) when available, else by |FC| alone.

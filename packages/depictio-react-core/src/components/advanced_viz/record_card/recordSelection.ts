@@ -44,15 +44,26 @@ export interface RecordSelection {
  * rows. A pick on another collection still counts: the server resolves the
  * link when the card fetches, so the card follows it rather than sitting on
  * its empty state while the rest of the dashboard is narrowed.
+ *
+ * `linkedIndex` (the resolved `linked_component`) names the one tile the card
+ * follows. It is more precise than `selectionSource`, so when it is set only
+ * that tile's selection counts, whichever of the two sources it emits.
  */
 export function readRecordSelection(
   filters: readonly InteractiveFilter[] | undefined,
-  options: { dcId?: string; selectionSource?: RecordSelectionSource | null },
+  options: {
+    dcId?: string;
+    selectionSource?: RecordSelectionSource | null;
+    linkedIndex?: string | null;
+  },
 ): RecordSelection | null {
-  const honoured = new Set<string>(honouredSelectionSources(options.selectionSource));
+  const honoured = new Set<string>(
+    options.linkedIndex ? RECORD_SELECTION_SOURCES : honouredSelectionSources(options.selectionSource),
+  );
   const candidates: RecordSelection[] = [];
   for (const filter of filters ?? []) {
     if (!filter.source || !honoured.has(filter.source)) continue;
+    if (options.linkedIndex && filter.index !== options.linkedIndex) continue;
     // A cleared selection keeps its entry with an empty value list, which is
     // not a selection and must not pull the card off its empty state.
     if (!Array.isArray(filter.value) || filter.value.length === 0) continue;

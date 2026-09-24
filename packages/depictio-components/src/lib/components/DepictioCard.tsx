@@ -11,7 +11,8 @@ import './DepictioCard.css';
  *   - Outer ``Card`` (withBorder, shadow="sm", radius "sm" or "8px" if custom bg)
  *     - height 100%, minHeight 120px, box-sizing content-box
  *   - Inner ``Card.Section`` with content padding, flex column, justify center
- *     - Icon overlay (absolute top-right, opacity 0.3, 40px iconify)
+ *     - Icon: right-hand watermark (opacity 0.3, always visible), beside the
+ *       title only on the compact analysis-mode header
  *     - Title text (bold, marginLeft -2px)
  *     - Hero value (bold, marginLeft -2px)
  *     - Optional aggregation description / comparison row
@@ -93,6 +94,25 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   contentRef,
 }) => {
   const hasCustomBg = !!background_color;
+  const iconColor = icon_color || title_color || 'currentColor';
+  // Where the icon goes. Every card keeps the right-hand watermark, always
+  // visible, except the compact analysis-mode header (groups compared), which
+  // has no corner left: there the icon sits beside the title, small and
+  // full-opacity.
+  const iconBesideTitle = !!icon_name && inline_header;
+  const titleIcon = iconBesideTitle ? (
+    <Icon
+      icon={icon_name as string}
+      width={16}
+      height={16}
+      style={{
+        color: iconColor,
+        flexShrink: 0,
+        // Optically centred on the title's first line.
+        marginTop: 2,
+      }}
+    />
+  ) : null;
 
   const header = inline_header ? (
     // Title left, value right: glued side by side the two bold texts read as
@@ -108,22 +128,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       style={{ marginLeft: -2, minWidth: 0 }}
     >
       <Group gap={6} wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
-        {/* The watermark icon has no corner left in the compact layout, so it
-            moves beside the title — small, full-opacity, in its own color. */}
-        {icon_name && (
-          <Icon
-            icon={icon_name}
-            width={16}
-            height={16}
-            style={{
-              color: icon_color || title_color || 'currentColor',
-              flexShrink: 0,
-              // Optically centred on the title's first line now that the row
-              // is top-aligned.
-              marginTop: 2,
-            }}
-          />
-        )}
+        {titleIcon}
         <Text
           size={title_font_size}
           fw={700}
@@ -217,12 +222,9 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           Inline ``width``/``height`` removed so the CSS controls sizing —
           @iconify/react renders an <svg> we can size via .depictio-card-icon
           svg{...} rules. */}
-      {icon_name && !inline_header && (
+      {icon_name && !iconBesideTitle && (
         <Box className="depictio-card-icon">
-          <Icon
-            icon={icon_name}
-            style={{ color: icon_color || title_color || 'currentColor' }}
-          />
+          <Icon icon={icon_name} style={{ color: iconColor }} />
         </Box>
       )}
 

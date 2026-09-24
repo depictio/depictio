@@ -2,17 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js';
 import {
   ActionIcon,
-  Badge,
+  Box,
   Button,
   Group,
-  MultiSelect,
   Paper,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Slider,
   Stack,
-  Switch,
   Text,
   TextInput,
   Tooltip,
@@ -32,6 +26,16 @@ import {
 import { resolveCategoricalPalette, stableColorMap, type StableColorMap } from '../../colors';
 import { filtersExcludingOwn } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizInlineField,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { ladderise, parseNewick, type PhyloNode, type PhyloTree, toNewick } from './phylo/newick';
 import { computeLayout, descendants, type Layout } from './phylo/layout';
@@ -1468,53 +1472,49 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // the clades and the tip search. Everything below decorates the same tree.
   const primaryControls = (
     <>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Mode
-        </Text>
-        <SegmentedControl
-          size="xs"
+      <VizControlGroup title="Layout">
+        <VizSegmented
+          label="Mode"
           data={LAYOUTS}
           value={layout}
           onChange={(v) => setLayout(v as Layout)}
         />
-      </Stack>
-      {colorOptions.length > 0 ? (
-        <Select
-          size="xs"
-          w={170}
-          label="Colour by"
-          value={colorCol}
-          onChange={setColorCol}
-          data={colorOptions}
-          clearable
+        <VizSwitch
+          checked={doLadderise}
+          onChange={(e) => setDoLadderise(e.currentTarget.checked)}
+          label="Ladderise"
         />
-      ) : null}
-      <TextInput
-        size="xs"
-        w={150}
-        label="Search tip"
-        placeholder="taxon name"
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-      />
-      <Switch
-        size="xs"
-        checked={doLadderise}
-        onChange={(e) => setDoLadderise(e.currentTarget.checked)}
-        label="Ladderise"
-      />
+      </VizControlGroup>
+      <VizControlGroup title="Tips">
+        {colorOptions.length > 0 ? (
+          <VizSelect
+            label="Colour by"
+            value={colorCol}
+            onChange={setColorCol}
+            data={colorOptions}
+            clearable
+          />
+        ) : null}
+        <VizInlineField label="Search tip">
+          <TextInput
+            size="xs"
+            aria-label="Search tip"
+            placeholder="taxon name"
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+          />
+        </VizInlineField>
+      </VizControlGroup>
     </>
   );
 
+  // `display: contents` keeps the id (the cursor rules below match the
+  // portalled popover by it) without adding a box, so the container still lays
+  // out each control as its own item.
   const controls = (
-    <Stack gap="xs" id={controlsId}>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Tip labels
-        </Text>
-        <Select
-          size="xs"
+    <Box id={controlsId} style={{ display: 'contents' }}>
+      <VizControlGroup title="Tip labels">
+        <VizSelect
           label="Label by"
           value={labelCol}
           onChange={setLabelCol}
@@ -1522,42 +1522,32 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           placeholder="Tree id"
           clearable
         />
-        <NumberInput
-          size="xs"
+        <VizNumberInput
           label="Hide labels above"
           value={labelLimit}
           onChange={(v) => setLabelLimit(typeof v === 'number' ? v : 80)}
           min={0}
           step={20}
         />
-        <Switch
-          size="xs"
+        <VizSwitch
           checked={alignLabels}
           onChange={(e) => setAlignLabels(e.currentTarget.checked)}
           label="Align labels"
         />
-      </Stack>
-      {colorOptions.length > 0 ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Metadata strips
-          </Text>
-          <MultiSelect
-            size="xs"
+      </VizControlGroup>
+      <VizControlGroup title="Annotations">
+        {colorOptions.length > 0 ? (
+          <VizMultiSelect
+            label="Metadata strips"
             value={stripCols}
             onChange={setStripCols}
             data={colorOptions}
             placeholder="none"
             clearable
           />
-        </Stack>
-      ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Legend
-        </Text>
-        <SegmentedControl
-          size="xs"
+        ) : null}
+        <VizSegmented
+          label="Legend"
           data={[
             { value: 'right', label: 'Right' },
             { value: 'bottom', label: 'Bottom' },
@@ -1565,53 +1555,38 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           ]}
           value={legendPos}
           onChange={(v) => setLegendPos(v as 'right' | 'bottom' | 'hidden')}
-          fullWidth
         />
-      </Stack>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Support values
-        </Text>
-        <Switch
-          size="xs"
+      </VizControlGroup>
+      <VizControlGroup title="Support values">
+        <VizSwitch
           checked={showSupport}
           onChange={(e) => setShowSupport(e.currentTarget.checked)}
           label="Show support"
         />
         {showSupport ? (
-          <>
-            <Text size="xs" c="dimmed">
-              Show at or below {supportMax}
-            </Text>
-            <Slider
-              size="xs"
-              value={supportMax}
-              onChange={setSupportMax}
-              min={0}
-              max={100}
-              step={5}
-            />
-          </>
+          <VizSlider
+            label={`Show at or below ${supportMax}`}
+            value={supportMax}
+            onChange={setSupportMax}
+            min={0}
+            max={100}
+            step={5}
+          />
         ) : null}
-      </Stack>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Distances
-        </Text>
-        <Switch
-          size="xs"
+      </VizControlGroup>
+      <VizControlGroup title="Distances">
+        <VizSwitch
           checked={showScaleBar}
           onChange={(e) => setShowScaleBar(e.currentTarget.checked)}
           label="Scale bar"
         />
-        <Switch
-          size="xs"
+        <VizSwitch
           checked={showBranchLabels}
           onChange={(e) => setShowBranchLabels(e.currentTarget.checked)}
           label={`Label ${BRANCH_LABEL_MAX} longest branches`}
         />
-      </Stack>
-    </Stack>
+      </VizControlGroup>
+    </Box>
   );
 
   // ---- Always-visible toolbar (zoom/pan + subtree actions) ----------------

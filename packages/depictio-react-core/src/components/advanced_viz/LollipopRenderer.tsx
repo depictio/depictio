@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Group,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   fetchAdvancedVizData,
@@ -430,9 +428,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     () => (
       <>
         {useSinglePicker ? (
-          <Select
-            size="xs"
-            w={170}
+          <VizSelect
             label="Gene"
             value={selectedGene}
             onChange={setSelectedGene}
@@ -440,9 +436,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
             searchable
           />
         ) : null}
-        <Select
-          size="xs"
-          w={160}
+        <VizSelect
           label="Sort genes"
           value={geneSort}
           onChange={(v) => v && setGeneSort(v as GeneSort)}
@@ -460,18 +454,16 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
+      <>
+        <VizControlGroup title="Markers">
+          <VizNumberInput
             label="Point size"
             value={pointSize}
             onChange={(v) => setPointSize(Math.max(2, Math.min(20, Number(v) || 8)))}
             min={2}
             max={20}
           />
-          <NumberInput
-            size="xs"
+          <VizNumberInput
             label="Stem width"
             value={stemWidth}
             onChange={(v) => setStemWidth(Math.max(0.5, Math.min(6, Number(v) || 1.2)))}
@@ -480,64 +472,52 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
             step={0.2}
             decimalScale={1}
           />
-        </Group>
-        <Select
-          size="xs"
-          label="Palette"
-          value={palette}
-          onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
-          data={[
-            ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
-            { value: 'tab10', label: 'tab10 (10 colours)' },
-            { value: 'tab20', label: 'tab20 (20 colours)' },
-          ]}
-          allowDeselect={false}
-        />
-        <NumberInput
-          size="xs"
-          label="Label top-N positions"
-          description="Per gene, 0 = off"
-          value={topNLabels}
-          onChange={(v) => setTopNLabels(Math.max(0, Math.min(20, Number(v) || 0)))}
-          min={0}
-          max={20}
-          disabled={!config.effect_col}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Scale
-          </Text>
-          <Switch
-          size="xs"
-          checked={scalePointsByEffect}
-          onChange={(e) => setScalePointsByEffect(e.currentTarget.checked)}
-          label="Scale points by |effect|"
-          disabled={!config.effect_col}
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
-          size="xs"
-          checked={showStems}
-          onChange={(e) => setShowStems(e.currentTarget.checked)}
-          label="Show stems"
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Markers
-          </Text>
-          <Switch
-          size="xs"
-          checked={markerOutline}
-          onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
-          label="Marker outline"
-        />
-        </Stack>
-      </Stack>
+          <VizSwitch
+            checked={scalePointsByEffect}
+            onChange={(e) => setScalePointsByEffect(e.currentTarget.checked)}
+            label="Scale points by |effect|"
+            disabled={!config.effect_col}
+          />
+          <VizSwitch
+            checked={showStems}
+            onChange={(e) => setShowStems(e.currentTarget.checked)}
+            label="Show stems"
+          />
+          <VizSwitch
+            checked={markerOutline}
+            onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
+            label="Marker outline"
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Palette"
+            value={palette}
+            onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
+            data={[
+              ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
+              { value: 'tab10', label: 'tab10 (10 colours)' },
+              { value: 'tab20', label: 'tab20 (20 colours)' },
+            ]}
+            allowDeselect={false}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label="Label top-N"
+            value={topNLabels}
+            onChange={(v) => setTopNLabels(Math.max(0, Math.min(20, Number(v) || 0)))}
+            min={0}
+            max={20}
+            disabled={!config.effect_col}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Positions per gene, 0 = off
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+      </>
     ),
     [
       brandPalette,

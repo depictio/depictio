@@ -42,3 +42,43 @@ export function rowLabel(row: RecordRow, columns: readonly string[], position: n
   const parts = columns.map((column) => formatFieldValue(row[column]));
   return parts.length ? parts.join(' / ') : `row ${position + 1}`;
 }
+
+/**
+ * The value the reader picked last. A table reports its selection in row
+ * order, not click order, so the newest pick is the value that was not in
+ * the previous selection; with none new (a row was deselected) the last value
+ * stands in.
+ */
+export function latestPickedValue(
+  previous: readonly string[] | null,
+  current: readonly string[],
+): string | null {
+  if (current.length === 0) return null;
+  const before = new Set(previous ?? []);
+  return current.find((value) => !before.has(value)) ?? current[current.length - 1];
+}
+
+/**
+ * The label the record picker shows for `row`: its title, its id when the
+ * title is another column, then the values that tell it apart from the other
+ * rows. Every part is searchable, so the reader can type any of them.
+ */
+export function recordOptionLabel(
+  row: RecordRow,
+  options: {
+    idCol: string;
+    titleCol?: string | null;
+    labelColumns: readonly string[];
+    position: number;
+  },
+): string {
+  const { idCol, titleCol, labelColumns, position } = options;
+  const heading = formatFieldValue(titleCol ? row[titleCol] : row[idCol]);
+  const id = titleCol && titleCol !== idCol ? formatFieldValue(row[idCol]) : null;
+  const rest = labelColumns
+    .filter((column) => column !== idCol && column !== titleCol)
+    .map((column) => formatFieldValue(row[column]));
+  const head = id && id !== heading ? `${heading} (${id})` : heading;
+  const label = [head, ...rest].filter(Boolean).join(' · ');
+  return label || `row ${position + 1}`;
+}

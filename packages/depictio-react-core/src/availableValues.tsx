@@ -18,10 +18,11 @@
  *   1. Walk dashboard.stored_metadata for distinct dc_ids referenced by
  *      figure / table / multiqc / map / image components.
  *   2. For each such dc_id (including the filter's own), call
- *      `fetchUniqueValues(dc_id, column_F)`. DCs that don't have a column
- *      with that name return an error → we skip them silently. A DC missing
- *      the column is treated as "no constraint from this DC" rather than
- *      "everything excluded".
+ *      `fetchUniqueValues(dc_id, column_F)`. Other delta DCs are asked only
+ *      when their (session-cached) specs list column_F, so a DC lacking the
+ *      column costs no request (it used to answer 404 per column). A DC
+ *      missing the column is treated as "no constraint from this DC" rather
+ *      than "everything excluded".
  *   3. Intersect the successful results.
  *   4. Cache the resulting Set keyed by `${dc_id_F}|${column_F}`.
  *
@@ -46,6 +47,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from './api';
+import { fetchSpecsCached, multiqcDcIds, specsHaveColumn } from './dcSpecs';
 
 /** Funnel result for one interactive component (issue #939). */
 export interface FunnelComponentState {
@@ -97,10 +99,13 @@ interface DataDcEntry {
  *  the join semantics apply equally. */
 function collectDataDcs(metadataList: StoredMetadata[] | undefined): DataDcEntry[] {
   if (!metadataList) return [];
+  // A DC bound to any multiqc component is a MultiQC DC, whatever other
+  // component (card, figure) also references it first.
+  const multiqc = multiqcDcIds(metadataList);
   const byId = new Map<string, DataDcEntry>();
   for (const m of metadataList) {
     if (!m.dc_id) continue;
-    const t = m.component_type;
+    const t = multiqc.has(m.dc_id) ? 'multiqc' : m.component_type;
     if (
       t === 'figure' ||
       t === 'table' ||
@@ -345,7 +350,17 @@ export const AvailableFilterValuesProvider: React.FC<
             return out;
           });
         }
-        return fetchUniqueValues(entry.dcId, columnName).then((values) => new Set(values));
+        if (entry.dcId === dcId) {
+          // The filter's own source DC carries the column by construction.
+          return fetchUniqueValues(entry.dcId, columnName).then((values) => new Set(values));
+        }
+        // Another delta DC: ask for its values only when its specs list the
+        // column. Absent column (or no specs) = no constraint, no request.
+        return fetchSpecsCached(entry.dcId).then((specs) =>
+          specsHaveColumn(specs, columnName)
+            ? fetchUniqueValues(entry.dcId, columnName).then((values) => new Set(values))
+            : new Set<string>(),
+        );
       };
 
       Promise.allSettled(fetchTargets.map(fetchOne))

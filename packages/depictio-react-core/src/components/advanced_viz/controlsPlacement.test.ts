@@ -42,10 +42,14 @@ describe('resolveControlsPlacement', () => {
 });
 
 describe('nextPlacement', () => {
-  it('cycles popover -> header -> rail -> popover', () => {
-    expect(nextPlacement('popover')).toBe('header');
-    expect(nextPlacement('header')).toBe('rail');
-    expect(nextPlacement('rail')).toBe('popover');
+  it('cycles popover -> rail -> header -> popover', () => {
+    expect(nextPlacement('popover')).toBe('rail');
+    expect(nextPlacement('rail')).toBe('header');
+    expect(nextPlacement('header')).toBe('popover');
+  });
+
+  it('pins to the vertical rail first', () => {
+    expect(CONTROLS_PLACEMENTS).toEqual(['popover', 'rail', 'header']);
   });
 });
 
