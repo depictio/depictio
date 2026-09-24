@@ -1,0 +1,822 @@
+# nf-core/riboseq Template v2.0.0 - Ribo-seq, translational efficiency and ORF discovery
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/riboseq/2.0.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv]
+#
+# Tested against the nf-core/riboseq AWS megatest results:
+#   s3://nf-core-awsmegatests/riboseq/results-11d66a3b8ae1f41f9c385af36bd431c35bf015ab/
+# `megatest.yaml` next to this file lists the tables-only subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# A riboseq run mixes two assays in one sample sheet: total mRNA libraries
+# (`type: rnaseq`) and ribosome-footprint libraries (`type: riboseq`). The
+# MultiQC, Salmon and sample-space panels read both; the riboWaltz, Ribo-TISH
+# and RiboCode panels only the Ribo-seq ones; anota2seq pairs them per
+# contrast. The catalog recipes match on file names (`*.ribowaltz.*.tsv`,
+# `*.anota2seq.results.tsv`, `ribotish/*_pred.txt`, `*_collapsed.txt`), never
+# on the pipeline's output directories.
+#
+# Design: the sample sheet already carries the design columns the contrasts
+# name. METADATA_FILE (optional, ampliseq convention) adds a design table whose
+# first column is the sample id and whose first annotation column becomes
+# GROUP_COL; the megatest ships `input/metadata.tsv` with `treatment` first.
+# ============================================================================
+template:
+  template_id: "nf-core/riboseq/2.0.0"
+  description: "nf-core/riboseq template: MultiQC funnel, Ribo-seq periodicity QC, sample space, anota2seq translational regulation, translational efficiency and ORF discovery"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing riboseq pipeline output (multiqc/, psites/, quantification/, translational_efficiency/, orf_predictions/)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the riboseq samplesheet (sample, fastq_1, fastq_2, strandedness, type and the design columns). Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted."
+      required: false
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV), first column the sample id, then one column per annotation. Adds the group filter and the design table; pruned when absent."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design-table sample id column (links join on it). Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design-table column the group filter and card read. Auto-detected as the first annotation column (treatment in the vendored megatest table)."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for display."
+      required: false
+  # Variables supplied when materialising the bundled reference/demo dataset:
+  # the fetch drops the vendored sheet, design table and contrasts into input/.
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_FILE: "{DATA_ROOT}/input/metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "treatment"
+      GROUP_COL_DISPLAY: "Treatment"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"    # the whole iGenomes catalogue
+          - "hook_url"   # nf-core runs may put a live webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Translational efficiency"
+        key_patterns: ["contrasts", "te_*", "translational_efficiency_method", "ribo_lfc_threshold", "rna_lfc_threshold"]
+      - group: "P-sites and ORF calling"
+        key_patterns: ["skip_ribowaltz", "skip_plastid", "plastid_*", "skip_ribotish", "skip_ribocode", "extra_ribocode_*", "run_ribotricer", "run_price", "run_rpbp", "extended_orf_analysis", "skip_orf_collapse", "orf_min_*", "smorf_max_aa", "gffcompare_class_codes"]
+      - group: "rRNA removal"
+        key_patterns: ["remove_ribo_rna", "ribo_removal_tool", "ribo_database_manifest", "ribodetector_*", "save_non_ribo_reads", "skip_bbsplit", "save_bbsplit_reads"]
+      - group: "Alignment & quantification"
+        key_patterns: ["aligner", "pseudo_aligner*", "star_*", "save_align_intermeds", "save_unaligned", "bam_csi_index", "stranded_threshold", "unstranded_threshold"]
+      - group: "Read trimming & UMI"
+        key_patterns: ["trimmer", "skip_trimming", "min_trimmed_reads", "save_trimmed", "fastp_merge", "equalise_read_lengths", "with_umi", "umi_*", "umitools_*", "skip_umi_extract", "save_umi_intermeds", "extra_fqlint_args"]
+      - group: "Annotation & references"
+        key_patterns: ["fasta", "gtf*", "gencode", "igenomes_*", "save_reference", "skip_gtf_*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "email*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "publish_dir_mode", "trace_report_suffix", "validate_params", "version", "help*", "show_hidden", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path", "test_data_base", "run_price"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "contrasts"
+      - "te_quantification_method"
+      - "te_lfc_threshold"
+      - "ribo_removal_tool"
+      - "aligner"
+      - "skip_ribowaltz"
+      - "skip_ribotish"
+      - "skip_ribocode"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # No design table: drop the metadata DC; its links and the group filter
+    # and card bound to it go with it. Every other panel reads the sample sheet.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Ribo-seq Translation Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "riboseq"
+    version: "2.0.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/riboseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC: the QC funnel of both assays, read from the parquet.
+      # MultiQC 1.33 writes `multiqc/<aligner>/multiqc_report_data/`; newer
+      # versions `multiqc_data/`. The pattern accepts both, with or without
+      # the aligner directory. The three FastQC passes (raw, trimmed,
+      # rRNA-filtered) are anchored `fastqc`, `fastqc-1` and `fastqc-2`.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data: FastQC at three stages, SortMeRNA, STAR, samtools, Salmon, Ribo-TISH and riboWaltz"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc(?:_report)?_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "fastqc"
+              - "fastqc-1"
+              - "fastqc-2"
+              - "sortmerna"
+              - "star"
+              - "samtools"
+              - "salmon"
+              - "ribotish"
+              - "ribowaltz"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Adapter Content"
+                - "Status Checks"
+              fastqc-1:
+                - "Sequence Counts"
+                - "Sequence Length Distribution"
+                - "Status Checks"
+              fastqc-2:
+                - "Sequence Counts"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Status Checks"
+              sortmerna:
+                - "sortmerna-section-1"
+              star:
+                - "Summary Statistics"
+                - "Alignment Scores"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+              salmon:
+                - "salmon-section-1"
+              ribotish:
+                - "Reading Frame Proportions"
+                - "Read Length Distribution"
+              ribowaltz:
+                - "P-site Region Distribution"
+                - "Reading Frame Distribution"
+                - "Metaprofile (Start Codon)"
+                - "Metaprofile (Stop Codon)"
+
+      # ----------------------------------------------------------------
+      # Sample hub: the run's own sheet (every column but the FASTQ paths),
+      # and the optional design table.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Run samplesheet: one row per library with its assay type and the design columns the sheet declares"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/riboseq/samplesheet.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library identifier, the key every link joins on"
+              "type": "Assay of the library: rnaseq (total mRNA), riboseq (ribosome footprints) or tiseq (initiating ribosomes)"
+              "read_type": "paired-end when the sheet declares a second FASTQ, else single-end"
+              "strandedness": "Library strandedness declared in the sheet (auto means the pipeline inferred it)"
+
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Optional design table (provide via --var METADATA_FILE=...), first column the sample id"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "{METADATA_ID_COL}": "Library identifier, must match the samplesheet sample column. All other columns are passed through."
+
+      # ----------------------------------------------------------------
+      # Expression of every library (Salmon, both assays).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gene_counts"
+        description: "Merged Salmon gene-level count matrix, one estimated count column per library"
+        config:
+          type: "Table"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "salmon\\.merged\\.gene_counts\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol"
+
+      - data_collection_tag: "sample_pca"
+        description: "Per-library PCA coordinates and library summary from the merged Salmon TPM matrix"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "salmon/sample_pca.py"
+            source_overrides:
+              matrix:
+                path: "quantification/salmon/salmon.merged.gene_tpm.tsv"
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Library identifier"
+              "dim_1": "First principal component of the log2(TPM + 1) matrix"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "group": "The sheet's most factor-like column (the assay type on a riboseq sheet)"
+              "genes_detected": "Genes with TPM above zero in this library"
+              "genes_expressed": "Genes with TPM at or above 1 in this library"
+              "median_tpm": "Median TPM over the genes the library detects"
+
+      # ----------------------------------------------------------------
+      # riboWaltz Ribo-seq QC (Ribo-seq libraries only). Optional: a run with
+      # --skip_ribowaltz writes none of these files.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "ribowaltz_summary"
+        optional: true
+        description: "One row per Ribo-seq library: P-sites, frame-0 share, region shares, CDS enrichment, footprint length"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribowaltz/library_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "psites": "P-sites riboWaltz assigned to a transcript region"
+              "frame0_cds_pct": "Share of CDS P-sites in frame 0, the annotated reading frame, in percent"
+              "frame_bias": "Frame-0 share minus the larger of the two other frames, in percentage points"
+              "cds_pct": "Share of the P-sites in the CDS, in percent"
+              "utr5_pct": "Share of the P-sites in the 5' UTR, in percent"
+              "utr3_pct": "Share of the P-sites in the 3' UTR, in percent"
+              "cds_enrichment": "CDS share over the CDS length share of the same transcripts"
+              "modal_length": "Most frequent footprint length, nt"
+              "length_iqr": "Interquartile range of the footprint lengths, nt"
+
+      - data_collection_tag: "ribowaltz_frames"
+        optional: true
+        description: "P-sites per library, transcript region and reading frame"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribowaltz/frames.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "region": "Transcript region: 5' UTR, CDS or 3' UTR"
+              "frame": "Reading frame relative to the annotated start codon"
+              "count": "P-sites in this region and frame"
+              "pct": "Share of the region's P-sites in this frame, in percent"
+
+      - data_collection_tag: "ribowaltz_psite_region"
+        optional: true
+        description: "P-site share per library and transcript region, with the length expectation"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribowaltz/psite_region.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "region": "Transcript region: 5' UTR, CDS or 3' UTR"
+              "scope": "Constant composition level of the stacked bar"
+              "count": "P-sites in the region"
+              "pct": "Share of the library's P-sites, in percent"
+              "expected_pct": "Length share of the region over the same transcripts, in percent"
+              "enrichment": "Observed share over expected share"
+
+      - data_collection_tag: "ribowaltz_length"
+        optional: true
+        description: "Footprint length distribution per Ribo-seq library"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribowaltz/length_distribution.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "length": "Read length, nt"
+              "count": "Reads of that length"
+              "pct": "Share of the library's reads, in percent"
+
+      - data_collection_tag: "ribowaltz_metaprofile_start"
+        optional: true
+        description: "Metagene P-site profile around the start codon, per Ribo-seq library"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribowaltz/metaprofile_start.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "position": "Distance from the start codon, nt"
+              "signal": "Share of the window's P-site signal at this position, in percent"
+
+      - data_collection_tag: "ribowaltz_metaprofile_stop"
+        optional: true
+        description: "Metagene P-site profile around the stop codon, per Ribo-seq library"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribowaltz/metaprofile_stop.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "position": "Distance from the stop codon, nt"
+              "signal": "Share of the window's P-site signal at this position, in percent"
+
+      # ----------------------------------------------------------------
+      # anota2seq translational regulation (per contrast). Optional: a run
+      # without --contrasts writes no translational_efficiency/ outputs.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "anota2seq_regulation"
+        optional: true
+        description: "One row per contrast and gene: the four anota2seq analyses side by side and one regulatory mode"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "anota2seq/regulation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast id from the contrasts file (target_vs_reference)"
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol (the Ensembl id when the run has none)"
+              "total_mrna_lfc": "log2 fold change of total mRNA (RNA-seq)"
+              "total_mrna_padj": "Adjusted p-value of the total mRNA analysis"
+              "translated_mrna_lfc": "log2 fold change of ribosome-bound mRNA (Ribo-seq)"
+              "translated_mrna_padj": "Adjusted p-value of the ribosome-bound mRNA analysis"
+              "translation_effect": "Change in ribosome-bound mRNA not explained by total mRNA, log2"
+              "translation_pvalue": "RVM p-value of the translation analysis"
+              "translation_padj": "Adjusted p-value of the translation analysis"
+              "buffering_effect": "Change in total mRNA not followed by ribosome-bound mRNA, log2"
+              "buffering_padj": "Adjusted p-value of the buffering analysis"
+              "regulation_mode": "translation, buffering, mRNA abundance or not regulated"
+              "direction": "Sign of the effect that decided the mode: up, down or none"
+
+      - data_collection_tag: "anota2seq_results"
+        optional: true
+        description: "The anota2seq analyses of every contrast stacked: one row per contrast, analysis and gene"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "anota2seq/results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast id from the contrasts file"
+              "analysis": "Ribosome-bound mRNA, Total mRNA, Translation or Buffering"
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol (the Ensembl id when the run has none)"
+              "effect": "anota2seq effect (apvEff), log2 scale"
+              "slope": "APV slope (translation and buffering analyses only)"
+              "pvalue": "RVM p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+              "neg_log10_padj": "-log10 of the adjusted p-value"
+              "significant": "Adjusted p below 0.15 and absolute effect of at least log2(1.2), anota2seq's default selection"
+              "direction": "up, down or not significant"
+
+      - data_collection_tag: "translational_efficiency"
+        optional: true
+        description: "Baseline translational efficiency per gene: mean Ribo-seq CPM over mean RNA-seq CPM, pooled over the run"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/riboseq/translational_efficiency.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol"
+              "rna_cpm": "Mean counts per million over the RNA-seq libraries"
+              "ribo_cpm": "Mean in-frame P-site counts per million over the Ribo-seq libraries"
+              "log2_rna_cpm": "log2(RNA-seq CPM + 1)"
+              "log2_ribo_cpm": "log2(Ribo-seq CPM + 1)"
+              "log2_te": "log2 translational efficiency: log2((Ribo CPM + 1) / (RNA CPM + 1))"
+              "rna_libraries": "RNA-seq libraries with a non-zero count"
+              "ribo_libraries": "Ribo-seq libraries with a non-zero P-site count"
+
+      # ----------------------------------------------------------------
+      # ORF discovery. Optional: --skip_ribotish / --skip_ribocode.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "ribotish_orfs"
+        optional: true
+        description: "Ribo-TISH ORF predictions, one row per library and ORF (stop-codon key)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribotish/orfs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "orf_id": "ORF key: chromosome, strand and genomic stop codon coordinate"
+              "transcript_id": "Transcript the ORF was reported on"
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol"
+              "gene_type": "Gene biotype"
+              "chrom": "Chromosome"
+              "strand": "Strand"
+              "orf_type": "Ribo-TISH initiation type (TisType)"
+              "orf_class": "Class shared with RiboCode: Annotated CDS, N-terminal variant, Upstream, Downstream, Internal or Novel ORF"
+              "start_codon": "Start codon of the retained start"
+              "aa_length": "Protein length, amino acids"
+              "start_sites": "Supported start codons Ribo-TISH reported for this ORF"
+              "frame_qvalue": "Ribo-TISH frame-test q-value of the retained start"
+
+      - data_collection_tag: "ribocode_orfs"
+        optional: true
+        description: "RiboCode ORF calls, one row per library and ORF (stop-codon key)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ribocode/orfs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "orf_id": "ORF key: chromosome, strand and genomic stop codon coordinate"
+              "transcript_id": "Transcript the ORF was reported on"
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol"
+              "gene_type": "Gene biotype"
+              "chrom": "Chromosome"
+              "strand": "Strand"
+              "orf_type": "RiboCode ORF type"
+              "orf_class": "Class shared with Ribo-TISH: Annotated CDS, Upstream, Downstream, Internal or Novel ORF"
+              "aa_length": "Protein length, amino acids"
+              "psites_frame0": "P-sites in frame 0 along the ORF"
+              "adjusted_pvalue": "RiboCode adjusted periodicity p-value"
+
+      - data_collection_tag: "orf_calls"
+        optional: true
+        description: "ORF counts and shares per library, caller and ORF class"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/riboseq/orf_calls.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Ribo-seq library identifier"
+              "caller": "Ribo-TISH or RiboCode"
+              "orf_class": "Shared ORF class"
+              "orfs": "ORFs the caller reported in this library and class"
+              "pct": "Share of the library's ORFs for this caller, in percent"
+
+      - data_collection_tag: "orf_overlap"
+        optional: true
+        description: "One row per ORF pooled over the libraries: which caller reported it and whether it is an annotated CDS"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/riboseq/orf_overlap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "orf_id": "ORF key: chromosome, strand and genomic stop codon coordinate"
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol"
+              "gene_type": "Gene biotype"
+              "orf_class": "Shared ORF class (RiboCode's when it called the ORF)"
+              "aa_length": "Longest protein length either caller reported, amino acids"
+              "ribotish": "1 when Ribo-TISH reported the ORF in at least one library"
+              "ribocode": "1 when RiboCode reported the ORF in at least one library"
+              "annotated_cds": "1 when either caller classed the ORF as the annotated CDS"
+              "ribotish_libraries": "Libraries in which Ribo-TISH reported the ORF"
+              "ribocode_libraries": "Libraries in which RiboCode reported the ORF"
+
+# ============================================================================
+# LINKS
+# The sample sheet is the hub: the persistent sample filters narrow every
+# per-library collection. `sample_mapping` resolves the MultiQC sample-name
+# variants (Read 1 / _1) back to the sheet id. The design table, when given,
+# fans out the same way on METADATA_ID_COL. Inside the result tabs, the gene
+# and ORF keys carry a pick from one collection to its siblings.
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sample_pca"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the sample space by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "gene_counts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the merged count matrix to the selected libraries (column subset)"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Ribo-seq library summary by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_frames"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the frame distribution by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_psite_region"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the region composition by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the footprint lengths by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_metaprofile_start"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the start-codon metaprofile by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_metaprofile_stop"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the stop-codon metaprofile by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribotish_orfs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Ribo-TISH ORFs by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ribocode_orfs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the RiboCode ORFs by sample sheet selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "orf_calls"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the ORF class composition by sample sheet selection"
+    enabled: true
+
+  # Design table (optional): the group filter reaches the hub and every
+  # per-library collection.
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the sample sheet by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "sample_pca"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the sample space by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribowaltz_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Ribo-seq library summary by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribowaltz_frames"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the frame distribution by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribowaltz_psite_region"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the region composition by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribowaltz_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the footprint lengths by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribowaltz_metaprofile_start"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the start-codon metaprofile by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribowaltz_metaprofile_stop"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the stop-codon metaprofile by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribotish_orfs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Ribo-TISH ORFs by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "ribocode_orfs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the RiboCode ORFs by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "orf_calls"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the ORF class composition by design-table selection"
+    enabled: true
+
+  # Ribo-seq QC tab: the library-summary filters reach the other riboWaltz views.
+  - source_dc_tag: "ribowaltz_summary"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_frames"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry a library-quality filter onto the frame distribution"
+    enabled: true
+  - source_dc_tag: "ribowaltz_summary"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry a library-quality filter onto the footprint lengths"
+    enabled: true
+  - source_dc_tag: "ribowaltz_summary"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_metaprofile_start"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry a library-quality filter onto the start-codon metaprofile"
+    enabled: true
+  - source_dc_tag: "ribowaltz_summary"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_metaprofile_stop"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry a library-quality filter onto the stop-codon metaprofile"
+    enabled: true
+  - source_dc_tag: "ribowaltz_summary"
+    source_column: "sample"
+    target_dc_tag: "ribowaltz_psite_region"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry a library-quality filter onto the region composition"
+    enabled: true
+
+  # Translational regulation tab: a regulation-mode or contrast pick narrows
+  # the per-analysis table and the efficiency plane to the same genes.
+  - source_dc_tag: "anota2seq_regulation"
+    source_column: "gene_id"
+    target_dc_tag: "anota2seq_results"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the regulation-mode selection onto the per-analysis results"
+    enabled: true
+  - source_dc_tag: "anota2seq_regulation"
+    source_column: "gene_id"
+    target_dc_tag: "translational_efficiency"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the regulation-mode selection onto the translational efficiency plane"
+    enabled: true
+  - source_dc_tag: "anota2seq_regulation"
+    source_column: "contrast"
+    target_dc_tag: "anota2seq_results"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep the per-analysis results on the contrast picked for the regulation panels"
+    enabled: true
+
+  # ORF discovery tab: an ORF-class or caller-overlap pick reaches the
+  # per-library calls and their composition.
+  - source_dc_tag: "orf_overlap"
+    source_column: "orf_id"
+    target_dc_tag: "ribotish_orfs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "orf_id"}
+    description: "Carry an ORF selection onto the Ribo-TISH calls"
+    enabled: true
+  - source_dc_tag: "orf_overlap"
+    source_column: "orf_id"
+    target_dc_tag: "ribocode_orfs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "orf_id"}
+    description: "Carry an ORF selection onto the RiboCode calls"
+    enabled: true
+  - source_dc_tag: "orf_overlap"
+    source_column: "orf_class"
+    target_dc_tag: "orf_calls"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "orf_class"}
+    description: "Narrow the ORF class composition to the picked classes"
+    enabled: true
