@@ -168,7 +168,7 @@ def _staleness(thread: CommentThread, tab: dict | None, cache: _HashCache) -> St
     return Staleness(component_changed=changed, data_changed=data_changed)
 
 
-def _reattach(thread: CommentThread, tab: dict | None) -> CommentThread:
+def _reattach(thread: CommentThread, tab: dict | None, *, persist: bool = True) -> CommentThread:
     """Point a thread whose component index vanished at its component again, by title.
 
     A YAML import regenerates component indexes, so a thread on a component
@@ -176,6 +176,9 @@ def _reattach(thread: CommentThread, tab: dict | None) -> CommentThread:
     carries the anchor's (non-empty) ``component_title``, the thread moves to
     it: the new index is persisted and returned. No match or several matches
     leave the thread alone (it reads as ``component_missing``).
+
+    ``persist=False`` answers with the new index without writing it: viewer
+    reads (``/published``) never write.
     """
     anchor = thread.anchor
     if anchor.component_index is None or not anchor.component_title or tab is None:
@@ -187,6 +190,11 @@ def _reattach(thread: CommentThread, tab: dict | None) -> CommentThread:
     if len(matches) != 1:
         return thread
     new_index = matches[0]
+    moved = thread.model_copy(
+        update={"anchor": anchor.model_copy(update={"component_index": new_index})}
+    )
+    if not persist:
+        return moved
     try:
         comment_threads_collection.update_one(
             {"_id": ObjectId(thread.id), "anchor.component_index": anchor.component_index},
@@ -198,9 +206,7 @@ def _reattach(thread: CommentThread, tab: dict | None) -> CommentThread:
         )
     except Exception as exc:  # noqa: BLE001 — the read still answers with the new index
         logger.warning(f"comments: failed to persist re-attachment of {thread.id}: {exc}")
-    return thread.model_copy(
-        update={"anchor": anchor.model_copy(update={"component_index": new_index})}
-    )
+    return moved
 
 
 def _out(thread: CommentThread, tab: dict | None, cache: _HashCache | None = None) -> ThreadOut:
@@ -420,7 +426,7 @@ async def list_published_annotations(
     out: list[PublishedAnnotation] = []
     for doc in docs:
         doc.setdefault("comments", [])
-        thread = _reattach(_to_thread(doc), dashboard)
+        thread = _reattach(_to_thread(doc), dashboard, persist=False)
         ann = thread.annotation
         if ann is None or not ann.published or thread.is_agent_proposal:
             continue
@@ -495,28 +501,52 @@ async def create_thread(
     run_id = body.agent.run_id if body.agent is not None else None
     now = utcnow()
 
-    # Idempotence: a re-run updates its earlier proposal instead of duplicating it.
-    if body.dedupe_key is not None:
+    uid = str(current_user.id)
+
+    def check_run_cap() -> None:
+        taken = comment_threads_collection.count_documents(
+            {"run_id": run_id, "created_by.agent.on_behalf_of": uid}
+        )
+        if taken >= MAX_THREADS_PER_RUN:
+            raise HTTPException(
+                status_code=429,
+                detail=f"An agent run may open at most {MAX_THREADS_PER_RUN} threads.",
+            )
+
+    # Idempotence: an agent re-run updates the caller's own earlier proposal
+    # instead of duplicating it. Only a proposal still awaiting (or refused)
+    # review qualifies; after acceptance, a re-run yields a fresh proposal.
+    # Human requests never dedupe.
+    if body.agent is not None and body.dedupe_key is not None:
         existing_doc = comment_threads_collection.find_one(
             {
                 "dedupe_key": body.dedupe_key,
                 "anchor.dashboard_id": tab_id,
                 "anchor.component_index": anchor.component_index,
+                "created_by.kind": "agent",
+                "created_by.agent.on_behalf_of": uid,
+                "status": {"$in": ["proposed", "rejected"]},
             }
         )
         if existing_doc:
             existing = _to_thread(existing_doc)
-            update_set: dict[str, Any] = {"anchor": anchor.model_dump(mode="python")}
+            if existing.run_id != run_id:
+                check_run_cap()
+            update_set: dict[str, Any] = {
+                "anchor": anchor.model_dump(mode="python"),
+                "run_id": run_id,
+                # A rejected proposal made again goes back to review.
+                "status": "proposed",
+                "review": None,
+            }
             if body.annotation is not None:
-                annotation = body.annotation
-                if existing.annotation is not None and not existing.is_agent_proposal:
-                    # Keep a human's publish decision on an accepted thread.
-                    annotation = annotation.model_copy(
-                        update={"published": existing.annotation.published}
-                    )
+                # Still a proposal: never visible to viewers.
+                annotation = body.annotation.model_copy(update={"published": False})
                 update_set["annotation"] = annotation.model_dump(mode="python")
                 if existing.number is None:
                     update_set["number"] = _next_annotation_number(tab_id)
+            elif existing.annotation is not None:
+                update_set["annotation.published"] = False
             if body.evidence is not None:
                 update_set["evidence"] = [e.model_dump(mode="python") for e in body.evidence]
             update: dict[str, Any] = {"$set": update_set}
@@ -532,11 +562,7 @@ async def create_thread(
             return _update_thread(existing.id, update)
 
     if run_id is not None:
-        if comment_threads_collection.count_documents({"run_id": run_id}) >= MAX_THREADS_PER_RUN:
-            raise HTTPException(
-                status_code=429,
-                detail=f"An agent run may open at most {MAX_THREADS_PER_RUN} threads.",
-            )
+        check_run_cap()
 
     comments = []
     if body.body is not None:
@@ -610,6 +636,10 @@ async def update_thread(
                 status_code=422, detail=exc.errors(include_url=False, include_context=False)
             ) from exc
         update_set["annotation"] = annotation.model_dump(mode="python")
+        # Keep the "modified" review outcome: a human reshaped an agent's
+        # annotation (publishing alone is not a modification).
+        if thread.created_by.kind == "agent" and set(patch) - {"published"}:
+            update_set["human_edited"] = True
 
     return _update_thread(thread.id, {"$set": update_set})
 
@@ -672,6 +702,8 @@ async def add_comment(
 ) -> ThreadOut:
     """Reply to a thread."""
     thread, _ = _load_thread(thread_id, current_user)
+    if thread.status == "rejected":
+        raise HTTPException(status_code=409, detail="A rejected thread takes no replies.")
     now = utcnow()
     comment = Comment(
         id=uuid.uuid4().hex, author=_human(current_user), body=body.body, created_at=now

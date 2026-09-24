@@ -30,6 +30,7 @@ from depictio.models.models.comments import (
 )
 
 DC = ObjectId()
+BOT = {"name": "bot", "run_id": "r1"}
 RANGE = {"kind": "range", "geometry": {"kind": "x_range", "x0": 1, "x1": 2}, "label": "band"}
 
 
@@ -208,7 +209,7 @@ class TestThreads:
     def test_list_sorts_hides_rejected_and_filters(self, world):
         first = create(world)
         tab = create(world, anchor={"dashboard_id": world.main})
-        rejected = create(world, agent={"name": "bot"})
+        rejected = create(world, agent=BOT)
         run(
             cr.review_thread(
                 rejected.id, ThreadReview(decision="rejected"), current_user=world.editor
@@ -274,7 +275,7 @@ class TestThreads:
 
         mine = create(world)
         run(cr.delete_thread(mine.id, current_user=world.editor))
-        agent = create(world, agent={"name": "bot"})
+        agent = create(world, agent=BOT)
         run(cr.delete_thread(agent.id, current_user=world.editor))  # on_behalf_of
         assert world.db["comment_threads"].count_documents({}) == 0
 
@@ -424,7 +425,7 @@ class TestAgents:
             "anchor": {"dashboard_id": world.main, "component_index": "c1"},
             "body": "x",
             "dedupe_key": "k",
-            "agent": {"name": "bot"},
+            "agent": {"name": "bot", "run_id": "r1"},
         }
         assert client.post("/comments/threads", json=body).status_code == 201
         assert client.post("/comments/threads", json=body).status_code == 200
@@ -437,6 +438,107 @@ class TestAgents:
                 create(world, agent={"name": "bot", "run_id": "r9"})
             create(world, agent={"name": "bot", "run_id": "other"})
         assert status_of(e) == 429
+
+    def test_run_cap_is_per_user(self, world):
+        with patch.object(cr, "MAX_THREADS_PER_RUN", 2):
+            for _ in range(2):
+                create(world, agent={"name": "bot", "run_id": "r9"})
+            # Same run id, launched by someone else: a separate budget.
+            create(world, world.editor2, agent={"name": "bot", "run_id": "r9"})
+
+    def test_agent_requires_run_id(self, world):
+        app = FastAPI()
+        app.include_router(cr.comments_endpoint_router, prefix="/comments")
+        app.dependency_overrides[get_user_or_anonymous] = lambda: world.editor
+        body = {
+            "anchor": {"dashboard_id": world.main, "component_index": "c1"},
+            "body": "x",
+            "agent": {"name": "bot"},
+        }
+        assert TestClient(app).post("/comments/threads", json=body).status_code == 422
+
+    def dedupe(self, w, user=None, **kw):
+        resp = Response(status_code=201)
+        t = create(
+            w, user, response=resp, annotation=RANGE, agent=BOT, dedupe_key="k", body="claim", **kw
+        )
+        return t, resp.status_code
+
+    def test_dedupe_ignores_other_users_proposals(self, world):
+        first, _ = self.dedupe(world)
+        other, code = self.dedupe(world, world.editor2)
+        assert code == 201 and other.id != first.id
+
+    def test_dedupe_ignores_human_threads(self, world):
+        human = create(world, dedupe_key="k", body="claim")
+        agent, code = self.dedupe(world)
+        assert code == 201 and agent.id != human.id
+        # ...and a human request never updates an agent proposal.
+        again = create(world, dedupe_key="k", body="claim")
+        assert again.id not in (human.id, agent.id)
+        assert world.db["comment_threads"].count_documents({}) == 3
+
+    def test_dedupe_after_acceptance_makes_a_fresh_proposal(self, world):
+        first, _ = self.dedupe(world)
+        run(
+            cr.review_thread(first.id, ThreadReview(decision="accepted"), current_user=world.editor)
+        )
+        fresh, code = self.dedupe(world)
+        assert code == 201 and fresh.id != first.id and fresh.status == "proposed"
+
+    def test_dedupe_reproposes_a_rejected_thread(self, world):
+        first, _ = self.dedupe(world)
+        run(
+            cr.review_thread(first.id, ThreadReview(decision="rejected"), current_user=world.editor)
+        )
+        again, code = self.dedupe(world)
+        assert code == 200 and again.id == first.id
+        assert again.status == "proposed" and again.review is None
+
+    def test_dedupe_never_publishes(self, world):
+        first, _ = self.dedupe(world)
+        # A stored published flag (never reachable through the API) is cleared.
+        world.db["comment_threads"].update_one(
+            {"_id": ObjectId(first.id)}, {"$set": {"annotation.published": True}}
+        )
+        again, code = self.dedupe(world)
+        assert code == 200 and again.annotation.published is False
+
+    def test_human_edit_of_agent_annotation_is_recorded(self, world):
+        t = self.agent_thread(world)
+        assert t.human_edited is False
+        r = run(
+            cr.update_thread(
+                t.id, ThreadUpdate(annotation={"label": "fixed"}), current_user=world.editor
+            )
+        )
+        assert r.human_edited is True
+
+    def test_publishing_alone_is_not_an_edit(self, world):
+        t = self.agent_thread(world)
+        run(cr.review_thread(t.id, ThreadReview(decision="accepted"), current_user=world.editor))
+        r = run(
+            cr.update_thread(
+                t.id, ThreadUpdate(annotation={"published": True}), current_user=world.editor
+            )
+        )
+        assert r.human_edited is False
+
+    def test_human_thread_edit_is_not_flagged(self, world):
+        t = create(world, annotation=RANGE)
+        r = run(
+            cr.update_thread(
+                t.id, ThreadUpdate(annotation={"label": "x"}), current_user=world.editor
+            )
+        )
+        assert r.human_edited is False
+
+    def test_no_replies_on_rejected_thread(self, world):
+        t = self.agent_thread(world)
+        run(cr.review_thread(t.id, ThreadReview(decision="rejected"), current_user=world.editor))
+        with pytest.raises(HTTPException) as e:
+            run(cr.add_comment(t.id, CommentCreate(body="hi"), current_user=world.editor))
+        assert status_of(e) == 409
 
 
 # ---------------------------------------------------------------------------
@@ -495,10 +597,12 @@ class TestStaleness:
             {"dashboard_id": ObjectId(world.main)},
             {"$set": {"stored_metadata.0.index": "c1-new"}},
         )
-        counts = run(cr.count_threads(world.main, current_user=world.editor))
-        assert counts["open"] == {"c1-new": 1}
         pub = run(cr.list_published_annotations(world.main, current_user=world.viewer))
         assert pub[0].component_index == "c1-new"
+        stored = world.db["comment_threads"].find_one({"_id": ObjectId(t.id)})
+        assert stored["anchor"]["component_index"] == "c1"  # viewer reads never write
+        counts = run(cr.count_threads(world.main, current_user=world.editor))
+        assert counts["open"] == {"c1-new": 1}
         got = listing(world, component_index="c1-new")
         assert [x.id for x in got] == [t.id]
         assert not got[0].staleness.component_missing
@@ -546,8 +650,8 @@ class TestPublishedAndCounts:
             )
         )
         create(world, annotation=RANGE)  # unpublished
-        create(world, annotation=RANGE, agent={"name": "bot"})  # proposed
-        rejected = create(world, annotation=RANGE, agent={"name": "bot"})
+        create(world, annotation=RANGE, agent=BOT)  # proposed
+        rejected = create(world, annotation=RANGE, agent=BOT)
         run(
             cr.review_thread(
                 rejected.id, ThreadReview(decision="rejected"), current_user=world.editor
@@ -577,7 +681,7 @@ class TestPublishedAndCounts:
         create(world)
         create(world)
         create(world, anchor={"dashboard_id": world.main})
-        create(world, agent={"name": "bot"})
+        create(world, agent=BOT)
         resolved = create(world, anchor={"dashboard_id": world.main, "component_index": "c3"})
         run(
             cr.update_thread(
@@ -627,3 +731,53 @@ class TestCascade:
             run(dash_routes.delete_tab(ObjectId(world.child), current_user=world.editor))
         remaining = list(world.db["comment_threads"].find())
         assert [d["anchor"]["dashboard_id"] for d in remaining] == [world.main]
+
+
+# ---------------------------------------------------------------------------
+# Backup
+# ---------------------------------------------------------------------------
+def test_backup_leaves_out_threads_of_temporary_users_dashboards():
+    from contextlib import ExitStack
+
+    from depictio.api.v1.endpoints.backup_endpoints import routes as backup_routes
+
+    database = mongomock.MongoClient()["depictio_backup_test"]
+    temp_user, real_user = ObjectId(), ObjectId()
+    temp_dash, real_dash = ObjectId(), ObjectId()
+    database["users"].insert_many(
+        [{"_id": temp_user, "is_temporary": True}, {"_id": real_user, "is_temporary": False}]
+    )
+    database["dashboards"].insert_many(
+        [
+            {"dashboard_id": temp_dash, "permissions": {"owners": [{"_id": temp_user}]}},
+            {"dashboard_id": real_dash, "permissions": {"owners": [{"_id": real_user}]}},
+        ]
+    )
+    database["comment_threads"].insert_many(
+        [
+            {"_id": ObjectId(), "anchor": {"dashboard_id": str(temp_dash)}},
+            {"_id": ObjectId(), "anchor": {"dashboard_id": str(real_dash)}},
+        ]
+    )
+    names = [
+        "users",
+        "projects",
+        "dashboards",
+        "data_collections",
+        "workflows",
+        "files",
+        "deltatables",
+        "runs",
+        "groups",
+        "instance_settings",
+        "branding_assets",
+        "comment_threads",
+    ]
+    with ExitStack() as stack:
+        for name in names:
+            stack.enter_context(patch.object(backup_routes, f"{name}_collection", database[name]))
+        backup = asyncio.run(backup_routes._create_mongodb_backup("admin@example.com"))
+
+    threads = backup["data"]["comment_threads"]
+    assert [t["anchor"]["dashboard_id"] for t in threads] == [str(real_dash)]
+    assert [str(d["dashboard_id"]) for d in backup["data"]["dashboards"]] == [str(real_dash)]

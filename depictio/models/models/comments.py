@@ -191,7 +191,9 @@ class ArrowNote(_Strict):
     ay: float = -40
 
 
-Geometry = Annotated[XRange | YRange | RefLine | MarkedPoints | ArrowNote, Field(discriminator="kind")]
+Geometry = Annotated[
+    XRange | YRange | RefLine | MarkedPoints | ArrowNote, Field(discriminator="kind")
+]
 
 _GEOMETRY_KINDS: dict[str, frozenset[str]] = {
     "range": frozenset({"x_range", "y_range"}),
@@ -221,7 +223,9 @@ class Annotation(_Strict):
     @model_validator(mode="after")
     def _geometry_matches_kind(self) -> Annotation:
         if self.geometry.kind not in _GEOMETRY_KINDS[self.kind]:
-            raise ValueError(f"a {self.kind!r} annotation cannot use a {self.geometry.kind!r} geometry")
+            raise ValueError(
+                f"a {self.kind!r} annotation cannot use a {self.geometry.kind!r} geometry"
+            )
         return self
 
 
@@ -306,11 +310,15 @@ class CommentThread(BaseModel):
     updated_at: datetime
     resolved_by: str | None = None
     resolved_at: datetime | None = None
+    human_edited: bool = False
+    """A human changed an agent's annotation: the "modified" review outcome, kept for evaluation."""
     comments: list[Comment] = Field(default_factory=list)
 
     @property
     def is_agent_proposal(self) -> bool:
-        return self.created_by.kind == "agent" and (self.review is None or self.review.decision != "accepted")
+        return self.created_by.kind == "agent" and (
+            self.review is None or self.review.decision != "accepted"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +349,8 @@ class ThreadCreate(_Strict):
     def _has_content(self) -> ThreadCreate:
         if self.body is None and self.annotation is None:
             raise ValueError("a thread needs a comment or an annotation")
+        if self.agent is not None and not self.agent.run_id:
+            raise ValueError("an agent thread needs agent.run_id")
         if self.agent is not None and self.annotation is not None and self.annotation.published:
             raise ValueError("an agent annotation cannot be published before a human accepts it")
         return self

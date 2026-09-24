@@ -271,14 +271,20 @@ class TestThreadCreate:
             ThreadCreate(
                 anchor=_anchor(),
                 annotation=_range_annotation(published=True),
-                agent=AgentInfo(name="bot"),
+                agent=AgentInfo(name="bot", run_id="r1"),
             )
 
     def test_agent_unpublished_annotation_ok(self):
         tc = ThreadCreate(
-            anchor=_anchor(), annotation=_range_annotation(), agent=AgentInfo(name="bot")
+            anchor=_anchor(),
+            annotation=_range_annotation(),
+            agent=AgentInfo(name="bot", run_id="r1"),
         )
         assert tc.agent is not None
+
+    def test_agent_requires_run_id(self):
+        with pytest.raises(ValidationError, match="run_id"):
+            ThreadCreate(anchor=_anchor(), body="hi", agent=AgentInfo(name="bot"))
 
     def test_human_published_annotation_ok(self):
         tc = ThreadCreate(anchor=_anchor(), annotation=_range_annotation(published=True))
@@ -333,6 +339,9 @@ class TestCommentThread:
     def test_agent_accepted_not_proposal(self):
         review = Review(decision="accepted", by="u2", at=NOW)
         assert _thread(_agent(), review).is_agent_proposal is False
+
+    def test_human_edited_defaults_false(self):
+        assert _thread(_agent()).human_edited is False
 
     def test_agent_rejected_is_proposal(self):
         review = Review(decision="rejected", by="u2", at=NOW)

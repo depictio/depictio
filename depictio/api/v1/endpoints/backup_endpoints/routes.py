@@ -566,6 +566,20 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
 
     logger.info(f"Found {len(temp_user_ids)} temporary users to exclude")
 
+    # Their dashboards are left out below, so the comment threads anchored on
+    # them go too (threads store tab ids as strings).
+    temp_dashboard_ids = (
+        [
+            str(d["dashboard_id"])
+            for d in dashboards_collection.find(
+                {"permissions.owners._id": {"$in": temp_user_ids}}, {"dashboard_id": 1}
+            )
+            if d.get("dashboard_id") is not None
+        ]
+        if temp_user_ids
+        else []
+    )
+
     for collection_name, config in collections_config.items():
         # Extract collection with proper type for type checker
         collection = cast(Collection[dict[str, Any]], config["collection"])
@@ -577,7 +591,11 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
             base_filter["permissions.owners._id"] = {"$nin": temp_user_ids}
 
         # Get all documents (applying exclusions)
-        if base_filter:
+        if collection_name == "comment_threads" and temp_dashboard_ids:
+            thread_filter = {"anchor.dashboard_id": {"$in": temp_dashboard_ids}}
+            excluded_documents += collection.count_documents(thread_filter)
+            documents = list(collection.find({"$nor": [thread_filter]}))
+        elif base_filter:
             # Count excluded documents
             excluded_count = collection.count_documents(
                 {
