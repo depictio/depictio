@@ -10,6 +10,7 @@ import {
   pixelToData,
   pointMisses,
   publishedToRenderable,
+  relayoutSetsRange,
   restoreAxesUpdate,
   snapshotAxes,
   stripOverlayPoints,
@@ -233,6 +234,33 @@ describe('axis snapshot', () => {
   });
   it('treats missing axes as nothing to restore', () => {
     expect(restoreAxesUpdate(snapshotAxes(null))).toEqual({});
+  });
+  it('covers every panel axis of a faceted figure', () => {
+    const snap = snapshotAxes({
+      xaxis: { autorange: false, range: [0, 10] },
+      xaxis2: { autorange: false, range: [5, 6] },
+      yaxis2: { autorange: true, range: [0, 1] },
+      _subplots: { cartesian: ['xy'] },
+      xaxisfoo: { range: [1, 2] },
+    } as Record<string, unknown>);
+    expect(restoreAxesUpdate(snap)).toEqual({
+      'xaxis.range': [0, 10],
+      'xaxis2.range': [5, 6],
+      'yaxis2.autorange': true,
+    });
+  });
+});
+
+describe('relayoutSetsRange', () => {
+  it('detects explicit ranges on any axis', () => {
+    expect(relayoutSetsRange({ 'xaxis.range[0]': 1, 'xaxis.range[1]': 2 })).toBe(true);
+    expect(relayoutSetsRange({ 'xaxis2.range': [1, 2] })).toBe(true);
+    expect(relayoutSetsRange({ 'yaxis3.range[1]': 2 })).toBe(true);
+  });
+  it('ignores autorange and non-axis changes', () => {
+    expect(relayoutSetsRange({ 'xaxis.autorange': true })).toBe(false);
+    expect(relayoutSetsRange({ dragmode: 'zoom' })).toBe(false);
+    expect(relayoutSetsRange(null)).toBe(false);
   });
 });
 

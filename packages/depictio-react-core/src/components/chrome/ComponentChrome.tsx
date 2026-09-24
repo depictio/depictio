@@ -177,11 +177,14 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   if (comments) actions.push('comments');
   // Annotate mode: cartesian Plotly figures, the advanced_viz kinds whose
   // renderer wires the annotation layer, and tables with a row-id column; and
-  // only when the app's annotation layer lets this user create annotations.
+  // only when the app's annotation layer lets this user create annotations
+  // and the mounted renderer reports it can capture in its current view (not
+  // a 3D embedding, a multi-panel barplot tab...).
   const annotationLayer = useAnnotationLayer();
   const canAnnotateHere =
     Boolean(annotationLayer?.canAnnotate) &&
-    componentSupportsAnnotation(componentType, metadata as Record<string, unknown>);
+    componentSupportsAnnotation(componentType, metadata as Record<string, unknown>) &&
+    Boolean(annotationLayer?.isAnnotatable(String(metadata.index)));
   const annotateActive =
     canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
   if (canAnnotateHere) actions.push('annotate');

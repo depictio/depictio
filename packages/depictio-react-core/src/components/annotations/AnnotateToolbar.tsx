@@ -3,6 +3,7 @@ import { ActionIcon, Button, Group, Paper, Popover, Stack, Text, Tooltip } from 
 import { Icon } from '@iconify/react';
 
 import type { AnnotationDraft, PendingAnnotation } from '../../annotations/AnnotationLayerContext';
+import { ANNOTATE_UI_ATTR } from '../../annotations/escape';
 import { annotateHint } from '../../annotations/layer';
 import type { AnnotateOptions, AnnotateTool } from '../../annotations/layer';
 import { Z_LAYERS } from '../../zLayers';
@@ -140,6 +141,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
           p={4}
           withBorder
           data-testid="annotate-toolbar"
+          {...{ [ANNOTATE_UI_ATTR]: '' }}
           onMouseDown={stop}
           onPointerDown={stop}
           onTouchStart={stop}
@@ -231,7 +233,7 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
           </Stack>
         </Paper>
       </Popover.Target>
-      <Popover.Dropdown onMouseDown={stop} onPointerDown={stop}>
+      <Popover.Dropdown onMouseDown={stop} onPointerDown={stop} {...{ [ANNOTATE_UI_ATTR]: '' }}>
         {pending && (
           <AnnotationForm
             pending={pending}

@@ -10,6 +10,7 @@ import {
   normalizeTraces,
   pixelToData,
   pointMisses,
+  relayoutSetsRange,
   restoreAxesUpdate,
   snapshotAxes,
   stripOverlayPoints,
@@ -29,8 +30,11 @@ import {
   appendAnnotationTraces,
   decorateAnnotationLayout,
   mergePlotHandlers,
+  restoreSelectionUpdates,
+  snapshotSelection,
 } from '../../annotations/plotDecorate';
-import type { PlotEventHandlers } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers, SelectionSnapshot } from '../../annotations/plotDecorate';
+import { isAnnotateEscape } from '../../annotations/escape';
 import AnnotateToolbar from './AnnotateToolbar';
 
 const NO_ANNOTATIONS: RenderableAnnotation[] = [];
@@ -62,6 +66,36 @@ export function clearDrawnSelection(gd: HTMLElement | null): void {
     // best-effort
   }
 }
+
+/** Put back the selection a snapshot recorded (see `snapshotSelection`). Best effort. */
+function restoreSelection(gd: HTMLElement | null, snapshot: SelectionSnapshot | null): void {
+  if (!gd || !snapshot) return;
+  try {
+    const target = gd as unknown as PlotlyTarget;
+    const { relayout, restyle } = restoreSelectionUpdates(snapshot);
+    Plotly.relayout(target, relayout as Partial<Plotly.Layout>).catch(() => {});
+    const data = (gd as unknown as { data?: unknown[] }).data;
+    const traceCount = Array.isArray(data) ? data.length : 0;
+    if (restyle && traceCount > 0) {
+      // Traces may have been removed since the snapshot.
+      const keep = restyle.indices.filter((i) => i < traceCount);
+      if (keep.length) {
+        const values = (restyle.update.selectedpoints as unknown[]).slice(0, keep.length);
+        Plotly.restyle(target, { selectedpoints: values } as unknown as Partial<Plotly.PlotData>, keep).catch(
+          () => {},
+        );
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+const readSelectionState = (gd: HTMLElement | null): SelectionSnapshot | null => {
+  if (!gd) return null;
+  const g = gd as unknown as { layout?: { selections?: unknown }; data?: unknown[] };
+  return snapshotSelection(g.layout, g.data);
+};
 
 const readFullLayout = (gd: HTMLElement | null) =>
   (gd as unknown as { _fullLayout?: Record<string, never> } | null)?._fullLayout ?? null;
@@ -180,6 +214,22 @@ export function usePlotAnnotationLayer({
   const gdRef = useRef<HTMLElement | null>(null);
   const [graphDiv, setGraphDiv] = useState<HTMLElement | null>(null);
 
+  // Tell the chrome whether this view can take annotations (its Annotate
+  // button is gated on it), and leave annotate mode if the view stops
+  // supporting it (3D toggle, multi-panel tab...).
+  const reportAnnotatable = layer?.reportAnnotatable;
+  useEffect(() => {
+    if (!reportAnnotatable) return;
+    reportAnnotatable(componentIndex, annotatable);
+    return () => reportAnnotatable(componentIndex, false);
+  }, [reportAnnotatable, componentIndex, annotatable]);
+  const annotateHereWhileDisabled =
+    !!layer && !annotatable && layer.annotate?.componentIndex === componentIndex;
+  useEffect(() => {
+    if (annotateHereWhileDisabled) layer?.setAnnotate(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotateHereWhileDisabled]);
+
   const decoratedData = useMemo(
     () => appendAnnotationTraces(data ?? NO_DATA, plotlyAnnotations),
     [data, plotlyAnnotations],
@@ -203,25 +253,48 @@ export function usePlotAnnotationLayer({
   latest.current = { layer, annotateTool, annotateOptions, componentIndex, pointIdIndex, pointIdColumn };
 
   // ── Range: a box zoom is captured, then immediately undone so the zoom
-  // never sticks. `restoringRef` swallows the relayout event our own undo emits.
+  // never sticks. `restoringRef` swallows the relayout event our own undo
+  // emits. Only a drag started in a plot area (`.nsewdrag`) is captured; any
+  // other explicit range change (scroll zoom, axis drag, a facet panel's own
+  // axes) is undone without creating an annotation.
   const axisSnapshotRef = useRef<AxisSnapshot | null>(null);
   const restoringRef = useRef(false);
+  const dragArmedRef = useRef(false);
 
   useEffect(() => {
     if (interaction?.capture !== 'relayout' || !graphDiv) return;
     axisSnapshotRef.current = snapshotAxes(readFullLayout(graphDiv));
+    dragArmedRef.current = false;
+    const onDown = (e: Event) => {
+      const t = e.target as Element | null;
+      dragArmedRef.current = !!t?.closest?.('.nsewdrag');
+    };
+    const onWheel = () => {
+      dragArmedRef.current = false;
+    };
+    // Capture phase: Plotly's drag handlers may stop propagation.
+    graphDiv.addEventListener('mousedown', onDown, true);
+    graphDiv.addEventListener('touchstart', onDown, true);
+    graphDiv.addEventListener('wheel', onWheel, true);
+    return () => {
+      graphDiv.removeEventListener('mousedown', onDown, true);
+      graphDiv.removeEventListener('touchstart', onDown, true);
+      graphDiv.removeEventListener('wheel', onWheel, true);
+    };
   }, [interaction?.capture, graphDiv, annotateOptions.rangeAxis]);
 
   const onAnnotateRelayout = useCallback((event: Record<string, unknown>) => {
     const { layer: l, annotateTool: tool, annotateOptions: opts, componentIndex: idx } = latest.current;
     if (!l || restoringRef.current || tool !== 'range') return;
     const gd = gdRef.current;
-    const geometry = rangeFromRelayout(event, opts.rangeAxis);
-    if (!geometry) {
+    const armed = dragArmedRef.current;
+    dragArmedRef.current = false;
+    if (!relayoutSetsRange(event)) {
       // Autorange (double-click) or anything else: that is the new baseline.
       axisSnapshotRef.current = snapshotAxes(readFullLayout(gd));
       return;
     }
+    const geometry = armed ? rangeFromRelayout(event, opts.rangeAxis) : null;
     const snapshot = axisSnapshotRef.current;
     if (gd && snapshot) {
       restoringRef.current = true;
@@ -235,17 +308,33 @@ export function usePlotAnnotationLayer({
           }, 0);
         });
     }
-    if (!pendingRef.current) l.onCaptured(idx, geometry, 'range');
+    if (geometry && !pendingRef.current) l.onCaptured(idx, geometry, 'range');
   }, []);
 
-  // ── Points: a lasso/box selection is captured, then cleared; nothing
-  // reaches the dashboard filters.
+  // ── Points / line / note: the figure's own selection (e.g. the dashboard
+  // selection highlight) is recorded on entry and put back after every
+  // capture and on exit, so annotating never wipes it.
+  const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
+  const keepsSelection = interaction?.capture === 'selected' || interaction?.capture === 'click';
+  useEffect(() => {
+    if (!keepsSelection || !graphDiv) return;
+    const snapshot = readSelectionState(graphDiv);
+    selectionSnapshotRef.current = snapshot;
+    return () => {
+      selectionSnapshotRef.current = null;
+      restoreSelection(graphDiv, snapshot);
+    };
+  }, [keepsSelection, graphDiv]);
+
+  // ── Points: a lasso/box selection is captured, then the figure's previous
+  // selection is restored; nothing reaches the dashboard filters.
   const onAnnotateSelected = useCallback((event: any) => {
     const { layer: l, annotateTool: tool, componentIndex: idx, pointIdIndex: slot, pointIdColumn: col } =
       latest.current;
     if (!l || tool !== 'points' || !event) return;
     const geometry = markedPointsFromSelection(stripOverlayPoints(event), col ? slot : undefined, col);
-    clearDrawnSelection(gdRef.current);
+    if (selectionSnapshotRef.current) restoreSelection(gdRef.current, selectionSnapshotRef.current);
+    else clearDrawnSelection(gdRef.current);
     if (geometry && !pendingRef.current) l.onCaptured(idx, geometry, 'points');
   }, []);
 
@@ -285,7 +374,7 @@ export function usePlotAnnotationLayer({
   useEffect(() => {
     if (!annotating || !layer) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (!isAnnotateEscape(e, gdRef.current)) return;
       if (pendingRef.current) layer.cancelPending();
       else layer.setAnnotate(null);
     };

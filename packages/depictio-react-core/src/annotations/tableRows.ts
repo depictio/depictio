@@ -22,7 +22,10 @@ export interface RowAnnotationMark {
 }
 
 /** Row id (stringified row-id column value) → how the row is marked. */
-export type RowAnnotationMap = Map<string, RowAnnotationMark>;
+export type RowAnnotationMap = ReadonlyMap<string, RowAnnotationMark>;
+
+/** The one map returned whenever no row is marked (stable identity). */
+export const EMPTY_ROW_ANNOTATIONS: RowAnnotationMap = new Map();
 
 /** Whether a table annotation applies to rows keyed by `rowIdColumn`. */
 export function isRowAnnotation(item: RenderableAnnotation, rowIdColumn: string): boolean {
@@ -52,9 +55,10 @@ export function buildRowAnnotationMap(
   rowIdColumn: string | null | undefined,
   highlightId: string | null = null,
 ): RowAnnotationMap {
-  const map: RowAnnotationMap = new Map();
-  if (!rowIdColumn) return map;
+  if (!rowIdColumn) return EMPTY_ROW_ANNOTATIONS;
   const relevant = items.filter((i) => isRowAnnotation(i, rowIdColumn)).sort(byNumber);
+  if (!relevant.length) return EMPTY_ROW_ANNOTATIONS;
+  const map = new Map<string, RowAnnotationMark>();
   // The focused annotation claims its rows first; the rest go by number.
   const ordered = highlightId
     ? [...relevant.filter((i) => i.id === highlightId), ...relevant.filter((i) => i.id !== highlightId)]
@@ -81,7 +85,45 @@ export function buildRowAnnotationMap(
       });
     }
   }
-  return map;
+  return map.size ? map : EMPTY_ROW_ANNOTATIONS;
+}
+
+/**
+ * Everything `buildRowAnnotationMap` depends on, as a string: memoising the
+ * map on it keeps its identity (and the table's row classes) unchanged when
+ * nothing that styles a row changed. `highlightId` only counts when it is one
+ * of the row annotations, so focusing an unrelated thread redraws nothing.
+ * '' when no annotation applies.
+ */
+export function rowAnnotationContentKey(
+  items: readonly RenderableAnnotation[],
+  rowIdColumn: string | null | undefined,
+  highlightId: string | null = null,
+): string {
+  if (!rowIdColumn) return '';
+  const relevant = items.filter((i) => isRowAnnotation(i, rowIdColumn));
+  if (!relevant.length) return '';
+  const focused = highlightId != null && relevant.some((i) => i.id === highlightId) ? highlightId : null;
+  return JSON.stringify([
+    rowIdColumn,
+    focused,
+    relevant.map((i) => [
+      i.id,
+      i.number,
+      i.annotation.color ?? null,
+      (i.annotation.geometry as MarkedPoints).ids,
+    ]),
+  ]);
+}
+
+/**
+ * CSV column keys: the displayed columns in their current order, minus the
+ * annotation badge column. Null when the badge column is not displayed (the
+ * grid's default export already leaves it out).
+ */
+export function exportColumnKeys(displayedColIds: readonly string[], badgeColId: string): string[] | null {
+  if (!displayedColIds.includes(badgeColId)) return null;
+  return displayedColIds.filter((id) => id !== badgeColId);
 }
 
 /** AG Grid row classes for a marked row (see styles/table-annotations.css). */

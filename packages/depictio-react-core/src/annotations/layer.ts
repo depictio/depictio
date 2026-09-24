@@ -352,39 +352,61 @@ export function publishedToRenderable(
   return out;
 }
 
-export interface AxisSnapshot {
-  x: { autorange: boolean; range: AxisValue[] | null } | null;
-  y: { autorange: boolean; range: AxisValue[] | null } | null;
+export interface AxisState {
+  autorange: boolean;
+  range: AxisValue[] | null;
 }
+
+/**
+ * Ranges of every cartesian axis of a figure, keyed by layout name
+ * (`xaxis`, `yaxis`, `xaxis2`...): faceted figures have one pair per panel.
+ */
+export type AxisSnapshot = Record<string, AxisState | null>;
 
 interface FullAxisLike {
   autorange?: unknown;
   range?: unknown;
 }
 
-function snapAxis(ax: FullAxisLike | undefined): AxisSnapshot['x'] {
-  if (!ax) return null;
+const AXIS_NAME = /^[xy]axis\d*$/;
+
+function snapAxis(ax: FullAxisLike | undefined): AxisState | null {
+  if (!ax || typeof ax !== 'object') return null;
   const range = Array.isArray(ax.range) && ax.range.length >= 2 ? [...ax.range] as AxisValue[] : null;
   return { autorange: ax.autorange === true || range == null, range };
 }
 
-/** The primary axes' current ranges, read from a graph div's `_fullLayout`. */
-export function snapshotAxes(
-  fullLayout: { xaxis?: FullAxisLike; yaxis?: FullAxisLike } | null | undefined,
-): AxisSnapshot {
-  return { x: snapAxis(fullLayout?.xaxis), y: snapAxis(fullLayout?.yaxis) };
+/** Every cartesian axis' current range, read from a graph div's `_fullLayout`. */
+export function snapshotAxes(fullLayout: Record<string, unknown> | null | undefined): AxisSnapshot {
+  const out: AxisSnapshot = {};
+  if (!fullLayout) return out;
+  for (const key of Object.keys(fullLayout)) {
+    if (!AXIS_NAME.test(key)) continue;
+    const snap = snapAxis(fullLayout[key] as FullAxisLike | undefined);
+    if (snap) out[key] = snap;
+  }
+  return out;
 }
 
-/** `Plotly.relayout` update putting the axes back where the snapshot was. */
+/** `Plotly.relayout` update putting every axis back where the snapshot was. */
 export function restoreAxesUpdate(snapshot: AxisSnapshot): Record<string, unknown> {
   const update: Record<string, unknown> = {};
-  (['x', 'y'] as const).forEach((a) => {
-    const s = snapshot[a];
-    if (!s) return;
-    if (s.autorange || !s.range) update[`${a}axis.autorange`] = true;
-    else update[`${a}axis.range`] = [...s.range];
-  });
+  for (const [name, s] of Object.entries(snapshot)) {
+    if (!s) continue;
+    if (s.autorange || !s.range) update[`${name}.autorange`] = true;
+    else update[`${name}.range`] = [...s.range];
+  }
   return update;
+}
+
+/**
+ * Whether a `plotly_relayout` event set an explicit range on some axis (a box
+ * zoom, a scroll zoom, an axis drag, on any panel), as opposed to an autorange
+ * reset or a non-axis change.
+ */
+export function relayoutSetsRange(ev: Record<string, unknown> | null | undefined): boolean {
+  if (!ev) return false;
+  return Object.keys(ev).some((k) => /^[xy]axis\d*\.range(\[[01]\])?$/.test(k));
 }
 
 interface PixelAxisLike {

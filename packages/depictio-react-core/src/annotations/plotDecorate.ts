@@ -102,6 +102,15 @@ export function decorateAnnotationLayout(
   }
   if (interaction) {
     base.dragmode = interaction.dragmode;
+    // A click never selects (and so never dims) points while annotating:
+    // line/note clicks are captured by the layer, not by Plotly.
+    base.clickmode = 'event';
+    // The modebar's zoom/pan/select buttons would either switch the tool's
+    // gesture away or emit axis ranges the range tool would capture.
+    base.modebar = {
+      ...((base.modebar as Record<string, unknown>) || {}),
+      remove: mergeModebarRemove((base.modebar as { remove?: unknown } | undefined)?.remove),
+    };
     if (interaction.fixedAxis) {
       // A range drag moves along one axis only: freeze the other so the zoom
       // box becomes a band.
@@ -110,6 +119,89 @@ export function decorateAnnotationLayout(
     }
   }
   return base;
+}
+
+/** Modebar buttons hidden while annotating (see decorateAnnotationLayout). */
+export const ANNOTATE_MODEBAR_REMOVE: readonly string[] = [
+  'zoom2d',
+  'pan2d',
+  'select2d',
+  'lasso2d',
+  'zoomIn2d',
+  'zoomOut2d',
+  'autoScale2d',
+  'resetScale2d',
+];
+
+function mergeModebarRemove(own: unknown): string[] {
+  const list = Array.isArray(own)
+    ? own.filter((b): b is string => typeof b === 'string' && b !== '')
+    : typeof own === 'string' && own
+      ? [own]
+      : [];
+  return Array.from(new Set([...list, ...ANNOTATE_MODEBAR_REMOVE]));
+}
+
+/**
+ * The selection a figure shows (drawn `layout.selections` and each trace's
+ * `selectedpoints`), e.g. a dashboard selection highlight. Captured on
+ * entering a points/click tool so annotating never wipes it.
+ */
+export interface SelectionSnapshot {
+  selections: unknown[] | null;
+  /** Per trace, in trace order; null = no selection on that trace. */
+  selectedpoints: Array<unknown[] | null>;
+}
+
+function copyPoints(v: unknown): unknown[] | null {
+  if (Array.isArray(v)) return [...v];
+  if (ArrayBuffer.isView(v) && typeof (v as unknown as { length?: unknown }).length === 'number') {
+    return Array.from(v as unknown as ArrayLike<unknown>);
+  }
+  return null;
+}
+
+/** Snapshot of the selection state of a graph div's `layout` / `data`. */
+export function snapshotSelection(
+  layout: { selections?: unknown } | null | undefined,
+  data: readonly unknown[] | null | undefined,
+): SelectionSnapshot {
+  const sel = layout?.selections;
+  return {
+    selections: Array.isArray(sel)
+      ? sel.map((s) => (s && typeof s === 'object' ? { ...(s as Record<string, unknown>) } : s))
+      : null,
+    selectedpoints: (data ?? []).map((t) =>
+      copyPoints((t as { selectedpoints?: unknown } | null)?.selectedpoints),
+    ),
+  };
+}
+
+/**
+ * The `Plotly.relayout` / `Plotly.restyle` calls putting a snapshot back.
+ * Only the traces present at snapshot time are restyled; `restyle` is null
+ * when the figure had no traces.
+ */
+export function restoreSelectionUpdates(snapshot: SelectionSnapshot): {
+  relayout: Record<string, unknown>;
+  restyle: { update: Record<string, unknown>; indices: number[] } | null;
+} {
+  const n = snapshot.selectedpoints.length;
+  return {
+    relayout: {
+      selections: snapshot.selections
+        ? snapshot.selections.map((s) => (s && typeof s === 'object' ? { ...(s as object) } : s))
+        : null,
+    },
+    restyle:
+      n > 0
+        ? {
+            // One value per trace (restyle's per-trace array form).
+            update: { selectedpoints: snapshot.selectedpoints.map((p) => (p ? [...p] : null)) },
+            indices: Array.from({ length: n }, (_, i) => i),
+          }
+        : null,
+  };
 }
 
 /** The Plotly event props a renderer and the annotation layer both use. */

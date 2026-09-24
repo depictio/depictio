@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRowAnnotationMap,
+  EMPTY_ROW_ANNOTATIONS,
+  exportColumnKeys,
   markedRowsFromSelection,
+  rowAnnotationContentKey,
   rowAnnotationBadge,
   rowAnnotationClasses,
 } from './tableRows';
@@ -110,5 +113,46 @@ describe('markedRowsFromSelection', () => {
   it('caps the ids', () => {
     const many = Array.from({ length: MAX_POINT_IDS + 10 }, (_, i) => ({ id: i }));
     expect(markedRowsFromSelection(many, 'id')?.ids).toHaveLength(MAX_POINT_IDS);
+  });
+});
+
+describe('row annotation map identity', () => {
+  it('returns the shared empty map when nothing applies', () => {
+    expect(buildRowAnnotationMap([], 'id')).toBe(EMPTY_ROW_ANNOTATIONS);
+    expect(buildRowAnnotationMap([item('a', 1, rows('id', [1]))], null)).toBe(EMPTY_ROW_ANNOTATIONS);
+    expect(buildRowAnnotationMap([item('a', 1, rows('other', [1]))], 'id', 'a')).toBe(
+      EMPTY_ROW_ANNOTATIONS,
+    );
+  });
+});
+
+describe('rowAnnotationContentKey', () => {
+  const items = [item('a', 1, rows('id', [1, 2])), item('b', 2, rows('other', [3]))];
+  it('is empty when no annotation marks rows of the column', () => {
+    expect(rowAnnotationContentKey([], 'id')).toBe('');
+    expect(rowAnnotationContentKey(items, null)).toBe('');
+    expect(rowAnnotationContentKey(items, 'missing', 'a')).toBe('');
+  });
+  it('ignores a focused thread that marks no row of this table', () => {
+    expect(rowAnnotationContentKey(items, 'id', 'b')).toBe(rowAnnotationContentKey(items, 'id', null));
+    expect(rowAnnotationContentKey(items, 'id', 'zzz')).toBe(rowAnnotationContentKey(items, 'id'));
+    expect(rowAnnotationContentKey(items, 'id', 'a')).not.toBe(rowAnnotationContentKey(items, 'id'));
+  });
+  it('is equal for equal content in new arrays and changes with the rows', () => {
+    const copy = [item('a', 1, rows('id', [1, 2])), item('b', 2, rows('other', [3]))];
+    expect(rowAnnotationContentKey(copy, 'id')).toBe(rowAnnotationContentKey(items, 'id'));
+    const moved = [item('a', 1, rows('id', [1, 4]))];
+    expect(rowAnnotationContentKey(moved, 'id')).not.toBe(rowAnnotationContentKey(items, 'id'));
+    const recolored = [item('a', 1, { ...rows('id', [1, 2]), color: 'blue' })];
+    expect(rowAnnotationContentKey(recolored, 'id')).not.toBe(rowAnnotationContentKey(items, 'id'));
+  });
+});
+
+describe('exportColumnKeys', () => {
+  it('drops the badge column and keeps the displayed order', () => {
+    expect(exportColumnKeys(['__badge', 'b', 'a'], '__badge')).toEqual(['b', 'a']);
+  });
+  it('is null when the badge column is not displayed', () => {
+    expect(exportColumnKeys(['b', 'a'], '__badge')).toBeNull();
   });
 });

@@ -5,7 +5,10 @@ import {
   appendAnnotationTraces,
   componentSupportsAnnotation,
   decorateAnnotationLayout,
+  ANNOTATE_MODEBAR_REMOVE,
   mergePlotHandlers,
+  restoreSelectionUpdates,
+  snapshotSelection,
   supportsAdvancedVizAnnotation,
   tableAnnotationColumn,
 } from './plotDecorate';
@@ -90,6 +93,52 @@ describe('decorateAnnotationLayout', () => {
     expect(out.xaxis).toEqual({ title: 'x', fixedrange: true });
     expect(out).not.toHaveProperty('yaxis');
     expect(decorateAnnotationLayout({}, null, { dragmode: false, fixedAxis: null }).dragmode).toBe(false);
+  });
+  it('makes clicks event-only and hides the zoom/pan/select modebar buttons while annotating', () => {
+    const own = { modebar: { orientation: 'v', remove: ['toImage', 'zoomIn2d'] }, clickmode: 'event+select' };
+    const out = decorateAnnotationLayout(own, null, { dragmode: 'zoom', fixedAxis: 'y' });
+    expect(out.clickmode).toBe('event');
+    const modebar = out.modebar as { orientation: string; remove: string[] };
+    expect(modebar.orientation).toBe('v');
+    expect(modebar.remove).toContain('toImage');
+    for (const b of ANNOTATE_MODEBAR_REMOVE) expect(modebar.remove).toContain(b);
+    expect(modebar.remove.filter((b) => b === 'zoomIn2d')).toHaveLength(1);
+    expect(own.modebar.remove).toEqual(['toImage', 'zoomIn2d']);
+    const str = decorateAnnotationLayout({ modebar: { remove: 'toImage' } }, null, {
+      dragmode: 'lasso',
+      fixedAxis: null,
+    });
+    expect((str.modebar as { remove: string[] }).remove[0]).toBe('toImage');
+  });
+  it('leaves clickmode and the modebar alone outside annotate mode', () => {
+    const out = decorateAnnotationLayout({}, { shapes: [{ type: 'rect' }], annotations: [] }, null);
+    expect(out).not.toHaveProperty('clickmode');
+    expect(out).not.toHaveProperty('modebar');
+  });
+});
+
+describe('selection snapshot', () => {
+  it('records drawn selections and per-trace selectedpoints as copies', () => {
+    const selections = [{ type: 'rect', x0: 0, x1: 1 }];
+    const data = [{ selectedpoints: [1, 2] }, {}, { selectedpoints: new Int32Array([4]) }];
+    const snap = snapshotSelection({ selections }, data);
+    expect(snap.selections).toEqual(selections);
+    expect(snap.selections![0]).not.toBe(selections[0]);
+    expect(snap.selectedpoints).toEqual([[1, 2], null, [4]]);
+    (data[0].selectedpoints as number[]).push(9);
+    expect(snap.selectedpoints[0]).toEqual([1, 2]);
+  });
+  it('builds the relayout/restyle calls that put it back', () => {
+    const snap = snapshotSelection({ selections: [{ type: 'rect' }] }, [{ selectedpoints: [3] }, {}]);
+    const { relayout, restyle } = restoreSelectionUpdates(snap);
+    expect(relayout).toEqual({ selections: [{ type: 'rect' }] });
+    expect(restyle).toEqual({ update: { selectedpoints: [[3], null] }, indices: [0, 1] });
+  });
+  it('clears everything when nothing was selected', () => {
+    const { relayout, restyle } = restoreSelectionUpdates(snapshotSelection({}, [{}]));
+    expect(relayout).toEqual({ selections: null });
+    expect(restyle).toEqual({ update: { selectedpoints: [null] }, indices: [0] });
+    expect(restoreSelectionUpdates(snapshotSelection(null, null)).restyle).toBeNull();
   });
 });
 

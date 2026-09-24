@@ -47,6 +47,14 @@ export interface AnnotationLayerControl {
   cancelPending: () => void;
   /** Stores the pending annotation. Rejects on failure (the popover stays open). */
   savePending: (draft: AnnotationDraft) => Promise<void>;
+  /**
+   * Renderers report whether they can capture annotations right now (a 3D
+   * embedding, a multi-panel barplot tab or a table without a row-id column
+   * cannot). Stable identity; pass false on unmount.
+   */
+  reportAnnotatable: (componentIndex: string, annotatable: boolean) => void;
+  /** Last value a mounted renderer reported for the component (false when none). */
+  isAnnotatable: (componentIndex: string) => boolean;
 }
 
 export const AnnotationLayerContext = createContext<AnnotationLayerControl | null>(null);
@@ -70,6 +78,20 @@ export interface AnnotationLayerProviderProps {
 }
 
 const noop = () => undefined;
+const EMPTY_ANNOTATABLE: Record<string, boolean> = {};
+
+/** `prev` with the component's flag set; `prev` itself when unchanged. */
+export function withAnnotatable(
+  prev: Record<string, boolean>,
+  componentIndex: string,
+  value: boolean,
+): Record<string, boolean> {
+  if (value ? prev[componentIndex] === true : !(componentIndex in prev)) return prev;
+  const next = { ...prev };
+  if (value) next[componentIndex] = true;
+  else delete next[componentIndex];
+  return next;
+}
 
 /**
  * Builds the layer control from plain values and owns the pending capture,
@@ -86,6 +108,10 @@ export const AnnotationLayerProvider: React.FC<AnnotationLayerProviderProps> = (
   children,
 }) => {
   const [pending, setPending] = useState<PendingAnnotation | null>(null);
+  const [annotatable, setAnnotatable] = useState<Record<string, boolean>>(EMPTY_ANNOTATABLE);
+  const reportAnnotatable = useCallback((componentIndex: string, value: boolean) => {
+    setAnnotatable((prev) => withAnnotatable(prev, componentIndex, value));
+  }, []);
   const effectiveAnnotate = canAnnotate ? annotate : null;
 
   // Leaving annotate mode (or moving it to another component) drops the shape
@@ -127,8 +153,22 @@ export const AnnotationLayerProvider: React.FC<AnnotationLayerProviderProps> = (
       onCaptured,
       cancelPending,
       savePending,
+      reportAnnotatable,
+      isAnnotatable: (componentIndex) => annotatable[componentIndex] === true,
     }),
-    [items, highlightId, canAnnotate, effectiveAnnotate, setAnnotate, pending, onCaptured, cancelPending, savePending],
+    [
+      items,
+      highlightId,
+      canAnnotate,
+      effectiveAnnotate,
+      setAnnotate,
+      pending,
+      onCaptured,
+      cancelPending,
+      savePending,
+      reportAnnotatable,
+      annotatable,
+    ],
   );
 
   return <AnnotationLayerContext.Provider value={value}>{children}</AnnotationLayerContext.Provider>;

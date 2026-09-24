@@ -6,3 +6,4 @@ export * from './layer';
 export * from './AnnotationLayerContext';
 export * from './tableRows';
 export * from './plotDecorate';
+export * from './escape';

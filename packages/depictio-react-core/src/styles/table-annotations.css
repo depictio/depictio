@@ -7,7 +7,9 @@
  * Same specificity trick as realtime-highlight.css: scope under both Alpine
  * theme roots with the ``.ag-row`` qualifier + ``!important`` so the theme's
  * odd-row stripe does not win. Selected rows keep AG Grid's selection tint so
- * the selection stays visible in annotate mode.
+ * the dashboard selection stays visible in annotate mode; rows picked for a
+ * new annotation (``depictio-row-annotate-selected``) get a dashed outline on
+ * top, which is independent of that selection.
  */
 
 .depictio-row-annotated-blue {
@@ -126,4 +128,13 @@
   color: var(--depictio-annot-stripe, var(--mantine-color-dimmed));
   font-weight: 600;
   letter-spacing: -0.05em;
+}
+
+/* Annotate mode: rows picked for the next "Mark rows". Drawn as an outline so
+ * it combines with the dashboard selection tint and existing annotations. */
+.ag-theme-alpine .ag-row.depictio-row-annotate-selected,
+.ag-theme-alpine-dark .ag-row.depictio-row-annotate-selected {
+  outline: 2px dashed var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+  background-color: var(--mantine-primary-color-light) !important;
 }
