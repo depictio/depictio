@@ -5014,6 +5014,7 @@ export interface PublishedAnnotation {
   label: string;
   color: AnnotationColor;
   style: AnnotationStyle;
+  variant?: string | null;
 }
 
 export interface ListThreadsOptions {

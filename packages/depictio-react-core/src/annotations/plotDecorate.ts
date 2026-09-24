@@ -5,9 +5,11 @@
  * Shared by FigureRenderer and the advanced_viz renderers through
  * `usePlotAnnotationLayer`. No React, no DOM.
  */
-import type { AnnotateInteraction } from './layer';
+import type { AnnotateInteraction, CaptureEvent } from './layer';
 import { supportsAnnotation } from './layer';
 import type { AnnotationsToPlotlyResult } from './toPlotly';
+import { OVERLAY_TRACE_PREFIX } from './toPlotly';
+import { PREVIEW_ANNOTATION_ID } from './types';
 
 /**
  * advanced_viz kinds drawn as one cartesian Plotly plot whose renderer wires
@@ -21,6 +23,19 @@ export const ANNOTATABLE_VIZ_KINDS: ReadonlySet<string> = new Set([
   'da_barplot',
   'ancombc_differentials',
   'ma',
+  'stacked_taxonomy',
+  'rarefaction',
+  'enrichment',
+  'dot_plot',
+  'lollipop',
+  'qq',
+  'pr_benchmark',
+  'roc_pr_curve',
+  'confusion_matrix',
+  'metric_ci_bars',
+  'profile',
+  'gsea_running_score',
+  'coverage_track',
 ]);
 
 export function supportsAdvancedVizAnnotation(meta: { viz_kind?: unknown }): boolean {
@@ -56,6 +71,10 @@ export function componentSupportsAnnotation(
       return supportsAdvancedVizAnnotation(meta);
     case 'table':
       return tableAnnotationColumn(meta) != null;
+    case 'multiqc':
+      // Figures and the General Stats table; the renderer reports which
+      // views can take them (not multi-panel figures, not the violin view).
+      return true;
     default:
       return false;
   }
@@ -64,29 +83,63 @@ export function componentSupportsAnnotation(
 /**
  * The figure's traces followed by the annotation overlay traces. Overlays go
  * last so the curveNumber of every real trace is unchanged, and never dim
- * under a selection. Returns `data` itself when there is nothing to add.
+ * under a selection. In annotate mode (`annotating`) they take no hover, so
+ * the tools only ever see the figure's own points. Returns `data` itself when
+ * there is nothing to add.
  */
 export function appendAnnotationTraces(
   data: readonly unknown[],
   plotly: Pick<AnnotationsToPlotlyResult, 'overlayTraces'> | null | undefined,
+  annotating = false,
 ): unknown[] {
   if (!plotly || plotly.overlayTraces.length === 0) return data as unknown[];
   const out: unknown[] = [...data];
   plotly.overlayTraces.forEach((t) =>
-    out.push({ ...(t as Record<string, unknown>), unselected: { marker: { opacity: 1 } } }),
+    out.push({
+      ...(t as Record<string, unknown>),
+      ...(annotating ? { hoverinfo: 'skip' } : {}),
+      unselected: { marker: { opacity: 1 } },
+    }),
   );
   return out;
 }
 
+/** Thread id carried by an overlay trace or label `name`, or null (preview, other names). */
+export function annotationIdFromName(name: unknown): string | null {
+  if (typeof name !== 'string' || !name.startsWith(OVERLAY_TRACE_PREFIX)) return null;
+  const id = name.slice(OVERLAY_TRACE_PREFIX.length);
+  return id && id !== PREVIEW_ANNOTATION_ID ? id : null;
+}
+
+/**
+ * Thread id of an annotation clicked on a plot: a label (`plotly_clickannotation`
+ * carries the layout annotation) or a marked-points ring (`plotly_click`,
+ * when its nearest point belongs to an overlay trace). Null otherwise.
+ */
+export function annotationIdFromClick(event: unknown): string | null {
+  if (!event || typeof event !== 'object') return null;
+  const ev = event as {
+    annotation?: { name?: unknown } | null;
+    fullAnnotation?: { name?: unknown } | null;
+    points?: Array<{ data?: { name?: unknown }; fullData?: { name?: unknown } } | null>;
+  };
+  if (ev.annotation || ev.fullAnnotation) {
+    return annotationIdFromName(ev.annotation?.name ?? ev.fullAnnotation?.name);
+  }
+  const first = Array.isArray(ev.points) ? ev.points[0] : null;
+  return first ? annotationIdFromName(first.data?.name ?? first.fullData?.name) : null;
+}
+
 /**
  * The layout with the annotation shapes/labels appended after the figure's
- * own, and the annotate tool's dragmode (plus the frozen axis of a range
- * drag). Returns `layout` itself when there is nothing to change.
+ * own, and the annotate tool's dragmode. In annotate mode the labels stop
+ * capturing clicks (they belong to the tools). Returns `layout` itself when
+ * there is nothing to change.
  */
 export function decorateAnnotationLayout(
   layout: Record<string, unknown>,
   plotly: Pick<AnnotationsToPlotlyResult, 'shapes' | 'annotations'> | null | undefined,
-  interaction: Pick<AnnotateInteraction, 'dragmode' | 'fixedAxis'> | null | undefined,
+  interaction: Pick<AnnotateInteraction, 'dragmode'> | null | undefined,
 ): Record<string, unknown> {
   const addShapes = !!plotly && plotly.shapes.length > 0;
   const addLabels = !!plotly && plotly.annotations.length > 0;
@@ -98,40 +151,28 @@ export function decorateAnnotationLayout(
   }
   if (addLabels) {
     const own = Array.isArray(base.annotations) ? (base.annotations as unknown[]) : [];
-    base.annotations = [...own, ...plotly!.annotations];
+    const labels = interaction
+      ? plotly!.annotations.map((a) => (a.captureevents ? { ...a, captureevents: false } : a))
+      : plotly!.annotations;
+    base.annotations = [...own, ...labels];
   }
   if (interaction) {
     base.dragmode = interaction.dragmode;
     // A click never selects (and so never dims) points while annotating:
     // line/note clicks are captured by the layer, not by Plotly.
     base.clickmode = 'event';
-    // The modebar's zoom/pan/select buttons would either switch the tool's
-    // gesture away or emit axis ranges the range tool would capture.
+    // The tools set the select/lasso gesture themselves; zoom, pan and the
+    // axis reset stay in the modebar (axis changes are never captured).
     base.modebar = {
       ...((base.modebar as Record<string, unknown>) || {}),
       remove: mergeModebarRemove((base.modebar as { remove?: unknown } | undefined)?.remove),
     };
-    if (interaction.fixedAxis) {
-      // A range drag moves along one axis only: freeze the other so the zoom
-      // box becomes a band.
-      const key = `${interaction.fixedAxis}axis`;
-      base[key] = { ...((base[key] as Record<string, unknown>) || {}), fixedrange: true };
-    }
   }
   return base;
 }
 
 /** Modebar buttons hidden while annotating (see decorateAnnotationLayout). */
-export const ANNOTATE_MODEBAR_REMOVE: readonly string[] = [
-  'zoom2d',
-  'pan2d',
-  'select2d',
-  'lasso2d',
-  'zoomIn2d',
-  'zoomOut2d',
-  'autoScale2d',
-  'resetScale2d',
-];
+export const ANNOTATE_MODEBAR_REMOVE: readonly string[] = ['select2d', 'lasso2d'];
 
 function mergeModebarRemove(own: unknown): string[] {
   const list = Array.isArray(own)
@@ -213,27 +254,51 @@ export interface PlotEventHandlers {
   onRelayout?: (event: any) => void;
   onHover?: (event: any) => void;
   onUnhover?: (event: any) => void;
+  onClickAnnotation?: (event: any) => void;
 }
 
 /**
  * The event handlers to hand `<Plot>`. Outside annotate mode (`capture`
- * null) the renderer's own handlers are kept as they are. In annotate mode
- * its selection handlers are detached, so a gesture draws an annotation and
- * never filters the dashboard; the annotation handler of the active capture
- * takes over its event, and relayout/hover stay with the renderer otherwise.
+ * null) the renderer's own handlers are kept, except that a click on a saved
+ * annotation (its label or a marked-points ring) goes to `openAnnotation`
+ * instead of the renderer's click filter. In annotate mode the renderer's
+ * selection and click handlers are detached, so a gesture draws an annotation
+ * and never filters the dashboard: the selection goes to the layer, and
+ * relayout is observed by the layer (to notice a zoom/pan picked in the
+ * modebar) before reaching the renderer.
  */
 export function mergePlotHandlers(
   own: PlotEventHandlers,
   annotate: Required<Pick<PlotEventHandlers, 'onSelected' | 'onRelayout' | 'onHover' | 'onUnhover'>>,
-  capture: AnnotateInteraction['capture'] | null,
+  capture: CaptureEvent | null,
+  openAnnotation?: ((threadId: string, event: unknown) => void) | null,
 ): PlotEventHandlers {
-  if (!capture) return own;
+  if (!capture) {
+    if (!openAnnotation) return own;
+    return {
+      ...own,
+      onClick: (event: any) => {
+        const id = annotationIdFromClick(event);
+        if (id) openAnnotation(id, event);
+        else own.onClick?.(event);
+      },
+      onClickAnnotation: (event: any) => {
+        const id = annotationIdFromClick(event);
+        if (id) openAnnotation(id, event);
+        else own.onClickAnnotation?.(event);
+      },
+    };
+  }
   return {
     onSelected: capture === 'selected' ? annotate.onSelected : undefined,
     onSelecting: undefined,
     onClick: undefined,
     onDeselect: undefined,
-    onRelayout: capture === 'relayout' ? annotate.onRelayout : own.onRelayout,
+    onClickAnnotation: undefined,
+    onRelayout: (event: any) => {
+      annotate.onRelayout(event);
+      own.onRelayout?.(event);
+    },
     onHover: capture === 'click' ? annotate.onHover : own.onHover,
     onUnhover: capture === 'click' ? annotate.onUnhover : own.onUnhover,
   };

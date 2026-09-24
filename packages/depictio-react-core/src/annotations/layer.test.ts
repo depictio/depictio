@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  annotateHint,
   annotateInteraction,
   customdataRow,
   DEFAULT_ANNOTATE_OPTIONS,
@@ -10,9 +11,6 @@ import {
   pixelToData,
   pointMisses,
   publishedToRenderable,
-  relayoutSetsRange,
-  restoreAxesUpdate,
-  snapshotAxes,
   stripOverlayPoints,
   supportsAnnotation,
   threadsToRenderable,
@@ -23,28 +21,41 @@ import { annotationsToPlotly, OVERLAY_TRACE_PREFIX } from './toPlotly';
 import type { Annotation } from './types';
 
 describe('annotateInteraction', () => {
-  it('captures ranges from a one-axis box zoom', () => {
-    expect(annotateInteraction('range', { ...DEFAULT_ANNOTATE_OPTIONS, rangeAxis: 'x' })).toEqual({
-      dragmode: 'zoom',
-      capture: 'relayout',
-      fixedAxis: 'y',
-    });
-    expect(annotateInteraction('range', { ...DEFAULT_ANNOTATE_OPTIONS, rangeAxis: 'y' }).fixedAxis).toBe(
-      'x',
-    );
+  it('captures ranges from a box selection, on either axis', () => {
+    for (const rangeAxis of ['x', 'y'] as const) {
+      expect(annotateInteraction('range', { ...DEFAULT_ANNOTATE_OPTIONS, rangeAxis })).toEqual({
+        dragmode: 'select',
+        capture: 'selected',
+      });
+    }
   });
   it('captures points from the chosen selection gesture', () => {
     expect(annotateInteraction('points', { ...DEFAULT_ANNOTATE_OPTIONS, selectMode: 'select' })).toEqual({
       dragmode: 'select',
       capture: 'selected',
-      fixedAxis: null,
     });
     expect(annotateInteraction('points').dragmode).toBe('lasso');
   });
   it('captures lines and notes from clicks, with no drag gesture', () => {
     for (const tool of ['line', 'note'] as const) {
-      expect(annotateInteraction(tool)).toEqual({ dragmode: false, capture: 'click', fixedAxis: null });
+      expect(annotateInteraction(tool)).toEqual({ dragmode: false, capture: 'click' });
     }
+  });
+});
+
+describe('annotateHint', () => {
+  it('names the line direction and the axis its value is read on', () => {
+    expect(annotateHint('line', { ...DEFAULT_ANNOTATE_OPTIONS, lineAxis: 'x' })).toBe(
+      'Click to place a vertical line at an x value',
+    );
+    expect(annotateHint('line', { ...DEFAULT_ANNOTATE_OPTIONS, lineAxis: 'y' })).toBe(
+      'Click to place a horizontal line at a y value',
+    );
+  });
+  it('explains that only the tool axis of a range box counts', () => {
+    expect(annotateHint('range', { ...DEFAULT_ANNOTATE_OPTIONS, rangeAxis: 'y' })).toBe(
+      'Drag a box: its y extent becomes the range',
+    );
   });
 });
 
@@ -224,46 +235,6 @@ describe('publishedToRenderable', () => {
   });
 });
 
-describe('axis snapshot', () => {
-  it('restores explicit ranges and autorange', () => {
-    const snap = snapshotAxes({
-      xaxis: { autorange: false, range: [0, 10] },
-      yaxis: { autorange: true, range: [1, 2] },
-    });
-    expect(restoreAxesUpdate(snap)).toEqual({ 'xaxis.range': [0, 10], 'yaxis.autorange': true });
-  });
-  it('treats missing axes as nothing to restore', () => {
-    expect(restoreAxesUpdate(snapshotAxes(null))).toEqual({});
-  });
-  it('covers every panel axis of a faceted figure', () => {
-    const snap = snapshotAxes({
-      xaxis: { autorange: false, range: [0, 10] },
-      xaxis2: { autorange: false, range: [5, 6] },
-      yaxis2: { autorange: true, range: [0, 1] },
-      _subplots: { cartesian: ['xy'] },
-      xaxisfoo: { range: [1, 2] },
-    } as Record<string, unknown>);
-    expect(restoreAxesUpdate(snap)).toEqual({
-      'xaxis.range': [0, 10],
-      'xaxis2.range': [5, 6],
-      'yaxis2.autorange': true,
-    });
-  });
-});
-
-describe('relayoutSetsRange', () => {
-  it('detects explicit ranges on any axis', () => {
-    expect(relayoutSetsRange({ 'xaxis.range[0]': 1, 'xaxis.range[1]': 2 })).toBe(true);
-    expect(relayoutSetsRange({ 'xaxis2.range': [1, 2] })).toBe(true);
-    expect(relayoutSetsRange({ 'yaxis3.range[1]': 2 })).toBe(true);
-  });
-  it('ignores autorange and non-axis changes', () => {
-    expect(relayoutSetsRange({ 'xaxis.autorange': true })).toBe(false);
-    expect(relayoutSetsRange({ dragmode: 'zoom' })).toBe(false);
-    expect(relayoutSetsRange(null)).toBe(false);
-  });
-});
-
 describe('pixelToData', () => {
   const layout = {
     xaxis: { _offset: 50, _length: 100, p2d: (px: number) => px / 10 },
@@ -287,7 +258,12 @@ describe('pointMisses', () => {
     ];
     expect(
       pointMisses(
-        { a: { expected: 15, found: 12 }, b: { expected: 3, found: 0 }, c: { expected: 2, found: 2 } },
+        {
+          a: { expected: 15, found: 12 },
+          b: { expected: 3, found: 0 },
+          c: { expected: 2, found: 2 },
+          r: { inRange: 4 },
+        },
         items,
       ),
     ).toEqual([

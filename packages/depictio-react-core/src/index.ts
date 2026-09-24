@@ -712,5 +712,17 @@ export { Z_LAYERS } from './zLayers';
 
 // Datawrapper-style chart annotations: types, Plotly conversion, event capture.
 export * from './annotations';
-export { AnnotateToolbar, AnnotationForm } from './components/annotations';
-export type { AnnotateToolbarProps, AnnotationFormProps } from './components/annotations';
+export {
+  AnnotateToolbar,
+  AnnotationColorPicker,
+  AnnotationEditor,
+  AnnotationForm,
+  InlineAnnotationEditor,
+} from './components/annotations';
+export type {
+  AnnotateToolbarProps,
+  AnnotationColorPickerProps,
+  AnnotationEditorProps,
+  AnnotationFormProps,
+  InlineAnnotationEditorProps,
+} from './components/annotations';

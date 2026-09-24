@@ -7,3 +7,8 @@ export * from './AnnotationLayerContext';
 export * from './tableRows';
 export * from './plotDecorate';
 export * from './escape';
+export * from './edit';
+export * from './summary';
+export * from './inlineEdit';
+export * from './renderedPoints';
+export * from './multiqc';

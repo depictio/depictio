@@ -6,6 +6,8 @@ import {
   componentSupportsAnnotation,
   decorateAnnotationLayout,
   ANNOTATE_MODEBAR_REMOVE,
+  annotationIdFromClick,
+  annotationIdFromName,
   mergePlotHandlers,
   restoreSelectionUpdates,
   snapshotSelection,
@@ -25,6 +27,41 @@ describe('componentSupportsAnnotation', () => {
     }
     expect(componentSupportsAnnotation('advanced_viz', { viz_kind: 'sankey' })).toBe(false);
     expect(supportsAdvancedVizAnnotation({})).toBe(false);
+  });
+  it('accepts the single-subplot cartesian kinds', () => {
+    for (const kind of [
+      'stacked_taxonomy',
+      'rarefaction',
+      'enrichment',
+      'dot_plot',
+      'lollipop',
+      'qq',
+      'pr_benchmark',
+      'roc_pr_curve',
+      'confusion_matrix',
+      'metric_ci_bars',
+      'profile',
+      'gsea_running_score',
+      'coverage_track',
+    ]) {
+      expect(componentSupportsAnnotation('advanced_viz', { viz_kind: kind })).toBe(true);
+    }
+  });
+  it('leaves out multi-subplot, non-cartesian and schematic kinds', () => {
+    for (const kind of [
+      'complex_heatmap',
+      'oncoplot',
+      'signal_matrix',
+      'upset_plot',
+      'sunburst',
+      'sankey',
+      'phylogenetic',
+      'sashimi',
+      'fusion_structure',
+      'gene_arrow_track',
+    ]) {
+      expect(componentSupportsAnnotation('advanced_viz', { viz_kind: kind })).toBe(false);
+    }
   });
   it('accepts tables with a row-id column', () => {
     expect(componentSupportsAnnotation('table', { row_selection_column: 'sample' })).toBe(true);
@@ -59,6 +96,12 @@ describe('appendAnnotationTraces', () => {
     expect(out[1]).toEqual({ name: 'annotation-1', unselected: { marker: { opacity: 1 } } });
     expect(data).toHaveLength(1);
   });
+  it('takes the overlays out of hover in annotate mode', () => {
+    const overlay = { name: 'annotation-1', hoverinfo: 'text' };
+    const out = appendAnnotationTraces(data, { overlayTraces: [overlay] }, true);
+    expect(out[1]).toMatchObject({ hoverinfo: 'skip' });
+    expect(appendAnnotationTraces(data, { overlayTraces: [overlay] })[1]).toMatchObject({ hoverinfo: 'text' });
+  });
 });
 
 describe('decorateAnnotationLayout', () => {
@@ -83,32 +126,37 @@ describe('decorateAnnotationLayout', () => {
     expect(out.shapes).toEqual([{ type: 'rect' }]);
     expect(out).not.toHaveProperty('annotations');
   });
-  it('applies the tool dragmode and freezes the other axis of a range drag', () => {
-    const out = decorateAnnotationLayout(
-      { xaxis: { title: 'x' } },
-      null,
-      { dragmode: 'zoom', fixedAxis: 'x' },
-    );
-    expect(out.dragmode).toBe('zoom');
-    expect(out.xaxis).toEqual({ title: 'x', fixedrange: true });
+  it('applies the tool dragmode and never freezes an axis', () => {
+    const out = decorateAnnotationLayout({ xaxis: { title: 'x' } }, null, { dragmode: 'select' });
+    expect(out.dragmode).toBe('select');
+    expect(out.xaxis).toEqual({ title: 'x' });
     expect(out).not.toHaveProperty('yaxis');
-    expect(decorateAnnotationLayout({}, null, { dragmode: false, fixedAxis: null }).dragmode).toBe(false);
+    expect(decorateAnnotationLayout({}, null, { dragmode: false }).dragmode).toBe(false);
   });
-  it('makes clicks event-only and hides the zoom/pan/select modebar buttons while annotating', () => {
-    const own = { modebar: { orientation: 'v', remove: ['toImage', 'zoomIn2d'] }, clickmode: 'event+select' };
-    const out = decorateAnnotationLayout(own, null, { dragmode: 'zoom', fixedAxis: 'y' });
+  it('makes clicks event-only and hides only the select/lasso modebar buttons while annotating', () => {
+    const own = { modebar: { orientation: 'v', remove: ['toImage', 'lasso2d'] }, clickmode: 'event+select' };
+    const out = decorateAnnotationLayout(own, null, { dragmode: 'select' });
     expect(out.clickmode).toBe('event');
     const modebar = out.modebar as { orientation: string; remove: string[] };
     expect(modebar.orientation).toBe('v');
     expect(modebar.remove).toContain('toImage');
+    expect(ANNOTATE_MODEBAR_REMOVE).toEqual(['select2d', 'lasso2d']);
     for (const b of ANNOTATE_MODEBAR_REMOVE) expect(modebar.remove).toContain(b);
-    expect(modebar.remove.filter((b) => b === 'zoomIn2d')).toHaveLength(1);
-    expect(own.modebar.remove).toEqual(['toImage', 'zoomIn2d']);
-    const str = decorateAnnotationLayout({ modebar: { remove: 'toImage' } }, null, {
-      dragmode: 'lasso',
-      fixedAxis: null,
-    });
+    for (const b of ['zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']) {
+      expect(modebar.remove).not.toContain(b);
+    }
+    expect(modebar.remove.filter((b) => b === 'lasso2d')).toHaveLength(1);
+    expect(own.modebar.remove).toEqual(['toImage', 'lasso2d']);
+    const str = decorateAnnotationLayout({ modebar: { remove: 'toImage' } }, null, { dragmode: 'lasso' });
     expect((str.modebar as { remove: string[] }).remove[0]).toBe('toImage');
+  });
+  it('stops labels capturing clicks in annotate mode only', () => {
+    const plotly = { shapes: [], annotations: [{ text: 'a', captureevents: true }, { text: 'b' }] };
+    const outside = decorateAnnotationLayout({}, plotly, null);
+    expect(outside.annotations).toEqual(plotly.annotations);
+    const inside = decorateAnnotationLayout({}, plotly, { dragmode: 'select' });
+    expect(inside.annotations).toEqual([{ text: 'a', captureevents: false }, { text: 'b' }]);
+    expect(plotly.annotations[0].captureevents).toBe(true);
   });
   it('leaves clickmode and the modebar alone outside annotate mode', () => {
     const out = decorateAnnotationLayout({}, { shapes: [{ type: 'rect' }], annotations: [] }, null);
@@ -142,6 +190,26 @@ describe('selection snapshot', () => {
   });
 });
 
+describe('annotation click ids', () => {
+  it('reads the thread id from overlay and label names', () => {
+    expect(annotationIdFromName('annotation-t1')).toBe('t1');
+    expect(annotationIdFromName('annotation-__preview__')).toBeNull();
+    expect(annotationIdFromName('annotation-')).toBeNull();
+    expect(annotationIdFromName('trace 0')).toBeNull();
+    expect(annotationIdFromName(undefined)).toBeNull();
+  });
+  it('recognises label clicks and marked-point ring clicks', () => {
+    expect(annotationIdFromClick({ index: 0, annotation: { name: 'annotation-t1' } })).toBe('t1');
+    expect(annotationIdFromClick({ index: 0, annotation: { text: 'top gene' } })).toBeNull();
+    expect(annotationIdFromClick({ points: [{ data: { name: 'annotation-t2' } }] })).toBe('t2');
+    expect(annotationIdFromClick({ points: [{ fullData: { name: 'annotation-t3' } }] })).toBe('t3');
+    expect(
+      annotationIdFromClick({ points: [{ data: { name: 'real' } }, { data: { name: 'annotation-t2' } }] }),
+    ).toBeNull();
+    expect(annotationIdFromClick(null)).toBeNull();
+  });
+});
+
 describe('mergePlotHandlers', () => {
   const own = {
     onSelected: vi.fn(),
@@ -160,21 +228,43 @@ describe('mergePlotHandlers', () => {
   it('keeps the renderer handlers outside annotate mode', () => {
     expect(mergePlotHandlers(own, annotate, null)).toBe(own);
   });
-  it('detaches the selection handlers in every annotate capture', () => {
-    for (const capture of ['relayout', 'click', 'selected'] as const) {
-      const out = mergePlotHandlers(own, annotate, capture);
+  it('routes clicks on saved annotations to the thread, others to the renderer', () => {
+    const open = vi.fn();
+    const onClick = vi.fn();
+    const out = mergePlotHandlers({ ...own, onClick }, annotate, null, open);
+    expect(out.onSelected).toBe(own.onSelected);
+    const click = { points: [{ data: { name: 'annotation-t1' } }], event: { clientX: 1, clientY: 2 } };
+    out.onClick!(click);
+    // The Plotly event rides along, for the editor's anchor.
+    expect(open).toHaveBeenCalledWith('t1', click);
+    expect(onClick).not.toHaveBeenCalled();
+    out.onClick!({ points: [{ data: { name: 'trace' } }] });
+    expect(onClick).toHaveBeenCalledTimes(1);
+    const labelClick = { annotation: { name: 'annotation-t9' } };
+    out.onClickAnnotation!(labelClick);
+    expect(open).toHaveBeenLastCalledWith('t9', labelClick);
+    // A renderer without a click handler still opens threads.
+    const bare = mergePlotHandlers({}, annotate, null, open);
+    expect(() => bare.onClick!({ points: [{ data: { name: 'x' } }] })).not.toThrow();
+  });
+  it('detaches the selection and click handlers in every annotate capture', () => {
+    const open = vi.fn();
+    for (const capture of ['click', 'selected'] as const) {
+      const out = mergePlotHandlers(own, annotate, capture, open);
       expect(out.onClick).toBeUndefined();
+      expect(out.onClickAnnotation).toBeUndefined();
       expect(out.onDeselect).toBeUndefined();
       expect(out.onSelecting).toBeUndefined();
       expect(out.onSelected).toBe(capture === 'selected' ? annotate.onSelected : undefined);
     }
   });
-  it('hands relayout and hover to the active capture only', () => {
-    const range = mergePlotHandlers(own, annotate, 'relayout');
-    expect(range.onRelayout).toBe(annotate.onRelayout);
-    expect(range.onHover).toBe(own.onHover);
+  it('lets the layer observe relayout before the renderer, and hands hover to the click tools', () => {
+    const sel = mergePlotHandlers(own, annotate, 'selected');
+    sel.onRelayout!({ dragmode: 'zoom' });
+    expect(annotate.onRelayout).toHaveBeenCalledWith({ dragmode: 'zoom' });
+    expect(own.onRelayout).toHaveBeenCalledWith({ dragmode: 'zoom' });
+    expect(sel.onHover).toBe(own.onHover);
     const click = mergePlotHandlers(own, annotate, 'click');
-    expect(click.onRelayout).toBe(own.onRelayout);
     expect(click.onHover).toBe(annotate.onHover);
     expect(click.onUnhover).toBe(annotate.onUnhover);
   });

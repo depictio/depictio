@@ -2,9 +2,14 @@ import React from 'react';
 import { ActionIcon, Button, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import type { AnnotationDraft, PendingAnnotation } from '../../annotations/AnnotationLayerContext';
+import type {
+  AnnotationDraft,
+  PendingAnnotation,
+  PendingDraftPatch,
+} from '../../annotations/AnnotationLayerContext';
 import { ANNOTATE_UI_ATTR } from '../../annotations/escape';
-import { annotateHint } from '../../annotations/layer';
+import { annotateHint, NAVIGATING_HINT } from '../../annotations/layer';
+import type { AnnotationStats } from '../../annotations/summary';
 import type { AnnotateOptions, AnnotateTool } from '../../annotations/layer';
 import { Z_LAYERS } from '../../zLayers';
 import AnnotationForm from './AnnotationForm';
@@ -18,6 +23,15 @@ export interface AnnotateToolbarProps {
   pending: PendingAnnotation | null;
   onSave: (draft: AnnotationDraft) => Promise<void>;
   onCancel: () => void;
+  /** Live form state, drawn as a preview of the pending shape. */
+  onDraftChange?: (patch: PendingDraftPatch) => void;
+  /** Counts measured on the data for the pending shape, shown in the form. */
+  pendingStats?: AnnotationStats;
+  /**
+   * The modebar's zoom or pan took over the drag gesture: no tool is shown
+   * active until one is picked again.
+   */
+  navigating?: boolean;
   /**
    * `figure` (default): the Plotly drawing tools. `rows`: a table, where the
    * only tool is marking the selected rows (a "points" annotation keyed on the
@@ -51,6 +65,9 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
   pending,
   onSave,
   onCancel,
+  onDraftChange,
+  pendingStats,
+  navigating = false,
   variant = 'figure',
   selectedCount = 0,
   onMarkRows,
@@ -72,18 +89,32 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
       select: () => onChange('range', { ...options, rangeAxis: 'y' }),
     },
     {
-      key: 'line',
-      label: 'Reference line',
-      icon: 'mdi:vector-line',
-      active: tool === 'line',
-      select: () => onChange('line', options),
+      key: 'line-x',
+      label: 'Vertical line (at an x value)',
+      icon: 'mdi:border-vertical',
+      active: tool === 'line' && options.lineAxis === 'x',
+      select: () => onChange('line', { ...options, lineAxis: 'x' }),
     },
     {
-      key: 'points',
-      label: 'Mark points',
-      icon: 'mdi:selection-ellipse',
-      active: tool === 'points',
-      select: () => onChange('points', options),
+      key: 'line-y',
+      label: 'Horizontal line (at a y value)',
+      icon: 'mdi:border-horizontal',
+      active: tool === 'line' && options.lineAxis === 'y',
+      select: () => onChange('line', { ...options, lineAxis: 'y' }),
+    },
+    {
+      key: 'points-lasso',
+      label: 'Mark points (lasso)',
+      icon: 'mdi:lasso',
+      active: tool === 'points' && options.selectMode === 'lasso',
+      select: () => onChange('points', { ...options, selectMode: 'lasso' }),
+    },
+    {
+      key: 'points-box',
+      label: 'Mark points (box)',
+      icon: 'mdi:selection-drag',
+      active: tool === 'points' && options.selectMode === 'select',
+      select: () => onChange('points', { ...options, selectMode: 'select' }),
     },
     {
       key: 'note',
@@ -103,12 +134,16 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
           select: () => undefined,
         },
       ]
-    : figureTools;
+    : navigating
+      ? figureTools.map((t) => ({ ...t, active: false }))
+      : figureTools;
   const hint = rowsMode
     ? selectedCount > 0
       ? `${selectedCount} row${selectedCount === 1 ? '' : 's'} selected`
       : 'Click rows to select them, then mark them'
-    : annotateHint(tool, options);
+    : navigating
+      ? NAVIGATING_HINT
+      : annotateHint(tool, options);
 
   // Rendered in the fullscreen element when there is one: a portal to <body>
   // would be invisible behind a fullscreen card.
@@ -179,48 +214,6 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
                     : 'Mark selected rows'}
                 </Button>
               )}
-              {!rowsMode && tool === 'line' && (
-                <Tooltip
-                  label={options.lineAxis === 'x' ? 'Vertical line (at an x value)' : 'Horizontal line (at a y value)'}
-                  withArrow
-                >
-                  <ActionIcon
-                    size="sm"
-                    variant="light"
-                    onClick={() =>
-                      onChange('line', { ...options, lineAxis: options.lineAxis === 'x' ? 'y' : 'x' })
-                    }
-                    aria-label="Switch line direction"
-                  >
-                    <Text size="xs" fw={700}>
-                      {options.lineAxis}
-                    </Text>
-                  </ActionIcon>
-                </Tooltip>
-              )}
-              {!rowsMode && tool === 'points' && (
-                <Tooltip
-                  label={options.selectMode === 'lasso' ? 'Lasso (switch to box)' : 'Box (switch to lasso)'}
-                  withArrow
-                >
-                  <ActionIcon
-                    size="sm"
-                    variant="light"
-                    onClick={() =>
-                      onChange('points', {
-                        ...options,
-                        selectMode: options.selectMode === 'lasso' ? 'select' : 'lasso',
-                      })
-                    }
-                    aria-label="Switch selection gesture"
-                  >
-                    <Icon
-                      icon={options.selectMode === 'lasso' ? 'mdi:lasso' : 'mdi:selection-drag'}
-                      width={14}
-                    />
-                  </ActionIcon>
-                </Tooltip>
-              )}
               <Tooltip label="Done (Esc)" withArrow>
                 <ActionIcon size="sm" variant="subtle" color="gray" onClick={onDone} aria-label="Leave annotate mode">
                   <Icon icon="mdi:check" width={14} />
@@ -239,6 +232,8 @@ const AnnotateToolbar: React.FC<AnnotateToolbarProps> = ({
             pending={pending}
             onSave={onSave}
             onCancel={onCancel}
+            onDraftChange={onDraftChange}
+            stats={pendingStats}
           />
         )}
       </Popover.Dropdown>

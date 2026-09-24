@@ -29,7 +29,9 @@ export type AnnotationKind = 'range' | 'line' | 'points' | 'note';
 export type AxisValue = number | string;
 
 export const MAX_POINT_IDS = 5000;
+export const MAX_REGION_VERTICES = 1000;
 export const MAX_LABEL_CHARS = 120;
+export const MAX_VARIANT_CHARS = 200;
 
 /** A band across the x axis, drawn behind the data. */
 export interface XRange {
@@ -57,17 +59,42 @@ export interface PointCoord {
   y: AxisValue;
   /** Index of the trace the point belongs to, when the figure has several. */
   trace?: number | null;
+  /**
+   * Index of the point in its trace's data, kept for traces drawn away from
+   * their data x/y (box, violin, bar) to find the drawn mark again.
+   */
+  index?: number | null;
 }
+
+/** The rectangle a box selection covered. */
+export interface BoxRegion {
+  shape: 'box';
+  x0: AxisValue;
+  x1: AxisValue;
+  y0: AxisValue;
+  y1: AxisValue;
+}
+
+/** The polygon a lasso traced: 3..MAX_REGION_VERTICES vertices, `x`/`y` of equal length. */
+export interface LassoRegion {
+  shape: 'lasso';
+  x: AxisValue[];
+  y: AxisValue[];
+}
+
+export type SelectionRegion = BoxRegion | LassoRegion;
 
 /**
  * Points to circle. Identified by the selection column (`column` + `ids`)
- * when the component has one, else by plain coordinates.
+ * when the component has one, else by plain coordinates. `region` keeps the
+ * area the selection gesture covered, drawn as a shaded background.
  */
 export interface MarkedPoints {
   kind: 'points';
   column?: string | null;
   ids?: Array<string | number>;
   coords?: PointCoord[];
+  region?: SelectionRegion | null;
 }
 
 /** Arrow head at (`x`, `y`) in data coords; label offset `ax`/`ay` in pixels. */
@@ -96,6 +123,8 @@ export interface AnnotationStyle {
   dash?: 'solid' | 'dash' | 'dot' | null;
   /** (0, 10] */
   width?: number | null;
+  /** 0..1, opacity of a marked-points region; 0 draws no background. */
+  fill_opacity?: number | null;
 }
 
 export interface Annotation {
@@ -107,6 +136,12 @@ export interface Annotation {
   style?: AnnotationStyle;
   /** Visible to viewers of the dashboard (shape and label only). */
   published?: boolean;
+  /**
+   * The view of the component the shape was drawn on (1..MAX_VARIANT_CHARS
+   * chars), for components showing one of several plots, e.g. a MultiQC
+   * dataset. Drawn only on that view; unset draws it on every view.
+   */
+  variant?: string | null;
 }
 
 /** An annotation ready to draw: its thread id, badge number and status. */
@@ -115,7 +150,12 @@ export interface RenderableAnnotation {
   number: number | null;
   annotation: Annotation;
   status?: string;
+  /** The capture waiting for its label: drawn dashed and faded, never clickable. */
+  preview?: boolean;
 }
+
+/** Id of the preview annotation drawn while a capture awaits its label. */
+export const PREVIEW_ANNOTATION_ID = '__preview__';
 
 const CIRCLED_DIGITS = [
   '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',

@@ -1,8 +1,10 @@
 /**
  * Table annotations: rows marked by a "points" annotation keyed on the table's
- * row-id column (see annotations/tableRows.ts). Colours come from the Mantine
- * palette CSS variables so they follow light/dark mode; each palette name only
- * sets three custom properties, the rules below do the painting.
+ * row-id column (see annotations/tableRows.ts). Colours come from Mantine's
+ * default palette, not the brand-remapped theme variables: TableRenderer sets
+ * ``--depictio-annot-<name>-*`` on the grid wrapper (annotationPaletteVars,
+ * light/dark aware). Each palette class only picks its three custom
+ * properties, the rules below do the painting.
  *
  * Same specificity trick as realtime-highlight.css: scope under both Alpine
  * theme roots with the ``.ag-row`` qualifier + ``!important`` so the theme's
@@ -13,81 +15,81 @@
  */
 
 .depictio-row-annotated-blue {
-  --depictio-annot-bg: var(--mantine-color-blue-light);
-  --depictio-annot-bg-strong: var(--mantine-color-blue-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-blue-filled);
+  --depictio-annot-bg: var(--depictio-annot-blue-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-blue-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-blue-stripe);
 }
 
 .depictio-row-annotated-cyan {
-  --depictio-annot-bg: var(--mantine-color-cyan-light);
-  --depictio-annot-bg-strong: var(--mantine-color-cyan-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-cyan-filled);
+  --depictio-annot-bg: var(--depictio-annot-cyan-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-cyan-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-cyan-stripe);
 }
 
 .depictio-row-annotated-teal {
-  --depictio-annot-bg: var(--mantine-color-teal-light);
-  --depictio-annot-bg-strong: var(--mantine-color-teal-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-teal-filled);
+  --depictio-annot-bg: var(--depictio-annot-teal-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-teal-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-teal-stripe);
 }
 
 .depictio-row-annotated-green {
-  --depictio-annot-bg: var(--mantine-color-green-light);
-  --depictio-annot-bg-strong: var(--mantine-color-green-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-green-filled);
+  --depictio-annot-bg: var(--depictio-annot-green-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-green-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-green-stripe);
 }
 
 .depictio-row-annotated-lime {
-  --depictio-annot-bg: var(--mantine-color-lime-light);
-  --depictio-annot-bg-strong: var(--mantine-color-lime-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-lime-filled);
+  --depictio-annot-bg: var(--depictio-annot-lime-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-lime-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-lime-stripe);
 }
 
 .depictio-row-annotated-yellow {
-  --depictio-annot-bg: var(--mantine-color-yellow-light);
-  --depictio-annot-bg-strong: var(--mantine-color-yellow-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-yellow-filled);
+  --depictio-annot-bg: var(--depictio-annot-yellow-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-yellow-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-yellow-stripe);
 }
 
 .depictio-row-annotated-orange {
-  --depictio-annot-bg: var(--mantine-color-orange-light);
-  --depictio-annot-bg-strong: var(--mantine-color-orange-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-orange-filled);
+  --depictio-annot-bg: var(--depictio-annot-orange-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-orange-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-orange-stripe);
 }
 
 .depictio-row-annotated-red {
-  --depictio-annot-bg: var(--mantine-color-red-light);
-  --depictio-annot-bg-strong: var(--mantine-color-red-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-red-filled);
+  --depictio-annot-bg: var(--depictio-annot-red-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-red-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-red-stripe);
 }
 
 .depictio-row-annotated-pink {
-  --depictio-annot-bg: var(--mantine-color-pink-light);
-  --depictio-annot-bg-strong: var(--mantine-color-pink-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-pink-filled);
+  --depictio-annot-bg: var(--depictio-annot-pink-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-pink-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-pink-stripe);
 }
 
 .depictio-row-annotated-grape {
-  --depictio-annot-bg: var(--mantine-color-grape-light);
-  --depictio-annot-bg-strong: var(--mantine-color-grape-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-grape-filled);
+  --depictio-annot-bg: var(--depictio-annot-grape-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-grape-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-grape-stripe);
 }
 
 .depictio-row-annotated-violet {
-  --depictio-annot-bg: var(--mantine-color-violet-light);
-  --depictio-annot-bg-strong: var(--mantine-color-violet-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-violet-filled);
+  --depictio-annot-bg: var(--depictio-annot-violet-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-violet-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-violet-stripe);
 }
 
 .depictio-row-annotated-indigo {
-  --depictio-annot-bg: var(--mantine-color-indigo-light);
-  --depictio-annot-bg-strong: var(--mantine-color-indigo-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-indigo-filled);
+  --depictio-annot-bg: var(--depictio-annot-indigo-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-indigo-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-indigo-stripe);
 }
 
 .depictio-row-annotated-gray {
-  --depictio-annot-bg: var(--mantine-color-gray-light);
-  --depictio-annot-bg-strong: var(--mantine-color-gray-light-hover);
-  --depictio-annot-stripe: var(--mantine-color-gray-filled);
+  --depictio-annot-bg: var(--depictio-annot-gray-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-gray-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-gray-stripe);
 }
 
 
@@ -128,6 +130,11 @@
   color: var(--depictio-annot-stripe, var(--mantine-color-dimmed));
   font-weight: 600;
   letter-spacing: -0.05em;
+}
+
+/* A badge opens its thread when the app handles annotation clicks. */
+.depictio-annot-badges-clickable .depictio-annot-badge-cell {
+  cursor: pointer;
 }
 
 /* Annotate mode: rows picked for the next "Mark rows". Drawn as an outline so

@@ -14,6 +14,9 @@ export interface CommentsControl {
   openCounts: Record<string, number>;
   /** Agent proposals awaiting review, same keys. */
   proposedCounts: Record<string, number>;
+  /** Unsettled threads (open or proposed) whose data or component changed
+   *  since they were written, same keys. */
+  staleCounts: Record<string, number>;
   /** Opens the comments drawer on one component, or on the whole tab (null). */
   openDrawer: (componentIndex?: string | null) => void;
   canComment: boolean;

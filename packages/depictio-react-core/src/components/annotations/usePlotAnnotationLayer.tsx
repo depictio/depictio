@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Tooltip, useComputedColorScheme, useMantineTheme } from '@mantine/core';
+import { Badge, Tooltip, useComputedColorScheme } from '@mantine/core';
 // Same prebuilt bundle react-plotly.js uses (see FigureRenderer).
 import Plotly from 'plotly.js';
 
@@ -7,24 +7,28 @@ import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
 import {
   annotateInteraction,
   DEFAULT_ANNOTATE_OPTIONS,
+  itemsForVariant,
+  KIND_LABELS,
   normalizeTraces,
   pixelToData,
   pointMisses,
-  relayoutSetsRange,
-  restoreAxesUpdate,
-  snapshotAxes,
   stripOverlayPoints,
+  withSelectableLines,
 } from '../../annotations/layer';
-import type { AnnotateInteraction, AnnotateOptions, AnnotateTool, AxisSnapshot } from '../../annotations/layer';
+import type { AnnotateInteraction, AnnotateOptions, AnnotateTool } from '../../annotations/layer';
 import { annotationsToPlotly } from '../../annotations/toPlotly';
+import type { AnnotationsToPlotlyResult } from '../../annotations/toPlotly';
+import type { AnnotationStats } from '../../annotations/summary';
 import {
   arrowNoteFromClick,
   markedPointsFromSelection,
-  rangeFromRelayout,
+  rangeFromSelection,
   refLineFromClick,
 } from '../../annotations/capture';
 import { makeColorResolver } from '../../annotations/resolveColor';
-import { numberBadge } from '../../annotations/types';
+import { renderedPointsFromGraph, renderedPointsSignature } from '../../annotations/renderedPoints';
+import type { GraphLike, RenderedPoints } from '../../annotations/renderedPoints';
+import { numberBadge, PREVIEW_ANNOTATION_ID } from '../../annotations/types';
 import type { RenderableAnnotation } from '../../annotations/types';
 import {
   appendAnnotationTraces,
@@ -35,11 +39,14 @@ import {
 } from '../../annotations/plotDecorate';
 import type { PlotEventHandlers, SelectionSnapshot } from '../../annotations/plotDecorate';
 import { isAnnotateEscape } from '../../annotations/escape';
+import { clientPointFromEvent } from '../../annotations/inlineEdit';
 import AnnotateToolbar from './AnnotateToolbar';
+import InlineAnnotationEditor from './InlineAnnotationEditor';
 
 const NO_ANNOTATIONS: RenderableAnnotation[] = [];
 const NO_DATA: unknown[] = [];
 const NO_LAYOUT: Record<string, unknown> = {};
+const NO_STATS: Record<string, AnnotationStats> = {};
 
 type PlotlyTarget = Parameters<typeof Plotly.relayout>[0];
 
@@ -100,6 +107,30 @@ const readSelectionState = (gd: HTMLElement | null): SelectionSnapshot | null =>
 const readFullLayout = (gd: HTMLElement | null) =>
   (gd as unknown as { _fullLayout?: Record<string, never> } | null)?._fullLayout ?? null;
 
+/** Saved annotations drawn first, the preview on top. */
+function mergePlotly(
+  a: AnnotationsToPlotlyResult | null,
+  b: AnnotationsToPlotlyResult | null,
+): AnnotationsToPlotlyResult | null {
+  if (!a || !b) return a ?? b;
+  return {
+    shapes: [...a.shapes, ...b.shapes],
+    annotations: [...a.annotations, ...b.annotations],
+    overlayTraces: [...a.overlayTraces, ...b.overlayTraces],
+    stats: a.stats,
+    topLabelCount: a.topLabelCount + b.topLabelCount,
+  };
+}
+
+const hasMarkedPoints = (items: RenderableAnnotation[]) =>
+  items.some((i) => i.annotation.geometry.kind === 'points');
+
+const needsTraces = (items: RenderableAnnotation[]) =>
+  items.some((i) => {
+    const k = i.annotation.geometry.kind;
+    return k === 'points' || k === 'x_range' || k === 'y_range';
+  });
+
 export interface UsePlotAnnotationLayerOptions {
   /** `String(metadata.index)`: the key annotations are stored under. */
   componentIndex: string;
@@ -118,6 +149,13 @@ export interface UsePlotAnnotationLayerOptions {
    * stored as coordinates rather than ids.
    */
   pointIdColumn?: string;
+  /**
+   * The view the plot shows, for components switching between several plots
+   * (e.g. a MultiQC dataset). New annotations are stored with it, and only the
+   * annotations drawn on this view (or on no particular view) are shown.
+   * Undefined for a component with a single view: every annotation is shown.
+   */
+  variant?: string | null;
 }
 
 export interface PlotAnnotationLayer {
@@ -136,7 +174,10 @@ export interface PlotAnnotationLayer {
    * annotating), plus `onInitialized` / `onUpdate` tracking the graph div.
    */
   plotProps: (own?: PlotEventHandlers & PlotGraphHandlers) => PlotEventHandlers & PlotGraphHandlers;
-  /** Tool palette + label popover; render inside the plot's positioned container. */
+  /**
+   * Tool palette + label popover, and the inline editor of a clicked
+   * annotation; render inside the plot's positioned container.
+   */
   toolbar: React.ReactNode;
   /** "12/15 points found" badges for marked points missing from the data. */
   badges: React.ReactNode[];
@@ -149,9 +190,12 @@ export interface PlotGraphHandlers {
 
 /**
  * Datawrapper-style annotations on a Plotly plot: draws the layer's
- * annotations for `componentIndex` on top of the figure and, in annotate
- * mode, turns Plotly gestures into new annotations (range = box zoom then
- * undone, points = lasso/box then cleared, line/note = click).
+ * annotations for `componentIndex` on top of the figure (plus a preview of
+ * the capture awaiting its label), edits an annotation in place (or opens
+ * its thread) when it is clicked, reports the counts measured on the data
+ * and, in annotate mode, turns Plotly gestures into new annotations (range =
+ * box selection on one axis, points = lasso/box, both then cleared;
+ * line/note = click). Zoom and pan stay available from the modebar.
  */
 export function usePlotAnnotationLayer({
   componentIndex,
@@ -161,42 +205,113 @@ export function usePlotAnnotationLayer({
   sourceData,
   pointIdIndex = 0,
   pointIdColumn,
+  variant,
 }: UsePlotAnnotationLayerOptions): PlotAnnotationLayer {
   const layer = useAnnotationLayer();
   const annotatable = !!layer && enabled;
-  const layerItems = annotatable ? layer!.itemsFor(componentIndex) : NO_ANNOTATIONS;
-  const mantineTheme = useMantineTheme();
+  const componentItems = annotatable ? layer!.itemsFor(componentIndex) : NO_ANNOTATIONS;
+  // Stable per items array: the conversion and the stats below memoise on it.
+  const layerItems = useMemo(
+    () => itemsForVariant(componentItems, variant) as RenderableAnnotation[],
+    [componentItems, variant],
+  );
   const computedScheme = useComputedColorScheme('light');
   const colorResolver = useMemo(
-    () => makeColorResolver(mantineTheme, computedScheme),
-    [mantineTheme, computedScheme],
+    () => makeColorResolver(computedScheme),
+    [computedScheme],
   );
   // Label text in the theme's own text tone, not in each annotation's colour
   // (a yellow label on a white plot is unreadable).
   const annotationFontColor = colorResolver('gray', computedScheme === 'dark' ? 1 : 8);
-  const hasPointAnnotations = layerItems.some((i) => i.annotation.geometry.kind === 'points');
+  // The capture awaiting its label, drawn as the popover currently has it.
+  const pendingHere =
+    annotatable && layer!.pending?.componentIndex === componentIndex ? layer!.pending : null;
+  const pendingDraft = pendingHere ? layer!.pendingDraft : null;
+  const previewItems = useMemo<RenderableAnnotation[]>(() => {
+    if (!pendingHere || !pendingDraft) return NO_ANNOTATIONS;
+    return [
+      {
+        id: PREVIEW_ANNOTATION_ID,
+        number: null,
+        preview: true,
+        annotation: {
+          kind: pendingHere.kind,
+          geometry: pendingDraft.geometry,
+          label: pendingDraft.label || KIND_LABELS[pendingHere.kind],
+          color: pendingDraft.color,
+          style: pendingDraft.style,
+        },
+      },
+    ];
+  }, [pendingHere, pendingDraft]);
+
+  const wantsTraces = needsTraces(layerItems) || needsTraces(previewItems);
   const matchData = sourceData ?? data;
   const annotationTraces = useMemo(
-    () => (hasPointAnnotations && matchData ? normalizeTraces(matchData, pointIdIndex) : undefined),
-    [hasPointAnnotations, matchData, pointIdIndex],
+    () => (wantsTraces && matchData ? normalizeTraces(matchData, pointIdIndex) : undefined),
+    [wantsTraces, matchData, pointIdIndex],
   );
   const highlightAnnotationId = layer?.highlightId ?? null;
-  const plotlyAnnotations = useMemo(() => {
-    if (!layerItems.length) return null;
-    return annotationsToPlotly(layerItems, {
+
+  // Where box, violin and bar traces drew their points (group offset,
+  // jitter), read from the graph div after every plot, so marked points are
+  // ringed on the mark. Set only when the positions changed: the rings
+  // redraw the figure, which reports back the same positions.
+  const wantsRendered = hasMarkedPoints(layerItems) || hasMarkedPoints(previewItems);
+  const wantsRenderedRef = useRef(wantsRendered);
+  wantsRenderedRef.current = wantsRendered;
+  const [renderedPoints, setRenderedPoints] = useState<RenderedPoints | null>(null);
+  const renderedSignatureRef = useRef('');
+  const syncRenderedPoints = useCallback((gd: unknown) => {
+    if (!wantsRenderedRef.current) return;
+    const next = renderedPointsFromGraph(gd as GraphLike | null);
+    const signature = renderedPointsSignature(next);
+    if (signature === renderedSignatureRef.current) return;
+    renderedSignatureRef.current = signature;
+    setRenderedPoints(next);
+  }, []);
+
+  const toPlotlyOptions = useMemo(
+    () => ({
       resolveColor: colorResolver,
       fontColor: annotationFontColor,
       traces: annotationTraces,
       // normalizeTraces already picked the id slot.
       selectionColumnIndex: 0,
       highlightId: highlightAnnotationId,
-    });
-  }, [layerItems, colorResolver, annotationFontColor, annotationTraces, highlightAnnotationId]);
-  const missingPoints = useMemo(
-    () =>
-      layer?.canAnnotate && plotlyAnnotations ? pointMisses(plotlyAnnotations.stats, layerItems) : [],
-    [layer?.canAnnotate, plotlyAnnotations, layerItems],
+      renderedPoints,
+    }),
+    [colorResolver, annotationFontColor, annotationTraces, highlightAnnotationId, renderedPoints],
   );
+  const savedPlotly = useMemo(
+    () => (layerItems.length ? annotationsToPlotly(layerItems, toPlotlyOptions) : null),
+    [layerItems, toPlotlyOptions],
+  );
+  // Rebuilt on every keystroke of the label: kept apart from the saved ones.
+  const previewPlotly = useMemo(
+    () =>
+      previewItems.length
+        ? annotationsToPlotly(previewItems, {
+            ...toPlotlyOptions,
+            topLabelOffset: savedPlotly?.topLabelCount ?? 0,
+          })
+        : null,
+    [previewItems, toPlotlyOptions, savedPlotly],
+  );
+  const plotlyAnnotations = useMemo(() => mergePlotly(savedPlotly, previewPlotly), [savedPlotly, previewPlotly]);
+  const pendingStats = previewPlotly?.stats[PREVIEW_ANNOTATION_ID];
+  const missingPoints = useMemo(
+    () => (layer?.canAnnotate && savedPlotly ? pointMisses(savedPlotly.stats, layerItems) : []),
+    [layer?.canAnnotate, savedPlotly, layerItems],
+  );
+
+  // Counts measured on this plot's data, for the app (thread list, drawer).
+  // The layer drops reports equal to the previous one.
+  const reportStats = layer?.reportStats;
+  const savedStats = annotatable ? (savedPlotly?.stats ?? NO_STATS) : null;
+  useEffect(() => {
+    if (reportStats && savedStats) reportStats(componentIndex, savedStats);
+  }, [reportStats, componentIndex, savedStats]);
 
   // Annotate mode for this plot: which tool, and how Plotly must behave.
   const annotateTool: AnnotateTool | null =
@@ -206,8 +321,10 @@ export function usePlotAnnotationLayer({
   const annotating = annotateTool != null;
   const [annotateOptions, setAnnotateOptions] = useState<AnnotateOptions>(DEFAULT_ANNOTATE_OPTIONS);
   const interaction = annotateTool ? annotateInteraction(annotateTool, annotateOptions) : null;
-  const pendingHere =
-    layer?.pending && layer.pending.componentIndex === componentIndex ? layer.pending : null;
+  // The modebar's zoom or pan took over the drag gesture (see onAnnotateRelayout).
+  const [navigating, setNavigating] = useState(false);
+  const navigatingRef = useRef(navigating);
+  navigatingRef.current = navigating;
   const pendingRef = useRef(pendingHere);
   pendingRef.current = pendingHere;
 
@@ -230,15 +347,22 @@ export function usePlotAnnotationLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annotateHereWhileDisabled]);
 
+  // The points tool selects on lines too (Plotly's lasso skips a trace
+  // without markers).
+  const selectsPoints = annotateTool === 'points';
+  const selectableData = useMemo(
+    () => (selectsPoints ? withSelectableLines(data ?? NO_DATA) : (data ?? NO_DATA)),
+    [data, selectsPoints],
+  );
   const decoratedData = useMemo(
-    () => appendAnnotationTraces(data ?? NO_DATA, plotlyAnnotations),
-    [data, plotlyAnnotations],
+    () => appendAnnotationTraces(selectableData, plotlyAnnotations, annotating),
+    [selectableData, plotlyAnnotations, annotating],
   );
   const decoratedLayout = useMemo(
     () => decorateAnnotationLayout(layout ?? NO_LAYOUT, plotlyAnnotations, interaction),
-    // Only the interaction's fields matter; the object is rebuilt per render.
+    // Only the interaction's dragmode matters; the object is rebuilt per render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout, plotlyAnnotations, interaction?.dragmode, interaction?.fixedAxis],
+    [layout, plotlyAnnotations, interaction?.dragmode],
   );
 
   // Latest render values for the stable handlers below.
@@ -249,71 +373,43 @@ export function usePlotAnnotationLayer({
     componentIndex,
     pointIdIndex,
     pointIdColumn,
+    variant,
   });
-  latest.current = { layer, annotateTool, annotateOptions, componentIndex, pointIdIndex, pointIdColumn };
+  latest.current = {
+    layer,
+    annotateTool,
+    annotateOptions,
+    componentIndex,
+    pointIdIndex,
+    pointIdColumn,
+    variant,
+  };
 
-  // ── Range: a box zoom is captured, then immediately undone so the zoom
-  // never sticks. `restoringRef` swallows the relayout event our own undo
-  // emits. Only a drag started in a plot area (`.nsewdrag`) is captured; any
-  // other explicit range change (scroll zoom, axis drag, a facet panel's own
-  // axes) is undone without creating an annotation.
-  const axisSnapshotRef = useRef<AxisSnapshot | null>(null);
-  const restoringRef = useRef(false);
-  const dragArmedRef = useRef(false);
-
-  useEffect(() => {
-    if (interaction?.capture !== 'relayout' || !graphDiv) return;
-    axisSnapshotRef.current = snapshotAxes(readFullLayout(graphDiv));
-    dragArmedRef.current = false;
-    const onDown = (e: Event) => {
-      const t = e.target as Element | null;
-      dragArmedRef.current = !!t?.closest?.('.nsewdrag');
-    };
-    const onWheel = () => {
-      dragArmedRef.current = false;
-    };
-    // Capture phase: Plotly's drag handlers may stop propagation.
-    graphDiv.addEventListener('mousedown', onDown, true);
-    graphDiv.addEventListener('touchstart', onDown, true);
-    graphDiv.addEventListener('wheel', onWheel, true);
-    return () => {
-      graphDiv.removeEventListener('mousedown', onDown, true);
-      graphDiv.removeEventListener('touchstart', onDown, true);
-      graphDiv.removeEventListener('wheel', onWheel, true);
-    };
-  }, [interaction?.capture, graphDiv, annotateOptions.rangeAxis]);
-
+  // ── Zoom / pan from the modebar: while one of them holds the drag
+  // gesture no tool is active; picking a tool again (even the same one)
+  // re-applies its dragmode, which a `uirevision` would otherwise keep on the
+  // user's modebar choice.
   const onAnnotateRelayout = useCallback((event: Record<string, unknown>) => {
-    const { layer: l, annotateTool: tool, annotateOptions: opts, componentIndex: idx } = latest.current;
-    if (!l || restoringRef.current || tool !== 'range') return;
-    const gd = gdRef.current;
-    const armed = dragArmedRef.current;
-    dragArmedRef.current = false;
-    if (!relayoutSetsRange(event)) {
-      // Autorange (double-click) or anything else: that is the new baseline.
-      axisSnapshotRef.current = snapshotAxes(readFullLayout(gd));
-      return;
-    }
-    const geometry = armed ? rangeFromRelayout(event, opts.rangeAxis) : null;
-    const snapshot = axisSnapshotRef.current;
-    if (gd && snapshot) {
-      restoringRef.current = true;
-      Plotly.relayout(gd as unknown as PlotlyTarget, restoreAxesUpdate(snapshot) as Partial<Plotly.Layout>)
-        .catch(() => {})
-        .then(() => {
-          // Plotly emits plotly_relayout before resolving; release on the
-          // next task so that event is certainly past.
-          setTimeout(() => {
-            restoringRef.current = false;
-          }, 0);
-        });
-    }
-    if (geometry && !pendingRef.current) l.onCaptured(idx, geometry, 'range');
+    if (!event || !('dragmode' in event)) return;
+    const { annotateTool: tool, annotateOptions: opts } = latest.current;
+    if (!tool) return;
+    setNavigating(event.dragmode !== annotateInteraction(tool, opts).dragmode);
   }, []);
+  const [toolPicks, setToolPicks] = useState(0);
+  const toolDragmode = interaction?.dragmode;
+  useEffect(() => {
+    setNavigating(false);
+    const gd = gdRef.current;
+    if (!gd || toolDragmode === undefined) return;
+    if (readFullLayout(gd)?.dragmode === toolDragmode) return;
+    Plotly.relayout(gd as unknown as PlotlyTarget, { dragmode: toolDragmode } as Partial<Plotly.Layout>).catch(
+      () => {},
+    );
+  }, [toolPicks, toolDragmode]);
 
-  // ── Points / line / note: the figure's own selection (e.g. the dashboard
-  // selection highlight) is recorded on entry and put back after every
-  // capture and on exit, so annotating never wipes it.
+  // ── Range / points / line / note: the figure's own selection (e.g. the
+  // dashboard selection highlight) is recorded on entry and put back after
+  // every capture and on exit, so annotating never wipes it.
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const keepsSelection = interaction?.capture === 'selected' || interaction?.capture === 'click';
   useEffect(() => {
@@ -326,16 +422,38 @@ export function usePlotAnnotationLayer({
     };
   }, [keepsSelection, graphDiv]);
 
-  // ── Points: a lasso/box selection is captured, then the figure's previous
-  // selection is restored; nothing reaches the dashboard filters.
+  // ── Range / points: a box or lasso selection is captured, then the
+  // figure's previous selection is restored; nothing reaches the dashboard
+  // filters. A range keeps only the tool's axis of the box.
   const onAnnotateSelected = useCallback((event: any) => {
-    const { layer: l, annotateTool: tool, componentIndex: idx, pointIdIndex: slot, pointIdColumn: col } =
-      latest.current;
-    if (!l || tool !== 'points' || !event) return;
-    const geometry = markedPointsFromSelection(stripOverlayPoints(event), col ? slot : undefined, col);
+    const {
+      layer: l,
+      annotateTool: tool,
+      annotateOptions: opts,
+      componentIndex: idx,
+      pointIdIndex: slot,
+      pointIdColumn: col,
+      variant: view,
+    } = latest.current;
+    if (!l || !event) return;
+    if (tool === 'range') {
+      const range = rangeFromSelection(event, opts.rangeAxis);
+      if (selectionSnapshotRef.current) restoreSelection(gdRef.current, selectionSnapshotRef.current);
+      else clearDrawnSelection(gdRef.current);
+      if (range && !pendingRef.current) l.onCaptured(idx, range, 'range', view);
+      return;
+    }
+    if (tool !== 'points') return;
+    // The selected area (range / lassoPoints / selections) rides along with
+    // the filtered points, so the annotation can shade it.
+    const geometry = markedPointsFromSelection(
+      { ...event, ...stripOverlayPoints(event) },
+      col ? slot : undefined,
+      col,
+    );
     if (selectionSnapshotRef.current) restoreSelection(gdRef.current, selectionSnapshotRef.current);
     else clearDrawnSelection(gdRef.current);
-    if (geometry && !pendingRef.current) l.onCaptured(idx, geometry, 'points');
+    if (geometry && !pendingRef.current) l.onCaptured(idx, geometry, 'points', view);
   }, []);
 
   // ── Line / note: any click in the plot area. Snaps to the hovered data
@@ -351,6 +469,8 @@ export function usePlotAnnotationLayer({
   const clickCaptureRef = useRef<(e: MouseEvent) => void>(() => undefined);
   clickCaptureRef.current = (e: MouseEvent) => {
     if (!layer || (annotateTool !== 'line' && annotateTool !== 'note') || pendingRef.current) return;
+    // A click while zoom/pan holds the gesture belongs to the navigation.
+    if (navigatingRef.current) return;
     const target = e.target as Element | null;
     if (target?.closest?.('.modebar, .legend')) return;
     const gd = gdRef.current;
@@ -361,7 +481,7 @@ export function usePlotAnnotationLayer({
     if (!point) return;
     const geometry =
       annotateTool === 'line' ? refLineFromClick(point, annotateOptions.lineAxis) : arrowNoteFromClick(point);
-    if (geometry) layer.onCaptured(componentIndex, geometry, annotateTool);
+    if (geometry) layer.onCaptured(componentIndex, geometry, annotateTool, variant);
   };
   useEffect(() => {
     if (interaction?.capture !== 'click' || !graphDiv) return;
@@ -383,10 +503,20 @@ export function usePlotAnnotationLayer({
   }, [annotating, layer]);
 
   // Graph div tracking, stable so memoised plot wrappers do not re-render.
-  const trackGraph = useCallback((gd: unknown) => {
-    gdRef.current = gd as HTMLElement;
-    setGraphDiv(gd as HTMLElement);
-  }, []);
+  // Runs after every plot, relayout and resize (react-plotly's onUpdate).
+  const trackGraph = useCallback(
+    (gd: unknown) => {
+      gdRef.current = gd as HTMLElement;
+      setGraphDiv(gd as HTMLElement);
+      syncRenderedPoints(gd);
+    },
+    [syncRenderedPoints],
+  );
+  // A first marked-points annotation (or its preview) on an already plotted
+  // figure: read the positions now rather than at the next plot.
+  useEffect(() => {
+    if (wantsRendered && gdRef.current) syncRenderedPoints(gdRef.current);
+  }, [wantsRendered, syncRenderedPoints]);
   const trackOnly = useCallback((_fig: unknown, gd: unknown) => trackGraph(gd), [trackGraph]);
 
   const annotateHandlers = useMemo(
@@ -399,11 +529,22 @@ export function usePlotAnnotationLayer({
     [onAnnotateSelected, onAnnotateRelayout, onAnnotateHover, onAnnotateUnhover],
   );
   const capture = interaction?.capture ?? null;
+  // A click on a saved annotation opens its inline editor at the click, or
+  // its thread when the app does not edit in place (outside annotate mode).
+  const layerOpenAnnotation = annotatable ? layer!.openAnnotation : null;
+  const openAnnotation = useMemo(
+    () =>
+      layerOpenAnnotation
+        ? (threadId: string, event: unknown) =>
+            layerOpenAnnotation(threadId, componentIndex, clientPointFromEvent(event))
+        : null,
+    [layerOpenAnnotation, componentIndex],
+  );
   const plotProps = useCallback(
     (own: PlotEventHandlers & PlotGraphHandlers = {}) => {
       const { onInitialized, onUpdate, ...events } = own;
       return {
-        ...mergePlotHandlers(events, annotateHandlers, capture),
+        ...mergePlotHandlers(events, annotateHandlers, capture, openAnnotation),
         onInitialized: onInitialized
           ? (fig: any, gd: any) => {
               trackGraph(gd);
@@ -418,24 +559,34 @@ export function usePlotAnnotationLayer({
           : trackOnly,
       };
     },
-    [annotateHandlers, capture, trackGraph, trackOnly],
+    [annotateHandlers, capture, openAnnotation, trackGraph, trackOnly],
   );
 
-  const toolbar =
+  const annotateToolbar =
     annotating && layer && annotateTool ? (
       <AnnotateToolbar
         tool={annotateTool}
         options={annotateOptions}
         onChange={(tool, options) => {
           setAnnotateOptions(options);
+          setToolPicks((n) => n + 1);
           if (tool !== annotateTool) layer.setAnnotate(componentIndex, tool);
         }}
         onDone={() => layer.setAnnotate(null)}
         pending={pendingHere}
         onSave={layer.savePending}
         onCancel={layer.cancelPending}
+        onDraftChange={layer.updatePendingDraft}
+        pendingStats={pendingStats}
+        navigating={navigating}
       />
     ) : null;
+  const toolbar = (
+    <>
+      {annotateToolbar}
+      {annotatable && <InlineAnnotationEditor componentIndex={componentIndex} />}
+    </>
+  );
 
   // A shape the reader cannot see in full: "12/15 points found" per marked-
   // points annotation whose points are not all in the current figure.

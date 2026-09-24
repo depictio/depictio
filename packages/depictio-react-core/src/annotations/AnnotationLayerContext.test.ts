@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { withAnnotatable } from './AnnotationLayerContext';
+import { initialPendingDraft, withAnnotatable } from './AnnotationLayerContext';
 
 describe('withAnnotatable', () => {
   it('sets and clears a component flag', () => {
@@ -12,5 +12,16 @@ describe('withAnnotatable', () => {
     const a = { '1': true };
     expect(withAnnotatable(a, '1', true)).toBe(a);
     expect(withAnnotatable(a, '2', false)).toBe(a);
+  });
+});
+
+describe('initialPendingDraft', () => {
+  it('starts with an empty label, the kind colour and the captured geometry', () => {
+    const geometry = { kind: 'ref_line', axis: 'x', value: 3 } as const;
+    expect(initialPendingDraft({ componentIndex: 'c', kind: 'line', geometry })).toEqual({
+      label: '',
+      color: 'red',
+      geometry,
+    });
   });
 });

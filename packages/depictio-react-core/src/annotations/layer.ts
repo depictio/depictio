@@ -10,11 +10,11 @@ import type {
   AnnotationColor,
   AnnotationKind,
   AnnotationStyle,
-  AxisValue,
   Geometry,
   RenderableAnnotation,
 } from './types';
 import { MAX_LABEL_CHARS } from './types';
+import type { AnnotationStats } from './summary';
 import { decodeBdata, extractCustomdataIds, isPlotlyTypedArray } from '../plotlyData';
 
 /** Drawing tool of the annotate mode (same union as the viewer's UI store). */
@@ -35,21 +35,21 @@ export const DEFAULT_ANNOTATE_OPTIONS: AnnotateOptions = {
   selectMode: 'lasso',
 };
 
-export type CaptureEvent = 'relayout' | 'click' | 'selected';
+export type CaptureEvent = 'click' | 'selected';
 
 export interface AnnotateInteraction {
   /** `layout.dragmode` while the tool is active. */
-  dragmode: 'zoom' | 'lasso' | 'select' | false;
+  dragmode: 'lasso' | 'select' | false;
   /** Which Plotly event produces the geometry. */
   capture: CaptureEvent;
-  /** Axis frozen (`fixedrange`) so a range drag only moves along the other. */
-  fixedAxis: 'x' | 'y' | null;
 }
 
 /**
  * How the figure behaves for a drawing tool. Ranges are captured from a box
- * zoom (then undone), points from a lasso/box selection (then cleared), lines
- * and notes from a click (no drag gesture at all).
+ * selection (only the tool's axis is kept), points from a lasso/box selection,
+ * both then cleared; lines and notes from a click (no drag gesture at all).
+ * Zoom and pan stay available from the modebar: axis changes are never
+ * captured.
  */
 export function annotateInteraction(
   tool: AnnotateTool,
@@ -57,16 +57,12 @@ export function annotateInteraction(
 ): AnnotateInteraction {
   switch (tool) {
     case 'range':
-      return {
-        dragmode: 'zoom',
-        capture: 'relayout',
-        fixedAxis: opts.rangeAxis === 'x' ? 'y' : 'x',
-      };
+      return { dragmode: 'select', capture: 'selected' };
     case 'points':
-      return { dragmode: opts.selectMode, capture: 'selected', fixedAxis: null };
+      return { dragmode: opts.selectMode, capture: 'selected' };
     case 'line':
     case 'note':
-      return { dragmode: false, capture: 'click', fixedAxis: null };
+      return { dragmode: false, capture: 'click' };
   }
 }
 
@@ -75,18 +71,21 @@ export function annotateHint(tool: AnnotateTool, opts: AnnotateOptions): string 
   switch (tool) {
     case 'range':
       return opts.rangeAxis === 'x'
-        ? 'Drag horizontally to highlight an x range'
-        : 'Drag vertically to highlight a y range';
+        ? 'Drag a box: its x extent becomes the range'
+        : 'Drag a box: its y extent becomes the range';
     case 'line':
       return opts.lineAxis === 'x'
-        ? 'Click to place a vertical reference line'
-        : 'Click to place a horizontal reference line';
+        ? 'Click to place a vertical line at an x value'
+        : 'Click to place a horizontal line at a y value';
     case 'points':
       return opts.selectMode === 'lasso' ? 'Lasso the points to mark' : 'Box-select the points to mark';
     case 'note':
       return 'Click a point to attach a note';
   }
 }
+
+/** Hint while the modebar's zoom or pan has taken over the drag gesture. */
+export const NAVIGATING_HINT = 'Zooming or panning: pick a tool to annotate again';
 
 /** The annotation kind a geometry belongs to. */
 export function kindForGeometry(geometry: Geometry): AnnotationKind {
@@ -216,6 +215,16 @@ export interface NormalizedTrace {
   y?: unknown[];
   /** One selection id per point (column already picked). */
   customdata?: unknown[];
+  /** A scatter trace drawn as a line (its points joined in order). */
+  lines?: boolean;
+}
+
+const SCATTER_TYPES = new Set(['scatter', 'scattergl']);
+
+/** Whether a trace is a scatter drawn with lines (`mode` has `lines`). */
+function isLineTrace(t: Record<string, unknown>): boolean {
+  const type = t.type ?? 'scatter';
+  return typeof type === 'string' && SCATTER_TYPES.has(type) && typeof t.mode === 'string' && t.mode.includes('lines');
 }
 
 /**
@@ -230,13 +239,56 @@ export function normalizeTraces(data: unknown, selectionColumnIndex: number): No
   const out: NormalizedTrace[] = [];
   for (const t of data as Array<Record<string, unknown> | null>) {
     if (!t || isOverlayTraceName(t.name)) continue;
-    out.push({
+    const trace: NormalizedTrace = {
       x: asPlainArray(t.x),
       y: asPlainArray(t.y),
       customdata: customdataIds(t.customdata, selectionColumnIndex),
-    });
+    };
+    if (isLineTrace(t)) trace.lines = true;
+    out.push(trace);
   }
   return out;
+}
+
+/**
+ * The traces with every lines-only scatter trace given invisible markers.
+ * Plotly's lasso and box select nothing on a trace without markers or text,
+ * so the "points" tool needs them to mark a line. Returns `data` itself when
+ * no trace needs it.
+ */
+export function withSelectableLines(data: readonly unknown[]): unknown[] {
+  let changed = false;
+  const out = data.map((raw) => {
+    const t = raw as Record<string, unknown> | null;
+    if (!t || typeof t !== 'object' || !isLineTrace(t) || isOverlayTraceName(t.name)) return raw;
+    const mode = t.mode as string;
+    if (mode.includes('markers') || mode.includes('text')) return raw;
+    changed = true;
+    const marker = t.marker && typeof t.marker === 'object' ? (t.marker as Record<string, unknown>) : {};
+    return {
+      ...t,
+      mode: `${mode}+markers`,
+      marker: { ...marker, opacity: 0 },
+      selected: { marker: { opacity: 0 } },
+      unselected: { marker: { opacity: 0 } },
+    };
+  });
+  return changed ? out : (data as unknown[]);
+}
+
+/**
+ * The annotations to draw on the view `variant` of a component: those drawn
+ * on that view plus those without a variant. Every item when `variant` is
+ * undefined (the component has a single view). Returns `items` itself when
+ * nothing is left out.
+ */
+export function itemsForVariant<T extends { annotation: { variant?: string | null } }>(
+  items: readonly T[],
+  variant: string | null | undefined,
+): readonly T[] {
+  if (variant === undefined) return items;
+  const keep = (i: T) => !i.annotation.variant || i.annotation.variant === variant;
+  return items.every(keep) ? items : items.filter(keep);
 }
 
 /** Visu types drawn outside a cartesian x/y plane: no annotation there. */
@@ -327,6 +379,7 @@ export interface PublishedLike {
   label: string;
   color: AnnotationColor;
   style: AnnotationStyle;
+  variant?: string | null;
 }
 
 /** Published annotations (what viewers may see), grouped by component index. */
@@ -346,67 +399,11 @@ export function publishedToRenderable(
         color: p.color,
         style: p.style,
         published: true,
+        ...(p.variant ? { variant: p.variant } : {}),
       },
     });
   }
   return out;
-}
-
-export interface AxisState {
-  autorange: boolean;
-  range: AxisValue[] | null;
-}
-
-/**
- * Ranges of every cartesian axis of a figure, keyed by layout name
- * (`xaxis`, `yaxis`, `xaxis2`...): faceted figures have one pair per panel.
- */
-export type AxisSnapshot = Record<string, AxisState | null>;
-
-interface FullAxisLike {
-  autorange?: unknown;
-  range?: unknown;
-}
-
-const AXIS_NAME = /^[xy]axis\d*$/;
-
-function snapAxis(ax: FullAxisLike | undefined): AxisState | null {
-  if (!ax || typeof ax !== 'object') return null;
-  const range = Array.isArray(ax.range) && ax.range.length >= 2 ? [...ax.range] as AxisValue[] : null;
-  return { autorange: ax.autorange === true || range == null, range };
-}
-
-/** Every cartesian axis' current range, read from a graph div's `_fullLayout`. */
-export function snapshotAxes(fullLayout: Record<string, unknown> | null | undefined): AxisSnapshot {
-  const out: AxisSnapshot = {};
-  if (!fullLayout) return out;
-  for (const key of Object.keys(fullLayout)) {
-    if (!AXIS_NAME.test(key)) continue;
-    const snap = snapAxis(fullLayout[key] as FullAxisLike | undefined);
-    if (snap) out[key] = snap;
-  }
-  return out;
-}
-
-/** `Plotly.relayout` update putting every axis back where the snapshot was. */
-export function restoreAxesUpdate(snapshot: AxisSnapshot): Record<string, unknown> {
-  const update: Record<string, unknown> = {};
-  for (const [name, s] of Object.entries(snapshot)) {
-    if (!s) continue;
-    if (s.autorange || !s.range) update[`${name}.autorange`] = true;
-    else update[`${name}.range`] = [...s.range];
-  }
-  return update;
-}
-
-/**
- * Whether a `plotly_relayout` event set an explicit range on some axis (a box
- * zoom, a scroll zoom, an axis drag, on any panel), as opposed to an autorange
- * reset or a non-axis change.
- */
-export function relayoutSetsRange(ev: Record<string, unknown> | null | undefined): boolean {
-  if (!ev) return false;
-  return Object.keys(ev).some((k) => /^[xy]axis\d*\.range(\[[01]\])?$/.test(k));
 }
 
 interface PixelAxisLike {
@@ -447,12 +444,18 @@ export interface PointMiss {
 
 /** Marked-points annotations with points missing from the current figure. */
 export function pointMisses(
-  stats: Record<string, { expected: number; found: number }>,
+  stats: Record<string, AnnotationStats>,
   items: readonly RenderableAnnotation[],
 ): PointMiss[] {
   const byId = new Map(items.map((i) => [i.id, i]));
-  return Object.entries(stats)
-    .filter(([, s]) => s.expected > 0 && s.found < s.expected)
+  const misses: Array<[string, { expected: number; found: number }]> = [];
+  for (const [id, s] of Object.entries(stats)) {
+    const { expected, found } = s;
+    if (expected != null && found != null && expected > 0 && found < expected) {
+      misses.push([id, { expected, found }]);
+    }
+  }
+  return misses
     .map(([id, s]) => ({ id, number: byId.get(id)?.number ?? null, ...s }))
     .sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity));
 }

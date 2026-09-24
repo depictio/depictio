@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Group,
   Pagination,
@@ -7,6 +7,7 @@ import {
   Stack,
   Table,
   Text,
+  useComputedColorScheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
@@ -25,6 +26,20 @@ import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import ComponentSkeleton from '../ComponentSkeleton';
 import RefetchOverlay from '../RefetchOverlay';
 import { useReportLoadStatus } from '../DashboardLoadingProvider';
+import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
+import { DEFAULT_ANNOTATE_OPTIONS } from '../../annotations/layer';
+import { isAnnotateEscape } from '../../annotations/escape';
+import { GENERAL_STATS_SAMPLE_KEY, MULTIQC_SAMPLE_COLUMN } from '../../annotations/multiqc';
+import { annotationColorTint, annotationColorValue } from '../../annotations/resolveColor';
+import {
+  buildRowAnnotationMap,
+  markedRowsFromSelection,
+  rowAnnotationBadge,
+} from '../../annotations/tableRows';
+import type { RowAnnotationMark } from '../../annotations/tableRows';
+import type { RenderableAnnotation } from '../../annotations/types';
+import AnnotateToolbar from '../annotations/AnnotateToolbar';
+import InlineAnnotationEditor from '../annotations/InlineAnnotationEditor';
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
@@ -139,10 +154,30 @@ const CELL_STYLE: React.CSSProperties = {
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
-  background: 'var(--mantine-color-body)',
+  backgroundColor: 'var(--mantine-color-body)',
   color: 'var(--mantine-color-text)',
   borderBottom: '1px solid var(--mantine-color-default-border)',
 };
+
+const NO_ANNOTATIONS: RenderableAnnotation[] = [];
+
+/** Narrow first column carrying the ①② badges of annotated rows. */
+const BADGE_CELL_STYLE: React.CSSProperties = {
+  ...CELL_STYLE,
+  width: 40,
+  minWidth: 40,
+  padding: '6px 2px 6px 4px',
+  textAlign: 'center',
+  fontWeight: 600,
+  letterSpacing: '-0.05em',
+};
+
+/** The sample a General Stats row shows, as the id marked rows are stored with. */
+function rowSample(row: Record<string, unknown>): string | number | null {
+  const v = row[GENERAL_STATS_SAMPLE_KEY];
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  return typeof v === 'string' && v !== '' ? v : null;
+}
 
 const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   dashboardId,
@@ -231,6 +266,103 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     [sortedRows, safePage],
   );
 
+  // ── Annotation layer ──────────────────────────────────────────────────────
+  // Rows are marked by sample (the same `sample` ids as the MultiQC figures):
+  // a marked row gets a tint, a coloured stripe and a ①② badge, as in
+  // TableRenderer. Annotate mode picks rows by click, in the table view only.
+  const layer = useAnnotationLayer();
+  const componentIndex = String(metadata.index);
+  const colorScheme = useComputedColorScheme('light');
+  const layerItems = layer ? layer.itemsFor(componentIndex) : NO_ANNOTATIONS;
+  const highlightAnnotationId = layer?.highlightId ?? null;
+  const rowAnnotations = useMemo(
+    () => buildRowAnnotationMap(layerItems, MULTIQC_SAMPLE_COLUMN, highlightAnnotationId),
+    [layerItems, highlightAnnotationId],
+  );
+  const hasRowAnnotations = rowAnnotations.size > 0;
+
+  const annotatable = !!payload && !error && view === 'table';
+  const reportAnnotatable = layer?.reportAnnotatable;
+  useEffect(() => {
+    if (!reportAnnotatable) return;
+    reportAnnotatable(componentIndex, annotatable);
+    return () => reportAnnotatable(componentIndex, false);
+  }, [reportAnnotatable, componentIndex, annotatable]);
+  const annotateHere = !!layer && layer.canAnnotate && layer.annotate?.componentIndex === componentIndex;
+  const annotating = annotateHere && annotatable;
+  // Switching to the violin view leaves annotate mode.
+  useEffect(() => {
+    if (annotateHere && !annotatable) layer?.setAnnotate(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotateHere, annotatable]);
+  const pendingHere =
+    layer?.pending && layer.pending.componentIndex === componentIndex ? layer.pending : null;
+
+  // Rows picked for the next "Mark rows", by stringified sample (raw value kept).
+  const [annotateSelected, setAnnotateSelected] = useState<Map<string, string | number>>(() => new Map());
+  useEffect(() => {
+    setAnnotateSelected((prev) => (prev.size ? new Map() : prev));
+  }, [annotating]);
+  const toggleAnnotateRow = (row: Record<string, unknown>) => {
+    if (!annotating || pendingHere) return;
+    const sample = rowSample(row);
+    if (sample == null) return;
+    setAnnotateSelected((prev) => {
+      const next = new Map(prev);
+      const key = String(sample);
+      if (next.has(key)) next.delete(key);
+      else next.set(key, sample);
+      return next;
+    });
+  };
+  const markSelectedRows = () => {
+    if (!layer || pendingHere) return;
+    const geometry = markedRowsFromSelection(
+      Array.from(annotateSelected.values(), (v) => ({ [MULTIQC_SAMPLE_COLUMN]: v })),
+      MULTIQC_SAMPLE_COLUMN,
+    );
+    if (!geometry) return;
+    layer.onCaptured(componentIndex, geometry, 'points');
+    setAnnotateSelected(new Map());
+  };
+
+  // Esc cancels the pending label first, then leaves annotate mode.
+  useEffect(() => {
+    if (!annotating || !layer) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!isAnnotateEscape(e, containerRef.current)) return;
+      if (pendingHere) layer.cancelPending();
+      else layer.setAnnotate(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [annotating, layer, pendingHere, containerRef]);
+
+  // A badge opens the inline editor of the annotation styling the row (or its
+  // thread), outside annotate mode where row clicks belong to the tool.
+  const openAnnotation = layer?.openAnnotation ?? null;
+  const onBadgeClick = useCallback(
+    (mark: RowAnnotationMark | undefined, e: React.MouseEvent<HTMLElement>) => {
+      if (!mark || !openAnnotation || annotating) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      openAnnotation(mark.id, componentIndex, { x: r.left + r.width / 2, y: r.bottom });
+    },
+    [openAnnotation, annotating, componentIndex],
+  );
+
+  /** Cell colours of a marked or picked row; null for a plain row. */
+  const rowTone = (
+    mark: RowAnnotationMark | undefined,
+    picked: boolean,
+  ): React.CSSProperties | null => {
+    if (picked) return { backgroundColor: 'var(--mantine-primary-color-light)' };
+    if (!mark) return null;
+    return {
+      backgroundColor: annotationColorTint(mark.color, colorScheme, mark.highlighted),
+      ...(mark.highlighted ? { fontWeight: 600 } : {}),
+    };
+  };
+
   const onHeaderClick = (colId: string) => {
     if (sortKey !== colId) {
       setSortKey(colId);
@@ -287,7 +419,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   const renderTable = (m: GeneralStatsModeData) => {
     const columns: GeneralStatsColumn[] = m.table_columns;
     return (
-      <Stack gap="xs" style={{ flex: 1, minHeight: 0 }}>
+      <Stack gap="xs" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div
           style={{
             flex: 1,
@@ -307,6 +439,9 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
           >
             <Table.Thead>
               <Table.Tr>
+                {hasRowAnnotations && (
+                  <Table.Th style={{ ...HEADER_STYLE, cursor: 'default', width: 40 }} title="Annotations" />
+                )}
                 {columns.map((col) => {
                   const isSort = sortKey === col.id;
                   const arrow = isSort ? (sortDir === 'asc' ? ' ↑' : sortDir === 'desc' ? ' ↓' : '') : '';
@@ -323,34 +458,69 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {visibleRows.map((row, rowIdx) => (
-                <Table.Tr key={rowIdx}>
-                  {columns.map((col) => {
-                    const value = row[col.id];
-                    const bar = col.id === 'Sample Name' ? null : findDataBar(dataBars.get(col.id), value);
-                    const cellStyle: React.CSSProperties = {
-                      ...CELL_STYLE,
-                      ...(col.id === 'Sample Name'
-                        ? { fontWeight: 600, minWidth: 200 }
+              {visibleRows.map((row, rowIdx) => {
+                const sample = rowSample(row);
+                const mark = sample == null ? undefined : rowAnnotations.get(String(sample));
+                const picked = annotating && sample != null && annotateSelected.has(String(sample));
+                const tone = rowTone(mark, picked);
+                const stripe = mark ? annotationColorValue(mark.color, colorScheme) : undefined;
+                return (
+                  <Table.Tr
+                    key={rowIdx}
+                    onClick={annotating ? () => toggleAnnotateRow(row) : undefined}
+                    style={{
+                      ...(annotating ? { cursor: 'pointer' } : {}),
+                      ...(picked
+                        ? { outline: '2px dashed var(--mantine-primary-color-filled)', outlineOffset: -2 }
                         : {}),
-                      ...(bar
-                        ? {
-                            backgroundImage: bar.backgroundImage,
-                            paddingTop: bar.paddingTop ?? CELL_STYLE.padding,
-                            paddingBottom: bar.paddingBottom ?? CELL_STYLE.padding,
-                          }
-                        : {}),
-                    };
-                    const display =
-                      col.type === 'numeric' ? formatCell(value, col.format) : String(value ?? '');
-                    return (
-                      <Table.Td key={col.id} style={cellStyle}>
-                        {display}
+                    }}
+                  >
+                    {hasRowAnnotations && (
+                      <Table.Td
+                        style={{
+                          ...BADGE_CELL_STYLE,
+                          ...tone,
+                          ...(stripe
+                            ? {
+                                color: stripe,
+                                boxShadow: `inset ${mark?.highlighted ? 5 : 3}px 0 0 ${stripe}`,
+                                cursor: openAnnotation && !annotating ? 'pointer' : undefined,
+                              }
+                            : {}),
+                        }}
+                        onClick={mark && !annotating ? (e) => onBadgeClick(mark, e) : undefined}
+                      >
+                        {rowAnnotationBadge(mark)}
                       </Table.Td>
-                    );
-                  })}
-                </Table.Tr>
-              ))}
+                    )}
+                    {columns.map((col) => {
+                      const value = row[col.id];
+                      const bar = col.id === 'Sample Name' ? null : findDataBar(dataBars.get(col.id), value);
+                      const cellStyle: React.CSSProperties = {
+                        ...CELL_STYLE,
+                        ...(col.id === 'Sample Name'
+                          ? { fontWeight: 600, minWidth: 200 }
+                          : {}),
+                        ...(bar
+                          ? {
+                              backgroundImage: bar.backgroundImage,
+                              paddingTop: bar.paddingTop ?? CELL_STYLE.padding,
+                              paddingBottom: bar.paddingBottom ?? CELL_STYLE.padding,
+                            }
+                          : {}),
+                        ...tone,
+                      };
+                      const display =
+                        col.type === 'numeric' ? formatCell(value, col.format) : String(value ?? '');
+                      return (
+                        <Table.Td key={col.id} style={cellStyle}>
+                          {display}
+                        </Table.Td>
+                      );
+                    })}
+                  </Table.Tr>
+                );
+              })}
             </Table.Tbody>
           </Table>
         </div>
@@ -364,6 +534,21 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
             />
           </Group>
         )}
+        {annotating && layer && (
+          <AnnotateToolbar
+            variant="rows"
+            tool="points"
+            options={DEFAULT_ANNOTATE_OPTIONS}
+            onChange={() => undefined}
+            onDone={() => layer.setAnnotate(null)}
+            pending={pendingHere}
+            onSave={layer.savePending}
+            onCancel={layer.cancelPending}
+            selectedCount={annotateSelected.size}
+            onMarkRows={markSelectedRows}
+          />
+        )}
+        {layer && <InlineAnnotationEditor componentIndex={componentIndex} />}
       </Stack>
     );
   };

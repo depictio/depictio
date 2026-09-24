@@ -1,62 +1,70 @@
-import React, { useState } from 'react';
-import {
-  Button,
-  ColorSwatch,
-  Group,
-  Stack,
-  Switch,
-  Text,
-  Textarea,
-  TextInput,
-  Tooltip,
-  UnstyledButton,
-} from '@mantine/core';
+import React, { useEffect, useState } from 'react';
+import { Button, Group, Stack, Switch, Text, Textarea, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import type { AnnotationDraft, PendingAnnotation } from '../../annotations/AnnotationLayerContext';
+import type {
+  AnnotationDraft,
+  PendingAnnotation,
+  PendingDraftPatch,
+} from '../../annotations/AnnotationLayerContext';
+import { hasRegion, withoutRegion } from '../../annotations/edit';
 import { defaultColorFor, KIND_LABELS, validateLabel } from '../../annotations/layer';
-import { ANNOTATION_COLORS, MAX_LABEL_CHARS } from '../../annotations/types';
-import type { AnnotationColor } from '../../annotations/types';
+import { DEFAULT_RANGE_OPACITY } from '../../annotations/toPlotly';
+import { annotationSummary } from '../../annotations/summary';
+import type { AnnotationStats } from '../../annotations/summary';
+import { MAX_LABEL_CHARS } from '../../annotations/types';
+import type { AnnotationColor, AnnotationStyle } from '../../annotations/types';
+import AnnotationColorPicker from './AnnotationColorPicker';
+import { RegionHighlightFields } from './AnnotationStyleFields';
 
 export interface AnnotationFormProps {
   pending: PendingAnnotation;
   onSave: (draft: AnnotationDraft) => Promise<void>;
   onCancel: () => void;
+  /** Receives the label, colour, style and geometry as they change (the preview). */
+  onDraftChange?: (patch: PendingDraftPatch) => void;
+  /** Counts measured on the component's data for the pending shape. */
+  stats?: AnnotationStats;
 }
 
-function geometrySummary(p: PendingAnnotation): string | null {
-  const g = p.geometry;
-  switch (g.kind) {
-    case 'x_range':
-      return `x from ${g.x0} to ${g.x1}`;
-    case 'y_range':
-      return `y from ${g.y0} to ${g.y1}`;
-    case 'ref_line':
-      return `${g.axis} = ${g.value}`;
-    case 'points': {
-      const n = g.ids?.length ?? g.coords?.length ?? 0;
-      return `${n} point${n === 1 ? '' : 's'}`;
-    }
-    case 'arrow_note':
-      return `at (${g.x}, ${g.y})`;
-  }
+function geometrySummary(p: PendingAnnotation, stats?: AnnotationStats): string {
+  return annotationSummary({ kind: p.kind, geometry: p.geometry, label: '' }, stats);
 }
 
 /**
  * Label, colour, optional comment and visibility of an annotation that was
- * just drawn. Colours are Mantine palette names rendered through the theme's
- * CSS variables, so the swatches follow light/dark mode like the shapes.
+ * just drawn. Lassoed or boxed points also get their selected area shaded,
+ * unless switched off.
  */
-const AnnotationForm: React.FC<AnnotationFormProps> = ({ pending, onSave, onCancel }) => {
+const AnnotationForm: React.FC<AnnotationFormProps> = ({
+  pending,
+  onSave,
+  onCancel,
+  onDraftChange,
+  stats,
+}) => {
   const [label, setLabel] = useState('');
   const [color, setColor] = useState<AnnotationColor>(defaultColorFor(pending.kind));
   const [body, setBody] = useState('');
   const [published, setPublished] = useState(false);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  const withRegion = hasRegion(pending.geometry);
+  const [highlight, setHighlight] = useState(true);
+  const [fillOpacity, setFillOpacity] = useState(DEFAULT_RANGE_OPACITY);
 
   const labelError = validateLabel(label);
-  const summary = geometrySummary(pending);
+  const summary = geometrySummary(pending, stats);
+  const geometry = withRegion && !highlight ? withoutRegion(pending.geometry) : pending.geometry;
+  const style: AnnotationStyle | undefined =
+    withRegion && highlight ? { fill_opacity: fillOpacity } : undefined;
+
+  // Keep the preview on the chart in step with the form.
+  useEffect(() => {
+    onDraftChange?.({ label: label.trim(), color, style, geometry });
+    // `style` and `geometry` are derived from the deps below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onDraftChange, label, color, highlight, fillOpacity, pending]);
 
   const submit = async () => {
     setTouched(true);
@@ -67,9 +75,10 @@ const AnnotationForm: React.FC<AnnotationFormProps> = ({ pending, onSave, onCanc
       await onSave({
         annotation: {
           kind: pending.kind,
-          geometry: pending.geometry,
+          geometry,
           label: label.trim(),
           color,
+          ...(style ? { style } : {}),
           published,
         },
         body: comment || undefined,
@@ -83,17 +92,21 @@ const AnnotationForm: React.FC<AnnotationFormProps> = ({ pending, onSave, onCanc
 
   return (
     <Stack gap="xs" data-testid="annotation-form">
-      <Group gap={6} wrap="nowrap">
-        <Icon icon="mdi:draw" width={16} />
-        <Text size="sm" fw={600}>
-          {KIND_LABELS[pending.kind]}
-        </Text>
+      {/* Summary on its own line: next to the kind it was truncated, and the
+          point count is the part worth reading. */}
+      <Stack gap={2}>
+        <Group gap={6} wrap="nowrap">
+          <Icon icon="mdi:draw" width={16} />
+          <Text size="sm" fw={600}>
+            {KIND_LABELS[pending.kind]}
+          </Text>
+        </Group>
         {summary && (
-          <Text size="xs" c="dimmed" truncate>
+          <Text size="xs" c="dimmed">
             {summary}
           </Text>
         )}
-      </Group>
+      </Stack>
       <TextInput
         size="xs"
         label="Label"
@@ -109,36 +122,15 @@ const AnnotationForm: React.FC<AnnotationFormProps> = ({ pending, onSave, onCanc
         }}
         error={touched ? labelError : null}
       />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Color
-        </Text>
-        <Group gap={4}>
-          {ANNOTATION_COLORS.map((c) => (
-            <Tooltip key={c} label={c} withArrow openDelay={300}>
-              <UnstyledButton
-                onClick={() => setColor(c)}
-                aria-label={`Color ${c}`}
-                aria-pressed={color === c}
-              >
-                <ColorSwatch
-                  color={`var(--mantine-color-${c}-filled)`}
-                  size={18}
-                  withShadow={color === c}
-                >
-                  {color === c && (
-                    <Icon
-                      icon="mdi:check"
-                      width={12}
-                      style={{ color: 'var(--mantine-color-white)' }}
-                    />
-                  )}
-                </ColorSwatch>
-              </UnstyledButton>
-            </Tooltip>
-          ))}
-        </Group>
-      </Stack>
+      <AnnotationColorPicker value={color} onChange={setColor} />
+      {withRegion && (
+        <RegionHighlightFields
+          enabled={highlight}
+          onEnabledChange={setHighlight}
+          opacity={fillOpacity}
+          onOpacityChange={setFillOpacity}
+        />
+      )}
       <Textarea
         size="xs"
         label="Comment"

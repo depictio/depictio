@@ -46,10 +46,12 @@ import {
   rowAnnotationContentKey,
 } from '../annotations/tableRows';
 import { tableAnnotationColumn } from '../annotations/plotDecorate';
+import { annotationPaletteVars } from '../annotations/resolveColor';
 import { isAnnotateEscape } from '../annotations/escape';
 import type { RowAnnotationMap } from '../annotations/tableRows';
 import type { RenderableAnnotation } from '../annotations/types';
 import AnnotateToolbar from './annotations/AnnotateToolbar';
+import InlineAnnotationEditor from './annotations/InlineAnnotationEditor';
 import '../styles/table-annotations.css';
 
 const NO_ANNOTATIONS: RenderableAnnotation[] = [];
@@ -130,6 +132,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const pageSize = clampPageSize(metadata.page_size);
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  // Annotation row colours from Mantine's default palette, so a brand theme
+  // that remaps palettes onto data colours cannot blend them into the data.
+  const annotationVars = useMemo(() => annotationPaletteVars(isDark ? 'dark' : 'light'), [isDark]);
   const uiScale = useUiScale();
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
@@ -798,6 +803,35 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     if (api && !api.isDestroyed()) api.redrawRows();
   };
 
+  // A click on a row's ①② badge opens the inline editor of the annotation
+  // that styles the row, anchored at the badge, or its thread when the app
+  // does not edit in place (outside annotate mode, where row clicks belong to
+  // the tool). Handled in the capture phase and flagged for AG Grid so the
+  // click never toggles the row in the dashboard selection.
+  const openAnnotation = layer?.openAnnotation ?? null;
+  const badgesClickable = !!openAnnotation && !!annotationColumn && !annotating;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !badgesClickable || !openAnnotation || !annotationColumn) return;
+    const onClick = (e: MouseEvent) => {
+      const cell = (e.target as Element | null)?.closest?.('.depictio-annot-badge-cell');
+      const rowIndex = Number(cell?.closest('[row-index]')?.getAttribute('row-index'));
+      const api = gridApiRef.current;
+      if (!cell || !Number.isInteger(rowIndex) || !api || api.isDestroyed()) return;
+      const v = (api.getDisplayedRowAtIndex(rowIndex)?.data as Record<string, unknown> | undefined)?.[
+        annotationColumn
+      ];
+      const mark = v == null ? undefined : rowAnnotationsRef.current.get(String(v));
+      if (!mark) return;
+      // AG Grid's own stop flag (`_stopPropagationForAgGrid`).
+      (e as MouseEvent & { __ag_Grid_Stop_Propagation?: boolean }).__ag_Grid_Stop_Propagation = true;
+      const r = cell.getBoundingClientRect();
+      openAnnotation(mark.id, componentIndex, { x: r.left + r.width / 2, y: r.bottom });
+    };
+    el.addEventListener('click', onClick, true);
+    return () => el.removeEventListener('click', onClick, true);
+  }, [badgesClickable, openAnnotation, annotationColumn, componentIndex, containerRef]);
+
   // Esc cancels the pending label first, then leaves annotate mode.
   useEffect(() => {
     if (!annotating || !layer) return;
@@ -927,13 +961,16 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             </Text>
           )}
           <div
-            className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+            className={`${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}${
+              badgesClickable ? ' depictio-annot-badges-clickable' : ''
+            }`}
             style={
               {
                 width: '100%',
                 flex: 1,
                 minHeight: 0,
                 position: 'relative',
+                ...annotationVars,
                 // Scale the Alpine defaults (13px font, 42px rows, 48px header)
                 // with the dashboard-wide font preference. Compact mode sets
                 // explicit JS row/header props below, which win over these vars.
@@ -1012,6 +1049,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
                 onMarkRows={markSelectedRows}
               />
             )}
+            {layer && annotationColumn && <InlineAnnotationEditor componentIndex={componentIndex} />}
             <RefetchOverlay visible={showRefetchOverlay || (showAll && allLoading)} />
           </div>
         </>

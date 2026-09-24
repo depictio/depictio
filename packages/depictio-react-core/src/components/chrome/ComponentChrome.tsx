@@ -171,9 +171,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const comments = useCommentsControl();
   const commentOpenCount = comments?.openCounts[metadata.index] ?? 0;
   const commentProposedCount = comments?.proposedCounts[metadata.index] ?? 0;
+  const commentStaleCount = comments?.staleCounts[metadata.index] ?? 0;
   // A component with threads keeps its comments icon on screen without hover:
   // the count is the point, and a hover-only badge would hide it.
-  const persistentComments = commentOpenCount > 0 || commentProposedCount > 0;
+  const persistentComments =
+    commentOpenCount > 0 || commentProposedCount > 0 || commentStaleCount > 0;
   if (comments) actions.push('comments');
   // Annotate mode: cartesian Plotly figures, the advanced_viz kinds whose
   // renderer wires the annotation layer, and tables with a row-id column; and
@@ -250,6 +252,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             componentId={metadata.index}
             openCount={commentOpenCount}
             proposedCount={commentProposedCount}
+            staleCount={commentStaleCount}
             onOpen={comments.openDrawer}
           />
         );
