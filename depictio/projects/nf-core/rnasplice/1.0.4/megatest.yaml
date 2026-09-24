@@ -1,0 +1,94 @@
+# Megatest manifest for nf-core/rnasplice 1.0.4 (read by scripts/nfcore_megatest.py).
+#
+# The template was validated against a `-profile test_full` run on the EMBL
+# cluster, not against an AWS megatest bucket, so `results_sha` is null and the
+# key list below documents the tables-only subset the recipes and MultiQC need
+# (about 1 GB of the run; no BAM, FASTQ or bigWig). With results_sha null the
+# fetch resolves the latest published results prefix for 1.0.4, if any.
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline rnasplice --version 1.0.4 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# MultiQC 1.18 writes no parquet: rebuild it from the FastQC zips and the tool
+# logs with depictio.dev_scripts.multiqc_reprocess (multiqc.reprocess below).
+# The design table is vendored next to this manifest under input/ and copied
+# into DATA_ROOT/input/ (see post_fetch_help).
+pipeline: rnasplice
+version: "1.0.4"
+results_sha: null
+run_root: ""
+multiqc:
+  version: "1.18"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  # Pipeline params, software versions, the validated sample sheet and contrasts.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/samplesheet.valid.csv
+  - contrastsheet/contrastsheet.valid.csv
+  # MultiQC tables (1.18, no parquet) and the MultiQC reprocess inputs.
+  - multiqc/multiqc_data/multiqc_*.txt
+  - fastqc/*_fastqc.zip
+  - trimgalore/fastqc/*_fastqc.zip
+  - trimgalore/*_trimming_report.txt
+  - star_salmon/log/*.Log.final.out
+  - star_salmon/samtools_stats/*.flagstat
+  - star_salmon/samtools_stats/*.stats
+  - star_salmon/featurecounts/*.featureCounts.txt.summary
+  - salmon/*/aux_info/meta_info.json
+  - salmon/*/libParams/flenDist.txt
+  - salmon/*/lib_format_counts.json
+  # Salmon merged gene TPMs for the sample PCA and the heatmap (both routes).
+  - salmon/tximport/salmon.merged.gene_tpm.tsv
+  - star_salmon/tximport/salmon.merged.gene_tpm.tsv
+  # DEXSeq exon usage, edgeR diffSpliceDGE.
+  - star_salmon/dexseq_exon/results/DEXSeqResults.*.csv
+  - star_salmon/dexseq_exon/results/perGeneQValue.*.csv
+  - star_salmon/edger/contrast_*.usage.*.csv
+  # DEXSeq DTU and SUPPA2 local events (both quantification routes).
+  - "*/dexseq_dtu/results/dexseq/DEXSeqResults.*.tsv"
+  - "*/dexseq_dtu/results/dexseq/perGeneQValue.*.tsv"
+  - "*/suppa/diffsplice/per_local_event/*_local_diffsplice.dpsi"
+  # rMATS post tables, junction plus exon-body counts.
+  - star_salmon/rmats/*/rmats_post/*.MATS.JCEC.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The design table is vendored with the template:
+  #   mkdir -p {dest}/input && cp depictio/projects/nf-core/rnasplice/1.0.4/input/*.tsv {dest}/input/
+  # MultiQC 1.18 wrote no parquet; rebuild it before ingesting:
+  #   python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}/multiqc/multiqc_data
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/rnasplice/1.0.4 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/metadata.tsv --var GENOME=hg19 --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/rnasplice/1.0.4 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/metadata.tsv --var GENOME=hg19
+# Test-run facts that must never appear in a dashboard text (lint rule e,
+# depictio/tests/models/test_template_conventions.py): run ids, cell lines and
+# contrasts, the organism, tissue and assembly, and genes seen in the run.
+forbidden_terms:
+  - SRR536342
+  - SRR536344
+  - SRR536346
+  - SRR536348
+  - SRR536350
+  - SRR536352
+  - SRR5363
+  - PC3E
+  - GS689
+  - PC3E-GS689
+  - GS689-PC3E
+  - GRCh37
+  - Homo sapiens
+  - prostate
+  - megatest
+  - test_full
+  - ENSG00000004961
+  - ENSG00000005302
+  - ENSG00000147403
