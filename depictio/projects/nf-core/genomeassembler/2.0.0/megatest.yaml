@@ -1,0 +1,88 @@
+# Megatest manifest for nf-core/genomeassembler 2.0.0 (read by scripts/nfcore_megatest.py).
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline genomeassembler --version 2.0.0 --max-file-mb 50
+#   bash download_test_data.sh [DIR]      # same thing, plus the bundled samplesheet
+#
+# Keys are fnmatch globs relative to the prefix root, mirrored 1:1 below the
+# destination, which becomes the template DATA_ROOT. fnmatch's `*` crosses `/`.
+#
+# WHAT THIS PREFIX IS
+# -------------------
+# `results-a72d47d9...` is the 2.0.0 release run (synced 2026-09-18), 961 GB and
+# 45.8k objects, 42k of them BUSCO internals (`busco_downloads/`, `run_*/`).
+# Only the report tables are fetched here, about 15 MB.
+#
+# The run is uneven, and the template is built to tolerate it:
+#   * one output directory per samplesheet row, plus one per read `group`
+#     (`singles/`, reads only). The `test_ont_flye` row has no directory at all.
+#   * QUAST published for 3 assemblies, BUSCO for 2, Merqury for 5. The
+#     `test_flye_*`, `test_hifiasm_hic` and `test_hifiasm_ul` rows published
+#     reads and k-mer QC only (no assembly QC).
+#   * no multiqc/ directory; the template declares no MultiQC collection.
+#   * samtools `.stats` of the read-back alignments are 13 to 53 MB each and are
+#     left out; the flagstat files carry the mapping rate the template shows.
+#   * fastplong JSONs (8 to 29 MB, identical across rows because every row maps
+#     the same reads) are left out; the template has no read QC tab.
+pipeline: genomeassembler
+version: "2.0.0"
+results_sha: "a72d47d9cdb50f21b97882dfb2abf4af8f4c74ad"
+run_root: ""
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  # --- provenance -------------------------------------------------------
+  - pipeline_info/params*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace*.txt
+  - genomeqc_samplesheet/*.csv
+  # --- assembly contiguity ----------------------------------------------
+  - "*/QC/QUAST/*/report.tsv"
+  - "*/QC/QUAST/*/transposed_report.tsv"
+  - "*/assembly/flye/*.assembly_info.txt"
+  - "*/scaffold/ragtag/*.stats"
+  # --- gene completeness ------------------------------------------------
+  - "*/QC/BUSCO/short_summary.*.json"
+  - "*/QC/BUSCO/short_summary.*.txt"
+  - "*/QC/BUSCO/*-busco.batch_summary.txt"
+  # --- k-mer accuracy and completeness ----------------------------------
+  - "*/QC/merqury/*.qv"
+  - "*/QC/merqury/*.completeness.stats"
+  - "*/QC/merqury/*.hist.ploidy"
+  - "*/QC/merqury/*.spectra-cn.hist"
+  - "*/QC/merqury/*.spectra-asm.hist"
+  # --- genome profile from reads ----------------------------------------
+  - "*/reads/genomescope/genomescope/*_genomescope.txt"
+  - "*/reads/genomescope/jellyfish/histo/*.tsv"
+  - "*/reads/genomescope/jellyfish/stats/*.txt"
+  # --- reads mapped back to each stage ----------------------------------
+  - "*/QC/alignments/*.flagstat"
+  - "*/QC/alignments/*.idxstats"
+  - "*/QC/alignments/reference/*.flagstat"
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  depictio-cli run --template nf-core/genomeassembler/2.0.0 --data-root {dest} --dry-run
+  depictio-cli run --template nf-core/genomeassembler/2.0.0 --data-root {dest}
+forbidden_terms:
+  - Arabidopsis
+  - thaliana
+  - Col-0
+  - Col_0
+  - Col-CEN
+  - brassicales
+  - test_hifi_hifiasm
+  - test_ont_hifiasm
+  - test_ont_flye
+  - test_hifi_flye
+  - test_hifiasm_ul
+  - test_hifiasm_flye
+  - test_flye_hifiasm
+  - test_hifiasm_hifiasm
+  - test_flye_flye
+  - test_hifiasm_hic
+  - SRR1604937
+  - CRR302669
