@@ -1,0 +1,12 @@
+# Ribo-TISH: translation initiation site and ORF prediction from Ribo-seq.
+#
+# `ribotish predict` writes one `<library>_pred.txt` per Ribo-seq library
+# (and, in nf-core/riboseq, a pooled `allsamples_pred.txt` run under
+# `ribotish_all/`). Each row is one candidate start codon on one transcript;
+# every start that shares a transcript and stop codon belongs to the same ORF.
+# The `orfs` recipe collapses the starts to one row per ORF and keys it by its
+# genomic stop codon, which is how it is compared with other ORF callers.
+id: ribotish
+name: Ribo-TISH
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribotish/predict
+homepage: https://github.com/zhpn1024/ribotish

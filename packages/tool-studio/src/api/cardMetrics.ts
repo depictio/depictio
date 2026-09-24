@@ -465,12 +465,55 @@ export function evenness(counts: number[], total: number): number | null {
   return Math.max(0, Math.min(1, entropy / Math.log(present.length)));
 }
 
+/** Per-group reductions for the non-additive heroes (`_VALUE_REDUCTIONS`):
+ *  each group then carries a value in the card's own unit (its max, its mean)
+ *  instead of a row count under a card that is not about rows. Nulls are
+ *  skipped and an empty group reduces to null, as in polars; `variance` /
+ *  `std_dev` are the sample (n - 1) estimators, null below two values. */
+const VALUE_REDUCTIONS: Record<string, (nums: number[]) => number | null> = {
+  average: (nums) => mean(nums),
+  mean: (nums) => mean(nums),
+  median: (nums) => (nums.length ? quantileLinear([...nums].sort((a, b) => a - b), 0.5) : null),
+  min: (nums) => (nums.length ? Math.min(...nums) : null),
+  max: (nums) => (nums.length ? Math.max(...nums) : null),
+  range: (nums) => (nums.length ? Math.max(...nums) - Math.min(...nums) : null),
+  variance: (nums) => sampleVariance(nums),
+  std_dev: (nums) => sqrtOrNull(sampleVariance(nums)),
+  std: (nums) => sqrtOrNull(sampleVariance(nums)),
+};
+
+function mean(nums: number[]): number | null {
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+}
+
+function sampleVariance(nums: number[]): number | null {
+  if (nums.length < 2) return null;
+  const m = nums.reduce((a, b) => a + b, 0) / nums.length;
+  return nums.reduce((acc, v) => acc + (v - m) * (v - m), 0) / (nums.length - 1);
+}
+
+function sqrtOrNull(v: number | null): number | null {
+  return v === null ? null : Math.sqrt(v);
+}
+
+/** Group-key order shared by both breakdown flavours: the name is the
+ *  tie-break (group_by promises no order) and a null key sorts last. */
+function compareKeys(a: FrameValue, b: FrameValue): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+}
+
 /**
  * The `__breakdown__` payload the categorical layouts read.
  *
  * The per-group reduction mirrors the card's hero metric (`group_expr`), so a
  * "distinct POS" card broken down by GENE counts distinct POS per gene — the
- * percentages have to read against the number printed above them.
+ * percentages have to read against the number printed above them. Under a
+ * non-additive hero (max, average, median, ...) each group carries that
+ * aggregation instead, and no share applies (`_value_breakdown`).
  */
 export function computeBreakdown(
   frame: StudioFrame,
@@ -493,6 +536,11 @@ export function computeBreakdown(
     else groups.set(key, [i]);
   }
 
+  const valueReduce = column !== breakdownCol ? VALUE_REDUCTIONS[hero] : undefined;
+  if (valueReduce) {
+    return valueBreakdown(groups, valueCol, breakdownCol, hero, valueReduce, topN, frame.height);
+  }
+
   const reduce = (rows: number[]): number => {
     if (column === breakdownCol) return rows.length;
     if (hero === 'nunique' || hero === 'unique') {
@@ -506,6 +554,7 @@ export function computeBreakdown(
       }
       return total;
     }
+    // `count` and anything else (percentile, mode, ...) -> rows per group.
     return rows.length;
   };
 
@@ -515,13 +564,7 @@ export function computeBreakdown(
   }));
   // group_by promises no order, so the name is the tie-break — without it the
   // preview and the saved card could rank the same data differently.
-  entries.sort((a, b) => {
-    if (b.count !== a.count) return b.count - a.count;
-    if (a.key === null) return 1;
-    if (b.key === null) return -1;
-    if (typeof a.key === 'number' && typeof b.key === 'number') return a.key - b.key;
-    return String(a.key) < String(b.key) ? -1 : String(a.key) > String(b.key) ? 1 : 0;
-  });
+  entries.sort((a, b) => (b.count !== a.count ? b.count - a.count : compareKeys(a.key, b.key)));
 
   // The server truncates each group to an int (a strip counts things) but takes
   // the total from the untruncated sum, so a `sum` breakdown's segments need
@@ -546,5 +589,59 @@ export function computeBreakdown(
     unique_values: entries.length,
     breakdown_kind: hero,
     evenness: evenness(counts.map((e) => e.count), total),
+  };
+}
+
+/**
+ * Breakdown for a non-additive hero (`_value_breakdown`). Each group's `count`
+ * is the hero aggregation over that group, in the column's unit (not
+ * truncated); `percent`, `top_share` and `evenness` are null because a group's
+ * max is not a share of anything. Groups rank by value, descending, except
+ * under `min` where the lowest groups are the interesting ones; a null value
+ * sorts last either way. `total` is the number of rows.
+ */
+function valueBreakdown(
+  groups: Map<FrameValue, number[]>,
+  valueCol: FrameColumn,
+  breakdownCol: string,
+  hero: string,
+  reduce: (nums: number[]) => number | null,
+  topN: number,
+  rowCount: number,
+): BreakdownPayload {
+  const ascending = hero === 'min';
+  const entries = [...groups.entries()].map(([key, rows]) => {
+    const nums: number[] = [];
+    for (const i of rows) {
+      const v = valueCol.values[i];
+      if (typeof v === 'number' && Number.isFinite(v)) nums.push(v);
+    }
+    const value = reduce(nums);
+    return { key, value: value !== null && Number.isFinite(value) ? value : null };
+  });
+  entries.sort((a, b) => {
+    if (a.value !== b.value) {
+      if (a.value === null) return 1;
+      if (b.value === null) return -1;
+      return ascending ? a.value - b.value : b.value - a.value;
+    }
+    return compareKeys(a.key, b.key);
+  });
+  // The server's percent / top_share are null here. The react-core type
+  // predates value breakdowns and still says number; every renderer gates on
+  // `breakdownHasShares` before reading them.
+  const noShare = null as unknown as number;
+  return {
+    column: breakdownCol,
+    total: rowCount,
+    top: entries.slice(0, topN).map((e) => ({
+      name: e.key === null ? '(null)' : String(e.key),
+      count: e.value as number,
+      percent: noShare,
+    })),
+    top_share: noShare,
+    unique_values: entries.length,
+    breakdown_kind: hero,
+    evenness: null,
   };
 }

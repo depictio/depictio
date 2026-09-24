@@ -1,0 +1,13 @@
+assembly_id	lineage	busco_class	rank	class_order	percent
+test_hifi_hifiasm_assembly	brassicales_odb12.2	Complete single-copy	BUSCO class	1	99.4
+test_hifi_hifiasm_assembly	brassicales_odb12.2	Complete duplicated	BUSCO class	2	0.4
+test_hifi_hifiasm_assembly	brassicales_odb12.2	Fragmented	BUSCO class	3	0.0
+test_hifi_hifiasm_assembly	brassicales_odb12.2	Missing	BUSCO class	4	0.2
+test_hifiasm_flye_assembly	brassicales_odb12.2	Complete single-copy	BUSCO class	1	99.4
+test_hifiasm_flye_assembly	brassicales_odb12.2	Complete duplicated	BUSCO class	2	0.4
+test_hifiasm_flye_assembly	brassicales_odb12.2	Fragmented	BUSCO class	3	0.0
+test_hifiasm_flye_assembly	brassicales_odb12.2	Missing	BUSCO class	4	0.2
+test_hifiasm_flye_links	brassicales_odb12.2	Complete single-copy	BUSCO class	1	99.4
+test_hifiasm_flye_links	brassicales_odb12.2	Complete duplicated	BUSCO class	2	0.4
+test_hifiasm_flye_links	brassicales_odb12.2	Fragmented	BUSCO class	3	0.0
+test_hifiasm_flye_links	brassicales_odb12.2	Missing	BUSCO class	4	0.2

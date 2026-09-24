@@ -1,25 +1,32 @@
 """The distribution blocks of `bcftools stats`, melted into one long frame.
 
-`bcftools stats` packs six different distributions into one flat report,
-each tagged by its own record type and each with its own column layout:
-indel length (`IDD`), substitution type (`ST`), quality (`QUAL`), read depth
-(`DP`), non-reference allele frequency (`AF`) and singleton stats (`SiS`).
-Read as six tables they would be six data collections, six sets of filters
-and six tiles that cannot be compared; read as one long
-`section / bin / label / count` frame they are one collection, and a single
-`section` filter drives every tile on the tab.
+`bcftools stats` packs several distributions into one flat report, each
+tagged by its own record type and each with its own column layout: indel
+length (`IDD`), substitution type (`ST`), read depth (`DP`), non-reference
+allele frequency (`AF`) and singleton stats (`SiS`). Read as five tables they
+would be five data collections, five sets of filters and five tiles that
+cannot be compared; read as one long `section / bin / label / count` frame
+they are one collection, and a single `section` filter drives every tile on
+the tab.
+
+The quality block (`QUAL`) is left out on purpose. It has one row per
+distinct quality value, which on a real callset is most of the melted frame,
+so a bar chart of the unfiltered collection read as a quality histogram and
+nothing else; and the quality question it answers (where a caller's score
+stops separating calls from noise) is the VCFtools Ts/Tv-by-quality sweep's
+job (`vcftools/tstv_qual.py`).
 
 The price of melting is that the key column differs per section. A numeric
-distribution (indel length, quality, depth, allele frequency) carries its
+distribution (indel length, depth, allele frequency) carries its
 x value in `bin` and leaves `label` null; a categorical one (substitution
 type, singleton stats) carries its x value in `label` and leaves `bin`
 null. `DP` is the one section that fills both, because bcftools writes its
 open-ended top bucket as a non-numeric bin name.
 
 `count` is the closest thing to "how many" each section publishes, which is
-not the same field in all six: number of sites for indel length and depth,
-number of SNPs for quality and allele frequency, and the substitution or
-singleton count for the two categorical ones. It is always a count of
+not the same field in all five: number of sites for indel length and depth,
+number of SNPs for allele frequency, and the substitution or singleton count
+for the two categorical ones. It is always a count of
 variant records, so summing it across a filtered section is meaningful;
 summing it across sections is not.
 
@@ -60,8 +67,6 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 _NUMERIC_SECTIONS: dict[str, tuple[str, int, int]] = {
     # IDD  [3]length (deletions negative)  [4]number of sites
     "indel_length": ("IDD", 2, 3),
-    # QUAL [3]Quality  [4]number of SNPs
-    "quality": ("QUAL", 2, 3),
     # AF   [3]allele frequency  [4]number of SNPs
     "allele_frequency": ("AF", 2, 3),
 }

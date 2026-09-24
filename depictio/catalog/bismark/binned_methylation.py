@@ -25,8 +25,13 @@ the data collection is a small, comparable matrix:
    single assembly;
 4. what remains is strided down to ``MAX_WINDOWS_PER_SAMPLE`` evenly spaced
    windows. A uniform stride over the genome-ordered windows is the honest
-   decimation for a genome-wide screen: keeping the CpG-densest windows instead
+   decimation for drawing and for the cohort-structure panels (PCA,
+   correlation, top-variable windows): keeping the CpG-densest windows instead
    would quietly turn every downstream panel into a CpG-island panel.
+
+The stride is a drawing budget, not a statistical one: the group comparison
+(``window_group_compare.py``) re-bins the same files through the same helper
+and tests every eligible window, never this decimated subset.
 
 The recipe reads its input file paths from a one-row-per-file **index** data
 collection rather than from a glob source, because a glob source reads every
@@ -74,14 +79,10 @@ Output schema:
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.bismark_names import sample_id_from_filename
-from depictio.recipes.lib.genomic_bins import bin_delimited_file
+from depictio.recipes.lib import bismark_names
 
 RAW_DC_TAG = "bismark_bedgraph_index"
 
@@ -100,38 +101,17 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "cpg_density_class": pl.Utf8,
 }
 
-SOURCE_PATH_COL = "source_path"
-
-#: Window width. See ``genomic_bins.DEFAULT_BIN_SIZE`` for why 10 kb.
-BIN_SIZE = 10_000
-#: A window mean is a measurement only once enough CpGs stand behind it.
-MIN_CPGS_PER_WINDOW = 20
-#: Contigs with fewer surviving windows than this are assembly debris.
-MIN_WINDOWS_PER_CONTIG = 50
+#: Window width and eligibility cut-offs, shared with the group comparison
+#: through ``depictio/recipes/lib/bismark_names.py``.
+BIN_SIZE = bismark_names.WINDOW_SIZE
+MIN_CPGS_PER_WINDOW = bismark_names.MIN_CPGS_PER_WINDOW
+MIN_WINDOWS_PER_CONTIG = bismark_names.MIN_WINDOWS_PER_CONTIG
 #: Windows kept per sample after the uniform genome-wide stride.
 MAX_WINDOWS_PER_SAMPLE = 20_000
 #: Labels of the CpG-density tertiles, sparsest first. A stand-in for the CGI
 #: annotation nf-core/methylseq does not bundle, computed on the whole matrix so
 #: a window carries the same class in every library.
 CPG_DENSITY_CLASSES = ("CpG-poor", "Intermediate", "CpG-dense")
-
-# `_1_val_1_bismark_bt2_pe.deduplicated.bedGraph.gz` and its single-end,
-# hisat2, `--skip_trimming` and `--skip_deduplication` spellings.
-_SUFFIX_RE = re.compile(
-    r"(_\d+)?(_val_\d+)?_bismark_[a-z0-9]+_(pe|se)(\.deduplicated)?\.bedGraph\.gz$", re.IGNORECASE
-)
-_BEDGRAPH_COLUMNS = ["chrom", "start", "end", "pct"]
-
-
-def _source_paths(index: pl.DataFrame) -> list[str]:
-    if index.is_empty():
-        raise ValueError(f"bismark_binned_methylation: '{RAW_DC_TAG}' is empty")
-    if SOURCE_PATH_COL not in index.columns:
-        raise ValueError(
-            f"bismark_binned_methylation: '{RAW_DC_TAG}' must be scanned with "
-            f"include_file_paths={SOURCE_PATH_COL}"
-        )
-    return sorted({str(p) for p in index.get_column(SOURCE_PATH_COL).to_list() if p})
 
 
 def _contig_order(frame: pl.DataFrame, column: str = "chromosome") -> pl.DataFrame:
@@ -142,60 +122,12 @@ def _contig_order(frame: pl.DataFrame, column: str = "chromosome") -> pl.DataFra
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Stream every bedGraph into windows, keep the complete comparable matrix."""
-    paths = _source_paths(sources["index"])
-
-    per_sample: list[pl.DataFrame] = []
-    for path in paths:
-        binned = bin_delimited_file(
-            path,
-            column_names=_BEDGRAPH_COLUMNS,
-            chrom_col="chrom",
-            pos_col="start",
-            value_col="pct",
-            bin_size=BIN_SIZE,
-            skip_rows=1,
-        )
-        kept = binned.filter(pl.col("n") >= MIN_CPGS_PER_WINDOW).select(
-            pl.lit(sample_id_from_filename(path, _SUFFIX_RE), pl.Utf8).alias("sample"),
-            pl.col("chrom").alias("chromosome"),
-            pl.col("start"),
-            pl.col("end"),
-            pl.col("mean").alias("methylation_pct"),
-            pl.col("n").alias("n_cpg"),
-        )
-        if kept.is_empty():
-            raise ValueError(
-                f"bismark_binned_methylation: no window of {Path(path).name} reached "
-                f"{MIN_CPGS_PER_WINDOW} CpGs"
-            )
-        per_sample.append(kept)
-
-    long = pl.concat(per_sample)
-    n_samples = long.get_column("sample").n_unique()
-
-    complete = (
-        long.group_by(["chromosome", "start"])
-        .agg(pl.col("sample").n_unique().alias("_samples"))
-        .filter(pl.col("_samples") == n_samples)
-        .drop("_samples")
+    """Stream every bedGraph into windows, keep the complete matrix, stride it."""
+    long = bismark_names.eligible_methylation_windows(
+        sources["index"], "bismark_binned_methylation"
     )
-    dense_contigs = (
-        complete.group_by("chromosome")
-        .agg(pl.len().alias("_windows"))
-        .filter(pl.col("_windows") >= MIN_WINDOWS_PER_CONTIG)
-        .get_column("chromosome")
-        .to_list()
-    )
-    complete = complete.filter(pl.col("chromosome").is_in(dense_contigs))
-    if complete.is_empty():
-        raise ValueError(
-            "bismark_binned_methylation: no window is covered in every sample on any contig "
-            f"with at least {MIN_WINDOWS_PER_CONTIG} windows; the libraries share no "
-            "comparable genomic space"
-        )
-
-    ordered = _contig_order(complete).sort(
+    windows = long.select("chromosome", "start").unique()
+    ordered = _contig_order(windows).sort(
         ["_contig_number", "chromosome", "start"], nulls_last=True
     )
     stride = max(1, -(-ordered.height // MAX_WINDOWS_PER_SAMPLE))

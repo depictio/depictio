@@ -2,9 +2,12 @@ id: cooltools_eigenvector
 name: A/B compartment track
 mode: eigs-cis
 description: >-
-  Per-bin first eigenvector (E1) of the intra-chromosomal correlation matrix ,
+  Per-bin first eigenvector (E1) of the intra-chromosomal correlation matrix,
   the A/B compartment track. Sign marks the compartment, zero-crossings are
-  compartment boundaries.
+  compartment boundaries. The recipe phases E1 per sample, resolution and
+  chromosome so it correlates positively with bin coverage (1 / balancing
+  weight): the better-covered compartment is A, the same way at every
+  resolution, without a GC or gene track.
 find:
   path_glob: "**/*.cis.vecs.tsv"
 recipe: cooltools/eigenvector.py

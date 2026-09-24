@@ -1,0 +1,19 @@
+id: mirtop_mirna_summary
+name: miRNA summary
+mode: mirna/expression
+description: >-
+  One row per miRNA: mean and median CPM, the spread of log2(CPM + 1) across
+  samples, detection, isomiR diversity and the share of reads matching the
+  reference sequence. The mean-variance plane of miRNAs and the record behind
+  each point.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/mirna_summary.py
+fixture: mirna_summary.tsv
+renders_as:
+  - { id: mirna_mean_variance, component: advanced_viz, kind: scatter_xy,
+      roles: {x: mean_log2_cpm, y: sd_log2_cpm, label: mirna, color: arm, size: detection_pct} }
+  - { component: card, column: mirna, aggregation: nunique, secondary_layout: donut, breakdown_col: arm }
+  - { component: card, column: reference_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: RangeSlider, column_name: mean_log2_cpm }
+  - { component: table, row_selection_enabled: true, row_selection_column: mirna }

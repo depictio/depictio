@@ -1,0 +1,16 @@
+id: mirtop_sample_pca
+name: Sample PCA on miRNA expression
+mode: mirna/expression
+description: >-
+  Principal components of log2(CPM + 1) over the most variable expressed
+  miRNAs, one point per sample, with the sample's miRNA library size and
+  detected miRNAs so separation by depth can be told from separation by design.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/sample_pca.py
+fixture: sample_pca.tsv
+renders_as:
+  - { id: mirna_pca, component: advanced_viz, kind: embedding,
+      roles: {sample_id: sample, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3} }
+  - { component: card, column: mirnas_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

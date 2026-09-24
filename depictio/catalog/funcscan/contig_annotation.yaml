@@ -3,8 +3,9 @@ name: Contig annotation
 mode: screening/contigs
 description: >-
   One row per annotated contig with how many features each nf-core/funcscan
-  screen put on it, the contig length and k-mer coverage read from the
-  assembler's own contig name, and the feature density that follows. This is
+  screen put on it, the contig length and coverage when the contig name
+  carries them (SPAdes or MEGAHIT headers, null otherwise), and the feature
+  density that follows. This is
   the annotation layer the four screens share: they all report the contig a
   feature sits on, even though the annotation step itself publishes no table.
 find:

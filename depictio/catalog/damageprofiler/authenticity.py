@@ -30,7 +30,9 @@ Output schema:
     background : Float64         every other substitution at the same positions, pooled
     mean_length : Float64        mean mapped fragment length, bp
     median_length : Int64        median mapped fragment length, bp
-    fraction_under_70bp : Float64  share of mapped fragments shorter than 70 bp, 0-1
+    fraction_under_70bp : Float64  share of mapped fragments shorter than the
+                                   short-fragment cut-off, 0-1 (the column name
+                                   keeps the default 70 bp for schema stability)
     n_reads : Int64              mapped fragments the length distribution counted
 """
 
@@ -63,7 +65,19 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 
 #: Fragments shorter than this are the ancient band; the cut-off is the one
 #: aDNA screening papers quote, not a property of the data.
+#: A template overrides it through the ``short_fragment_bp`` param (eager's
+#: ``SHORT_FRAGMENT_BP`` variable); this value is the fallback.
 SHORT_FRAGMENT_BP = 70
+
+
+def short_fragment_cutoff(params: dict[str, str] | None) -> int:
+    """The ``short_fragment_bp`` param as a positive int, else ``SHORT_FRAGMENT_BP``."""
+    raw = ((params or {}).get("short_fragment_bp") or "").strip()
+    try:
+        value = int(float(raw))
+    except ValueError:
+        return SHORT_FRAGMENT_BP
+    return value if value > 0 else SHORT_FRAGMENT_BP
 
 
 def _terminal(damage: pl.DataFrame, end: str, base_change: str, name: str) -> pl.DataFrame:
@@ -83,8 +97,11 @@ def _terminal(damage: pl.DataFrame, end: str, base_change: str, name: str) -> pl
     )
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+def transform(
+    sources: dict[str, pl.DataFrame], params: dict[str, str] | None = None
+) -> pl.DataFrame:
     """One row per library, joining the two signals."""
+    cutoff = short_fragment_cutoff(params)
     damage = sources["damage"]
     lengths = sources["lengths"]
     for name, frame, needed in (
@@ -137,7 +154,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .min()
             .alias("median_length"),
             (
-                pl.col("occurrences").filter(pl.col("length") < SHORT_FRAGMENT_BP).sum()
+                pl.col("occurrences").filter(pl.col("length") < cutoff).sum()
                 / pl.col("occurrences").sum()
             ).alias("fraction_under_70bp"),
             pl.col("occurrences").sum().alias("n_reads"),

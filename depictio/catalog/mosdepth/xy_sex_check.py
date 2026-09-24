@@ -8,8 +8,9 @@ glob rather than through a raw scan DC -- there is nothing to recover from
 the path.
 
 Its ``Sample`` column is the BAM stem, ``<sample>.<stage>``, so the same
-library appears once per alignment stage. Splitting it keeps the two stages
-comparable side by side instead of reading as two unrelated libraries.
+library appears once per alignment stage. The stage is split off so the
+library joins its sample, and one pass per sample is kept (see
+``keep_one_stage``): the stages measure the same alignments.
 
 The X/Y depth ratio is the classic aneuploidy-free check that the sex of the
 sequenced material matches the sex recorded in the sample sheet: a karyotype
@@ -39,6 +40,32 @@ XX_RATIO_CUTOFF = 10.0
 
 #: MultiQC's own headers; the contig labels are MultiQC's, not the reference's.
 _REQUIRED_COLUMNS = ("Sample", "Chromosome X", "Chromosome Y")
+
+#: When mosdepth ran more than once on a sample (sarek measures the
+#: duplicate-marked and then the recalibrated CRAM), one pass is kept: the
+#: first of these stages the sample has, else its alphabetically first one.
+#: Recalibration rewrites base qualities, not alignments, so the passes carry
+#: the same depth; keeping both doubled every sum and every track lane.
+STAGE_PREFERENCE = ("recal", "md", "sorted")
+
+
+def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
+    """Rows of one mosdepth pass per sample (see ``STAGE_PREFERENCE``)."""
+    rank = pl.col("stage").replace_strict(
+        {s: i for i, s in enumerate(STAGE_PREFERENCE)},
+        default=len(STAGE_PREFERENCE),
+        return_dtype=pl.Int64,
+    )
+    kept = (
+        df.select("sample", "stage")
+        .unique()
+        .with_columns(rank.alias("_rank"))
+        .sort(["sample", "_rank", "stage"])
+        .unique(subset="sample", keep="first", maintain_order=True)
+        .select("sample", "stage")
+    )
+    return df.join(kept, on=["sample", "stage"], how="semi")
+
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
@@ -70,10 +97,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.Float64
     )
 
-    return (
+    return keep_one_stage(
         df.with_columns(
             stem.str.extract(r"^(.*)\.[^.]+$", 1).fill_null(stem).alias("sample"),
-            stem.str.extract(r"\.([^.]+)$", 1).alias("stage"),
+            stem.str.extract(r"\.([^.]+)$", 1).fill_null("all").alias("stage"),
             x_cov.alias("x_coverage"),
             y_cov.alias("y_coverage"),
             ratio.alias("xy_ratio"),
@@ -87,5 +114,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("inferred_sex")
         )
         .select(list(EXPECTED_SCHEMA))
-        .sort(["sample", "stage"])
-    )
+    ).sort(["sample", "stage"])

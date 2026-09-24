@@ -1,0 +1,17 @@
+id: mirtop_isomir_composition
+name: isomiR composition per sample
+mode: mirna/isomirs
+description: >-
+  Each sample's miRNA reads partitioned four ways: by 3' end (reference,
+  trimmed, templated extension, non-templated addition), by 5' end shift, by
+  the added nucleotide, and by nucleotide change (seed, central, other). Each
+  partition sums to the sample's miRNA reads.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/isomir_composition.py
+fixture: isomir_composition.tsv
+renders_as:
+  - { id: isomir_classes, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: sample, taxon: taxon, rank: rank, abundance: abundance} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: taxon }
+  - { component: table }

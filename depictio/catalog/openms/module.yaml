@@ -1,0 +1,11 @@
+# OpenMS: the mass-spectrometry toolkit nf-core/mhcquant is built on. This
+# folder holds the database-search side: the Comet search run through
+# OpenMS' CometAdapter (nf-core module openmsthirdparty/cometadapter), whose
+# Percolator input tables (`<run>_pin.tsv`, one per raw file) carry every
+# target and decoy peptide-spectrum match before rescoring.
+id: openms
+name: OpenMS
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/openmsthirdparty/cometadapter
+homepage: https://openms.de
+edam_topics:
+  - http://edamontology.org/topic_0121 # Proteomics

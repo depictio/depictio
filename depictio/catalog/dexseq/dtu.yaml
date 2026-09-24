@@ -1,0 +1,20 @@
+id: dexseq_dtu
+name: Differential transcript usage
+mode: splicing/transcript-usage
+description: >-
+  DEXSeq differential transcript usage (DTU) as nf-core/rnasplice's dexseq_dtu
+  route writes it: one row per contrast and transcript with its usage log2 fold
+  change (treatment over control), p-value, adjusted p-value and the gene-level
+  q-value.
+find: { path_glob: "**/DEXSeqResults.*.tsv" }
+recipe: dexseq/dtu.py
+fixture: dtu.tsv
+renders_as:
+  - id: dtu_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: transcript_id, effect_size: log2fc, significance: padj, label: gene_id, category: direction }
+  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: direction }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

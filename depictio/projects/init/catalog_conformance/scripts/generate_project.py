@@ -149,10 +149,18 @@ def raw_relative_path(entry: CatalogEntry, output: CatalogOutput) -> str:
     with the leading `**` dropped, a bare `filename` is placed under the tool's
     own folder. Any `*` left over is filled with a sample name, since a glob
     cannot be a path.
+
+    A `**/<name>` glob with no directory of its own is also placed under the
+    tool's folder, not at the run root: `**` means "anywhere", and the run root
+    is claimed by root-anchored globs (mhcquant writes its per-sample reports
+    there as `*.tsv`), so a file staged there would be recognised as those
+    outputs too.
     """
     find = output.find
     if find.path_glob:
         parts = [p for p in find.path_glob.split("/") if p not in ("", "**")]
+        if len(parts) == 1 and find.path_glob.startswith("**/"):
+            parts = [entry.id, *parts]
     elif find.filename:
         parts = [entry.id, find.filename]
     else:  # unreachable: CatalogFind requires at least one clause

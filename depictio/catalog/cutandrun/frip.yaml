@@ -17,10 +17,10 @@ recipe: cutandrun/frip.py
 fixture: frip.tsv
 renders_as:
   - { id: frip_composition_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: signal_class, title: Fragment coverage inside and outside peaks} }
-  # The composition itself, then the spread of the fraction across samples and
-  # the worst library in the run.
+  # The composition itself, then the spread of FRiP across samples and the
+  # lowest FRiP in the run (on `frip`, one value per sample, not on `fraction`,
+  # whose minimum is the smallest outside-peaks share).
   - { component: card, column: coverage_bp, aggregation: sum, secondary_layout: donut, breakdown_col: signal_class }
   - { component: card, column: frip, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fraction, aggregation: min, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: n_peaks, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: frip, aggregation: min, secondary_layout: gauge, coverage_max: 1.0 }
   - { component: table }

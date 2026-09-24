@@ -1,0 +1,18 @@
+id: ribowaltz_psite_region
+name: P-sites per transcript region
+mode: riboseq/region
+description: >-
+  Share of each library's P-sites in the 5' UTR, CDS and 3' UTR, next to the
+  share each region would get from its length alone. Protected footprints are
+  enriched in the CDS; a library that follows the length expectation behaves
+  like fragmented RNA.
+find: { path_glob: "**/*.ribowaltz.psite_region.tsv" }
+recipe: ribowaltz/psite_region.py
+fixture: psite_region.tsv
+renders_as:
+  - id: region_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: { sample_id: sample, taxon: region, rank: scope, abundance: pct }
+  - { component: card, column: enrichment, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

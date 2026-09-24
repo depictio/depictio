@@ -1,17 +1,17 @@
-sample	target	fragment_class	class_order	n_fragments	fraction	median_length	mono_to_sub
-h3k27me3_R1	h3k27me3	Sub-nucleosomal	1	145998	0.0636	59.0	8.465
-h3k27me3_R1	h3k27me3	Mononucleosomal	2	1235809	0.538	203.0	8.465
-h3k27me3_R1	h3k27me3	Dinucleosomal	3	689959	0.3004	382.0	8.465
-h3k27me3_R1	h3k27me3	Multi-nucleosomal	4	225294	0.0981	573.0	8.465
-h3k27me3_R2	h3k27me3	Sub-nucleosomal	1	216575	0.1051	68.0	5.36
-h3k27me3_R2	h3k27me3	Mononucleosomal	2	1160761	0.5631	200.0	5.36
-h3k27me3_R2	h3k27me3	Dinucleosomal	3	543099	0.2634	373.0	5.36
-h3k27me3_R2	h3k27me3	Multi-nucleosomal	4	141067	0.0684	565.0	5.36
-h3k4me3_R1	h3k4me3	Sub-nucleosomal	1	141916	0.1104	65.0	3.425
-h3k4me3_R1	h3k4me3	Mononucleosomal	2	486042	0.3781	206.0	3.425
-h3k4me3_R1	h3k4me3	Dinucleosomal	3	449532	0.3497	355.0	3.425
-h3k4me3_R1	h3k4me3	Multi-nucleosomal	4	208116	0.1619	544.0	3.425
-h3k4me3_R2	h3k4me3	Sub-nucleosomal	1	162909	0.1158	73.0	3.143
-h3k4me3_R2	h3k4me3	Mononucleosomal	2	512035	0.3639	202.0	3.143
-h3k4me3_R2	h3k4me3	Dinucleosomal	3	493401	0.3507	350.0	3.143
-h3k4me3_R2	h3k4me3	Multi-nucleosomal	4	238672	0.1696	544.0	3.143
+sample	target	fragment_class	class_order	n_fragments	fraction	median_length	mono_to_sub	sample_median_length
+h3k27me3_R1	h3k27me3	Sub-nucleosomal	1	145998	0.0636	59.0	8.465	227.0
+h3k27me3_R1	h3k27me3	Mononucleosomal	2	1235809	0.538	203.0	8.465	227.0
+h3k27me3_R1	h3k27me3	Dinucleosomal	3	689959	0.3004	382.0	8.465	227.0
+h3k27me3_R1	h3k27me3	Multi-nucleosomal	4	225294	0.0981	573.0	8.465	227.0
+h3k27me3_R2	h3k27me3	Sub-nucleosomal	1	216575	0.1051	68.0	5.36	216.0
+h3k27me3_R2	h3k27me3	Mononucleosomal	2	1160761	0.5631	200.0	5.36	216.0
+h3k27me3_R2	h3k27me3	Dinucleosomal	3	543099	0.2634	373.0	5.36	216.0
+h3k27me3_R2	h3k27me3	Multi-nucleosomal	4	141067	0.0684	565.0	5.36	216.0
+h3k4me3_R1	h3k4me3	Sub-nucleosomal	1	141916	0.1104	65.0	3.425	255.0
+h3k4me3_R1	h3k4me3	Mononucleosomal	2	486042	0.3781	206.0	3.425	255.0
+h3k4me3_R1	h3k4me3	Dinucleosomal	3	449532	0.3497	355.0	3.425	255.0
+h3k4me3_R1	h3k4me3	Multi-nucleosomal	4	208116	0.1619	544.0	3.425	255.0
+h3k4me3_R2	h3k4me3	Sub-nucleosomal	1	162909	0.1158	73.0	3.143	259.0
+h3k4me3_R2	h3k4me3	Mononucleosomal	2	512035	0.3639	202.0	3.143	259.0
+h3k4me3_R2	h3k4me3	Dinucleosomal	3	493401	0.3507	350.0	3.143	259.0
+h3k4me3_R2	h3k4me3	Multi-nucleosomal	4	238672	0.1696	544.0	3.143	259.0

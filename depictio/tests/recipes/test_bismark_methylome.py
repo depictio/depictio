@@ -37,7 +37,9 @@ from depictio.catalog.bismark.binned_methylation import (
 )
 from depictio.catalog.bismark.window_group_compare import (
     MIN_DELTA_PCT,
+    _preferred_group_col,
     benjamini_hochberg,
+    compare_windows,
     two_sided_t_p_value,
 )
 from depictio.recipes import execute_recipe
@@ -283,16 +285,19 @@ def _window_frame(levels: dict[str, list[float]], n_windows: int = 40) -> pl.Dat
     return pl.DataFrame(rows)
 
 
-def _samples_frame(assignment: dict[str, str]) -> pl.DataFrame:
+def _samples_frame(assignment: dict[str, str], factor: str = "condition") -> pl.DataFrame:
+    """A sample hub with the samplesheet columns and one design factor."""
     return pl.DataFrame(
         {
             "sample_id": list(assignment),
-            "group": list(assignment.values()),
+            "fastq_1": [f"{s}_1.fastq.gz" for s in assignment],
+            "fastq_2": [f"{s}_2.fastq.gz" for s in assignment],
+            factor: list(assignment.values()),
         }
     )
 
 
-def test_the_planted_window_is_the_one_that_comes_out(tmp_path: Path) -> None:
+def test_the_planted_window_is_the_one_that_comes_out() -> None:
     n_windows = 40
     flat = [70.0, 70.4, 69.6, 70.2]
     levels = {
@@ -306,13 +311,9 @@ def test_the_planted_window_is_the_one_that_comes_out(tmp_path: Path) -> None:
     for sample in ("B1", "B2"):
         levels[sample][planted] -= MIN_DELTA_PCT * 3
 
-    out = execute_recipe(
-        COMPARE,
-        tmp_path,
-        extra_sources={
-            "windows": _window_frame(levels, n_windows),
-            "samples": _samples_frame({"A1": "low", "A2": "low", "B1": "high", "B2": "high"}),
-        },
+    out = compare_windows(
+        _window_frame(levels, n_windows),
+        _samples_frame({"A1": "low", "A2": "low", "B1": "high", "B2": "high"}),
     )
 
     assert out.height == n_windows
@@ -330,7 +331,7 @@ def test_the_planted_window_is_the_one_that_comes_out(tmp_path: Path) -> None:
     assert hit["neg_log10_padj"] == pytest.approx(-math.log10(hit["padj"]), rel=1e-9)
 
 
-def test_a_clean_but_tiny_shift_is_not_called(tmp_path: Path) -> None:
+def test_a_clean_but_tiny_shift_is_not_called() -> None:
     """A statistically clean two-point shift is not a methylation difference."""
     n_windows = 20
     levels = {
@@ -339,29 +340,104 @@ def test_a_clean_but_tiny_shift_is_not_called(tmp_path: Path) -> None:
         "B1": [68.00] * n_windows,
         "B2": [68.01] * n_windows,
     }
-    out = execute_recipe(
-        COMPARE,
-        tmp_path,
-        extra_sources={
-            "windows": _window_frame(levels, n_windows),
-            "samples": _samples_frame({"A1": "low", "A2": "low", "B1": "high", "B2": "high"}),
-        },
+    out = compare_windows(
+        _window_frame(levels, n_windows),
+        _samples_frame({"A1": "low", "A2": "low", "B1": "high", "B2": "high"}),
     )
     assert out.get_column("padj").min() < 0.05  # the test itself is convinced
     assert out.get_column("direction").unique().to_list() == ["Not significant"]
 
 
-def test_a_design_with_fewer_than_two_libraries_a_side_is_refused(tmp_path: Path) -> None:
+def test_a_design_with_fewer_than_two_libraries_a_side_is_refused() -> None:
     levels = {"A1": [70.0] * 10, "B1": [50.0] * 10, "B2": [51.0] * 10}
     with pytest.raises(ValueError, match="at least two on each side"):
-        execute_recipe(
-            COMPARE,
-            tmp_path,
-            extra_sources={
-                "windows": _window_frame(levels, 10),
-                "samples": _samples_frame({"A1": "low", "B1": "high", "B2": "high"}),
-            },
+        compare_windows(
+            _window_frame(levels, 10),
+            _samples_frame({"A1": "low", "B1": "high", "B2": "high"}),
         )
+
+
+def test_the_first_two_level_design_factor_is_tested() -> None:
+    """The hub's factors are read in order; a one-level factor is skipped."""
+    levels = {"A1": [70.0] * 10, "A2": [71.0] * 10, "B1": [50.0] * 10, "B2": [51.0] * 10}
+    samples = _samples_frame({"A1": "x", "A2": "x", "B1": "x", "B2": "x"}, factor="batch")
+    samples = samples.with_columns(
+        pl.Series("condition", ["treated", "treated", "control", "control"])
+    )
+    out = compare_windows(_window_frame(levels, 10), samples)
+    assert (out.row(0, named=True)["group_a"], out.row(0, named=True)["group_b"]) == (
+        "control",
+        "treated",
+    )
+
+
+def _two_factor_samples() -> pl.DataFrame:
+    """A hub with two two-level factors: `batch` first, `condition` second."""
+    samples = _samples_frame({"A1": "b1", "A2": "b2", "B1": "b1", "B2": "b2"}, factor="batch")
+    return samples.with_columns(
+        pl.Series("condition", ["treated", "treated", "control", "control"])
+    )
+
+
+def test_group_col_param_wins_over_the_first_two_level_factor() -> None:
+    """GROUP_COL, passed as the `group_col` param, is tested when it has two levels."""
+    levels = {"A1": [70.0] * 10, "A2": [71.0] * 10, "B1": [50.0] * 10, "B2": [51.0] * 10}
+    samples = _two_factor_samples()
+    first = compare_windows(_window_frame(levels, 10), samples)
+    assert first.row(0, named=True)["group_a"] == "b1"  # fallback: first factor
+    chosen = compare_windows(_window_frame(levels, 10), samples, group_col="condition")
+    assert (chosen.row(0, named=True)["group_a"], chosen.row(0, named=True)["group_b"]) == (
+        "control",
+        "treated",
+    )
+
+
+def test_unusable_group_col_falls_back() -> None:
+    """A GROUP_COL that is absent, the no-group sentinel, or not two-level falls back."""
+    assert _preferred_group_col({"group_col": "__no_group__"}) is None
+    assert _preferred_group_col({}) is None
+    assert _preferred_group_col(None) is None
+    assert _preferred_group_col({"group_col": "condition"}) == "condition"
+    levels = {"A1": [70.0] * 10, "A2": [71.0] * 10, "B1": [50.0] * 10, "B2": [51.0] * 10}
+    samples = _two_factor_samples().with_columns(pl.lit("x").alias("site"))
+    for group_col in ("missing", "site"):
+        out = compare_windows(_window_frame(levels, 10), samples, group_col=group_col)
+        assert out.row(0, named=True)["group_a"] == "b1"
+
+
+def test_no_design_means_no_comparison() -> None:
+    """Without a two-level factor the recipe refuses, and the DC is skipped."""
+    levels = {"A1": [70.0] * 10, "A2": [71.0] * 10, "B1": [50.0] * 10, "B2": [51.0] * 10}
+    with pytest.raises(ValueError, match="no two-group comparison"):
+        compare_windows(_window_frame(levels, 10), None)
+    samplesheet_only = _samples_frame({"A1": "x", "A2": "x", "B1": "x", "B2": "x"}).drop(
+        "condition"
+    )
+    with pytest.raises(ValueError, match="no two-group comparison"):
+        compare_windows(_window_frame(levels, 10), samplesheet_only)
+
+
+def test_every_eligible_window_is_tested_from_the_bedgraphs(tmp_path: Path) -> None:
+    """The comparison re-bins the bedGraphs and tests every eligible window.
+
+    It must not inherit the drawing stride of `bismark_binned_methylation`, so
+    its row count is the full eligible set: every window of every contig that
+    clears the CpG and contig cut-offs.
+    """
+    contigs = {"chr1": CONTIG_WINDOWS, "chr2": CONTIG_WINDOWS}
+    design = {"A1": "low", "A2": "low", "B1": "high", "B2": "high"}
+    for sample, level in zip(design, (70.0, 71.0, 50.0, 51.0), strict=True):
+        _write_bedgraph(tmp_path / _bedgraph_name(sample), _library_rows(level, contigs=contigs))
+    out = execute_recipe(
+        COMPARE,
+        tmp_path,
+        extra_sources={
+            "index": _index(sorted(tmp_path.glob("*.bedGraph.gz"))),
+            "samples": _samples_frame(design),
+        },
+    )
+    assert out.height == 2 * CONTIG_WINDOWS
+    assert out.get_column("window_id").n_unique() == out.height
 
 
 # ------------------------------------------------------------- summary_report

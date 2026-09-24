@@ -1,0 +1,19 @@
+sample	rank	category	peptides
+PBMC007_B	Modification	Unmodified	3388
+PBMC007_B	Modification	Modified	248
+PBMC007_B	Peptide length	9-mer	2572
+PBMC007_B	Peptide length	8-mer	466
+PBMC007_B	Peptide length	10-mer	380
+PBMC007_B	Peptide length	11-mer	186
+PBMC007_B	Peptide length	12-mer	32
+PBMC007_B	Precursor charge	2+	3360
+PBMC007_B	Precursor charge	3+	276
+PBMC009_A	Modification	Unmodified	5387
+PBMC009_A	Modification	Modified	265
+PBMC009_A	Peptide length	9-mer	3893
+PBMC009_A	Peptide length	8-mer	689
+PBMC009_A	Peptide length	10-mer	652
+PBMC009_A	Peptide length	11-mer	340
+PBMC009_A	Peptide length	12-mer	78
+PBMC009_A	Precursor charge	2+	5204
+PBMC009_A	Precursor charge	3+	448

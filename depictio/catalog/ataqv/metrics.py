@@ -39,6 +39,9 @@ Output schema:
     median_mapq : Float64             median mapping quality
     properly_paired_fraction : Float64  properly paired and mapped / total_reads
     maximum_proper_pair_fragment_size : Int64  longest proper pair observed
+    median_fragment_length : Float64  median of the library's fragment-length
+                                      histogram (``fragment_length_counts``),
+                                      weighted by read count
     ataqv_version : Utf8              version that wrote the report
 """
 
@@ -90,6 +93,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "median_mapq": pl.Float64,
     "properly_paired_fraction": pl.Float64,
     "maximum_proper_pair_fragment_size": pl.Int64,
+    "median_fragment_length": pl.Float64,
     "ataqv_version": pl.Utf8,
 }
 
@@ -145,6 +149,31 @@ def _ratio(numerator, denominator) -> float | None:
     return float(numerator) / float(denominator)
 
 
+def _median_fragment_length(metrics: dict) -> float | None:
+    """Read-weighted median of the fragment-length histogram, or None without one.
+
+    The histogram is one row per length, so a plain median over it is the middle
+    of the x axis. This walks the counts to the length where half the reads sit.
+    """
+    fields = metrics.get("fragment_length_counts_fields") or ["fragment_length", "read_count"]
+    pairs = []
+    for entry in metrics.get("fragment_length_counts") or []:
+        row = dict(zip(fields, entry))
+        length, count = row.get("fragment_length"), row.get("read_count")
+        if length is None or not count:
+            continue
+        pairs.append((int(length), int(count)))
+    total = sum(count for _, count in pairs)
+    if not total:
+        return None
+    running = 0
+    for length, count in sorted(pairs):
+        running += count
+        if 2 * running >= total:
+            return float(length)
+    return None
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """One row per library, with the derived fractions ATAC QC is quoted in."""
     rows: list[dict] = []
@@ -160,6 +189,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "properly_paired_fraction": _ratio(
                 metrics.get("properly_paired_and_mapped_reads"), total
             ),
+            "median_fragment_length": _median_fragment_length(metrics),
         }
         row.update({column: metrics.get(key) for key, column in _PASS_THROUGH.items()})
         rows.append(row)

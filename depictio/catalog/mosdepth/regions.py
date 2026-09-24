@@ -57,6 +57,32 @@ _PLAIN_NAME_RE = r"^(.+)\.regions\.bed(?:\.gz)?$"
 #: Stage recorded for a file whose name carries none.
 NO_STAGE = "all"
 
+#: When mosdepth ran more than once on a sample (sarek measures the
+#: duplicate-marked and then the recalibrated CRAM), one pass is kept: the
+#: first of these stages the sample has, else its alphabetically first one.
+#: Recalibration rewrites base qualities, not alignments, so the passes carry
+#: the same depth; keeping both doubled every sum and every track lane.
+STAGE_PREFERENCE = ("recal", "md", "sorted")
+
+
+def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
+    """Rows of one mosdepth pass per sample (see ``STAGE_PREFERENCE``)."""
+    rank = pl.col("stage").replace_strict(
+        {s: i for i, s in enumerate(STAGE_PREFERENCE)},
+        default=len(STAGE_PREFERENCE),
+        return_dtype=pl.Int64,
+    )
+    kept = (
+        df.select("sample", "stage")
+        .unique()
+        .with_columns(rank.alias("_rank"))
+        .sort(["sample", "_rank", "stage"])
+        .unique(subset="sample", keep="first", maintain_order=True)
+        .select("sample", "stage")
+    )
+    return df.join(kept, on=["sample", "stage"], how="semi")
+
+
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "chromosome": pl.Utf8,
     "position": pl.Int64,  # window start
@@ -88,6 +114,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("start_bp").is_not_null(),
         pl.col("end_bp").is_not_null(),
     )
+    typed = keep_one_stage(typed)
 
     binned = (
         typed.with_columns(

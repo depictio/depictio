@@ -35,13 +35,16 @@ Output schema:
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.bismark_names import sample_id_from_filename
+from depictio.recipes.lib.bismark_names import (
+    BEDGRAPH_COLUMNS,
+    BEDGRAPH_SUFFIX_RE,
+    sample_id_from_filename,
+)
 
 RAW_DC_TAG = "bismark_bedgraph_index"
 
@@ -64,12 +67,6 @@ SOURCE_PATH_COL = "source_path"
 #: enough points to draw seven curves without thinning.
 BIN_WIDTH_PCT = 2.0
 
-# `bismark_[a-z0-9]+` keeps the hisat2 route's `_bismark_hisat2_` names working.
-_SUFFIX_RE = re.compile(
-    r"(_\d+)?(_val_\d+)?_bismark_[a-z0-9]+_(pe|se)(\.deduplicated)?\.bedGraph\.gz$", re.IGNORECASE
-)
-_BEDGRAPH_COLUMNS = ["chrom", "start", "end", "pct"]
-
 
 def _histogram(path: str) -> pl.DataFrame:
     """Stream one bedGraph into its per-CpG methylation histogram."""
@@ -79,7 +76,7 @@ def _histogram(path: str) -> pl.DataFrame:
         separator="\t",
         has_header=False,
         skip_rows=1,  # the `track type=bedGraph` line
-        new_columns=_BEDGRAPH_COLUMNS,
+        new_columns=BEDGRAPH_COLUMNS,
         schema_overrides={"chrom": pl.Utf8, "start": pl.Int64, "pct": pl.Float64},
     )
     bucket = (
@@ -112,7 +109,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         histogram = _histogram(path)
         if histogram.is_empty():
             raise ValueError(f"bismark_methylation_density: {Path(path).name} holds no CpG")
-        sample = sample_id_from_filename(path, _SUFFIX_RE)
+        sample = sample_id_from_filename(path, BEDGRAPH_SUFFIX_RE)
         total = int(histogram.get_column("n_cpgs").sum())
         frames.append(
             histogram.select(

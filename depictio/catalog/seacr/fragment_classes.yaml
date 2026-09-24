@@ -17,7 +17,7 @@ fixture: fragment_classes.tsv
 renders_as:
   - { id: seacr_fragment_class_stack, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: fragment_class, title: Fragment classes per sample} }
   - { component: card, column: n_fragments, aggregation: sum, secondary_layout: donut, breakdown_col: fragment_class }
-  - { component: card, column: fraction, aggregation: max, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }
+  - { component: card, column: sample_median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: mono_to_sub, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: mono_to_sub, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table }

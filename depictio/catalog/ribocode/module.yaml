@@ -1,0 +1,12 @@
+# RiboCode: de novo annotation of actively translated ORFs from the 3-nt
+# periodicity of Ribo-seq P-sites.
+#
+# `RiboCode` writes one `<library>.txt` table per Ribo-seq library and, with
+# ORF collapsing on, `<library>_collapsed.txt`, where ORFs that share a stop
+# codon across transcripts are merged into one row. The `orfs` recipe reads the
+# collapsed tables and keys each ORF by its genomic stop codon, the same key
+# the Ribo-TISH recipe builds, so the two callers can be compared.
+id: ribocode
+name: RiboCode
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribocode/ribocode
+homepage: https://github.com/xryanglab/RiboCode

@@ -3,7 +3,7 @@ name: Cell x marker-gene expression matrix
 mode: analysis/cell_expression
 description: >-
   One row per called cell, one Float64 column per panel gene (the run's own
-  cluster markers, a curated PBMC panel and the most dispersed genes),
+  cluster markers, the optional MARKER_PANEL of the run and the most dispersed genes),
   log1p(CP10k), next to the cell's UMAP coordinates and cluster. The embedding
   renderer lists every column in its Colour-by menu, so this is the table that
   answers "type a gene, see it on the UMAP", and the wide matrix the

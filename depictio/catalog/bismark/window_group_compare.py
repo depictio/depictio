@@ -3,15 +3,22 @@
 nf-core/methylseq ships no differential-methylation caller at any version, so a
 cohort that was sequenced to compare two conditions arrives with no answer to
 the question it was run for. This recipe is the honest screen that the published
-files do support: every window of ``bismark_binned_methylation`` tested between
-the two levels of the run's design factor, corrected for multiplicity, and
-handed to a volcano and a Manhattan.
+files do support: every eligible window tested between the two levels of the
+run's design factor, corrected for multiplicity, and handed to a volcano and a
+Manhattan.
 
 What it is, precisely, so nobody reads more into it than it holds:
 
-* the unit is a ``BIN_SIZE`` window, not a CpG and not a called DMR. A window
+* the unit is a ``WINDOW_SIZE`` window, not a CpG and not a called DMR. A window
   that comes out significant is a region worth looking at, not a region a caller
   has delimited;
+* **every eligible window is tested.** The windows are re-binned here from the
+  per-CpG bedGraphs through the same rules as ``bismark_binned_methylation``
+  (at least ``MIN_CPGS_PER_WINDOW`` CpGs in every library, contigs with enough
+  such windows), but without its drawing stride: that collection is decimated
+  for the tracks and the cohort panels, this one is not, so Benjamini-Hochberg
+  corrects over the whole eligible set. Drawing budgets are applied by the
+  renderers, never by the test;
 * the test is a pooled two-sample t-test on the **arcsine square-root
   transform** of the window's methylation proportion. Methylation is a
   proportion bounded at 0 and 1 whose variance collapses at both ends; the
@@ -21,12 +28,23 @@ What it is, precisely, so nobody reads more into it than it holds:
   difference in percentage points, because that is the quantity a reader can
   judge;
 * the weights are absent. Without per-CpG coverage counts (Bismark writes them
-  to ``methylation_coverage/*.cov.gz``, which this megatest does not publish) a
-  beta-binomial model has nothing to be binomial about, so each window
-  contributes its mean and the test is on library-level replication alone. With
-  three versus four libraries that is a low-powered screen, and it is labelled
-  as one;
-* multiplicity is handled with Benjamini-Hochberg over all tested windows.
+  to ``methylation_coverage/*.cov.gz``, which a 2.3.0 run does not publish by
+  default) a beta-binomial model has nothing to be binomial about, so each
+  window contributes its mean and the test is on library-level replication
+  alone. With a handful of libraries a side that is a low-powered screen, and
+  it is labelled as one;
+* the design comes from the ``samples`` hub, which carries the columns of the
+  run's ``METADATA_FILE`` in file order: the factor tested is the template's
+  ``GROUP_COL`` (passed as the ``group_col`` param) when it is a hub column with
+  exactly two levels across the libraries, else the first factor that has
+  exactly two levels. ``group_a`` / ``group_b`` name its two levels, in sorted
+  order, and ``delta_methylation`` is ``group_a`` minus ``group_b``.
+
+A run with no such factor, or with fewer than two libraries on either side, has
+no comparison to make: the recipe raises a clear error and the template declares
+the collection ``optional``, so ingestion skips it and the tiles bound to it are
+pruned rather than drawn empty. (The recipe runner refuses an empty frame, so a
+skipped optional collection is the platform's form of "no rows".)
 
 The t distribution's tail is evaluated here rather than through SciPy: the
 degrees of freedom are the same for every window, so the two-sided p-value is
@@ -61,14 +79,15 @@ import numpy as np
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.bismark_names import eligible_methylation_windows
 from depictio.recipes.lib.genomic_bins import window_id_expr
 
-MATRIX_DC_TAG = "bismark_binned_methylation"
+INDEX_DC_TAG = "bismark_bedgraph_index"
 SAMPLES_DC_TAG = "samples"
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="windows", dc_ref=MATRIX_DC_TAG),
-    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG),
+    RecipeSource(ref="index", dc_ref=INDEX_DC_TAG),
+    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -90,11 +109,12 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "n_cpg_min": pl.Int64,
 }
 
-#: Sample-hub columns that may carry the design, most explicit first. The first
-#: one with exactly two levels across the run's libraries is the factor tested:
-#: a two-group comparison needs a two-level factor, and `group` exists so a
-#: template can say which factor that is instead of leaving it to be guessed.
-GROUP_COLUMN_CANDIDATES = ("group", "cell_line", "treatment", "condition")
+#: Sample-hub columns that are never a design factor. Every other hub column is
+#: one, in the design table's own order.
+NON_FACTOR_COLUMNS = frozenset({"sample_id", "sample", "fastq_1", "fastq_2", "genome"})
+
+#: ``GROUP_COL`` value the CLI sets when the run declares no group column.
+NO_GROUP_SENTINEL = "__no_group__"
 
 #: Adjusted-p cut-off used to label `direction`. The volcano's own threshold is
 #: a display control; this is the label the cards and the donut count.
@@ -192,47 +212,63 @@ def benjamini_hochberg(p_values: np.ndarray) -> np.ndarray:
     return adjusted
 
 
-def _group_assignment(samples: pl.DataFrame, libraries: list[str]) -> tuple[str, dict[str, str]]:
-    """The design column with exactly two levels, and each library's level."""
+def _preferred_group_col(params: dict[str, str] | None) -> str | None:
+    """The template's ``GROUP_COL``, or None when unset or the no-group sentinel."""
+    value = ((params or {}).get("group_col") or "").strip()
+    return value if value and value != NO_GROUP_SENTINEL else None
+
+
+def _group_assignment(
+    samples: pl.DataFrame | None, libraries: list[str], group_col: str | None = None
+) -> tuple[str, dict[str, str]]:
+    """The design column to test and each library's level.
+
+    ``group_col`` (the template's ``GROUP_COL``) wins when it is a hub factor with
+    exactly two levels across ``libraries``; otherwise the first such factor.
+    """
     if samples is None or samples.is_empty() or "sample_id" not in samples.columns:
         raise ValueError(
-            "bismark_window_group_compare: the 'samples' hub is missing or has no "
-            "'sample_id' column, so the run has no design to compare along"
+            "bismark_window_group_compare: the run declares no design (no 'samples' hub "
+            "with a METADATA_FILE factor), so there is no two-group comparison to run"
         )
     present = samples.filter(pl.col("sample_id").is_in(libraries))
-    for column in GROUP_COLUMN_CANDIDATES:
-        if column not in present.columns:
-            continue
-        levels = present.get_column(column).drop_nulls().unique().sort().to_list()
+    factors = [c for c in present.columns if c not in NON_FACTOR_COLUMNS]
+    if group_col in factors:
+        factors = [group_col] + [c for c in factors if c != group_col]
+    for column in factors:
+        levels = present.get_column(column).cast(pl.Utf8).drop_nulls().unique().to_list()
         if len(levels) == 2:
-            mapping = dict(
-                zip(
-                    present.get_column("sample_id").to_list(),
-                    present.get_column(column).to_list(),
-                    strict=True,
-                )
+            pairs = zip(
+                present.get_column("sample_id").to_list(),
+                present.get_column(column).cast(pl.Utf8).to_list(),
+                strict=True,
             )
-            return column, {k: v for k, v in mapping.items() if v is not None}
+            return column, {k: v for k, v in pairs if v is not None}
     raise ValueError(
-        "bismark_window_group_compare: none of the sample-hub columns "
-        f"{list(GROUP_COLUMN_CANDIDATES)} has exactly two levels across the run's "
-        "libraries, so there is no two-group comparison to run"
+        "bismark_window_group_compare: no design column of the sample hub "
+        f"({factors or 'none'}) has exactly two levels across the run's libraries, so "
+        "there is no two-group comparison to run"
     )
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Test every window between the design's two levels, BH-correct, label."""
-    windows = sources["windows"]
+def compare_windows(
+    windows: pl.DataFrame, samples: pl.DataFrame | None, group_col: str | None = None
+) -> pl.DataFrame:
+    """Test every window of a complete long frame between the design's two levels.
+
+    ``windows`` holds ``sample, chromosome, start, end, methylation_pct, n_cpg``,
+    one row per library per window, every window present in every library.
+    """
     required = {"sample", "chromosome", "start", "end", "methylation_pct", "n_cpg"}
     missing = required - set(windows.columns)
     if missing:
         raise ValueError(
-            f"bismark_window_group_compare: '{MATRIX_DC_TAG}' lacks {sorted(missing)}, "
+            f"bismark_window_group_compare: the window frame lacks {sorted(missing)}, "
             f"got {windows.columns}"
         )
 
     libraries = windows.get_column("sample").unique().sort().to_list()
-    _, assignment = _group_assignment(sources["samples"], libraries)
+    _, assignment = _group_assignment(samples, libraries, group_col)
     levels = sorted({level for library, level in assignment.items() if library in libraries})
     if len(levels) != 2:
         raise ValueError(
@@ -323,3 +359,21 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # so the genomic position keeps the order stable between runs.
         .sort(["padj", "chromosome", "start"])
     )
+
+
+def transform(
+    sources: dict[str, pl.DataFrame | None], params: dict[str, str] | None = None
+) -> pl.DataFrame:
+    """Re-bin every eligible window from the bedGraphs and test all of them."""
+    group_col = _preferred_group_col(params)
+    # The design is checked before the bedGraphs are streamed, so a run without
+    # one fails fast instead of binning 750 MB for nothing.
+    samples = sources.get("samples")
+    hub_ids = (
+        samples.get_column("sample_id").to_list()
+        if samples is not None and "sample_id" in samples.columns
+        else []
+    )
+    _group_assignment(samples, hub_ids, group_col)
+    windows = eligible_methylation_windows(sources["index"], "bismark_window_group_compare")
+    return compare_windows(windows, samples, group_col)

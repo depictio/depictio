@@ -1,0 +1,19 @@
+id: mirdeep2_score_summary
+name: miRDeep2 score-cutoff summary
+mode: mirna/discovery
+description: >-
+  miRDeep2's own calibration table, one row per sample and integer score
+  cutoff: novel candidates reported, their estimated false and true positives,
+  known miRBase precursors recovered and the signal-to-noise ratio against
+  permuted structures. The curve miRDeep2's authors read to pick a cutoff.
+find:
+  path_glob: "**/result_*.csv"
+recipe: mirdeep2/score_summary.py
+fixture: score_summary.tsv
+renders_as:
+  - { id: signal_to_noise_curve, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: score_cutoff, y: signal_to_noise} }
+  - { id: known_recovery_curve, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: score_cutoff, y: known_detected_pct} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: score_cutoff, y: novel_reported, color: sample} }
+  - { component: table }

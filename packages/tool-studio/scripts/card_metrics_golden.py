@@ -142,6 +142,26 @@ BREAKDOWN_CASES = [
         "aggregation": "nunique",
         "top_n_count": 4,
     },
+    # Non-additive heroes: each group carries the hero aggregation in the
+    # column's unit and no share applies (``_value_breakdown``). ``lineage`` has
+    # a null key and a group with null values; ``run`` has numeric keys.
+    *[
+        {
+            "name": f"breakdown_lineage_{agg}",
+            "column": "coverage",
+            "breakdown_col": "lineage",
+            "aggregation": agg,
+            "top_n_count": 5,
+        }
+        for agg in ("average", "median", "min", "max", "range", "variance", "std_dev")
+    ],
+    {
+        "name": "breakdown_run_max",
+        "column": "coverage",
+        "breakdown_col": "run",
+        "aggregation": "max",
+        "top_n_count": 3,
+    },
 ]
 
 AGG_CASES = [
@@ -219,8 +239,10 @@ def main() -> int:
         if agg in ("count", "nunique"):
             value = int(value) if value is not None else None
         elif agg in ("min", "max", "mode"):
-            value = float(value) if isinstance(value, (int, float)) else (
-                str(value) if value is not None else None
+            value = (
+                float(value)
+                if isinstance(value, (int, float))
+                else (str(value) if value is not None else None)
             )
         elif value is not None:
             value = float(value) if isinstance(value, (int, float)) else None

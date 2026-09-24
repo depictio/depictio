@@ -1,0 +1,12 @@
+# anota2seq: translational regulation from paired total mRNA and
+# ribosome-bound (Ribo-seq or polysome) mRNA of the same samples.
+#
+# The nf-core module writes one `<contrast>.<analysis>.anota2seq.results.tsv`
+# per analysis (translated_mRNA, total_mRNA, translation, buffering) with the
+# RVM statistics of anota2seqGetOutput(output = "full"). It does not write a
+# regulatory-mode call per gene; the `regulation` recipe derives one from the
+# four tables with anota2seq's own default selection thresholds.
+id: anota2seq
+name: anota2seq
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/anota2seq/anota2seqrun
+homepage: https://bioconductor.org/packages/anota2seq

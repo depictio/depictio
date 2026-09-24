@@ -3,20 +3,23 @@ dashboard into a gene browser.
 
 Everything else this module ships aggregates expression before it reaches the
 reader (a dot plot is per cluster, a heatmap is per cluster). That answers "what
-marks cluster 7" and never answers "where is CD3D on this UMAP", which is the
+marks cluster 7" and never answers "where is my gene on this UMAP", which is the
 first question anyone opens a single-cell app with. This output is the wide
 `cell x gene` matrix that answers it: the embedding renderer's Colour-by menu
 lists every column of the bound data collection, so shipping ~120 gene columns
 next to the UMAP coordinates gives a gene picker for free, with no new renderer
 and no new dependency.
 
-The panel is the union of three sources, deliberately: what the run itself found
-(top `TOP_MARKERS_PER_CLUSTER` genes of every graph-based cluster), what a reader
-of a PBMC run will look for whether or not the clustering surfaced it
-(`CURATED_PBMC_PANEL`), and what varies most across cells regardless of the
+The panel is the union of three sources, deliberately: the reader's own panel
+(the optional ``MARKER_PANEL`` template variable, forwarded as the
+``marker_panel`` transform param, see ``depictio.recipes.lib.scrnaseq_panels``),
+what the run itself found (top `TOP_MARKERS_PER_CLUSTER` genes of every
+graph-based cluster), and what varies most across cells regardless of the
 clustering (the top `TOP_DISPERSION_GENES` by Cell Ranger's own normalised
-dispersion). Capped at `MAX_PANEL_GENES` columns, because the width is what the
-reader pays for: 8 767 cells x 120 Float64 columns is roughly 8 MB.
+dispersion). No tissue or organism panel is hardcoded, so a run on any reference
+gets a panel built from its own clusters. Capped at `MAX_PANEL_GENES` columns,
+because the width is what the reader pays for (about 1 MB per 1 000 cells at
+120 Float64 columns).
 
 Values are log1p(CP10k): the count is divided by the cell's total UMI count,
 scaled to 10 000, and log1p-ed, the normalisation every single-cell app plots.
@@ -60,7 +63,10 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.cellranger_samples import with_sample_column
-from depictio.recipes.lib.scrnaseq_panels import CURATED_PBMC_PANEL
+from depictio.recipes.lib.scrnaseq_panels import (
+    GRAPHCLUST_RESOLUTION,
+    marker_panel_from_params,
+)
 
 DIFFEXP_DC_TAG = "cellranger_diffexp"
 DISPERSION_DC_TAG = "cellranger_dispersion_raw"
@@ -94,9 +100,6 @@ TOP_DISPERSION_GENES = 30
 #: hard cap on the gene columns, the width the reader pays for
 MAX_PANEL_GENES = 150
 
-#: the clustering the panel's marker half comes from (see `cellranger/diffexp.py`)
-GRAPHCLUST_RESOLUTION = "graphclust"
-
 _MATRIX_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/filtered_feature_bc_matrix/"
 _FEATURES_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/filtered_feature_bc_matrix/"
 _BARCODE_INDEX_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/filtered_feature_bc_matrix/"
@@ -112,12 +115,13 @@ def panel_genes(
     diffexp: pl.DataFrame,
     dispersion: pl.DataFrame | None,
     available: set[str],
+    reader_panel: tuple[str, ...] = (),
 ) -> list[str]:
-    """Markers, then the curated panel, then the most dispersed genes, deduplicated.
+    """The reader's panel, then the markers, then the most dispersed genes, deduplicated.
 
     Ordered by provenance rather than alphabetically so the cap, when it bites,
-    drops the dispersion tail first: the run's own markers and the panel a reader
-    types by hand are what the tile is for.
+    drops the dispersion tail first: the panel a reader asked for and the run's
+    own markers are what the tile is for.
     """
     ordered: list[str] = []
     seen: set[str] = set()
@@ -128,12 +132,13 @@ def panel_genes(
                 seen.add(name)
                 ordered.append(name)
 
+    _take(reader_panel)
+
     markers = diffexp
     if "resolution" in markers.columns:
         markers = markers.filter(pl.col("resolution") == GRAPHCLUST_RESOLUTION)
     markers = markers.filter(pl.col("rank_in_cluster") <= TOP_MARKERS_PER_CLUSTER)
     _take(markers.sort(["cluster", "rank_in_cluster"])["gene"].to_list())
-    _take(CURATED_PBMC_PANEL)
 
     if dispersion is not None and dispersion.height:
         cols = set(dispersion.columns)
@@ -154,7 +159,9 @@ def panel_genes(
     return ordered[:MAX_PANEL_GENES]
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+def transform(
+    sources: dict[str, pl.DataFrame], params: dict[str, str] | None = None
+) -> pl.DataFrame:
     diffexp = sources["diffexp"]
     dispersion = sources.get("dispersion")
     matrix = _with_sample(sources["matrix"], _MATRIX_SAMPLE_RE, "matrix")
@@ -173,7 +180,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     feature_names = set(features["feature_name"].cast(pl.Utf8).drop_nulls().to_list())
     # A gene symbol that collides with one of the fixed columns would shadow it.
     feature_names -= set(EXPECTED_SCHEMA)
-    genes = panel_genes(diffexp, dispersion, feature_names)
+    genes = panel_genes(diffexp, dispersion, feature_names, marker_panel_from_params(params))
     if not genes:
         raise ValueError("cellranger_cell_expression: the gene panel is empty")
 

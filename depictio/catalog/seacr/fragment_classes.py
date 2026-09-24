@@ -42,6 +42,9 @@ Output schema:
     fraction : Float64       share of the sample's fragments in that class
     median_length : Float64  median fragment length inside the class
     mono_to_sub : Float64    mononucleosomal / sub-nucleosomal, per sample
+    sample_median_length : Float64  median fragment length of the whole sample,
+                                    weighted by fragment count (repeated on its
+                                    four class rows, like ``mono_to_sub``)
 """
 
 from __future__ import annotations
@@ -66,6 +69,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "fraction": pl.Float64,
     "median_length": pl.Float64,
     "mono_to_sub": pl.Float64,
+    "sample_median_length": pl.Float64,
 }
 
 SUB_NUCLEOSOMAL = "Sub-nucleosomal"
@@ -167,5 +171,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .cast(pl.Float64)
         .alias("mono_to_sub")
     )
-    grouped = grouped.join(ratios, on="sample", how="left")
+    # The per-sample median over the whole ladder. The histogram has one row per
+    # length, so a card median over `seacr_fragment_lengths.fragment_length`
+    # would be the middle of the x axis; this is the length at half the
+    # fragments. Every sample has exactly four rows here, so a card median or
+    # box plot over this column weighs every sample once.
+    medians = df.group_by("sample").agg(
+        _median_length(pl.col("count"), pl.col("fragment_length")).alias("sample_median_length")
+    )
+    grouped = grouped.join(ratios, on="sample", how="left").join(medians, on="sample", how="left")
     return grouped.select(list(EXPECTED_SCHEMA)).sort(["sample", "class_order"])

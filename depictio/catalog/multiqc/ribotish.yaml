@@ -1,0 +1,15 @@
+id: multiqc_ribotish
+name: Ribo-seq footprint quality
+origin_tool: Ribo-TISH
+mode: ribotish
+description: "Ribo-seq quality from Ribo-TISH: reading-frame proportions and read-length distribution of the footprints, via MultiQC."
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. riboseq multiqc/star/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: ribotish }

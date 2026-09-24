@@ -1,0 +1,19 @@
+id: mirdeep2_predictions
+name: miRNA precursor predictions
+mode: mirna/discovery
+description: >-
+  Every precursor miRDeep2 scored, one row per sample and candidate: the novel
+  hairpins it proposes and the miRBase precursors it re-discovered, with the
+  miRDeep2 score, the estimated true-positive probability, the read stack on
+  the mature, loop and star arms, the randfold test and the precursor locus.
+find:
+  path_glob: "**/result_*.csv"
+recipe: mirdeep2/predictions.py
+fixture: predictions.tsv
+renders_as:
+  - { id: prediction_scores, component: advanced_viz, kind: scatter_xy,
+      roles: {x: total_reads, y: score, label: prediction_id, color: category} }
+  - { component: card, column: prediction_id, aggregation: count, secondary_layout: donut, breakdown_col: category }
+  - { component: card, column: score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: category }
+  - { component: table, row_selection_enabled: true, row_selection_column: prediction_id }

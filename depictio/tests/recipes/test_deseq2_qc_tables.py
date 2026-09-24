@@ -43,3 +43,54 @@ def test_qc_sample_dists_keeps_the_matrix_around_an_na_cell(tmp_path: Path) -> N
     assert out["sample"].to_list() == ["s1", "s2", "s3"]
     assert out["s3"].to_list() == [None, 7.25, 0.0]
     assert out["s1"].to_list() == [0.0, 12.5, None]
+
+
+def _qc_pca_module():
+    import importlib.util
+
+    path = Path(__file__).parents[2] / "catalog" / "deseq2" / "qc_pca.py"
+    spec = importlib.util.spec_from_file_location("_deseq2_qc_pca", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_qc_pca_resolves_components_per_matrix_in_one_frame() -> None:
+    """Two matrices stacked diagonally in one frame keep their own axes and percentages."""
+    import polars as pl
+
+    first = pl.DataFrame(
+        {
+            "sample": ["a1", "a2", "a3"],
+            "PC1: 63% variance": ["1.0", "NA", "-1.0"],
+            "PC2: 34% variance": ["0.5", "0.25", "-0.5"],
+        }
+    )
+    second = pl.DataFrame(
+        {
+            "sample": ["b1", "b2"],
+            "PC1: 91% variance": ["2.0", "-2.0"],
+            "PC2: 7% variance": ["0.1", "-0.1"],
+        }
+    )
+    frame = pl.concat([first, second], how="diagonal_relaxed").with_columns(
+        pl.all().replace("NA", None)
+    )
+
+    out = _qc_pca_module().transform({"pca": frame})
+
+    assert out.columns == [
+        "sample_id",
+        "dim_1",
+        "dim_2",
+        "dim_1_percent",
+        "dim_2_percent",
+        "pca_set",
+    ]
+    assert out["sample_id"].to_list() == ["a1", "a2", "a3", "b1", "b2"]
+    assert out["dim_1"].to_list() == [1.0, None, -1.0, 2.0, -2.0]
+    assert out["dim_2"].null_count() == 0
+    assert out["dim_1_percent"].to_list() == [63.0, 63.0, 63.0, 91.0, 91.0]
+    assert out["dim_2_percent"].to_list() == [34.0, 34.0, 34.0, 7.0, 7.0]
+    assert out["pca_set"].n_unique() == 2

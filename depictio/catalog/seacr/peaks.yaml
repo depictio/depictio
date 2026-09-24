@@ -29,5 +29,5 @@ renders_as:
   - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
   - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: total_signal, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: signal_density, aggregation: average, secondary_layout: threshold, threshold_value: 50.0 }
+  - { component: card, column: signal_density, aggregation: average, secondary_layout: histogram }
   - { component: table, row_selection_enabled: true, row_selection_column: peak_id }

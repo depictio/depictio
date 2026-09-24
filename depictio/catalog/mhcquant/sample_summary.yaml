@@ -1,0 +1,30 @@
+id: mhcquant_sample_summary
+name: Immunopeptidome summary
+mode: immunopeptidomics/summary
+description: >-
+  One row per sample: PSMs, peptides, peptidoforms and source proteins, the
+  modified share, the length signature (median length, 9-mer share, class I and
+  class II window shares), median score and retention-time error, and, for a
+  quantified run, replicate completeness and correlation.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/sample_summary.py
+fixture: sample_summary.tsv
+renders_as:
+  - { id: yield_psms, component: card, column: psms, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: yield_peptides, component: card, column: peptides, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: yield_peptides_total, component: card, column: peptides, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { id: yield_proteins, component: card, column: proteins, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: modified_share, component: card, column: modified_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: ninemer_share, component: card, column: ninemer_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: class_i_share, component: card, column: class_i_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: class_ii_share, component: card, column: class_ii_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: median_length, component: card, column: median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: replicate_correlation, component: card, column: replicate_median_r, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: replicate_worst_pair, component: card, column: replicate_min_r, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: replicate_completeness, component: card, column: all_replicates_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: rt_error, component: card, column: median_abs_rt_error_min, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: yield_vs_ninemer
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: peptides, y: ninemer_fraction, label: sample, size: psms }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

@@ -33,5 +33,5 @@ renders_as:
   - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
   - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: fold_enrichment, aggregation: average, secondary_layout: histogram }
-  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 10.0 }
+  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 1.3, threshold_direction: min, threshold_warn: 1.0 }
   - { component: table, row_selection_enabled: true, row_selection_column: peak_id }

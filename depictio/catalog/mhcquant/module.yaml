@@ -1,0 +1,22 @@
+# nf-core/mhcquant's own summary and annotation steps. The peptide table, the
+# fragment-ion annotation and every table derived from them here come from
+# pipeline-local processes (SUMMARIZE_RESULTS and PYOPENMS_IONANNOTATOR, both
+# pyOpenMS scripts under modules/local), so there is no nf-core module to
+# derive identity from and it is declared in full, the same documented
+# exception as comBGC and enchantR.
+#
+# The OpenMS / Comet search tables the pipeline runs on the way live in the
+# `openms` tool folder.
+id: mhcquant
+name: nf-core/mhcquant
+description: >-
+  Immunopeptidomics summary tables of nf-core/mhcquant: the FDR-filtered
+  peptides of every sample with their scores, retention-time prediction,
+  source proteins and per-replicate intensities, the fragment-ion annotation of
+  their spectra, and the derived immunopeptidome signatures (length profile,
+  anchor motifs, replicate reproducibility, source proteins).
+homepage: https://nf-co.re/mhcquant
+source_url: https://github.com/nf-core/mhcquant/tree/3.2.0/modules/local
+edam_topics:
+  - http://edamontology.org/topic_0121 # Proteomics
+  - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
