@@ -82,3 +82,27 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/eager/2.4.5 --data-root {dest}
+# Megatest facts that must never reach a dashboard text (lint rule e in
+# depictio/tests/models/test_template_conventions.py): sample and library ids,
+# ENA runs, the organism and its reference contigs.
+forbidden_terms:
+  - COD076
+  - COD092
+  - COD076E1bL1
+  - COD092E1bL1i69
+  - ERR1943600
+  - ERR1943601
+  - ERR1943602
+  - ERR1943607
+  - ERR1943608
+  - ERR1943609
+  - cod
+  - Atlantic
+  - Gadus
+  - Gadus_morhua
+  - morhua
+  - gadMor
+  - vikingfish
+  - NC_044048.1
+  - NC_044056.1
+  - NC_002081.1

@@ -66,6 +66,23 @@ keys:
   - nonpareil/nonpareil_all_samples.csv
   - nanoq/*.stats
 prefix_keys: []
+# Megatest facts that must never appear in a dashboard text (linted by
+# depictio/tests/models/test_template_conventions.py, rule e).
+forbidden_terms:
+  - mock
+  - seventeen
+  - MOCK_001_Minion_R9
+  - MOCK_002_Minion_R9
+  - MOCK_003_Minion_R9
+  - MOCK_001_Illumina_Hiseq_3000
+  - MOCK_002_Illumina_Hiseq_3000
+  - MOCK_003_Illumina_Hiseq_3000
+  - HiSeq 3000
+  - MinION R9
+  - Caldicellulosiruptor
+  - Methanobrevibacter
+  - Gemmatimonas
+  - Thermotoga
 renames: {}
 post_fetch_help: |
   === Quick test commands ===

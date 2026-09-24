@@ -386,3 +386,63 @@ Live checks (headless Playwright, 1600x1000, `/tmp/claude-502/shots-scrnaseq/`):
 card opens on FCER1A (graphclust Cluster 8, rank 1, log2fc 7.72), the comparison opens with a
 result (C1 n=1249 vs C2 n=1189, 9 up, 22 down, 90 not significant), the violin and the
 parallel coordinates (14 lines, 6 axes) render, header chips are visible without hover.
+
+## Wave 3 (2026-09-23): genericity, blockers, redundancy
+
+What changed:
+- **Marker panel.** `MARKER_PANEL` (optional template variable, comma list) replaces the
+  hardcoded PBMC panel. `depictio/recipes/lib/scrnaseq_panels.py` now holds
+  `parse_marker_panel` / `resolve_marker_panel` and no tissue panel; `cellranger/cell_expression.py`
+  puts the reader's panel first, then the top 5 markers per cluster, then the most dispersed genes;
+  `cellranger/cell_expression_long.py` keeps `MARKER_PANEL`, else the top 2 markers per cluster
+  from `cellranger_diffexp` (new optional `dc_ref`), else the wide table's first gene columns, at
+  most 24 genes. It no longer raises on a mouse or non-blood run. Both recipes read the panel
+  from a `params` keyword the platform does not pass yet (see Open).
+- **CellBender per route.** `simpleaf_cellbender_metrics` and `kallisto_cellbender_metrics` ran
+  `cellbender/metrics.py`, whose fixed `dc_ref` is the Cell Ranger route's raw scan, so all three
+  routes reported the Cell Ranger CellBender numbers (8 805 cells). Two pipeline-local recipes
+  (`recipes/simpleaf_cellbender_metrics.py`, `recipes/kallisto_cellbender_metrics.py`) reuse the
+  catalog transform on each route's own scan: 8 805 / 8 821 / 8 765 now.
+- **Blockers:** cluster QC heatmap `col_z`; "Significant markers" counts rows with
+  `adjusted_pvalue < 0.05` by `cluster_label`; the per-cell violin is faceted by gene; "Cycling
+  cells" counts barcodes with `g2m_score >= 0.05`; the found/expected ratio has no one-sided
+  threshold (median + box plot); the HVG text and the `Kept for the PCA` filter are fixed/removed;
+  glance strip and threshold cards read `_frac` and show the lowest library; the five threshold
+  cards lost their passing-side `threshold_warn` (P17).
+- **Genericity:** no gene name, sample, tissue or cluster label in any text or default
+  (`color_col: CD3D` / `MS4A1`, `default_record: FCER1A`, `default_group_a/_b` removed);
+  the Ensembl link is `Multi/Search`; the mito rule has its cards and box plot back
+  (`sc-cq-card-mito`, `sc-cq-card-box-mito`, `sc-cq-fig-mito-box`); `forbidden_terms` in
+  `megatest.yaml`.
+- **Redundancy removed (42 tiles, 182 to 141 with the new mito card):** Library QC 8 cards + 1 intro, MultiQC knee, Cell calling
+  4 ambient cards + rank table, Cell QC 2 histograms + top-20 box card, Embeddings 2 UMAPs,
+  4 HVG cards, HVG table, selection filter, 2 embedding cards, variance table, Clusters sizes
+  bar, parallel coordinates, cell-cycle table, Markers heatmap, faceted barplot, 6 cards, per-cell
+  table, and the `Glance scope` slider. `sc-ref-table-metrics` is no longer pinned (collapsed
+  at the end of Library QC). New tag: `sc-mk-card-counts` (was `sc-mk-card-resolutions`),
+  `sc-cq-card-box-mito` (was `-box-ribo`), `sc-cq-fig-mito-box` (was `-ribo-box`), `sc-cq-card-mito`.
+- **Conventions:** cards before figures on every tab, intros at most 2 sentences,
+  `advanced_viz_controls: header` on every tab, the gene record in a closing "Gene detail"
+  section, Markers resolution filter `default_value: graphclust`.
+
+Verified:
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
+  depictio/tests/models/test_template_conventions.py -q -rxX -k scrnaseq   # 13 passed, 3 xpassed
+uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+  --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run      # 8/8 steps
+```
+The recipe chain (scans, `cell_qc`, `cell_expression`, `cell_expression_long`, `cell_cycle`,
+`aligner_summary`) was re-run in process on the local megatest: the long table holds 24 genes
+x 2 079 capped cells (49 896 rows) without a panel and exactly the 3 present genes of a
+`CD3D, MS4A1;LYZ NOTAGENE` panel; a synthetic mouse-cased wide table falls back to its own
+genes instead of raising.
+
+Open:
+- `MARKER_PANEL` reaches the recipes only once the platform forwards a transform `params`
+  mapping (snippet in the wave 3 report: `TransformConfig.params`, `execute_recipe(params=)`,
+  CLI pass-through). Until then the variable is declared and documented, and the recipes use
+  the data-derived fallback.
+- The UpSet still has no simpleaf own-call set: the megatest fetch has no per-barcode simpleaf
+  (QCatch) cell list, only its metrics summary.
+- Nothing re-ingested or checked live in this pass; `.db_seeds` not regenerated.

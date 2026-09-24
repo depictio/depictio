@@ -1,58 +1,45 @@
-# nf-core/sarek Template v3.10.0 - Germline variant calling, five callers side by side
+# nf-core/sarek Template v3.10.0 - Variant calling, caller by caller
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
 #   depictio run --template nf-core/sarek/3.10.0 --data-root /path/to/your/data
+#   [--var GENOME=hg19]    # UCSC name of the run's assembly, default hg38
 #
-# Tested against the nf-core/sarek 3.10.0 AWS megatest run's
-# `test_full_germline_ncbench_agilent/` profile:
-#   s3://nf-core-awsmegatests/sarek/results-8ccac7ad37b05dd792447763bf9671b719824587/
-#   (NA12878, two read depths, five germline callers. See megatest.yaml.)
-# ============================================================================
+# Validated against the nf-core/sarek 3.10.0 AWS megatest
+# (`test_full_germline_ncbench_agilent/`, see megatest.yaml), but nothing below
+# is specific to it: the sample hub is read from the CSV manifests sarek always
+# publishes (csv/), the MultiQC sample names are attached to the hub by the
+# platform's canonicalisation, and the genome build is the GENOME variable.
 #
-# SCOPE: GERMLINE ONLY, ONE PATIENT, TWO SAMPLES.
-# This megatest profile never runs a somatic route: there is no
-# tumor/normal pair, and ASCAT / ControlFREEC / MSIsensor(pro) never execute,
-# so those outputs do not exist anywhere under DATA_ROOT. `status` is 0
-# (normal) for both samples; the `status`/`status_label` columns on the
-# `samples` hub exist for forward-compatibility with a somatic run, not
-# because this run varies them.
+# WHAT A RUN MAY LACK.
+# The annotation collections (snpeff_*) and the VCFtools ones (vcftools_*) are
+# optional: a run without snpEff in --tools, or with vcftools skipped, drops
+# the Consequences and Genes tabs (and the VCFtools panels) instead of failing
+# to ingest. The somatic collections (ASCAT, CNVkit, MSIsensor-pro,
+# NGSCheckMate) are optional too, and no tile binds them yet.
 #
-# FIVE CALLERS, DOWN TO THE VARIANT.
-# `--tools deepvariant,freebayes,haplotypecaller,manta,strelka,snpeff,vep`.
-# The manifest fetches the per-sample per-caller VCFs and their snpEff-annotated
-# twins (44 MB of the run's 217 MB of VCF; the gVCFs and the VEP duplicates stay
-# out), so the five-caller comparison runs at the variant level: one row per
-# call, read with Polars alone (`depictio/recipes/lib/vcf.py`; bgzip is
-# gzip-compatible, so no VCF dependency is needed).
+# STRUCTURAL-VARIANT CALLERS.
+# Manta and TIDDIT call few or no SNPs, so bcftools stats reports Ts/Tv 0.0 for
+# them. That is the caller doing its job; every Ts/Tv tile filters them out
+# with `ts_tv > 0`.
 #
-# TWO DEPTHS OF ONE INDIVIDUAL, SO "CONCORDANCE" MEANS DEPTH SENSITIVITY.
-# NA12878_75M and NA12878_200M are the same exome sequenced twice. Comparing
-# them is not a truth comparison against a benchmark callset: it is a reading of
-# how much each caller gains or loses between 75M and 200M reads. Every panel
-# that puts the two side by side is labelled that way.
-#
-# MANTA IS A CALLER HERE TOO, AND ITS BCFTOOLS STATS LOOK DEGENERATE.
-# Manta is a structural-variant caller; its output VCF has almost no
-# SNPs, so `bcftools stats` reports `ts=0 tv=0 ts/tv=0.0` for it and most of
-# its records land in bcftools' "others" bucket rather than "indels"/"SNPs".
-# That is Manta doing its job, not a data gap, see VALIDATION_REPORT.md.
-#
-# NATIVE MULTIQC 1.35, NOT REPROCESSED.
-# Unlike several other lot templates, this run already ships MultiQC 1.35
-# with a native parquet (`multiqc/multiqc_data/multiqc.parquet`), so no
+# NATIVE MULTIQC, NOT REPROCESSED.
+# sarek ships a MultiQC parquet (`multiqc/multiqc_data/multiqc.parquet`), so no
 # `multiqc_reprocess` step is needed. `modules` / `plots` below were read off
-# `multiqc.list_plots()` against this exact file, not guessed from another
-# pipeline's report.
+# `multiqc.list_plots()` against a real run.
 template:
   template_id: "nf-core/sarek/3.10.0"
-  description: "nf-core/sarek template: germline variant calling with five callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta, Strelka) on the same two samples, compared at the bcftools-stats level, on top of the native MultiQC 1.35 report."
+  description: "nf-core/sarek template: variant calling compared caller by caller, from coverage and bcftools statistics down to the annotated variant, on top of the native MultiQC report."
   version: "1.0.0"
   variables:
     - name: "DATA_ROOT"
-      description: "Root directory containing sarek output (reports/, csv/, multiqc/, pipeline_info/) for the test_full_germline_ncbench_agilent/ profile, plus input/ holding the samplesheet."
+      description: "Root directory of the sarek output (csv/, reports/, variant_calling/, annotation/, multiqc/, pipeline_info/)."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the
-  # samplesheet ships in input/ alongside this template.
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run was aligned to (hg38, hg19, mm10): the axis and gene lane of every locus track."
+      required: false
+      default: "hg38"
+  # The bundled reference dataset needs no variable beyond DATA_ROOT: the hub
+  # reads csv/, and GENOME keeps its default.
   reference:
     vars: {}
   # How this run's provenance is collected at ingest, surfaced in the
@@ -118,12 +105,12 @@ workflows:
         - "{DATA_ROOT}"
     data_collections:
       # ----------------------------------------------------------------
-      # Hub: one row per sample. Derives the read-depth condition and a
-      # human-readable status label from the samplesheet the pipeline
-      # validated; see recipes/samples.py.
+      # Hub: one row per sample, from the CSV manifests sarek publishes under
+      # csv/ (recalibrated.csv, markduplicates*.csv, variantcalled.csv); see
+      # recipes/samples.py. The samplesheet itself is not part of the output.
       # ----------------------------------------------------------------
       - data_collection_tag: "samples"
-        description: "Per-sample hub: patient, tumor/normal status and the read-depth condition the sample name encodes"
+        description: "Per-sample hub: patient, sex, tumour or normal status and the callers run on the sample, from sarek's csv/ manifests"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -134,40 +121,19 @@ workflows:
             format: "TSV"
             columns_description:
               "sample_id": "Sample name, the key every other collection is linked on"
-              "patient": "Patient/individual identifier from the samplesheet"
-              "status": "0 = normal, 1 = tumor (sarek convention); always 0 on this germline-only run"
-              "status_label": "Normal or Tumor, derived from status"
-              "read_depth_millions": "Approximate input read depth in millions, parsed from the sample name"
-              "read_depth_label": "The same depth as a label, so the run's one real factor can drive a MultiSelect"
-              "n_lanes": "Sequencing lanes merged into the sample"
-
-      - data_collection_tag: "samplesheet"
-        description: "The samplesheet the pipeline validated against, one row per patient/sample/lane"
-        config:
-          type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: "NA12878_Agilent_full_test\\.csv$"
-          dc_specific_properties:
-            format: "CSV"
-            columns_description:
-              "patient": "Patient/individual identifier"
-              "status": "0 = normal, 1 = tumor"
-              "sample": "Sample identifier"
-              "lane": "Sequencing lane"
-              "fastq_1": "Read 1 FASTQ URL"
-              "fastq_2": "Read 2 FASTQ URL"
+              "patient": "Patient or individual identifier"
+              "sex": "Sex as declared in the samplesheet (XX, XY or NA)"
+              "status": "0 = normal, 1 = tumour (sarek convention); empty when only variantcalled.csv was published"
+              "status_label": "Normal, Tumour or Unknown, derived from status"
+              "n_callers": "Variant callers that produced a VCF for the sample"
 
       # ----------------------------------------------------------------
-      # MultiQC. Native MultiQC 1.35 (not reprocessed). Module and plot
-      # names come from multiqc.list_plots() run against this run's own
-      # parquet.
+      # MultiQC. Native (not reprocessed). Module and plot names come from
+      # multiqc.list_plots() run against a real sarek parquet; a module the
+      # run did not produce simply has no panel.
       # ----------------------------------------------------------------
       - data_collection_tag: "multiqc_data"
-        description: "Native MultiQC 1.35 report: read QC, alignment, base recalibration, coverage, variant-call QC and annotation, ten modules"
+        description: "Native MultiQC report: read QC, alignment, base recalibration, coverage, variant-call QC and annotation"
         config:
           type: "MultiQC"
           scan:
@@ -278,7 +244,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller (deepvariant, freebayes, haplotypecaller, manta, strelka)"
+              "caller": "Variant caller the VCF came from"
               "n_records": "Total VCF records"
               "n_no_alts": "Reference-only sites"
               "n_snps": "Records with a SNP"
@@ -300,21 +266,22 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller (deepvariant, freebayes, haplotypecaller, manta, strelka)"
+              "caller": "Variant caller the VCF came from"
               "ts": "Transitions"
               "tv": "Transversions"
-              "ts_tv": "Ts/Tv ratio; 0.0 for a caller with no scoreable SNPs (e.g. manta)"
+              "ts_tv": "Ts/Tv ratio; 0.0 for a caller with no scoreable SNPs (a structural-variant caller)"
               "ts_1st_alt": "Transitions, counting only the first ALT allele of a site"
               "tv_1st_alt": "Transversions, counting only the first ALT allele of a site"
               "ts_tv_1st_alt": "Ts/Tv ratio, first-ALT-only"
 
       # ----------------------------------------------------------------
       # bcftools stats, the distribution blocks. Same raw scan as the two
-      # summaries above: IDD / ST / QUAL / DP / AF / SiS melted into one long
-      # frame keyed by `section`, so one picker drives every tile built on it.
+      # summaries above: IDD / ST / DP / AF / SiS melted into one long frame
+      # keyed by `section`, so one picker drives every tile built on it. The
+      # QUAL block is left out (see catalog/bcftools/stats_sections.py).
       # ----------------------------------------------------------------
       - data_collection_tag: "bcftools_stats_sections"
-        description: "Per-caller indel-length, substitution, quality, depth and allele-frequency distributions from bcftools stats"
+        description: "Per-caller indel-length, substitution, depth and allele-frequency distributions from bcftools stats"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -325,8 +292,8 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller the VCF came from"
-              "section": "Which bcftools stats block the row comes from (indel_length, substitution, quality, depth, allele_frequency, singleton_stats)"
+              "caller": "Variant caller the VCF came from"
+              "section": "Which bcftools stats block the row comes from (indel_length, substitution, depth, allele_frequency, singleton_stats)"
               "bin": "Numeric bin of the distribution; null in the categorical sections"
               "label": "Categorical label of the row; null in the numeric sections"
               "count": "How many records fall in the bin"
@@ -347,7 +314,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller the VCF came from"
+              "caller": "Variant caller the VCF came from"
               "callset": "Sample and caller together"
               "substitution_class": "Substitution folded onto its pyrimidine reference (C to A, C to G, C to T, T to A, T to C, T to G)"
               "mutation_class": "transition (C to T, T to C) or transversion (the other four)"
@@ -366,7 +333,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller the VCF came from"
+              "caller": "Variant caller the VCF came from"
               "callset": "Sample and caller together"
               "length": "Indel length in base pairs, negative for a deletion"
               "indel_class": "insertion or deletion"
@@ -374,10 +341,12 @@ workflows:
               "fraction": "Share of all the callset's indels at that length"
 
       # ----------------------------------------------------------------
-      # Coverage. mosdepth runs twice per sample (on the duplicate-marked and
-      # on the recalibrated CRAM), so every coverage collection carries a
-      # `stage` column. The per-target bed is 212k rows per sample and stage;
-      # the recipe bins it to 1 Mb windows before it reaches a tile.
+      # Coverage. sarek runs mosdepth on the duplicate-marked and on the
+      # recalibrated CRAM; the passes carry the same depth, so every coverage
+      # recipe keeps one per sample (the recalibrated one when present) and
+      # the `stage` column says which. The per-target bed is a few hundred
+      # thousand rows per exome sample; the recipe bins it to 1 Mb windows
+      # before it reaches the navigator.
       # ----------------------------------------------------------------
       - data_collection_tag: "mosdepth_regions_raw"
         description: "Raw mosdepth per-target mean depth over the capture bed (input of mosdepth_regions)"
@@ -405,7 +374,7 @@ workflows:
               "source_path": "File the row came from; sample and stage are derived from it"
 
       - data_collection_tag: "mosdepth_regions"
-        description: "Mean read depth in 1 Mb windows along the genome, per sample and per mosdepth stage"
+        description: "Mean read depth in 1 Mb windows along the genome, per sample"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -420,16 +389,16 @@ workflows:
               "end": "Window end"
               "value": "Target-length-weighted mean depth in the window"
               "sample": "Sample the depth was measured on"
-              "stage": "Which CRAM mosdepth ran on: md (duplicate-marked) or recal (recalibrated)"
-              "sample_stage": "Sample and stage together, the lane label of the coverage track"
+              "stage": "Which CRAM the kept mosdepth pass ran on: recal (recalibrated) when present, else md (duplicate-marked)"
+              "sample_stage": "Sample and stage together"
               "n_targets": "Capture targets that fall in the window"
 
       # The same per-target bed, unbinned, for the Cohort QC locus section. It
-      # is large (one row per target, sample and pass) and only ever read
-      # narrowed to a region, through the region link from mosdepth_regions,
-      # which is what keeps a track on it at a few hundred rows.
+      # is large (one row per target and sample) and only ever read narrowed to
+      # a region, through the region link from mosdepth_windows, which is what
+      # keeps a track on it at a few hundred rows.
       - data_collection_tag: "mosdepth_targets"
-        description: "Mean read depth per capture target, per sample and mosdepth stage; the locus section's depth track"
+        description: "Mean read depth per capture target, per sample; the locus section's depth track"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -444,8 +413,8 @@ workflows:
               "end": "Target end"
               "depth": "Mean read depth over the target"
               "sample": "Sample the depth was measured on"
-              "stage": "Which CRAM mosdepth ran on: md (duplicate-marked) or recal (recalibrated)"
-              "sample_stage": "Sample and stage together, the lane label of the depth track"
+              "stage": "Which CRAM the kept mosdepth pass ran on: recal (recalibrated) when present, else md (duplicate-marked)"
+              "sample_stage": "Sample and stage together"
               "target_bp": "Target length in base pairs"
 
       # The same 1 Mb windows as mosdepth_regions, renamed to chrom / pos: the
@@ -467,7 +436,7 @@ workflows:
               "end": "Window end"
               "depth": "Target-length-weighted mean depth in the window"
               "sample": "Sample the depth was measured on"
-              "stage": "Which CRAM mosdepth ran on: md (duplicate-marked) or recal (recalibrated)"
+              "stage": "Which CRAM the kept mosdepth pass ran on: recal (recalibrated) when present, else md (duplicate-marked)"
               "sample_stage": "Sample and stage together"
               "n_targets": "Capture targets that fall in the window"
 
@@ -509,7 +478,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the depth was measured on"
-              "stage": "md (duplicate-marked) or recal (recalibrated)"
+              "stage": "Which CRAM the kept mosdepth pass ran on: recal when present, else md"
               "scope": "genome for the whole contig, region for the capture targets on it"
               "chrom": "Contig, or total for the run-level row"
               "length": "Contig length, or bases covered by targets in the region scope"
@@ -520,6 +489,7 @@ workflows:
 
       - data_collection_tag: "mosdepth_xy_sex_check"
         description: "X and Y coverage per sample, and the heuristic sex the ratio implies"
+        optional: true # MultiQC writes its X/Y table only when it recognised both contigs
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -530,7 +500,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the coverage was measured on"
-              "stage": "md (duplicate-marked) or recal (recalibrated)"
+              "stage": "Which CRAM the kept mosdepth pass ran on: recal when present, else md"
               "x_coverage": "Mean depth on chromosome X"
               "y_coverage": "Mean depth on chromosome Y"
               "xy_ratio": "X depth divided by Y depth"
@@ -539,9 +509,11 @@ workflows:
       # ----------------------------------------------------------------
       # VCFtools, per caller and per sample. Both reports name their sample and
       # their caller only in the file name, so both scans carry the path.
+      # Optional: `--skip_tools vcftools` leaves them out.
       # ----------------------------------------------------------------
       - data_collection_tag: "vcftools_filter_summary_raw"
         description: "Raw vcftools FILTER summaries (input of vcftools_filter_summary)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -567,6 +539,7 @@ workflows:
 
       - data_collection_tag: "vcftools_filter_summary"
         description: "How each caller's own FILTER column partitions its calls, and what each partition costs in Ts/Tv"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -577,7 +550,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller the VCF came from"
+              "caller": "Variant caller the VCF came from"
               "filter_label": "FILTER value; PASS is the caller's own kept set"
               "n_variants": "Calls carrying that FILTER value"
               "n_ts": "Transitions among them"
@@ -588,6 +561,7 @@ workflows:
 
       - data_collection_tag: "vcftools_tstv_qual_raw"
         description: "Raw vcftools Ts/Tv-by-quality sweeps (input of vcftools_tstv_qual)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -615,6 +589,7 @@ workflows:
 
       - data_collection_tag: "vcftools_tstv_qual"
         description: "Ts/Tv of the calls above each quality threshold, one decimated curve per sample and caller"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -625,7 +600,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller the VCF came from"
+              "caller": "Variant caller the VCF came from"
               "series": "Sample and caller together, the curve's own label"
               "qual_threshold": "Quality floor of the step"
               "n_ts_above": "Transitions at or above the floor"
@@ -676,7 +651,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the call was made on"
-              "caller": "Germline caller that made it"
+              "caller": "Variant caller that made it"
               "chrom": "Contig"
               "pos": "Position, 1-based"
               "variant_key": "Contig, position and alleles joined, the key a call is matched on across callers"
@@ -692,6 +667,7 @@ workflows:
 
       - data_collection_tag: "snpeff_ann_vcf_raw"
         description: "Raw snpEff-annotated VCF lines (input of snpeff_ann_variants)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -715,6 +691,7 @@ workflows:
 
       - data_collection_tag: "snpeff_ann_variants"
         description: "One row per annotated variant call: everything vcf_variants carries, plus snpEff's most severe consequence for it"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -725,7 +702,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the call was made on"
-              "caller": "Germline caller that made it"
+              "caller": "Variant caller that made it"
               "chrom": "Contig"
               "pos": "Position, 1-based"
               "variant_key": "Contig, position and alleles joined, the key a call is matched on across callers"
@@ -747,6 +724,7 @@ workflows:
 
       - data_collection_tag: "snpeff_variant_upset"
         description: "One row per PASS variant and one membership column per caller-and-sample pair, for the variant-level overlap"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -760,6 +738,7 @@ workflows:
 
       - data_collection_tag: "snpeff_protein_lollipop"
         description: "Coding variants placed at their amino-acid position, on the genes carrying the most of them"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -770,7 +749,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the call was made on"
-              "caller": "Germline caller that made it"
+              "caller": "Variant caller that made it"
               "gene": "Gene the variant sits on, one lollipop lane per value"
               "aa_pos": "Amino-acid position along the protein"
               "impact": "Impact class, the colour of the lollipop head"
@@ -787,6 +766,7 @@ workflows:
       # ----------------------------------------------------------------
       - data_collection_tag: "snpeff_csv_raw"
         description: "Raw snpEff CSV summary lines (input of snpeff_csv_stats)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -809,6 +789,7 @@ workflows:
 
       - data_collection_tag: "snpeff_csv_stats"
         description: "What kind of variants each callset holds: impact classes, functional classes, consequences, genomic regions, variant types and zygosity"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -819,7 +800,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the callset belongs to"
-              "caller": "Germline caller the callset came from"
+              "caller": "Variant caller the callset came from"
               "section": "Which composition snpEff counted: impact, functional_class, effect, region, variant_type or zygosity"
               "category": "The class counted inside that section"
               "count": "How many effects or calls fall in the class"
@@ -827,6 +808,7 @@ workflows:
 
       - data_collection_tag: "snpeff_genes_raw"
         description: "Raw snpEff per-transcript effect counts (input of snpeff_genes)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -850,6 +832,7 @@ workflows:
 
       - data_collection_tag: "snpeff_genes"
         description: "Per-gene variant counts by impact class, summed over the gene's transcripts, one row per gene and callset"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -860,7 +843,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the callset belongs to"
-              "caller": "Germline caller the callset came from"
+              "caller": "Variant caller the callset came from"
               "gene_name": "Gene symbol"
               "gene_id": "Ensembl gene id"
               "biotype": "Transcript biotype snpEff assigned to the gene"
@@ -873,6 +856,7 @@ workflows:
 
       - data_collection_tag: "snpeff_gene_upset"
         description: "One row per gene and one membership column per caller, over the genes carrying a coding variant"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -886,6 +870,7 @@ workflows:
 
       - data_collection_tag: "snpeff_gene_heatmap"
         description: "The genes carrying the most coding variants, as a gene by callset matrix of variant counts"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -897,29 +882,13 @@ workflows:
             columns_description:
               "gene_name": "Gene symbol, the row label of the matrix"
 
-      - data_collection_tag: "snpeff_oncoplot"
-        description: "Callset by gene grid coloured by the most severe impact class each cell carries"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "snpeff/oncoplot.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample_id": "Sample and caller together, the column of the grid"
-              "gene": "Gene symbol, the row of the grid"
-              "mutation_type": "Most severe impact class in the cell"
-              "n_variants": "Variants behind the cell"
-
       # ----------------------------------------------------------------
       # One QC profile per callset, for the parallel-coordinates tile: the
       # bcftools summary, its Ts/Tv and what the annotated VCF says about
       # FILTER, zygosity, depth and allele fraction, joined on sample and caller.
       # ----------------------------------------------------------------
       - data_collection_tag: "callset_qc"
-        description: "One row per callset (sample and caller) with the eight numbers a germline callset is judged on"
+        description: "One row per callset (sample and caller) with the eight numbers a germline callset is judged on; reads the annotated VCFs when present, the caller VCFs otherwise"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -931,10 +900,10 @@ workflows:
             columns_description:
               "callset": "Sample and caller together, one polyline"
               "sample": "Sample the VCF was called on"
-              "caller": "Germline caller the VCF came from"
+              "caller": "Variant caller the VCF came from"
               "n_records": "Records in the VCF"
               "snp_fraction": "SNPs over records"
-              "ts_tv": "Transitions over transversions; an exome sits near 2.5 to 3"
+              "ts_tv": "Transitions over transversions"
               "multiallelic_pct": "Multiallelic sites per hundred records"
               "pass_pct": "Calls the caller kept, per hundred"
               "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
@@ -946,7 +915,7 @@ workflows:
       # their tabix index and range-read by the browser for the window in
       # view, so the locus section can draw every call with its INFO fields
       # without materialising them again. One object per callset, named after
-      # the file (NA12878_75M.deepvariant, ...). Structural-variant callers are
+      # the file (<sample>.<caller>). Structural-variant callers are
       # left out: their symbolic alleles do not draw as point variants. Optional
       # because a run fetched without the .tbi sidecars has nothing to upload.
       # ----------------------------------------------------------------
@@ -963,14 +932,14 @@ workflows:
                 pattern: "^(?!.*\\.(?:manta|tiddit)\\.).*_snpEff\\.ann\\.vcf\\.gz$"
           dc_specific_properties:
             format: "vcf"
-            assembly: "hg38"
+            assembly: "{GENOME}"
             sample_regex: "(?P<sample>[^/]+?)_snpEff\\.ann\\.vcf\\.gz$"
             max_file_size_mb: 32
 
       # ----------------------------------------------------------------
-      # SOMATIC. None of the collections below has a single file in this
-      # megatest: sarek 3.10.0 publishes no tumour/normal profile, so ASCAT,
-      # CNVkit, ControlFREEC, MSIsensor-pro and NGSCheckMate never execute
+      # SOMATIC. None of the collections below exists on a germline run:
+      # ASCAT, CNVkit, MSIsensor-pro and NGSCheckMate only execute on a
+      # tumour/normal (or multi-library) run.
       # here. They are declared `optional: true` with the globs sarek's own
       # `test_full` somatic profile writes, so the same template lights them up
       # on a run that has them without a second template to maintain. No
@@ -1082,20 +1051,12 @@ workflows:
               "source_path": "File the row came from"
 
 links:
-  # Hub -> MultiQC. sarek's per-tool sample names carry caller/stage suffixes
-  # the file NAME itself never has (NA12878_75M.deepvariant, NA12878_75M.md,
-  # NA12878_75M-1_1, ...); see VALIDATION_REPORT.md SK-D1 for where the
-  # generic sample_mapping canonicalisation does and does not collapse them
-  # back to the hub's plain `NA12878_75M` / `NA12878_200M`.
-  # SK-D1 fix. sarek renames its sample per tool: MultiQC knows twenty names
-  # for each of the two samples (a lane-and-read name for FastQC and fastp, a
-  # stage name for samtools / MarkDuplicates / mosdepth, and one per caller and
-  # per annotator for bcftools / VCFtools / SnpEff / VEP). The generic
-  # canonicalisation strips `_R1` / `_L001` style suffixes only, so without an
-  # explicit map the persistent sample filter reached the general-statistics
-  # table and almost nothing else. The list below is this run's own MultiQC
-  # sample names, read off the parquet; a run with a different `--tools` set
-  # needs it regenerated, and a name that is not in it still resolves to itself.
+  # Hub -> MultiQC. sarek renames its sample per tool (a lane-and-read name for
+  # FastQC and fastp, a stage name for samtools / MarkDuplicates / mosdepth, one
+  # per caller and annotator for bcftools / VCFtools / snpEff / VEP). The
+  # platform attaches each MultiQC name to the hub id it starts with at a
+  # token boundary (depictio/cli/cli/utils/sample_mapping.py,
+  # canonicalize_to_hub), so no per-run `mappings` list is needed.
   - source_dc_tag: "samples"
     source_column: "sample_id"
     target_dc_tag: "multiqc_data"
@@ -1103,49 +1064,6 @@ links:
     link_config:
       resolver: "sample_mapping"
       target_field: "sample_name"
-      mappings:
-        "NA12878_75M":
-          - "NA12878_75M-1"
-          - "NA12878_75M-1_1"
-          - "NA12878_75M-1_2"
-          - "NA12878_75M.md"
-          - "NA12878_75M.recal"
-          - "NA12878_75M.deepvariant"
-          - "NA12878_75M.deepvariant_snpEff"
-          - "NA12878_75M.deepvariant_VEP.ann"
-          - "NA12878_75M.freebayes.filtered"
-          - "NA12878_75M.freebayes.filtered_snpEff"
-          - "NA12878_75M.freebayes.filtered_VEP.ann"
-          - "NA12878_75M.haplotypecaller.filtered"
-          - "NA12878_75M.haplotypecaller.filtered_snpEff"
-          - "NA12878_75M.haplotypecaller.filtered_VEP.ann"
-          - "NA12878_75M.manta.diploid_sv"
-          - "NA12878_75M.manta.diploid_sv_snpEff"
-          - "NA12878_75M.manta.diploid_sv_VEP.ann"
-          - "NA12878_75M.strelka.variants"
-          - "NA12878_75M.strelka.variants_snpEff"
-          - "NA12878_75M.strelka.variants_VEP.ann"
-        "NA12878_200M":
-          - "NA12878_200M-1"
-          - "NA12878_200M-1_1"
-          - "NA12878_200M-1_2"
-          - "NA12878_200M.md"
-          - "NA12878_200M.recal"
-          - "NA12878_200M.deepvariant"
-          - "NA12878_200M.deepvariant_snpEff"
-          - "NA12878_200M.deepvariant_VEP.ann"
-          - "NA12878_200M.freebayes.filtered"
-          - "NA12878_200M.freebayes.filtered_snpEff"
-          - "NA12878_200M.freebayes.filtered_VEP.ann"
-          - "NA12878_200M.haplotypecaller.filtered"
-          - "NA12878_200M.haplotypecaller.filtered_snpEff"
-          - "NA12878_200M.haplotypecaller.filtered_VEP.ann"
-          - "NA12878_200M.manta.diploid_sv"
-          - "NA12878_200M.manta.diploid_sv_snpEff"
-          - "NA12878_200M.manta.diploid_sv_VEP.ann"
-          - "NA12878_200M.strelka.variants"
-          - "NA12878_200M.strelka.variants_snpEff"
-          - "NA12878_200M.strelka.variants_VEP.ann"
     description: "Filter every MultiQC panel by the samples picked in the left panel, through sarek's per-tool sample names"
     enabled: true
 
@@ -1349,16 +1267,6 @@ links:
     description: "Filter the per-caller Ts/Tv ratios by the samples picked in the left panel"
     enabled: true
 
-  - source_dc_tag: "samples"
-    source_column: "sample_id"
-    target_dc_tag: "snpeff_oncoplot"
-    target_type: "table"
-    link_config:
-      resolver: "direct"
-      target_field: "sample_id"
-    description: "Filter the gene-by-callset oncoplot grid by the samples picked in the left panel"
-    enabled: true
-
   - source_dc_tag: "bcftools_stats_summary"
     source_column: "caller"
     target_dc_tag: "bcftools_stats_tstv"
@@ -1366,7 +1274,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "caller"
-    description: "Carry the caller picked on the MultiQC tab's glance scope over to its Ts/Tv rows"
+    description: "Carry the caller picked on the MultiQC tab over to its Ts/Tv rows"
     enabled: true
 
   - source_dc_tag: "bcftools_stats_summary"
@@ -1387,16 +1295,14 @@ links:
   # region. No data is read to resolve them (resolver: region). All three name
   # their coordinates chrom / pos, which is also what lets the followers zoom
   # on the region client side. The file-backed VCF track needs no link: it
-  # follows the region filter itself and reads only the window in view. The
-  # per-contig summary has no region link, yet live it shows only the
-  # region's contig (observed 2026-09-23, VALIDATION_REPORT.md SK-D18).
+  # follows the region filter itself and reads only the window in view.
+
   #
   # No second (value) link may join mosdepth_windows to mosdepth_targets or
   # vcf_variants: the link resolver finds a link by its source and target
-  # collections, so a direct `stage` link on the same pair is answered with
-  # the region link and fails ("Unknown resolver type: region", SK-D15). The
-  # stage picker therefore narrows the navigator and the per-contig summary
-  # only; the per-target track keeps its four lanes.
+  # collections, so a direct link on the same pair is answered with the region
+  # link and fails ("Unknown resolver type: region", SK-D15). The stage picker
+  # that needed one is gone: the coverage recipes keep one mosdepth pass.
   # ----------------------------------------------------------------
   - source_dc_tag: "mosdepth_windows"
     source_column: "chrom"
@@ -1416,16 +1322,6 @@ links:
       resolver: "region"
       columns: {chrom: "chrom", pos: "pos"}
     description: "A region typed or brushed on the depth navigator narrows the calls track"
-    enabled: true
-
-  - source_dc_tag: "mosdepth_windows"
-    source_column: "stage"
-    target_dc_tag: "mosdepth_summary"
-    target_type: "table"
-    link_config:
-      resolver: "direct"
-      target_field: "stage"
-    description: "Carry the mosdepth pass picked on the coverage tab over to the per-contig summary"
     enabled: true
 
   - source_dc_tag: "samples"

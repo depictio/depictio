@@ -1,214 +1,207 @@
 # nf-core/scrnaseq 4.2.0 reference dashboard
 
-Built against the nf-core/scrnaseq 4.2.0 AWS megatest, one sample (`pbmc8k`,
-10x Genomics v2 chemistry, GRCh38). `DATA_ROOT` is now the megatest RESULTS
-ROOT, holding one directory per `--aligner` route: `aligner_cellranger/`
-(required, the pipeline default, the only route with matrices, secondary
-analysis and a MultiQC report), `aligner_simpleaf/` and `aligner_kallisto/`
-(optional, tables-and-JSON only, feed the Aligner concordance tab).
-`aligner_star/` publishes nothing this dashboard reads.
+Validated against the nf-core/scrnaseq 4.2.0 AWS megatest (one 10x v2 sample,
+see `megatest.yaml`). `DATA_ROOT` is the results root, holding one directory
+per `--aligner` route: `aligner_cellranger/` (required, the pipeline default,
+the only route with matrices, secondary analysis and a MultiQC report),
+`aligner_simpleaf/` and `aligner_kallisto/` (optional, tables-and-JSON only,
+feed the Aligner concordance tab). `aligner_star/` publishes nothing this
+dashboard reads.
+
+## Template variables
+
+| Variable | Required | What it does |
+| --- | --- | --- |
+| `DATA_ROOT` | yes | results root, one directory per `--aligner` route |
+| `MARKER_PANEL` | no | comma-separated gene symbols the per-cell marker tiles always carry (Markers violin, gene UMAP Colour by menu) |
+
+`MARKER_PANEL` replaces the PBMC panel earlier versions hardcoded. It is
+forwarded to `cellranger/cell_expression.py` and
+`cellranger/cell_expression_long.py` as their `marker_panel` transform param
+(see `depictio/recipes/lib/scrnaseq_panels.py`). Without it, or when none of
+its genes is in the reference (a mouse run typed with human symbols, for
+example), the recipes fall back to the top markers of every graph-based
+cluster from `cellranger_diffexp`: 5 per cluster in the wide matrix, 2 per
+cluster (at most 24 genes) in the long table the violin reads. Neither recipe
+raises on an empty intersection any more. A blood run would pass the lineage
+markers it wants to see, for example
+`--var MARKER_PANEL=CD3D,CD8A,MS4A1,CD14,LYZ,FCGR3A,NKG7,FCER1A,PPBP`.
+
+Two readings stay human-specific and are documented rather than hidden: the
+mitochondrial fraction and the MAD mito rule read gene symbols starting with
+`MT-` (they read 0 on another organism, or on a reference without
+mitochondrial genes, as the megatest's bundled GRCh38 is), and the cell-cycle
+scores read the human Tirosh gene sets (the phase degrades to NA elsewhere).
 
 ## Funnel
 
 1. **MultiQC** (landing tab): FastQC on the raw reads, then Cell Ranger
-   count's own summary stats table and its three QC curves (barcode-rank,
-   median genes per cell, sequencing saturation), read from the Cell Ranger
-   route's MultiQC 1.35 parquet.
-2. **Library QC**: Cell Ranger's headline library metrics against 10x's own
-   pass/warn/fail bands, and where confidently-mapped reads land in the
-   genome.
-3. **Cell calling**: the barcode-rank ("knee") curve computed independently
-   of MultiQC straight off the raw feature-barcode matrix, and CellBender's
-   ambient-RNA removal accounting.
-4. **Cell QC**: the MAD-based flag every other tab can filter on, and the
-   distributions behind it.
-5. **Embeddings**: UMAP and t-SNE against the graph-based clusters, the QC
-   flag and depth, the same UMAP coloured by any gene of the marker panel,
-   the feature selection behind the PCA, and the PCA scree.
-6. **Clusters**: cluster sizes, composition per sample, QC medians (as a
-   heatmap), cell-cycle phase, and how stable the clusters are across
-   k-means resolutions.
-7. **Markers**: per-cluster marker gene expression (dot plot, heatmap), the
-   same markers cell by cell, and differential expression at any clustering
-   resolution (volcano, bar plot, table).
+   count's own summary stats and its median-genes and saturation curves.
+2. **Library QC**: five Cell Ranger metrics against 10x's own cut-offs,
+   depth per cell, the mapping breakdown, and the full metrics table.
+3. **Cell calling**: the filtering funnel, the barcode-rank ("knee") curve
+   computed straight off the raw matrix, and CellBender's ambient-RNA
+   accounting.
+4. **Cell QC**: the MAD-based flag every other tab can filter on, rule by
+   rule, including the mitochondrial rule.
+5. **Embeddings**: UMAP and t-SNE by cluster, the UMAP coloured by any panel
+   gene, gene dispersion and the PCA scree.
+6. **Clusters**: cluster sizes, QC medians, composition per sample,
+   cell-cycle phase, and stability across k-means resolutions.
+7. **Markers**: marker dot plot, the markers cell by cell, and
+   differential expression at any clustering resolution, with a gene
+   record at the end of the tab.
 8. **Compare selections**: lasso two groups of cells on the UMAP and test
    every panel gene between them.
 9. **Aligner concordance** (optional): Cell Ranger against simpleaf/alevin-fry
-   and kallisto|bustools, when the megatest fetched all three routes.
+   and kallisto|bustools, when the run used several routes.
 
-The sample hub (`samples`) and the cell-level QC filters (cluster, QC
-status, UMI counts, genes detected) are pinned on every tab; the cluster
-picked on any of them narrows the cluster summary, marker expression,
-marker gene, per-cell expression and cell-cycle tables through the
-`cluster_label` cross-DC links, without leaving the tab. Every tab also
-carries its own non-persistent filter section for the question that tab
-asks: QC band and metric on Library QC, UMIs per barcode on Cell calling,
-failing rule and top-20 share on Cell QC, feature selection on Embeddings,
-cluster size and cell-cycle phase on Clusters, clustering resolution and
-gene on Markers, cluster and QC status on Compare selections, aligner route
-and caller agreement on Aligner concordance. The MultiQC tab is the
-exception: its only collection is the MultiQC report, which is filtered by
-sample mapping rather than by column.
+Pinned on every tab: the "Run at a glance" strip (four cards: cells called,
+median genes per cell, lowest sequencing saturation, lowest reads-in-cells
+fraction), the collapsed sample sheet, the sample filter and the cell-level
+QC filters (cluster, QC status, UMI counts, genes detected). The cluster
+picked there narrows the cluster summary, marker expression, marker gene,
+per-cell expression and cell-cycle tables through the `cluster_label`
+cross-DC links. Every tab except MultiQC also carries its own open filter
+section for the question that tab asks. Every tab sets
+`advanced_viz_controls: header`, so colour-by and sort controls sit as chips
+under each tile title.
+
+Cell Ranger clusters each sample on its own, so `cluster_label` ("C1
+top1/top2") names a population within its own sample. The Clusters and
+Markers intros say so; on a multi-sample run, a label or a colour shared by
+two samples is not the same population.
+
+## Selection
+
+Every scatter and embedding of cells selects on `barcode`, and the tables select
+on their entity column (`sample_id` in the sample hub, `barcode` for cells,
+`gene` for markers, `aligner` for routes, `barcode_core` for the cell-call
+overlap). A pick narrows the other tiles on the same collection or linked to it;
+the sample hub, pinned on every tab, narrows every collection through the
+sample links. The Cell QC and Markers tabs each carry a record card beside the
+table that drives it (`linked_component`): the card stays a thin rail until a
+row or cell is picked, then shows that record. Tables whose collection nothing
+else on the tab reads (library metrics, Cell Ranger metrics, calling funnel,
+CellBender), the gene-coloured UMAP, the dispersion scatter, the volcano and
+the knee plots do not select.
 
 ## Tab by tab
 
 ### MultiQC
-Opens with a pinned "Run at a glance" strip that rides every tab: cells
-called, median genes per cell, sequencing saturation and reads in cells, from
-Cell Ranger's metrics summary, with a tab-local "Glance scope" slider on the
-cells-called count. Then "MultiQC general statistics", "Read quality"
-(FastQC), "Cell Ranger summary" (Cell Ranger's own stats + 3 curves). Outside
-the pinned strip it holds MultiQC panels only, no pipeline-computed tile
-lives here.
+MultiQC panels only, outside the pinned strip. Cell Ranger's own barcode-rank
+panel is not shown: the Cell calling tab draws the same curve with the cell
+and background barcodes coloured and the cutoff marked.
 
 ### Library QC
-What to look for: `Cells called` against `expected_cells` on the pinned
-sample sheet, a large gap is worth a second look before trusting anything
-downstream. The 5 thresholded metrics (sequencing saturation, fraction
-reads in cells, valid barcodes, Q30 RNA, confidently-mapped-to-transcriptome)
-each carry a pass/warn/fail band in the table; the mapping breakdown is
+One section: five threshold cards (sequencing saturation, reads in cells,
+valid barcodes, Q30 RNA, confidently mapped to the transcriptome), each the
+lowest library against 10x's cut-off, then mean reads and median UMI per
+cell as box plots, a count of the metric checks per QC band, and the
+thresholded table. `Cells called` on the glance strip should track
+`expected_cells` on the pinned sample sheet. The mapping breakdown is
 grouped, not stacked, because `antisense` overlaps `exonic`/`intronic` by
-Cell Ranger's own definition and a 100%-stacked bar would misread as a
-partition. The MultiQC saturation curve is intentionally not repeated here
-(MultiQC-only rule), the card and table give the same reading as a number.
+Cell Ranger's own definition. Cell Ranger's full metrics table sits
+collapsed at the end of the tab; it is no longer pinned on every tab.
+
+The glance strip and the threshold cards read the same `_frac` columns on
+the same 0 to 1 scale, and show the lowest library rather than a mean of
+fractions.
 
 ### Cell calling
-What to look for: the knee in the barcode-rank curve is where Cell Ranger
-drew the cell-calling threshold. The "Calling funnel" strip that opens the tab
-reads the same filtering as four nested counts (every barcode observed,
-called a cell, kept by CellBender, passing the per-cell QC), each a subset
-of the one before, so the drop between two stages is the cost of that step
-and nothing else. CellBender's cards show how much
-of the raw signal it called ambient and how many barcodes it kept as cells;
-the agreement card counts how many of Cell Ranger's own called cells
-CellBender's independent model also keeps, a large gap flags a dataset
-where the two cell-calling strategies disagree.
+The funnel opens the tab: every barcode observed, called a cell, kept by
+CellBender, passing the per-cell QC, each a subset of the one before. The
+knee curve follows. The Ambient section keeps four CellBender cards (cells
+found, fraction of counts removed, counts removed, found over expected) and
+its metrics table. The found over expected ratio carries no verdict: a
+ratio far above 1 is as much a warning as one below it, so the card shows
+the per-library spread instead of a one-sided threshold.
 
 ### Cell QC
-What to look for: the MAD rules (sc-best-practices convention, computed
-per sample on log1p values) flag a cell as a low-UMI, low-gene, high-top20
-or high-mito outlier. **This reference has no mitochondrial genes** (the
-bundled pbmc8k GRCh38 carries zero `MT-*` features), so `pct_mito` and
-`mad_high_mito` read 0 / false for every cell on this megatest; the rule is
-unchanged and will activate against a reference that does carry them. The
-reading here leads with UMI / gene counts, the top-20 share and the
-ribosomal fraction instead. The scatter (UMI vs genes, coloured by QC
-status) and the two box plots (ribosomal fraction, log10 UMI, both by
-cluster) show whether flagged cells sit apart from the main cloud or are
-concentrated in a specific cluster, the latter is a candidate real cell
-type, not noise.
+Rule cards first (low UMI, low genes, high top-20 share, high mito), then
+the flagged share and the UMI, gene and mitochondrial distributions, then
+the UMI vs genes scatter and the mito and depth box plots by cluster. The
+MAD rules (sc-best-practices convention, per sample, on log1p values): 5 MAD
+below the median for UMIs and genes, 5 MAD above for the top-20 share, and
+median plus 3 MAD or 8% for the mitochondrial fraction.
 
 ### Embeddings
-What to look for: the same UMAP read three ways, by cluster, by depth
-(log10 genes detected, since the mito-based reading is empty here) and by
-QC status, then t-SNE by cluster as a second projection of the same
-structure, laid out two by two. A cluster that is uniformly low-depth is a
-candidate low-quality population rather than a real cell type; QC-flagged
-cells clustering together (rather than scattering) is the same signal from
-the other side. Lasso-select on the cluster UMAP feeds the Analysis panel.
+The cluster UMAP and the t-SNE side by side, under two PCA cards (the top
+component's variance and the number of components reported). Depth and QC
+status are one Colour by pick away on either tile, so they no longer get
+tiles of their own. "Gene expression on the map" is the same UMAP bound to
+`cellranger_cell_expression`, where every panel gene is a column of the
+searchable Colour by menu; it opens coloured by cluster, no gene is
+hardcoded.
 
-"Gene expression on the map" is the same UMAP bound to
-`cellranger_cell_expression`, where every panel gene is its own column, so
-the tile's Colour-by menu lists them all: type a gene and see where it is
-expressed. The panel is the top markers of every graph-based cluster, a
-curated PBMC panel and the most dispersed genes, log1p(CP10k) normalised, a
-cell with no UMI of the gene reading 0 rather than missing.
-
-"Feature selection" is the step between the count matrix and the PCA that
-no dashboard showed: mean expression against normalised dispersion for
-every gene Cell Ranger measured, coloured by whether it kept the gene for
-the PCA. A gene missing from the embedding is a gene in the grey cloud.
-Genes Cell Ranger could not normalise carry no dispersion, and those are
-exactly the ones it dropped. The PCA scree then shows how much the first 3
-components (used everywhere else) actually explain.
-
-Every scatter and embedding on this tab draws its colour-by and axis
-controls as chips under the title (`controls_placement: header`), so
-switching the UMAP from cluster to depth to a gene is one click, not a
-settings popover.
+"Feature selection" keeps the mean expression against normalised dispersion
+scatter, coloured by detection rate. Cell Ranger's `features_selected.csv`
+lists every gene with a finite dispersion, so it separates the genes Cell
+Ranger could normalise from those it could not (undetected or constant), not
+variable from non-variable genes; the old "kept for the PCA" filter was a
+NaN toggle and is gone. The dispersion slider stays.
 
 ### Clusters
-What to look for: cluster sizes, then the same cluster's QC medians as a
-row-z-scored heatmap (`median_pct_mito` dropped: constant 0 on this
-reference, which a z-score cannot normalise) and its QC-status split as a
-grouped bar, a cluster with a high flagged share is a candidate QC
-artefact rather than a cell type. The stability sankey (graphclust ->
-kmeans_6 -> kmeans_10) shows whether a graph-based cluster stays a single
-ribbon as k grows (stable) or fans out across several k-means clusters
-(candidate for further splitting).
+Four cards first (cells by cluster, flagged share and CellBender agreement
+per cluster as box plots, median depth), then the QC-status bar per cluster
+(its height is the cluster size), the cluster QC heatmap, the composition
+per sample and the cluster table. The heatmap is column-z-scored: each
+metric (median UMIs, median genes, flagged share, CellBender share) is
+centred across clusters, so mixed units no longer make every row read "UMI
+high". The stability sankey reads graphclust, kmeans_6 and kmeans_10, the
+resolutions Cell Ranger computes by default.
 
-The parallel coordinates under the heatmap draw the same cluster summary
-as one line per cluster across six axes (cells, share of cells, median
-UMIs, median genes, flagged share, CellBender share), each rescaled to its
-own range. A small, shallow, heavily flagged cluster bends away from the
-rest on several axes at once, which a single bar never shows. Brushing an
-axis becomes a range filter on the cluster summary. The Cells per cluster
-slider draws its distribution above the handle, like every QC threshold
-slider of this template.
-
-"Cell cycle" answers a question Cell Ranger does not: is this cluster a
-distinct cell type, or the same type cycling? The S and G2/M scores are
-computed from the Tirosh gene sets, each the cell's mean log1p(CP10k) over
-the set minus its mean over every measured gene, and the larger score wins
-when it is positive, otherwise the cell is G1. A cluster that is mostly S
-or G2M next to a G1 cluster with the same markers is one population in two
-phases. The composition bar reads each sample's cells as percentages per
-cluster, so two samples of different depth stay comparable; this megatest
-has one sample, so it draws one bar.
+"Cell cycle": S and G2/M scores from the Tirosh gene sets, each the cell's
+mean log1p(CP10k) over the set minus its mean over every measured gene; the
+larger positive score wins, otherwise G1. The "Cycling cells" card counts
+cells whose G2/M score is at least 0.05 (a documented default, a little
+above the 0 the phase call uses), broken down by cluster.
 
 ### Markers
-What to look for: `cluster_label` names each cluster generically by its top
-2 markers, there is no hardcoded tissue panel. The dot plot and heatmap
-show which genes are specific to which cluster (large dot / bright cell);
-the volcano and bar plot show the same markers by effect size and
-significance. Picking a cluster on the pinned Cell QC filters narrows every
-tile on this tab through the `cluster_label` link, and the Clustering
-resolution filter swaps the graph-based clustering for any of the k-means
-ones (Cell Ranger writes a differential-expression table per resolution and
-all of them are read, not just the graph-based one).
+The Clustering resolution filter opens on `graphclust`. "Marker
+expression": two cards (mean expression and detection rate of the markers,
+as box plots), the dot plot and its table. "Per-cell marker spread": the
+violin is faceted by gene, one panel per marker gene of the long table, so
+it reads without a gene picked; the Gene filter narrows it to one panel.
+The box per gene sits below it.
 
-"Per-cell marker spread" draws the same markers cell by cell rather than as
-one number per (cluster, gene). A cluster whose marker is bimodal, high in
-half its cells and absent in the other half, is indistinguishable from a
-uniform one on a dot plot. Cells are capped per cluster there so the box
-stays drawable; the wide matrix behind the Compare selections tab keeps
-every cell.
-The per-cluster tile is a violin (with its box inside), so a bimodal
-marker shows as two bulges.
-
-"Differential expression" pairs the volcano (volcano view only: these are
-the markers Cell Ranger kept per cluster, already filtered on
-significance, so a QQ view has no null to read against) with a gene
-record card. The card opens on FCER1A, the top marker of the
-dendritic-cell cluster, and shows one card per (resolution, cluster) row
-where the gene ranks as a marker; ticking a gene in the marker table swaps
-it, clearing the tick brings FCER1A back. The dot plot's gene sort and
-cap sit as chips under its title.
+"Differential expression": four cards (significant markers, adjusted p-value
+below 0.05, counted per cluster; log2 fold change; adjusted p-value; mean
+counts) and the volcano. The volcano keeps the volcano
+view only: these are Cell Ranger's top-ranked markers per cluster, not a
+genome-wide test, so a QQ plot has no null to compare against. "Gene
+detail" closes the tab: the marker table with a record card beside it (no
+hardcoded default). Ticking a row of the table fills the card with
+that gene, one row per clustering where it ranks as a marker. Its Ensembl link uses the species-agnostic
+`https://www.ensembl.org/Multi/Search/Results?q={gene_id}` search.
 
 ### Compare selections
-What to look for: lasso a set of cells on the UMAP, save it as group A,
-lasso a second set and save it as group B, then run the comparison: every
-gene of the panel is tested between the two groups and drawn as a volcano,
-effect size against significance. With no groups saved the tab opens on
-the B-cell cluster (C1) against the classical monocytes (C2), already
-compared (`auto_run`), so the tile shows a result before you touch it;
-the group pickers sit as chips under the title. The values are already log1p(CP10k), so no further
-transform is applied, and the test is a Wilcoxon rank-sum. Two caveats:
-narrow to `qc_status: pass` first, since a comparison run over flagged
-cells is a comparison of QC artefacts, and check that the two groups have
-comparable depth, since groups of very different depth differ on almost
-every gene for the wrong reason.
+Lasso a set of cells on the UMAP, save it as group A, lasso a second set as
+group B, and read the volcano. With no groups saved, the comparison opens on
+the two largest clusters (the renderer's automatic pair; the template no
+longer names cluster labels). Each gene is tested with a Wilcoxon rank-sum
+on the log1p(CP10k) values, FDR-corrected across genes, and the result is
+cached server-side. The guard cards say what the comparison is run over:
+cells on the map, their QC status (narrow to `pass` first), their depth
+(two groups of very different depth differ on almost every gene for the
+wrong reason), and the marker panel size.
 
 ### Aligner concordance (optional)
-What to look for: **a Cell Ranger-only run (the pipeline default) leaves
-every tile on this tab empty**, every collection feeding it is optional.
-When simpleaf and/or kallisto were also run, the cards compare cells
-called, CellBender cells and mapping rate per route; the UpSet plot shows
-how the routes' cell calls (plus CellBender on each) agree on the same
-physical barcode, normalised to the bare 16-mer since Cell Ranger's own
-barcodes carry a `-1` GEM-well suffix the other routes do not; the two knee
-curves (Cell Ranger, simpleaf) are drawn on the same log-log axes and are
-directly comparable side by side.
+A Cell Ranger-only run (the pipeline default) leaves every tile on this tab
+empty; every collection feeding it is optional. When simpleaf and/or
+kallisto were also run, the cards compare cells called, CellBender cells,
+median UMI per cell and mapping rate per route; the UpSet plot shows how
+the routes' cell calls (plus CellBender on each) agree on the same physical
+barcode, normalised to the bare 16-mer; the two knee curves share log-log
+axes.
+
+`simpleaf_cellbender_metrics` and `kallisto_cellbender_metrics` now run
+pipeline-local recipes (`nf-core/scrnaseq/simpleaf_cellbender_metrics.py`,
+`nf-core/scrnaseq/kallisto_cellbender_metrics.py`) that reuse the catalog
+`cellbender/metrics.py` transform on the route's own raw scan. The catalog
+recipe's fixed `dc_ref` made both collections copies of the Cell Ranger
+route's CellBender numbers, which is why the three routes showed the same
+CellBender cell count.
 
 ## Data not fetched (see `megatest.yaml` for the full rationale)
 
@@ -231,8 +224,8 @@ Cell-Ranger-based template can reuse them:
 
 | Collection | Rows (pbmc8k) | What it carries |
 | --- | --- | --- |
-| `cellranger_cell_expression` | 8 767 x 127 | one row per cell, one Float64 column per panel gene (121 here), plus the UMAP coordinates, cluster and QC status |
-| `cellranger_cell_expression_long` | 70 686 | the curated panel half, melted to one row per (cell, gene), capped per cluster so a box plot stays drawable |
+| `cellranger_cell_expression` | 8 767 x 102 | one row per cell, one Float64 column per panel gene (`MARKER_PANEL`, the top 5 markers per cluster and the most dispersed genes; 96 here without `MARKER_PANEL`), plus the UMAP coordinates, cluster and QC status |
+| `cellranger_cell_expression_long` | 49 896 | the marker-panel slice (`MARKER_PANEL`, else the top 2 markers per cluster, at most 24 genes), melted to one row per (cell, gene), capped per cluster so a violin stays drawable |
 | `cellranger_hvg_dispersion` | 22 835 | mean expression, normalised dispersion, detection rate and whether the PCA used the gene |
 | `cellranger_cell_cycle` | 8 767 | S and G2/M scores per cell and the phase call (G1 5 290 / G2M 1 867 / S 1 610) |
 | `cellranger_cell_funnel` | 1 per sample | the four nested stage counts of the filtering waterfall |

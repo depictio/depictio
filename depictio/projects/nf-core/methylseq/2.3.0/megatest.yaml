@@ -64,11 +64,64 @@ keys:
   # no output for them; Picard never runs on the Bismark route at all (no
   # picard_metrics/ directory, no PICARD trace entries). A megatest run where
   # PRESEQ_LCEXTRAP succeeds for every sample could re-add "preseq/*.txt".
+# Run-specific values the dashboard texts must never name (checked by
+# depictio/tests/models/test_template_conventions.py): the megatest samples and
+# their accessions, the cell lines and conditions of its design, the organism
+# and assembly, and the locus the navigator used to open on.
+forbidden_terms:
+  - "SRR7961102_GSM3415666_MShef11_low_oxygen_Q1"
+  - "SRR7961103_GSM3415667_MShef11_low_oxygen_Q2"
+  - "SRR7961104_GSM3415668_MShef11_low_oxygen_Q3"
+  - "SRR7961150_GSM3415714_MShef4_bulk"
+  - "SRR7961161_GSM3415725_MShef4_J1"
+  - "SRR7961163_GSM3415727_MShef4_J2"
+  - "SRR7961164_GSM3415728_MShef4_J3"
+  - "SRR7961102"
+  - "SRR7961103"
+  - "SRR7961104"
+  - "SRR7961150"
+  - "SRR7961161"
+  - "SRR7961163"
+  - "SRR7961164"
+  - "GSM3415666"
+  - "GSM3415667"
+  - "GSM3415668"
+  - "GSM3415714"
+  - "GSM3415725"
+  - "GSM3415727"
+  - "GSM3415728"
+  - "E-MTAB-6511"
+  - "MShef11"
+  - "MShef4"
+  - "hESC"
+  - "low_oxygen"
+  - "low-oxygen"
+  - "low oxygen"
+  - "normoxic"
+  - "J1"
+  - "J2"
+  - "J3"
+  - "Q1"
+  - "Q2"
+  - "Q3"
+  - "Homo sapiens"
+  - "human"
+  - "hg38"
+  - "GRCh38"
+  - "NKX2-1"
+  - "chr14"
+  - "seven libraries"
 prefix_keys:
   - pipeline_info/params_*.json
   - pipeline_info/*software*versions*.yml
 renames: {}
 post_fetch_help: |
+  === Design table ===
+
+  # The run's design (cell line x condition) is vendored with the template; the
+  # reference seed reads it from {dest}/input/, so copy it there first:
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/methylseq/2.3.0/input/sample_metadata.tsv {dest}/input/
+
   === Reprocess MultiQC (the run wrote a pre-parquet MultiQC, Depictio reads >= 1.31 parquet) ===
 
   python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
@@ -78,7 +131,8 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest} --dry-run
+  depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest} --dry-run \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest}

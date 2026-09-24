@@ -293,3 +293,66 @@ Open questions.
 - Scan regexes are matched with `re.match` against the basename, then against the path relative
   to the run root: a path-qualified pattern must start at the run root or with `.*/`.
 - Descriptions must not contain `<` or `>` (e.g. "C>T"): the model rejects them as HTML.
+
+## Wave 3 conventions (read before editing any dashboard)
+
+Gated by `depictio/tests/models/test_template_conventions.py` (one test per rule, one
+parameter per template; a template listed in its `KNOWN_VIOLATIONS` is xfail until fixed,
+then removed from the list so the rule turns strict).
+
+### Genericity
+- A template answers the pipeline's questions for ANY run. No megatest sample names, loci,
+  genes, organisms, counts, results or run-specific thresholds in titles, subtitles, bodies,
+  descriptions, defaults or filters.
+- Every `megatest.yaml` carries `forbidden_terms: [...]` (the megatest's sample ids, genes,
+  organisms and loci). The lint fails when one appears in any dashboard text (tab title /
+  subtitle, section name / description, component title / description / body), matched
+  case-insensitively on word boundaries.
+- Intros: 2 sentences (`h: 2`), what to look at, not what was found. The lint caps a text
+  body at 3 sentences; methods go to docs/dashboards.md.
+- `default_record`: absent or data-derived. `default_region`: allowed, documented in one
+  sentence ("opens on a documented default, change it in the header").
+- Design metadata: variables `METADATA_FILE`, `METADATA_ID_COL`, `GROUP_COL`
+  (+ `GROUP_COL_DISPLAY`), as in ampliseq 2.18.0. Dashboards reference `{GROUP_COL}` /
+  `{GROUP_COL_DISPLAY}`; never parse the design out of sample names in a recipe.
+- Genome build: declare a defaulted variable and reference it wherever an assembly or an
+  annotation is set (genome_view / coverage_track `assembly`, `annotation`, template.yaml):
+  ```yaml
+  variables:
+    - {name: GENOME, description: "Genome build of the run (UCSC name)", required: false, default: "hg38"}
+  ```
+  Any declared variable with a `default` resolves `{NAME}` in template.yaml and in the
+  dashboard YAMLs (`--var GENOME=mm10` overrides it). A default does not count as provided
+  for `if_var_present` conditionals. Mirror the default in `reference.vars` for the seeded
+  reference project.
+- Sample ids a file's content lacks: a scan DC uses `polars_kwargs.include_file_paths`; a
+  recipe source declares `RecipeSource(..., source_path="source_path")` and derives `sample`
+  from that column (never hardcode a sample list).
+- MultiQC to hub: do not hand-write a `mappings:` list of run sample names. The generic
+  canonicalisation (`depictio/cli/cli/utils/sample_mapping.py::canonicalize_to_hub`) joins a
+  MultiQC name to the hub id it equals once read / lane / trimming / stage suffixes are
+  stripped, or to the hub id that prefixes it at a `.` `_` `-` boundary.
+
+### Family conventions
+- Tab 1 = MultiQC when the pipeline has one (MultiQC panels only), else an Overview tab.
+- Pinned persistent glance strip: exactly 4 cards (run size + design), on every tab, no text,
+  never repeated as a tab card.
+- "Sample sheet" section: pinned top, collapsed, 2-sentence intro, declared on the main tab.
+- At most 2 pinned tables; never pin a table a tab also shows (lint: same DC + same `use:`).
+- Remove a MultiQC panel when a tile reads the same table; the others go in a collapsed
+  section at the bottom.
+- Card secondary: `box_plot` for per-library measures; `top_n` only under `sum` or `count`
+  (lint). Never average percentages across contexts (lint, warn level: an
+  `average` / `median` card over a `*_pct` / `*percent` / `*_frac` column needs a
+  `filter_expr` scoping it to one context). Never histogram-strip a one-row-per-sample table.
+- `threshold_warn` sits on the failing side of `threshold_value` (lint): below it for
+  `threshold_direction: min`, above it for `max`.
+- Order inside a tab: cards, distributions, detail, collapsed tables. Every tab has filters
+  (pinned persistent + a tab-local section, open). One `record_card` per key (no hardcoded
+  default) in a "<unit> detail" section at the tab end.
+- A single-value `Slider` filters `>=` (a threshold); use `RangeSlider` for a band.
+- Composition bars: percentages, `top_n: 12`, sorted by abundance. One sankey per template.
+- Locus: a dedicated tab (or a section on the comparison tab when the navigator reads that
+  DC); never the same tracks on two tabs; no lateral chromosome filter.
+- Distance heatmaps: `ward` + `Blues`. Replicate / role filters: MultiSelect.
+  `advanced_viz_controls: header`.

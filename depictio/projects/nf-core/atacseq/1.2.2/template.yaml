@@ -69,10 +69,15 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing atacseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the design
-  # sheet is part of the run's own pipeline_info/ output.
+    - name: "GENOME"
+      description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=<assembly> for a run on another build."
+      required: false
+      default: "hg38"
+  # The bundled reference dataset: the design sheet is part of the run's own
+  # pipeline_info/ output, and the megatest was aligned to hg19.
   reference:
-    vars: {}
+    vars:
+      GENOME: "hg19"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -134,6 +139,7 @@ workflows:
               "merged_library": "<sample>.mLb.clN, the merged filtered library the peak calls are named after"
               "group": "Design group; the level the DESeq2 contrasts compare"
               "replicate": "Biological replicate number inside the group"
+              "replicate_label": "The replicate as a label (R1, R2, ...), what the replicate filter selects on"
               "n_libraries": "Sequencing libraries merged into the sample"
               "libraries": "Those library ids, comma separated"
 
@@ -312,6 +318,7 @@ workflows:
               "median_mapq": "Median mapping quality"
               "properly_paired_fraction": "Properly paired and mapped reads over total_reads"
               "maximum_proper_pair_fragment_size": "Longest proper pair observed"
+              "median_fragment_length": "Median fragment length of the library, weighted by read count over its fragment-length histogram"
               "ataqv_version": "ataqv version that wrote the report"
 
       - data_collection_tag: "ataqv_fragment_length"
@@ -718,6 +725,18 @@ workflows:
               "sample": "Library the row is centred on; every other column is one library of the run"
 
 links:
+  # The library sheet reaches the read-level MultiQC panels on its own key
+  # (<sample>_T<n>), which is what the MultiQC tab's Library scope filter picks.
+  - source_dc_tag: "design_reads"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the read-level MultiQC panels by the sequencing libraries picked in the left panel"
+    enabled: true
+
   # Hub -> the collections that speak the short sample name.
   - source_dc_tag: "sample_design"
     source_column: "sample"

@@ -126,6 +126,12 @@ template:
             matrix: {path: "salmon/salmon.merged.gene_tpm.tsv"}
         - data_collection_tag: "gene_counts"
           scan_filename: "{DATA_ROOT}/salmon/salmon.merged.gene_counts.tsv"
+        - data_collection_tag: "deseq2_qc_pca"
+          source_overrides:
+            pca: {glob_pattern: "salmon/deseq2_qc/*pca.vals.txt"}
+        - data_collection_tag: "deseq2_qc_dists"
+          source_overrides:
+            dists: {glob_pattern: "salmon/deseq2_qc/*sample.dists.txt"}
       dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
@@ -358,6 +364,11 @@ workflows:
           source: "transformed"
           transform:
             recipe: "deseq2/qc_pca.py"
+            # One route only: a run with both aligner routes writes a
+            # deseq2_qc/ under each, and the catalog glob would read both.
+            source_overrides:
+              pca:
+                glob_pattern: "star_salmon/deseq2_qc/*pca.vals.txt"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -366,6 +377,7 @@ workflows:
               "dim_2": "Second principal component"
               "dim_1_percent": "Variance the first component explains, in percent"
               "dim_2_percent": "Variance the second component explains, in percent"
+              "pca_set": "Which count matrix the components come from"
 
       - data_collection_tag: "deseq2_qc_dists"
         optional: true
@@ -375,6 +387,9 @@ workflows:
           source: "transformed"
           transform:
             recipe: "deseq2/qc_sample_dists.py"
+            source_overrides:
+              dists:
+                glob_pattern: "star_salmon/deseq2_qc/*sample.dists.txt"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -622,7 +637,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "sample"
-    description: "Filter the gene explorer by the samples picked in the PCA or the sample table"
+    description: "Filter the gene explorer by the samples picked in the library summary table"
     enabled: true
 
   - source_dc_tag: "sample_overview"
@@ -642,7 +657,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "sample_id"
-    description: "Filter the DESeq2 QC PCA by the samples picked in the Salmon PCA"
+    description: "Filter the DESeq2 QC PCA by the samples picked in the library summary table"
     enabled: true
 
   - source_dc_tag: "sample_overview"
@@ -652,7 +667,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "sample"
-    description: "Narrow the DESeq2 QC distance matrix to the samples picked in the Salmon PCA"
+    description: "Narrow the DESeq2 QC distance matrix to the samples picked in the library summary table"
     enabled: true
 
   - source_dc_tag: "sample_overview"
@@ -662,7 +677,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "sample_id"
-    description: "Filter the read distribution composition by the samples picked in the Salmon PCA"
+    description: "Filter the read distribution composition by the samples picked in the library summary table"
     enabled: true
 
   - source_dc_tag: "samplesheet"
@@ -682,7 +697,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "sample"
-    description: "Filter the per-library QC profile by the samples picked in the PCA"
+    description: "Filter the per-library QC profile by the samples picked in the library summary table"
     enabled: true
 
   # A gene picked on the mean-variance plane narrows the box plot and the gene
@@ -704,5 +719,77 @@ links:
     link_config:
       resolver: "sample_mapping"
       target_field: "sample"
-    description: "Filter the MultiQC panels by the samples picked in the PCA"
+    description: "Filter the MultiQC panels by the samples picked in the library summary table"
+    enabled: true
+
+  # The DESeq2 QC PCA is the one sample PCA of the template: a selection on
+  # it narrows every per-sample tile, as the library summary table does.
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "sample_overview"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the library summary to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "gene_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the gene explorer to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "expression_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the top variable gene heatmap (column subset) to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_qc_dists"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the DESeq2 QC distance matrix to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "rseqc_read_distribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the read distribution composition to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "general_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the per-library QC profile to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by the samples picked on the DESeq2 QC PCA"
     enabled: true

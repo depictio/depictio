@@ -463,3 +463,35 @@ Discrepancies:
 - RS-D14: `gene_summary` backs two tiles from a pipeline-local recipe. It is a candidate for
   a `salmon/gene_summary` catalog output (the brief did not assign catalog modules to this
   agent).
+
+## 2026-09-23: Wave 3 (bulk RNA family rework)
+
+What changed:
+
+- One sample view. The TPM PCA (`rna-ovw-pca`) and the MultiQC copies of the DESeq2 PCA, the
+  RSeQC read distribution and the Qualimap genomic origin are gone; the DESeq2 QC PCA and the
+  sample distance matrix sit side by side on Expression overview. The distance heatmap uses
+  `ward` linkage and the `Blues` scale.
+- `deseq2/qc_pca` recipe rewritten: components are resolved per file, the `_mqc` twin of a
+  table is deduplicated, and a new `pca_set` column labels each block. This fixes the
+  chipseq report of null coordinates and one repeated variance percentage when several PCA
+  files were concatenated. The DESeq2 QC globs now point at `star_salmon/deseq2_qc/` (and
+  `salmon/deseq2_qc/` under `PSEUDOALIGNER_ONLY`), since the megatest publishes both.
+- The Expression heatmap tab is folded into Gene explorer (Picked genes, Top variable genes,
+  Expression by condition, Gene detail, Gene rows, Matrix rows). The record card has no
+  default record and the tab prose no longer names a gene.
+- Genericity: no fixed expressed-gene threshold, no organism or cell-line wording, cards use
+  median plus Tukey box or top-N; `forbidden_terms` added to `megatest.yaml`.
+- Filter sections: `Sample scope`, `Reference scope` (persistent), `Library scope`,
+  `Gene scope`. `Sample sheet` is pinned, persistent and collapsed.
+
+Verified (offline): template lint clean; `test_shipped_dashboard_yamls` and
+`test_template_conventions` for the three bulk RNA templates pass; recipe tests pass; CLI dry
+run on the megatest 8/8; `deseq2/qc_pca` checked on the rnaseq megatest and test profile, and
+on the chipseq 1.2.0 and atacseq 2.1.2 megatests.
+
+Still open:
+
+- Live render not checked in this wave (no stack); screenshots are stale.
+- The condition is still parsed from the `<condition>_REP<n>` sample name.
+- Conformance fixtures and `.db_seeds` need regenerating (main session).

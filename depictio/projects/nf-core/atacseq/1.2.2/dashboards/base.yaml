@@ -3,13 +3,13 @@ version: 1
 #
 # Funnel: library QC (the reprocessed MultiQC report) -> the ATAC-specific
 # quality ataqv measures -> the peaks each library yielded -> the consensus peak
-# set across libraries -> differential accessibility between protocols. The
+# set across libraries -> differential accessibility between design groups. The
 # sample design sheet is the hub: the filters in the left panel reach the
 # MultiQC panels, the ataqv collections, the peak table, the peak QC summary,
 # the HOMER annotation and the DESeq2 contrasts through the project links.
 #
 # `Cohort at a glance` is pinned to the top of every tab and is never
-# collapsed: the four numbers the run is judged on (libraries by protocol,
+# collapsed: the four numbers the run is judged on (libraries by group,
 # replicate depth, peaks called, FRiP) are the first row wherever the reader
 # lands, and a pinned persistent section is the one thing allowed to hold
 # non-MultiQC tiles on the MultiQC tab.
@@ -20,7 +20,7 @@ version: 1
 # why an ataqv section exists at all: the 1.9 report had no ataqv module.
 main_dashboard:
   title: nf-core/atacseq
-  subtitle: "nf-core/atacseq 1.2.2 megatest: six GM12878 libraries across three transposition protocols (FAST, OMNI, STD)"
+  subtitle: "MACS2 broad peaks, ataqv library quality, a consensus peak set and DESeq2 differential accessibility, on top of the MultiQC report"
   project_tag: ATAC-seq Chromatin Accessibility
   main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
@@ -42,14 +42,12 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-  # Tab-local and deliberately not persistent: these two narrow the per-library
-  # peak QC rows pinned under this tab's MultiQC panels, and they would mean
-  # nothing on the peak, consensus and differential tabs, which carry filters of
-  # their own on their own collections.
-  - name: Peak QC scope
-    icon: mdi:counter
-    color: indigo
-    description: Narrows the per-library peak QC rows read under the report
+  # Tab-local: the read-level panels on this tab are keyed on the sequencing
+  # library, a finer grain than the sample every other tab works in.
+  - name: Library scope
+    icon: mdi:test-tube
+    color: blue
+    description: The sequencing libraries behind the FastQC and Trim Galore panels
   grid_sections:
   - name: Run at a glance
     icon: mdi:view-dashboard-outline
@@ -80,7 +78,7 @@ main_dashboard:
   - name: Sample sheet
     icon: mdi:table-account
     color: teal
-    description: The ATAC libraries, their protocol and their replicate
+    description: The ATAC libraries, their design group and their replicate
     collapsed: true
     persistent: true
     pin: top
@@ -109,7 +107,7 @@ main_dashboard:
     display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Libraries by protocol
+    title: Libraries by group
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     tag: at-glance-card-replicate
@@ -176,7 +174,7 @@ main_dashboard:
       Every number [MultiQC](https://multiqc.info) collected for this run, one
       row per library, then the panels behind it: read quality, insert sizes
       and duplication, and how concentrated the reads are in accessible
-      chromatin. The ATAC-specific ataqv measures are on the ATAC signal tab.
+      chromatin. The ATAC-specific ataqv measures are on the Signal tab.
     workflow_tag: atacseq
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -263,13 +261,10 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      samtools reports every merged library twice, before filtering (mLb.mkD)
-      and after it (mLb.clN), so the gap between the two series is what ATAC
-      filtering removed. The
-      [Picard](https://broadinstitute.github.io/picard/) histogram is the
-      nucleosome ladder, and duplication and the
-      [preseq](https://github.com/smithlabcode/preseq) curve say how much of
-      the library was distinct.
+      samtools reports every merged library before filtering (mLb.mkD) and
+      after it (mLb.clN), so the gap between the two series is what ATAC
+      filtering removed. The Picard histogram is the nucleosome ladder; the
+      complexity curve with its confidence ribbon is on the Signal tab.
     workflow_tag: atacseq
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -322,14 +317,14 @@ main_dashboard:
     title_align: left
     layout: {x: 4, y: 7, w: 4, h: 5}
   - component_type: multiqc
-    tag: at-qc-preseq
+    tag: at-qc-ataqv-mapq
     section: Alignment and library complexity
     workflow_tag: atacseq
     data_collection_tag: multiqc_data
-    selected_module: preseq
-    selected_plot: Complexity curve (molecule count)
-    use: multiqc/preseq
-    title: Library complexity curve
+    selected_module: ataqv
+    selected_plot: Mapping Quality Distribution
+    use: multiqc/ataqv
+    title: Mapping quality distribution
     title_size: sm
     title_align: left
     layout: {x: 0, y: 12, w: 8, h: 5}
@@ -403,6 +398,21 @@ main_dashboard:
   # Pinned to the top of every tab: the design sheet is the hub the project
   # links fan every selection out from, so it is the one table that belongs
   # above the tiles rather than under them.
+  - component_type: text
+    tag: at-sheet-intro
+    section: Sample sheet
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per ATAC sample, with its design group, replicate and
+      merged-library name. Every sample filter starts from this table; tick a
+      row to carry that library into every tab.
+    workflow_tag: atacseq
+    data_collection_tag: sample_design
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: at-ref-table-design
     section: Sample sheet
@@ -410,11 +420,11 @@ main_dashboard:
     data_collection_tag: sample_design
     row_selection_enabled: true
     row_selection_column: sample
-    title: Sample design
-    description: One row per ATAC sample, with its protocol group, replicate and merged-library name. Tick a row to carry that library into every tab.
+    title: Sample sheet
+    description: One row per ATAC sample, with its design group, replicate and merged-library name.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 0, y: 2, w: 8, h: 3}
 
   # -------------------------------------------------------- reference tables
   - component_type: text
@@ -438,7 +448,8 @@ main_dashboard:
     workflow_tag: atacseq
     data_collection_tag: macs2_peak_summary
     use: macs2/peak_summary
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     title: Peak QC summary
     description: Peak count, FRiP score and the width, enrichment and significance spreads per library.
     title_size: h3
@@ -472,21 +483,20 @@ main_dashboard:
     column_type: object
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
     placement: left
-    title: Transposition protocol
+    title: Group
     layout: {x: 0, y: 3, w: 1, h: 3}
-  # The second real factor of the design sheet, next to the protocol: two
-  # biological replicates per protocol. `replicate` is an int64 column, so it
-  # takes a range control rather than a select.
+  # The second factor of the design sheet, next to the group. It filters on
+  # the categorical twin of `replicate` (family convention: MultiSelect).
   - component_type: interactive
     tag: at-filter-replicate
-    index: at-replicate-range
+    index: at-replicate-filter
     section: Sample filters
     group: Sample scope
     workflow_tag: atacseq
     data_collection_tag: sample_design
-    interactive_component_type: RangeSlider
-    column_name: replicate
-    column_type: int64
+    interactive_component_type: MultiSelect
+    column_name: replicate_label
+    column_type: object
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:content-duplicate'}
     placement: left
     title: Replicate
@@ -521,13 +531,11 @@ main_dashboard:
     placement: left
     title: FRiP score
     layout: {x: 0, y: 3, w: 1, h: 3}
-  # Tab-local filters on this tab's own peak QC rows. They do not ride the other
-  # tabs: those filter on the peak, consensus and contrast columns instead.
   - component_type: interactive
     tag: at-qc-filter-peakcount
     index: at-qc-peakcount-range
-    section: Peak QC scope
-    group: Peak yield
+    section: QC thresholds
+    group: Library quality
     workflow_tag: atacseq
     data_collection_tag: macs2_peak_summary
     interactive_component_type: RangeSlider
@@ -537,29 +545,28 @@ main_dashboard:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:counter'}
     placement: left
     title: Peaks called
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
-    tag: at-qc-filter-peakwidth
-    index: at-qc-peakwidth-range
-    section: Peak QC scope
-    group: Peak yield
+    tag: at-qc-filter-library
+    index: at-library-filter
+    section: Library scope
+    group: Library scope
     workflow_tag: atacseq
-    data_collection_tag: macs2_peak_summary
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: width_median
-    column_type: float64
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
+    data_collection_tag: design_reads
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:folder-outline'}
     placement: left
-    title: Median peak width
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    title: Sequencing library
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
 tabs:
 # ============================================================================
-# ATAC signal
+# Signal
 # ============================================================================
-- title: ATAC signal
-  subtitle: The ATAC-specific quality ataqv measures, which MultiQC 1.9 never reported and 1.35 only partly renders
+- title: Signal
+  subtitle: The ATAC-specific quality ataqv measures, library complexity, coverage concentration and the fragment ladder
   tab_order: 2
   tab_icon: mdi:waves
   tab_icon_color: cyan
@@ -611,17 +618,16 @@ tabs:
     alignment: left
     body: >
       [ataqv](https://github.com/ParkerLab/ataqv) reads the filtered alignment
-      against the peak calls and a TSS annotation. The four numbers a library
-      is accepted or rejected on come first: TSS enrichment, reads inside
-      peaks, the mitochondrial and the duplicate fraction. None of them reaches
-      a general [MultiQC](https://multiqc.info) table.
+      against the peak calls and a TSS annotation. The first row is what a
+      library is accepted or rejected on (TSS enrichment, reads inside peaks,
+      mitochondrial and duplicate fractions), the second what its fragments
+      look like.
     workflow_tag: atacseq
     data_collection_tag: ataqv_metrics
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # Two rows, both filling the 8-column grid. Row one (y 1) is the acceptance
-  # quartet, four cards at w 2. Row two (y 3) is what the library's peaks and
-  # fragments look like: the top-N card is widened to w 4 because it spells out
-  # merged-library names, the two fragment cards keep w 2.
+  # Two rows, both filling the 8-column grid. Row one is the acceptance
+  # quartet; row two is what the library's fragments look like. Peak counts are
+  # the glance strip's, so no card repeats them here.
   - component_type: card
     tag: at-qc-card-tss
     index: at-qc-card-tss
@@ -646,7 +652,7 @@ tabs:
     workflow_tag: atacseq
     data_collection_tag: ataqv_metrics
     use: ataqv/metrics
-    aggregation: average
+    aggregation: min
     column_name: hqaa_overlapping_peaks_percent
     column_type: float64
     secondary_layout: threshold
@@ -656,7 +662,7 @@ tabs:
     display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Reads inside peaks
+    title: Lowest reads inside peaks
     layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: at-qc-card-mito
@@ -692,57 +698,22 @@ tabs:
     title: Duplicate fraction
     layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: at-sig-card-peaks
-    index: at-sig-card-peaks
-    section: Library quality at a glance
-    workflow_tag: atacseq
-    data_collection_tag: ataqv_metrics
-    use: ataqv/metrics
-    aggregation: sum
-    column_name: total_peaks
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Peaks ataqv scored
-    layout: {x: 0, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: at-sig-card-tsscov
-    index: at-sig-card-tsscov
-    section: Library quality at a glance
-    workflow_tag: atacseq
-    data_collection_tag: ataqv_tss_coverage
-    use: ataqv/tss_coverage
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: coverage
-    column_type: float64
-    display: {icon_name: 'mdi:target', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: TSS coverage
-    layout: {x: 2, y: 4, w: 2, h: 2}
-  - component_type: card
     tag: at-sig-card-fraglen
     index: at-sig-card-fraglen
     section: Library quality at a glance
     workflow_tag: atacseq
-    data_collection_tag: ataqv_fragment_length
-    use: ataqv/fragment_length
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: fragment_length
-    column_type: int64
+    column_name: median_fragment_length
+    column_type: float64
     display: {icon_name: 'mdi:ruler', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Fragment length
-    layout: {x: 4, y: 4, w: 2, h: 2}
+    title: Median fragment length
+    layout: {x: 0, y: 4, w: 2, h: 2}
   - component_type: card
     tag: at-sig-card-class
     index: at-sig-card-class
@@ -750,15 +721,49 @@ tabs:
     workflow_tag: atacseq
     data_collection_tag: ataqv_fragment_length
     use: ataqv/fragment_length
-    aggregation: count
-    column_name: fragment_class
-    column_type: object
+    aggregation: sum
+    column_name: read_count
+    column_type: int64
     secondary_layout: donut
     breakdown_col: fragment_class
     display: {icon_name: 'mdi:chart-donut', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Fragment windows
+    title: Reads by fragment window
+    layout: {x: 2, y: 4, w: 2, h: 2}
+  - component_type: card
+    tag: at-sig-card-shortmono
+    index: at-sig-card-shortmono
+    section: Library quality at a glance
+    workflow_tag: atacseq
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: short_mononucleosomal_ratio
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Sub- to mononucleosomal ratio
+    layout: {x: 4, y: 4, w: 2, h: 2}
+  - component_type: card
+    tag: at-sig-card-paired
+    index: at-sig-card-paired
+    section: Library quality at a glance
+    workflow_tag: atacseq
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: properly_paired_fraction
+    column_type: float64
+    display: {icon_name: 'mdi:link-variant', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Properly paired
     layout: {x: 6, y: 4, w: 2, h: 2}
 
   # ------------------------------------------- depth and coverage concentration
@@ -787,6 +792,7 @@ tabs:
     data_collection_tag: preseq_complexity_curve
     use: preseq/complexity_ribbon
     config:
+      controls_placement: header
       log_x: true
       band_opacity: 0.18
       line_width: 2
@@ -967,6 +973,7 @@ tabs:
     data_collection_tag: deeptools_plot_profile
     use: deeptools/metagene_profile
     config:
+      controls_placement: header
       reference_x: 300
       reference_label: TSS
       shaded_bands:
@@ -1053,18 +1060,6 @@ tabs:
     # Full width: six libraries' curves over 800 bp of x, and the two shaded
     # windows they are read against, do not separate in half a grid.
     layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: multiqc
-    tag: at-sig-mqc-fld
-    section: Fragment length ladder
-    workflow_tag: atacseq
-    data_collection_tag: multiqc_data
-    selected_module: ataqv
-    selected_plot: Fragment Length Distribution
-    use: multiqc/ataqv
-    title: Fragment length distribution (MultiQC)
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 5}
   - component_type: figure
     tag: at-sig-fig-class
     section: Fragment length ladder
@@ -1076,7 +1071,7 @@ tabs:
     title: Reads per fragment class
     description: How each library splits across the sub-nucleosomal, transitional, mononucleosomal and multi-nucleosomal windows.
     title_size: h3
-    layout: {x: 0, y: 14, w: 8, h: 6}
+    layout: {x: 0, y: 9, w: 8, h: 6}
 
   # ------------------------------------------------------ read distribution
   - component_type: text
@@ -1114,18 +1109,6 @@ tabs:
     description: Every library against every reference sequence ataqv counted; colour is log10 read count, size the share of the library.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: multiqc
-    tag: at-sig-mqc-chrom
-    section: Read distribution
-    workflow_tag: atacseq
-    data_collection_tag: multiqc_data
-    selected_module: ataqv
-    selected_plot: Mapping Quality Distribution
-    use: multiqc/ataqv
-    title: Mapping quality distribution (MultiQC)
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 5}
 
   # ----------------------------------------------------------- ataqv tables
   - component_type: text
@@ -1222,14 +1205,10 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: How many calls the run made, how wide and how enriched they are
-  - name: Reads in peaks per library
-    icon: mdi:chart-bar
-    color: cyan
-    description: FRiP and the peak count of every library, one bar each
   - name: Significance along the genome
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Where the strongest calls sit, and how enrichment relates to significance
+    description: Where the strongest calls sit, and how wide the calls are
   - name: Where the peaks land
     icon: mdi:dna
     color: blue
@@ -1249,9 +1228,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      This run used broad peak calling, so a call is a region rather than a
-      summit. The cards below count them and summarise how wide, how enriched
-      and how significant they are across the six libraries.
+      Broad peak calling reports a region rather than a summit. The cards
+      count the calls and summarise how wide, how enriched and how significant
+      they are.
     workflow_tag: atacseq
     data_collection_tag: macs2_broad_peaks
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1317,9 +1296,9 @@ tabs:
     column_name: neg_log10_qvalue
     column_type: float64
     secondary_layout: threshold
-    threshold_value: 10
+    threshold_value: 1.3
     threshold_direction: min
-    threshold_warn: 5
+    threshold_warn: 1
     display: {icon_name: 'mdi:check-decagram', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
@@ -1338,7 +1317,7 @@ tabs:
     body: >
       Each point is a broad call at the centre of its region, height is the
       [MACS2](https://github.com/macs3-project/MACS) q-value. Lasso a region
-      on the scatter: the selection carries the peak id into the
+      on the Manhattan panel: the selection carries the peak id into the
       [HOMER](http://homer.ucsd.edu/homer/) annotation table through the
       project links.
     workflow_tag: atacseq
@@ -1353,6 +1332,7 @@ tabs:
     use: macs2/broad_peak_significance
     viz_kind: manhattan
     config:
+      controls_placement: header
       viz_kind: manhattan
       chr_col: chr
       pos_col: midpoint
@@ -1369,47 +1349,6 @@ tabs:
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: figure
-    tag: at-pk-fig-scatter
-    index: at-pk-fig-scatter
-    section: Significance along the genome
-    workflow_tag: atacseq
-    data_collection_tag: macs2_broad_peaks
-    use: macs2/broad_peaks
-    mode: code
-    visu_type: scatter
-    code_content: |
-      # enrichment against significance for the strongest calls in view; the
-      # full frame is ~224k peaks, far more than a scatter can show
-      df_modified = (
-          df.sort("neg_log10_qvalue", descending=True)
-          .head(2000)
-          .with_columns(pl.col("width").clip(50, 5000).alias("peak_width"))
-      )
-
-      fig = px.scatter(
-          df_modified.to_pandas(),
-          x="fold_enrichment",
-          y="neg_log10_qvalue",
-          color="sample",
-          size="peak_width",
-          size_max=18,
-          hover_name="peak_id",
-          custom_data=["peak_id"],
-          opacity=0.7,
-      )
-      fig.update_layout(
-          xaxis_title="Fold enrichment over background",
-          yaxis_title="-log10(q-value)",
-          legend_title_text="Library",
-          margin={"t": 24, "l": 64, "r": 16, "b": 48},
-      )
-    selection_enabled: true
-    selection_column: peak_id
-    title: Enrichment against significance
-    description: The 2000 most significant calls in view; point size is the peak width. Lasso to select peaks.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 4, h: 6}
-  - component_type: figure
     tag: at-pk-fig-width
     section: Significance along the genome
     workflow_tag: atacseq
@@ -1423,54 +1362,7 @@ tabs:
     title: Peak width distribution
     description: How wide the calls are, per library, on a log axis. Broad calling gives wider regions than a narrow-peak run would.
     title_size: h3
-    layout: {x: 4, y: 9, w: 4, h: 6}
-
-  # ---------------------------------------------------------- reads in peaks
-  # FRiP and the peak count per library as bars. The glance strip on the main
-  # tab gives the cohort mean; here each library is its own bar, so the two
-  # low-yield FAST libraries read at a glance against OMNI and STD.
-  - component_type: text
-    tag: at-pk-frip-intro
-    section: Reads in peaks per library
-    title: How much of each library lands in peaks
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      FRiP is the fraction of a library's reads that fall inside its own
-      peaks, the ENCODE signal-to-noise figure for ATAC-seq (0.2 and above is
-      good). Read it beside the number of peaks MACS2 called: a library with
-      few reads in few peaks is under-transposed, not just shallow.
-    workflow_tag: atacseq
-    data_collection_tag: macs2_peak_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: at-pk-fig-frip
-    index: at-pk-fig-frip
-    section: Reads in peaks per library
-    workflow_tag: atacseq
-    data_collection_tag: macs2_peak_summary
-    use: macs2/peak_summary
-    visu_type: bar
-    dict_kwargs: {x: sample, y: frip_score, color: sample}
-    title: FRiP score per library
-    description: Fraction of each library's reads inside its own MACS2 peaks.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 6}
-  - component_type: figure
-    tag: at-pk-fig-npeaks
-    index: at-pk-fig-npeaks
-    section: Reads in peaks per library
-    workflow_tag: atacseq
-    data_collection_tag: macs2_peak_summary
-    use: macs2/peak_summary
-    visu_type: bar
-    dict_kwargs: {x: sample, y: num_peaks, color: sample}
-    title: Peaks called per library
-    description: Number of MACS2 broad peaks per library; OMNI calls several times more than FAST.
-    title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 9, w: 8, h: 6}
 
   # -------------------------------------------------------------- annotation
   - component_type: text
@@ -1483,8 +1375,8 @@ tabs:
     alignment: left
     body: >
       HOMER assigns every call to a genomic feature and to the nearest start
-      site. Accessible chromatin is promoter-heavy, so a TSS-centred distance
-      histogram is what a working ATAC library should look like.
+      site. Accessible chromatin is promoter-heavy, so the composition bar and
+      the TSS-centred curve are what a working ATAC library should show.
     workflow_tag: atacseq
     data_collection_tag: homer_annotated_peaks
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1540,22 +1432,20 @@ tabs:
     title: Distance to TSS
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: at-pk-card-annopeaks
-    index: at-pk-card-annopeaks
+    tag: at-pk-card-score
+    index: at-pk-card-score
     section: Where the peaks land
     workflow_tag: atacseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
-    aggregation: count
-    column_name: peak_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: annotation_class
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    aggregation: average
+    column_name: peak_score
+    column_type: float64
+    secondary_layout: histogram
+    display: {icon_name: 'mdi:trending-up', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Annotated peaks
+    title: Peak score
     layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: figure
     tag: at-pk-fig-anno
@@ -1563,64 +1453,13 @@ tabs:
     workflow_tag: atacseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
-    visu_type: bar
-    dict_kwargs: {x: sample, color: annotation_class}
-    title: Peak annotation per library
-    description: How the calls of each library split across promoter-TSS, exon, intron, TTS and intergenic.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 4, h: 6}
-  - component_type: figure
-    tag: at-pk-fig-tss
-    index: at-pk-fig-tss
-    section: Where the peaks land
-    workflow_tag: atacseq
-    data_collection_tag: homer_annotated_peaks
-    use: homer/annotated_peaks
-    mode: code
     visu_type: histogram
-    code_content: |
-      # distance to the nearest TSS, clipped to a 10 kb window: the raw column
-      # runs to several hundred kb and would flatten the peak at zero
-      window = 10_000
-      df_modified = df.filter(
-          pl.col("distance_to_tss").is_not_null()
-          & (pl.col("distance_to_tss").abs() <= window)
-      )
-
-      fig = px.histogram(
-          df_modified.to_pandas(),
-          x="distance_to_tss",
-          color="annotation_class",
-          nbins=80,
-          opacity=0.8,
-      )
-      fig.update_layout(
-          barmode="overlay",
-          xaxis_title="Distance to nearest TSS (bp)",
-          yaxis_title="Peaks",
-          legend_title_text="Feature class",
-          margin={"t": 24, "l": 64, "r": 16, "b": 48},
-      )
-      fig.add_vline(x=0, line_dash="dot", line_color="grey")
-    title: Distance to the nearest TSS
-    description: Peaks within 10 kb of a start site, split by feature class. A spike at zero is promoter accessibility.
+    dict_kwargs: {x: sample, color: annotation_class, barnorm: percent}
+    title: Peak annotation per library
+    description: The share of each library's calls in promoter-TSS, exon, intron, TTS and intergenic, as a percentage so libraries of different depth compare directly.
     title_size: h3
-    layout: {x: 4, y: 4, w: 4, h: 6}
+    layout: {x: 0, y: 4, w: 8, h: 6}
 
-  # ------------------------------------------------------------- peak tables
-  - component_type: text
-    tag: at-pk-tss-intro
-    section: Where the peaks land
-    title: "The same distances, one curve per sample"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The histogram above pools the samples and splits them by feature class. This one does the opposite: one curve per sample, as a share of that sample's peaks, so libraries of different depth can be compared directly.
-    workflow_tag: atacseq
-    data_collection_tag: homer_tss_distance_profile
-    layout: {x: 0, y: 10, w: 8, h: 2}
   - component_type: advanced_viz
     tag: at-pk-av-tss
     index: at-pk-av-tss
@@ -1629,6 +1468,7 @@ tabs:
     data_collection_tag: homer_tss_distance_profile
     use: homer/tss_distance
     config:
+      controls_placement: header
       reference_x: 0
       reference_label: TSS
       shaded_bands:
@@ -1639,7 +1479,7 @@ tabs:
     title: "Peak distribution around the nearest TSS"
     description: "Peaks counted in 250 bp bins across a 20 kb window; the shaded band is the 1 kb promoter window either side of the start site."
     title_size: h3
-    layout: {x: 0, y: 12, w: 8, h: 7}
+    layout: {x: 0, y: 10, w: 8, h: 7}
   - component_type: text
     tag: at-pk-tables-intro
     section: Peak tables
@@ -1680,7 +1520,30 @@ tabs:
     description: Feature class, distance to the nearest start site and the gene each call belongs to.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 5}
+    layout: {x: 0, y: 7, w: 5, h: 6}
+  - component_type: advanced_viz
+    tag: at-pk-av-record
+    index: at-pk-av-record
+    section: Peak tables
+    workflow_tag: atacseq
+    data_collection_tag: homer_annotated_peaks
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: peak_id
+      title_col: peak_id
+      selection_source: any
+      linked_component: at-pk-table-anno
+      sections:
+        Call: [sample, chr, start, end, strand, peak_score]
+        Annotation: [annotation_class, annotation, distance_to_tss, nearest_promoter_id, gene_name, gene_type]
+      labels:
+        distance_to_tss: Distance to TSS (bp)
+        nearest_promoter_id: Nearest promoter
+    title: Peak record
+    description: The call picked in the annotation table beside it, with the feature and gene HOMER assigned to it.
+    title_size: h3
+    layout: {x: 5, y: 7, w: 3, h: 6}
 
   - component_type: interactive
     tag: at-pk-filter-qvalue
@@ -1726,8 +1589,7 @@ tabs:
     placement: left
     title: Feature class
     layout: {x: 0, y: 6, w: 1, h: 3}
-  # The locus control the two genome tiles are read with: one reference sequence
-  # at a time keeps the track legible and the region brush meaningful.
+  # Narrows the genome-wide Manhattan and the peak tables to chosen contigs.
   - component_type: interactive
     tag: at-pk-filter-chr
     index: at-pk-chr-filter
@@ -1744,7 +1606,7 @@ tabs:
     layout: {x: 0, y: 9, w: 1, h: 3}
 
 # ============================================================================
-# Peak locus
+# Locus
 # ============================================================================
 # The locus section (docs/design/advanced-viz.md section 9): three collections
 # on one genomic region. The navigator (a genome_view on macs2_broad_peaks)
@@ -1756,16 +1618,17 @@ tabs:
 # tile of its collection on the tab, and the Peaks tab keeps its genome-wide
 # Manhattan and annotation panels.
 #
-# The run is aligned against hg19 (GAPDH promoter peaks at chr12:6.64 Mb), so
-# the navigator sets `assembly: hg19` for the chromosome sizes and draws no
-# gene lane (the bundled gene tables are hg38 and mm10). The HOMER track below
-# stands in for it: each peak labelled with its nearest gene.
+# The genome axis comes from the `GENOME` template variable (default hg38; the
+# hg19 megatest sets it through reference.vars / --var GENOME=hg19). With a
+# built-in assembly the navigator fetches only the chromosome of its region.
+# No gene lane is drawn (the bundled gene tables are hg38 and mm10): the HOMER
+# track below stands in for it, each peak labelled with its nearest gene.
 #
 # Default region: chr6:26,000,000-26,300,000, the HIST1 replication-dependent
 # histone cluster. Every library calls peaks there (FAST 3 and 5, OMNI 32 and
 # 33, STD 22 and 19), 34 consensus intervals cover it and HOMER puts 44 of the
 # calls on a promoter-TSS, so no track opens empty.
-- title: Peak locus
+- title: Locus
   subtitle: "One region, three collections: the broad calls per library, the consensus intervals and the HOMER gene annotation on one axis"
   tab_order: 4
   tab_icon: mdi:dna
@@ -1861,17 +1724,15 @@ tabs:
   - component_type: text
     tag: at-loc-intro
     section: Peaks on one axis
-    title: The HIST1 histone cluster
+    title: One region, every track
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The section opens on chr6:26,000,000-26,300,000 (hg19), the HIST1
-      histone gene cluster: every library calls peaks on it, OMNI and STD
-      many more than FAST, and most calls sit on histone promoters. Type
-      another locus in the navigator header or brush its axis, and the
-      consensus intervals and the HOMER track below move to the same region.
+      The tab opens on the navigator's default region, a fixed locus set in
+      its config. Type a locus in the navigator header or brush its axis; the
+      tracks and the cards above follow.
     workflow_tag: atacseq
     data_collection_tag: macs2_broad_peaks
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1896,7 +1757,7 @@ tabs:
       max_facets: 6
       score_title: "-log10(q-value)"
       opacity: 0.8
-      assembly: hg19
+      assembly: "{GENOME}"
       default_region: "chr6:26,000,000-26,300,000"
       region_filter_enabled: true
       selection_enabled: true
@@ -1917,6 +1778,7 @@ tabs:
     data_collection_tag: macs2_consensus_boolean
     viz_kind: genome_view
     config:
+      controls_placement: header
       viz_kind: genome_view
       chr_col: chr
       pos_col: start
@@ -1926,11 +1788,13 @@ tabs:
       mark: bar
       score_title: Libraries calling it
       opacity: 0.8
-      assembly: hg19
+      assembly: "{GENOME}"
       region_filter_enabled: false
       follow_region_filter: true
+      selection_enabled: true
+      selection_column: peak_id
     title: Consensus intervals and their support
-    description: The merged consensus intervals on the same region, each as high as the number of libraries that called a peak on it (1 to 6). It follows the navigator's region.
+    description: The merged consensus intervals on the same region, each as high as the number of libraries that called a peak on it (1 to the number of libraries in the set). It follows the navigator's region.
     title_size: h3
     layout: {x: 0, y: 8, w: 8, h: 3}
   - component_type: advanced_viz
@@ -1941,6 +1805,7 @@ tabs:
     data_collection_tag: homer_annotated_peaks
     viz_kind: genome_view
     config:
+      controls_placement: header
       viz_kind: genome_view
       chr_col: chr
       pos_col: start
@@ -1951,28 +1816,16 @@ tabs:
       mark: bar
       score_title: Peak score
       opacity: 0.8
-      assembly: hg19
+      assembly: "{GENOME}"
       region_filter_enabled: false
       follow_region_filter: true
+      selection_enabled: true
+      selection_column: peak_id
     title: Nearest gene of every call
     description: The same calls as HOMER annotated them, coloured by feature class; hover a call for the nearest gene. It follows the navigator's region.
     title_size: h3
     layout: {x: 0, y: 11, w: 8, h: 3}
 
-  - component_type: interactive
-    tag: at-loc-filter-chr
-    index: at-loc-chr-select
-    section: Locus scope
-    group: Region
-    workflow_tag: atacseq
-    data_collection_tag: macs2_broad_peaks
-    interactive_component_type: MultiSelect
-    column_name: chr
-    column_type: object
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
-    placement: left
-    title: Chromosome
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: at-loc-filter-support
     index: at-loc-support-range
@@ -1987,7 +1840,7 @@ tabs:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:account-group-outline'}
     placement: left
     title: Libraries per consensus interval
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: at-loc-filter-anno
     index: at-loc-anno-select
@@ -2001,7 +1854,7 @@ tabs:
     display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:shape-outline'}
     placement: left
     title: Feature class
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 3, w: 1, h: 3}
 
 # ============================================================================
 # Consensus
@@ -2028,10 +1881,6 @@ tabs:
     icon: mdi:set-merge
     color: teal
     description: Which combinations of libraries call the same interval
-  - name: Sample space
-    icon: mdi:chart-scatter-plot
-    color: blue
-    description: Where the libraries sit relative to each other on the consensus count matrix
   - name: Signal at the strongest intervals
     icon: mdi:chart-box-outline
     color: blue
@@ -2053,7 +1902,7 @@ tabs:
     body: >
       The per-library calls are merged into consensus intervals. An interval
       called by every library is reproducible accessibility; one called by a
-      single library is usually noise or protocol-specific.
+      single library is usually noise or group-specific.
     workflow_tag: atacseq
     data_collection_tag: macs2_consensus_boolean
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2142,8 +1991,8 @@ tabs:
     alignment: left
     body: >
       Each bar is one combination of libraries calling the same interval. Bars
-      that pair the two replicates of a protocol are reproducibility; bars that
-      pair protocols are accessibility every protocol recovers.
+      that pair the replicates of one group are reproducibility; bars that
+      span groups are accessibility every group recovers.
     workflow_tag: atacseq
     data_collection_tag: macs2_consensus_boolean
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2155,6 +2004,7 @@ tabs:
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_upset
     config:
+      controls_placement: header
       # Library columns of the run, whatever the samples; the replicate-level `.mRp.clN` set is left out.
       set_columns_pattern: '\.mLb\.clN$'
       color_intersections_by: degree
@@ -2168,65 +2018,6 @@ tabs:
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
 
-  # ------------------------------------------------------------- sample space
-  # The two QC tables nf-core's own DESeq2 script writes beside the contrast
-  # results, read as data rather than as the MultiQC custom-content images the
-  # report renders them as. They are also the only sample-keyed rows on this
-  # tab, so they are what the left-rail sample scope reaches here.
-  - component_type: text
-    tag: at-cons-space-intro
-    section: Sample space
-    title: How the libraries relate before any contrast
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [DESeq2](https://bioconductor.org/packages/DESeq2) reduces the consensus
-      count matrix to two components and to a pairwise distance matrix before it
-      tests anything. Replicates of one transposition protocol should sit
-      together and the three protocols apart; a replicate that lands beside the
-      wrong protocol invalidates the contrasts on the next tab.
-    workflow_tag: atacseq
-    data_collection_tag: deseq2_qc_pca
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: at-cons-av-pca
-    index: at-cons-av-pca
-    section: Sample space
-    workflow_tag: atacseq
-    data_collection_tag: deseq2_qc_pca
-    use: deseq2/qc_pca_embedding
-    config:
-      controls_placement: header
-      point_size: 14
-      marker_outline: true
-      legend_pos: right
-      plot_style: grid
-      selection_enabled: true
-      selection_column: sample_id
-    title: "Consensus count PCA"
-    description: "The principal components the pipeline itself computed on the consensus counts, one point per library. Click a point to select the library."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: at-cons-av-dists
-    index: at-cons-av-dists
-    section: Sample space
-    workflow_tag: atacseq
-    data_collection_tag: deseq2_qc_sample_dists
-    use: deseq2/qc_distance_heatmap
-    config:
-      cluster_rows: true
-      cluster_cols: true
-      cluster_method: average
-      normalize: none
-      colorscale: Viridis
-    title: "Library distance matrix"
-    description: "Euclidean distance between every pair of libraries on the consensus counts, clustered. The dark diagonal is each library against itself."
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
-
   - component_type: text
     tag: at-cons-heatmap-intro
     section: Signal at the strongest intervals
@@ -2237,7 +2028,7 @@ tabs:
     alignment: left
     body: >
       Fold enrichment of the most strongly accessible consensus intervals. A
-      cell is zero where that library called no peak, so protocol-specific
+      cell is zero where that library called no peak, so group-specific
       accessibility reads as a block rather than as scattered gaps.
     workflow_tag: atacseq
     data_collection_tag: macs2_consensus_fc
@@ -2250,6 +2041,7 @@ tabs:
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_signal_heatmap
     config:
+      controls_placement: header
       value_columns_pattern: '\.mLb\.clN$'
       row_annotation_cols: [support]
       cluster_rows: true
@@ -2303,32 +2095,6 @@ tabs:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 7, w: 8, h: 5}
-  - component_type: table
-    tag: at-cons-table-pca
-    section: Consensus tables
-    workflow_tag: atacseq
-    data_collection_tag: deseq2_qc_pca
-    use: deseq2/qc_pca
-    row_selection_enabled: true
-    row_selection_column: sample_id
-    title: Consensus count PCA coordinates
-    description: The two principal components of every library and the variance each component explains.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 12, w: 8, h: 3}
-  - component_type: table
-    tag: at-cons-table-dists
-    section: Consensus tables
-    workflow_tag: atacseq
-    data_collection_tag: deseq2_qc_sample_dists
-    use: deseq2/qc_sample_dists
-    row_selection_enabled: true
-    row_selection_column: sample
-    title: Library distance matrix
-    description: The square distance table behind the clustered heatmap, one column per library of the run.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 15, w: 8, h: 3}
 
   - component_type: interactive
     tag: at-cons-filter-support
@@ -2379,7 +2145,7 @@ tabs:
 # Differential accessibility
 # ============================================================================
 - title: Differential accessibility
-  subtitle: "DESeq2 on the consensus interval counts: FAST against OMNI, FAST against STD and OMNI against STD"
+  subtitle: DESeq2 on the consensus interval counts, one contrast at a time
   tab_order: 6
   tab_icon: mdi:scale-balance
   tab_icon_color: grape
@@ -2396,6 +2162,10 @@ tabs:
     icon: mdi:counter
     color: grape
     description: How many intervals changed, and by how much
+  - name: Sample space
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Where the libraries sit in the count matrix DESeq2 tested, before any interval is read
   - name: Volcano, MA and QQ
     icon: mdi:chart-scatter-plot
     color: grape
@@ -2413,14 +2183,14 @@ tabs:
   - component_type: text
     tag: at-da-intro
     section: Differential accessibility at a glance
-    title: Accessibility that changes between protocols
+    title: Accessibility that changes between groups
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
       DESeq2 counts reads over the consensus intervals and tests each interval
-      between two transposition protocols. Pick a single contrast in the left
+      between two groups of the design. Pick a single contrast in the left
       panel before reading the volcano or the MA plot.
     workflow_tag: atacseq
     data_collection_tag: deseq2_results
@@ -2436,7 +2206,7 @@ tabs:
     column_name: gene_id
     column_type: object
     secondary_layout: top_n
-    breakdown_col: direction
+    breakdown_col: contrast
     top_n_count: 3
     display: {icon_name: 'mdi:counter', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
     title_size: sm
@@ -2487,12 +2257,74 @@ tabs:
     aggregation: max
     column_name: neg_log10_padj
     column_type: float64
-    secondary_layout: histogram
+    secondary_layout: threshold
     display: {icon_name: 'mdi:check-decagram', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Strongest significance
+    title: Strongest -log10 padj
+    threshold_value: 1.3
+    threshold_direction: min
+    threshold_warn: 1
     layout: {x: 6, y: 2, w: 2, h: 2}
+  # ------------------------------------------------------------- sample space
+  # The two QC tables nf-core's own DESeq2 script writes beside the contrast
+  # results, read as data rather than as the MultiQC custom-content images the
+  # report renders them as. They are also the only sample-keyed rows on this
+  # tab, so they are what the left-rail sample scope reaches here.
+  - component_type: text
+    tag: at-cons-space-intro
+    section: Sample space
+    title: How the libraries relate before any contrast
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [DESeq2](https://bioconductor.org/packages/DESeq2) reduces the consensus
+      count matrix to two components and to a pairwise distance matrix before
+      it tests anything. Replicates of one group should sit together and the
+      groups apart; a replicate that lands beside another group undermines the
+      contrasts below.
+    workflow_tag: atacseq
+    data_collection_tag: deseq2_qc_pca
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: at-cons-av-pca
+    index: at-cons-av-pca
+    section: Sample space
+    workflow_tag: atacseq
+    data_collection_tag: deseq2_qc_pca
+    use: deseq2/qc_pca_embedding
+    config:
+      controls_placement: header
+      point_size: 14
+      marker_outline: true
+      legend_pos: right
+      plot_style: grid
+      selection_enabled: true
+      selection_column: sample_id
+    title: "Consensus count PCA"
+    description: "The principal components the pipeline itself computed on the consensus counts, one point per library. Click a point to select the library."
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: at-cons-av-dists
+    index: at-cons-av-dists
+    section: Sample space
+    workflow_tag: atacseq
+    data_collection_tag: deseq2_qc_sample_dists
+    use: deseq2/qc_distance_heatmap
+    config:
+      controls_placement: header
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      normalize: none
+      colorscale: Blues
+    title: "Library distance matrix"
+    description: Euclidean distance between every pair of libraries on the consensus counts, Ward-clustered.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # ------------------------------------------------------------ volcano / MA / QQ
   # One tile, three views of the same DESeq2 rows. The view switch sits in the
@@ -2553,8 +2385,8 @@ tabs:
     alignment: left
     body: >
       The bars rank the strongest significant changes, signed by direction,
-      and the counts show how the three protocol comparisons differ in how
-      many intervals open or close.
+      and the counts show how the contrasts in view differ in how many
+      intervals open or close.
     workflow_tag: atacseq
     data_collection_tag: deseq2_results
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2566,6 +2398,7 @@ tabs:
     data_collection_tag: deseq2_results
     use: deseq2/da_barplot
     config:
+      controls_placement: header
       significance_col: padj
       significance_threshold: 0.05
       top_n: 25
@@ -2611,7 +2444,7 @@ tabs:
           margin={"t": 24, "l": 64, "r": 16, "b": 48},
       )
     title: Significant intervals per contrast
-    description: How many intervals cleared padj 0.05 and a two-fold change in each protocol comparison, split by direction.
+    description: How many intervals cleared padj 0.05 and a two-fold change in each contrast, split by direction.
     title_size: h3
     layout: {x: 0, y: 16, w: 8, h: 6}
 
@@ -2626,8 +2459,9 @@ tabs:
     alignment: left
     body: >
       Every tested interval with its effect size, standard error and adjusted
-      p-value. Tick a row to carry that interval into the panels above and into
-      the consensus overlap matrix.
+      p-value, then the principal components and the distance matrix behind
+      the sample-space tiles. Tick a result row to carry that interval into
+      the panels above and into the consensus overlap matrix.
     workflow_tag: atacseq
     data_collection_tag: deseq2_results
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2644,6 +2478,32 @@ tabs:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: at-cons-table-pca
+    section: Differential tables
+    workflow_tag: atacseq
+    data_collection_tag: deseq2_qc_pca
+    use: deseq2/qc_pca
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Consensus count PCA coordinates
+    description: The two principal components of every library and the variance each component explains.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 3}
+  - component_type: table
+    tag: at-cons-table-dists
+    section: Differential tables
+    workflow_tag: atacseq
+    data_collection_tag: deseq2_qc_sample_dists
+    use: deseq2/qc_sample_dists
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Library distance matrix
+    description: The square distance table behind the clustered heatmap, one column per library of the run.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 11, w: 8, h: 3}
 
   - component_type: interactive
     tag: at-da-filter-contrast

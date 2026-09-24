@@ -126,6 +126,10 @@ workflows:
               filename: "{SAMPLESHEET_FILE}"
           dc_specific_properties:
             format: "CSV"
+            # Read every column as text: run accessions are integers in some sheets
+            # and ERR/SRR strings in others, and the filter on them is a select.
+            polars_kwargs:
+              infer_schema_length: 0
             columns_description:
               "sample": "Sample identifier (used for cross-DC filtering via links)"
               "run_accession": "Sequencing run the FASTQ belongs to; several runs per sample are merged"
@@ -611,4 +615,50 @@ links:
       resolver: "direct"
       target_field: "profiler_db"
     description: "Cross-select the per-run statistics and the ordination on the profiling run"
+    enabled: true
+
+  # The ordination names its points `sample | profiler / database` in sample_id;
+  # the plain sample id is its `sample` column, which the sample scope reaches.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "taxpasta_embedding"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the ordination by selected samples"
+    enabled: true
+
+  # The Profiles tab's classifier and database filters sit on the hub; these two
+  # links carry them to the lineage table the Krona rings are drawn from.
+  - source_dc_tag: "taxpasta_profiles"
+    source_column: "profiler"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "profiler"
+    description: "Narrow the lineage rings to the classifiers in scope"
+    enabled: true
+
+  - source_dc_tag: "taxpasta_profiles"
+    source_column: "database"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "database"
+    description: "Narrow the lineage rings to the databases in scope"
+    enabled: true
+
+  # A lasso on the ordination selects profiling runs; this carries the selection
+  # to the lineage table behind the taxonomic flow on the same tab.
+  - source_dc_tag: "taxpasta_embedding"
+    source_column: "profiler_db"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "profiler_db"
+    description: "Narrow the taxonomic flow to the profiling runs picked in the ordination"
     enabled: true

@@ -1,49 +1,26 @@
-"""One row per methylseq sample, from the samplesheet the pipeline was launched
-with.
+"""One row per methylseq sample: the samplesheet, joined to the run's design.
 
-Every Bismark output file names itself after the samplesheet `sample` column
-directly (no `_T<n>` technical-replicate suffix, unlike cutandrun / eager), so
-this hub needs no id reconstruction. What it adds is the design the AWS
-megatest's SRA/GEO-derived sample names carry as free text
-(`<SRR>_<GSM>_<cell_line>_<condition>`) and that no other file in the run spells
-out structurally: two hESC lines, MShef11 under three low-oxygen replicates and
-MShef4 across a bulk sample and three passage conditions.
+Every Bismark output file names itself after the samplesheet ``sample`` column
+directly (no ``_T<n>`` technical-replicate suffix, unlike cutandrun / eager), so
+this hub needs no id reconstruction. The pipeline samplesheet carries no design
+column, so the design comes from an optional table declared through
+``METADATA_FILE`` (the ampliseq convention): sample id in a column named
+``sample`` or else in the first column, every other column a factor. Nothing is
+ever parsed out of the sample names, whose spelling is the submitter's choice.
 
-`condition` alone is one value per sample, which is a label, not a factor: a
-filter on it can only pick samples one at a time and a card broken down by it
-has seven slices of one. So the condition is split further, into the treatment
-and the replicate inside it:
-
-    low_oxygen_Q1  ->  treatment low_oxygen, replicate 1
-    J2             ->  treatment J,          replicate 2
-    bulk           ->  treatment bulk,       replicate 1
-
-which leaves three treatments and three replicates, both usable as filters and
-as breakdowns. A condition with no replicate token is its own first replicate,
-so the column has no holes.
-
-`group` names the two-level factor the cohort was designed around, which the
-catalog's window comparison reads to decide what it is testing. Here that is the
-cell line, and the dashboard says so plainly: in this megatest MShef11 is
-exactly the low-oxygen arm and MShef4 exactly the normoxic one, so cell line and
-oxygen condition are the same split and neither can be attributed separately.
-
-A samplesheet whose `sample` column does not follow this convention (any run
-using its own naming) still ingests: the parsed columns fall back to null rather
-than raising, so the hub always has at least the sample id and the FASTQ paths.
+The factors are carried under their own names and in the table's own column
+order, so the dashboards' ``{GROUP_COL}`` resolves against the hub and the
+catalog's window comparison can test along the first two-level factor (which is
+also the column the CLI picks as ``GROUP_COL`` when none is given). Without a
+design table the hub is the samplesheet alone: every tile bound to the sample
+id keeps working, and the group comparison is skipped.
 
 Output schema:
     sample_id : Utf8        the samplesheet's own sample name (matches every
                              Bismark output file for this sample)
-    srr_accession : Utf8    SRA run accession, when the sample name starts with one
-    gsm_accession : Utf8    GEO sample accession, when the sample name carries one
-    cell_line : Utf8        third underscore-separated token (e.g. MShef11, MShef4)
-    condition : Utf8        everything after the cell line (e.g. low_oxygen_Q1, bulk, J1)
-    treatment : Utf8        the condition without its replicate token
-    replicate : Utf8        the replicate number inside the treatment, "1" when absent
-    group : Utf8            the two-level factor the cohort compares (the cell line)
     fastq_1 : Utf8          read 1 FASTQ path/URL from the samplesheet
     fastq_2 : Utf8          read 2 FASTQ path/URL, empty for single-end samples
+    <design columns> : Utf8 one per factor of METADATA_FILE, when given
 """
 
 from __future__ import annotations
@@ -59,82 +36,52 @@ SOURCES: list[RecipeSource] = [
         format="CSV",
         read_kwargs={"infer_schema_length": 0},
     ),
+    RecipeSource(ref="design", dc_ref="metadata", optional=True),
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
-    "srr_accession": pl.Utf8,
-    "gsm_accession": pl.Utf8,
-    "cell_line": pl.Utf8,
-    "condition": pl.Utf8,
-    "treatment": pl.Utf8,
-    "replicate": pl.Utf8,
-    "group": pl.Utf8,
     "fastq_1": pl.Utf8,
     "fastq_2": pl.Utf8,
 }
+# Design columns are run-dependent; validated dynamically.
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
-# "<SRR accession>_<GSM accession>_<cell line>_<condition...>". Only the first
-# three underscore-separated tokens are structural; everything after the cell
-# line is the condition, comma-free so it survives as one token.
-_NAME_PATTERN = r"^(SRR\d+)_(GSM\d+)_([A-Za-z0-9]+)_(.+)$"
-
-# The condition, split into what was done and which replicate of it this is.
-# Two spellings occur and they need different greediness, so they are two
-# patterns rather than one alternation: `low_oxygen_Q1` separates the replicate
-# token with an underscore (take the LAST one, hence the greedy prefix), while
-# `J2` glues a numeric replicate to an alphabetic treatment. A condition that
-# matches neither carries no replicate token and is the whole treatment.
-_SEPARATED_TREATMENT = r"^(.+)_[A-Za-z]*\d+$"
-_SEPARATED_REPLICATE = r"^.+_([A-Za-z]*\d+)$"
-_GLUED_TREATMENT = r"^([A-Za-z]+)\d+$"
-_GLUED_REPLICATE = r"^[A-Za-z]+(\d+)$"
+#: Design-table column names that are never a factor: the sample id spellings
+#: and bookkeeping columns a samplesheet-derived table may carry along.
+NON_FACTOR_COLUMNS = frozenset({"sample", "sample_id", "fastq_1", "fastq_2", "genome"})
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Add the cell-line / treatment / replicate split on top of the samplesheet."""
-    df = sources["samplesheet"]
-    if "sample" not in df.columns:
-        raise ValueError(
-            f"methylseq samples: samplesheet lacks a 'sample' column, got {df.columns}"
-        )
+def _design(design: pl.DataFrame | None) -> pl.DataFrame | None:
+    """The design table keyed on ``sample_id``, factors as strings, in file order."""
+    if design is None or design.is_empty() or design.width < 2:
+        return None
+    id_col = "sample" if "sample" in design.columns else design.columns[0]
+    factors = [c for c in design.columns if c != id_col and c not in NON_FACTOR_COLUMNS]
+    if not factors:
+        return None
+    return design.select(
+        pl.col(id_col).cast(pl.Utf8).alias("sample_id"),
+        *[pl.col(c).cast(pl.Utf8) for c in factors],
+    ).unique(subset="sample_id", keep="first", maintain_order=True)
 
-    extracted = pl.col("sample").str.extract_groups(_NAME_PATTERN)
-    df = df.with_columns(
-        pl.col("sample").alias("sample_id"),
-        extracted.struct.field("1").alias("srr_accession"),
-        extracted.struct.field("2").alias("gsm_accession"),
-        extracted.struct.field("3").alias("cell_line"),
-        extracted.struct.field("4").alias("condition"),
-        (pl.col("fastq_1") if "fastq_1" in df.columns else pl.lit(None, pl.Utf8)).alias("fastq_1"),
-        (pl.col("fastq_2") if "fastq_2" in df.columns else pl.lit(None, pl.Utf8)).alias("fastq_2"),
-    )
 
-    condition = pl.col("condition")
-    replicate_token = pl.coalesce(
-        condition.str.extract(_SEPARATED_REPLICATE, 1),
-        condition.str.extract(_GLUED_REPLICATE, 1),
-    )
-    return (
-        df.with_columns(
-            # A condition that carries no replicate token is the whole treatment.
-            pl.coalesce(
-                condition.str.extract(_SEPARATED_TREATMENT, 1),
-                condition.str.extract(_GLUED_TREATMENT, 1),
-                condition,
-            )
-            .cast(pl.Utf8)
-            .alias("treatment"),
-            # Only the digits: `Q1` and `1` are the first replicate of their own
-            # treatment, and keeping the letter would split a three-level factor
-            # into six. A condition with no replicate token is its own first.
-            pl.when(condition.is_null())
-            .then(None)
-            .otherwise(pl.coalesce(replicate_token.str.extract(r"(\d+)", 1), pl.lit("1")))
-            .cast(pl.Utf8)
-            .alias("replicate"),
-            pl.col("cell_line").alias("group"),
-        )
-        .select(list(EXPECTED_SCHEMA))
-        .sort("sample_id")
-    )
+def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
+    """The samplesheet's sample and FASTQ columns, plus the design factors."""
+    sheet = sources["samplesheet"]
+    if sheet is None or "sample" not in sheet.columns:
+        columns = None if sheet is None else sheet.columns
+        raise ValueError(f"methylseq samples: samplesheet lacks a 'sample' column, got {columns}")
+
+    hub = sheet.select(
+        pl.col("sample").cast(pl.Utf8).alias("sample_id"),
+        *[
+            (pl.col(c) if c in sheet.columns else pl.lit(None)).cast(pl.Utf8).alias(c)
+            for c in ("fastq_1", "fastq_2")
+        ],
+    ).unique(subset="sample_id", keep="first", maintain_order=True)
+
+    design = _design(sources.get("design"))
+    if design is not None:
+        hub = hub.join(design, on="sample_id", how="left")
+    return hub.sort("sample_id")

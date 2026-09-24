@@ -539,7 +539,8 @@ workflows:
       # ----------------------------------------------------------------
       # Annotation. Prokka's per-bin `.txt` is a key/value file, so it is
       # scanned as two colon-separated columns and pivoted by the recipe.
-      # The GFF subset (METAMDBG bins only, see megatest.yaml) carries the
+      # The GFFs present under the data root (the megatest fetch keeps a subset,
+      # see megatest.yaml) carry the
       # coordinates the locus map needs.
       # ----------------------------------------------------------------
       - data_collection_tag: "prokka_summary_raw"
@@ -595,7 +596,7 @@ workflows:
               "meets_mimag_rna": "True when the bin carries at least 3 rRNAs and 18 tRNAs"
 
       - data_collection_tag: "prokka_gff_raw"
-        description: "Raw Prokka GFF rows including the embedded FASTA (input of prokka_gene_track). METAMDBG bins only, see megatest.yaml"
+        description: "Raw Prokka GFF rows including the embedded FASTA (input of prokka_gene_track); covers whichever bins have a GFF under the data root"
         optional: true
         config:
           type: "Table"
@@ -940,6 +941,17 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "assembler"}
     description: "Carry the assembler picked in the left panel over to the recruitment matrix"
+    enabled: true
+
+  # CheckM2 -> per-bin QUAST: the Bins tab's quality filters are sourced on
+  # CheckM2, and without this link its "Bin assembly statistics" section would
+  # ignore them. Both recipes keep the bin id as the binner wrote it.
+  - source_dc_tag: "checkm2_quality_report"
+    source_column: "bin_id"
+    target_dc_tag: "quast_bins_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "bin_id"}
+    description: "Narrow the per-bin assembly statistics to the bins the CheckM2 filters keep"
     enabled: true
 
   # Reverse links: a bin picked on the headline table carries its own identity

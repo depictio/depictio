@@ -234,10 +234,11 @@ were not touched, and its glob is narrowed to `**/*.bam.stats` so it cannot coll
 
 **New pipeline-local recipes** (`depictio/projects/nf-core/nanoseq/recipes/`):
 
-- `samples.py` now extracts `protocol`, `source_replicate` and `run_id` out of
-  `samplesheet.input_file`. The six libraries are not three replicates per cell line: they are
-  one cDNA and two direct-cDNA preparations off three flow-cell runs, which the sheet's
-  `A549_R1..R3` naming hides. `protocol` is a persistent filter as a result.
+- `samples.py` carries `protocol`, `source_replicate` and `run_id` beside the condition. The
+  six libraries are not three replicates per cell line: they are one cDNA and two direct-cDNA
+  preparations off three flow-cell runs, which the sheet's `<group>_R<n>` naming hides.
+  `protocol` is a persistent filter as a result. (Wave 3 follow-up: these now come from the
+  design table, not from the FASTQ name; see "Design from METADATA_FILE" below.)
 - `deseq2_results.py` wraps the shared DESeq2 reader so `gene_id` is the Ensembl id extracted
   from Bambu's attribute string, `gene_biotype` is its own filterable column, the original
   descriptor survives as `feature_label`, and the contrast is named `A549 vs K562` from the
@@ -405,3 +406,76 @@ Live rows: samtools_read_length_nx 594, dexseq_usage 84, samtools_stats_sections
 deseq2_results 208 722, dexseq_results 419, bambu_counts_transcript_long 415 356; the
 optional GTF pair skipped. Screenshots: `/tmp/claude-502/shots-nanoseq/` (7 tabs + tile shots,
 volcano MA and QQ views clicked live).
+
+# Wave 3
+
+**Date:** 2026-09-23. Offline only (no ingest, no live check): the stack belongs to the main
+session.
+
+## What changed
+
+- **Tabs 7 -> 6, MultiQC first.** Run hub became the `MultiQC` tab (general statistics, FastQC,
+  samtools flagstat/idxstats, pinned sample sheet). Run dynamics folded into `Reads and read
+  length` (the aligned read-length profile plus a 2-sentence pycoQC note). `DE and usage` split:
+  DESeq2 is `Gene expression (DESeq2)`; the DEXSeq section moved to the top of `Isoform usage
+  and expression`.
+- **Glance strip.** Pinned persistent, 4 cards on every tab (libraries by condition, reads,
+  gigabases, N50); the hub copies and `ns-sheet-card-condition` are gone.
+- **Blockers.** Q-ladder cards (`ns-rq-card-pct/-ladder-reads/-mb`) scoped to the Q10 rung
+  with `filter_expr`, Q10 in the title. Recomputed on the megatest: 1 788 362 reads and
+  2 187.1 Mb at Q10 or above (against 9 627 631 basecalled; the old sum over all rungs gave
+  16.8 M). The dead `section` / `bin` filters on Run dynamics and Alignment are removed. The
+  biotype claim on the DE tab is dropped together with the DE copies of the Quantification
+  counts, so no `deseq2_results -> bambu_counts_gene_long` link was added. top_n on
+  `max` cards replaced by `box_plot`; `ns-is-card-genes` keeps top_n (nunique shows per-library
+  values since wave 3a) but is scoped to `count > 0`.
+- **Redundancies removed.** Ladder x4 -> ladder AV + table (`ns-rq-fig-ladder`,
+  `ns-rd-mqc-readsbyquality` dropped). NanoStat x3 -> DC table only (`ns-rq-mqc-nanostat-table`,
+  `ns-rd-mqc-lengthdist` dropped). `ns-de-fig-distribution`, `ns-de-table-counts`,
+  `ns-qt-av-topcount`, `ns-is-av-heatmap`, `ns-hub-fig-depth`, the Run dynamics samtools cards
+  (except supplementary alignments, now on Alignment) and samtools `Percent mapped` / `Alignment
+  stats` panels dropped. The wide `bambu_counts_gene` / `bambu_counts_transcript` DCs are no
+  longer bound and were removed from template.yaml.
+- **Reference table.** The DESeq2 top-200 table is no longer pinned; it is a collapsed table on
+  the DESeq2 tab. Pinned tables: the sample sheet only.
+- **Genericity.** No A549 / K562 / SG-NEx / gene id / run numbers in any dashboard text;
+  "the run's contrast" in titles; `coverage_max: 60` gauge removed. `forbidden_terms` added to
+  megatest.yaml. Median log-CPM cards scoped to detected features (`count > 0`); samtools
+  percentage cards scoped to the SN row. Correlation heatmap: ward + Blues.
+- **Filters.** Every tab has an open tab-local section: Run scope (MultiQC), Read QC scope
+  (mean-quality Slider `gte` + N50 range on NanoStat), Alignment scope (library), Feature scope,
+  DE scope (5 filters in one section), Isoform scope.
+
+## What was run
+
+```
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
+  depictio/tests/models/test_template_conventions.py -q -k nanoseq -rxX
+python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root ... --dry-run   # 8/8
+```
+
+## Design from METADATA_FILE (wave 3 genericity follow-up)
+
+`samples.py` no longer parses `input_file`. The design comes from an optional table declared
+through `METADATA_FILE` / `METADATA_ID_COL` / `GROUP_COL` (the ampliseq convention; the
+`group_col` and `id_col` values reach the recipe through the transform `params` channel),
+joined on the sample name or on the samplesheet group. `condition` is the `GROUP_COL` column,
+the design-table columns `protocol`, `source_replicate` and `run_id` feed the hub columns of
+the same name (`unknown` when absent), and other factors ride along as extra columns. Without
+a table, `condition` is the samplesheet group recovered from the pipeline-built
+`<group>_R<replicate>` name. The megatest's table is vendored as `input/sample_metadata.tsv`
+(built once from the source dataset's library annotations, the values the old FASTQ-name
+parse produced) and set in `reference.vars`. Checked on the megatest: the hub with the
+vendored table is frame-identical to the previous parse; without it the confounders read
+`unknown`. Output schema unchanged (9 columns; extra factors are optional columns).
+
+## Still open
+
+- Without `METADATA_FILE` the library preparation, source replicate and flow-cell run filters
+  and the two `Sample structure` donuts show a single `unknown` value. They stay bound (the hub
+  columns always exist); pruning them per variable would need a component-level conditional.
+- `ns-qt-card-top50` (median of a per-library percentage) still raises the rule-f warning; the
+  collection has one row per library, so there is no context to scope.
+- `ns-is-av-structures` has no gene picker source besides its header; not bound to the DEXSeq
+  table selection.
+- Not checked live: the new filter_expr cards, the Slider `gte` filter and the new layout.

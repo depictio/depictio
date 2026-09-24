@@ -17,8 +17,9 @@
 # MALT / HOPS / Kraken metagenomic screen did not run in this megatest. The five
 # collections at the end of this file declare them anyway, with the globs the
 # eager output docs publish and `optional: true`, so a run that DID enable them
-# ingests without a template edit; here they are skipped, and the two dashboard
-# tabs that would read them say so in a text tile rather than rendering empty.
+# ingests without a template edit. Each has one table tile in the dashboard;
+# the import drops a tile whose collection is absent, so a run without the
+# branch shows only the two-sentence note of the section that would hold it.
 #
 # MULTIQC WAS REPROCESSED.
 # The run shipped MultiQC 1.13.dev0, which writes `multiqc_data.json` and no
@@ -39,11 +40,12 @@
 # THE SAMPLESHEET IS NOT PART OF THE MEGATEST FETCH.
 # Unlike ampliseq or rnaseq, eager's AWS test data carries no `input/` prefix
 # and no `pipeline_info/params.json` to recover the run's `--input` TSV from
-# (see megatest.yaml). `input/benchmarking_vikingfish.tsv` here is therefore a
+# (see megatest.yaml). The two recipes that read it (samples.py, lane_stats.py)
+# take any `{DATA_ROOT}/input/*.tsv`, so a real run needs its `--input` TSV
+# copied there. For the megatest, `input/benchmarking_vikingfish.tsv` here is a
 # hand-reconstructed manifest (sample/library/lane against the six ENA runs the
 # megatest fetched, s3://nf-core-awsmegatests/eager/ENA_Data_Fish/), not a
-# fetched artifact, a real `--data-root` needs it copied to
-# `{DATA_ROOT}/input/benchmarking_vikingfish.tsv` by hand (see VALIDATION_REPORT.md).
+# fetched artifact (see VALIDATION_REPORT.md).
 #
 # LAYOUT NOTE. Every scan regex matches on file NAME, never on the per-sample
 # directory names (`<library>_rmdup/`, `<library>_rmdup_stats/`) the recipes
@@ -63,8 +65,12 @@ template:
   version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
-      description: "Root directory containing eager output (fastqc/, adapterremoval/, samtools/, deduplication/, damageprofiler/, qualimap/, preseq/, endorspy/, bcftools/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet, and input/benchmarking_vikingfish.tsv (see the LAYOUT NOTE above)."
+      description: "Root directory containing eager output (fastqc/, adapterremoval/, samtools/, deduplication/, damageprofiler/, qualimap/, preseq/, endorspy/, bcftools/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet, and the run's --input TSV under input/ (see the LAYOUT NOTE above)."
       required: true
+    - name: "SHORT_FRAGMENT_BP"
+      description: "Short-fragment cut-off in bp. The damageprofiler/authenticity recipe counts fragments shorter than it (column fraction_under_70bp, name kept for schema stability) and the Authentication tab names it (card title and fragment-length intro)."
+      required: false
+      default: "70"
   reference:
     vars: {}
   provenance:
@@ -812,6 +818,8 @@ workflows:
           source: "transformed"
           transform:
             recipe: "damageprofiler/authenticity.py"
+            params:
+              short_fragment_bp: "{SHORT_FRAGMENT_BP}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -822,7 +830,7 @@ workflows:
               "background": "Every other substitution at the same positions, pooled"
               "mean_length": "Mean mapped fragment length, bp"
               "median_length": "Median mapped fragment length, bp"
-              "fraction_under_70bp": "Share of mapped fragments shorter than 70 bp, 0 to 1"
+              "fraction_under_70bp": "Share of mapped fragments shorter than the short-fragment cut-off (SHORT_FRAGMENT_BP, default 70 bp), 0 to 1"
               "n_reads": "Mapped fragments the length distribution counted"
 
       # One row per library pooling endorS.py, Picard, Qualimap and
@@ -930,9 +938,10 @@ workflows:
       # matched on NAME so they survive the 2.x to 3.x directory renames.
       # With `optional: true` a run that did not enable the branch skips
       # the collection instead of failing the ingest, and a run that did
-      # enable it picks the files up with no template edit. No dashboard
-      # tile binds them, so nothing renders empty here; the two tabs that
-      # would read them carry a text tile saying the branch did not run.
+      # enable it picks the files up with no template edit. One table tile
+      # binds each (Mapping: MaltExtract, Kraken; Authentication: ANGSD,
+      # MTNucRatio; Coverage: Sex.DetERRmine); the import drops the tile
+      # when its collection is absent.
       # ----------------------------------------------------------------
       - data_collection_tag: "sexdeterrmine"
         description: "Sex.DetERRmine relative X and Y coverage per library (optional, needs --run_sexdeterrmine)"
@@ -1188,7 +1197,7 @@ links:
 
   # ---- Hub to the genotyping collections, keyed on Sample_Name ----------
   # bcftools stats ran on the per-sample VCF, so its `sample` column holds
-  # COD076, not COD076E1bL1. The hub carries both ids, which is the only
+  # the Sample_Name, not the Library_ID. The hub carries both ids, which is the only
   # reason these two tiles can be filtered from the same left panel as the
   # rest of the dashboard.
   - source_dc_tag: "samples"
@@ -1250,6 +1259,31 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Carry a library selected on the endogenous DNA tiles over to its flagstat rows"
+    enabled: true
+
+  # ---- QC collections back to the hub -----------------------------------
+  # The pinned QC thresholds filter these two collections. Linking them back
+  # to the library hub lets a coverage, duplication or endogenous-DNA floor
+  # narrow the hub, which then fans the surviving libraries out to every tab
+  # (filters travel up to three links).
+  - source_dc_tag: "qualimap_bamqc_genome_results"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Carry a coverage or duplication floor to the library hub, and through it to every tab"
+    enabled: true
+
+  - source_dc_tag: "endorspy_endogenous"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Carry an endogenous-DNA floor to the library hub, and through it to every tab"
     enabled: true
 
   # ---- The two collections this pass added ------------------------------

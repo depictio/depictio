@@ -17,6 +17,9 @@ the samplesheets themselves (row counts are recounted, not copied), and the loca
 Related: `MEGATEST_STATUS.md` (what each S3 bucket holds), `VALIDATION_SCENARIOS.md`
 (analytical scenarios per pipeline), `TEMPLATE_BOTTLENECKS.md` (platform gaps).
 
+The per-profile survey below predates lot 2 and wave 3. The five wave 3 templates are listed in
+section 3 with the dataset each was validated on; their `test*` profiles are not surveyed yet.
+
 ## Verdicts
 
 The verdict column says what the **1.10.0 Nextflow auto-trigger** would produce from
@@ -336,6 +339,27 @@ all - even the "tiny" `test_nanopore` pulls its FAST5/summary from `ngi-igenomes
 
 ---
 
+## 3. Wave 3 templates
+
+Built on 2026-09-23 against the AWS megatest of each pipeline's latest release. None of these
+pipelines publishes the design of its run, so each template reads it from a table vendored next
+to it under `input/` and passed as `METADATA_FILE`, with `METADATA_ID_COL` and `GROUP_COL` naming
+the id and design columns, the ampliseq convention. Validated offline only: recipes on the real
+files, template lint and a CLI dry run.
+
+| pipeline | template version | latest nf-core | `-r` needed | reference megatest | MultiQC written | structure | DCs (optional) | dataset and design |
+|---|---|---|---|---|---|---|---|---|
+| riboseq | 2.0.0 | 2.0.0 | no | `11d66a3b` | 1.33 | flat | 18 (14) | 12 libraries, 6 Ribo-seq and 6 RNA-seq, one contrast; samplesheet, contrasts and design table vendored under `input/` |
+| smrnaseq | 2.4.1 | 2.4.1 | no | `cb0af579` | 1.33 | flat | 17 (8) | 28 libraries, two crossed factors; design table vendored, built once from the test-datasets samplesheet |
+| genomeassembler | 2.0.0 | 2.0.0 | no | `a72d47d9` | none | flat | 24 (20) | 10 assembly strategies, half of them without assembly QC on this partial run; samplesheet vendored and read as the design table |
+| mhcquant | 3.2.0 | 3.2.0 | no | `6ec12c97` | 1.33 (custom content only) | flat | 15 (4) | `test_full`: PRIDE PXD011628, 2 samples x 3 raw replicates, one per condition; samplesheet vendored under `input/` |
+| demultiplex | 1.8.0 | 1.8.0 | no | `daade37c` | 1.35 | flat | 18 (13) | `test_full`: one flowcell, one lane, 18 libraries, bcl2fastq route; library design vendored in the template directory |
+| rnasplice | 1.0.4 (pending) | 1.0.4 | | `1d0494ae` (truncated) | none | | | waits for an EMBL cluster `test_full` run; fallback seqinspector 1.1.2 (megatest `6aa08aab`) |
+
+With these, 24 templates ship, 25 once rnasplice lands.
+
+---
+
 ## Annex A - why the codes exist
 
 **`VER`** - `depictio.config` forwards `--pipeline-id <manifest.name>/<manifest.version>`
@@ -370,7 +394,9 @@ through the manual fetch-and-reprocess route.
 sheet under `pipeline_info/`, which their templates already read. Everywhere else the
 sheet exists only as the URL in `params.json`, which is why every `megatest.yaml`
 `post_fetch_help` curls it into `input/`. Workaround for a live run: copy the sheet into
-`<outdir>/input/` before the pipeline finishes.
+`<outdir>/input/` before the pipeline finishes. The wave 3 templates, and methylseq, chipseq and
+nanoseq since that wave, go one step further: the run's design table is vendored with the
+template and passed as `METADATA_FILE`.
 
 **`RUNS`** - `scan.py` walks only subdirectories matching `runs_regex` when
 `data_location.structure` is `sequencing-runs`. viralrecon is the only such template.
@@ -378,9 +404,10 @@ The trigger passes `--data-root params.outdir`, so it needs
 `params.depictio_data_root` set to a parent directory holding `run_*/`.
 
 **`SKIP`** - `_introspect_pipeline_params` derives route flags for ampliseq and
-viralrecon only (`IS_NANOPORE`, `IS_METAGENOMIC`, `SKIP_QIIME`, `SKIP_TAXONOMY`,
-`SKIP_ALPHA_RAREFACTION`, `SKIP_ANCOM`, `IS_MULTIREGION`, `METADATA_FILE`). airrflow's
-five, rnafusion's six, funcscan's four and rnaseq's three are not derived, and
+viralrecon (`IS_NANOPORE`, `IS_METAGENOMIC`, `SKIP_QIIME`, `SKIP_TAXONOMY`,
+`SKIP_ALPHA_RAREFACTION`, `SKIP_ANCOM`, `IS_MULTIREGION`, `METADATA_FILE`) and, since wave 3,
+demultiplex's `IS_BCLCONVERT`. airrflow's five, rnafusion's six, funcscan's four, rnaseq's
+three and mhcquant's two are not derived, and
 `depictio.config` has no parameter that forwards `--var`. A profile that cuts a branch
 therefore leaves a required collection with no source.
 

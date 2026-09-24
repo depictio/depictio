@@ -480,3 +480,40 @@ shape of the run and not a defect. Not done: `samplesheet -> splice_junctions`. 
 `ctatsplicing/introns.py` schema has no sample column (intron, chrom, start, end, strand,
 gene, read support), so there is no target field; the template's own comment documents the
 table as junction-keyed and unlinked.
+
+## 2026-09-23: Wave 3 (bulk RNA family rework)
+
+What changed:
+
+- Per-sample fusion rows. Every fusion recipe (`arriba/fusions`, `arriba/fusion_links`,
+  `starfusion/fusions`, `fusioncatcher/fusion_genes`, `fusioninspector/fusions`,
+  `fusioninspector/protein_domains`, `fusionreport/fusions`, `fusionreport/caller_evidence`,
+  `ctatsplicing/introns`, `ctatsplicing/cancer_introns`) derives `sample` from the file name
+  through `RecipeSource.source_path`. The template links `samplesheet.sample` to all ten
+  fusion collections, and the fusion-report rank is computed per sample.
+- Callers are derived from the fusion-report columns instead of a fixed list; unknown callers
+  get a generic read-count parse in `caller_evidence`. The UpSet uses
+  `set_columns_pattern: "^(?!(n_databases|n_tools|rank)$)"`.
+- The duplicate consensus table on Fusion calls is deleted (it stays in the pinned
+  `Reference tables`). The glance strip is samples, fusions called, 5' partners and callers;
+  the Arriba-support and junction-unique cards are gone. New known-fusions card
+  (`filter_expr: col('n_databases') > 0`); the agreement card is a count with a composition
+  by `tool_support`.
+- Splicing folded: `Splice junctions` is collapsed at the foot of the last tab with its
+  table; the per-gene splice bar is deleted. The evidence and FusionInspector tables moved
+  out of `Reference tables` into `Caller tables` and `Validated rows`.
+- Filter sections renamed (`Sample scope`; `Reference scope` persistent; tab scopes open).
+  New pinned, persistent, collapsed `Sample sheet`. `forbidden_terms` added to
+  `megatest.yaml`.
+
+Verified (offline): template lint clean; shipped YAML and template convention tests pass;
+recipe tests pass on the updated fixtures (each gained a `sample` column); CLI dry run on the
+megatest 8/8 (`cancer_introns` skipped as an empty optional file, as before); a synthetic
+two-sample cohort gives per-sample rows, per-sample ranks and a derived extra caller.
+
+Still open:
+
+- Live render not checked: the UpSet pattern selection and the `filter_expr` card need a look
+  on a running stack; screenshots are stale.
+- The `_trimmed` FastQC suffix still does not match the samplesheet `sample`.
+- Conformance fixtures and `.db_seeds` need regenerating (main session).

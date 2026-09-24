@@ -1,151 +1,124 @@
 # nf-core/nanoseq 3.0.0: Depictio dashboards
 
 This template turns the output of [nf-core/nanoseq](https://nf-co.re/nanoseq) 3.0.0 into a
-single seven-tab Depictio dashboard. nanoseq QCs Nanopore long reads, aligns them with
-minimap2, quantifies gene and transcript expression with Bambu, and (when the samplesheet asks
-for it) runs DESeq2 and DEXSeq on top of those counts. The dashboard follows that chain left to
-right: what the run is, what the basecaller produced, how the library behaved, how it aligned,
-what Bambu counted and whether the samples sit where the design says, what moved between the
-conditions, and which isoforms carry it.
+single six-tab Depictio dashboard. nanoseq QCs Nanopore long reads, aligns them with minimap2,
+quantifies gene and transcript expression with Bambu, and (when the samplesheet asks for it)
+runs DESeq2 and DEXSeq on top of those counts. The tabs follow that chain: what MultiQC
+reports, how long and how good the reads are, how they aligned, what Bambu counted and whether
+the libraries group by condition, which genes moved, and which transcripts changed their share
+of their gene.
 
-Data comes from the AWS megatest run `results-1e60482a2c4621234393a6eef8e9a104309c20ae` (the
-3.0.0 release tag): SG-NEx A549 and K562 cell lines, cDNA and direct cDNA Nanopore RNA-seq,
-3 libraries each.
+The template was validated against the AWS megatest run
+`results-1e60482a2c4621234393a6eef8e9a104309c20ae` (the 3.0.0 release tag).
 
 > **This template reads an ALREADY-REPROCESSED MultiQC report.**
 > nanoseq 3.0.0 published MultiQC 1.11, which writes `multiqc_data.json` and no parquet.
-> Depictio reads only `multiqc.parquet` (MultiQC 1.31 and later); the megatest data directory
-> this template was built against already carries the reprocessed report
-> (`multiqc/multiqc_data/multiqc.parquet` + `REPROCESSED.json`), produced by re-running the
-> pinned MultiQC 1.35 over the run's own raw tool outputs. See `VALIDATION_REPORT.md` if you
-> need to reproduce that step from a fresh fetch.
+> Depictio reads only `multiqc.parquet` (MultiQC 1.31 and later); reprocess the run's own raw
+> tool outputs with the pinned MultiQC 1.35 first. See `VALIDATION_REPORT.md` for the command.
 
 ---
 
 ## How the dashboard is built
 
-- **Every tab has a scope.** A persistent `Sample filters` section is pinned to the top of every
-  tab with a sample, condition and library-preparation picker, and the template's links fan a
-  pick there out to NanoStat, the samtools distributions, the melted Bambu counts, the
-  sample-structure collections and the MultiQC panels. Each tab then adds a non-persistent
-  filter section on its own columns (every threshold slider draws the column's distribution
-  above it): a quality cutoff on read QC, a stats section and an axis
-  range on the two distribution tabs, a biotype and an expression floor on quantification and
-  isoforms, a direction and a mean-expression floor on the DE tab.
-- **Bambu's wide matrices are read long.** Bambu writes one row per feature with a column per
-  sample, which is the shape that made the earlier build of this template a single link deep.
-  The `bambu/counts_gene_long` and `bambu/counts_transcript_long` catalog recipes melt those
-  matrices into one row per sample and feature, with the raw count, CPM and log CPM, so every
-  downstream collection carries a `sample` column and the sample picker reaches it.
-- **Feature ids are readable.** The megatest's minimal test GTF makes Bambu's "gene" rows
-  exon-granular (`ccds_id CCDS...; exon_id ENSE...; gene_biotype X; ENSGxxxxx`) rather than one
-  row per gene. Every collection derived from Bambu here, including the DESeq2 results, is read
-  through a wrapper that extracts the `ENSG` / `ENST` id and promotes the biotype to its own
-  filterable column, keeping the original descriptor in `feature_label`. Volcano and MA labels
-  are Ensembl ids, and biotype is a filter rather than a substring.
-- **The run-level statistics say so.** DESeq2 and DEXSeq collapse the whole run into a single
-  A549-vs-K562 comparison, so those three collections carry no `sample` column and the sample
-  picker does not narrow them. The DE tab says this in its opening text and puts the per-library
-  counts the statistics were computed from in a section of its own directly underneath, which
-  does filter.
-- **The pinned reference table is a view, not the whole table.** The full DESeq2 table is
-  208 722 rows; pinning it to seven tabs put an unscrollable grid on every one of them. The
-  `Reference tables` section now holds the 200 best-measured rows (highest mean normalised
-  count), and the full table is what the volcano, MA, barplot and QQ tiles on the DE tab read.
-- **Bambu, not a genome aligner's per-region output.** nanoseq's megatest run is a
-  transcript-quantification run (minimap2 against a transcriptome/genome, Bambu counting), not a
-  variant-calling or fusion-detection run: the samplesheet's `is_transcripts` and
-  `nanopolish_fast5` columns are empty for every sample here, so no JAFFAL fusion calls and no
-  nanopolish methylation output exist to show. See `VALIDATION_REPORT.md` for what the real
-  megatest layout does and does not carry.
+- **A pinned glance strip.** Four cards open every tab: libraries by condition, reads
+  basecalled, gigabases sequenced and read length N50. They are not repeated as tab cards.
+- **Every tab has a scope.** A persistent `Sample filters` section (sample, condition, library
+  preparation) is pinned to the top of every tab, and the template's links fan a pick out to
+  NanoStat, the samtools distributions, the melted Bambu counts, the sample-structure
+  collections and the MultiQC panels. Each tab adds an open, non-persistent filter section on
+  its own columns.
+- **MultiQC panels live on the MultiQC tab only**, minus the panels a data-collection tile
+  already draws: the NanoStat summary and reads-by-quality panels (the Reads tab reads NanoStat
+  itself), FastQC's length distribution (the samtools read-length profile), and samtools'
+  Percent mapped and Alignment stats (the Alignment tab reads the same SN block).
+- **Cards read one reading per library.** The NanoStat quality ladder has one row per library
+  and Phred cutoff, so its cards are scoped to the Q10 rung with `filter_expr` and name Q10 in
+  their title; the samtools percentage cards are scoped to the SN summary row. Per-library
+  maxima (longest read) use a box-plot secondary, not a top-N strip.
+- **Bambu's wide matrices are read long.** The `bambu/counts_gene_long` and
+  `bambu/counts_transcript_long` catalog recipes melt Bambu's feature-by-sample matrices into
+  one row per sample and feature (count, CPM, log CPM), so the sample picker reaches them.
+- **Feature ids are readable.** When Bambu's rows are GTF attribute strings, every collection
+  derived from them, including the DESeq2 results, extracts the `ENSG` / `ENST` id and promotes
+  the biotype to its own filterable column, keeping the original string in `feature_label`.
+- **Run-level statistics say so.** DESeq2 and DEXSeq collapse the run into one comparison, so
+  their collections carry no `sample` column and the sample picker does not narrow them. The
+  DESeq2 tab says so and points to the per-library counts on the Quantification tab.
+- **Cross-selection on the library.** Every per-library plot (length against quality, Nx
+  ladder, read-length, quality-ladder, coverage and indel curves, PCA, depth against
+  complexity) and every per-library table selects on the sample column, which the sample hub
+  links to every sample-keyed collection, so a pick narrows the rest of the tab. The length
+  against quality scatter drives a library record card beside it, which stays a thin rail until
+  a library is picked. The long gene and transcript count tables and the DESeq2 table are not
+  selectable: their feature ids link to no other collection on their tab.
+- **Design columns.** The design comes from an optional table declared through `METADATA_FILE`
+  (sample name, or samplesheet group, in `METADATA_ID_COL`; one column per factor).
+  `condition` is its `GROUP_COL` column; its columns named `protocol`, `source_replicate` and
+  `run_id` feed the library preparation, source replicate and flow-cell run filters; any
+  other factor rides along as an extra hub column. Without a table, `condition` is the
+  samplesheet group and the three confounders read `unknown`. `replicate` and the group are
+  recovered from the sample name nanoseq itself builds, `<group>_R<replicate>`; nothing else
+  is read out of a sample or FASTQ name.
+
+| Variable | Default | Role |
+|---|---|---|
+| `METADATA_FILE` | none | Optional design table (TSV). The bundled reference sets the vendored `input/sample_metadata.tsv`. |
+| `METADATA_ID_COL` | first column | Design table id column. |
+| `GROUP_COL` | first factor of `METADATA_FILE` | The factor carried as `condition`. |
 
 ## Tabs
 
-### Run hub
+### MultiQC
 
-What the run is. Four NanoStat cards (reads, gigabases, N50, mean quality) over the MultiQC
-general-statistics table, then the cohort design: six libraries, two cell lines, two library
-preparations and three flow-cell runs. The library preparation matters here, which is why it is
-a persistent filter rather than a footnote. The samplesheet names the libraries `A549_R1..R3`
-and `K562_R1..R3`, but the input FASTQ names say one cDNA library and two direct-cDNA ones per
-cell line, off three different flow-cell runs, so what looks like three replicates is three
-preparations. A bar of Bambu library sizes closes the tab.
+The general-statistics table, the FastQC panels (counts, per-base and per-sequence quality, GC,
+N content, duplication, overrepresented sequences, status) and the samtools flagstat and
+idxstats panels. The pinned `Sample sheet` section (collapsed) holds the sample hub every filter
+is sourced on. A tab-local `Run scope` section narrows by flow-cell run and source replicate.
 
-### Basecall and read QC
+### Reads and read length
 
-NanoStat's summary of the raw FASTQ, read straight from the report rather than through MultiQC,
-so it filters and cards like any other collection: mean and median read length, the spread and
-the longest read, and a length-against-quality scatter of the six libraries with its axis and
-colour controls in the tile header. That scatter stays one point per library: nanoseq publishes
-no per-read table (NanoPlot runs without `--raw`, pycoQC needs a `sequencing_summary.txt`), so a
-read-level length-against-quality density cannot be drawn from this run. Under it, the Nx
-ladder: N1 to N99 per library, recomputed from the exact read-length histogram `samtools stats`
-keeps. Its N50 rung (marked) equals NanoStat's N50 for every library, and the rest of the ladder
-shows what a single N50 bar hid, whether a library's yield sits in a few long reads or in many
-reads of one length. Under
-it, the quality ladder: how many reads, what share of the library and how many megabases survive
-each Phred floor, as a profile with a Q10 marker, a grouped bar and a table. A collapsed
-`MultiQC read panels` section carries the eight FastQC panels and NanoStat's summary table.
-
-### Run dynamics
-
-The flow-cell views a Nanopore run is usually watched through (cumulative yield over the
-sequencing hours, quality drift as the pores age, the channel map) all read pycoQC's summary of
-`sequencing_summary.txt`. nanoseq produces it when a run supplies that file and `--skip_pycoqc`
-is not set; this megatest started from FASTQ, so neither exists, and the tab opens by saying so.
-What the run does carry is the read-length histogram `samtools stats` records per BAM and
-MultiQC never surfaces: a profile of length against read count, both axes logarithmic,
-decimated to 200 geometric bins per library, beside FastQC's pre-alignment length distribution
-and NanoStat's reads-by-quality panel.
+NanoStat's summary of the raw FASTQ: mean, median and spread of read length and the longest
+read per library, a length-against-quality scatter (one point per library: nanoseq publishes no
+per-read table) with a library record card beside it, the Nx ladder recomputed from the samtools read-length histogram (N50 marked),
+and the aligned read-length profile. The quality ladder follows: the Q10 cards (share, reads,
+megabases) and mean read quality, then the yield above each Phred cutoff as one curve per
+library. A 2-sentence note says the flow-cell views (yield over time, channel map) need pycoQC,
+which nanoseq runs only when a `sequencing_summary.txt` is supplied. Tables are collapsed at
+the bottom. Filters: a mean-quality floor and an N50 range on the NanoStat summary.
 
 ### Alignment and coverage
 
-Placement rate, per-base identity and mapped reads and bases, read out of the `samtools stats`
-summary block rather than MultiQC so they filter with the rest of the dashboard. Then the two
-distributions that block also carries and that nothing else shows: the coverage-depth histogram
-(how evenly the reference was hit) and the indel length spectrum with insertions and deletions
-as separate curves per library, which is the characteristic Nanopore error mode. A collapsed
-`MultiQC alignment panels` section carries the six samtools panels.
+Placement rate, per-base identity, mapped reads and supplementary alignments from the
+`samtools stats` SN block, then the coverage-depth histogram and the indel length spectrum
+(insertions and deletions as separate curves). The full distributions table is collapsed.
+Filter: a library picker on the samtools collection.
 
 ### Quantification and sample structure
 
-Library size, genes detected, protein-coding share and the share the top 50 genes take, then the
-question the preparation filter exists for: do the libraries group by condition or by
-preparation. A PCA on log CPM over the 500 most variable genes (the way DESeq2's `plotPCA` does
-it), a depth-against-complexity scatter, and a Spearman correlation heatmap on the same values,
-which is the plot that catches a swapped label. The PCA's colour-by and the scatter's axes sit
-in the tile headers, so regrouping by preparation is one click. Under them the gene counts themselves: the 100
-most variable genes as a row-standardised heatmap, the 50 highest-count genes for reference, a
-box of the per-library expression distribution and the full melted matrix.
+Library size, genes detected, protein-coding share and top-50 gene share; then whether the
+libraries group by condition or by preparation: libraries by preparation and by flow-cell run,
+a PCA on log CPM over the 500 most variable genes, a depth-against-complexity scatter and a
+Spearman correlation heatmap (ward, Blues). Then the gene counts: detected-gene cards, the
+per-library log-CPM distribution and the 100 most variable genes as a row-standardised heatmap.
+Tables are collapsed at the bottom. Filters: biotype and a log-CPM range.
 
-### DE and usage
+### Gene expression (DESeq2)
 
-DESeq2 on Bambu's gene counts: direction counts, effect size, the strongest adjusted p-value as
-a gauge, then one tile with three views of the results switched from its header (volcano, MA
-against mean expression, QQ of the raw p-values) and a differential-abundance barplot of the
-twenty largest effects. The adjusted p-value and log2 fold-change floors live in this tab's
-own `Significance thresholds` section, next to the direction, biotype and expression controls,
-because `deseq2_results` is rendered here and nowhere else. The section below it is the per-library expression those statistics
-were computed from, which does follow the sample picker. Last, DEXSeq: whether one of a gene's
-transcripts is used more or less relative to its siblings, holding the gene's total expression
-constant. 419 features were testable and four clear the cut-off, all isoforms of one gene
-(ENSG00000124570). The volcano offers a QQ view in its header (DEXSeq writes no mean intensity,
-so there is no MA view). Under it, the proportions DEXSeq tested, which its results table does
-not carry: each library's transcript shares of the six genes with the smallest gene-level
-q-value, recomputed from Bambu's transcript counts, one stacked bar per library and one panel per
-gene with its q-value in the title.
+DESeq2 on Bambu's gene counts: direction counts, effect size, genes tested and the strongest
+adjusted p-value, then one tile with three views switched from its header (volcano, MA, QQ) and
+a barplot of the twenty largest effects. The 200 best-measured rows are in a collapsed table.
+One `DE scope` section holds the adjusted p-value, log2 fold change, direction, biotype and
+mean-expression filters.
 
-### Isoforms
+### Isoform usage and expression
 
-The same matrix one level down: the transcript-level counts, the 50 highest-count transcripts as
-a heatmap annotated by the gene they belong to, the per-library distribution and the full melted
-transcript table. The isoform lane view underneath needs the exon coordinates, which live in
-`bambu/extended_annotations.gtf`, written whenever Bambu is allowed to extend the annotation
-rather than only quantify against it. This megatest was quantification-only, so the collection
-behind that tile is optional and the tile is empty here; a run with the file fills it with no
-change to the template, gene picker in the tile header. A sashimi view is not offered: nanoseq
-publishes no splice-junction table (no `SJ.out.tab`, no junction BED), and the BAMs are not in
-the megatest mirror.
+DEXSeq first: whether a transcript is used more or less relative to its siblings, with its
+volcano (QQ view in the header; DEXSeq writes no mean intensity, so no MA view) and the
+per-library transcript shares of the top genes, recomputed from Bambu's transcript counts. Then
+isoform expression from the melted transcript matrix, and the isoform lane view, which reads
+`bambu/extended_annotations.gtf` and stays empty on a quantification-only run. No sashimi view:
+nanoseq publishes no splice-junction table. Filters: biotype and a log-CPM range on the
+transcript counts.
 
 ## Reproducing
 
@@ -160,6 +133,13 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --src  ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest \
   --dest ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest
 
+# Copy the vendored design table next to the run.
+mkdir -p ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest/input
+cp depictio/projects/nf-core/nanoseq/3.0.0/input/sample_metadata.tsv \
+  ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest/input/
+
 depictio-cli run --template nf-core/nanoseq/3.0.0 \
-  --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --dry-run
+  --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest \
+  --var METADATA_FILE=~/Data/depictio-nfcore/nanoseq/3.0.0/megatest/input/sample_metadata.tsv \
+  --dry-run
 ```

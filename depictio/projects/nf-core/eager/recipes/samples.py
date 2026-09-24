@@ -4,8 +4,10 @@ nf-core/eager 2.x's `--input` TSV is one row per sequencing LANE
 (`Sample_Name, Library_ID, Lane, ...`): every downstream output (BAM,
 DamageProfiler, Qualimap, ...) is published per `Library_ID` after eager merges
 its lanes, so that is the hub the sample filter and every project link key on,
-not `Sample_Name` (which can carry several libraries, not the case in this
-run, but the recipe does not assume it).
+not `Sample_Name` (which can carry several libraries).
+
+The sheet is read from any `DATA_ROOT/input/*.tsv`: eager 2.x does not publish
+its `--input`, so the run's TSV is copied there by hand.
 
 Output schema:
     sample_id : Utf8        Library_ID, the name every output file uses
@@ -23,10 +25,15 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+#: The run's `--input` TSV (one row per lane), copied under DATA_ROOT/input/.
+#: eager 2.x does not publish it, so any TSV there is read; several are
+#: concatenated, which lets a multi-batch project ship one sheet per batch.
+SAMPLESHEET_GLOB = "input/*.tsv"
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
-        path="input/benchmarking_vikingfish.tsv",
+        glob_pattern=SAMPLESHEET_GLOB,
         format="tsv",
         read_kwargs={"infer_schema_length": 0},
     ),

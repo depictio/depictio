@@ -9,22 +9,16 @@ main_dashboard:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Two persistent filter groups. `Sample filters` is sourced on the
-  # samplesheet, the hub every template links from: it reaches the MultiQC
-  # panels on this tab and, on a cohort run, is what narrows the report to one
-  # library. On the validated single-sample run both controls hold one value
-  # and are inert, which is not wrong: the section is where a cohort's sample
-  # and strandedness go. `Fusion scope` is the dashboard's real unit: rnafusion
-  # writes one file per tool per sample and none of those files carries a
-  # sample column, so every fusion collection is keyed on the fusion name and
-  # the fusion filter is what fans out through the template links to every
-  # caller. The splice-junction table is keyed on the junction and reachable
-  # by neither (see template.yaml links).
+  # Two persistent filter groups. `Sample scope` is sourced on the samplesheet,
+  # which links to the MultiQC panels and to every fusion and splicing table on
+  # `sample` (the recipes read it off the file names), so on a cohort run it
+  # narrows every tab to the picked libraries. `Fusion scope` fans a fusion
+  # selection out through the template links to every caller.
   filter_sections:
-  - name: Sample filters
+  - name: Sample scope
     icon: mdi:filter-variant
     color: teal
-    description: Applies to the MultiQC panels through the samplesheet link; inert on a single-sample run
+    description: Which samples every tab is about, through the samplesheet links
     persistent: true
     pin: top
   - name: Fusion scope
@@ -36,37 +30,48 @@ main_dashboard:
   - name: Reference scope
     icon: mdi:filter-variant
     color: gray
-    description: Narrows the reference tables on this tab by partner gene and knowledge base
-    collapsed: true
-  # `Run at a glance` is pinned to the top and `Reference tables` to the bottom,
-  # so the run headline numbers and the rows every tile is computed from trail
-  # each tab. Both are declared here, on the tab no route conditional can remove.
-  # Being pinned and persistent is also what lets the glance strip sit on a tab
-  # named MultiQC without turning it into a second overview page.
+    description: Narrow the pinned consensus table by partner gene and knowledge base
+    persistent: true
+  # `Run at a glance` and `Sample sheet` are pinned to the top and `Reference
+  # tables` to the bottom, so the run size, the samples and the consensus every
+  # tab is filtered by trail each tab. They are declared here, on the tab no
+  # route conditional can remove. The MultiQC sections follow the family order:
+  # general statistics, then reads, alignment and library metrics.
   grid_sections:
-  - name: Alignment at a glance
-    icon: mdi:chart-box-outline
+  - name: General statistics
+    icon: mdi:table
     color: orange
-    description: Where the reads went, before any fusion is called
+    description: One row per sample, the headline numbers of every QC module
   - name: Read quality
     icon: mdi:chart-bell-curve
     color: orange
     description: Base quality and read yield, raw and after trimming
+  - name: Alignment
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Where the reads went, before any fusion is called
   - name: Library metrics
     icon: mdi:ruler
     color: blue
     description: Insert size, duplication and coverage along the transcript
     collapsed: true
   - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The size of the run, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
     icon: mdi:table-account
     color: teal
-    description: The run headline numbers and the samples the run was given
+    description: The samples the run was given, with their declared strandedness
+    collapsed: true
     persistent: true
     pin: top
   - name: Reference tables
     icon: mdi:table
     color: gray
-    description: The rows behind every tile, on every tab
+    description: The fusion-report consensus every tab is filtered by
     collapsed: true
     persistent: true
     pin: bottom
@@ -74,7 +79,7 @@ main_dashboard:
   # ------------------------------------------------------ alignment at a glance
   - component_type: text
     tag: rnaf-qc-intro
-    section: Alignment at a glance
+    section: General statistics
     workflow_tag: rnafusion
     data_collection_tag: multiqc_data
     title: Read this tab before you trust a fusion
@@ -91,7 +96,7 @@ main_dashboard:
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rnaf-qc-general-stats
-    section: Alignment at a glance
+    section: General statistics
     workflow_tag: rnafusion
     data_collection_tag: multiqc_data
     use: multiqc/general_stats
@@ -104,7 +109,7 @@ main_dashboard:
     layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: multiqc
     tag: rnaf-qc-star-alignment
-    section: Alignment at a glance
+    section: Alignment
     workflow_tag: rnafusion
     data_collection_tag: multiqc_data
     selected_module: star
@@ -114,10 +119,10 @@ main_dashboard:
     description: Uniquely mapped, multi-mapped and unmapped reads per sample.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: multiqc
     tag: rnaf-qc-picard-assignment
-    section: Alignment at a glance
+    section: Alignment
     workflow_tag: rnafusion
     data_collection_tag: multiqc_data
     selected_module: picard
@@ -127,7 +132,7 @@ main_dashboard:
     description: Coding, UTR, intronic, intergenic and ribosomal share of the aligned bases.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 0, w: 4, h: 5}
 
   # ---------------------------------------------------------------- read quality
   - component_type: text
@@ -264,7 +269,7 @@ main_dashboard:
     title_size: sm
     title_align: left
     title: Distinct 5' partners
-    layout: {x: 0, y: 0, w: 2, h: 2}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     tag: rnaf-glance-card-callers
     section: Run at a glance
@@ -280,51 +285,65 @@ main_dashboard:
     title_size: sm
     title_align: left
     title: Callers reporting
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: rnaf-glance-card-arriba-support
-    section: Run at a glance
-    workflow_tag: rnafusion
-    data_collection_tag: arriba_fusions
-    use: arriba/fusions
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: support_fraction
-    column_type: float64
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Arriba support fraction
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: rnaf-glance-card-junction-unique
-    section: Run at a glance
-    workflow_tag: rnafusion
-    data_collection_tag: splice_junctions
-    use: ctatsplicing/introns
-    aggregation: average
-    column_name: uniq_fraction
-    column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
-    display: {icon_name: 'mdi:waves', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Uniquely mapped junctions
     layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rnaf-glance-card-samples
+    section: Run at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: samplesheet
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rnaf-glance-card-fusions
+    section: Run at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: fusion_consensus
+    use: fusionreport/fusions
+    aggregation: nunique
+    column_name: fusion
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: tool_support
+    display: {icon_name: 'mdi:dna', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Fusions called
+    layout: {x: 2, y: 0, w: 2, h: 2}
+
+  # --------------------------------------------------------------- sample sheet
+  - component_type: text
+    tag: rnaf-sheet-intro
+    section: Sample sheet
+    workflow_tag: rnafusion
+    data_collection_tag: samplesheet
+    title: What was sequenced
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample, as the run's input sheet declared it. Every fusion and
+      splicing table carries the same sample names, so a row picked here narrows
+      every tab.
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: rnaf-table-samplesheet
-    section: Run at a glance
+    section: Sample sheet
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
     row_selection_enabled: true
     row_selection_column: sample
-    title: Run samplesheet
-    description: The samples the run was given, with the declared library strandedness. The validated run holds one row.
+    title: Sample sheet
+    description: The samples the run was given, with the declared library strandedness. Select rows to narrow every tab.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 2}
+    layout: {x: 0, y: 2, w: 8, h: 4}
 
   # -------------------------------------------------------------- reference tables
   - component_type: text
@@ -338,9 +357,9 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The consensus, evidence, validation and splice-junction rows every panel
-      above is computed from. Filters picked in the left panel narrow these
-      tables too, and a row selected here narrows the tiles.
+      The fusion-report consensus every tab is filtered by, one row per fusion
+      and sample. Pick a fusion here to narrow the evidence, validation and
+      protein-domain tiles on the other tabs.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: rnaf-ref-table-consensus
@@ -355,56 +374,12 @@ main_dashboard:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 4}
-  - component_type: table
-    tag: rnaf-ref-table-evidence
-    section: Reference tables
-    workflow_tag: rnafusion
-    data_collection_tag: caller_evidence
-    use: fusionreport/caller_evidence
-    row_selection_enabled: true
-    row_selection_column: fusion
-    title: Per-caller evidence
-    description: One row per fusion and caller, with the raw evidence string.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
-  - component_type: table
-    tag: rnaf-ref-table-fi
-    section: Reference tables
-    workflow_tag: rnafusion
-    data_collection_tag: fusioninspector_fusions
-    use: fusioninspector/fusions
-    row_selection_enabled: true
-    row_selection_column: fusion
-    title: FusionInspector validation
-    description: The calls re-quantified against a fusion contig reference.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 4}
-  - component_type: table
-    tag: rnaf-ref-table-junctions
-    section: Reference tables
-    workflow_tag: rnafusion
-    data_collection_tag: splice_junctions
-    use: ctatsplicing/introns
-    row_selection_enabled: false
-    title: Splice junctions
-    description: Every junction CTAT-splicing scored, with its read support.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 15, w: 8, h: 7}
 
   # ---------------------------------------------------------------- left panel
-  # `rnaf-filter-sample` (samplesheet.sample) and `rnaf-filter-strandedness`
-  # (samplesheet.strandedness) used to live here. The validated run is a single
-  # sample, so both columns hold exactly one value and neither control could
-  # narrow anything: a filter that cannot change the view is worse than no
-  # filter, because it reads as one that is not working. They are replaced by
-  # the fusion-level controls below, which is the unit this pipeline measures.
   - component_type: interactive
     tag: rnaf-filter-sample
     index: rnaf-sample-filter
-    section: Sample filters
+    section: Sample scope
     group: Sample scope
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
@@ -418,7 +393,7 @@ main_dashboard:
   - component_type: interactive
     tag: rnaf-filter-strandedness
     index: rnaf-strandedness-filter
-    section: Sample filters
+    section: Sample scope
     group: Sample scope
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
@@ -471,9 +446,7 @@ main_dashboard:
     placement: left
     title: Fusion Indication Index
     layout: {x: 0, y: 7, w: 1, h: 3}
-  # Tab-local scope for the reference tables this tab carries. Neither column is
-  # wired anywhere else, so these two controls are this tab's own filters rather
-  # than a second copy of another tab's.
+  # Persistent with the consensus table they narrow, which is pinned on every tab.
   - component_type: interactive
     tag: rnaf-filter-gene5p
     index: rnaf-gene5p-filter
@@ -516,8 +489,7 @@ tabs:
   - name: Consensus scope
     icon: mdi:counter
     color: indigo
-    description: Narrow the consensus table by rank and knowledge-base support
-    collapsed: true
+    description: Narrow the calls by rank, knowledge-base support and partner contigs
   grid_sections:
   - name: Calls at a glance
     icon: mdi:counter
@@ -531,43 +503,23 @@ tabs:
     icon: mdi:relation-many-to-many
     color: cyan
     description: Which contigs the two halves of each call came from
-  - name: Ranked calls
-    icon: mdi:table
-    color: indigo
-    description: The consensus table itself, the hub every other tab is filtered by
   components:
   - component_type: text
     tag: rnaf-calls-intro
     section: Calls at a glance
     workflow_tag: rnafusion
     data_collection_tag: fusion_consensus
-    title: One row per fusion, not per sample
+    title: One row per fusion and sample
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      [fusion-report](https://github.com/Clinical-Genomics/fusion-report) pools
-      every caller into one table and scores each fusion with the Fusion
-      Indication Index, which combines caller agreement with how many knowledge
-      bases already list the pair.
+      [fusion-report](https://github.com/Clinical-Genomics/fusion-report)
+      pools every caller into one table per sample and scores each fusion with
+      the Fusion Indication Index, which combines caller agreement with how
+      many knowledge bases already list the pair.
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: rnaf-calls-card-fusions
-    section: Calls at a glance
-    workflow_tag: rnafusion
-    data_collection_tag: fusion_consensus
-    use: fusionreport/fusions
-    aggregation: nunique
-    column_name: fusion
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: tool_support
-    display: {icon_name: 'mdi:dna', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Fusions called
-    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-calls-card-fii
     section: Calls at a glance
@@ -583,23 +535,24 @@ tabs:
     title_size: sm
     title_align: left
     title: Fusion Indication Index
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-calls-card-agreement
     section: Calls at a glance
     workflow_tag: rnafusion
     data_collection_tag: fusion_consensus
     use: fusionreport/fusions
-    aggregation: average
-    column_name: n_tools
-    column_type: int64
-    secondary_layout: gauge
-    coverage_max: 3
+    aggregation: count
+    column_name: fusion
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: tool_support
     display: {icon_name: 'mdi:set-merge', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Callers per fusion
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    title: Caller agreement
+    description: Calls split by how many of the run's callers reported them.
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-calls-card-databases
     section: Calls at a glance
@@ -616,6 +569,22 @@ tabs:
     title_size: sm
     title_align: left
     title: Knowledge bases
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: rnaf-calls-card-known
+    section: Calls at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: fusion_consensus
+    use: fusionreport/fusions
+    aggregation: nunique
+    column_name: fusion
+    column_type: object
+    filter_expr: "col('n_databases') > 0"
+    display: {icon_name: 'mdi:book-open-variant', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Known fusions
+    description: Fusions at least one knowledge base already lists.
     layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
@@ -629,9 +598,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The UpSet counts the fusions each combination of callers found; the bar on
-      the far left is the set every caller agreed on. The ranked view below puts
-      the same fusions in fusion-report's own order.
+      The UpSet counts the calls each combination of callers found, one set
+      per caller the run executed. The ranked view below puts the same calls
+      in fusion-report's own order.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: rnaf-calls-upset
@@ -641,7 +610,9 @@ tabs:
     data_collection_tag: fusion_consensus
     use: fusionreport/caller_upset
     config:
-      set_columns: [arriba, fusioncatcher, starfusion]
+      # Every 0/1 caller flag the recipe derived from the run, whatever the
+      # callers; the three count columns that can also read 0/1 are excluded.
+      set_columns_pattern: "^(?!(n_databases|n_tools|rank)$)"
       sort_by: cardinality
       sort_order: descending
       min_size: 1
@@ -722,34 +693,6 @@ tabs:
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 8}
 
-  - component_type: text
-    tag: rnaf-calls-table-intro
-    section: Ranked calls
-    workflow_tag: rnafusion
-    data_collection_tag: fusion_consensus
-    title: Pick a fusion here to drive the rest
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Selecting rows narrows the evidence, validation and protein-domain tiles on
-      the other tabs, because the template links every caller collection to this
-      one on the fusion name.
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: rnaf-calls-table
-    section: Ranked calls
-    workflow_tag: rnafusion
-    data_collection_tag: fusion_consensus
-    use: fusionreport/fusions
-    row_selection_enabled: true
-    row_selection_column: fusion
-    title: fusion-report consensus
-    description: Rank, index, knowledge bases and the per-caller flags behind the UpSet.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: interactive
     tag: rnaf-filter-rank
     index: rnaf-rank-range
@@ -808,7 +751,6 @@ tabs:
     icon: mdi:tune
     color: teal
     description: Narrow the evidence rows by caller and read support
-    collapsed: true
   grid_sections:
   - name: Support across callers
     icon: mdi:chart-scatter-plot
@@ -818,6 +760,7 @@ tabs:
     icon: mdi:dna
     color: cyan
     description: Each caller's own evidence, on its own terms
+    collapsed: true
   - name: Caller tables
     icon: mdi:table
     color: gray
@@ -934,21 +877,21 @@ tabs:
       # Pivot the long evidence table so the two split-read callers face each
       # other on one plane; FusionCatcher rides along as the marker size.
       wide = df.pivot(
-          on='caller', index='fusion', values='supporting_reads',
+          on='caller', index=['sample', 'fusion'], values='supporting_reads',
           aggregate_function='sum',
       ).fill_null(0)
       for caller in ('arriba', 'starfusion', 'fusioncatcher'):
           if caller not in wide.columns:
               wide = wide.with_columns(pl.lit(0).alias(caller))
       wide = wide.join(
-          df.group_by('fusion').agg(pl.col('fii').max().alias('fii')),
-          on='fusion', how='left',
+          df.group_by(['sample', 'fusion']).agg(pl.col('fii').max().alias('fii')),
+          on=['sample', 'fusion'], how='left',
       ).with_columns(pl.col('fii').fill_null(0.0))
 
       fig = px.scatter(
           wide.to_pandas(), x='arriba', y='starfusion', color='fii',
           size='fusioncatcher', size_max=28, hover_name='fusion',
-          custom_data=['fusion'], color_continuous_scale='Tealgrn',
+          hover_data=['sample'], custom_data=['fusion'], color_continuous_scale='Tealgrn',
       )
       fig.update_layout(
           xaxis_title='Arriba supporting reads',
@@ -959,7 +902,7 @@ tabs:
     selection_enabled: true
     selection_column: fusion
     title: Arriba against STAR-Fusion
-    description: One point per fusion; size is the FusionCatcher support, colour the Fusion Indication Index. Points off the diagonal are the fusions the two callers weigh differently. Select points to filter the dashboard.
+    description: One point per fusion and sample; size is the FusionCatcher support, colour the Fusion Indication Index. Points off the diagonal are the fusions the two callers weigh differently. Select points to filter the dashboard.
     title_size: h3
     layout: {x: 0, y: 11, w: 8, h: 6}
 
@@ -974,7 +917,7 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The consensus flattens three very different evidence models. Here each
+      The consensus flattens very different evidence models. Here each
       caller keeps its own grouping: [Arriba](https://github.com/suhrig/arriba)
       by confidence class,
       [STAR-Fusion](https://github.com/STAR-Fusion/STAR-Fusion) by splice type,
@@ -1055,6 +998,19 @@ tabs:
     layout: {x: 0, y: 19, w: 8, h: 6}
 
   - component_type: table
+    tag: rnaf-ref-table-evidence
+    section: Caller tables
+    workflow_tag: rnafusion
+    data_collection_tag: caller_evidence
+    use: fusionreport/caller_evidence
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: Per-caller evidence
+    description: One row per fusion and caller, with the raw evidence string.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
     tag: rnaf-ev-table-arriba
     section: Caller tables
     workflow_tag: rnafusion
@@ -1066,7 +1022,7 @@ tabs:
     description: Breakpoints, structural type, reading frame and the retained protein domains.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ev-table-starfusion
     section: Caller tables
@@ -1079,7 +1035,7 @@ tabs:
     description: Junction and spanning counts, splice type and normalised abundance.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 4, w: 8, h: 4}
+    layout: {x: 0, y: 9, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ev-table-fusioncatcher
     section: Caller tables
@@ -1092,7 +1048,7 @@ tabs:
     description: Spanning pairs, unique reads, anchor length and the annotation labels.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 5}
+    layout: {x: 0, y: 13, w: 8, h: 5}
   - component_type: interactive
     tag: rnaf-filter-caller
     index: rnaf-caller-filter
@@ -1165,12 +1121,10 @@ tabs:
     icon: mdi:check-decagram
     color: grape
     description: Narrow the validated calls by predicted protein and abundance
-    collapsed: true
   - name: Splicing scope
     icon: mdi:waves
     color: blue
     description: Narrow the splice junctions by chromosome and support
-    collapsed: true
   grid_sections:
   - name: Validated calls
     icon: mdi:check-decagram
@@ -1180,10 +1134,18 @@ tabs:
     icon: mdi:shape-outline
     color: violet
     description: Which Pfam domains each partner brings to the fusion protein
+  - name: Validated rows
+    icon: mdi:table
+    color: gray
+    description: The FusionInspector rows the tiles above are computed from
+    collapsed: true
+  # A second question (the junction landscape, keyed on the junction, not on
+  # the fusion), so it is folded: collapsed at the foot of the tab.
   - name: Splice junctions
     icon: mdi:waves
     color: blue
     description: The junction landscape CTAT-splicing scored around the calls
+    collapsed: true
   components:
   - component_type: text
     tag: rnaf-fi-intro
@@ -1315,9 +1277,45 @@ tabs:
     selection_enabled: true
     selection_column: fusion
     title: Fusion allelic ratio, both sides
-    description: One point per validated call; size is the re-aligned read support. A point high on both axes has little wild-type competition on either side. Select points to filter the domain track below.
+    description: One point per validated call; size is the re-aligned read support. A point high on both axes has little wild-type competition on either side. Select points to read the call in the record beside it and filter the domain track below.
     title_size: h3
-    layout: {x: 0, y: 10, w: 8, h: 6}
+    layout: {x: 0, y: 10, w: 5, h: 6}
+  - component_type: advanced_viz
+    tag: rnaf-fi-record
+    index: rnaf-fi-record
+    section: Validated calls
+    workflow_tag: rnafusion
+    data_collection_tag: fusioninspector_fusions
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: fusion
+      title_col: fusion
+      selection_source: any
+      linked_component: rnaf-fi-far-scatter
+      sections:
+        Fusion: [fusion, sample, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, splice_type]
+        Support: [junction_reads, spanning_frags, supporting_reads, ffpm, junction_fraction]
+        Allelic ratio: [far_left, far_right, counter_fusion_left, counter_fusion_right, large_anchor_support]
+        Protein: [prot_fusion_type, cds_left_id, cds_right_id, n_domains_5p, n_domains_3p]
+    title: Validated call record
+    description: The call picked on the scatter or in the validated rows, with its breakpoints, read support and predicted protein; the sample field says which library it was called in.
+    title_size: h3
+    layout: {x: 5, y: 10, w: 3, h: 6}
+
+  - component_type: table
+    tag: rnaf-ref-table-fi
+    section: Validated rows
+    workflow_tag: rnafusion
+    data_collection_tag: fusioninspector_fusions
+    use: fusioninspector/fusions
+    row_selection_enabled: true
+    row_selection_column: fusion
+    title: FusionInspector validation
+    description: The calls re-quantified against a fusion contig reference.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 4}
 
   - component_type: text
     tag: rnaf-fi-domain-intro
@@ -1392,10 +1390,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      [CTAT-splicing](https://github.com/TrinityCTAT/CTAT-SPLICING) scores every
-      junction in the genes the callers touched. The landscape is keyed on the
-      junction, not on the fusion, so it is not narrowed by the fusion filter in
-      the left panel.
+      [CTAT-splicing](https://github.com/TrinityCTAT/CTAT-SPLICING) scores
+      every junction in the genes the callers touched. The landscape is keyed
+      on the junction, so the fusion filter does not reach it; the sample
+      filter does.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: rnaf-splice-card-junctions
@@ -1495,18 +1493,19 @@ tabs:
     description: Each arc is one splice junction, drawn from donor to acceptor and thickened by the reads crossing it. The locus picker opens on the busiest cluster; junctions under two reads are hidden.
     title_size: h3
     layout: {x: 0, y: 10, w: 8, h: 7}
-  - component_type: figure
-    tag: rnaf-splice-gene-bar
+  - component_type: table
+    tag: rnaf-ref-table-junctions
     section: Splice junctions
     workflow_tag: rnafusion
     data_collection_tag: splice_junctions
     use: ctatsplicing/introns
-    visu_type: bar
-    dict_kwargs: {x: gene, y: uniq_mapped, color: strand}
-    title: Junction support per gene
-    description: Uniquely mapping reads summed per gene, split by strand.
+    row_selection_enabled: true
+    row_selection_column: gene
+    title: Splice junctions
+    description: Every junction CTAT-splicing scored, with its read support; select rows to narrow the Manhattan and the junction arcs to those genes.
     title_size: h3
-    layout: {x: 0, y: 17, w: 8, h: 5}
+    title_align: left
+    layout: {x: 0, y: 17, w: 8, h: 6}
   - component_type: interactive
     tag: rnaf-filter-prot
     index: rnaf-prot-filter

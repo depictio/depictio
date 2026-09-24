@@ -540,3 +540,27 @@ template: it takes down every advanced-viz tile in the repo equally.
 - SK-D6 (FreeBayes absent from `vcf_variants`) and SK-D9 (`md` and `recal` mosdepth lanes
   identical) still hold and show in the locus section. `cnv_profile` stays unbound: the run
   publishes no somatic profile.
+
+
+## Wave 3 (2026-09-23)
+
+The template was reworked from a megatest dashboard into a template: nothing in its texts, filters
+or defaults depends on the validation run any more.
+
+| Item | Change |
+|---|---|
+| Sample hub | built from `csv/recalibrated.csv`, `csv/markduplicates*.csv` and `csv/variantcalled.csv` (all optional, first present wins); `status_label` and `n_callers`; no name parsing, no read-depth column, no samplesheet collection (the shipped `input/` copy is deleted) |
+| `GENOME` variable | default `hg38`; drives the genome tracks' `assembly` and the annotated VCF collection. The calls track `annotation` stays `hg38` (Literal in the viz model, see open issues) |
+| MultiQC link | `sample_mapping` resolver, the 40-name `mappings:` table dropped |
+| Optional collections | all `vcftools_*`, all `snpeff_*`, `mosdepth_xy_sex_check`; `callset_qc` falls back to the raw calls when the annotated VCFs are absent; `snpeff_oncoplot` removed with its tile |
+| mosdepth | one pass per sample (recal, then md, then sorted) in the regions, summary, sex-check and targets recipes; the stage filter and the stage link are gone |
+| bcftools stats sections | QUAL block no longer ingested; the block picker opens on depth |
+| Locus section | navigator stays genome-wide, generic documented default region `chr1:1,000,000-2,000,000`; region reaches the tracks only; the VCF file track is kept beside the depth and calls tracks; the duplicate genome track on Caller concordance removed |
+| Cards | Ts/Tv cards and filter `filter_expr: col('ts_tv') > 0`; PASS and coding cards moved to sums or filtered counts; coverage cards scoped with `filter_expr` (target scope, under-20x targets) |
+| Record card | no default record; moved to a `Variant detail` section at the end of the Consequences tab |
+| Redundancies | pinned Reference tables, MultiQC per-contig and duplication/mapping panels on Cohort QC, the caller dot plot, the impact bar figure, the oncoplot |
+| Texts | all intros rewritten to two sentences with no run values; `forbidden_terms` in `megatest.yaml` |
+
+Open: the calls-track gene lane is fixed to `hg38` until the viz model accepts a free assembly
+string there; the upset and heatmap collections are fixed and do not follow the pickers; somatic
+collections still carry no tiles.

@@ -143,11 +143,11 @@ workflows:
               "sample_id": "Sample identifier, matching the columns of the abundance matrices"
               "group": "The sheet's most factor-like column (fewest levels >= 2), the default grouping"
               "size_factor": "DESeq2 library-size normalisation factor for this sample"
-              "factor_2": "The sheet's second most factor-like column, aliased so a shipped filter can bind to it"
+              "factor_2": "The sheet's second most factor-like column, aliased so a shipped filter can bind to it; null when the sheet has no such factor"
               "factor_2_name": "Name of the sheet column factor_2 was aliased from"
               "factor_3": "The sheet's third most factor-like column"
               "factor_3_name": "Name of the sheet column factor_3 was aliased from"
-              "factor_4": "The sheet's fourth most factor-like column, usually the batch or block"
+              "factor_4": "The sheet's fourth most factor-like column, null when the sheet has no such factor"
               "factor_4_name": "Name of the sheet column factor_4 was aliased from"
 
       # ----------------------------------------------------------------
@@ -392,6 +392,7 @@ workflows:
               "size": "Genes of the set found in the ranked list"
               "es": "Enrichment score"
               "nes": "Enrichment score normalised for set size, the value to compare across sets"
+              "abs_nes": "Magnitude of the normalised enrichment score, whichever pole the set came up at"
               "nom_pvalue": "Nominal p-value"
               "fdr_qvalue": "False discovery rate across the sets of this report"
               "fwer_pvalue": "Family-wise error rate"

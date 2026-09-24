@@ -5,10 +5,18 @@
 #
 # Tested against nf-core/methylseq AWS megatest results:
 #   s3://nf-core-awsmegatests/methylseq/results-93bc5811603c287c766a0ff7e03b5b41f4483895/bismark/
-#   (E-MTAB-6511 subset: two human ESC lines, MShef11 under three low-oxygen
-#    replicates and MShef4 across a bulk sample and three passage/differentiation
-#    conditions (J1/J2/J3). See megatest.yaml.)
+#   (seven paired-end libraries; see megatest.yaml and VALIDATION_REPORT.md)
 # ============================================================================
+#
+# DESIGN AND GENOME ARE VARIABLES.
+# The pipeline samplesheet carries no design column, so the design is an
+# optional table declared through METADATA_FILE (sample id in a column named
+# `sample` or in the first column, every other column a factor), the ampliseq
+# convention; GROUP_COL defaults to its first factor column and is what the
+# dashboards colour and filter by. Nothing is parsed out of sample names. The
+# group comparison tests GROUP_COL when it has two levels, else the first
+# two-level factor; without a design table it is pruned. GENOME (default
+# hg38) names the assembly of the locus tracks.
 #
 # SCOPE: BISMARK ONLY.
 # methylseq publishes one route per aligner (`bismark/`, `bismark_hisat/`,
@@ -48,15 +56,40 @@
 template:
   template_id: "nf-core/methylseq/2.3.0"
   description: "nf-core/methylseq template: Bismark bisulfite alignment, deduplication and per-context methylation extraction (with M-bias curves), on top of the reprocessed MultiQC report and Qualimap coverage."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing methylseq Bismark-route output (bismark/, fastqc/, trimgalore/, qualimap/, pipeline_info/, input/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the
-  # samplesheet is part of the run's own input/ output.
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample id in a column named sample or in the first column, one column per factor. Enables the design filters and colouring and the window group comparison (on GROUP_COL, else the first two-level factor)."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table sample-id column. Auto-detected as the first column."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group, colour and filter by. Auto-detected as the first factor column of METADATA_FILE. The window group comparison tests it when it has exactly two levels."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "GENOME"
+      description: "UCSC assembly name of the reference the run aligned to, used by the locus tracks' gene annotation and region search."
+      required: false
+      default: "hg38"
+  # Variables for the BUNDLED reference dataset: the megatest run with its
+  # design table vendored in input/ (built once from the samplesheet; see
+  # VALIDATION_REPORT.md) and the assembly the megatest aligned to.
   reference:
-    vars: {}
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "cell_line"
+      GROUP_COL_DISPLAY: "Cell line"
+      GENOME: "hg38"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -72,6 +105,15 @@ template:
         key_patterns: ["*"]
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # No design table: no factor to filter or colour by and no two groups to
+    # compare, so the design collection and the comparison are pruned (their
+    # tiles and the comparison's region link go with them).
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata", "bismark_window_group_compare"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -96,13 +138,36 @@ workflows:
         - "{DATA_ROOT}"
     data_collections:
       # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the sample id.
+      # Pruned when METADATA_FILE is absent. The hub below joins it, so every
+      # design filter and colour reads the hub, never this table directly.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample identifier, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
       # Hub: one row per sample. Every Bismark output file already names
       # itself after the samplesheet `sample` column directly (no _T<n>
-      # technical-replicate suffix), so the recipe only adds the cell-line /
-      # condition split this megatest's SRA/GEO-derived names carry.
+      # technical-replicate suffix), so the recipe needs no id reconstruction;
+      # it joins the design table's factors when there is one.
       # ----------------------------------------------------------------
       - data_collection_tag: "samples"
-        description: "Per-sample hub: the sample name every Bismark output file uses, split into cell line, treatment and replicate"
+        description: "Per-sample hub: the sample name every Bismark output file uses, its FASTQ pair and the run's design factors"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -113,13 +178,6 @@ workflows:
             format: "TSV"
             columns_description:
               "sample_id": "The sample name every Bismark output file uses"
-              "srr_accession": "SRA run accession"
-              "gsm_accession": "GEO sample accession"
-              "cell_line": "hESC line (MShef11 or MShef4 in this megatest)"
-              "condition": "Everything after the cell line in the sample name (e.g. low_oxygen_Q1, bulk, J1)"
-              "treatment": "The condition without its replicate token (low_oxygen, bulk, J in this megatest)"
-              "replicate": "Replicate number inside the treatment; a condition with no replicate token is its own first"
-              "group": "The two-level factor the cohort compares, which the window comparison tests along (here the cell line)"
               "fastq_1": "Read 1 FASTQ path/URL from the samplesheet"
               "fastq_2": "Read 2 FASTQ path/URL from the samplesheet"
 
@@ -524,9 +582,6 @@ workflows:
               "dim_1": "First principal component"
               "dim_2": "Second principal component"
               "dim_3": "Third principal component"
-              "cell_line": "hESC line, carried from the sample hub"
-              "treatment": "Treatment, carried from the sample hub"
-              "group": "The two-level factor the cohort compares"
 
       - data_collection_tag: "bismark_window_correlation"
         description: "Pairwise Pearson correlation of the libraries over their shared 10 kb windows, square"
@@ -556,14 +611,22 @@ workflows:
               "chromosome": "Contig the window sits on"
               "window_variance": "Variance of the window's methylation across the libraries"
 
+      # Optional: a run without a two-level design factor (or with fewer than
+      # two libraries a side) has no comparison, and the recipe says so; the
+      # collection is then skipped and its tiles pruned instead of failing the
+      # ingestion. It re-bins the bedGraphs itself so every eligible window is
+      # tested, not the drawing stride of bismark_binned_methylation.
       - data_collection_tag: "bismark_window_group_compare"
-        description: "Every 10 kb window tested between the two levels of the run's design factor, arcsine-transformed, BH-corrected"
+        optional: true
+        description: "Every eligible 10 kb window tested between the two levels of GROUP_COL (else the run's first two-level design factor), arcsine-transformed, BH-corrected over all tested windows"
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
             recipe: "bismark/window_group_compare.py"
+            params:
+              group_col: "{GROUP_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -912,7 +975,7 @@ links:
     description: "Filter the window-correlation matrix rows by the samples picked in the left panel"
     enabled: true
 
-  # Region link (the locus section of the Global methylome tab). The navigator
+  # Region link (the locus section of the Group comparison tab). The navigator
   # genome_view on the group-comparison windows emits a chromosome + position
   # filter pair on its own columns; this rewrites it onto the binned windows so
   # the per-library lanes under the navigator (and the glance card that reads

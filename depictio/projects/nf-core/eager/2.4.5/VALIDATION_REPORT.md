@@ -452,10 +452,11 @@ tools' reports, so those stay pipeline-local, as in every other nf-core template
   comparison would have a single column. `bcftools/stats_summary` already carries the
   `caller` column a multi-caller run would need, so adding it later is a dashboard change
   only.
-- `damageprofiler/authenticity`'s `fraction_under_70bp` uses a fixed 70 bp threshold
-  (`SHORT_FRAGMENT_BP`). It is the conventional ancient-DNA cutoff but it is a constant in
-  the recipe, not a template variable; a study working on a different fragment regime would
-  want it configurable.
+- `damageprofiler/authenticity`'s `fraction_under_70bp` now counts fragments under the
+  template variable `SHORT_FRAGMENT_BP` (default 70, passed as the recipe's
+  `short_fragment_bp` param; the recipe keeps 70 as fallback). The column name keeps
+  `70bp` for schema stability, so with a non-default cut-off the name no longer matches
+  the value; the column description and the tab texts name the variable.
 - The `Contamination and sex` and `Metagenomic screening` optional collections have never
   been exercised against a run that enables them. Their globs come from the eager output
   documentation, not from data, so the first real run of either branch may need the scan
@@ -537,3 +538,84 @@ default region both locus tiles echo `NC_044048.1:1-30,875,876` (the MAPQ track 
 19 windows x 2 libraries); typing `NC_044056.1:5,000,000-20,000,000` in the navigator's
 locus field moved the navigator and the MAPQ track (18 rows). Header chips are visible
 without hover on the scatter tiles and the parallel coordinates.
+
+## Wave 3 (2026-09-23): family rework, 8 to 6 tabs
+
+Input: `_reviews_wave3/review-longread-adna.md` and the eager rows of
+`consolidated-review.md`. Applied in the order genericity, blockers, redundancies,
+conventions.
+
+### What changed
+
+- **Tabs 8 to 6.** MultiQC (first, maintainer decision), Run and library hub, Reads and
+  read fate, Mapping/endogenous/duplication, Authentication, Coverage/sex/genotyping.
+  `Metagenomic screening` and `Contamination and sex` are gone as tabs: their per-contig
+  depth moved to Coverage, the gate paragraphs became two-sentence notes, and one table
+  tile now binds each optional collection (`maltextract_heatmap`, `kraken_report` on
+  Mapping; `nuclear_contamination`, `mtnucratio` on Authentication; `sexdeterrmine` on
+  Coverage). The import drops those tiles when the collection is absent.
+- **Genericity.** No sample id, organism, contig or run number remains in any text
+  (subtitle, hub intros, gates, fragment-length and locus intros, complexity-curve and
+  contig-scatter descriptions). `default_region` is kept and documented in one sentence
+  of `ea-cov-intro`. `forbidden_terms` added to `megatest.yaml`. New variable
+  `SHORT_FRAGMENT_BP` (default 70) names the cut-off in texts and sets it in the
+  `damageprofiler/authenticity` recipe (params channel). The two recipes reading
+  the samplesheet (`samples.py`, `lane_stats.py`) now glob `input/*.tsv` instead of the
+  megatest file name.
+- **Blockers.** QC thresholds: new links `qualimap_bamqc_genome_results -> samples` and
+  `endorspy_endogenous -> samples` (`sample -> sample_id`), so a floor reaches every tab
+  through the hub (multi-hop resolution, `filter_links.MAX_LINK_HOPS = 3`).
+  `ea-meta-card-reads` / `-mapped` (both-stage double count) removed with their tab; the
+  flagstat card kept (`ea-map-card-input`) is scoped by
+  `filter_expr: col('stage') == 'pre-filter'`. `ea-sex-card-length` removed.
+  `ea-hub-card-reads` (attrition printed collapsed pairs as "retained") became the glance
+  card `ea-glance-card-reads` with `attrition_cols: [retained_reads]`. top_n on
+  max/nunique cards: `ea-sex-card-top`, `ea-cov-card-peak` now `box_plot`;
+  `ea-cov-card-fraction` is `average` over `min_coverage == 1` with `box_plot`;
+  `ea-dup-card-distinct` (preseq ceiling) replaced by `ea-dup-card-examined` (Picard
+  reads examined, attrition to unique reads).
+- **Redundancies.** Misincorporation x4 to profile + table (`ea-dmg-fig-line`,
+  `ea-dmg-mqc-5p/-3p` removed). All MultiQC twins removed (`ea-qc-ar-retained`,
+  `ea-fate-mqc-*`, `ea-map-mqc-*`, `ea-dup-mqc-picard`, `ea-complex-mqc`, `ea-len-mqc-*`,
+  `ea-dist-mqc-*`, `ea-meta-mqc-gc`); the bcftools panels and FastQC duplication levels
+  moved to the MultiQC tab. `Lane yield` moved from the hub to Reads and read fate;
+  hub collapse/length/retained cards and `ea-fate-fig-collapsed` removed.
+  `ea-endo-fig-bar`, `ea-endo-card-offtarget`, `ea-geno-fig-snps`, `ea-geno-fig-tstv`
+  removed (the Ts/Tv expectation moved into the card description). `Glance scope` and
+  `ea-mq-filter-damage` removed.
+- **Conventions.** Glance strip = run size and design (libraries, samples, lanes, reads
+  sequenced), pinned persistent, never repeated as a tab card. Filter sections renamed
+  `<X> scope`, each tab has a local one (MultiQC: report sample; no chromosome filter on
+  the locus tab). Each tab ends with a collapsed tables section. Library record_card
+  (no default record) on the hub, driven by the pooled table's row selection. Every text
+  at most 2 sentences.
+
+### Verified (offline)
+
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
+  depictio/tests/models/test_template_conventions.py depictio/tests/catalog -q -k eager -rxX
+# 14 passed, 2 xpassed (top_n_only_under_sum, text_intro_length): eager is clean on
+# every rule, including warn-only no_mean_of_percentages
+uv run pytest depictio/tests/recipes -q -k eager       # 5 passed
+uv run python -m depictio.cli run --template nf-core/eager/2.4.5 \
+  --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run   # 8/8 steps
+```
+
+`samples.py` re-run on the megatest data through `resolve_sources`: 2 libraries, same
+output as before the glob change.
+
+### Still open
+
+- **Not live-checked.** No ingest or render in this wave (stack owned by the main
+  session): the Report scope filter on `multiqc_data.sample`, the record_card selection
+  from the pooled table, the new hub back-links and the optional-table hiding need a live
+  pass. `.db_seeds` must be regenerated by the main session.
+- **`SHORT_FRAGMENT_BP` only relabels.** Recipes take no template parameters, so the
+  `damageprofiler/authenticity` constant (70) is still the one computing
+  `fraction_under_70bp`.
+- **Optional tables have raw columns.** The five optional collections are scanned with
+  `infer_schema_length: 0` and no catalog recipe, so their tables show the tool's own
+  headers as text; a catalog module per tool would give them typed columns and cards.
+- **Navigator overview with an mtDNA contig.** On the whole-reference fallback the y scale
+  spans the mitochondrion and flattens the nuclear lanes (EA-D13), unchanged.

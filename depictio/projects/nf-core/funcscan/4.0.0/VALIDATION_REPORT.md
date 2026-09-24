@@ -409,3 +409,68 @@ Typing the same name in the locus field is refused ("Not a locus on this collect
 - FS-D17: the `genome_view` locus field cannot parse assembler contig names that contain
   dashes (`...-NODE-16-length-49668-...`); the chromosome picker works. Viewer-side, outside
   this partition.
+
+# Wave 3 (family review, metagenomics)
+
+## What changed
+
+- **Landing strip.** `Screening at a glance` (8 cards, mixed sum / median / average /
+  max, a `coverage_max: 1500` gauge) became `Run at a glance`: 4 cards (ARG hits, AMP
+  candidates, BGC regions, CAZyme genes), all `sum` + `top_n` by sample, persistent and
+  pinned to the top of every tab. The three wrong-looking cards are gone:
+  `fs-card-arg-genes` (a sum of per-sample distinct genes; the true distinct count stays on
+  Resistome as `arg-card-genes`, nunique `gene_symbol`), `fs-card-amp-hc` (a sum beside a
+  median of its superset) and `fs-card-bgc-classes` (a max with a per-sample top_n).
+  `fs-card-cazy-fam` and `fs-intro` went with them.
+- **Redundancy.** Dropped `fs-fig-arg-vs-cazyme` (kept `fs-av-screen-scatter`, now w 8),
+  the pinned `Reference tables` section (`fs-ref-arg/-amp/-bgc/-cazyme`, each repeating a
+  tab table), `bgc-table-regions` (kept `bgc-table-track`), `arg-av-heatmap` (kept the dot
+  plot and the class heatmap). Each screen tab's first card no longer repeats the glance
+  strip: `arg-card-hits` -> `arg-card-classes` (nunique drug class), `amp-card-count` ->
+  `amp-card-contigs`, `bgc-card-regions` -> `bgc-card-classes`, `caz-card-genes` ->
+  `caz-card-contigs`.
+- **Run report.** Kept `run-versions-intro`, `run-fig-tools`, `run-table-versions` and the
+  `Version scope` filters; dropped the 4 cards, `run-intro` and `Process scope`.
+- **Cards.** `arg-card-coverage` (mean of a percentage, `threshold_warn` on the passing
+  side) -> `arg-card-close`, sum of hits at 90 % identity and 80 % coverage or more, by
+  tool. `arg-card-identity` is scoped to aligned hits with `filter_expr`.
+  `amp-card-prob` reads `prob_max` instead of `prob_ampir`; `amp-card-confidence` (mean
+  probability against an arbitrary 0.8) -> `amp-card-agreement`, candidates called by two
+  predictors or more. `caz-card-substrates` is titled "Genes with a substrate call" and
+  filters out `unassigned`. Per-row measures (`aa_length`, `cds_count`) use `box_plot`.
+- **Filters.** Only the Sample MultiSelect is persistent; the per-screen count sliders
+  (ARG hits, AMP candidates, BGC regions, CAZyme genes) sit in an open, landing-only
+  `Sample thresholds` section. Tab-local threshold sections are no longer collapsed.
+  `advanced_viz_controls: header` on every tab.
+- **Genericity.** Removed "gut metagenome", "155 regions", "119 gene rows", "In this run
+  ampir carried the screen", "dbCAN-sub ... its private set is the largest", the megatest
+  mention in `ann-intro`; every intro is at most 2 sentences. `megatest.yaml` gains a
+  `forbidden_terms:` list (the 19 sample ids, MGnify, megatest, gut, run counts).
+- **Recipes.** `funcscan/contig_annotation.py` parsed only the dashed, renamed SPAdes names
+  (`...-NODE-16-length-49668-cov-9.81`): the nf-core `test` profile's plain SPAdes names
+  (`NODE_1_length_248_cov_0.98`) gave null lengths everywhere. It now reads
+  `length[_-]` / `cov[_-]` and MEGAHIT `len=` / `multi=`, and keeps a null (contig in the
+  table, off the length axis) for any other naming. `dbcan/overview.py`,
+  `dbcan/tool_overlap.py` and `dbcan/substrates.py` now take the sample from the
+  per-sample directory through `RecipeSource.source_path` (the contig prefix is the
+  fallback): on the `test` profile they previously collapsed both samples into one `run`
+  pseudo-sample.
+
+## Verified
+
+- `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py depictio/tests/models/test_template_conventions.py -k funcscan -rxX`: all pass, the three funcscan
+  KNOWN_VIOLATIONS entries xpass (pinned table, top_n aggregation, warn side); no
+  percentage-mean warning left.
+- `uv run pytest depictio/tests/recipes/test_funcscan_screens.py`: 7 passed.
+- Recipes on local data (`execute_recipe`): megatest and nf-core `test` profile.
+  `contig_annotation` has no null length on either; dbCAN recipes give `sample_1`,
+  `sample_2` on `test` and the 19 sample ids on the megatest.
+- `depictio-cli run --dry-run` on both data roots: 8/8 steps.
+
+## Still open
+
+- Not checked live (no ingest in this wave): tile heights after the removals, the new
+  `filter_expr` cards rendering, and the glance strip on every tab.
+- A `record_card` for an AMP candidate or a BGC region (review suggestion) is not added.
+- Hardcoded `custom_color` / `icon_color` values on every tile predate this wave.
+- The locus field still refuses contig names with dashes (platform, P28).

@@ -1,7 +1,7 @@
 # nf-core/cutandrun 3.1: Depictio dashboards
 
 This template turns the output of [nf-core/cutandrun](https://nf-co.re/cutandrun) 3.1 into a
-single five-tab Depictio dashboard. cutandrun trims and aligns CUT&RUN libraries against both
+single six-tab Depictio dashboard. cutandrun trims and aligns CUT&RUN libraries against both
 the target genome and a spike-in, converts the alignments to fragment coverage, calls
 enriched regions with SEACR against the IgG control (and, optionally, with MACS2 over the
 same fragments), and merges the calls of each target into a consensus set. The dashboard
@@ -25,19 +25,22 @@ H3K27me3 in two replicates each, plus two IgG controls.
 
 ## How the dashboard is built
 
-- **One funnel, five tabs.** MultiQC, then Signal, then Peak calls, then Caller agreement,
-  then Consensus and reproducibility. Each tab answers the question the previous one raises:
-  are the libraries clean and is the target enriched over its control, what the signal
-  underneath that looks like, what did each caller call, how much of that the two callers
-  share, and how much of it both replicates of a target support.
-- **Controls where they are the analysis.** The locus navigator, the fragment track's view
-  switch, the fingerprint scatter, the PCA and the caller dot plot draw their encoding
-  controls as chips under the title (`controls_placement: header`); every other tile keeps
-  them in the settings popover. Every threshold `RangeSlider` draws the column histogram above
+- **One funnel, six tabs.** MultiQC, then Signal, then Peaks, then Caller agreement, then
+  Locus, then Consensus. Each tab answers the question the previous one raises: are the
+  libraries clean and is the target enriched over its control, what the signal underneath
+  that looks like, what did each caller call, how much of that the two callers share, what
+  the calls look like on one region, and how much of it both replicates of a target support.
+- **Genome build is a variable.** `GENOME` (default `hg38`) feeds the `assembly` of every
+  genome track on the Locus tab; pass `--var GENOME=mm10` (or any other build) for a run
+  aligned elsewhere. The gene lane (`annotation`) is still fixed to `hg38`, because that
+  field only takes a literal build name.
+- **Controls in the tile header.** Every advanced visualisation draws its encoding controls
+  as chips under the title (`controls_placement: header`) rather than behind the settings
+  icon. Every threshold `RangeSlider` draws the column histogram above
   it (`show_histogram: true`).
 - **The sample hub is the hub.** `samples` is one row per library with its target, its
   replicate number and its role (target or control). A persistent `Sample filters` section
-  (sample, target, replicate, role) is pinned to the top of every tab, and the template's
+  (sample, target, replicate, role; replicate and role are MultiSelects) is pinned to the top of every tab, and the template's
   links fan a pick there out to the MultiQC panels, both peak collections, the peak summary,
   the fragment-length tables, the nucleosome classes, the spike-in factors, the signal budget
   and the caller comparison at once. `replicate` is the second real samplesheet factor and is
@@ -46,26 +49,24 @@ H3K27me3 in two replicates each, plus two IgG controls.
 - **Every tab carries filters on two levels.** The pinned persistent `Sample filters` section
   above, plus a tab-local, non-persistent section on that tab's own columns: `Alignment scope`
   on the MultiQC tab (target alignment rate, spike-in scale factor), `Signal scope` on Signal
-  (nucleosome class, fragment length, coverage concentration), `Peak scope` on Peak calls
-  (region width, coverage per base, contig), `Caller scope` on Caller agreement (caller, share
-  reproduced) and `Consensus scope` on Consensus (replicate support, interval width, member
+  (nucleosome class, fragment length, coverage concentration), `Peak scope` on Peaks (region
+  width, coverage per base, contig), `Caller scope` on Caller agreement (caller, share
+  reproduced), `Locus scope` on Locus (SEACR coverage per base, MACS2 q-value, replicate
+  support) and `Consensus scope` on Consensus (replicate support, interval width, member
   peaks).
-- **Every tab opens with four cards.** A `w: 2` glance strip across the full width, mostly
-  multi-metric (donut, box plot, top-n, gauge). On the MultiQC tab that strip lives in the
-  pinned `Sample sheet` section rather than in a grid section of its own, because a MultiQC
-  tab holds MultiQC panels only and a pinned persistent section is the one exemption; it rides
-  every other tab too, open rather than collapsed, so the four cards are the first row
-  wherever the reader lands.
-- **Pinned sample sheet, tables and thresholds.** The glance strip and the sample hub sit in
-  an open `Sample sheet` section pinned to the top of every tab, and the per-sample SEACR
+- **A glance strip on every tab.** `Cohort at a glance` is a pinned persistent four-card
+  strip, open on every tab: samples by role (the donut that makes the IgG controls visible),
+  samples by target, peaks called (top 3 by sample) and FRiP (box plot). A pinned persistent
+  section is the one exemption that lets non-MultiQC tiles ride the MultiQC tab.
+- **Pinned sample sheet, tables and thresholds.** The sample hub sits in a collapsed `Sample
+  sheet` section pinned under the glance strip, and the per-sample SEACR
   summary in a collapsed `Reference tables` section pinned to the bottom, next to a collapsed
   `QC thresholds` section holding the yield and coverage floors.
-- **Selection, both ways.** The total-against-maximum-coverage scatter on the Peak calls tab
-  carries `selection_enabled` on `peak_id` and both peak tables carry
-  `row_selection_enabled` on the same column; the caller scatter on the Caller agreement tab
+- **Selection, both ways.** Both peak tables on the Peaks tab carry `row_selection_enabled`
+  on `peak_id`, and the sample hub table does the same on `sample_id`; the caller scatter on the Caller agreement tab
   and the comparison table do the same on `sample`. Lassoing narrows the tables, ticking rows
   narrows the panels.
-- **Catalog provenance, on every bindable tile.** All 75 non-text, non-filter tiles carry a
+- **Catalog provenance, on every bindable tile.** Every non-text, non-filter tile carries a
   `use:` catalog reference, so the tile chrome always says where the panel comes from:
   `seacr/*` for the SEACR panels and the nucleosome classes, `macs2/*` for the MACS2
   comparison panels, `deeptools/*` for the three tables on the Signal tab, `bowtie2/*` for the
@@ -84,9 +85,7 @@ H3K27me3 in two replicates each, plus two IgG controls.
 
 The main tab, and the one reading the reprocessed report.
 
-`Sample sheet`, pinned open at the top of every tab, opens on the dashboard's glance strip
-over the sample hub: samples by role (the donut that makes the IgG controls visible), samples
-by target, the libraries behind them and the replicate depth, then the hub table itself.
+`Cohort at a glance` and the collapsed `Sample sheet` open the tab, as they open every tab.
 
 `Run at a glance` opens the report itself with the general statistics table: one row per
 sample, pooling the FastQC, Trim Galore, bowtie2, samtools and MACS2 headline numbers, with a
@@ -107,6 +106,7 @@ narrows the report rather than only the Signal tab.
 quality metrics, which separate an enriched target from a flat IgG control, then the sample
 PCA and the sample correlation matrix. Those four panels are pictures MultiQC redraws from
 its own parquet; the three tables nf-core publishes behind them are read on the Signal tab.
+MultiQC panels that only restated a tile on another tab were removed.
 
 ---
 
@@ -118,126 +118,94 @@ What the run published as a table beside the report. None of it reaches a MultiQ
 fragment histogram, the Bowtie 2 logs and the three deepTools tables are files of their own.
 
 `Signal at a glance` opens the tab with four numbers about the material itself, before any
-peak is called: the fragment-length spread, the fragments measured, the spike-in scale factor
-and the target alignment rate.
+peak is called: the per-sample median fragment length (read-weighted over the fragment
+histogram, `seacr/fragment_classes.sample_median_length`), the fragments measured, the
+spike-in scale factor and the target alignment rate.
 
 `Fragment length structure` is the nucleosomal ladder: a code-mode distribution figure and its
-cumulative twin. For H3K4me3 the ladder should show a clear mononucleosome peak; a flat
+cumulative twin, with the sub-nucleosomal (0 to 120 bp) and mononucleosomal (120 to 250 bp)
+windows shaded and labelled. A sharp mark shows a clear mononucleosome peak; a flat
 distribution means the digestion did not work.
 
 `Nucleosome classes` bins that same histogram at the conventional MNase boundaries:
 sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to 450 bp and
-multi-nucleosomal above it. The donut is the composition over the libraries in view, the
-stacked bar is the same split per sample, and `mono_to_sub` is the sharp-against-broad
-contrast as one number per sample. On this megatest H3K27me3_R1 is the most nucleosome-heavy
-library at a ratio of 8.5 and H3K4me3_R2 the least at 3.1, which is the direction a broad mark
-against a sharp one should give.
-
-`Fragment pile-up around the peaks` is the deepTools heatmap of a CUT&RUN run rebuilt from the
-fragment BEDs the pipeline publishes (`*.frags.cut.bed`), since no bigWig or computeMatrix
-output is mirrored. The new catalog output `seacr/frags_profile` keeps, per sample, the 500
-strongest SEACR regions whose 6 kb windows do not overlap, and counts the fragments over
-every 100 bp bin of each window, per million fragments of the sample. The `signal_matrix` tile
-draws regions down and offsets across, one panel per sample with the mean profile on top; a
-code-mode line figure puts the four mean profiles on one axis. On this megatest H3K4me3
-peaks at about 140 (R1) and 59 (R2) fragments per million at the summit against 2 at 3 kb,
-while H3K27me3 only rises from about 4 to 15 (R1): sharp against broad, from the fragments
-themselves. It sits on this tab rather than under
-the locus navigator on purpose: the navigator's region reaches `seacr_frags_profile` through
-its region link, which would narrow the matrix to the handful of regions on screen.
+multi-nucleosomal above it. The cards give the class median length and `mono_to_sub`, the
+sharp-against-broad contrast as one number per sample (median, box plot), and the stacked
+bar is the class split per sample.
 
 `Spike-in normalisation` is what the coverage was divided by. Every library is aligned twice
 and the carrier depth of the second alignment says how much material it really held; the
 pipeline turns that into `normalisation_c / spikein_aligned_pairs` and applies it to the
 bedGraph every caller reads. The run publishes no scale-factor table, so these rows are
-recomputed from the two Bowtie 2 logs. The spread is large and meaningful: the IgG controls
-carry 3 % carrier DNA and get a factor near 0.16, while H3K27me3_R1 carries 0.006 % and gets
-55.9.
+recomputed from the two Bowtie 2 logs.
 
 `Library duplication` reads samtools flagstat on the marked-duplicate BAMs (the shared
 `samtools/flagstat` recipe) and draws the duplicate share per library and against depth. The
 pipeline flags duplicates in the target BAMs rather than removing them, so the share inflates
-every coverage number downstream. On this megatest the targets sit between 1 % and 6.5 %
-while the IgG controls, which hold the least material, reach 35 % and 86 %.
+every coverage number downstream.
 
 `Coverage concentration and sample similarity` reads the three tables behind the deepTools
 panels on the MultiQC tab. `use: deeptools/fingerprint_scatter` puts every library on one
 plane, coverage concentration against divergence from a uniform library, so the targets
 separate from the IgG controls; `use: deeptools/pca_embedding` reads the `plotPCA` loadings
 with the variance each component explains; and `use: deeptools/correlation_heatmap` reads the
-correlation matrix itself, clustered on both axes, where a block spanning two targets is a
-swap or a contamination.
+correlation matrix itself, clustered on both axes.
+
+`Signal tables`, collapsed, holds the fragment-class and spike-in rows.
 
 ---
 
-## Peak calls
+## Peaks
 
-`SEACR peak yield` counts the regions in view, their width distribution, the total coverage
-they carry and the coverage per base.
+`SEACR peak yield` counts the regions in view, their width distribution (histogram), the
+total coverage they carry and the coverage per base, then the region-width histogram on a log
+x axis.
+
+`Fragment pile-up around the peaks` is the deepTools heatmap of a CUT&RUN run rebuilt from the
+fragment BEDs the pipeline publishes (`*.frags.cut.bed`), since no bigWig or computeMatrix
+output is mirrored. The catalog output `seacr/frags_profile` keeps, per sample, the 500
+strongest SEACR regions whose 6 kb windows do not overlap, and counts the fragments over
+every 100 bp bin of each window, per million fragments of the sample. The `signal_matrix` tile
+draws regions down and offsets across, one panel per sample with the mean profile on top; a
+code-mode line figure puts the mean profiles on one axis. It sits here rather than on the
+Locus tab on purpose: the navigator's region reaches `seacr_frags_profile` through its region
+link, which would narrow the matrix to the handful of regions on screen.
 
 `Signal budget` is the fraction of reads in peaks, first-class rather than inferred. SEACR
 reports no read count, so the fraction is built in base pairs of fragment coverage: the summed
 region signal, de-scaled by the spike-in factor, over the total the fragment-length histogram
-accounts for. The de-scaling is what makes it a fraction at all, and the numbers say so: the
-raw ratios span 2.3 to 48 across the four targets, whose factors span 2.9 to 55.9, and
-dividing the factor back out collapses them to 0.67 to 0.86. The donut is the in-peaks against
-outside-peaks composition, the stacked bar is the same split per sample.
-
-The code-mode scatter of total against maximum coverage (selection on `peak_id`) and the
-region-width histogram sit in the yield section under the cards.
-
-`Peak calls locus` is the locus section: four tiles on one region and one x axis. The
-navigator on top is a `genome_view` of every SEACR region (`use: seacr/seacr_peak_track`,
-rect marks, locus field in the header). It sets no `assembly`: SEACR also calls regions on
-alt and unplaced contigs that the hg38 contig table does not list, and GenomeSpy rejects the
-whole spec on the first unknown contig, so the axis is derived from the rows and gene symbol
-search is off. It opens on
-`default_region: chr9:130,850,000-131,350,000`, from the 3' end of ABL1 to PLPP7, because every
-track of the megatest has data there: H3K4me3 calls two sharp regions on the NUP214 and FAM78A
-promoters in both replicates, H3K27me3 covers LAMC3 and FIBCD1 with some thirty regions per
-replicate, MACS2 and the consensus sets call the same places, and the fragment windows of the
-strongest regions of all four samples sit inside it. Under it, three tracks follow the region
-through the `region` links declared in `template.yaml` (`seacr_peaks -> seacr_frags_profile`,
-`-> macs2_peaks`, `-> seacr_consensus_peaks`): the fragment pile-up (`coverage_track`, one lane
-per sample, header switch between the Plotly track and the GenomeSpy locus view), the MACS2
-calls and the consensus intervals (`genome_view` with `follow_region_filter`; the consensus
-track carries the hg38 gene lane, its rows already narrowed to chr9). Only the
-navigator's region travels through those links; the sidebar Contig filter narrows the SEACR
-calls alone. The earlier `coverage_track` over the SEACR calls was removed: it drew the same
-rows as the navigator (lint `test_no_double_track_binding`).
+accounts for. The de-scaling is what makes it a fraction at all. The cards give the coverage
+in peaks and the lowest FRiP in view.
 
 `MACS2 alongside` is the same fragments through a background-model caller: four cards (peaks,
-width, fold enrichment, best q-value) and a manhattan panel over `-log10(q)`. Note that it
-does not share a y axis with the SEACR genome panels above: SEACR has no p-value and no fold
-enrichment at all, so its track plots coverage while the MACS2 panel plots significance.
+width, fold enrichment, best q-value against a threshold of 1.3) and a manhattan panel over
+`-log10(q)`. It does not share a y axis with the SEACR panels: SEACR has no p-value and no
+fold enrichment at all.
 
-`Peak tables`, collapsed, holds both callers' rows with row selection on `peak_id`.
+`Peak tables`, collapsed, holds both callers' rows with row selection on `peak_id`, and the
+per-sample FRiP rows.
 
 The left rail filters on region width and coverage per base (both sliders draw the column
 histogram) and on contig.
 
 ---
 
-![Peak calls](screenshots/peak-calls.png)
+![Peaks](screenshots/peak-calls.png)
 
 ## Caller agreement
 
 The tab that exists because this pipeline runs two callers over one set of fragments.
 
-`Agreement at a glance` counts the peaks each caller made, the share each caller's calls the
-other reproduced, the worst agreement in view on a gauge, and the calls only one of the two
-made.
+`Agreement at a glance` counts the peaks each caller made, their median width, the worst
+agreement in view on a gauge, and the calls only one of the two made.
 
-`Caller against caller` places every sample as a point with the two callers as rows in a dot
-plot, next to a code-mode scatter of MACS2 yield against SEACR yield per sample, carrying
-`selection_enabled` on `sample`.
+`Caller against caller` puts a code-mode scatter of MACS2 yield against SEACR yield per
+sample, carrying `selection_enabled` on `sample`, beside a bar of the calls the other caller
+did not make.
 
-`Where they diverge` holds two bars: the calls the other caller did not make, and the share
-of calls the other caller reproduced.
-
-`Comparison table` holds the eight rows (four samples times two callers) with row selection
-on `sample`. The whole tab now reads the `cutandrun/caller_agreement` catalog output rather
-than an inline recipe, so every tile on it carries provenance.
+`Comparison table`, collapsed, holds one row per sample and caller with row selection on
+`sample`. The whole tab reads the `cutandrun/caller_agreement` catalog output, so every tile
+on it carries provenance.
 
 `macs2_peaks` is the template's only `optional: true` collection, so a SEACR-only run keeps
 every other tile. This tab is the part that degrades least gracefully in that case: with one
@@ -248,28 +216,59 @@ caller present the comparison reads as complete agreement rather than as missing
 
 ![Caller agreement](screenshots/caller-agreement.png)
 
-## Consensus and reproducibility
+## Locus
+
+Four tracks on one genomic region and one x axis.
+
+`Region at a glance` counts what sits in the region in view: the SEACR regions, their
+coverage per base, the MACS2 peaks and the consensus intervals. The cards follow the region
+like the tracks do.
+
+`One region, four tracks` puts the navigator on top, a `genome_view` of every SEACR region
+(`use: seacr/seacr_peak_track`, rect marks, locus field in the header, `assembly:
+{GENOME}`), opening on a `default_region` chosen so that every track has data there. Under
+it, three tracks follow the region through the `region` links declared in `template.yaml`
+(`seacr_peaks -> seacr_frags_profile`, `-> macs2_peaks`, `-> seacr_consensus_peaks`): the
+fragment pile-up (`coverage_track`, one lane per sample, header switch between the Plotly
+track and the GenomeSpy locus view), the MACS2 calls and the consensus intervals
+(`genome_view` with `follow_region_filter`; the consensus track carries the hg38 gene lane).
+With a built-in assembly a navigator fetches only the chromosome of its region, so calls on
+alt and unplaced contigs are simply not drawn until the reader navigates there.
+
+The `Locus scope` rail filters SEACR coverage per base, the MACS2 q-value and the consensus
+replicate support.
+
+---
+
+## Consensus
 
 `Consensus at a glance` counts the merged intervals per target, the replicates per interval,
-the split by support as a donut and the coverage per interval.
+the interval width and the coverage per interval.
 
-`Replicate agreement` is the UpSet panel over the four replicate columns of the consensus
-table: which combinations of replicates call each interval.
+`Replicate agreement` is the UpSet panel over the replicate columns of the consensus table:
+which combinations of replicates call each interval.
 
 `How reproducible` holds a code-mode bar of the reproducible share per target and a histogram
-of interval width by replicate support.
+of interval width (log x axis) by replicate support.
 
-Read the donut before the rest: on this megatest 63 % of the consensus intervals are called
-by a single replicate, because H3K27me3 is a broad mark whose replicates overlap poorly. The
-`Replicate support` filter defaults to showing every value rather than the reproducible
-subset, so the cards above average over that mostly single-replicate set unless you narrow
-it.
+The `Replicate support` filter defaults to showing every value rather than the reproducible
+subset, so the cards average over single-replicate intervals too unless you narrow it. A
+broad mark whose replicates overlap poorly shows that as a large single-replicate share.
 
 `Consensus table`, collapsed, holds the merged intervals with row selection on `peak_id`.
 
 ---
 
-![Consensus and reproducibility](screenshots/consensus-and-reproducibility.png)
+![Consensus](screenshots/consensus-and-reproducibility.png)
+
+## Cross-selection
+
+A picked row or point becomes a dashboard filter that narrows the other tiles of its
+collection and follows the project links to the collections they reach. The sample tables
+(pinned sample sheet and peak summary, fragment classes, spike-in factors, FRiP, caller
+agreement) and the spike-in and duplication scatters select on `sample`; the peak tables,
+the manhattan panel and every Locus track select on `peak_id`. The deepTools PCA emits a
+selection, but its collection has no outgoing link, so it narrows no other tile.
 
 ## Reproducing
 
