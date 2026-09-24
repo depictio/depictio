@@ -1,0 +1,91 @@
+name: Local server smoke test (no Docker)
+
+# Builds the wheel the way a release would (viewer bundle included) and boots it with
+# `depictio local up` from outside the checkout, so the container-free profile cannot
+# silently drift from the Docker one.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "depictio/**"
+      - "packages/plotly-*/**"
+      - "pyproject.toml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/local-server-smoke.yaml"
+  workflow_dispatch:
+
+jobs:
+  local-up:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Build the viewer bundle
+        run: |
+          pnpm install --frozen-lockfile
+          cd depictio/viewer && pnpm run build
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build wheels
+        run: |
+          uv build --wheel --out-dir "$RUNNER_TEMP/wheels" .
+          uv build --wheel --out-dir "$RUNNER_TEMP/wheels" packages/plotly-upset
+          uv build --wheel --out-dir "$RUNNER_TEMP/wheels" packages/plotly-complexheatmap
+          ls -la "$RUNNER_TEMP/wheels"
+
+      - name: depictio local up (iris example, from the wheel, outside the checkout)
+        working-directory: ${{ runner.temp }}
+        run: |
+          W="$RUNNER_TEMP/wheels"
+          uvx --python 3.12 \
+            --from "depictio[local] @ file://$(ls $W/depictio-*.whl)" \
+            --with "$(ls $W/plotly_upset-*.whl)" \
+            --with "$(ls $W/plotly_complexheatmap-*.whl)" \
+            depictio local up --examples iris --no-open
+
+      - name: Check the API, the viewer and the ingested iris table
+        run: |
+          curl -fsS http://127.0.0.1:8058/health
+          curl -fsS -o /dev/null http://127.0.0.1:8058/dashboards
+          # The iris Delta table is written to the local MinIO in the background.
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null \
+              http://127.0.0.1:8058/depictio/api/v1/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c; then
+              echo "iris delta table registered"; exit 0
+            fi
+            sleep 5
+          done
+          echo "iris delta table never appeared"; exit 1
+
+      - name: depictio local down
+        if: always()
+        working-directory: ${{ runner.temp }}
+        run: |
+          uvx --python 3.12 \
+            --from "depictio[local] @ file://$(ls $RUNNER_TEMP/wheels/depictio-*.whl)" \
+            --with "$(ls $RUNNER_TEMP/wheels/plotly_upset-*.whl)" \
+            --with "$(ls $RUNNER_TEMP/wheels/plotly_complexheatmap-*.whl)" \
+            depictio local down
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: depictio-local-logs
+          path: ~/.depictio/local/logs
+          retention-days: 7
