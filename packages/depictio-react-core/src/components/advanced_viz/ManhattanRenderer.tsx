@@ -1,14 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  MultiSelect,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Stack,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -29,6 +20,13 @@ import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragm
 import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { rainfallDistances } from './rainfallDistances';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import {
+  VizControlGroup,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+} from './controls/VizControls';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
@@ -947,70 +945,61 @@ const ManhattanRenderer: React.FC<Props> = ({
   const primaryControls = useMemo(
     () => (
       <>
-        <SegmentedControl
-          size="xs"
-          w={160}
-          value={mode}
-          onChange={(v) => setMode(v as VizMode)}
-          data={[
-            { value: 'manhattan', label: 'Score' },
-            { value: 'rainfall', label: 'Rainfall' },
-          ]}
-        />
-        {/* A class column is the rainfall figure's colour rule, so Colour-by
-            has nothing left to say while it is bound. */}
-        {colorByOptions.length > 2 && !rainfallClassCol ? (
-          <Select
-            size="xs"
-            w={170}
-            label="Colour by"
-            value={colorBy}
-            onChange={(v) => setColorBy(v ?? COLOR_BY_CHROMOSOME)}
-            data={colorByOptions}
-            allowDeselect={false}
-            comboboxProps={{ withinPortal: true }}
+        <VizControlGroup title="Data">
+          <VizSegmented
+            aria-label="Figure"
+            value={mode}
+            onChange={(v) => setMode(v as VizMode)}
+            data={[
+              { value: 'manhattan', label: 'Score' },
+              { value: 'rainfall', label: 'Rainfall' },
+            ]}
           />
-        ) : null}
-        {rainfall ? null : (
-          <NumberInput
-            size="xs"
-            w={110}
-            label="Threshold"
-            value={scoreThreshold ?? ''}
-            onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
-            decimalScale={3}
-          />
-        )}
-        {hasThreshold ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Highlight
-            </Text>
-            <SegmentedControl
-              size="xs"
-              w={190}
-              value={highlight}
-              onChange={(v) => setHighlight(v as Highlight)}
-              data={[
-                { value: 'above', label: 'Above' },
-                { value: 'below', label: 'Below' },
-                { value: 'none', label: 'Both' },
-              ]}
+          {/* A class column is the rainfall figure's colour rule, so Colour-by
+              has nothing left to say while it is bound. */}
+          {colorByOptions.length > 2 && !rainfallClassCol ? (
+            <VizSelect
+              label="Colour by"
+              value={colorBy}
+              onChange={(v) => setColorBy(v ?? COLOR_BY_CHROMOSOME)}
+              data={colorByOptions}
+              allowDeselect={false}
             />
-          </Stack>
-        ) : null}
-        <MultiSelect
-          size="xs"
-          w={200}
-          label="Chromosomes"
-          value={selectedChrs}
-          onChange={setSelectedChrs}
-          data={allChrs}
-          placeholder="all"
-          searchable
-          clearable
-          comboboxProps={{ withinPortal: true }}
-        />
+          ) : null}
+          <VizMultiSelect
+            label="Chromosomes"
+            value={selectedChrs}
+            onChange={setSelectedChrs}
+            data={allChrs}
+            placeholder="all"
+            searchable
+            clearable
+          />
+        </VizControlGroup>
+        {rainfall && !hasThreshold ? null : (
+          <VizControlGroup title="Threshold">
+            {rainfall ? null : (
+              <VizNumberInput
+                label="Threshold"
+                value={scoreThreshold ?? ''}
+                onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
+                decimalScale={3}
+              />
+            )}
+            {hasThreshold ? (
+              <VizSegmented
+                label="Highlight"
+                value={highlight}
+                onChange={(v) => setHighlight(v as Highlight)}
+                data={[
+                  { value: 'above', label: 'Above' },
+                  { value: 'below', label: 'Below' },
+                  { value: 'none', label: 'Both' },
+                ]}
+              />
+            ) : null}
+          </VizControlGroup>
+        )}
       </>
     ),
     [
@@ -1029,9 +1018,8 @@ const ManhattanRenderer: React.FC<Props> = ({
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <NumberInput
-          size="xs"
+      <VizControlGroup title="Labels and markers">
+        <VizNumberInput
           label="Top-N labels"
           value={topNLabels}
           onChange={(v) => setTopNLabels(Number(v) || 0)}
@@ -1040,8 +1028,7 @@ const ManhattanRenderer: React.FC<Props> = ({
         />
         {hasThreshold ? (
           <>
-            <NumberInput
-              size="xs"
+            <VizNumberInput
               label={
                 highlight === 'below'
                   ? 'Marker size (below, highlighted)'
@@ -1054,8 +1041,7 @@ const ManhattanRenderer: React.FC<Props> = ({
               min={1}
               max={30}
             />
-            <NumberInput
-              size="xs"
+            <VizNumberInput
               label={
                 highlight === 'below'
                   ? 'Marker size (above, dimmed)'
@@ -1070,8 +1056,7 @@ const ManhattanRenderer: React.FC<Props> = ({
             />
           </>
         ) : (
-          <NumberInput
-            size="xs"
+          <VizNumberInput
             label="Marker size"
             value={markerSizeUniform}
             onChange={(v) => setMarkerSizeUniform(Math.max(1, Number(v) || 1))}
@@ -1079,7 +1064,7 @@ const ManhattanRenderer: React.FC<Props> = ({
             max={30}
           />
         )}
-      </Stack>
+      </VizControlGroup>
     ),
     [hasThreshold, topNLabels, markerSizeAbove, markerSizeBelow, markerSizeUniform, highlight],
   );

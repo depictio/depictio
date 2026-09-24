@@ -1,16 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Group,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -28,6 +17,15 @@ import {
   hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import { looksContinuous } from './colourScales';
 import { densityHeatmap } from './densityBins';
 import {
@@ -703,66 +701,56 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   // the legend are paint on the same cloud.
   const primaryControls = (
     <>
-      <SegmentedControl
-        size="xs"
-        w={150}
-        value={densityView ? 'density' : 'points'}
-        onChange={(v) => {
-          const next = v === 'density';
-          setDensityOverride(next);
-          setDensity(next);
-        }}
-        data={[
-          { value: 'points', label: 'Points' },
-          { value: 'density', label: 'Density' },
-        ]}
-      />
-      <Switch
-        size="xs"
-        checked={logX}
-        onChange={(e) => setLogX(e.currentTarget.checked)}
-        label="Log x"
-      />
-      <Switch
-        size="xs"
-        checked={logY}
-        onChange={(e) => setLogY(e.currentTarget.checked)}
-        label="Log y"
-      />
-      <Select
-        size="xs"
-        w={190}
-        label="Reference line"
-        value={refLine}
-        onChange={(v) => setRefLine((v as ReferenceLine) || 'none')}
-        data={[
-          { value: 'none', label: 'None' },
-          { value: 'diagonal', label: 'Identity diagonal' },
-          { value: 'horizontal', label: 'Horizontal at reference value' },
-          { value: 'vertical', label: 'Vertical at reference value' },
-        ]}
-        allowDeselect={false}
-        comboboxProps={{ withinPortal: true }}
-      />
-      {refLine === 'horizontal' || refLine === 'vertical' ? (
-        <NumberInput
-          size="xs"
-          w={130}
-          label="Reference value"
-          placeholder={refLine === 'horizontal' ? 'y =' : 'x ='}
-          value={refValue ?? ''}
-          onChange={(v) => setRefValue(v === '' || v === null ? null : Number(v))}
-          decimalScale={6}
+      <VizControlGroup title="Display">
+        <VizSegmented
+          aria-label="Cloud"
+          value={densityView ? 'density' : 'points'}
+          onChange={(v) => {
+            const next = v === 'density';
+            setDensityOverride(next);
+            setDensity(next);
+          }}
+          data={[
+            { value: 'points', label: 'Points' },
+            { value: 'density', label: 'Density' },
+          ]}
         />
-      ) : null}
-      {refLine !== 'none' && !densityView ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Highlight
-          </Text>
-          <SegmentedControl
-            size="xs"
-            w={190}
+        <VizSwitch
+          checked={logX}
+          onChange={(e) => setLogX(e.currentTarget.checked)}
+          label="Log x"
+        />
+        <VizSwitch
+          checked={logY}
+          onChange={(e) => setLogY(e.currentTarget.checked)}
+          label="Log y"
+        />
+      </VizControlGroup>
+      <VizControlGroup title="Reference">
+        <VizSelect
+          label="Reference line"
+          value={refLine}
+          onChange={(v) => setRefLine((v as ReferenceLine) || 'none')}
+          data={[
+            { value: 'none', label: 'None' },
+            { value: 'diagonal', label: 'Identity diagonal' },
+            { value: 'horizontal', label: 'Horizontal at reference value' },
+            { value: 'vertical', label: 'Vertical at reference value' },
+          ]}
+          allowDeselect={false}
+        />
+        {refLine === 'horizontal' || refLine === 'vertical' ? (
+          <VizNumberInput
+            label="Reference value"
+            placeholder={refLine === 'horizontal' ? 'y =' : 'x ='}
+            value={refValue ?? ''}
+            onChange={(v) => setRefValue(v === '' || v === null ? null : Number(v))}
+            decimalScale={6}
+          />
+        ) : null}
+        {refLine !== 'none' && !densityView ? (
+          <VizSegmented
+            label="Highlight"
             value={refHighlight}
             onChange={(v) => setRefHighlight(v as ReferenceHighlight)}
             data={[
@@ -771,102 +759,88 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
               { value: 'none', label: 'Both' },
             ]}
           />
-        </Stack>
-      ) : null}
+        ) : null}
+      </VizControlGroup>
     </>
   );
 
   const controls = (
-    <Stack gap="xs">
-      {config.size_col ? (
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
-            label="Min size"
-            value={minSize}
+    <>
+      <VizControlGroup title="Markers">
+        {config.size_col ? (
+          <>
+            <VizNumberInput
+              label="Min size"
+              value={minSize}
+              disabled={densityView}
+              onChange={(v) => setMinSize(Math.max(1, Number(v) || 4))}
+              min={1}
+              max={40}
+            />
+            <VizNumberInput
+              label="Max size"
+              value={maxSize}
+              disabled={densityView}
+              onChange={(v) => setMaxSize(Math.max(2, Number(v) || 22))}
+              min={2}
+              max={80}
+            />
+          </>
+        ) : (
+          <VizNumberInput
+            label="Marker size"
+            value={markerSize}
             disabled={densityView}
-            onChange={(v) => setMinSize(Math.max(1, Number(v) || 4))}
+            onChange={(v) => setMarkerSize(Math.max(1, Number(v) || 7))}
             min={1}
             max={40}
           />
-          <NumberInput
-            size="xs"
-            label="Max size"
-            value={maxSize}
-            disabled={densityView}
-            onChange={(v) => setMaxSize(Math.max(2, Number(v) || 22))}
-            min={2}
-            max={80}
-          />
-        </Group>
-      ) : (
-        <NumberInput
-          size="xs"
-          label="Marker size"
-          value={markerSize}
-          disabled={densityView}
-          onChange={(v) => setMarkerSize(Math.max(1, Number(v) || 7))}
-          min={1}
-          max={40}
-        />
-      )}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Opacity
-        </Text>
-        <Slider
-          size="xs"
+        )}
+        <VizSlider
+          label="Opacity"
           value={opacity}
           onChangeEnd={setOpacity}
           min={0.05}
           max={1}
           step={0.05}
-          label={(v) => v.toFixed(2)}
+          thumbLabel={(v) => v.toFixed(2)}
         />
-      </Stack>
-      {(config.color_col && numericColour) || densityView ? (
-        <Select
-          size="xs"
-          label="Colourscale"
-          value={colourScale}
-          onChange={(v) => v && setColourScale(v)}
-          data={COLOUR_SCALES as unknown as string[]}
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-        />
-      ) : null}
-      {config.label_col ? (
-        <NumberInput
-          size="xs"
-          label="Top-N labels"
-          description={
-            config.size_col ? 'Largest by the size column' : 'Furthest from zero on y'
-          }
-          value={topN}
-          disabled={densityView}
-          onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
-          min={0}
-          max={50}
-        />
-      ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Markers
-        </Text>
-        <Switch
-          size="xs"
+        <VizSwitch
           checked={outline}
           disabled={densityView}
           onChange={(e) => setOutline(e.currentTarget.checked)}
           label="Marker outline"
         />
-      </Stack>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Legend
-        </Text>
-        <Select
-          size="xs"
+      </VizControlGroup>
+      {config.label_col ? (
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label="Top-N labels"
+            value={topN}
+            disabled={densityView}
+            onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
+            min={0}
+            max={50}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {config.size_col ? 'Largest by the size column' : 'Furthest from zero on y'}
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+      ) : null}
+      <VizControlGroup title="Colour & legend">
+        {(config.color_col && numericColour) || densityView ? (
+          <VizSelect
+            label="Colourscale"
+            value={colourScale}
+            onChange={(v) => v && setColourScale(v)}
+            data={COLOUR_SCALES as unknown as string[]}
+            allowDeselect={false}
+          />
+        ) : null}
+        <VizSelect
+          label="Legend"
           value={legendPos}
           onChange={(v) => setLegendPos((v as LegendPos) || 'right')}
           data={[
@@ -875,10 +849,9 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             { value: 'none', label: 'Hidden' },
           ]}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
         />
-      </Stack>
-    </Stack>
+      </VizControlGroup>
+    </>
   );
 
   // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is

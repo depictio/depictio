@@ -114,7 +114,13 @@ export { default as InteractiveGroupCard } from './components/InteractiveGroupCa
 // One swatch for every place a section is drawn — the two panel headers and the
 // viewer's authoring UI — so a section named "QC" never looks different
 // depending on where you meet it.
-export { default as SectionIcon, sectionColorVar } from './components/SectionIcon';
+export {
+  default as SectionIcon,
+  DEFAULT_SECTION_PALETTE,
+  resolveSectionColor,
+  SectionColorContext,
+  sectionColorVar,
+} from './components/SectionIcon';
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
@@ -154,6 +160,8 @@ export {
   isControlsPlacement,
 } from './components/advanced_viz/AdvancedVizInlineControls';
 export type { ControlsPlacement } from './components/advanced_viz/AdvancedVizInlineControls';
+// The controls container, so the inspector lays controls out like the popover.
+export { VizControlsGrid } from './components/advanced_viz/controls/VizControls';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.
 export { default as DataGridBody } from './components/data/DataGridBody';
@@ -366,6 +374,8 @@ export type {
   IngestionSummary,
   RegisteredFile,
   VizKindSuggestion,
+  VizSuggestionContext,
+  VizSuggestionMatch,
   VizSuggestionsResponse,
   CatalogRender,
   CatalogOutputMatch,
@@ -387,6 +397,8 @@ export {
   genomeRegionFilters,
   genomePosFilterIndex,
   regionFromFilters,
+  isRegionFilter,
+  cardScopedFilters,
 } from './selection';
 export type { GenomeRegionSelection } from './selection';
 
@@ -457,6 +469,7 @@ export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
+export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
 export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
 export type { GroupSummaryRow } from './components/interactive/ActiveFilterSummary';
 

@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  MultiSelect,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
@@ -429,9 +427,7 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   // x extent and the notes about missing lanes are secondary.
   const primaryControls = (
     <>
-      <Select
-        size="xs"
-        w={120}
+      <VizSelect
         label="Ends"
         value={ends}
         onChange={(v) => setEnds((v as Ends) || 'both')}
@@ -441,20 +437,15 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           { value: '3p', label: "3' only" },
         ]}
         allowDeselect={false}
-        comboboxProps={{ withinPortal: true }}
       />
-      <MultiSelect
-        size="xs"
-        w={220}
+      <VizMultiSelect
         label="Highlight"
         value={highlight}
         onChange={setHighlight}
         data={SUBSTITUTION_OPTIONS}
         placeholder="Substitutions to highlight"
-        comboboxProps={{ withinPortal: true }}
       />
-      <Switch
-        size="xs"
+      <VizSwitch
         checked={facetBy === 'length_bin'}
         onChange={(e) => setFacetBy(e.currentTarget.checked ? 'length_bin' : 'none')}
         label="One lane per read-length bin"
@@ -463,9 +454,8 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   );
 
   const controls = (
-    <Stack gap="xs">
-      <NumberInput
-        size="xs"
+    <>
+      <VizNumberInput
         label="Max position"
         value={maxPosition}
         onChange={(v) => setMaxPosition(Math.max(1, Number(v) || DEFAULT_MAX_POSITION))}
@@ -473,16 +463,20 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         max={200}
       />
       {laneColumnMissing ? (
-        <Text size="xs" c="dimmed">
-          {`This data collection has no "${lengthBinCol}" column, so the profile stays on one lane.`}
-        </Text>
+        <VizFullRow>
+          <Text size="xs" c="dimmed">
+            {`This data collection has no "${lengthBinCol}" column, so the profile stays on one lane.`}
+          </Text>
+        </VizFullRow>
       ) : null}
       {faceting && laneCount > lanesShown ? (
-        <Text size="xs" c="dimmed">
-          {`Showing ${lanesShown} of ${laneCount} bins (max_facets).`}
-        </Text>
+        <VizFullRow>
+          <Text size="xs" c="dimmed">
+            {`Showing ${lanesShown} of ${laneCount} bins (max_facets).`}
+          </Text>
+        </VizFullRow>
       ) : null}
-    </Stack>
+    </>
   );
 
   return (

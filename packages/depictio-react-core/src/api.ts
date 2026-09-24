@@ -279,6 +279,9 @@ export interface StoredMetadata {
   aggregation?: string;
   aggregations?: string[];
   filter_expr?: string;
+  /** Card: let a locus navigator's genome region narrow this card (off by
+   *  default, see `cardScopedFilters`). */
+  follow_region_filter?: boolean;
   title_color?: string;
   background_color?: string;
   title_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -290,6 +293,8 @@ export interface StoredMetadata {
   // Interactive
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
+  /** Slider only: comparison with the value (gte when absent). */
+  slider_mode?: string;
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -845,6 +850,8 @@ export interface InteractiveFilter {
     interactive_component_type?: string;
     selection_column?: string;
     filter_expr?: string;
+    /** Slider comparison (gte, gt, lte, lt, eq, ne); the server defaults to gte. */
+    slider_mode?: string;
   };
 }
 
@@ -1097,17 +1104,33 @@ export async function fetchPolarsSchema(dcId: string): Promise<Record<string, st
   return res.json();
 }
 
+/** The evidence behind a suggestion: every distinctive role has a column named
+ *  like it (`named`), the table has the shape the kind reads (`shape`), the
+ *  dashboard tab makes it right (`context`), or none of these (`weak`). */
+export type VizSuggestionMatch = 'named' | 'shape' | 'context' | 'weak';
+
 /** One viz kind scored against a DC schema by the backend suggestion engine.
- *  `score` is a graded 0-1 fit (dtype compatibility × column-name similarity).
- *  `role_candidates` lists dtype-compatible columns per required role, ranked
- *  best-first, for pre-filling bindings. `unmet_roles` / `weak_roles` drive the
- *  builder's inline guidance. */
+ *  `score` (0-1) is for ranking only; what the UI shows is `match` and the
+ *  short `reasons` behind it. `role_candidates` lists dtype-compatible columns
+ *  per required role, ranked best-first, for pre-filling bindings.
+ *  `unmet_roles` / `weak_roles` drive the builder's inline guidance. */
 export interface VizKindSuggestion {
   viz_kind: string;
   score: number;
   role_candidates: Record<string, string[]>;
   unmet_roles: string[];
   weak_roles: string[];
+  /** Absent on older APIs. */
+  match?: VizSuggestionMatch;
+  reasons?: string[];
+}
+
+/** What the builder knows about the dashboard tab a new tile lands on. */
+export interface VizSuggestionContext {
+  /** Columns emitted by the tab's selection-capable tiles. */
+  selectionColumns?: readonly string[];
+  /** Advanced-viz kinds already on the tab. */
+  existingKinds?: readonly string[];
 }
 
 export interface VizSuggestionsResponse {
@@ -1119,11 +1142,19 @@ export interface VizSuggestionsResponse {
 /** Ranked viz-kind suggestions for an existing DC. Reads the DC's inferred
  *  polars schema server-side and runs the graded scoring engine, returning
  *  every kind scored (best-first) so the builder can present a "suggest but
- *  tolerate" picker. */
+ *  tolerate" picker. `context` lets kinds that depend on the dashboard (a
+ *  record card following a selection) be recommended. */
 export async function fetchVizSuggestions(
   dcId: string,
+  context?: VizSuggestionContext,
 ): Promise<VizSuggestionsResponse> {
-  const res = await authFetch(`${API_BASE}/datacollections/viz-suggestions/${dcId}`);
+  const params = new URLSearchParams();
+  for (const c of context?.selectionColumns ?? []) params.append('selection_columns', c);
+  for (const k of context?.existingKinds ?? []) params.append('existing_kinds', k);
+  const qs = params.toString();
+  const res = await authFetch(
+    `${API_BASE}/datacollections/viz-suggestions/${dcId}${qs ? `?${qs}` : ''}`,
+  );
   if (!res.ok) throw new Error(`Failed to fetch viz suggestions: ${res.status}`);
   return res.json();
 }
@@ -1397,6 +1428,8 @@ export interface CoverageTrackPayload {
   samples_filter?: string[] | null;
   smoothing_window?: number;
   max_rows?: number | null;
+  /** Server bins each sample track to at most this many rows when wider. */
+  max_bins_per_track?: number | null;
   filter_metadata: InteractiveFilter[];
 }
 
@@ -1417,6 +1450,10 @@ export interface CoverageTrackResult {
     n_samples: number;
     mean_value: number | null;
     max_value: number | null;
+    /** Bin width (bp) when the server binned the tracks to its row budget. */
+    bin_width?: number | null;
+    /** Rows before binning. */
+    input_rows?: number;
   };
   row_count: number;
   load_ms?: number;
@@ -1557,6 +1594,8 @@ export interface SankeyPayload {
   sort_mode?: 'alphabetical' | 'total_flow' | 'input';
   min_link_value?: number;
   step_filters?: Record<string, string[]> | null;
+  /** Columns whose distinct values come back as `step_options`. */
+  option_cols?: string[] | null;
   filter_metadata: InteractiveFilter[];
 }
 
@@ -1568,6 +1607,10 @@ export interface SankeyResult {
   link_count: number;
   total_flow: number;
   row_count: number;
+  /** Rows before the step filters (absent on older APIs). */
+  input_rows?: number;
+  /** Distinct values per `option_cols` column, before the step filters. */
+  step_options?: Record<string, string[]>;
   load_ms?: number;
   compute_ms?: number;
 }

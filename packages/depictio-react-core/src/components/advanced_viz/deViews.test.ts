@@ -10,6 +10,7 @@ import {
   qqSeries,
   rankTopN,
   resolveDeView,
+  significancePredicate,
   tierCounts,
 } from './deViews';
 
@@ -119,5 +120,34 @@ describe('offeredDeViews', () => {
   it('falls back to the first offered view when the stored one is gone', () => {
     expect(resolveDeView('ma', ['volcano', 'qq'])).toBe('volcano');
     expect(resolveDeView('qq', ['volcano', 'qq'])).toBe('qq');
+  });
+});
+
+describe('significancePredicate', () => {
+  it('counts an underflowed p of 0 as significant, the cutoff inclusive', () => {
+    const pass = significancePredicate([0, 0.05, 0.051, null, NaN, -1], {
+      isNegLog10: false,
+      threshold: 0.05,
+    });
+    expect([0, 1, 2, 3, 4, 5].map(pass)).toEqual([true, true, false, false, false, false]);
+  });
+
+  it('reads a -log10 column against -log10 of the p cutoff', () => {
+    const pass = significancePredicate([10, 9.9, Infinity, null], {
+      isNegLog10: true,
+      threshold: 1e-10,
+    });
+    expect([0, 1, 2, 3].map(pass)).toEqual([true, false, true, false]);
+  });
+
+  it('gives the volcano and MA tier counts the same answer on the same column', () => {
+    const padj = [0, 0.01, 0.2, 0.04];
+    const lfc = [2, -3, 4, 0.5];
+    const pass = significancePredicate(padj, { isNegLog10: false, threshold: 0.05 });
+    expect(tierCounts(classifyTiers(lfc, 1, pass))).toEqual({ UP: 1, DN: 1, NS: 2 });
+  });
+
+  it('lets every row through when there is no significance column', () => {
+    expect(significancePredicate([], { isNegLog10: false, threshold: 0.05 })(3)).toBe(true);
   });
 });

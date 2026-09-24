@@ -8,7 +8,12 @@
  */
 
 import type { AdvancedVizKind, InteractiveFilter, StoredMetadata } from '../../../api';
-import { filtersExcludingOwn, genomePosFilterIndex } from '../../../selection';
+import {
+  filtersExcludingOwn,
+  genomePosFilterIndex,
+  genomeRegionFilters,
+  regionFromFilters,
+} from '../../../selection';
 import { requiredColumns } from './genomeSpySpec';
 import type { GenomeViewConfig } from './genomeSpySpec';
 
@@ -43,6 +48,69 @@ export function filtersForGenomeViewFetch(
   return filtersExcludingOwn(withoutChr, genomePosFilterIndex(componentIndex), 'genome_selection');
 }
 
+// ---- Fetching only the window around the tile's own region -----------------
+
+/** Index suffix of the window pair. It is sent with the fetch only, never
+ *  published, so it can never be mistaken for the tile's own region. */
+export const NAVIGATOR_WINDOW_INDEX_SUFFIX = '::window';
+
+/**
+ * The region this tile itself published (locus field, `default_region`,
+ * brush), read off its own `genome_selection` pair only.
+ */
+export function ownRegion(
+  filters: readonly InteractiveFilter[],
+  componentIndex: string,
+  chrColumn: string,
+  posColumn: string,
+): { chrom: string; start: number; end: number } | null {
+  const posIndex = genomePosFilterIndex(componentIndex);
+  const own = filters.filter(
+    (f) =>
+      f.source === 'genome_selection' && (f.index === componentIndex || f.index === posIndex),
+  );
+  if (!own.length) return null;
+  return regionFromFilters([...own], chrColumn, posColumn);
+}
+
+/**
+ * The window a navigator fetches around its own region: the region's whole
+ * chromosome.
+ *
+ * Why a window at all: GenomeSpy uploads every row it is given to the GPU in
+ * one go, and a whole-genome table of a few hundred thousand intervals stalls
+ * that upload for seconds while the reader looks at one locus. Why the whole
+ * chromosome rather than a margin: the navigator is still the section's
+ * overview, so a zoom-out or a brush anywhere along the chromosome finds its
+ * rows already there, and only a jump to another chromosome (locus field,
+ * brush across contigs) refetches. The genome axis itself comes from the
+ * assembly, so every other contig is still drawn, just empty.
+ */
+export function navigatorWindow(
+  region: { chrom: string; start: number; end: number } | null,
+): { chroms: string[]; range: [number, number] | null } | null {
+  if (!region || !region.chrom) return null;
+  return { chroms: [region.chrom], range: null };
+}
+
+/** The window as the filter pair the fetch carries, on the tile's own columns. */
+export function navigatorWindowFilters(
+  metadata: Pick<StoredMetadata, 'index' | 'dc_id'>,
+  chrColumn: string,
+  posColumn: string,
+  window: { chroms: string[]; range: [number, number] | null } | null,
+): InteractiveFilter[] {
+  if (!window || !window.chroms.length) return [];
+  const pair = genomeRegionFilters(
+    { ...metadata, index: `${metadata.index}${NAVIGATOR_WINDOW_INDEX_SUFFIX}` } as StoredMetadata,
+    chrColumn,
+    posColumn,
+    window,
+  );
+  // A chromosome-only window has an empty position half; sending it is noise.
+  return pair.filter((f) => Array.isArray(f.value) && f.value.length > 0);
+}
+
 export interface GenomeViewLoadResult {
   rows: Record<string, unknown[]>;
   /** True when the server had to sample, so the tile can say so. */
@@ -67,9 +135,11 @@ export async function loadGenomeViewRows(
     config: GenomeViewConfig;
     filters: InteractiveFilter[];
     selectionColumn?: string;
+    /** Extra filters narrowing the fetch to a window (`navigatorWindowFilters`). */
+    windowFilters?: InteractiveFilter[];
   },
 ): Promise<GenomeViewLoadResult> {
-  const { metadata, config, filters, selectionColumn } = args;
+  const { metadata, config, filters, selectionColumn, windowFilters } = args;
   const columns = requiredColumns(config, selectionColumn).filter(Boolean);
   if (!metadata.wf_id || !metadata.dc_id || columns.length < 3) {
     throw new Error('genome_view: missing data binding');
@@ -79,7 +149,7 @@ export async function loadGenomeViewRows(
     wfId: metadata.wf_id,
     dcId: metadata.dc_id,
     columns,
-    filters: filtersForGenomeViewFetch(filters, metadata.index),
+    filters: [...filtersForGenomeViewFetch(filters, metadata.index), ...(windowFilters ?? [])],
     vizKind: 'genome_view',
     roles: { chr: config.chr_col, pos: config.pos_col, score: config.score_col },
     tail:

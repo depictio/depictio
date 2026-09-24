@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -16,6 +10,7 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizSwitch } from './controls/VizControls';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -281,8 +276,7 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   // encoding tier and there is no cosmetic tier to keep behind the icon.
   const primaryControls = useMemo(
     () => (
-      <Switch
-        size="xs"
+      <VizSwitch
         checked={sortByFreq}
         onChange={(e) => setSortByFreq(e.currentTarget.checked)}
         label="Sort by mutation frequency"

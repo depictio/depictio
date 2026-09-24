@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Select, Slider, Stack, Switch, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
@@ -205,28 +206,23 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // Ranking the bars is what turns this into a comparison; the rest is paint.
   const primaryControls = useMemo(
     () => (
-      <Switch size="xs" checked={sortDesc} onChange={(e) => setSortDesc(e.currentTarget.checked)} label="Sort by value" />
+      <VizSwitch checked={sortDesc} onChange={(e) => setSortDesc(e.currentTarget.checked)} label="Sort by value" />
     ),
     [sortDesc],
   );
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Switch size="xs" checked={showLabels} onChange={(e) => setShowLabels(e.currentTarget.checked)} label="Value labels" />
-        <Select
-          size="xs"
+      <>
+        <VizSwitch checked={showLabels} onChange={(e) => setShowLabels(e.currentTarget.checked)} label="Value labels" />
+        <VizSelect
           label="Colour scale"
           value={colorscale}
           onChange={(v) => setColorscale(v || 'Tealgrn')}
           data={COLORSCALE_NAMES}
-          comboboxProps={{ withinPortal: true }}
         />
-        <Stack gap={2}>
-          <Text size="xs" fw={500}>Point size</Text>
-          <Slider size="xs" min={6} max={22} value={pointSize} onChange={setPointSize} />
-        </Stack>
-      </Stack>
+        <VizSlider label="Point size" min={6} max={22} value={pointSize} onChange={setPointSize} />
+      </>
     ),
     [showLabels, colorscale, pointSize],
   );

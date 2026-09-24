@@ -2,12 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Badge,
   Group,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Slider,
   Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -41,8 +36,31 @@ import type { Contig, GenomeRegion, GenomeViewConfig } from './genomespy/genomeS
 import { loadGeneAnnotation } from './genomespy/geneAnnotations';
 import type { GeneAnnotation } from './genomespy/geneAnnotations';
 import { defaultRegionFilters, ownRegionKey, ownRegionZoom } from './genomespy/defaultRegion';
-import { filtersForGenomeViewFetch, loadGenomeViewRows } from './genomespy/genomeViewData';
+import {
+  filtersForGenomeViewFetch,
+  loadGenomeViewRows,
+  navigatorWindow,
+  navigatorWindowFilters,
+  ownRegion,
+} from './genomespy/genomeViewData';
+import {
+  announceDefaultRegion,
+  DEFAULT_REGION_GATE_MS,
+  settleDefaultRegion,
+  useDefaultRegionGate,
+  withdrawDefaultRegion,
+} from './genomespy/defaultRegionGate';
 import LocusInput from './genomespy/LocusInput';
+import { rememberDefaultRegion } from './genomespy/defaultRegionMemo';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import {
   buildFileGenomeSpec,
   fetchIndexedFileManifest,
@@ -153,6 +171,31 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const selectionEnabled = Boolean(selectionColumn);
   const regionBrushEnabled = Boolean(onFilterChange) && config.region_filter_enabled !== false;
 
+  // ---- Holding the first fetch for a default region -----------------------
+  // A tile with a `default_region` to emit is a navigator: it announces that
+  // to the section (`defaultRegionGate.ts`) so the tracks under it hold their
+  // first fetch until the region lands instead of reading the whole genome
+  // first. Every other table-backed tile is such a follower.
+  const hasDefaultRegion =
+    Boolean(onFilterChange) && regionBrushEnabled && Boolean((config.default_region ?? '').trim());
+  // One decision per session, emitted or not (see the default-region effect).
+  const defaultRegionDecided = useRef(false);
+  // What the default-region decision came to, for this tile's own fetch hold.
+  const [defaultOutcome, setDefaultOutcome] = useState<'pending' | 'emitted' | 'none'>('pending');
+  // Announced while rendering, not in an effect: the followers mounted in the
+  // same commit run their fetch effects before this tile's effects would.
+  if (hasDefaultRegion && !defaultRegionDecided.current) announceDefaultRegion(metadata.index);
+  useEffect(() => {
+    if (!hasDefaultRegion) return undefined;
+    if (!defaultRegionDecided.current) announceDefaultRegion(metadata.index);
+    return () => withdrawDefaultRegion(metadata.index);
+  }, [hasDefaultRegion, metadata.index]);
+  const followerGateOpen = useDefaultRegionGate(
+    filters,
+    metadata.index,
+    !fileMode && !hasDefaultRegion,
+  );
+
   const effectiveConfig = useMemo<GenomeViewConfig>(
     () => ({
       ...config,
@@ -199,6 +242,21 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     [filters, metadata.index],
   );
 
+  // ---- Fetching the window around the tile's own region -------------------
+  // With a built-in assembly the genome axis comes from the assembly, not from
+  // the rows, so a navigator can fetch only the window around the region it
+  // published (`navigatorWindow`) without losing a single contig. The same
+  // condition lets it decide its default region before any row has arrived,
+  // so its own first fetch waits for that decision (at most the gate timeout)
+  // and is already a window.
+  const builtinAssembly =
+    !fileMode && Boolean(effectiveConfig.assembly && BUILTIN_ASSEMBLIES.includes(effectiveConfig.assembly));
+  const [ownHoldExpired, setOwnHoldExpired] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setOwnHoldExpired(true), DEFAULT_REGION_GATE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -234,41 +292,6 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     };
   }, [fileMode, metadata.dc_id, refreshTick]);
 
-  useEffect(() => {
-    if (fileMode) return undefined;
-    let cancelled = false;
-    setLoading(true);
-    setFetchError(null);
-    loadGenomeViewRows(fetchAdvancedVizData, {
-      metadata,
-      config: effectiveConfig,
-      filters: filtersForFetch,
-      selectionColumn,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setRows(res.rows);
-        setEstimated(res.estimated);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setFetchError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    fileMode,
-    metadata.wf_id,
-    metadata.dc_id,
-    JSON.stringify(requiredCols),
-    JSON.stringify(filtersForFetch),
-    scoreThreshold,
-    refreshTick,
-  ]);
-
   // ---- Assets: built-in contigs and the gene lane -------------------------
   // Both are static per assembly and memoised process-wide, so four hg38 tiles
   // on one dashboard pay for them once.
@@ -294,12 +317,93 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     };
   }, [trackAssembly]);
 
+  // The window the fetch is narrowed to: the chromosome of this tile's own
+  // region, and only when the axis does not depend on the rows. A new region
+  // on the same chromosome (a brush, a locus typed nearby) keeps the window
+  // and costs no refetch; another chromosome, or a cleared region, moves it.
+  const ownRegionNow = useMemo(
+    () => ownRegion(filters, metadata.index, config.chr_col, config.pos_col),
+    [filters, metadata.index, config.chr_col, config.pos_col],
+  );
+  const fetchWindowChrom = builtinAssembly && assemblyContigs?.length ? (ownRegionNow?.chrom ?? null) : null;
+  const fetchWindow = useMemo(
+    () => (fetchWindowChrom ? navigatorWindow({ chrom: fetchWindowChrom, start: 0, end: Infinity }) : null),
+    [fetchWindowChrom],
+  );
+  const windowFilters = useMemo(
+    () => navigatorWindowFilters(metadata, config.chr_col, config.pos_col, fetchWindow),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [metadata.index, metadata.dc_id, config.chr_col, config.pos_col, fetchWindow],
+  );
+  // The navigator's own first fetch waits for its default-region decision and,
+  // when it emitted, for that region to come back through the host's filters,
+  // so the first read is already the window.
+  const holdOwnFetch =
+    hasDefaultRegion &&
+    builtinAssembly &&
+    !ownHoldExpired &&
+    (defaultOutcome === 'pending' || (defaultOutcome === 'emitted' && !ownRegionNow));
+
+  useEffect(() => {
+    if (fileMode) return undefined;
+    // Waiting for a default region (this tile's own, or a navigator's above):
+    // the skeleton stays up instead of a whole-genome read that the region
+    // would replace a moment later.
+    if (holdOwnFetch || !followerGateOpen) {
+      setLoading(true);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setFetchError(null);
+    loadGenomeViewRows(fetchAdvancedVizData, {
+      metadata,
+      config: effectiveConfig,
+      filters: filtersForFetch,
+      selectionColumn,
+      windowFilters,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setRows(res.rows);
+        setEstimated(res.estimated);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setFetchError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    fileMode,
+    metadata.wf_id,
+    metadata.dc_id,
+    JSON.stringify(requiredCols),
+    JSON.stringify(filtersForFetch),
+    JSON.stringify(windowFilters),
+    holdOwnFetch,
+    followerGateOpen,
+    scoreThreshold,
+    refreshTick,
+  ]);
+
   const [geneAnnotation, setGeneAnnotation] = useState<GeneAnnotation | null>(null);
+  // Whether the lane's gene table has been read (or there is none to read), so
+  // a `default_region` naming a gene is not decided against a table that is
+  // still loading.
+  const [genesSettled, setGenesSettled] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    loadGeneAnnotation(effectiveConfig.annotation).then((g) => {
-      if (!cancelled) setGeneAnnotation(g);
-    });
+    loadGeneAnnotation(effectiveConfig.annotation)
+      .then((g) => {
+        if (!cancelled) setGeneAnnotation(g);
+      })
+      .finally(() => {
+        if (!cancelled) setGenesSettled(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -574,14 +678,19 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // nothing. `defaultRegionFilters` owns every reason not to emit; the ref
   // owns "once", which is what keeps a reader who clears the region from
   // being sent straight back to it.
-  const contigNames = useMemo(() => (contigs ?? []).map((c) => c.name), [contigs]);
-  const defaultRegionDecided = useRef(false);
+  // With a built-in assembly the contig names are known before any row is:
+  // that is what lets the navigator decide, and window its own fetch, first.
+  const contigNames = useMemo(
+    () => (contigs ?? (builtinAssembly ? assemblyContigs : null) ?? []).map((c) => c.name),
+    [contigs, builtinAssembly, assemblyContigs],
+  );
   useEffect(() => {
     if (defaultRegionDecided.current || !onFilterChange) return;
     // A locus is resolved against the contigs the data carries, so there is
     // nothing to decide before they are known: `chr7` and `7` are the same
     // place, and a filter carrying the wrong spelling selects no rows at all.
     if (!contigNames.length) return;
+    if (!genesSettled) return;
     // One decision per session, emitted or not: coming back through here after
     // the reader has moved on would undo their move.
     defaultRegionDecided.current = true;
@@ -595,7 +704,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       genes: geneAnnotation?.genes ?? null,
       filters,
     });
+    settleDefaultRegion(metadata.index, Boolean(toEmit));
+    setDefaultOutcome(toEmit ? 'emitted' : 'none');
     if (!toEmit) return;
+    // Recorded before the emit, so the dispatch reads it on the re-render the
+    // emit causes and keeps the tile's clear action hidden for a region the
+    // reader did not choose.
+    rememberDefaultRegion(metadata.index, ownRegionKey(toEmit, metadata.index));
     for (const filter of toEmit) onFilterChange(filter);
   }, [
     onFilterChange,
@@ -606,6 +721,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     config.default_region,
     regionBrushEnabled,
     geneAnnotation,
+    genesSettled,
     filters,
   ]);
 
@@ -662,152 +778,161 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       : null;
 
   const fileControls = fileMode ? (
-    <Stack gap={4}>
-      <Text size="xs" fw={500}>
-        File-backed track
-      </Text>
-      <Text size="xs" c="dimmed">
-        {manifest
-          ? `${manifest.format.toUpperCase()} read from storage as you zoom in. ` +
-            `${builtFile?.lanes.length ?? 0} of ${manifest.files.length} sample(s) drawn.`
-          : 'Reading the collection manifest.'}
-      </Text>
-      {builtFile && builtFile.droppedLanes > 0 ? (
-        <Text size="xs" c="dimmed">
-          {builtFile.droppedLanes} more sample(s) not drawn; raise the lane cap on the tile.
-        </Text>
-      ) : null}
-      <Text size="xs" c="dimmed">
-        Marks, lanes and the threshold rule come from the file itself, so this tile only offers
-        the cosmetic controls below.
-      </Text>
-    </Stack>
-  ) : null;
-
-  const controls = (
-    <Stack gap="xs">
-      {fileControls}
-      <Stack gap={4} display={fileMode ? 'none' : undefined}>
-        <Text size="xs" fw={500}>
-          Mark
-        </Text>
-        <SegmentedControl
-          size="xs"
-          value={effectiveMark(effectiveConfig)}
-          onChange={(v) => setMark(v as 'point' | 'rect' | 'bar')}
-          data={[
-            { value: 'point', label: 'Points' },
-            { value: 'rect', label: 'Intervals', disabled: !config.end_col },
-            { value: 'bar', label: 'Bars' },
-          ]}
-        />
-        <Text size="xs" c="dimmed">
-          {config.end_col
-            ? 'Bars run from the baseline; intervals span start to end.'
-            : 'Bind an end column to draw intervals. GenomeSpy has no line mark, so a coverage profile is drawn as bars.'}
-        </Text>
-      </Stack>
-      <Stack gap={4} display={fileMode ? 'none' : undefined}>
-        <Text size="xs" fw={500}>
-          Per-sample lanes
-        </Text>
-        <Switch
-          size="xs"
-          checked={facetBySample && canFacet}
-          disabled={!canFacet}
-          onChange={(e) => setFacetBySample(e.currentTarget.checked)}
-          label={canFacet ? 'One lane per sample, shared genome axis' : 'Bind a sample column first'}
-        />
-        {facetBySample && canFacet ? (
-          <NumberInput
-            size="xs"
-            label="Max lanes"
-            min={1}
-            max={40}
-            value={maxFacets}
-            onChange={(v) => setMaxFacets(typeof v === 'number' ? v : 8)}
-          />
-        ) : null}
-        {built && built.droppedFacets > 0 ? (
-          <Text size="xs" c="dimmed">
-            {built.droppedFacets} more sample(s) not drawn.
-          </Text>
-        ) : null}
-      </Stack>
-      <NumberInput
-        size="xs"
-        label="Point size (px)"
-        min={1}
-        max={30}
-        value={pointSize}
-        onChange={(v) => setPointSize(typeof v === 'number' ? v : 5)}
-      />
-      <Stack gap={2}>
-        <Text size="xs">Opacity</Text>
-        <Slider size="xs" min={0.05} max={1} step={0.05} value={opacity} onChange={setOpacity} />
-      </Stack>
-      <NumberInput
-        size="xs"
-        label="Threshold rule"
-        placeholder="none"
-        display={fileMode ? 'none' : undefined}
-        value={scoreThreshold ?? ''}
-        onChange={(v) => setScoreThreshold(typeof v === 'number' ? v : null)}
-      />
-      <Select
-        size="xs"
-        label="Assembly"
-        description="Built-in chromosome sizes, or derive them from the data"
-        clearable
-        value={assembly}
-        onChange={(v) => setAssembly(v)}
-        data={BUILTIN_ASSEMBLIES.map((a) => ({ value: a, label: a }))}
-        placeholder="from data"
-      />
-      <Select
-        size="xs"
-        label="Gene annotation lane"
-        description="Protein-coding genes under the track; labels appear as you zoom in"
-        display={fileMode ? 'none' : undefined}
-        value={annotation}
-        onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'mm10') ?? 'none')}
-        data={[
-          { value: 'none', label: 'None' },
-          ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
-        ]}
-      />
-      {annotationHint ? (
-        <Text size="xs" c="dimmed">
-          {annotationHint}
-        </Text>
-      ) : null}
+    <VizFullRow>
       <Stack gap={4}>
         <Text size="xs" fw={500}>
-          Region filter
+          File-backed track
         </Text>
-        <Switch
-          size="xs"
+        <Text size="xs" c="dimmed">
+          {manifest
+            ? `${manifest.format.toUpperCase()} read from storage as you zoom in. ` +
+              `${builtFile?.lanes.length ?? 0} of ${manifest.files.length} sample(s) drawn.`
+            : 'Reading the collection manifest.'}
+        </Text>
+        {builtFile && builtFile.droppedLanes > 0 ? (
+          <Text size="xs" c="dimmed">
+            {builtFile.droppedLanes} more sample(s) not drawn; raise the lane cap on the tile.
+          </Text>
+        ) : null}
+        <Text size="xs" c="dimmed">
+          Marks, lanes and the threshold rule come from the file itself, so this tile only offers
+          the cosmetic controls below.
+        </Text>
+      </Stack>
+    </VizFullRow>
+  ) : null;
+
+  // The row-backed controls a file-backed track takes from the file itself.
+  // They were hidden, not unmounted, before; their state lives in this
+  // component either way, so leaving them out is the same behaviour.
+  const controls = (
+    <>
+      {fileControls}
+      <VizControlGroup title="Marks">
+        {fileMode ? null : (
+          <>
+            <VizSegmented
+              label="Mark"
+              value={effectiveMark(effectiveConfig)}
+              onChange={(v) => setMark(v as 'point' | 'rect' | 'bar')}
+              data={[
+                { value: 'point', label: 'Points' },
+                { value: 'rect', label: 'Intervals', disabled: !config.end_col },
+                { value: 'bar', label: 'Bars' },
+              ]}
+            />
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {config.end_col
+                  ? 'Bars run from the baseline; intervals span start to end.'
+                  : 'Bind an end column to draw intervals. GenomeSpy has no line mark, so a coverage profile is drawn as bars.'}
+              </Text>
+            </VizFullRow>
+          </>
+        )}
+        <VizNumberInput
+          label="Point size (px)"
+          min={1}
+          max={30}
+          value={pointSize}
+          onChange={(v) => setPointSize(typeof v === 'number' ? v : 5)}
+        />
+        <VizSlider
+          label="Opacity"
+          min={0.05}
+          max={1}
+          step={0.05}
+          value={opacity}
+          onChange={setOpacity}
+        />
+        {fileMode ? null : (
+          <VizNumberInput
+            label="Threshold rule"
+            placeholder="none"
+            value={scoreThreshold ?? ''}
+            onChange={(v) => setScoreThreshold(typeof v === 'number' ? v : null)}
+          />
+        )}
+      </VizControlGroup>
+      {fileMode ? null : (
+        <VizControlGroup title="Lanes">
+          <VizSwitch
+            checked={facetBySample && canFacet}
+            disabled={!canFacet}
+            onChange={(e) => setFacetBySample(e.currentTarget.checked)}
+            label={canFacet ? 'One lane per sample, shared genome axis' : 'Bind a sample column first'}
+          />
+          {facetBySample && canFacet ? (
+            <VizNumberInput
+              label="Max lanes"
+              min={1}
+              max={40}
+              value={maxFacets}
+              onChange={(v) => setMaxFacets(typeof v === 'number' ? v : 8)}
+            />
+          ) : null}
+          {built && built.droppedFacets > 0 ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {built.droppedFacets} more sample(s) not drawn.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+      )}
+      <VizControlGroup title="Genome">
+        <VizSelect
+          label="Assembly"
+          description="Built-in chromosome sizes, or derive them from the data"
+          clearable
+          value={assembly}
+          onChange={(v) => setAssembly(v)}
+          data={BUILTIN_ASSEMBLIES.map((a) => ({ value: a, label: a }))}
+          placeholder="from data"
+        />
+        {fileMode ? null : (
+          <VizSelect
+            label="Gene annotation lane"
+            description="Protein-coding genes under the track; labels appear as you zoom in"
+            value={annotation}
+            onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'mm10') ?? 'none')}
+            data={[
+              { value: 'none', label: 'None' },
+              ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
+            ]}
+          />
+        )}
+        {annotationHint ? (
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {annotationHint}
+            </Text>
+          </VizFullRow>
+        ) : null}
+        <VizSwitch
           checked={followRegion}
           onChange={(e) => setFollowRegion(e.currentTarget.checked)}
           label="Zoom to an incoming region instead of the whole genome"
         />
-      </Stack>
-      <Group gap={4}>
-        <Badge size="xs" variant="light">
-          {backend === 'webgl' ? 'WebGL' : 'Canvas fallback'}
-        </Badge>
-        {regionBrushEnabled ? (
+      </VizControlGroup>
+      <VizFullRow>
+        <Group gap={4}>
           <Badge size="xs" variant="light">
-            {brushedRegion ? `region ${brushedRegion}` : 'drag to filter a region'}
+            {backend === 'webgl' ? 'WebGL' : 'Canvas fallback'}
           </Badge>
-        ) : null}
-        {selectionEnabled ? (
-          <Badge size="xs" variant="light">
-            click filters {selectionColumn}
-          </Badge>
-        ) : null}
-      </Group>
-    </Stack>
+          {regionBrushEnabled ? (
+            <Badge size="xs" variant="light">
+              {brushedRegion ? `region ${brushedRegion}` : 'drag to filter a region'}
+            </Badge>
+          ) : null}
+          {selectionEnabled ? (
+            <Badge size="xs" variant="light">
+              click filters {selectionColumn}
+            </Badge>
+          ) : null}
+        </Group>
+      </VizFullRow>
+    </>
   );
 
   return (

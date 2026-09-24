@@ -2,12 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   alpha,
   Group,
-  MultiSelect,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -22,6 +16,15 @@ import {
 } from '../../api';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { dotSizeKey, dotSizes, type DotSizeKeyEntry } from './dotSizes';
 import { splitFigureByGroups } from './groupSplit';
@@ -734,8 +737,8 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
 
   const viewControl =
     offeredViews.length > 1 ? (
-      <SegmentedControl
-        size="xs"
+      <VizSegmented
+        aria-label="View"
         value={activeView}
         onChange={(v) => setView(v as View)}
         data={offeredViews.map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
@@ -743,80 +746,72 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     ) : null;
 
   // Encoding tier: which view, which terms or genes are on the axes, in what
-  // order and under which colour semantics. Drawn as chips in the header, so
-  // every control carries a fixed width and no description.
+  // order and under which colour semantics. Handed to the frame as a flat
+  // fragment; the strip's grid owns the widths.
   const primaryControls = useMemo(
     () => (
       <>
         {viewControl}
         {activeView === 'enrichment' ? (
           <>
-            {sources.length > 0 ? (
-              <MultiSelect
-                size="xs"
-                w={200}
-                label="Source"
-                value={selectedSources}
-                onChange={setSelectedSources}
-                data={sources}
-                placeholder="all sources"
-                clearable
+            <VizControlGroup title="Terms">
+              {sources.length > 0 ? (
+                <VizMultiSelect
+                  label="Source"
+                  value={selectedSources}
+                  onChange={setSelectedSources}
+                  data={sources}
+                  placeholder="all sources"
+                  clearable
+                />
+              ) : null}
+              <VizNumberInput
+                label="Top-N pathways"
+                value={topN}
+                onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+                min={1}
+                max={100}
               />
-            ) : null}
-            <NumberInput
-              size="xs"
-              w={110}
-              label="Top-N pathways"
-              value={topN}
-              onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
-              min={1}
-              max={100}
-            />
-            <NumberInput
-              size="xs"
-              w={110}
-              label="padj threshold"
-              value={padjThreshold}
-              onChange={(v) => setPadjThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
-              min={0}
-              max={1}
-              step={0.01}
-              decimalScale={3}
-            />
-            <Select
-              size="xs"
-              w={170}
-              label="Colour by"
-              value={colourBy}
-              onChange={(v) => v && setColourBy(v as ColourBy)}
-              data={[
-                { value: 'neg_log10_padj', label: '-log10(padj)' },
-                { value: 'abs_nes', label: '|NES|' },
-                { value: 'nes_sign', label: 'NES sign (up / down)' },
-                { value: 'gene_count', label: 'Gene count' },
-              ]}
-              allowDeselect={false}
-            />
-            <Select
-              size="xs"
-              w={140}
-              label="Sort terms"
-              value={termSort}
-              onChange={(v) => v && setTermSort(v as TermSort)}
-              data={[
-                { value: 'nes', label: 'NES' },
-                { value: 'significance', label: 'Significance' },
-                { value: 'gene_count', label: 'Gene count' },
-                { value: 'name', label: 'Name' },
-              ]}
-              allowDeselect={false}
-            />
+              <VizNumberInput
+                label="padj threshold"
+                value={padjThreshold}
+                onChange={(v) => setPadjThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
+                min={0}
+                max={1}
+                step={0.01}
+                decimalScale={3}
+              />
+            </VizControlGroup>
+            <VizControlGroup title="Colour and order">
+              <VizSelect
+                label="Colour by"
+                value={colourBy}
+                onChange={(v) => v && setColourBy(v as ColourBy)}
+                data={[
+                  { value: 'neg_log10_padj', label: '-log10(padj)' },
+                  { value: 'abs_nes', label: '|NES|' },
+                  { value: 'nes_sign', label: 'NES sign (up / down)' },
+                  { value: 'gene_count', label: 'Gene count' },
+                ]}
+                allowDeselect={false}
+              />
+              <VizSelect
+                label="Sort terms"
+                value={termSort}
+                onChange={(v) => v && setTermSort(v as TermSort)}
+                data={[
+                  { value: 'nes', label: 'NES' },
+                  { value: 'significance', label: 'Significance' },
+                  { value: 'gene_count', label: 'Gene count' },
+                  { value: 'name', label: 'Name' },
+                ]}
+                allowDeselect={false}
+              />
+            </VizControlGroup>
           </>
         ) : (
-          <>
-            <Select
-              size="xs"
-              w={160}
+          <VizControlGroup title="Axes">
+            <VizSelect
               label="Sort genes"
               value={geneSort}
               onChange={(v) => v && setGeneSort(v as AxisSort)}
@@ -827,9 +822,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
               ]}
               allowDeselect={false}
             />
-            <Select
-              size="xs"
-              w={160}
+            <VizSelect
               label="Sort clusters"
               value={clusterSort}
               onChange={(v) => v && setClusterSort(v as AxisSort)}
@@ -840,9 +833,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
               ]}
               allowDeselect={false}
             />
-            <NumberInput
-              size="xs"
-              w={100}
+            <VizNumberInput
               label="Max genes"
               value={maxGenes}
               onChange={(v) => setMaxGenes(Math.max(5, Math.min(500, Number(v) || 50)))}
@@ -850,7 +841,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
               max={500}
               disabled={fullGenes}
             />
-          </>
+          </VizControlGroup>
         )}
       </>
     ),
@@ -873,83 +864,67 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // Cosmetic tier: how the same dots are painted.
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Select
-          size="xs"
-          label="Colourscale"
-          description="Auto follows the colour-by mode and the theme"
-          value={colourScale}
-          onChange={(v) => v && setColourScale(v as DotPlotColourScale)}
-          data={['Auto', ...COLOUR_SCALES]}
-          allowDeselect={false}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Direction
-          </Text>
-          <Switch
-            size="xs"
+      <>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Colourscale"
+            description="Auto follows the colour-by mode and the theme"
+            value={colourScale}
+            onChange={(v) => v && setColourScale(v as DotPlotColourScale)}
+            data={['Auto', ...COLOUR_SCALES]}
+            allowDeselect={false}
+          />
+          <VizSwitch
             checked={reverseScale}
             onChange={(e) => setReverseScale(e.currentTarget.checked)}
             label="Reverse colourscale"
           />
-        </Stack>
-        {activeView === 'dotplot' ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Scale
-            </Text>
-            <Switch
-              size="xs"
+          {activeView === 'dotplot' ? (
+            <VizSwitch
               checked={logTransform}
               onChange={(e) => setLogTransform(e.currentTarget.checked)}
               label={`log10(${config.mean_expression_col}+1)`}
             />
-          </Stack>
-        ) : null}
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Markers">
+          <VizNumberInput
             label="Max dot size"
             value={maxSize}
             onChange={(v) => setMaxSize(Math.max(4, Math.min(60, Number(v) || 22)))}
             min={4}
             max={60}
           />
-          <NumberInput
-            size="xs"
+          <VizNumberInput
             label="Min dot size"
             value={minSize}
             onChange={(v) => setMinSize(Math.max(0, Math.min(20, Number(v) || 2)))}
             min={0}
             max={20}
           />
-        </Group>
-        <NumberInput
-          size="xs"
-          label={activeView === 'enrichment' ? 'Annotate top-N' : 'Annotate top-N frac'}
-          description={
-            activeView === 'enrichment'
-              ? 'Gene count on the most significant dots; 0 = off'
-              : '0 = off'
-          }
-          value={annotateTopN}
-          onChange={(v) => setAnnotateTopN(Math.max(0, Math.min(40, Number(v) || 0)))}
-          min={0}
-          max={40}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Markers
-          </Text>
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={markerOutline}
             onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
-            label="Marker outline"
+            label="Outline"
           />
-        </Stack>
-      </Stack>
+        </VizControlGroup>
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label={activeView === 'enrichment' ? 'Annotate top-N' : 'Annotate top-N frac'}
+            value={annotateTopN}
+            onChange={(v) => setAnnotateTopN(Math.max(0, Math.min(40, Number(v) || 0)))}
+            min={0}
+            max={40}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {activeView === 'enrichment'
+                ? 'Gene count on the most significant dots; 0 = off'
+                : '0 = off'}
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+      </>
     ),
     [
       activeView,

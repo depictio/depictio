@@ -1,16 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Group,
-  NumberInput,
   Paper,
-  Select,
-  Slider,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   AdvancedVizKind,
@@ -23,6 +25,7 @@ import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
   filtersExcludingOwn,
+  hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
@@ -213,6 +216,14 @@ const GenomeChordRenderer: React.FC<Props> = ({
   const [estimated, setEstimated] = useState(false);
   const [hovered, setHovered] = useState<ChordLink | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  // The chords are highlighted from local state, so a clear from outside the
+  // ring (the tile's clear-selection action, the filter summary) has to reach
+  // it here: once the dashboard no longer holds this tile's selection, nothing
+  // is selected.
+  const ownSelectionActive = hasOwnSelection(filters, metadata.index, 'scatter_selection');
+  useEffect(() => {
+    if (!ownSelectionActive) setSelected([]);
+  }, [ownSelectionActive]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 4) {
@@ -406,9 +417,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
   // second tier.
   const primaryControls = (
     <>
-      <Select
-        size="xs"
-        w={170}
+      <VizSelect
         label="Assembly"
         value={assembly ?? ASSEMBLY_AUTO}
         onChange={(v) => setAssembly(v && v !== ASSEMBLY_AUTO ? v : null)}
@@ -418,9 +427,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
         ]}
         allowDeselect={false}
       />
-      <Select
-        size="xs"
-        w={170}
+      <VizSelect
         label="Colour by"
         value={colourBy}
         onChange={(v) => setColourBy((v as 'category' | 'chrom_a' | 'none') || 'category')}
@@ -435,49 +442,41 @@ const GenomeChordRenderer: React.FC<Props> = ({
   );
 
   const controls = (
-    <Stack gap="xs">
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Links drawn (at most)
-        </Text>
-        <Slider
-          size="xs"
+    <>
+      <VizControlGroup title="Links">
+        <VizSlider
+          label={`Max links: ${maxLinks}`}
+          aria-label="Links drawn (at most)"
           min={10}
           max={2000}
           step={10}
           value={maxLinks}
           onChange={setMaxLinks}
-          label={(v) => String(v)}
+          thumbLabel={(v) => String(v)}
         />
-      </Stack>
-      {config.weight_col ? (
-        <NumberInput
-          size="xs"
-          label="Minimum weight"
-          placeholder="no threshold"
-          min={0}
-          value={minWeight ?? ''}
-          onChange={(v) => setMinWeight(v === '' || v === null ? null : Number(v))}
-        />
-      ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Display
-        </Text>
-        <Switch
-          size="xs"
-          checked={showLabels}
-          onChange={(e) => setShowLabels(e.currentTarget.checked)}
-          label="Chromosome labels"
-        />
-        <Switch
-          size="xs"
+        {config.weight_col ? (
+          <VizNumberInput
+            label="Minimum weight"
+            placeholder="no threshold"
+            min={0}
+            value={minWeight ?? ''}
+            onChange={(v) => setMinWeight(v === '' || v === null ? null : Number(v))}
+          />
+        ) : null}
+        <VizSwitch
           checked={intraChrom}
           onChange={(e) => setIntraChrom(e.currentTarget.checked)}
           label="Intra-chromosomal links"
         />
-      </Stack>
-    </Stack>
+      </VizControlGroup>
+      <VizControlGroup title="Labels">
+        <VizSwitch
+          checked={showLabels}
+          onChange={(e) => setShowLabels(e.currentTarget.checked)}
+          label="Chromosome labels"
+        />
+      </VizControlGroup>
+    </>
   );
 
   let emptyMessage: string | undefined;

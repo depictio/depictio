@@ -3,7 +3,7 @@
  *
  * A Plotly figure fills whatever box it is given, so a tile cannot be measured
  * off the DOM the way a text block or a table can: the node reports the tile
- * back rather than the content. What these renderers *do* know is a count  - 
+ * back rather than the content. What these renderers *do* know is a count  -
  * six contrasts, forty genes, twelve sets, three cards, and roughly how much
  * vertical room one of them needs to stay readable. That is the whole of the
  * calculation here: a count, a per-item height, and the fixed chrome (axis
@@ -18,7 +18,7 @@
  *
  * The numbers are honest, not flattering: a tile with two bars asks for the
  * minimum. `advanced_viz` may only grow (see `FIT_POLICIES` in `autofit.ts`),
- * so a small demand changes nothing on a tile the author sized generously  - 
+ * so a small demand changes nothing on a tile the author sized generously  -
  * the policy decides what to do with the answer, this module only answers.
  */
 

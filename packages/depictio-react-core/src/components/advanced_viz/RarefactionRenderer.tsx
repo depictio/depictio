@@ -1,15 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Tabs,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import { VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 
 import {
   fetchAdvancedVizData,
@@ -505,9 +497,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
   const primaryControls = (
     <>
       {groupOptions.length > 0 ? (
-        <Select
-          size="xs"
-          w={180}
+        <VizSelect
           label="Group by"
           value={groupBy}
           onChange={setGroupBy}
@@ -515,9 +505,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
           clearable
         />
       ) : null}
-      <NumberInput
-        size="xs"
-        w={130}
+      <VizNumberInput
         label="Top-N samples"
         value={topN}
         onChange={(v) => setTopN(Math.max(1, Number(v) || 60))}
@@ -528,14 +516,11 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
   );
 
   const controls = (
-    <Stack gap="xs">
-      <Switch
-        size="xs"
-        checked={showCI}
-        onChange={(e) => setShowCI(e.currentTarget.checked)}
-        label="Error bars (±SE)"
-      />
-    </Stack>
+    <VizSwitch
+      checked={showCI}
+      onChange={(e) => setShowCI(e.currentTarget.checked)}
+      label="Error bars (±SE)"
+    />
   );
 
   return (

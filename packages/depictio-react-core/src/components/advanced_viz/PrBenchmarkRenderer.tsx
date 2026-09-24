@@ -1,16 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  alpha,
-  SegmentedControl,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { alpha, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
@@ -454,45 +452,42 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
   const hasSupport = Boolean(config.support_col);
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         {activeView !== 'roc' ? (
           <>
-            <Switch size="xs" checked={showIso} onChange={(e) => setShowIso(e.currentTarget.checked)} label="F1 iso-contours" />
-            <Switch size="xs" checked={showDiag} onChange={(e) => setShowDiag(e.currentTarget.checked)} label="y = x diagonal" />
-            <Switch size="xs" checked={showLabels} onChange={(e) => setShowLabels(e.currentTarget.checked)} label="Point labels" />
-            <Switch size="xs" checked={showColorbar} onChange={(e) => setShowColorbar(e.currentTarget.checked)} label="Colour bar" />
-            <Switch size="xs" checked={unitRange} onChange={(e) => setUnitRange(e.currentTarget.checked)} label="Fixed 0–1 axes" />
-            <Stack gap={4}>
-              <Text size="xs" fw={500}>Base marker size</Text>
-              <Slider size="xs" min={6} max={30} value={baseSize} onChange={setBaseSize} />
-            </Stack>
-            <Stack gap={4}>
-              <Text size="xs" fw={500}>Label font</Text>
-              <Slider size="xs" min={8} max={18} value={labelFont} onChange={setLabelFont} />
-            </Stack>
+            <VizControlGroup title="Guides">
+              <VizSwitch checked={showIso} onChange={(e) => setShowIso(e.currentTarget.checked)} label="F1 iso-contours" />
+              <VizSwitch checked={showDiag} onChange={(e) => setShowDiag(e.currentTarget.checked)} label="y = x diagonal" />
+              <VizSwitch checked={unitRange} onChange={(e) => setUnitRange(e.currentTarget.checked)} label="Fixed 0–1 axes" />
+            </VizControlGroup>
+            <VizControlGroup title="Points">
+              <VizSlider label="Base marker size" min={6} max={30} value={baseSize} onChange={setBaseSize} />
+              <VizSwitch checked={showColorbar} onChange={(e) => setShowColorbar(e.currentTarget.checked)} label="Colour bar" />
+              <VizSwitch checked={showLabels} onChange={(e) => setShowLabels(e.currentTarget.checked)} label="Point labels" />
+              <VizSlider label="Label font" min={8} max={18} value={labelFont} onChange={setLabelFont} />
+            </VizControlGroup>
           </>
         ) : null}
         {activeView !== 'pr' ? (
-          <>
-            <Switch size="xs" checked={showLegend} onChange={(e) => setShowLegend(e.currentTarget.checked)} label="Legend" />
-            <Switch size="xs" checked={showMarkers} onChange={(e) => setShowMarkers(e.currentTarget.checked)} label="Curve markers" />
+          <VizControlGroup title="Curves">
+            <VizSwitch checked={showLegend} onChange={(e) => setShowLegend(e.currentTarget.checked)} label="Legend" />
+            <VizSwitch checked={showMarkers} onChange={(e) => setShowMarkers(e.currentTarget.checked)} label="Curve markers" />
             {showMarkers ? (
-              <Stack gap={4}>
-                <Text size="xs" fw={500}>Curve marker size</Text>
-                <Slider size="xs" min={2} max={14} value={markerSize} onChange={setMarkerSize} />
-              </Stack>
+              <VizSlider label="Curve marker size" min={2} max={14} value={markerSize} onChange={setMarkerSize} />
             ) : null}
-            <Switch size="xs" checked={fill} onChange={(e) => setFill(e.currentTarget.checked)} label="Shade area" />
-            <Switch size="xs" checked={showAuc} onChange={(e) => setShowAuc(e.currentTarget.checked)} label="Show AUC" />
+            <VizSwitch checked={fill} onChange={(e) => setFill(e.currentTarget.checked)} label="Shade area" />
+            <VizSwitch checked={showAuc} onChange={(e) => setShowAuc(e.currentTarget.checked)} label="Show AUC" />
             {!hasFpr ? (
-              <Text size="9px" c="dimmed">
-                A true ROC needs a false-positive-rate column (true negatives). Without one the
-                curve stays precision against recall, which is the variant-calling standard.
-              </Text>
+              <VizFullRow>
+                <Text size="9px" c="dimmed">
+                  A true ROC needs a false-positive-rate column (true negatives). Without one the
+                  curve stays precision against recall, which is the variant-calling standard.
+                </Text>
+              </VizFullRow>
             ) : null}
-          </>
+          </VizControlGroup>
         ) : null}
-      </Stack>
+      </>
     ),
     [
       activeView,
@@ -516,8 +511,8 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     const viewLabel = (v: View): string =>
       v === 'pr' ? 'Points' : v === 'roc' ? (hasFpr ? 'ROC' : 'Curve') : 'Both';
     return offeredViews.length > 1 ? (
-      <SegmentedControl
-        size="xs"
+      <VizSegmented
+        aria-label="View"
         value={activeView}
         onChange={(v) => setView(v as View)}
         data={offeredViews.map((v) => ({ value: v, label: viewLabel(v) }))}
@@ -526,8 +521,8 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
   }, [offeredViews, activeView, setView, hasFpr]);
 
   // Encoding tier: which view, whether point size encodes support, and the
-  // colour scale that maps the metric. Drawn as chips in the header, so every
-  // control carries a fixed width and no description.
+  // colour scale that maps the metric. Drawn in the header strip, so no
+  // control carries a description.
   const primaryControls = useMemo(
     () => (
       <>
@@ -535,8 +530,9 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
         {activeView !== 'roc' ? (
           <>
             {hasSupport ? (
-              <SegmentedControl
-                size="xs"
+              <VizSegmented
+                label="Size"
+                aria-label="Point size"
                 value={sizeMode}
                 onChange={(v) => setSizeMode(v as 'support' | 'uniform')}
                 data={[
@@ -545,14 +541,11 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
                 ]}
               />
             ) : null}
-            <Select
-              size="xs"
-              w={150}
+            <VizSelect
               label="Colour scale"
               value={colorscale}
               onChange={(v) => setColorscale(v || 'Tealgrn')}
               data={COLORSCALE_NAMES}
-              comboboxProps={{ withinPortal: true }}
             />
           </>
         ) : null}

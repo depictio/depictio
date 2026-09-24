@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { ActionIcon, Group, ScrollArea, Stack, Tabs, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { DataGridBody, MetadataBody } from 'depictio-react-core';
+import { DataGridBody, MetadataBody, VizControlsGrid } from 'depictio-react-core';
 import type { DashboardData, DashboardPermissions, StoredMetadata } from 'depictio-react-core';
 import DashboardInfoBody from '../DashboardInfoBody';
 import { useNotesEditor } from '../../components/notes/useNotesEditor';
@@ -139,10 +139,10 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
               {/* Encoding first, cosmetics after: the same order the popover
                   uses, and the order a reader asks the questions in, what is
                   plotted before how it looks. */}
-              <Stack gap="sm">
+              <VizControlsGrid layout="column">
                 {extras?.primaryControls}
                 {extras?.controls}
-              </Stack>
+              </VizControlsGrid>
             </ScrollArea>
           </Tabs.Panel>
         )}

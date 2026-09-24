@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Stack, Switch, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizSwitch } from './controls/VizControls';
 import { logSpacedRankThin } from './kneeThinning';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -296,20 +297,17 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   // a linear rank axis hides the knee entirely.
   const primaryControls = (
     <>
-      <Switch size="xs" checked={logX} onChange={(e) => setLogX(e.currentTarget.checked)} label="Log rank (x)" />
-      <Switch size="xs" checked={logY} onChange={(e) => setLogY(e.currentTarget.checked)} label="Log UMI count (y)" />
+      <VizSwitch checked={logX} onChange={(e) => setLogX(e.currentTarget.checked)} label="Log rank (x)" />
+      <VizSwitch checked={logY} onChange={(e) => setLogY(e.currentTarget.checked)} label="Log UMI count (y)" />
     </>
   );
 
   const controls = (
-    <Stack gap="xs">
-      <Switch
-        size="xs"
-        checked={showCutoff}
-        onChange={(e) => setShowCutoff(e.currentTarget.checked)}
-        label="Show cell-calling cutoff"
-      />
-    </Stack>
+    <VizSwitch
+      checked={showCutoff}
+      onChange={(e) => setShowCutoff(e.currentTarget.checked)}
+      label="Show cell-calling cutoff"
+    />
   );
 
   return (

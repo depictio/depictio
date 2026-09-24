@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -27,6 +18,13 @@ import {
   hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -668,70 +666,66 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   // paint.
   const primaryControls = (
     <>
-      <Switch
-        size="xs"
-        checked={logX || derivative}
-        disabled={derivative}
-        onChange={(e) => setLogX(e.currentTarget.checked)}
-        label="Log x"
-      />
-      <Switch
-        size="xs"
-        checked={logY || derivative}
-        disabled={derivative}
-        onChange={(e) => setLogY(e.currentTarget.checked)}
-        label="Log y"
-      />
-      <Switch
-        size="xs"
-        checked={derivative}
-        onChange={(e) => setDerivative(e.currentTarget.checked)}
-        label="Local log-log slope panel"
-      />
+      <VizControlGroup title="Axes">
+        <VizSwitch
+          checked={logX || derivative}
+          disabled={derivative}
+          onChange={(e) => setLogX(e.currentTarget.checked)}
+          label="Log x"
+        />
+        <VizSwitch
+          checked={logY || derivative}
+          disabled={derivative}
+          onChange={(e) => setLogY(e.currentTarget.checked)}
+          label="Log y"
+        />
+        <VizSwitch
+          checked={derivative}
+          onChange={(e) => setDerivative(e.currentTarget.checked)}
+          label="Local log-log slope panel"
+        />
+      </VizControlGroup>
     </>
   );
 
   const controls = (
-    <Stack gap="xs">
-      <NumberInput
-        size="xs"
-        label="Line width"
-        value={lineWidth}
-        onChange={(v) => setLineWidth(Math.max(0.5, Number(v) || 2))}
-        min={0.5}
-        max={8}
-        step={0.5}
-        decimalScale={1}
-      />
-      {bandCols ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Band opacity
-          </Text>
-          <Slider
-            size="xs"
+    <>
+      <VizControlGroup title="Lines">
+        <VizNumberInput
+          label="Line width"
+          value={lineWidth}
+          onChange={(v) => setLineWidth(Math.max(0.5, Number(v) || 2))}
+          min={0.5}
+          max={8}
+          step={0.5}
+          decimalScale={1}
+        />
+        {bandCols ? (
+          <VizSlider
+            label="Band opacity"
             value={bandOpacity}
             onChangeEnd={setBandOpacity}
             min={0}
             max={1}
             step={0.05}
-            label={(v) => v.toFixed(2)}
+            thumbLabel={(v) => v.toFixed(2)}
           />
-        </Stack>
-      ) : null}
-      <Select
-        size="xs"
-        label="Legend"
-        value={legendPos}
-        onChange={(v) => setLegendPos((v as LegendPos) || 'right')}
-        data={[
-          { value: 'right', label: 'Right' },
-          { value: 'bottom', label: 'Bottom' },
-          { value: 'none', label: 'Hidden' },
-        ]}
-        allowDeselect={false}
-      />
-    </Stack>
+        ) : null}
+      </VizControlGroup>
+      <VizControlGroup title="Legend">
+        <VizSelect
+          label="Legend"
+          value={legendPos}
+          onChange={(v) => setLegendPos((v as LegendPos) || 'right')}
+          data={[
+            { value: 'right', label: 'Right' },
+            { value: 'bottom', label: 'Bottom' },
+            { value: 'none', label: 'Hidden' },
+          ]}
+          allowDeselect={false}
+        />
+      </VizControlGroup>
+    </>
   );
 
   // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is

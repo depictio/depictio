@@ -204,6 +204,28 @@ export function genomePosFilterIndex(componentIndex: string): string {
   return `${componentIndex}${GENOME_POS_INDEX_SUFFIX}`;
 }
 
+/** True for either half of a genome region pair (`source: 'genome_selection'`). */
+export function isRegionFilter(f: InteractiveFilter): boolean {
+  return f.source === 'genome_selection';
+}
+
+/**
+ * The filters a card reads: every active filter except the genome region,
+ * unless the card opts in with `follow_region_filter`.
+ *
+ * A region is a place to look, not a subset to summarise, so a card keeps
+ * summarising the whole collection while the tracks follow the locus. Mirrors
+ * `depictio/api/v1/region_scope.py`, which applies the same rule server-side
+ * in `bulk_compute_cards` and the card preview routes.
+ */
+export function cardScopedFilters(
+  filters: InteractiveFilter[],
+  card: { follow_region_filter?: unknown } | null | undefined,
+): InteractiveFilter[] {
+  if (card?.follow_region_filter === true) return filters;
+  return filters.some(isRegionFilter) ? filters.filter((f) => !isRegionFilter(f)) : filters;
+}
+
 /**
  * The filter pair a `genome_view` region brush emits.
  *
@@ -372,6 +394,65 @@ export function hasOwnSelection(
       Array.isArray(f.value) &&
       f.value.length > 0,
   );
+}
+
+/**
+ * The sources a tile's "clear selection" affordance covers: the selections a
+ * reader makes by pointing at the tile itself (a lasso, a row pick, a map
+ * polygon, a thumbnail, a genome brush).
+ *
+ * Left out on purpose: `tree_selection` and `axis_selection`, whose tiles
+ * carry their own clear control and keep their visual state locally, so a
+ * clear from the chrome would drop the filter and leave the clade or the brush
+ * drawn; and `group_filter`, which is never in the user's filter list.
+ */
+const CLEARABLE_SELECTION_SOURCES: ReadonlySet<InteractiveFilterSource> = new Set([
+  'scatter_selection',
+  'table_selection',
+  'map_selection',
+  'image_selection',
+  'genome_selection',
+]);
+
+/** The selection one tile currently contributes to the dashboard. */
+export interface OwnSelection {
+  /** The non-empty entries this tile emitted, the region's position half
+   *  included. Empty when the tile has nothing selected. */
+  filters: InteractiveFilter[];
+  /** How many values are selected, for the "Clear selection (N)" label. A
+   *  region's position half is a range, not picked values, so it adds none. */
+  count: number;
+}
+
+/**
+ * Read back the selection a tile has emitted, keyed on its own index (and the
+ * `::pos` index of a genome region's second half) so another tile's selection
+ * on the same column never counts as this one's.
+ */
+export function ownSelection(
+  filters: readonly InteractiveFilter[],
+  componentIndex: string,
+): OwnSelection {
+  const posIndex = genomePosFilterIndex(componentIndex);
+  const own: InteractiveFilter[] = [];
+  let count = 0;
+  for (const f of filters) {
+    if (f.index !== componentIndex && f.index !== posIndex) continue;
+    if (!f.source || !CLEARABLE_SELECTION_SOURCES.has(f.source)) continue;
+    const v = f.value;
+    if (v == null || (Array.isArray(v) && v.length === 0)) continue;
+    own.push(f);
+    if (f.index === componentIndex) count += Array.isArray(v) ? v.length : 1;
+  }
+  return { filters: own, count };
+}
+
+/** The cleared form of each entry, the `[]` shape `mergeFiltersBySource`
+ *  drops. Emitting these one by one is what "clear this tile" means. */
+export function clearedSelectionFilters(
+  filters: readonly InteractiveFilter[],
+): InteractiveFilter[] {
+  return filters.map((f) => ({ ...f, value: [] }));
 }
 
 /**

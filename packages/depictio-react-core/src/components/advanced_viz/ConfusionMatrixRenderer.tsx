@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Select, Slider, Stack, Switch, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizControlGroup, VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
 import { COLORSCALE_NAMES, contrastingText, plotlyColorscale, sampleColorscale } from '../../utils/colorScale';
 
@@ -162,9 +163,7 @@ const ConfusionMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // format, the scale and the font are how the same matrix is painted.
   const primaryControls = useMemo(
     () => (
-      <Select
-        size="xs"
-        w={180}
+      <VizSelect
         label="Normalise"
         value={mode}
         onChange={(v) => setMode((v as NormalizeMode) || 'per_caller')}
@@ -173,7 +172,6 @@ const ConfusionMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           { value: 'per_truth', label: 'Per row (TP/FP/FN)' },
           { value: 'none', label: 'None (raw scale)' },
         ]}
-        comboboxProps={{ withinPortal: true }}
       />
     ),
     [mode],
@@ -181,22 +179,21 @@ const ConfusionMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
 
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Switch size="xs" checked={showFractions} onChange={(e) => setShowFractions(e.currentTarget.checked)} label="Show fractions" />
-        <Select
-          size="xs"
-          label="Colour scale"
-          value={colorscale}
-          onChange={(v) => setColorscale(v || 'Blues')}
-          data={COLORSCALE_NAMES}
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Switch size="xs" checked={showColorbar} onChange={(e) => setShowColorbar(e.currentTarget.checked)} label="Colour bar" />
-        <Stack gap={2}>
-          <Text size="xs" fw={500}>Font size</Text>
-          <Slider size="xs" min={8} max={26} value={fontSize} onChange={setFontSize} />
-        </Stack>
-      </Stack>
+      <>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Colour scale"
+            value={colorscale}
+            onChange={(v) => setColorscale(v || 'Blues')}
+            data={COLORSCALE_NAMES}
+          />
+          <VizSwitch checked={showColorbar} onChange={(e) => setShowColorbar(e.currentTarget.checked)} label="Colour bar" />
+        </VizControlGroup>
+        <VizControlGroup title="Labels">
+          <VizSwitch checked={showFractions} onChange={(e) => setShowFractions(e.currentTarget.checked)} label="Show fractions" />
+          <VizSlider label="Font size" min={8} max={26} value={fontSize} onChange={setFontSize} />
+        </VizControlGroup>
+      </>
     ),
     [showFractions, colorscale, showColorbar, fontSize],
   );

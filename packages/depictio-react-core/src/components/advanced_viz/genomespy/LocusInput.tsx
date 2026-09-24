@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Autocomplete, Group, Select, Text } from '@mantine/core';
+import { Autocomplete } from '@mantine/core';
 
 import type { InteractiveFilter, StoredMetadata } from '../../../api';
 import { genomeRegionFilters } from '../../../selection';
 import type { Contig, GeneRow, GenomeRegion } from './genomeSpySpec';
 import { findGenes, formatLocus, geneWindow, resolveLocus } from './locusParse';
+import { VizInlineField, VizSelect } from '../controls/VizControls';
 
 /**
  * The address bar of a locus section: type `chr7:55,000,000-56,000,000` or a
@@ -101,10 +102,11 @@ const LocusInput: React.FC<Props> = ({
   const placeholder = region ? formatLocus(region.chrom, region.start, region.end) : 'chr7:55,000,000-56,000,000';
 
   return (
-    <Group gap={6} wrap="nowrap" align="flex-start">
-      <Select
-        size="xs"
-        w={120}
+    // Two cells of the frame's controls grid, not one pre-arranged row: the
+    // chromosome dropdown titled above, the locus field labelled inline.
+    <>
+      <VizSelect
+        label="Chromosome"
         aria-label="Chromosome"
         placeholder="Chromosome"
         value={region?.chrom ?? null}
@@ -120,43 +122,39 @@ const LocusInput: React.FC<Props> = ({
         clearable
         searchable={contigNames.length > 8}
       />
-      <Autocomplete
-        size="xs"
-        w={230}
-        aria-label="Locus or gene"
-        placeholder={placeholder}
-        value={text}
-        data={suggestions}
-        error={error}
-        disabled={!onFilterChange}
-        onChange={(v) => {
-          setText(v);
-          if (error) setError(null);
-        }}
-        onOptionSubmit={(v) => {
-          const gene = findGenes(genes, v, 1)[0];
-          if (!gene) {
-            submit(v);
-            return;
-          }
-          const window = geneWindow(gene);
-          setText(formatLocus(window.chrom, window.start, window.end));
-          setError(null);
-          emit({ chroms: [window.chrom], range: [window.start, window.end] });
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            submit(text);
-          }
-        }}
-      />
-      {!genes?.length ? (
-        <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>
-          chr:start-end
-        </Text>
-      ) : null}
-    </Group>
+      <VizInlineField label={genes?.length ? 'Locus or gene' : 'Locus (chr:start-end)'}>
+        <Autocomplete
+          size="xs"
+          aria-label="Locus or gene"
+          placeholder={placeholder}
+          value={text}
+          data={suggestions}
+          error={error}
+          disabled={!onFilterChange}
+          onChange={(v) => {
+            setText(v);
+            if (error) setError(null);
+          }}
+          onOptionSubmit={(v) => {
+            const gene = findGenes(genes, v, 1)[0];
+            if (!gene) {
+              submit(v);
+              return;
+            }
+            const window = geneWindow(gene);
+            setText(formatLocus(window.chrom, window.start, window.end));
+            setError(null);
+            emit({ chroms: [window.chrom], range: [window.start, window.end] });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit(text);
+            }
+          }}
+        />
+      </VizInlineField>
+    </>
   );
 };
 

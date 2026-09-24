@@ -1,18 +1,20 @@
 import React, { createContext, useContext } from 'react';
-import { ActionIcon, Group, ScrollArea, Stack } from '@mantine/core';
+import { Center, ScrollArea, SegmentedControl, Tooltip, VisuallyHidden } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
   RAIL_WIDTH_PX,
+  CONTROLS_PLACEMENTS,
   isControlsPlacement,
-  nextPlacement,
   type ControlsPlacement,
   type InlineLayout,
 } from './controlsPlacement';
+import { VIZ_SEGMENTED_STYLES, VizControlsGrid } from './controls/VizControls';
 
 /**
  * The React half of the controls-placement feature: the contexts the dispatch
- * publishes and the frame reads, the two inline surfaces, and the chrome pin.
+ * publishes and the frame reads, the two inline surfaces, and the placement
+ * picker drawn in the header of every controls block.
  *
  * The rules themselves (resolution order, rail-vs-below threshold, the echo
  * strings) live in `controlsPlacement.ts` so the node-environment vitest can
@@ -74,15 +76,23 @@ export function useRegionEcho(): string | null {
  *
  * Renderers pass `primaryControls` as a *fragment of individual controls*
  * rather than a pre-arranged Stack, so the same node reads as a strip here, as
- * a column in the rail, and as a settings list in the popover. Compact sizes
- * (`size="xs"`, an explicit `w`) are the renderer's to set: Mantine sizes are
- * per component and cannot be cascaded from a wrapper.
+ * a column in the rail, and as a settings list in the popover. The controls
+ * themselves are the `Viz*` wrappers from `controls/VizControls`, which fix
+ * size and height; the grid here fixes the arrangement.
  */
-export const InlineControlsStrip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <Group gap="xs" wrap="wrap" align="flex-end" data-testid="advanced-viz-controls-strip">
-    {children}
-  </Group>
-);
+export const InlineControlsStrip: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const state = useControlsPlacement();
+  return (
+    <VizControlsGrid
+      layout="strip"
+      framed
+      headerAction={<ControlsPlacementPicker state={state} />}
+      data-testid="advanced-viz-controls-strip"
+    >
+      {children}
+    </VizControlsGrid>
+  );
+};
 
 /**
  * Both tiers in a column, beside the plot or under it.
@@ -94,58 +104,78 @@ export const InlineControlsStrip: React.FC<{ children: React.ReactNode }> = ({ c
 export const InlineControlsRail: React.FC<{
   layout: Extract<InlineLayout, 'rail-side' | 'rail-below'>;
   children: React.ReactNode;
-}> = ({ layout, children }) => (
-  <ScrollArea
-    type="auto"
-    data-testid="advanced-viz-controls-rail"
-    data-rail-layout={layout}
-    style={
-      layout === 'rail-side'
-        ? { width: RAIL_WIDTH_PX, flex: `0 0 ${RAIL_WIDTH_PX}px`, minHeight: 0 }
-        : { width: '100%', maxHeight: 220 }
-    }
-  >
-    <Stack gap={8} pr={6} pl={layout === 'rail-side' ? 8 : 0}>
-      {children}
-    </Stack>
-  </ScrollArea>
-);
+}> = ({ layout, children }) => {
+  const state = useControlsPlacement();
+  return (
+    <ScrollArea
+      type="auto"
+      data-testid="advanced-viz-controls-rail"
+      data-rail-layout={layout}
+      style={
+        layout === 'rail-side'
+          ? { width: RAIL_WIDTH_PX, flex: `0 0 ${RAIL_WIDTH_PX}px`, minHeight: 0 }
+          : { width: '100%', maxHeight: 220 }
+      }
+    >
+      <div style={{ paddingRight: 6, paddingLeft: layout === 'rail-side' ? 8 : 0 }}>
+        <VizControlsGrid
+          layout="column"
+          framed
+          headerAction={<ControlsPlacementPicker state={state} />}
+        >
+          {children}
+        </VizControlsGrid>
+      </div>
+    </ScrollArea>
+  );
+};
 
 const PLACEMENT_ICON: Record<ControlsPlacement, string> = {
-  popover: 'tabler:pinned-off',
+  popover: 'tabler:adjustments-horizontal',
+  rail: 'tabler:layout-sidebar-right',
   header: 'tabler:layout-navbar',
-  rail: 'tabler:layout-sidebar-right-expand',
 };
 
 const PLACEMENT_LABEL: Record<ControlsPlacement, string> = {
-  popover: 'Controls in the popover',
-  header: 'Controls under the title',
-  rail: 'Controls in a side rail',
+  popover: 'In the settings popover',
+  rail: 'In a side rail',
+  header: 'Under the title',
 };
 
 /**
- * Chrome ActionIcon that pins this tile's controls out of the popover, cycling
- * popover to header to rail. Filled while the controls are pinned, so a tile
- * that is showing them reads as such from the action row.
+ * Where this tile's controls live, picked from the header of the controls
+ * block itself (the popover's, the strip's or the rail's), so the way back to
+ * the popover is always on the block that is showing. Icons only, each with a
+ * tooltip and a visually hidden name; the current placement is the selected
+ * segment. Renders nothing where the placement cannot be changed.
  */
-export const ControlsPlacementToggle: React.FC<{ state: ControlsPlacementState }> = ({
+export const ControlsPlacementPicker: React.FC<{ state: ControlsPlacementState }> = ({
   state,
 }) => {
   const { placement, setPlacement } = state;
   if (!setPlacement) return null;
-  const next = nextPlacement(placement);
   return (
-    <ActionIcon
-      variant={placement === 'popover' ? 'subtle' : 'filled'}
-      color="teal"
-      size="sm"
+    <SegmentedControl
+      size="xs"
       aria-label="Controls placement"
-      title={`${PLACEMENT_LABEL[placement]} (click for: ${PLACEMENT_LABEL[next].toLowerCase()})`}
-      data-testid="advanced-viz-placement-toggle"
+      data-testid="advanced-viz-placement-picker"
       data-placement={placement}
-      onClick={() => setPlacement(next)}
-    >
-      <Icon icon={PLACEMENT_ICON[placement]} width={16} height={16} />
-    </ActionIcon>
+      value={placement}
+      onChange={(v) => {
+        if (isControlsPlacement(v)) setPlacement(v);
+      }}
+      styles={VIZ_SEGMENTED_STYLES}
+      data={CONTROLS_PLACEMENTS.map((p) => ({
+        value: p,
+        label: (
+          <Tooltip label={PLACEMENT_LABEL[p]} withArrow openDelay={300}>
+            <Center>
+              <Icon icon={PLACEMENT_ICON[p]} width={14} height={14} />
+              <VisuallyHidden>{PLACEMENT_LABEL[p]}</VisuallyHidden>
+            </Center>
+          </Tooltip>
+        ),
+      }))}
+    />
   );
 };

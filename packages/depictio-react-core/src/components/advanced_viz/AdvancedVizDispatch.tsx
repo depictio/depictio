@@ -2,6 +2,8 @@ import React from 'react';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { wrapWithChrome } from '../chrome';
+import { clearedSelectionFilters, ownSelection } from '../../selection';
+import { defaultRegionKey, withoutDefaultRegion } from './genomespy/defaultRegionMemo';
 import VolcanoRenderer from './VolcanoRenderer';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
@@ -51,7 +53,7 @@ import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import {
   AdvancedVizRegionEchoContext,
   ControlsPlacementContext,
-  ControlsPlacementToggle,
+  ControlsPlacementPicker,
   genomeRegionEcho,
   resolveControlsPlacement,
   useAdvancedVizPlacementDefault,
@@ -256,7 +258,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         published.primaryControls ?? published.controls
       );
     if (popoverControls) {
-      nodes.push(<AdvancedVizSettingsPopover key="settings" controls={popoverControls} />);
+      nodes.push(
+        <AdvancedVizSettingsPopover
+          key="settings"
+          controls={popoverControls}
+          headerAction={<ControlsPlacementPicker state={placementState} />}
+        />,
+      );
     }
     if (published.data) {
       nodes.push(
@@ -272,10 +280,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       nodes.push(<LoadAllButton key="load-all" state={published.reduction} />);
     }
     // Data and reduction stay in the chrome whatever the placement: they are
-    // about the rows behind the figure, not about how it is drawn.
-    if (published.controls || published.primaryControls) {
-      nodes.push(<ControlsPlacementToggle key="placement" state={placementState} />);
-    }
+    // about the rows behind the figure, not about how it is drawn. Where the
+    // controls live is picked in the header of the controls block itself
+    // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
   }, [published, placement, placementState]);
 
@@ -415,6 +422,28 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     ],
   );
 
+  // The tile's own selection (a lasso, a pick, a genome brush), read back from
+  // the dashboard filters so the chrome can offer the same clear action a
+  // table or a scatter figure has. Each renderer already undims itself when
+  // its entry leaves the filters (see `useSelectionRevision`), so clearing the
+  // filter is also what clears the picture. A genome view's opening region
+  // (`default_region`) is not the reader's selection and does not count.
+  const own = React.useMemo(
+    () =>
+      withoutDefaultRegion(
+        ownSelection(filters, metadata.index),
+        metadata.index,
+        defaultRegionKey(metadata.index),
+      ),
+    [filters, metadata.index],
+  );
+  const onResetSelection =
+    onFilterChange && own.filters.length > 0
+      ? () => {
+          for (const cleared of clearedSelectionFilters(own.filters)) onFilterChange(cleared);
+        }
+      : undefined;
+
   const combinedExtras = popovers || extraActions ? (
     <>
       {popovers}
@@ -439,7 +468,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         </GroupStatusBadgeContext.Provider>
       </ComponentIndexContext.Provider>
     </AdvancedVizExtrasProvider>,
-    { extraActions: combinedExtras, showDragHandle },
+    {
+      extraActions: combinedExtras,
+      showDragHandle,
+      onResetFilter: onResetSelection,
+      sourceFilterActive: own.filters.length > 0,
+      selectionCount: own.count,
+    },
   );
 };
 

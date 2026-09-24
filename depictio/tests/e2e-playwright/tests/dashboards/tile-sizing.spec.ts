@@ -4,7 +4,7 @@
  * Autofit sizes text, cards, tables and advanced-viz tiles to what they hold,
  * in the editor as well as the viewer. That makes one guarantee worth guarding
  * end to end: the moment a user drags a tile's height, that tile leaves
- * autofit (`fit: fixed` on its stored_metadata) and nothing sizes it again  - 
+ * autofit (`fit: fixed` on its stored_metadata) and nothing sizes it again  -
  * not the next save, not a reload, not the viewer. Before autofit ran in the
  * editor there was no way to lose a manual height; now there is, and it is the
  * regression a unit test on `fitLayoutHeights` cannot see, because it lives in

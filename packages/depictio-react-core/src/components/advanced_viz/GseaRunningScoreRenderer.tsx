@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  alpha,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { alpha, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   type AdvancedVizKind,
@@ -553,18 +550,14 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
   // same curves.
   const primaryControls = (
     <>
-      <NumberInput
-        size="xs"
-        w={130}
+      <VizNumberInput
         label="Top-N gene sets"
         value={topNSets}
         onChange={(v) => setTopNSets(Math.max(1, Math.min(20, Number(v) || 5)))}
         min={1}
         max={20}
       />
-      <Select
-        size="xs"
-        w={170}
+      <VizSelect
         label="Layout"
         value={layoutMode}
         onChange={(v) => v && setLayoutMode(v as LayoutMode)}
@@ -578,33 +571,28 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
   );
 
   const controls = (
-    <Stack gap="xs">
-      <Stack gap={4}>
-        <Switch
-          size="xs"
-          checked={showLeadingEdge}
-          onChange={(e) => setShowLeadingEdge(e.currentTarget.checked)}
-          label="Shade the leading edge"
+    <VizControlGroup title="Annotations">
+      <VizSwitch
+        checked={showLeadingEdge}
+        onChange={(e) => setShowLeadingEdge(e.currentTarget.checked)}
+        label="Shade the leading edge"
+      />
+      {config.member_col ? (
+        <VizSwitch
+          checked={showHits}
+          onChange={(e) => setShowHits(e.currentTarget.checked)}
+          label="Hit rug"
+          disabled={!hasHits}
         />
-        {config.member_col ? (
-          <Switch
-            size="xs"
-            checked={showHits}
-            onChange={(e) => setShowHits(e.currentTarget.checked)}
-            label="Hit rug"
-            disabled={!hasHits}
-          />
-        ) : null}
-        {config.metric_col ? (
-          <Switch
-            size="xs"
-            checked={showMetric}
-            onChange={(e) => setShowMetric(e.currentTarget.checked)}
-            label="Ranked metric"
-          />
-        ) : null}
-      </Stack>
-    </Stack>
+      ) : null}
+      {config.metric_col ? (
+        <VizSwitch
+          checked={showMetric}
+          onChange={(e) => setShowMetric(e.currentTarget.checked)}
+          label="Ranked metric"
+        />
+      ) : null}
+    </VizControlGroup>
   );
 
   return (

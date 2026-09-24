@@ -13,6 +13,7 @@ import {
   SectionAccordionItem,
   SectionHeader,
 } from './SectionAccordion';
+import { resolveSectionColor } from './SectionIcon';
 import ComponentRenderer from './ComponentRenderer';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
 import { fitLayoutHeights, GRID_ROW_GAP_PX, GRID_ROW_PX, useAutofitHeights } from './autofit';
@@ -229,7 +230,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
             <SectionAccordionItem
               key={key}
               value={key}
-              color={section.spec.color}
+              color={resolveSectionColor(section.spec.color, section.spec.name)}
               actions={renderSectionActions?.(section)}
             >
               <Accordion.Control>

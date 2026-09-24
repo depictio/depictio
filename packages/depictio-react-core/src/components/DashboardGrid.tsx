@@ -25,7 +25,7 @@ import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteracti
 import type { ComponentSection } from '../utils/groupInteractive';
 import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
 import { useCollapseState } from '../hooks/useCollapseState';
-import { sectionColorVar } from './SectionIcon';
+import { resolveSectionColor, sectionColorVar } from './SectionIcon';
 import {
   applyAccordionValue,
   SectionAccordion,
@@ -33,6 +33,7 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
+import { usePreannouncedDefaultRegions } from './advanced_viz/genomespy/defaultRegionGate';
 import {
   fitLayoutHeights,
   isAutofitted,
@@ -40,6 +41,17 @@ import {
   GRID_ROW_GAP_PX,
   GRID_ROW_PX,
 } from './autofit';
+import {
+  applyRecordPanels,
+  findSidePanels,
+  linkedSelectionActive,
+  panelExpanded,
+  reconcileOverrides,
+  recordPanelLinks,
+} from './recordPanelLayout';
+import type { RecordSidePanel } from './recordPanelLayout';
+import { RecordPanelContext, RecordPanelSource, RecordPanelToggle } from './RecordPanel';
+import type { FoldedRecordPanel, RecordPanelState } from './RecordPanel';
 
 /** Bucket key for what is left of the unsectioned components once the tab's
  *  opening text has been split off — never a real section name, so it can't
@@ -204,6 +216,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   beforeSections,
   renderSectionActions,
 }) => {
+  // A locus navigator below the fold sits behind LazyMount and cannot announce
+  // its default region before the tracks above the fold fetch, so the layout
+  // announces it from the stored config (`defaultRegionGate.ts`).
+  usePreannouncedDefaultRegions(metadataList, Boolean(onFilterChange));
+
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
   // the memoised grid cells and re-render every Plotly figure on the dashboard.
@@ -476,7 +493,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // passes, but that write is a render away.
   const resizedByHand = useRef<Set<string>>(new Set());
 
-  const layoutsForSection = useCallback(
+  const baseLayoutForSection = useCallback(
     (members: StoredMetadata[], fitted = true): Layout[] => {
       const ids = new Set(members.map((m) => m.index));
       const mine = layouts.filter((l) => ids.has(l.i));
@@ -506,6 +523,94 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       return isDraggable || isResizable ? packed : widenLoneRows(packed, rowMateSet(mine));
     },
     [layouts, isDraggable, isResizable, autoHeights, autofit],
+  );
+
+  // Record cards laid out as their source's side panel (`recordPanelLayout.ts`).
+  // Reading only: the editor always shows the author's own geometry, so a
+  // panel never folds while the layout can be dragged or resized.
+  const panelsEnabled = !editMode && !isDraggable && !isResizable;
+  const recordLinks = useMemo(() => recordPanelLinks(metadataList), [metadataList]);
+  const sidePanels = useMemo(() => {
+    const byCard = new Map<string, RecordSidePanel>();
+    if (!panelsEnabled || recordLinks.size === 0) return byCard;
+    for (const section of sections) {
+      for (const panel of findSidePanels(baseLayoutForSection(section.members), recordLinks)) {
+        byCard.set(panel.cardId, panel);
+      }
+    }
+    return byCard;
+  }, [panelsEnabled, recordLinks, sections, baseLayoutForSection]);
+
+  // Folded while the source holds no pick, unfolded while it does; a reader's
+  // toggle wins until the source's pick appears or goes away.
+  const selectionActive = useMemo(() => {
+    const active: Record<string, boolean> = {};
+    for (const panel of sidePanels.values()) {
+      active[panel.cardId] = linkedSelectionActive(filters, panel.sourceId);
+    }
+    return active;
+  }, [sidePanels, filters]);
+  const [panelOverrides, setPanelOverrides] = useState<Record<string, boolean>>({});
+  const previousActiveRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    const previous = previousActiveRef.current;
+    previousActiveRef.current = selectionActive;
+    setPanelOverrides((current) => reconcileOverrides(current, previous, selectionActive));
+  }, [selectionActive]);
+
+  const recordPanelState = useMemo<RecordPanelState>(() => {
+    const expanded = (cardId: string) =>
+      panelExpanded(Boolean(selectionActive[cardId]), panelOverrides[cardId]);
+    const foldedBySource = new Map<string, FoldedRecordPanel>();
+    for (const panel of sidePanels.values()) {
+      if (expanded(panel.cardId)) continue;
+      const card = metadataList.find((m) => m.index === panel.cardId);
+      foldedBySource.set(panel.sourceId, { panel, title: card?.title || 'Record' });
+    }
+    return {
+      panel: (cardId) => sidePanels.get(cardId),
+      expanded,
+      toggle: (cardId) =>
+        setPanelOverrides((current) => ({ ...current, [cardId]: !expanded(cardId) })),
+      foldedFor: (sourceId) => foldedBySource.get(sourceId),
+    };
+  }, [sidePanels, selectionActive, panelOverrides, metadataList]);
+  const recordSources = useMemo(() => new Set(recordLinks.values()), [recordLinks]);
+
+  // A fold changes two tiles' widths without the window changing, and Plotly
+  // only re-flows on a window `resize`. Pump it for the length of RGL's width
+  // transition so a widened chart follows the tile; AG Grid watches its own
+  // container and re-fits its columns on its own.
+  const foldSignature = [...sidePanels.keys()]
+    .map((id) => `${id}:${recordPanelState.expanded(id) ? 1 : 0}`)
+    .join(' ');
+  const firstFoldRef = useRef(true);
+  useEffect(() => {
+    if (firstFoldRef.current) {
+      firstFoldRef.current = false;
+      return;
+    }
+    if (typeof window === 'undefined') return;
+    const until = performance.now() + 300;
+    let rafId: number | null = null;
+    const tick = () => {
+      window.dispatchEvent(new Event('resize'));
+      rafId = performance.now() < until ? requestAnimationFrame(tick) : null;
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [foldSignature]);
+
+  const layoutsForSection = useCallback(
+    (members: StoredMetadata[], fitted = true): Layout[] => {
+      const base = baseLayoutForSection(members, fitted);
+      if (sidePanels.size === 0) return base;
+      const panels = findSidePanels(base, recordLinks).filter((p) => sidePanels.has(p.cardId));
+      return applyRecordPanels(base, panels, (cardId) => !recordPanelState.expanded(cardId));
+    },
+    [baseLayoutForSection, sidePanels, recordLinks, recordPanelState],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -547,7 +652,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         // the heights it is stored with, not at the ones its content asked for.
         const sectionLayout =
           sectionLayoutsRef.current.get(section.key) ??
-          layoutsForSection(section.members, false);
+          baseLayoutForSection(section.members, false);
 
         let sectionBottom = 0;
         for (const item of sectionLayout) {
@@ -558,7 +663,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       }
       onLayoutChange?.(merged);
     },
-    [onLayoutChange, layoutsForSection, sections, autofittedIds, storedHeights],
+    [onLayoutChange, baseLayoutForSection, sections, autofittedIds, storedHeights],
   );
 
   /** A height the user dragged to outranks anything the content asks for, so
@@ -587,11 +692,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // the one cell that actually changed. Item geometry is RGL's business and
   // travels through `layouts`, not through these children.
   const cellsBySection = useMemo(() => {
-    const byKey = new Map<string, React.ReactNode[]>();
+    const byKey = new Map<string, { id: string; node: React.ReactNode }[]>();
+    // The renderer inside a cell that drives a record side panel: wrapped so
+    // the folded card's rail can sit on its edge (`RecordPanelSource`).
+    const panelSource = (m: StoredMetadata, node: React.ReactNode) =>
+      recordSources.has(m.index) ? (
+        <RecordPanelSource sourceId={m.index}>{node}</RecordPanelSource>
+      ) : (
+        node
+      );
     for (const section of sections) {
       byKey.set(
         section.key,
-        section.members.map((m) => (
+        section.members.map((m) => ({ id: m.index, node: (
           // Outer div = the cloned target react-resizable injects the
           // resize-handle <span>s into. It must NOT clip overflow or the
           // top-edge handles (nw/n/ne) get sliced off — the inner div clips
@@ -614,23 +727,45 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 flexDirection: 'column',
               }}
             >
-              <ComponentRenderer
-                dashboardId={dashboardId}
-                metadata={m}
-                filters={filters}
-                onFilterChange={onFilterChange}
-                cardValue={cardValues?.[m.index]}
-                cardSecondaryValues={cardSecondaryValues?.[m.index]}
-                cardLoading={cardValuesLoading}
-                refreshTick={refreshTick}
-                activeHighlight={activeHighlight}
-                groupRender={groupRender}
-                extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
-                showDragHandle={editMode && isDraggable}
-              />
+              {recordLinks.has(m.index) ? (
+                // A folded card leaves the grid altogether (its rail is drawn
+                // by the source's cell), so only the unfolded card is here.
+                <ComponentRenderer
+                  dashboardId={dashboardId}
+                  metadata={m}
+                  filters={filters}
+                  onFilterChange={onFilterChange}
+                  refreshTick={refreshTick}
+                  activeHighlight={activeHighlight}
+                  groupRender={groupRender}
+                  extraActions={
+                    showOverlays ? (
+                      renderItemOverlay!(m.index, m)
+                    ) : (
+                      <RecordPanelToggle cardId={m.index} />
+                    )
+                  }
+                  showDragHandle={editMode && isDraggable}
+                />
+              ) : panelSource(m, (
+                <ComponentRenderer
+                  dashboardId={dashboardId}
+                  metadata={m}
+                  filters={filters}
+                  onFilterChange={onFilterChange}
+                  cardValue={cardValues?.[m.index]}
+                  cardSecondaryValues={cardSecondaryValues?.[m.index]}
+                  cardLoading={cardValuesLoading}
+                  refreshTick={refreshTick}
+                  activeHighlight={activeHighlight}
+                  groupRender={groupRender}
+                  extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
+                  showDragHandle={editMode && isDraggable}
+                />
+              ))}
             </div>
           </div>
-        )),
+        ) })),
       );
     }
     return byKey;
@@ -649,6 +784,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     renderItemOverlay,
     editMode,
     isDraggable,
+    recordLinks,
+    recordSources,
   ]);
 
   const renderGrid = (section: ComponentSection) =>
@@ -715,7 +852,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       draggableHandle=".react-grid-dragHandle"
       resizeHandles={['s', 'e', 'w', 'n', 'sw', 'se', 'nw', 'ne']}
     >
-      {cellsBySection.get(section.key)}
+      {(cellsBySection.get(section.key) ?? [])
+        // A folded record card has no layout item (`applyRecordPanels`), and
+        // react-grid-layout would place a child without one on its own.
+        .filter((cell) => !sidePanels.has(cell.id) || recordPanelState.expanded(cell.id))
+        .map((cell) => cell.node)}
     </ResponsiveGridLayout>
     );
 
@@ -753,7 +894,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           <SectionAccordionItem
             key={section.key}
             value={section.key}
-            color={section.spec?.color}
+            color={resolveSectionColor(section.spec?.color, section.sectionName)}
             actions={renderSectionActions?.(section.sectionName ?? null)}
           >
             <Accordion.Control>
@@ -784,6 +925,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     );
 
   return (
+    <RecordPanelContext.Provider value={recordPanelState}>
     <div
       ref={wrapperRef}
       className={rootClass}
@@ -824,6 +966,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       {restBucket && renderGrid(restBucket)}
       {renderSections(ownSections)}
     </div>
+    </RecordPanelContext.Provider>
   );
 };
 
@@ -878,7 +1021,9 @@ export const SectionSummary: React.FC<{
               height={20}
               style={{
                 flexShrink: 0,
-                color: m.icon_color || sectionColorVar(section.spec?.color),
+                color:
+                  m.icon_color ||
+                  sectionColorVar(resolveSectionColor(section.spec?.color, section.sectionName)),
               }}
             />
           )}

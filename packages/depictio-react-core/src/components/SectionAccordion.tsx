@@ -4,7 +4,11 @@ import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec } from '../api';
 import type { CollapseState } from '../hooks/useCollapseState';
-import SectionIcon, { sectionColorVar } from './SectionIcon';
+import SectionIcon, {
+  resolveSectionColor,
+  SectionColorContext,
+  sectionColorVar,
+} from './SectionIcon';
 import './sectionAccordion.css';
 
 /**
@@ -71,6 +75,7 @@ export const SectionAccordionItem: React.FC<{
 }> = ({ value, color, actions, children }) => {
   const [control, panel] = React.Children.toArray(children);
   return (
+    <SectionColorContext.Provider value={color ?? null}>
     <Accordion.Item
       value={value}
       style={
@@ -91,6 +96,7 @@ export const SectionAccordionItem: React.FC<{
       )}
       {panel}
     </Accordion.Item>
+    </SectionColorContext.Provider>
   );
 };
 
@@ -113,7 +119,9 @@ export const SectionHeader: React.FC<{
         heading is a section heading. The filter panel buys its room back on the
         header's height instead (see sectionAccordion.css). */}
     <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-      <SectionIcon spec={spec ?? undefined} />
+      <SectionIcon
+        spec={spec?.icon ? { icon: spec.icon, color: resolveSectionColor(spec.color, name) } : undefined}
+      />
       {/* Title over subtitle: the header carries the narration that dashboards
           used to spend a full-width text component on. In the header rather
           than the body because a folded section is exactly when its description

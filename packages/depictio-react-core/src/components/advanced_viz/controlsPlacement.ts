@@ -11,7 +11,8 @@ import type { InteractiveFilter } from '../../api';
  *
  * `popover` is what every tile did before this existed: both tiers behind the
  * Settings ActionIcon in the chrome row. The two inline placements put the
- * controls next to what they drive.
+ * controls next to what they drive. The choice itself is made in the header
+ * of the controls block, wherever that block is drawn.
  *
  *  - `header`: the encoding tier (`primaryControls`) as a compact strip under
  *    the title; the cosmetic tier stays in the popover. A renderer with no
@@ -22,8 +23,13 @@ import type { InteractiveFilter } from '../../api';
  */
 export type ControlsPlacement = 'popover' | 'rail' | 'header';
 
-/** Cycle order of the chrome toggle, and the values the config accepts. */
-export const CONTROLS_PLACEMENTS: readonly ControlsPlacement[] = ['popover', 'header', 'rail'];
+/**
+ * The values the config accepts, in the order the placement picker lists them
+ * and cycles through. `rail` comes right after `popover`: pinning a tile's
+ * controls puts them in a vertical column first, where a list of labelled
+ * rows reads best; the strip under the title is the third choice.
+ */
+export const CONTROLS_PLACEMENTS: readonly ControlsPlacement[] = ['popover', 'rail', 'header'];
 
 export function isControlsPlacement(value: unknown): value is ControlsPlacement {
   return typeof value === 'string' && (CONTROLS_PLACEMENTS as readonly string[]).includes(value);
@@ -43,7 +49,7 @@ export function resolveControlsPlacement(
   return 'popover';
 }
 
-/** The next placement in the toggle's cycle. */
+/** The next placement in the cycle: popover, then rail, then header. */
 export function nextPlacement(current: ControlsPlacement): ControlsPlacement {
   const i = CONTROLS_PLACEMENTS.indexOf(current);
   return CONTROLS_PLACEMENTS[(i + 1) % CONTROLS_PLACEMENTS.length];
