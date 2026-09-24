@@ -582,7 +582,9 @@ A renderer splits its controls in two tiers when it calls `AdvancedVizFrame`:
 `popover` (default, both tiers behind the settings icon), `header` (encoding tier as a strip
 under the title, cosmetics in the popover) or `rail` (both tiers in a 220 px column beside
 the plot, under it below 480 px of tile width). A dashboard-level `advanced_viz_controls`
-sets the default for every tile; the tile's own value wins. The chrome pin cycles the three.
+sets the default for every tile; the tile's own value wins. The placement is picked from a
+three-icon switch in the header of the controls block itself (popover, rail or strip), so the
+way back to the popover is always on the block that is showing.
 Data and Load-All stay in the chrome whatever the placement. `primaryControls` is a fragment
 of individual compact controls, never a pre-arranged Stack, so the frame can lay the same
 node out as a strip, a rail or a popover list. The inline area counts towards the tile's
@@ -659,6 +661,50 @@ row's fields grouped by section, with URL templates per column. `parallel_coordi
 one polyline per sample across N metric axes, coloured by a group column; an axis brush
 emits an ordinary range filter with source `axis_selection`. Both are new interaction shapes,
 not presets, which is why they are kinds.
+
+#### Linking a record card to its source
+
+By default a `record_card` follows whichever selection reaches it (`selection_source`). Set
+`config.linked_component` to the `tag` of one component and the card follows that component's
+selection only. The dashboard import rewrites the tag to the component's `index`, which is
+what selection filters carry, and refuses a tag that names no component of the same
+dashboard tab.
+
+```yaml
+- tag: <source-tag>
+  component_type: table
+  row_selection_enabled: true
+  row_selection_column: <id column>
+  section: <section>
+  layout: { x: 0, y: <row>, w: 5, h: 6 }
+- component_type: advanced_viz
+  viz_kind: record_card
+  config:
+    viz_kind: record_card
+    id_col: <id column>
+    linked_component: <source-tag>
+  section: <section>
+  layout: { x: 5, y: <row>, w: 3, h: 6 }
+```
+
+The source has to emit a selection: a table with `row_selection_enabled` and
+`row_selection_column`, a figure or map with `selection_enabled` and `selection_column`, or
+an advanced_viz kind that selects (`embedding`, `manhattan`, `genome_view`, `profile`,
+`scatter_xy`, `genome_chord`) with `selection_enabled`. When the source reads the same data
+collection as the card, its selection column must be the card's `id_col`, since the card
+matches the picked values on that column. A source on another collection is exempt: its
+pick reaches the card through a project link, whose two sides are named independently.
+
+**Collapsible side panel.** A linked card placed in the same section and on the same row as
+its source, touching it edge to edge on either side, becomes the source's side panel in the
+viewer. While the source holds no selection the card folds into a one-column rail (icon,
+vertical title, unfold chevron) and the source widens into the freed columns; a selection
+unfolds it, and the chevron in the rail or in the card header toggles it by hand until the
+source's selection next appears or clears. The fold is a derived layout
+(`packages/depictio-react-core/src/components/recordPanelLayout.ts`), never written back,
+and the editor always shows the stored layout unfolded. This pairing is also the one
+exception to the full-width table rule of the shipped-template lint: a table may be narrower
+than the grid when its linked record card fills the rest of the row.
 
 ---
 
