@@ -126,6 +126,7 @@ import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
+import { focusComponent } from './lib/focusComponent';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -857,25 +858,12 @@ const EditorApp: React.FC = () => {
         setSaveStatus('saved');
         // Scroll the freshly placed component into view + brief highlight pulse
         // so the user can see where it landed (otherwise auto-placed items at
-        // the bottom are easy to miss).
-        const flashNewComponent = () => {
-          const inner = document.querySelector(
-            `[data-component-id="${newId}"]`,
-          ) as HTMLElement | null;
-          // The .react-grid-item ancestor is the absolutely-positioned cell,
-          // so we scroll/highlight that — not the inner content wrapper.
-          const el = (inner?.closest('.react-grid-item') as HTMLElement | null) || inner;
-          if (!el) return;
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('depictio-duplicate-flash');
-          window.setTimeout(
-            () => el.classList.remove('depictio-duplicate-flash'),
-            1500,
-          );
-        };
-        // Wait two frames so react-grid-layout has positioned the new item.
+        // the bottom are easy to miss). Deferred two frames so
+        // react-grid-layout has positioned the new item.
         requestAnimationFrame(() =>
-          requestAnimationFrame(flashNewComponent),
+          requestAnimationFrame(() => {
+            focusComponent(newId, { defer: false });
+          }),
         );
         notifications.show({
           color: 'teal',

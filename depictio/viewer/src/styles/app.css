@@ -233,6 +233,28 @@ body.panel-transitioning .react-grid-layout {
   border-radius: 6px;
 }
 
+/* Same pulse for a component focused from a comment thread, in the theme's
+ * primary colour rather than the editor's teal, so it reads as "this is what
+ * the comment is about" and not as a freshly added tile. Applied and removed
+ * by `lib/focusComponent.ts`. */
+@keyframes depictio-comment-flash {
+  0% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  20% {
+    box-shadow:
+      inset 0 0 0 3px var(--mantine-primary-color-filled),
+      inset 0 0 24px var(--mantine-primary-color-light);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+.depictio-comment-flash {
+  animation: depictio-comment-flash 1.8s ease-out;
+  border-radius: 6px;
+}
+
 /* ── Boot splash ───────────────────────────────────────────────────────────
  * Shown while the route chunk downloads and while the dashboard document is in
  * flight: phases with no panel list yet, so nothing can report a fraction.

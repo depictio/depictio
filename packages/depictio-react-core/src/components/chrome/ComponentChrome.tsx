@@ -8,6 +8,8 @@ import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
+import CommentsButton from './CommentsButton';
+import { useCommentsControl } from './CommentsContext';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
@@ -17,6 +19,7 @@ import './chrome.css';
 
 export type ChromeAction =
   | 'inspect'
+  | 'comments'
   | 'catalog'
   | 'description'
   | 'metadata'
@@ -159,6 +162,15 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const inspector = useInspectorControl();
   const actions: ChromeAction[] = [];
   if (inspector) actions.push('inspect');
+  // Same again for comments: the viewer only provides a control to users who
+  // may comment (editors and owners), on every component type alike.
+  const comments = useCommentsControl();
+  const commentOpenCount = comments?.openCounts[metadata.index] ?? 0;
+  const commentProposedCount = comments?.proposedCounts[metadata.index] ?? 0;
+  // A component with threads keeps its comments icon on screen without hover:
+  // the count is the point, and a hover-only badge would hide it.
+  const persistentComments = commentOpenCount > 0 || commentProposedCount > 0;
+  if (comments) actions.push('comments');
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
@@ -211,6 +223,17 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             componentId={metadata.index}
             active={inspector.selectedId === metadata.index}
             onInspect={inspector.select}
+          />
+        );
+      case 'comments':
+        if (!comments) return null;
+        return (
+          <CommentsButton
+            key="comments"
+            componentId={metadata.index}
+            openCount={commentOpenCount}
+            proposedCount={commentProposedCount}
+            onOpen={comments.openDrawer}
           />
         );
       case 'catalog':
@@ -403,10 +426,15 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           const node = renderAction(a);
           if (!node) return null;
           const isActiveReset = a === 'reset' && persistentReset;
+          const isPersistentComments = a === 'comments' && persistentComments;
           return (
             <span
               key={a}
-              className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
+              className={
+                'dgl-no-drag' +
+                (isActiveReset ? ' depictio-active-reset' : '') +
+                (isPersistentComments ? ' depictio-comments-persistent' : '')
+              }
               style={{ display: 'inline-flex', alignItems: 'center' }}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}

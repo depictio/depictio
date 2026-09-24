@@ -12,6 +12,11 @@ import type { AdvancedVizExtrasPayload } from 'depictio-react-core';
  */
 export type InspectorTab = 'controls' | 'data' | 'info' | 'notes';
 
+/** What the comments drawer lists: one component's threads, or the whole tab. */
+export type CommentsScope = 'component' | 'tab';
+/** Drawing tool of the (upcoming) annotate mode. */
+export type AnnotateTool = 'range' | 'line' | 'points' | 'note';
+
 interface UiState {
   /** `StoredMetadata.index` of the inspected component, or null for none. */
   selectedComponentId: string | null;
@@ -25,6 +30,17 @@ interface UiState {
    * subscribes to this slice.
    */
   advancedVizExtras: Record<string, AdvancedVizExtrasPayload | null>;
+  /** Comments drawer. `commentsComponentIndex` is the component the
+   *  "This component" scope shows, kept when switching to the tab scope so
+   *  switching back returns to it. */
+  commentsOpen: boolean;
+  commentsScope: CommentsScope;
+  commentsComponentIndex: string | null;
+  /** Thread last clicked in the drawer, highlighted until another is. */
+  focusedThreadId: string | null;
+  /** Component in annotate mode, and the active drawing tool (not wired yet). */
+  annotateComponentIndex: string | null;
+  annotateTool: AnnotateTool | null;
 }
 
 interface UiActions {
@@ -38,6 +54,12 @@ interface UiActions {
     componentId: string,
     payload: AdvancedVizExtrasPayload | null,
   ) => void;
+  /** Opens the comments drawer on a component, or on the whole tab (null). */
+  openComments: (componentIndex?: string | null) => void;
+  closeComments: () => void;
+  setCommentsScope: (scope: CommentsScope) => void;
+  setFocusedThread: (threadId: string | null) => void;
+  setAnnotate: (componentIndex: string | null, tool?: AnnotateTool | null) => void;
 }
 
 const INITIAL: UiState = {
@@ -45,6 +67,12 @@ const INITIAL: UiState = {
   inspectorOpen: false,
   inspectorTab: 'info',
   advancedVizExtras: {},
+  commentsOpen: false,
+  commentsScope: 'tab',
+  commentsComponentIndex: null,
+  focusedThreadId: null,
+  annotateComponentIndex: null,
+  annotateTool: null,
 };
 
 export const useUiStore = create<UiState & UiActions>((set) => ({
@@ -66,6 +94,21 @@ export const useUiStore = create<UiState & UiActions>((set) => ({
         ? s
         : { advancedVizExtras: { ...s.advancedVizExtras, [componentId]: payload } },
     ),
+  openComments: (componentIndex) =>
+    set((s) =>
+      componentIndex
+        ? { commentsOpen: true, commentsScope: 'component', commentsComponentIndex: componentIndex }
+        : {
+            commentsOpen: true,
+            commentsScope: 'tab',
+            commentsComponentIndex: s.commentsComponentIndex,
+          },
+    ),
+  closeComments: () => set({ commentsOpen: false, focusedThreadId: null }),
+  setCommentsScope: (scope) => set({ commentsScope: scope }),
+  setFocusedThread: (threadId) => set({ focusedThreadId: threadId }),
+  setAnnotate: (componentIndex, tool = null) =>
+    set({ annotateComponentIndex: componentIndex, annotateTool: componentIndex ? tool : null }),
 }));
 
 export default useUiStore;
