@@ -35,6 +35,48 @@ modèles). Seule la configuration change, et uniquement via les variables
 | Auth | au choix | mono-utilisateur (`DEPICTIO_AUTH_SINGLE_USER_MODE`) |
 | Miniatures | Playwright dans le worker | désactivées, sauf si Chromium est présent ou avec `--screenshots` |
 
+![un seul serveur, deux façons de le lancer](../../docs/images/v1.4/local/schema_same_code.png)
+
+![ce que fait depictio local up](../../docs/images/v1.4/local/schema_up_flow.png)
+
+Les deux schémas sont générés par `dev/diagrams/local_server.py`, avec la boîte
+à outils Excalidraw du repo (`sketch.py`).
+
+## Serveur vs CLI
+
+| | Serveur Docker / K8s | Serveur local : `depictio[local]` (cette PR) | CLI : `depictio-cli` |
+|---|---|---|---|
+| Rôle | instance partagée | serveur complet et client sur le poste | client : ingère vers un serveur existant |
+| Installation | `docker compose up` / Helm | `uvx --python 3.12 --from "depictio[local]" depictio local up` | `uvx depictio-cli` |
+| Publié | images ghcr.io | **non** (PyPI à faire) | oui, PyPI 1.11.2 |
+| Prérequis | Docker ou un cluster | `uv` seulement | `uv` seulement |
+| Serveur nécessaire | c'est lui | non, il le démarre | oui (URL + token dans `CLI.yaml`) |
+| Environnement Python | dans les images | ~2 Go, ~30 s à froid | ~0,9 Go, 11 s à froid |
+| Autres téléchargements | images | MongoDB, Redis, MinIO de conda-forge : ~360 Mo, 8 s, une seule fois | aucun |
+| Viewer | nginx | `dist/` du wheel, servi par FastAPI | aucun |
+| Auth | multi-utilisateur, public ou mono-utilisateur | mono-utilisateur | token de l'instance cible |
+| Commandes | — | celles de la CLI + `local up/down/status/wipe` | `run`, `dashboard`, `data`, `config`, `backup`… |
+| `depictio local up` | — | fonctionne | message clair qui renvoie vers `depictio[local]` |
+| Usage type | équipe, démo, production | reviewer qui teste un template sur ses résultats | déclencheur Nextflow, CI, envoi vers une instance partagée |
+
+## Captures (1920×1200, Playwright, pile lancée par `uvx` depuis le wheel)
+
+nf-core/rnaseq 3.26.0, sous-ensemble du megatest, avec les panneaux ouverts puis repliés :
+
+| sidebar et filtres ouverts | sidebar et filtres repliés |
+|---|---|
+| ![](../../docs/images/v1.4/local/screenshots/rnaseq_multiqc_panels_open.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_multiqc_panels_closed.png) |
+| ![](../../docs/images/v1.4/local/screenshots/rnaseq_heatmap.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_gene_explorer.png) |
+
+Filtre `Condition = GM12878` : les cartes sont recalculées (8 → 2 librairies),
+puis le filtre suit sur l'onglet MultiQC.
+
+| sans filtre | avec filtre | onglet MultiQC filtré |
+|---|---|---|
+| ![](../../docs/images/v1.4/local/screenshots/rnaseq_overview_no_filter.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_overview_filter_gm12878.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_multiqc_filter_gm12878.png) |
+
+## Approches écartées
+
 Les approches suivantes ont été écartées pendant l'implémentation :
 
 - **Stockage sur disque local (`file://`)** : S3 apparaît à 257 endroits dans
@@ -61,6 +103,7 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 | `depictio/version.py` | repli sur `importlib.metadata` : `VERSION` est hors du package, **l'API plantait à l'import depuis un wheel** |
 | `db_init_reference_datasets.py` | les `project.yaml` de référence codent `/app/depictio/...` en dur ; ce préfixe est réécrit vers la racine réelle du package (aucun effet dans l'image) |
 | `settings_models.py` + 4 sites | `DEPICTIO_PERFORMANCE_SCREENSHOTS_ENABLED` et `_SCREENSHOTS_DIR`. Au démarrage, `clean_screenshots()` supprime les PNG sans dashboard en base, et **il effaçait les miniatures versionnées du repo** quand le serveur tournait depuis un checkout avec une partie des exemples. En local, les miniatures vont dans `~/.depictio/local/screenshots` |
+| `dev/diagrams/local_server.py`, `docs/images/v1.4/local/` | les deux schémas (SVG + PNG) et les captures ci-dessus |
 | `.github/workflows/local-server-smoke.yaml` | construit le wheel (viewer compris), lance `uvx … depictio local up --examples iris` hors du checkout, puis vérifie `/health`, `/dashboards` et la table Delta iris |
 
 ## Mesures (Linux x86_64, réseau datacenter)
