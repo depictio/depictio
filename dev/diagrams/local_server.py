@@ -329,11 +329,14 @@ def build_up_flow() -> Sketch:
         s.line(x, 728, x, 738, width=1.2, colour=DIM, passes=1)
         s.text(x, 758, f"{sec} s", size=12, colour=DIM)
 
-    for i, text in enumerate(("no Docker", "no conda install", "no git clone")):
+    for i, text in enumerate(("no Docker", "no conda / pixi to set up", "no git clone")):
         cx, cy = 1370, 480 + i * 84
-        s.rect(Box(cx - 130, cy - 26, 260, 52, PINK, ""))
-        s.cross(cx - 100, cy, size=10)
-        s.text(cx + 12, cy + 7, text, size=19, weight="bold")
+        s.rect(Box(cx - 150, cy - 26, 300, 52, PINK, ""))
+        s.cross(cx - 120, cy, size=10)
+        s.text(cx + 18, cy + 6, text, size=17, weight="bold")
+    # The binaries are conda packages all the same; only the tool is not installed.
+    s.text(1370, 700, "conda-forge packages, fetched by `py-rattler`:", size=13, colour=DIM)
+    s.text(1370, 720, "a Python dependency, not a tool to install", size=13, colour=DIM)
     return s
 
 
