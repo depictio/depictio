@@ -220,10 +220,10 @@ class TestS3BackupIntegration:
 
         with patch("depictio.api.v1.backup_strategy_manager.settings") as mock_settings:
             # Mock source S3 settings (attribute is still named `minio` for config compat)
-            mock_settings.minio.bucket = "test-bucket"
-            mock_settings.minio.endpoint_url = s3_config["endpoint_url"]
-            mock_settings.minio.aws_access_key_id = s3_config["aws_access_key_id"]
-            mock_settings.minio.aws_secret_access_key = s3_config["aws_secret_access_key"]
+            mock_settings.s3.bucket = "test-bucket"
+            mock_settings.s3.endpoint_url = s3_config["endpoint_url"]
+            mock_settings.s3.aws_access_key_id = s3_config["aws_access_key_id"]
+            mock_settings.s3.aws_secret_access_key = s3_config["aws_secret_access_key"]
 
             # Mock backup settings (destination)
             mock_settings.backup.backup_s3_config = backup_config
