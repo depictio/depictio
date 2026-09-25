@@ -1,0 +1,107 @@
+# Megatest manifest for nf-core/demultiplex 1.8.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template needs. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline demultiplex --version 1.8.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# The test_full profile demultiplexes one Illumina MiSeq flowcell (one lane,
+# paired-end, dual 8 bp index) with bcl2fastq, so the run publishes the
+# bcl2fastq layout `<flowcell>/L<lane>/Stats/Stats.json` + `Reports/`. A
+# bclconvert run publishes `<flowcell>/L<lane>/Reports/Demultiplex_Stats.csv`
+# and `Top_Unknown_Barcodes.csv` instead: the template scans both, and every
+# collection is optional so either layout ingests.
+#
+# MultiQC: the run writes MultiQC 1.35 parquets. `multiqc/` is the per-library
+# report (bcl2fastq, fastp, falco, checkqc); `multiqcsav/` is the run-level
+# report fed with the InterOp directory. For this run the SAV report only
+# holds the bcl2fastq sections (the MultiQC `sav` module found no RunInfo.xml
+# next to InterOp/), so the template reads the InterOp binaries directly
+# through the `interop/*` recipes.
+#
+# Not fetched on purpose: the demultiplexed FASTQ files (36 files, about 4 GB)
+# and the HTML reports.
+pipeline: demultiplex
+version: "1.8.0"
+# s3://nf-core-awsmegatests/demultiplex/results-<results_sha>/ == the 1.8.0 release tag_sha.
+results_sha: "daade37c4a75a4c1709ccf12434deb3424141319"
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # Downstream samplesheets the pipeline writes for the next nf-core pipeline.
+  - samplesheet/*.csv
+  # Run parameters index files the pipeline writes at the run root.
+  - "*.csv"
+  # InterOp binaries (run-level SAV metrics: tiles, quality, errors, phasing).
+  - "*InterOp/*.bin"
+  - "*RunInfo.xml"
+  - "*RunParameters.xml"
+  # bcl2fastq demultiplexing statistics.
+  - "*Stats/Stats.json"
+  - "*Stats/DemuxSummaryF*L*.txt"
+  - "*Stats/AdapterTrimming.txt"
+  - "*Stats/DemultiplexingStats.xml"
+  - "*Stats/ConversionStats.xml"
+  # bclconvert demultiplexing statistics (absent from this bcl2fastq run).
+  - "*Reports/Demultiplex_Stats.csv"
+  - "*Reports/Top_Unknown_Barcodes.csv"
+  - "*Reports/Quality_Metrics.csv"
+  - "*Reports/Adapter_Metrics.csv"
+  # CheckQC lane verdicts.
+  - "*checkqc_report.json"
+  # Per-library fastp and falco QC.
+  - "*.fastp.json"
+  - "*_summary.txt"
+  - "*_fastqc_data.txt"
+  # MultiQC reports (per-library and run-level).
+  - "multiqc/multiqc_data/*"
+  - "multiqcsav/multiqc_data/*"
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  depictio-cli run --template nf-core/demultiplex/1.8.0 --data-root {dest} --dry-run
+  depictio-cli run --template nf-core/demultiplex/1.8.0 --data-root {dest} \
+    --var METADATA_FILE=depictio/projects/nf-core/demultiplex/1.8.0/input/library_metadata.tsv
+
+# Megatest-specific names a dashboard text must never carry (lint-checked).
+forbidden_terms:
+  - E-coli_1ng_input-rep01
+  - E-coli_1ng_input-rep02
+  - E-coli_1ng_input-rep03
+  - E-coli_100ng_input-rep04
+  - E-coli_100ng_input-rep05
+  - E-coli_100ng_input-rep06
+  - B-cereus_1ng_input-rep07
+  - B-cereus_1ng_input-rep08
+  - B-cereus_1ng_input-rep09
+  - B-cereus_100ng_input-rep10
+  - B-cereus_100ng_input-rep11
+  - B-cereus_100ng_input-rep12
+  - R-sphaeroides_1ng_input-rep13
+  - R-sphaeroides_1ng_input-rep14
+  - R-sphaeroides_1ng_input-rep15
+  - R-sphaeroides_100ng_input-rep16
+  - R-sphaeroides_100ng_input-rep17
+  - R-sphaeroides_100ng_input-rep18
+  - E-coli
+  - B-cereus
+  - R-sphaeroides
+  - Escherichia
+  - Bacillus
+  - Rhodobacter
+  - "35147139"
+  - 000000000-BDNBC
+  - BDNBC
+  - lane1_no_adapters

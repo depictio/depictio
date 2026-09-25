@@ -1,49 +1,109 @@
-title: Metric ± CI forest (demo)
-project_tag: Advanced Visualisations
+# Benchmark confidence intervals: one tab of the advanced-visualisation showcase.
+title: 'Benchmark confidence intervals'
+subtitle: 'Precision and recall per caller with their 95% confidence intervals'
+icon: 'mdi:ruler'
+icon_color: 'pink'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d64'
 is_main_tab: false
-parent_dashboard_tag: Advanced Visualisations
 tab_order: 27
-icon: mdi:chart-timeline-variant
-icon_color: pink
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:ruler'
+tab_icon_color: 'pink'
+
+filter_sections:
+  - name: 'Caller scope'
+    icon: 'mdi:filter-variant'
+    color: 'pink'
+    description: 'Restricts which callers are drawn'
+
+grid_sections:
+  - name: 'Confidence intervals'
+    icon: 'mdi:ruler'
+    color: 'pink'
+    description: 'Point estimate and 95% interval per caller, one metric per tile'
+
 components:
-- component_type: text
-  tag: ci-demo-intro
-  title: Metric ± 95% CI (forest plot)
-  order: 1
-  alignment: left
-  body: >
-    Point estimate + 95% confidence interval per caller (synthetic). The dot is
-    the value, the horizontal line the CI; the x-axis auto-zooms so small values
-    stay readable. The gear exposes sort order, value labels, colour scale and
-    point size.
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  layout: {x: 0, y: 0, w: 8, h: 1}
-- component_type: advanced_viz
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  viz_kind: metric_ci_bars
-  config:
+  - tag: ci-demo-intro
+    index: ci-text
+    component_type: text
+    title: 'Benchmark confidence intervals'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Confidence intervals'
+    body: >
+      A forest plot per metric: the dot is the caller's precision or recall against the
+      truth set, the bar its 95% confidence interval, so two callers whose bars overlap are
+      not distinguishable on this truth set. Sorting and value labels sit in the tile
+      header. The intervals come from the true and false positive counts that hap.py or
+      vcfeval report in nf-core/variantbenchmarking.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: ci-demo-precision
+    index: ci-precision
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    title: 'Precision, 95% CI'
+    description: 'Precision per caller with its 95% confidence interval.'
+    section: 'Confidence intervals'
     viz_kind: metric_ci_bars
-    label_col: tool
-    value_col: precision
-    lower_col: precision_lower
-    upper_col: precision_upper
-    metric_name: Precision
-  tag: ci-demo-precision
-  title: Precision ± 95% CI
-  layout: {x: 0, y: 1, w: 4, h: 9}
-- component_type: advanced_viz
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  viz_kind: metric_ci_bars
-  config:
+    config:
+      viz_kind: metric_ci_bars
+      label_col: tool
+      value_col: precision
+      lower_col: precision_lower
+      upper_col: precision_upper
+      metric_name: Precision
+      controls_placement: header
+    layout: { x: 0, y: 2, w: 4, h: 8 }
+
+  - tag: ci-demo-recall
+    index: ci-recall
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    title: 'Recall, 95% CI'
+    description: 'Recall per caller with its 95% confidence interval.'
+    section: 'Confidence intervals'
     viz_kind: metric_ci_bars
-    label_col: tool
-    value_col: recall
-    lower_col: recall_lower
-    upper_col: recall_upper
-    metric_name: Recall
-  tag: ci-demo-recall
-  title: Recall ± 95% CI
-  layout: {x: 4, y: 1, w: 4, h: 9}
+    config:
+      viz_kind: metric_ci_bars
+      label_col: tool
+      value_col: recall
+      lower_col: recall_lower
+      upper_col: recall_upper
+      metric_name: Recall
+      controls_placement: header
+    layout: { x: 4, y: 2, w: 4, h: 8 }
+
+  - tag: filter-ci-tool
+    index: ci-f-tool
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    interactive_component_type: MultiSelect
+    column_name: tool
+    column_type: object
+    title: 'Caller'
+    placement: left
+    section: 'Caller scope'
+    group: 'Caller filters'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-ci-f1
+    index: ci-f-f1
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    interactive_component_type: RangeSlider
+    column_name: f1
+    column_type: float64
+    title: 'F1'
+    placement: left
+    section: 'Caller scope'
+    group: 'Caller filters'
+    show_histogram: true
+    layout: { x: 0, y: 3, w: 1, h: 3 }

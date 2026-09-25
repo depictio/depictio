@@ -14,12 +14,11 @@ Only the abridged table is matched. The full ``fusion_predictions.tsv`` is a
 superset that repeats these columns plus the per-read detail, so reading both
 would double every call.
 
-The per-sample file carries no sample column and the recipe harness concatenates
-the globbed files without their path, so no ``sample`` column can be recovered:
-the fusion call is the unit of analysis.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
 
 Output columns:
-    fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, splice_type,
+    sample, fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, splice_type,
     junction_reads, spanning_frags, supporting_reads, ffpm, log_ffpm,
     junction_fraction, large_anchor_support, annotations
 """
@@ -28,9 +27,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`starfusion/<sample>.starfusion.abridged.tsv`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".starfusion.abridged.tsv"
+
+
+def _sample() -> pl.Expr:
+    """``starfusion/S1.starfusion.abridged.tsv`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
+        source_path=_SOURCE_PATH,
         glob_pattern="starfusion/*.starfusion.abridged.tsv",
         format="TSV",
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
@@ -38,6 +56,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
@@ -75,6 +94,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = sources["fusions"]
 
     base = df.select(
+        _sample(),
         _text("#FusionName").alias("fusion"),
         _symbol("LeftGene").alias("gene_5p"),
         _symbol("RightGene").alias("gene_3p"),

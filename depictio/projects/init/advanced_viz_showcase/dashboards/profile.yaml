@@ -1,11 +1,11 @@
-# Signal profile — one tab of the advanced-visualisation showcase.
+# Chromatin accessibility at TSS: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Signal profile'
+title: 'Chromatin accessibility at TSS'
 subtitle: 'TSS enrichment: one curve per ATAC library over distance to the transcription start site, with bootstrap confidence ribbons.'
 icon: 'mdi:chart-bell-curve'
 icon_color: 'teal'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d70'
 is_main_tab: false
 tab_order: 28
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:waveform'
+tab_icon: 'mdi:waves'
 tab_icon_color: 'green'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,10 +44,12 @@ components:
     vertical_alignment: top
     section: 'Signal profile'
     body: >
-      Enrichment against distance to the TSS, one curve per ATAC library, ribbon width set by
-      read depth. A good library spikes on the dotted line at zero; CTRL_rep4 and TREAT_rep3
-      stay near 3× background under a ribbon twice as fat. Click a curve to cross-filter.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      ATAC-seq signal against distance to the transcription start site, one curve per library
+      with a confidence ribbon and the nucleosome positions shaded. A good library peaks
+      sharply at zero; CTRL_rep4 and TREAT_rep3 stay low under wide ribbons. Click a curve to
+      filter the dashboard to that library; log axes are in the tile header. Input: deepTools
+      profiles of nf-core/atacseq or nf-core/chipseq.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-profile
     index: 'prof-curve'
@@ -55,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'profile_demo'
     title: 'TSS enrichment profile'
-    description: 'Normalised enrichment over ±2 kb around the TSS, 25 bp bins, 8 libraries across two conditions. Ribbon opacity, line width, log axes and legend placement live in the Settings ⚙ popover.'
+    description: 'Normalised enrichment over 2 kb either side of the TSS, 25 bp bins, 8 libraries in two conditions. Log axes sit in the tile header.'
     section: 'Signal profile'
     viz_kind: 'profile'
     config:
@@ -79,7 +81,8 @@ components:
       legend_pos: "right"
       selection_enabled: true
       selection_column: "series"
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-profile-series
     index: prof-f-series
@@ -111,6 +114,7 @@ components:
     placement: left
     section: 'Profile scope'
     group: 'Profile filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#20C997'

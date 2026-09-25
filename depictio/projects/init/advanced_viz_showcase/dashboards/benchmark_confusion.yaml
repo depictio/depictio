@@ -1,34 +1,74 @@
-title: Confusion matrix (demo)
-project_tag: Advanced Visualisations
+# Benchmark error profile: one tab of the advanced-visualisation showcase.
+title: 'Benchmark error profile'
+subtitle: 'True positives, false positives and false negatives per caller'
+icon: 'mdi:alert-outline'
+icon_color: 'blue'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d63'
 is_main_tab: false
-parent_dashboard_tag: Advanced Visualisations
 tab_order: 26
-icon: mdi:grid
-icon_color: blue
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:alert-outline'
+tab_icon_color: 'blue'
+
+filter_sections:
+  - name: 'Caller scope'
+    icon: 'mdi:filter-variant'
+    color: 'blue'
+    description: 'Restricts which callers are drawn'
+
+grid_sections:
+  - name: 'Error profile'
+    icon: 'mdi:alert-outline'
+    color: 'blue'
+    description: 'Where each caller gains and loses calls against the truth set'
+
 components:
-- component_type: text
-  tag: cm-demo-intro
-  title: Confusion matrix
-  order: 1
-  alignment: left
-  body: >
-    TP / FP / FN per caller (synthetic). Cell shade = the per-caller normalised
-    fraction so cells stay comparable when TP ≫ FP/FN; the label is the raw count
-    with luminance-aware contrast. The gear exposes normalisation mode, colour
-    scale, colour bar and font size.
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  layout: {x: 0, y: 0, w: 8, h: 1}
-- component_type: advanced_viz
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  viz_kind: confusion_matrix
-  config:
+  - tag: cm-demo-intro
+    index: cm-text
+    component_type: text
+    title: 'Benchmark error profile'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Error profile'
+    body: >
+      One row per caller, one column per outcome against the truth set: true positives,
+      false positives, false negatives. The shade is normalised per caller so a caller with
+      many more calls stays comparable, and the label is the raw count. Switch the
+      normalisation in the tile header to compare callers per outcome instead. Counts as
+      nf-core/variantbenchmarking reports them.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: cm-demo-viz
+    index: cm-matrix
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    title: 'Outcome counts per caller'
+    description: 'True positive, false positive and false negative counts per caller, shaded per caller.'
+    section: 'Error profile'
     viz_kind: confusion_matrix
-    label_col: tool
-    tp_col: tp
-    fp_col: fp
-    fn_col: fn
-  tag: cm-demo-viz
-  title: Confusion matrix
-  layout: {x: 0, y: 1, w: 8, h: 9}
+    config:
+      viz_kind: confusion_matrix
+      label_col: tool
+      tp_col: tp
+      fp_col: fp
+      fn_col: fn
+      controls_placement: header
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-cm-tool
+    index: cm-f-tool
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    interactive_component_type: MultiSelect
+    column_name: tool
+    column_type: object
+    title: 'Caller'
+    placement: left
+    section: 'Caller scope'
+    group: 'Caller filters'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

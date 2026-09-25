@@ -13,7 +13,7 @@
     {
       "index": "man-text",
       "component_type": "text",
-      "title": "Genome-wide scan",
+      "title": "Genome-wide scans",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Markers plotted at their genomic position against their score, with alternating bands separating the chromosomes and a threshold line across the plot. Peaks that clear the line are labelled by feature id; restricting to one chromosome isolates a locus.\n",
+      "body": "Top: an association scan, each marker at its position against -log10(padj), peaks over the dashed threshold labelled; lasso markers to filter by feature. Bottom: the same kind in rainfall mode on one tumour genome, y is log10 of the distance to the previous SNV, so the three kataegis foci (C to T and C to G runs) drop as vertical streaks. Colour-by and the mode sit in each header. Inputs: GWAS or QTL summary statistics, and the somatic VCF of nf-core/sarek.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "man-manhattan",
       "component_type": "advanced_viz",
-      "title": "Manhattan plot \u2014 chr \u00d7 score",
+      "title": "Association scan",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "manhattan_demo",
       "wf_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Per-chromosome significance with alternating bands and top-N locus labels. Tune the threshold line in Settings \u2699.",
+      "description": "Per-chromosome significance with alternating bands, the threshold line and the top 8 loci labelled. Lasso or click markers to publish a feature filter.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Genome-wide scan",
       "viz_kind": "manhattan",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "manhattan",
         "chr_col": "chr",
         "pos_col": "pos",
@@ -80,7 +81,63 @@
         "default_color_by": null,
         "top_n_labels": 8,
         "selection_enabled": true,
-        "selection_column": "feature"
+        "selection_column": "feature",
+        "mode": "manhattan",
+        "rainfall_class_col": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "man-rainfall",
+      "component_type": "advanced_viz",
+      "title": "Somatic mutation rainfall",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "somatic_snv_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One tumour genome of somatic SNVs: a clock-like background plus three kataegis foci, for the rainfall view",
+        "data_collection_tag": "somatic_snv_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Each SNV at its position, y is log10 of the distance to the previous SNV on the chromosome, colour is the substitution class. Clusters fall to the bottom.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genome-wide scan",
+      "viz_kind": "manhattan",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "manhattan",
+        "chr_col": "chr",
+        "pos_col": "pos",
+        "score_col": "vaf",
+        "feature_col": null,
+        "effect_col": null,
+        "score_kind": "-log10(padj)",
+        "score_threshold": null,
+        "marker_size_above": 6,
+        "marker_size_below": 4,
+        "marker_size_uniform": 5,
+        "highlight": "above",
+        "color_by_columns": [],
+        "default_color_by": null,
+        "top_n_labels": 0,
+        "selection_enabled": false,
+        "selection_column": null,
+        "mode": "rainfall",
+        "rainfall_class_col": "mutation_class"
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -119,10 +176,10 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Locus filters",
+      "group": "Association filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#F68B33",
+      "show_histogram": null,
       "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -161,11 +218,53 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Locus filters",
+      "group": "Association filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#E74C3C",
+      "show_histogram": true,
       "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "man-f-mutation-class",
+      "component_type": "interactive",
+      "title": "Substitution class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "somatic_snv_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One tumour genome of somatic SNVs: a clock-like background plus three kataegis foci, for the rainfall view",
+        "data_collection_tag": "somatic_snv_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Scan scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "mutation_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Rainfall filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:shape-outline",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -189,6 +288,14 @@
       "w": 1,
       "h": 3,
       "static": false
+    },
+    {
+      "i": "box-man-f-mutation-class",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
     }
   ],
   "right_panel_layout_data": [
@@ -197,7 +304,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -212,7 +319,22 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-man-rainfall",
+      "x": 0,
+      "y": 8,
+      "w": 8,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -232,8 +354,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Manhattan",
-  "subtitle": "Generic chr/pos/score with threshold line, alternating bands and top-N locus labels",
+  "title": "Genome-wide scans",
+  "subtitle": "An association scan with its significance threshold, and the rainfall of one tumour genome where clustered mutations (kataegis) fall to the bottom.",
   "icon": "mdi:chart-line-stacked",
   "icon_color": "orange",
   "icon_variant": "filled",
@@ -277,7 +399,7 @@
       "name": "Scan scope",
       "icon": "mdi:filter-variant",
       "color": "orange",
-      "description": "Restricts the scan to a region or a score range",
+      "description": "Restricts the scan to a chromosome or a score range, and the rainfall to substitution classes",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -288,12 +410,14 @@
       "name": "Genome-wide scan",
       "icon": "mdi:chart-line",
       "color": "orange",
-      "description": "Markers at their genomic position against significance",
+      "description": "Markers at their genomic position against significance, then somatic SNVs against the distance to their neighbour",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

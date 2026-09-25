@@ -53,10 +53,15 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing cutandrun output (01_prealign/, 02_alignment/, 03_peak_calling/, 04_reporting/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the
-  # samplesheet is part of the run's own pipeline_info/ output.
+    - name: "GENOME"
+      description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=<assembly> for a run on another build."
+      required: false
+      default: "hg38"
+  # The bundled reference dataset: the samplesheet is part of the run's own
+  # pipeline_info/ output, and the megatest was aligned to hg38.
   reference:
-    vars: {}
+    vars:
+      GENOME: "hg38"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -113,13 +118,14 @@ workflows:
           metatype: "Metadata"
           source: "transformed"
           transform:
-            recipe: "nf-core/cutandrun/samples.py"
+            recipe: "cutandrun/samples.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "sample_id": "<group>_R<replicate>, the key every other collection is linked on"
               "target": "Samplesheet group: the histone mark or the IgG control"
               "replicate": "Replicate number inside the group"
+              "replicate_label": "R1, R2 and so on: the same factor as a categorical a MultiSelect can filter"
               "role": "target or IgG control"
               "is_control": "True for the IgG control samples"
               "control_target": "Group of the control this sample was called against"
@@ -161,7 +167,11 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                # Portable across layouts (lint F7): a real run writes
+                # `multiqc/<aligner>/multiqc_data/` and the reprocessed
+                # artefact sits at the run root, so neither directory level is
+                # spelled out literally.
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -210,6 +220,56 @@ workflows:
                 - "PCA plot"
                 - "Fingerprint plot"
                 - "Fingerprint quality metrics"
+
+      # ----------------------------------------------------------------
+      # Spike-in normalisation. Every library is aligned twice, and the two
+      # Bowtie 2 logs are what the scale factor is made of. Both sets are read
+      # through ONE scan (the file names differ by a `.spikein.` infix), one
+      # line per row, because only a scan carries the file path into the frame.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bowtie2_logs_raw"
+        description: "Raw Bowtie 2 summary logs of both alignments, one line per row (input of bowtie2_spikein_factors)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.bowtie2\\.log$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              truncate_ragged_lines: true
+            columns_description:
+              "line": "One line of a Bowtie 2 summary, as prose"
+              "source_path": "File the line came from; the sample and the genome are derived from it"
+
+      - data_collection_tag: "bowtie2_spikein_factors"
+        description: "Per-sample spike-in normalisation: target depth, spike-in depth and the scale factor the pipeline divides the coverage by"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bowtie2/spikein_factors.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample both alignments belong to"
+              "total_pairs": "Read pairs that entered both alignments"
+              "target_aligned": "Pairs aligned concordantly to the target genome"
+              "target_align_rate": "Bowtie 2's overall alignment rate against the target genome, in percent"
+              "spikein_aligned": "Pairs aligned concordantly to the spike-in genome"
+              "spikein_align_rate": "Same rate against the spike-in genome, in percent"
+              "spikein_fraction": "spikein_aligned / total_pairs, the carrier share of the library"
+              "target_per_spikein": "target_aligned / spikein_aligned, the enrichment ratio"
+              "scale_factor": "normalisation_c / spikein_aligned, the multiplier applied to the bedGraph (normalisation_c defaults to 10000)"
 
       # ----------------------------------------------------------------
       # deepTools signal QC. MultiQC draws the fingerprint curve and the PCA
@@ -456,6 +516,62 @@ workflows:
               "cumulative_fraction": "Share of the sample's fragments at most that long"
 
       # ----------------------------------------------------------------
+      # The same histogram binned into nucleosome classes: the ladder says
+      # "this looks like chromatin", the classes say how much of the library
+      # is nucleosome-free, which is what separates a sharp mark from a broad
+      # one.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_fragment_classes"
+        description: "Fragment lengths binned into sub-nucleosomal, mononucleosomal, dinucleosomal and multi-nucleosomal classes, per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/fragment_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the fragments came from"
+              "target": "Group the sample belongs to"
+              "fragment_class": "Sub-nucleosomal, Mononucleosomal, Dinucleosomal or Multi-nucleosomal"
+              "class_order": "1 to 4, so a stacked bar orders the classes by length"
+              "n_fragments": "Fragments of the sample in that class"
+              "fraction": "Share of the sample's fragments in that class"
+              "median_length": "Median fragment length inside the class, in bp"
+              "mono_to_sub": "Mononucleosomal over sub-nucleosomal fragments, one value per sample"
+              "sample_median_length": "Median fragment length of the whole sample, weighted by fragment count; one value per sample"
+
+      # ----------------------------------------------------------------
+      # FRiP. SEACR reports no read count, so the fraction is built in base
+      # pairs of fragment coverage: the summed region signal, de-scaled by the
+      # spike-in factor the pipeline applied to the bedGraph, over the total
+      # the fragment-length histogram accounts for. Long on purpose, two rows
+      # per sample, so a donut reads it as a composition.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "frip"
+        description: "Each sample's fragment coverage split into the part inside its own peaks and the part outside them"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cutandrun/frip.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the coverage belongs to"
+              "target": "Group the sample belongs to"
+              "signal_class": "In peaks or Outside peaks"
+              "coverage_bp": "Base pairs of fragment coverage in that class"
+              "fraction": "coverage_bp over the sample's total fragment coverage"
+              "frip": "The sample's fraction inside peaks, repeated on both of its rows"
+              "n_peaks": "Regions SEACR called for the sample"
+              "peak_span_bp": "Base pairs those regions span"
+              "fragment_bp": "Base pairs all of the sample's fragments covered"
+              "scale_factor": "Spike-in factor divided out of the peak signal, 1.0 when the run was not scaled"
+
+      # ----------------------------------------------------------------
       # Caller agreement. Reads the two peak collections and the hub
       # through `dc_ref`, so it runs after all three. A target a caller
       # returned nothing for still gets a row, with n_peaks 0.
@@ -467,7 +583,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/cutandrun/caller_agreement.py"
+            recipe: "cutandrun/caller_agreement.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -484,6 +600,113 @@ workflows:
               "log10_n_peaks": "log10(n_peaks + 1), a colour axis that survives zeros"
               "other_caller": "The caller compared against"
               "n_peaks_other": "Peaks that other caller called for the same sample"
+
+      # ----------------------------------------------------------------
+      # Duplication. MultiQC's samtools module shows the flagstat counts as
+      # a stacked bar; the per-sample duplicate share a CUT&RUN reader
+      # checks first (a low-input library saturates fast) needs the counts
+      # as a table. Only the marked-duplicate BAMs' reports are read: the
+      # IgG controls also get a deduplicated twin under dedup/, whose
+      # report would count the same sample twice.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_flagstat_raw"
+        description: "Raw samtools flagstat reports of the marked-duplicate target BAMs, one line per row (input of samtools_flagstat)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?markdup/[^/]+\\.flagstat$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a flagstat report"
+              "source_path": "File the line came from; the sample is derived from it"
+
+      - data_collection_tag: "samtools_flagstat"
+        description: "Per-sample alignment counts from samtools flagstat on the marked-duplicate BAM: total, mapped, properly paired and duplicate reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/flagstat.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the BAM belongs to"
+              "stage": "Always pre-filter here: cutandrun reports the marked BAM before any filter"
+              "total_reads": "QC-passed plus QC-failed reads"
+              "mapped_reads": "Reads flagged mapped"
+              "mapped_pct": "Mapped over total, in percent"
+              "duplicate_reads": "Reads Picard MarkDuplicates flagged as duplicates"
+              "properly_paired_reads": "Reads in a properly paired pair"
+              "properly_paired_pct": "Properly paired over total, in percent"
+              "singleton_pct": "Reads whose mate did not map, in percent"
+
+      # ----------------------------------------------------------------
+      # Fragment pile-up around the SEACR regions. The fragment BEDs
+      # (`*.frags.cut.bed`, tens of MB per library) are what SEACR called
+      # from; the raw scan only exists so the recipe can read the sample
+      # off the file name. Both collections are optional: a run published
+      # without the fragment BEDs, or a mirror that skipped them, ingests
+      # everything else and the pile-up tiles drop out.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_frags_raw"
+        description: "Raw per-sample fragment BEDs, one fragment per row (input of seacr_frags_profile)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.frags\\.cut\\.bed$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["chr", "start", "end"]
+              include_file_paths: "source_path"
+            columns_description:
+              "chr": "Chromosome"
+              "start": "Fragment start (0-based)"
+              "end": "Fragment end"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "seacr_frags_profile"
+        description: "Fragments piled up in 100 bp bins on a 6 kb window around the summit of each sample's 500 strongest non-overlapping SEACR regions, per million fragments"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/frags_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the fragments and the region belong to"
+              "target": "Group the sample belongs to"
+              "peak_id": "SEACR region the window is centred on (seacr_peaks.peak_id)"
+              "peak_rank": "1 for the sample's strongest kept region"
+              "chr": "Chromosome"
+              "summit": "The region's summit"
+              "offset_bp": "Bin start minus the summit bin start, in bp"
+              "bin_start": "Genomic start of the bin (0-based)"
+              "bin_end": "Genomic end of the bin"
+              "fragments": "Fragments overlapping the bin"
+              "cpm": "Fragments overlapping the bin per million fragments of the sample"
 
 links:
   # Hub -> everything keyed on the sample name.
@@ -525,6 +748,39 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the fragment-length curves by the samples picked in the left panel"
+    enabled: true
+
+  # The new signal collections, keyed on the same hub sample id, so the pinned
+  # sample / target / replicate filters reach the Signal and Peak calls tabs
+  # instead of stopping at the MultiQC panels.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bowtie2_spikein_factors"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the spike-in factors by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_fragment_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment-class composition by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "frip"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the signal budget by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"
@@ -585,6 +841,19 @@ links:
     description: "Carry a sample selected on the caller comparison over to its SEACR QC row"
     enabled: true
 
+  # The alignment-rate and scale-factor sliders on the MultiQC tab are sourced
+  # on the spike-in table, so they only narrow the report if the reverse link
+  # exists.
+  - source_dc_tag: "bowtie2_spikein_factors"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Carry the alignment and spike-in thresholds over to the MultiQC panels"
+    enabled: true
+
   - source_dc_tag: "seacr_peaks"
     source_column: "sample"
     target_dc_tag: "caller_agreement"
@@ -624,4 +893,63 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the correlation matrix rows by the samples picked on the samplesheet"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "samtools_flagstat"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the duplication counts by the samples picked on the samplesheet"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_frags_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment pile-up by the samples picked in the left panel"
+    enabled: true
+
+  # Locus section (Peak calls tab). The SEACR navigator emits a chromosome
+  # and a position range on its own columns (chr, start); these links rename
+  # them onto each track's coordinate columns, so a brush or a typed locus on
+  # the navigator moves the fragment pile-up, the MACS2 calls and the
+  # consensus intervals with it. Only the navigator's region travels this
+  # way: the sidebar Contig filter narrows the SEACR calls alone.
+  - id: seacr_peaks_region_to_seacr_frags_profile
+    source_dc_tag: "seacr_peaks"
+    source_column: "chr"
+    target_dc_tag: "seacr_frags_profile"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "bin_start"}
+    description: "A region brushed or typed on the SEACR navigator narrows the fragment pile-up"
+    enabled: true
+
+  - id: seacr_peaks_region_to_macs2_peaks
+    source_dc_tag: "seacr_peaks"
+    source_column: "chr"
+    target_dc_tag: "macs2_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region brushed or typed on the SEACR navigator narrows the MACS2 calls"
+    enabled: true
+
+  - id: seacr_peaks_region_to_seacr_consensus_peaks
+    source_dc_tag: "seacr_peaks"
+    source_column: "chr"
+    target_dc_tag: "seacr_consensus_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region brushed or typed on the SEACR navigator narrows the consensus intervals"
     enabled: true

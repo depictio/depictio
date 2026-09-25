@@ -1,0 +1,21 @@
+contrast	analysis	gene_id	gene_name	effect	slope	pvalue	padj	neg_log10_padj	significant	direction
+treated_vs_control	Buffering	ENSG00000000419	DPM1	-0.031998	0.746130	0.917960	0.978012	0.009656	false	not significant
+treated_vs_control	Buffering	ENSG00000000457	SCYL3	0.062954	0.112929	0.797247	0.941173	0.026331	false	not significant
+treated_vs_control	Buffering	ENSG00000001036	FUCA2	0.137083	-0.152544	0.415862	0.834870	0.078381	false	not significant
+treated_vs_control	Ribosome-bound mRNA	ENSG00000000419	DPM1	-0.082613		0.777961	0.870844	0.060059	false	not significant
+treated_vs_control	Ribosome-bound mRNA	ENSG00000000457	SCYL3	0.185583		0.751794	0.856026	0.067513	false	not significant
+treated_vs_control	Ribosome-bound mRNA	ENSG00000001036	FUCA2	0.489369		0.179079	0.348108	0.458285	false	not significant
+treated_vs_control	Ribosome-bound mRNA	ENSG00000001461	NIPAL3	1.407363		0.024561	0.104578	0.980561	true	up
+treated_vs_control	Ribosome-bound mRNA	ENSG00000003056	M6PR	1.350182		0.001241	0.023644	1.626278	true	up
+treated_vs_control	Ribosome-bound mRNA	ENSG00000003400	CASP10	1.531390		0.009594	0.064535	1.190205	true	up
+treated_vs_control	Ribosome-bound mRNA	ENSG00000004478	FKBP4	-0.748154		0.029215	0.116266	0.934545	true	down
+treated_vs_control	Ribosome-bound mRNA	ENSG00000004534	RBM6	-1.283870		0.008689	0.061499	1.211135	true	down
+treated_vs_control	Ribosome-bound mRNA	ENSG00000005339	CREBBP	-1.341350		0.004395	0.042550	1.371099	true	down
+treated_vs_control	Total mRNA	ENSG00000000419	DPM1	-0.093638		0.709053	0.856630	0.067207	false	not significant
+treated_vs_control	Total mRNA	ENSG00000000457	SCYL3	0.083911		0.686662	0.845357	0.072960	false	not significant
+treated_vs_control	Total mRNA	ENSG00000001036	FUCA2	0.062433		0.612260	0.805594	0.093884	false	not significant
+treated_vs_control	Total mRNA	ENSG00000012171	SEMA3B	-0.759141		0.001081	0.132991	0.876176	true	down
+treated_vs_control	Total mRNA	ENSG00000057294	PKP2	-0.943671		0.000115	0.047365	1.324544	true	down
+treated_vs_control	Total mRNA	ENSG00000092969	TGFB2	-0.669840		0.001362	0.148306	0.828842	true	down
+treated_vs_control	Total mRNA	ENSG00000019549	SNAI2	1.694324		0.000502	0.093843	1.027598	true	up
+treated_vs_control	Total mRNA	ENSG00000048052	HDAC9	1.408312		0.000376	0.091313	1.039466	true	up

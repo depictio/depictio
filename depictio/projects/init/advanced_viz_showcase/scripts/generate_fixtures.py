@@ -26,6 +26,7 @@ rather than four hand-crafted scatter plots.
 
 from __future__ import annotations
 
+import math
 import random
 import sys
 from pathlib import Path
@@ -1590,6 +1591,11 @@ SASHIMI_CHROM = "chr12"
 
 # (exon start, exon end) — locus A, the cassette-exon gene. E3 is the cassette.
 #
+# Placed inside the hg38 footprint of CHD4 (chr12:6,570,081-6,614,524) so the
+# GenomeSpy view's bundled gene lane names one gene under the arcs instead of
+# the four neighbours an arbitrary window would straddle. The exons themselves
+# are synthetic, not CHD4's.
+#
 # The intron lengths matter as much as the exons. An earlier draft spaced the
 # exons evenly, every intron between 3.7 and 6.2 kb, and the panel came out as a
 # picket fence of near-identical arcs, which is the one thing a real locus never
@@ -1599,14 +1605,14 @@ SASHIMI_CHROM = "chr12"
 # the mid-length part of the gene so the skipping arc is still readable at
 # whole-locus zoom.
 _SASHIMI_EXONS_A = [
-    (6530000, 6530420),  # E1
-    (6545620, 6545807),  # E2, donor of both the inclusion and the skipping junction
-    (6549207, 6549319),  # E3, the cassette, skipped in the knockdown
-    (6552219, 6552483),  # E4, acceptor of the skipping junction
-    (6553263, 6553418),  # E5, 780 bp downstream of E4 — the shortest intron here
-    (6563018, 6563221),  # E6
-    (6564471, 6564612),  # E7
-    (6568712, 6569101),  # E8
+    (6571000, 6571420),  # E1
+    (6586620, 6586807),  # E2, donor of both the inclusion and the skipping junction
+    (6590207, 6590319),  # E3, the cassette, skipped in the knockdown
+    (6593219, 6593483),  # E4, acceptor of the skipping junction
+    (6594263, 6594418),  # E5, 780 bp downstream of E4, the shortest intron here
+    (6604018, 6604221),  # E6
+    (6605471, 6605612),  # E7
+    (6609712, 6610101),  # E8
 ]
 
 # (exon start, exon end) — locus B, 45.7 Mb downstream.
@@ -1834,3 +1840,988 @@ def generate_scatter_xy_demo() -> None:
 
 
 generate_scatter_xy_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Contact map: a multi-resolution Hi-C matrix over three real loci.
+# columns: chrom, start, end, chrom2, start2, end2, count, resolution
+# ---------------------------------------------------------------------------
+# Three 1.28 Mb windows of GRCh38 chosen for what a Hi-C reader expects to see
+# there: the HOXA cluster sitting on a TAD boundary (chr7), MYC inside a large
+# domain with a loop to its downstream boundary (chr8), and the IGF2 / KCNQ1
+# imprinted domain (chr11). Coordinates are real, so the showcase can draw the
+# bundled hg38 gene lane under the matrix and a locus typed as a gene symbol
+# lands on the right bins.
+#
+# Every resolution is written as a partition of one collection, the way
+# `cooler dump` over an mcool is ingested: the 10 kb pixels are counted, and
+# the 20 kb and 40 kb levels are those pixels summed over 2x2 and 4x4 blocks
+# (what `cooler coarsen` does), never re-simulated. The `resolution` column
+# names the bin size, which is what lets the tile pick the level that fits the
+# visible span and re-read a finer one on zoom.
+#
+# The first-bin columns are named chrom / start / end rather than chrom1 /
+# start1 / end1 on purpose: the locus tabs brush a region onto chrom / start,
+# and a tile follows a region on the columns it binds, so the matrix shares the
+# name with the peak and coverage tracks stacked under it.
+#
+# Only the upper triangle is written; the renderer mirrors it.
+_CONTACT_MAP_WINDOWS = (
+    # (chromosome, window start, TAD bin ranges, loop anchor bin pairs)
+    ("chr7", 26_600_000, ((6, 48), (49, 66), (67, 121)), ((49, 66),)),
+    ("chr8", 127_100_000, ((4, 40), (41, 92), (93, 124)), ((63, 92), (41, 63))),
+    ("chr11", 1_800_000, ((10, 32), (33, 62), (63, 112), (113, 127)), ((33, 62), (63, 110))),
+)
+_CONTACT_MAP_BIN_SIZE = 10_000
+_CONTACT_MAP_N_BINS = 128
+_CONTACT_MAP_COARSEN = (1, 2, 4)
+_CONTACT_MAP_PEAK = 300.0
+_CONTACT_MAP_DECAY_EXPONENT = 1.5
+_CONTACT_MAP_TAD_BOOST = 2.5
+
+
+def _contact_map_fine_counts(tads, loops, rng: random.Random) -> dict[tuple[int, int], int]:
+    """Integer 10 kb pixel counts (upper triangle) for one window.
+
+    Power-law decay with separation (the P(s) slope of a real matrix), a boost
+    for pixels inside one TAD, and a focal enrichment at each loop anchor pair,
+    which is the dot that only a fine resolution resolves.
+    """
+    counts: dict[tuple[int, int], int] = {}
+    for i in range(_CONTACT_MAP_N_BINS):
+        for j in range(i, _CONTACT_MAP_N_BINS):
+            value = _CONTACT_MAP_PEAK * (j - i + 1) ** -_CONTACT_MAP_DECAY_EXPONENT
+            if any(lo <= i <= hi and lo <= j <= hi for lo, hi in tads):
+                value *= _CONTACT_MAP_TAD_BOOST
+            for a, b in loops:
+                if abs(i - a) <= 1 and abs(j - b) <= 1:
+                    value *= 6.0 if (i, j) == (a, b) else 2.5
+            count = int(round(value * rng.uniform(0.8, 1.2)))
+            if count > 0:
+                counts[(i, j)] = count
+    return counts
+
+
+def generate_contact_map_demo() -> None:
+    """Write contact_map_demo.tsv: 3 loci x 3 resolutions (10, 20, 40 kb)."""
+    header = ["chrom", "start", "end", "chrom2", "start2", "end2", "count", "resolution"]
+    rows: list[list] = []
+    rng = random.Random(20260517)
+
+    for chrom, offset, tads, loops in _CONTACT_MAP_WINDOWS:
+        fine = _contact_map_fine_counts(tads, loops, rng)
+        for factor in _CONTACT_MAP_COARSEN:
+            size = _CONTACT_MAP_BIN_SIZE * factor
+            level: dict[tuple[int, int], int] = {}
+            for (i, j), count in fine.items():
+                key = (i // factor, j // factor)
+                level[key] = level.get(key, 0) + count
+            for (a, b), count in sorted(level.items()):
+                start1 = offset + a * size
+                start2 = offset + b * size
+                rows.append(
+                    [chrom, start1, start1 + size, chrom, start2, start2 + size, count, size]
+                )
+
+    write_tsv(OUT / "contact_map_demo.tsv", header, rows)
+
+
+generate_contact_map_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Locus tracks: CTCF peaks and ChIP coverage over the contact-map loci.
+# locus_peaks_demo:    chrom, start, end, peak_id, score, peak_class
+# locus_coverage_demo: chrom, start, end, coverage, sample
+# ---------------------------------------------------------------------------
+# The two tracks a Hi-C locus figure stacks under the matrix, on the same three
+# windows and the same chrom / start column names, so a region brushed on one
+# of them moves the matrix and the other track together. CTCF peaks sit on
+# every TAD boundary and on every loop anchor (the convergent-CTCF picture),
+# plus a few weaker sites inside domains. The coverage collection carries two
+# ChIP tracks: CTCF, sharp at those peaks, and H3K27ac, broad over the
+# promoters of the bundled hg38 protein-coding genes in each window.
+_LOCUS_PEAK_WIDTH = (250, 600)
+_LOCUS_INTERNAL_PEAKS = 6
+_LOCUS_COVERAGE_BIN = 2_000
+_LOCUS_GENES_JSON = (
+    _REPO_ROOT / "depictio" / "viewer" / "public" / "assets" / "genomes" / "hg38.genes.json"
+)
+
+
+def _locus_peaks() -> list[list]:
+    """CTCF peaks per window: boundaries, loop anchors, then internal sites."""
+    rng = random.Random(20260523)
+    peaks: list[list] = []
+    for chrom, offset, tads, loops in _CONTACT_MAP_WINDOWS:
+        anchored: dict[int, str] = {}
+        for lo, hi in tads:
+            anchored.setdefault(lo, "TAD boundary")
+            anchored.setdefault(hi + 1, "TAD boundary")
+        for a, b in loops:
+            anchored[a] = "loop anchor"
+            anchored[b] = "loop anchor"
+        sites = [(b, cls) for b, cls in anchored.items() if 0 <= b < _CONTACT_MAP_N_BINS]
+        taken = {b for b, _ in sites}
+        wanted = len(sites) + _LOCUS_INTERNAL_PEAKS
+        while len(sites) < wanted:
+            b = rng.randrange(2, _CONTACT_MAP_N_BINS - 2)
+            if all(abs(b - t) > 3 for t in taken):
+                taken.add(b)
+                sites.append((b, "internal"))
+        for b, cls in sorted(sites):
+            width = rng.randint(*_LOCUS_PEAK_WIDTH)
+            centre = offset + b * _CONTACT_MAP_BIN_SIZE + rng.randint(-2_000, 2_000)
+            base = {"loop anchor": 14.0, "TAD boundary": 10.0, "internal": 4.0}[cls]
+            score = round(base * rng.uniform(0.75, 1.25), 2)
+            peaks.append([chrom, centre - width // 2, centre + width // 2, "", score, cls])
+    for n, peak in enumerate(peaks, start=1):
+        peak[3] = f"CTCF_{n:03d}"
+    return peaks
+
+
+def _locus_promoters(chrom: str, lo: int, hi: int) -> list[int]:
+    """TSS positions of the bundled hg38 protein-coding genes inside a window."""
+    import json
+
+    genes = json.loads(_LOCUS_GENES_JSON.read_text())["genes"]
+    tss = []
+    for name, g_chrom, start, end, strand in genes:
+        if g_chrom != chrom:
+            continue
+        site = start if strand == "+" else end
+        if lo <= site < hi:
+            tss.append(site)
+    return tss
+
+
+def generate_locus_peaks_demo() -> None:
+    """Write locus_peaks_demo.tsv: CTCF peaks over the three contact-map loci."""
+    header = ["chrom", "start", "end", "peak_id", "score", "peak_class"]
+    write_tsv(OUT / "locus_peaks_demo.tsv", header, _locus_peaks())
+
+
+def generate_locus_coverage_demo() -> None:
+    """Write locus_coverage_demo.tsv: CTCF and H3K27ac ChIP depth in 2 kb bins."""
+    header = ["chrom", "start", "end", "coverage", "sample"]
+    rows: list[list] = []
+    rng = random.Random(20260524)
+    peaks = _locus_peaks()
+    span = _CONTACT_MAP_N_BINS * _CONTACT_MAP_BIN_SIZE
+    for chrom, offset, _tads, _loops in _CONTACT_MAP_WINDOWS:
+        centres = [((p[1] + p[2]) // 2, p[4]) for p in peaks if p[0] == chrom]
+        promoters = _locus_promoters(chrom, offset, offset + span)
+        for sample in ("GM12878_CTCF", "GM12878_H3K27ac"):
+            for start in range(offset, offset + span, _LOCUS_COVERAGE_BIN):
+                mid = start + _LOCUS_COVERAGE_BIN / 2
+                depth = 2.0
+                if sample == "GM12878_CTCF":
+                    # Sharp: a peak is one or two bins wide.
+                    for centre, score in centres:
+                        depth += score * 6.0 * math.exp(-(((mid - centre) / 1_200.0) ** 2))
+                else:
+                    # Broad: acetylation spreads a few kb either side of a TSS.
+                    for site in promoters:
+                        depth += 40.0 * math.exp(-(((mid - site) / 4_000.0) ** 2))
+                depth *= rng.uniform(0.85, 1.15)
+                rows.append([chrom, start, start + _LOCUS_COVERAGE_BIN, round(depth, 2), sample])
+    write_tsv(OUT / "locus_coverage_demo.tsv", header, rows)
+
+
+generate_locus_peaks_demo()
+generate_locus_coverage_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Knee plot: two barcode-rank curves.
+# columns: sample, rank, umi_count, is_cell
+# ---------------------------------------------------------------------------
+# Each sample's curve has the classic two-regime shape: a gently declining
+# plateau over the called cells, then a power-law drop into the flat
+# empty-droplet background. `is_cell` marks the boundary directly, so the
+# renderer's cutoff line demo doesn't depend on its own estimator.
+_KNEE_SAMPLES = (
+    # name, n_cells, n_total, plateau, background level, decay exponent
+    ("sample_A", 800, 4000, 15000.0, 200.0, 1.5),
+    ("sample_B", 500, 4000, 9000.0, 120.0, 1.3),
+)
+
+
+def generate_knee_plot_demo() -> None:
+    """Write knee_plot_demo.tsv: two barcode-rank curves with a cell cutoff."""
+    header = ["sample", "rank", "umi_count", "is_cell"]
+    rows: list[list] = []
+    rng = random.Random(20260518)
+
+    for sample, n_cells, n_total, plateau, background, alpha in _KNEE_SAMPLES:
+        for rank in range(1, n_total + 1):
+            is_cell = rank <= n_cells
+            if is_cell:
+                # Gentle decline across the cell population.
+                mean = plateau * (1.0 - 0.3 * (rank / n_cells))
+            else:
+                # Power-law decay into the background, anchored so the curve
+                # is continuous across the cutoff.
+                mean = background + (plateau - background) * (n_cells / rank) ** alpha
+            umi = max(1.0, mean * rng.uniform(0.85, 1.15))
+            rows.append([sample, rank, round(umi, 1), "true" if is_cell else "false"])
+
+    write_tsv(OUT / "knee_plot_demo.tsv", header, rows)
+
+
+generate_knee_plot_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Damage profile: ancient-DNA misincorporation, two samples.
+# columns: sample, end, position, base_change, frequency
+# ---------------------------------------------------------------------------
+# The deamination signature: C>T enriched near the 5' read end, G>A enriched
+# near the 3' read end, both decaying from ~0.3 at position 1 to a low
+# background within ~10 bp. Every other substitution sits flat near the
+# background rate throughout, which is what makes the two damage curves stand
+# out when the renderer highlights them.
+_DAMAGE_SAMPLES = ("sample_A", "sample_B")
+_DAMAGE_BASE_CHANGES = ("C>T", "G>A", "T>C", "A>G", "other")
+_DAMAGE_MAX_POSITION = 25
+_DAMAGE_START_FREQ = 0.3
+_DAMAGE_DECAY_POSITIONS = 4.0
+_DAMAGE_BACKGROUND = 0.01
+
+
+def generate_damage_profile_demo() -> None:
+    """Write damage_profile_demo.tsv: 5p C>T / 3p G>A deamination curves."""
+    header = ["sample", "end", "position", "base_change", "frequency"]
+    rows: list[list] = []
+    rng = random.Random(20260519)
+
+    for sample in _DAMAGE_SAMPLES:
+        for end in ("5p", "3p"):
+            damage_change = "C>T" if end == "5p" else "G>A"
+            for position in range(1, _DAMAGE_MAX_POSITION + 1):
+                for base_change in _DAMAGE_BASE_CHANGES:
+                    if base_change == damage_change:
+                        mean = _DAMAGE_BACKGROUND + _DAMAGE_START_FREQ * math.exp(
+                            -(position - 1) / _DAMAGE_DECAY_POSITIONS
+                        )
+                    else:
+                        mean = _DAMAGE_BACKGROUND
+                    freq = max(0.0, mean * rng.uniform(0.8, 1.2))
+                    rows.append([sample, end, position, base_change, round(freq, 4)])
+
+    write_tsv(OUT / "damage_profile_demo.tsv", header, rows)
+
+
+generate_damage_profile_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Group comparison: 600 cells x 60 genes, 3 clusters, 6 planted markers.
+# columns: cell_id, cluster, gene_01 ... gene_60
+# ---------------------------------------------------------------------------
+# The one wide observation x feature matrix in the showcase whose point is not
+# a picture of the matrix but a test run over it. Two markers per cluster sit
+# at the head of the gene list and everything else is drawn from one
+# background distribution, so a comparison between two clusters returns
+# exactly the four markers of those two clusters: a reader can check the
+# volcano against the fixture's own definition.
+_GROUP_COMPARE_CELLS = 600
+_GROUP_COMPARE_GENES = 60
+_GROUP_COMPARE_CLUSTERS = (("cluster_1", 220), ("cluster_2", 200), ("cluster_3", 180))
+_GROUP_COMPARE_MARKERS = {
+    "cluster_1": ("gene_01", "gene_02"),
+    "cluster_2": ("gene_03", "gene_04"),
+    "cluster_3": ("gene_05", "gene_06"),
+}
+_GROUP_COMPARE_MARKER_FOLD = 8.0
+# A handful of genes that separate cluster_3 from the other two only mildly.
+# Without them the volcano would be six points against a flat cloud, which
+# would not show what the FDR and effect-size lines are for.
+_GROUP_COMPARE_WEAK = {"gene_07": 1.8, "gene_08": 1.6, "gene_09": 0.55}
+# Zeros, the way a droplet protocol produces them: a feature can simply not be
+# captured in a cell. A tenth is enough for the reader to see them in the data
+# popover without emptying the matrix.
+_GROUP_COMPARE_DROPOUT = 0.1
+
+
+def generate_group_compare_demo() -> None:
+    """Write group_compare_demo.tsv: a cell x gene matrix with planted markers."""
+    genes = [f"gene_{i:02d}" for i in range(1, _GROUP_COMPARE_GENES + 1)]
+    header = ["cell_id", "cluster", *genes]
+    rows: list[list] = []
+    rng = random.Random(20260520)
+
+    cells: list[tuple[str, str]] = []
+    n = 0
+    for cluster, count in _GROUP_COMPARE_CLUSTERS:
+        for _ in range(count):
+            n += 1
+            cells.append((f"cell_{n:04d}", cluster))
+    assert len(cells) == _GROUP_COMPARE_CELLS
+
+    # Interleaved rather than blocked, so nothing downstream can depend on the
+    # clusters arriving in contiguous runs.
+    rng.shuffle(cells)
+
+    for cell_id, cluster in cells:
+        # Per-cell depth: the same gene reads higher in a deeply sequenced
+        # cell, which is why the comparison normalises nothing and the
+        # rank-based test is the default.
+        depth = rng.lognormvariate(0.0, 0.25)
+        values: list[float] = []
+        for gene in genes:
+            fold = 1.0
+            if gene in _GROUP_COMPARE_MARKERS[cluster]:
+                fold = _GROUP_COMPARE_MARKER_FOLD
+            elif gene in _GROUP_COMPARE_WEAK and cluster == "cluster_3":
+                fold = _GROUP_COMPARE_WEAK[gene]
+            if rng.random() < _GROUP_COMPARE_DROPOUT:
+                values.append(0.0)
+                continue
+            values.append(round(rng.lognormvariate(1.0, 0.7) * fold * depth, 3))
+        rows.append([cell_id, cluster, *values])
+
+    write_tsv(OUT / "group_compare_demo.tsv", header, rows)
+
+
+generate_group_compare_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Genome chord: fusion / structural-variant partner links.
+# columns: chrom_a, pos_a, chrom_b, pos_b, label, weight, category
+# ---------------------------------------------------------------------------
+# A rearranged tumour genome as a caller would report it: four event classes,
+# read support spanning two orders of magnitude (which is what the renderer's
+# log-scaled chord width exists for), and a handful of recurrent partners heavy
+# enough to read at a glance against the lighter background of one-off events.
+# Positions are drawn inside the real GRCh38 chromosome lengths, so the demo
+# dashboard can pin `assembly: hg38` and every locus lands where it belongs.
+_CHORD_CHROM_SIZES = {
+    "chr1": 248956422,
+    "chr2": 242193529,
+    "chr3": 198295559,
+    "chr4": 190214555,
+    "chr5": 181538259,
+    "chr6": 170805979,
+    "chr7": 159345973,
+    "chr8": 145138636,
+    "chr9": 138394717,
+    "chr10": 133797422,
+    "chr11": 135086622,
+    "chr12": 133275309,
+    "chr13": 114364328,
+    "chr14": 107043718,
+    "chr15": 101991189,
+    "chr16": 90338345,
+    "chr17": 83257441,
+    "chr18": 80373285,
+    "chr19": 58617616,
+    "chr20": 64444167,
+    "chr21": 46709983,
+    "chr22": 50818468,
+    "chrX": 156040895,
+    "chrY": 57227415,
+}
+# The classes a caller assigns, with whether both breakpoints sit on one
+# chromosome and the weight band the class tends to fall in.
+_CHORD_CLASSES = (
+    ("translocation", False, 4, 90),
+    ("inversion", True, 3, 60),
+    ("deletion", True, 6, 200),
+    ("duplication", True, 8, 400),
+)
+# Recurrent partners drawn heavy, so the ring has a foreground: the picture is
+# about which partners recur, not about how many events there were.
+_CHORD_RECURRENT = (
+    ("chr8", "chr14", "MYC--IGH", "translocation", 480),
+    ("chr9", "chr22", "BCR--ABL1", "translocation", 365),
+    ("chr4", "chr4", "FGFR3--TACC3", "duplication", 290),
+    ("chr2", "chr2", "EML4--ALK", "inversion", 175),
+    ("chr12", "chr15", "ETV6--NTRK3", "translocation", 140),
+    ("chr21", "chr7", "TMPRSS2--ETV1", "translocation", 96),
+)
+_CHORD_N_LINKS = 40
+
+
+def generate_genome_chord_demo() -> None:
+    """Write genome_chord_demo.tsv: 40 links over 24 chromosomes, 4 classes."""
+    header = ["chrom_a", "pos_a", "chrom_b", "pos_b", "label", "weight", "category"]
+    rows: list[list] = []
+    rng = random.Random(20260520)
+    names = list(_CHORD_CHROM_SIZES)
+
+    def locus(chrom: str) -> int:
+        # Off the telomeres, where no caller reports a usable breakpoint.
+        size = _CHORD_CHROM_SIZES[chrom]
+        return rng.randint(int(size * 0.02), int(size * 0.98))
+
+    for chrom_a, chrom_b, label, category, weight in _CHORD_RECURRENT:
+        rows.append([chrom_a, locus(chrom_a), chrom_b, locus(chrom_b), label, weight, category])
+
+    for i in range(_CHORD_N_LINKS - len(_CHORD_RECURRENT)):
+        category, intra, low, high = _CHORD_CLASSES[i % len(_CHORD_CLASSES)]
+        chrom_a = rng.choice(names)
+        chrom_b = chrom_a if intra else rng.choice([c for c in names if c != chrom_a])
+        # Log-uniform within the class's band: read support is multiplicative,
+        # and a linear draw would put almost every event at the top of its range.
+        weight = int(round(math.exp(rng.uniform(math.log(low), math.log(high)))))
+        rows.append(
+            [
+                chrom_a,
+                locus(chrom_a),
+                chrom_b,
+                locus(chrom_b),
+                f"SV{i + 1:03d}",
+                weight,
+                category,
+            ]
+        )
+
+    write_tsv(OUT / "genome_chord_demo.tsv", header, rows)
+
+
+generate_genome_chord_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Somatic SNVs: one tumour genome for the rainfall view of the Manhattan.
+# columns: chr, pos, vaf, mutation_class, sample
+# ---------------------------------------------------------------------------
+# A rainfall plot puts each variant at its position and the distance to the
+# previous variant on y, so it only says something when the calls carry
+# clusters. The background is scattered along GRCh38 in proportion to
+# chromosome length with the C>T excess of a clock-like signature; three
+# kataegis foci (tens of C>T and C>G calls within a few kb, the APOBEC
+# signature) fall to the bottom of the plot as the vertical streaks the view
+# exists to show. `vaf` fills the score role the kind binds.
+_SOMATIC_BACKGROUND = 1_400
+_SOMATIC_CLASSES = ("C>A", "C>G", "C>T", "T>A", "T>C", "T>G")
+_SOMATIC_BACKGROUND_WEIGHTS = (0.14, 0.10, 0.42, 0.08, 0.17, 0.09)
+_SOMATIC_KATAEGIS = (
+    # (chromosome, focus, number of calls, span in bp)
+    ("chr2", 60_120_000, 38, 9_000),
+    ("chr8", 127_730_000, 30, 6_000),
+    ("chr17", 7_660_000, 26, 5_000),
+)
+
+
+def generate_somatic_snv_demo() -> None:
+    """Write somatic_snv_demo.tsv: a clock-like background plus 3 kataegis foci."""
+    header = ["chr", "pos", "vaf", "mutation_class", "sample"]
+    rng = random.Random(20260525)
+    names = [c for c in _CHORD_CHROM_SIZES if c != "chrY"]
+    total = sum(_CHORD_CHROM_SIZES[c] for c in names)
+    rows: list[list] = []
+    for _ in range(_SOMATIC_BACKGROUND):
+        point = rng.randrange(total)
+        for chrom in names:
+            size = _CHORD_CHROM_SIZES[chrom]
+            if point < size:
+                break
+            point -= size
+        cls = rng.choices(_SOMATIC_CLASSES, weights=_SOMATIC_BACKGROUND_WEIGHTS)[0]
+        rows.append([chrom, point + 1, round(rng.betavariate(4, 8), 3), cls, "TUMOUR_01"])
+    for chrom, focus, n_calls, span in _SOMATIC_KATAEGIS:
+        for _ in range(n_calls):
+            cls = rng.choice(("C>T", "C>T", "C>G"))
+            pos = focus + rng.randint(-span // 2, span // 2)
+            rows.append([chrom, pos, round(rng.betavariate(3, 9), 3), cls, "TUMOUR_01"])
+    order = {c: i for i, c in enumerate(names)}
+    rows.sort(key=lambda r: (order[r[0]], r[1]))
+    write_tsv(OUT / "somatic_snv_demo.tsv", header, rows)
+
+
+generate_somatic_snv_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Transcript structure: isoforms of two genes on a base-pair axis.
+# columns: transcript_id, gene_id, gene_name, chrom, start, end, feature,
+#          strand, transcript_class, sample, expression
+# ---------------------------------------------------------------------------
+# The four events a long-read isoform panel exists to show, on one gene: a
+# skipped cassette exon, an alternative first exon, an alternative 3' end and a
+# retained intron, plus one transcript the caller flagged as novel. A second,
+# minus-strand gene is there so the chevrons and the gene selector have
+# something to switch to. Blocks are given as (start, end) pairs and the coding
+# ones are derived by intersecting the transcript's ORF with its exons, which
+# is what keeps a UTR visible either side of every CDS.
+_TS_CHROM = "chr7"
+_TS_SAMPLE = "A549_rep1"
+
+# gene_id, gene_name, strand, [(transcript_id, class, expression, exons, orf)]
+_TS_GENES: tuple = (
+    (
+        "DPXG00000001",
+        "DPX1",
+        "+",
+        (
+            (
+                "DPX1-201",
+                "known",
+                142.3,
+                (
+                    (1000000, 1000420),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1019150),
+                ),
+                (1000310, 1018240),
+            ),
+            # cassette exon 3 skipped
+            (
+                "DPX1-202",
+                "known",
+                88.1,
+                ((1000000, 1000420), (1003200, 1003560), (1012400, 1012760), (1018000, 1019150)),
+                (1000310, 1018190),
+            ),
+            # alternative first exon, downstream of the canonical one
+            (
+                "DPX1-203",
+                "known",
+                31.5,
+                (
+                    (1001500, 1001840),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1019150),
+                ),
+                (1001620, 1018240),
+            ),
+            # alternative 3' end: the last exon stops early
+            (
+                "DPX1-204",
+                "NIC",
+                12.4,
+                (
+                    (1000000, 1000420),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1018520),
+                ),
+                (1000310, 1018300),
+            ),
+            # intron 2 retained, which puts a stop codon inside it
+            (
+                "DPX1-205",
+                "NNC",
+                5.9,
+                ((1000000, 1000420), (1003200, 1008290), (1012400, 1012760), (1018000, 1019150)),
+                (1000310, 1004010),
+            ),
+            # novel first exon upstream of the annotated gene, no called ORF
+            (
+                "BambuTx1",
+                "novel",
+                27.8,
+                (
+                    (999100, 999380),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1019150),
+                ),
+                None,
+            ),
+        ),
+    ),
+    (
+        "DPXG00000002",
+        "DPX2",
+        "-",
+        (
+            (
+                "DPX2-201",
+                "known",
+                64.2,
+                ((1130000, 1131300), (1136200, 1136540), (1140600, 1142000)),
+                (1130900, 1141700),
+            ),
+            ("DPX2-202", "NIC", 9.4, ((1130000, 1131300), (1140600, 1142000)), (1130900, 1141700)),
+        ),
+    ),
+)
+
+
+def generate_transcript_structure_demo() -> None:
+    """Write transcript_structure_demo.tsv: eight isoforms across two genes."""
+    header = [
+        "transcript_id",
+        "gene_id",
+        "gene_name",
+        "chrom",
+        "start",
+        "end",
+        "feature",
+        "strand",
+        "transcript_class",
+        "sample",
+        "expression",
+    ]
+    rows: list[list] = []
+    for gene_id, gene_name, strand, transcripts in _TS_GENES:
+        for transcript_id, cls, expression, exons, orf in transcripts:
+            for start, end in exons:
+                rows.append(
+                    [
+                        transcript_id,
+                        gene_id,
+                        gene_name,
+                        _TS_CHROM,
+                        start,
+                        end,
+                        "exon",
+                        strand,
+                        cls,
+                        _TS_SAMPLE,
+                        expression,
+                    ]
+                )
+            if orf is None:
+                continue
+            orf_start, orf_end = orf
+            for start, end in exons:
+                cds_start, cds_end = max(start, orf_start), min(end, orf_end)
+                if cds_start >= cds_end:
+                    continue
+                rows.append(
+                    [
+                        transcript_id,
+                        gene_id,
+                        gene_name,
+                        _TS_CHROM,
+                        cds_start,
+                        cds_end,
+                        "CDS",
+                        strand,
+                        cls,
+                        _TS_SAMPLE,
+                        expression,
+                    ]
+                )
+
+    write_tsv(OUT / "transcript_structure_demo.tsv", header, rows)
+
+
+generate_transcript_structure_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. CNV profile: a synthetic somatic copy-number profile, 2 tumour samples.
+# columns: sample, chrom, start, end, log2, baf, copy_number, minor_copy_number,
+#          segment, label
+# ---------------------------------------------------------------------------
+# One long table carrying both the evidence and the call, told apart by the
+# `segment` column, which is the shape the three somatic callers in the catalog
+# (CNVkit, ASCAT, Control-FREEC) are reshaped into. A synthetic genome of five
+# chromosomes at 20 kb bins, 10 000 bins per sample, with six events planted in
+# the first sample:
+#
+#   chr1  gain (3 copies)                 log2 +0.58, BAF splits to 1/3 and 2/3
+#   chr2  hemizygous loss (1 copy)        log2 -1.00, BAF collapses to the edges
+#   chr2  subclonal gain                  log2 +0.28, a shallow, wide event
+#   chr3  copy-neutral LOH (2 copies)     log2 stays at 0, only the BAF moves
+#   chr4  focal amplification (7 copies)  log2 +1.80 over 60 bins
+#   chr5  homozygous deletion (0 copies)  log2 -2.60, no BAF to report
+#
+# The copy-neutral LOH is the reason the BAF panel exists: the log2 track says
+# nothing at all there, and the allele fractions say the whole region lost one
+# parental haplotype. The second sample carries four different events so the
+# sample selector changes the picture rather than the labels.
+_CNV_CHROMS = (
+    # name, bins on that chromosome
+    ("chr1", 3000),
+    ("chr2", 2500),
+    ("chr3", 2000),
+    ("chr4", 1500),
+    ("chr5", 1000),
+)
+_CNV_BIN_SIZE = 20_000
+_CNV_LOG2_NOISE = 0.12
+_CNV_BAF_NOISE = 0.035
+# (chrom, first bin, last bin, log2, copy number, BAF bands, label, minor copy number)
+# The minor copy number is ASCAT's nMinor (nMajor is the total minus it): the
+# allele-specific call that tells a copy-neutral LOH (2 + 0) from a balanced
+# diploid region (1 + 1) when the total copy number is the same.
+_CNV_EVENTS = {
+    "TUMOUR_A": (
+        ("chr1", 800, 1400, 0.58, 3, (0.33, 0.67), "CN 3 gain", 1),
+        ("chr2", 300, 900, -1.00, 1, (0.02, 0.98), "CN 1 loss", 0),
+        ("chr2", 1600, 2200, 0.28, 3, (0.40, 0.60), "CN 3 subclonal gain", 1),
+        ("chr3", 500, 1200, 0.00, 2, (0.04, 0.96), "CN 2 copy-neutral LOH", 0),
+        ("chr4", 700, 760, 1.80, 7, (0.14, 0.86), "CN 7 amplification", 1),
+        ("chr5", 400, 450, -2.60, 0, None, "CN 0 deletion", 0),
+    ),
+    "TUMOUR_B": (
+        ("chr1", 2100, 2800, -0.45, 1, (0.12, 0.88), "CN 1 loss", 0),
+        ("chr3", 500, 1200, 0.00, 2, (0.05, 0.95), "CN 2 copy-neutral LOH", 0),
+        ("chr4", 100, 900, 0.45, 3, (0.35, 0.65), "CN 3 gain", 1),
+        ("chr5", 200, 600, 0.62, 3, (0.34, 0.66), "CN 3 gain", 1),
+    ),
+}
+
+
+def _cnv_event_at(events, chrom: str, index: int):
+    """The planted event covering this bin, or None for a neutral bin."""
+    for event in events:
+        if event[0] == chrom and event[1] <= index <= event[2]:
+            return event
+    return None
+
+
+def _cnv_neutral_runs(events, chrom: str, n_bins: int):
+    """The stretches of a chromosome no planted event covers.
+
+    A caller publishes a segment for every stretch of the genome it assessed,
+    not only for the aberrant ones, so the drawn segment track is continuous.
+    """
+    covered = sorted((e[1], e[2]) for e in events if e[0] == chrom)
+    runs: list[tuple[int, int]] = []
+    cursor = 0
+    for first, last in covered:
+        if first > cursor:
+            runs.append((cursor, first - 1))
+        cursor = max(cursor, last + 1)
+    if cursor <= n_bins - 1:
+        runs.append((cursor, n_bins - 1))
+    return runs
+
+
+def generate_cnv_profile_demo() -> None:
+    """Write cnv_profile_demo.tsv: 20 000 bins and the segments called over them."""
+    header = [
+        "sample",
+        "chrom",
+        "start",
+        "end",
+        "log2",
+        "baf",
+        "copy_number",
+        "minor_copy_number",
+        "segment",
+        "label",
+    ]
+    rows: list[list] = []
+    rng = random.Random(20260520)
+
+    for sample, events in _CNV_EVENTS.items():
+        for chrom, n_bins in _CNV_CHROMS:
+            for index in range(n_bins):
+                event = _cnv_event_at(events, chrom, index)
+                start = index * _CNV_BIN_SIZE
+                if event is None:
+                    log2 = rng.gauss(0.0, _CNV_LOG2_NOISE)
+                    copy_number = 2
+                    minor_copy_number = 1
+                    baf = rng.gauss(0.5, _CNV_BAF_NOISE)
+                else:
+                    log2 = rng.gauss(event[3], _CNV_LOG2_NOISE)
+                    copy_number = event[4]
+                    minor_copy_number = event[7]
+                    bands = event[5]
+                    # One of the two allelic bands per bin: drawing both is what
+                    # makes an unbalanced region read as a split rather than a
+                    # thicker line.
+                    baf = (
+                        None
+                        if bands is None
+                        else min(1.0, max(0.0, rng.gauss(rng.choice(bands), _CNV_BAF_NOISE)))
+                    )
+                rows.append(
+                    [
+                        sample,
+                        chrom,
+                        start,
+                        start + _CNV_BIN_SIZE,
+                        round(log2, 3),
+                        None if baf is None else round(baf, 3),
+                        copy_number,
+                        minor_copy_number,
+                        "bin",
+                        None,
+                    ]
+                )
+
+        # The calls over those bins: every planted event, plus the neutral
+        # stretches between them, so the segment track covers the genome.
+        for chrom, n_bins in _CNV_CHROMS:
+            called = [
+                (e[1], e[2], e[3], e[4], e[5], e[6], e[7]) for e in events if e[0] == chrom
+            ] + [
+                (first, last, 0.0, 2, (0.5, 0.5), "CN 2", 1)
+                for first, last in _cnv_neutral_runs(events, chrom, n_bins)
+            ]
+            for first, last, log2, copy_number, bands, label, minor_copy_number in sorted(
+                called, key=lambda c: (c[0], c[1])
+            ):
+                rows.append(
+                    [
+                        sample,
+                        chrom,
+                        first * _CNV_BIN_SIZE,
+                        (last + 1) * _CNV_BIN_SIZE,
+                        round(log2, 3),
+                        None if bands is None else round(min(bands), 3),
+                        copy_number,
+                        minor_copy_number,
+                        "segment",
+                        label,
+                    ]
+                )
+
+    write_tsv(OUT / "cnv_profile_demo.tsv", header, rows)
+
+
+generate_cnv_profile_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Record card: a per-gene fact sheet, one row per entity.
+# columns: feature_id, gene_symbol, gene_name, biotype, chromosome, start, end,
+#          strand, effect_size, significance, mean_expression, n_variants,
+#          top_consequence, pathway, ensembl_id, uniprot_id
+# ---------------------------------------------------------------------------
+# The card is the one tile in the showcase that draws nothing until something
+# else is clicked, so its collection has to be the same one a scatter binds:
+# the effect-size and mean-expression columns are there to give that scatter
+# real axes, and the identifier columns are there to give the card its links.
+_CARD_BIOTYPES = ("protein_coding", "lncRNA", "pseudogene")
+_CARD_PATHWAYS = (
+    "Interferon signalling",
+    "Cell cycle",
+    "Oxidative phosphorylation",
+    "Extracellular matrix",
+    "Unassigned",
+)
+_CARD_CONSEQUENCES = ("missense", "synonymous", "frameshift", "stop_gained", "intronic")
+_CARD_CHROMS = ("chr1", "chr2", "chr7", "chr12", "chrX")
+
+
+def generate_record_card_demo() -> None:
+    """Write record_card_demo.tsv: 120 genes with the fields a card groups."""
+    header = [
+        "feature_id",
+        "gene_symbol",
+        "gene_name",
+        "biotype",
+        "chromosome",
+        "start",
+        "end",
+        "strand",
+        "effect_size",
+        "significance",
+        "mean_expression",
+        "n_variants",
+        "top_consequence",
+        "pathway",
+        "ensembl_id",
+        "uniprot_id",
+    ]
+    rows: list[list] = []
+    rng = random.Random(20260901)
+
+    for index in range(120):
+        symbol = f"GENE{index:03d}"
+        chrom = _CARD_CHROMS[index % len(_CARD_CHROMS)]
+        start = 1_000_000 + index * 137_000
+        # A quarter of the genes are planted as hits so the scatter that drives
+        # the card has something worth clicking on.
+        is_hit = index % 4 == 0
+        effect = rng.gauss(2.4 if is_hit else 0.0, 0.6) * (1 if index % 2 == 0 else -1)
+        padj = rng.uniform(1e-9, 1e-4) if is_hit else rng.uniform(0.05, 0.95)
+        rows.append(
+            [
+                symbol,
+                symbol,
+                f"{_CARD_BIOTYPES[index % len(_CARD_BIOTYPES)].replace('_', ' ')} gene {index:03d}",
+                _CARD_BIOTYPES[index % len(_CARD_BIOTYPES)],
+                chrom,
+                start,
+                start + rng.randint(4_000, 90_000),
+                "+" if index % 3 else "-",
+                round(effect, 3),
+                float(f"{padj:.3g}"),
+                round(rng.uniform(1.0, 12.0), 3),
+                rng.randint(0, 24),
+                _CARD_CONSEQUENCES[index % len(_CARD_CONSEQUENCES)],
+                _CARD_PATHWAYS[index % len(_CARD_PATHWAYS)],
+                f"ENSG{index:011d}",
+                f"P{index:05d}",
+            ]
+        )
+
+    write_tsv(OUT / "record_card_demo.tsv", header, rows)
+
+
+generate_record_card_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Parallel coordinates: per-sample QC metrics, MultiQC general-stats shape.
+# columns: sample, group, total_reads_m, percent_duplicates, percent_gc,
+#          mean_quality, percent_aligned, insert_size_median, percent_rrna,
+#          genes_detected
+# ---------------------------------------------------------------------------
+# Three groups whose polylines cross in some axes and separate in others, which
+# is the whole reason to draw a sample profile as a set of parallel axes rather
+# than as eight box plots: the failing libraries are not the worst on any single
+# metric, they are the ones that bend the same way across four of them.
+_PC_GROUPS = (
+    # name, n, reads, dup, gc, quality, aligned, insert, rrna, genes
+    ("control", 10, 48.0, 12.0, 47.0, 36.5, 94.0, 210.0, 2.5, 14800.0),
+    ("treated", 10, 44.0, 15.0, 48.5, 36.0, 92.5, 205.0, 3.2, 14300.0),
+    ("degraded", 6, 21.0, 34.0, 52.0, 32.0, 71.0, 140.0, 11.5, 9600.0),
+)
+
+
+def generate_parallel_coordinates_demo() -> None:
+    """Write parallel_coordinates_demo.tsv: 26 libraries over 8 QC metrics."""
+    header = [
+        "sample",
+        "group",
+        "total_reads_m",
+        "percent_duplicates",
+        "percent_gc",
+        "mean_quality",
+        "percent_aligned",
+        "insert_size_median",
+        "percent_rrna",
+        "genes_detected",
+    ]
+    rows: list[list] = []
+    rng = random.Random(20260902)
+    counter = 0
+
+    for group, count, *centres in _PC_GROUPS:
+        for _ in range(count):
+            counter += 1
+            reads, dup, gc, quality, aligned, insert, rrna, genes = (
+                # A tenth of the centre as spread: enough for the lines to fan
+                # out, tight enough for the three groups to stay legible.
+                rng.gauss(centre, abs(centre) * 0.10)
+                for centre in centres
+            )
+            rows.append(
+                [
+                    f"SAMPLE_{counter:02d}",
+                    group,
+                    round(max(1.0, reads), 2),
+                    round(min(99.0, max(0.0, dup)), 2),
+                    round(min(80.0, max(20.0, gc)), 2),
+                    round(max(10.0, quality), 2),
+                    round(min(99.9, max(5.0, aligned)), 2),
+                    int(max(50.0, insert)),
+                    round(max(0.0, rrna), 2),
+                    int(max(500.0, genes)),
+                ]
+            )
+
+    write_tsv(OUT / "parallel_coordinates_demo.tsv", header, rows)
+
+
+generate_parallel_coordinates_demo()

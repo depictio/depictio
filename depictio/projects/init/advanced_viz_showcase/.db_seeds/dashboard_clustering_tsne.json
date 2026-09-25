@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Like UMAP, a neighbourhood-preserving projection, but one that pushes clusters further apart and preserves even less global structure. Cluster sizes and inter-cluster distances are not interpretable here; membership is.\n",
+      "body": "t-SNE of the same samples: like UMAP it preserves neighbourhoods, but it pushes clusters further apart, so cluster sizes and distances between clusters are not interpretable, membership is. The Method and Colour by pickers sit in the tile header; a lasso or box selection publishes the samples as a dashboard filter. Compare with the UMAP tab: a cluster present in both is real, one present in only one is an artefact of the embedding.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -64,6 +64,7 @@
       "section": "t-SNE projection",
       "viz_kind": "embedding",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "embedding",
         "sample_id_col": "sample_id",
         "dim_1_col": "dim_1",
@@ -134,6 +135,7 @@
       "group": "Point filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#8E44AD",
       "icon_name": "mdi:scatter-plot",
       "wf_tag": "python/advanced_viz_demo"
@@ -176,6 +178,7 @@
       "group": "Point filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:blur",
       "wf_tag": "python/advanced_viz_demo"
@@ -209,7 +212,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -222,9 +225,9 @@
     {
       "i": "box-tsne-embedding",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -244,7 +247,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Clustering: t-SNE",
+  "title": "Cell neighbourhoods (t-SNE)",
   "subtitle": "t-SNE on the same matrix (perplexity auto-clamped)",
   "icon": "mdi:scatter-plot",
   "icon_color": "grape",
@@ -281,7 +284,7 @@
   },
   "tab_order": 6,
   "main_tab_name": null,
-  "tab_icon": "mdi:scatter-plot",
+  "tab_icon": "mdi:shape-outline",
   "tab_icon_color": "grape",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -307,5 +310,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

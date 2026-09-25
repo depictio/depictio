@@ -1,15 +1,27 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { GroupStatusBadgeContext } from '../GroupStatusBadge';
 import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
+import { GRID_ROW_GAP_PX, GRID_ROW_PX, publishContentDemand } from '../autofit';
 import {
   AdvancedVizExtrasContext,
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
+import {
+  InlineControlsRail,
+  InlineControlsStrip,
+  RAIL_WIDTH_PX,
+  inlineLayoutFor,
+  selectionEcho,
+  useControlsPlacement,
+  useRegionEcho,
+} from './AdvancedVizInlineControls';
+import { frameTiers } from './frameTiers';
+import { usePlotSlotResize } from './plotSlotResize';
 
 /**
  * Server-side downsampling state, mirroring the scatter-figure reduction badge
@@ -45,6 +57,34 @@ interface AdvancedVizFrameProps {
    * alongside metadata / fullscreen / reset (same styling, same position).
    */
   controls?: React.ReactNode;
+  /**
+   * The encoding tier: the controls that decide *what* is plotted (axes,
+   * colour-by, normalise, rank, view switch, gene picker, run button), as
+   * opposed to the cosmetic tier in `controls` (opacity, point size, labels).
+   *
+   * Pass a fragment of individual compact controls, not a pre-arranged Stack:
+   * the frame lays the same node out as a strip under the title (`header`), as
+   * a column in the rail (`rail`), or hands it to the settings popover ahead of
+   * the cosmetic tier (`popover`, the default). Sizes are the renderer's to
+   * set, `size="xs"` and an explicit `w`, since Mantine sizes cannot cascade
+   * from a wrapper.
+   */
+  primaryControls?: React.ReactNode;
+  /**
+   * How many grid rows this tile's content actually needs, published to the
+   * autofit channel so a viz with three bars stops occupying five rows. The
+   * frame adds the inline controls area's own height when it draws one below
+   * the plot.
+   */
+  contentDemand?: { rows: number };
+  /**
+   * What this tile is currently showing, as one dim line under the title
+   * (`412 / 5,000 rows`, `chr7:55,000,000-56,000,000`, `A (412) vs B (388)`).
+   * Renderers that know better than the frame set it; otherwise the frame
+   * derives it from `reduction` and from any region filter that reached the
+   * tile.
+   */
+  echo?: string;
   /** Loading state for initial fetch. */
   loading?: boolean;
   /** Error to display in place of children. */
@@ -125,6 +165,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   title,
   subtitle,
   controls,
+  primaryControls,
+  contentDemand,
+  echo,
   loading,
   error,
   emptyMessage,
@@ -166,9 +209,26 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const redPresent = Boolean(reduction);
   const redFull = reduction?.full ?? false;
   const redLoading = reduction?.loading ?? false;
+  const redDisplayed = reduction?.displayed ?? 0;
+  const redTotal = reduction?.total ?? 0;
   const onToggleRef = useRef(reduction?.onToggle);
   onToggleRef.current = reduction?.onToggle;
   const stableToggle = useCallback(() => onToggleRef.current?.(), []);
+
+  // Where this tile's controls are drawn. Resolved once by the dispatch (which
+  // holds the config and the dashboard default) and read here and there, so
+  // the strip and the popover cannot disagree about which tier lives where.
+  const { placement } = useControlsPlacement();
+  const regionEcho = useRegionEcho();
+
+  // A renderer with only a cosmetic tier still gets a strip under `header`:
+  // its controls are promoted, which also leaves the popover empty.
+  const tiers = useMemo(
+    () => frameTiers(placement, primaryControls, controls),
+    [placement, primaryControls, controls],
+  );
+  const stripControls = tiers.primary;
+  const cosmeticControls = tiers.cosmetic;
 
   // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
   // turns the payload back into the popovers; the inspector turns the same
@@ -176,7 +236,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // left the inspector with nothing it could re-present.
   const extras = useMemo<AdvancedVizExtrasPayload | null>(() => {
     const payload: AdvancedVizExtrasPayload = {};
-    if (controls) payload.controls = controls;
+    if (cosmeticControls) payload.controls = cosmeticControls;
+    if (stripControls) payload.primaryControls = stripControls;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -191,7 +252,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     }
     return Object.keys(payload).length ? payload : null;
   }, [
-    controls,
+    cosmeticControls,
+    stripControls,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -208,9 +270,129 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     return () => publish(null);
   }, [publish, extras]);
 
+  // The rail moves beside the plot only on a tile wide enough for both. Width
+  // rather than the grid's `w`: the frame never sees the layout item, and a
+  // dashboard renders at several breakpoints anyway.
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [frameWidth, setFrameWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const measure = () =>
+      setFrameWidth((prev) => {
+        const next = node.clientWidth;
+        // Sub-pixel churn would re-render the whole subtree on every reflow.
+        return prev !== null && Math.abs(prev - next) < 1 ? prev : next;
+      });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const hasInlineControls = Boolean(stripControls || cosmeticControls);
+  const inlineLayout = inlineLayoutFor(placement, frameWidth, hasInlineControls);
+
+  // An inline area under the plot is content the tile has to make room for:
+  // without this, turning the strip on squeezes the figure instead of growing
+  // the tile. A side rail takes width, not height, so it adds nothing.
+  const inlineRef = useRef<HTMLDivElement | null>(null);
+  const [inlineHeight, setInlineHeight] = useState(0);
+  useEffect(() => {
+    const node = inlineRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      setInlineHeight(0);
+      return;
+    }
+    const measure = () =>
+      setInlineHeight((prev) => {
+        const next = Math.round(node.getBoundingClientRect().height);
+        return Math.abs(prev - next) < 2 ? prev : next;
+      });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [inlineLayout]);
+
+  // The strip, the rail and the badge rows all take room from the plot slot
+  // without the window moving, which is the only resize Plotly listens to.
+  const plotSlotRef = useRef<HTMLDivElement | null>(null);
+  usePlotSlotResize(plotSlotRef);
+
+  const demandRows = contentDemand?.rows;
+  useEffect(() => {
+    if (!componentIndex || demandRows === undefined) return;
+    const stacked = inlineLayout === 'header' || inlineLayout === 'rail-below';
+    const extraRows =
+      stacked && inlineHeight > 0
+        ? Math.ceil(inlineHeight / (GRID_ROW_PX + GRID_ROW_GAP_PX))
+        : 0;
+    publishContentDemand(String(componentIndex), { rows: demandRows + extraRows });
+  }, [componentIndex, demandRows, inlineLayout, inlineHeight]);
+
+  // One dim line saying what is on screen. Derived from the reduction the
+  // renderer already publishes unless it passed something better.
+  // The rows the renderer handed the data popover, as the count to echo when
+  // nothing was sampled, which is most tiles, most of the time.
+  const dataRowCount = dataRows ? (Object.values(dataRows)[0]?.length ?? 0) : 0;
+  const echoText = useMemo(
+    () =>
+      selectionEcho({
+        echo,
+        reduction: redPresent ? { displayed: redDisplayed, total: redTotal, full: redFull } : null,
+        rows: dataRowCount,
+        region: regionEcho,
+      }),
+    [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho],
+  );
+
+  // Once the plot has drawn, a refetch keeps it mounted under the skeleton
+  // instead of swapping it out. Unmounting purges Plotly, and a purged GL plot
+  // leaves its WebGL contexts alive until GC, so every filter change on a busy
+  // tab used to churn contexts until Chrome evicted a live plot's (a blank
+  // UMAP after creating a group). It also removes the flash between renders.
+  const hasDrawnRef = useRef(false);
+  if (!loading && !error && !emptyMessage) hasDrawnRef.current = true;
+  const skeleton = (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', zIndex: 1 }}>
+      <ComponentSkeleton variant="block" />
+    </div>
+  );
+  const body = loading ? (
+    hasDrawnRef.current ? (
+      <>
+        {children}
+        {skeleton}
+      </>
+    ) : (
+      skeleton
+    )
+  ) : error ? (
+    <Alert color="red" title="Failed to render" variant="light">
+      <Text size="xs">{error}</Text>
+    </Alert>
+  ) : emptyMessage ? (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'var(--mantine-color-dimmed)',
+        fontSize: '0.85rem',
+      }}
+    >
+      {emptyMessage}
+    </div>
+  ) : (
+    children
+  );
+
   return (
     <ErrorBoundary>
       <Paper
+        ref={frameRef}
         p="sm"
         withBorder
         radius="md"
@@ -225,6 +407,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       >
         {title ||
         subtitle ||
+        echoText ||
+        inlineLayout === 'header' ||
         (counts && Object.keys(counts).length > 0) ||
         showReduction ||
         estimated ||
@@ -238,6 +422,11 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             {subtitle ? (
               <Text size="xs" c="dimmed" lineClamp={2}>
                 {subtitle}
+              </Text>
+            ) : null}
+            {echoText ? (
+              <Text size="xs" c="dimmed" lineClamp={1} data-testid="advanced-viz-echo">
+                {echoText}
               </Text>
             ) : null}
             {counts && Object.keys(counts).length > 0 ? (
@@ -305,33 +494,43 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
                 {groupBadge}
               </Group>
             ) : null}
+            {inlineLayout === 'header' ? (
+              <div ref={inlineRef} style={{ marginTop: 4 }}>
+                <InlineControlsStrip>{stripControls}</InlineControlsStrip>
+              </div>
+            ) : null}
           </Stack>
         ) : null}
-        <div style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
-          {loading ? (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-              <ComponentSkeleton variant="block" />
-            </div>
-          ) : error ? (
-            <Alert color="red" title="Failed to render" variant="light">
-              <Text size="xs">{error}</Text>
-            </Alert>
-          ) : emptyMessage ? (
+        <div
+          style={{
+            flex: '1 1 auto',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: inlineLayout === 'rail-side' ? 'row' : 'column',
+            gap: inlineLayout === 'rail-side' || inlineLayout === 'rail-below' ? 8 : 0,
+          }}
+        >
+          <div
+            ref={plotSlotRef}
+            style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}
+          >
+            {body}
+          </div>
+          {inlineLayout === 'rail-side' || inlineLayout === 'rail-below' ? (
             <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: 'var(--mantine-color-dimmed)',
-                fontSize: '0.85rem',
-              }}
+              ref={inlineLayout === 'rail-below' ? inlineRef : undefined}
+              style={
+                inlineLayout === 'rail-side'
+                  ? { flex: `0 0 ${RAIL_WIDTH_PX}px`, minHeight: 0, display: 'flex' }
+                  : { flex: '0 0 auto' }
+              }
             >
-              {emptyMessage}
+              <InlineControlsRail layout={inlineLayout}>
+                {stripControls}
+                {cosmeticControls}
+              </InlineControlsRail>
             </div>
-          ) : (
-            children
-          )}
+          ) : null}
         </div>
       </Paper>
     </ErrorBoundary>

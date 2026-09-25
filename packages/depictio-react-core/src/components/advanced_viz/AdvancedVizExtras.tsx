@@ -1,5 +1,5 @@
 import React, { createContext, Suspense, lazy, useState } from 'react';
-import { ActionIcon, Group, Popover, Stack, Text } from '@mantine/core';
+import { ActionIcon, Divider, Group, Popover, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 // Lazy, matching `MapDataButton`: AG Grid is ~250kB plus its own stylesheets,
@@ -11,6 +11,7 @@ const DataGridBody = lazy(() => import('../data/DataGridBody'));
 import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { VizControlsGrid } from './controls/VizControls';
 
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
@@ -45,6 +46,14 @@ import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 export interface AdvancedVizExtrasPayload {
   /** Tier-2 settings JSX, rendered bare in a tab or inside the settings popover. */
   controls?: React.ReactNode;
+  /**
+   * The encoding tier (axes, colour-by, normalise, rank, run button), split
+   * out from the cosmetic `controls` so a surface can present the two
+   * differently: the frame draws it inline under `controls_placement: header`,
+   * the inspector lists it first, and the popover keeps it above the cosmetic
+   * tier when nothing has been pinned out.
+   */
+  primaryControls?: React.ReactNode;
   data?: {
     rows: Record<string, unknown[]>;
     columns?: string[];
@@ -72,9 +81,12 @@ export const AdvancedVizExtrasProvider: React.FC<ProviderProps> = ({ children, o
 
 interface SettingsPopoverProps {
   controls: React.ReactNode;
+  /** Drawn at the right of the header: the placement picker, so the
+   *  controls can be pinned into the tile from where they are read. */
+  headerAction?: React.ReactNode;
 }
 
-export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ controls }) => {
+export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ controls, headerAction }) => {
   // Tooltip wraps Popover.Target's child via a sibling span — putting Tooltip
   // *inside* Popover.Target wraps the ActionIcon, which breaks Mantine's
   // ref-forwarding and produces a multi-click open bug (the click-outside
@@ -126,23 +138,27 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
           builds a dropdown taller than the window, and Mantine then floats it
           past the top edge with its first sections unreachable. The header
           stays out of the scroller so the close button is always in reach. */}
-      <Popover.Dropdown p="sm" style={{ maxWidth: 380 }}>
+      <Popover.Dropdown p="sm" style={{ minWidth: 320, maxWidth: 420 }}>
         <Stack gap="xs" style={{ maxHeight: 'min(70vh, 560px)' }}>
           <Group justify="space-between" wrap="nowrap" gap="xs">
             <Text size="xs" fw={600} c="dimmed">
               Viz controls
             </Text>
-            <ActionIcon
-              variant="subtle"
-              size="xs"
-              color="gray"
-              aria-label="Close viz controls"
-              title="Close"
-              onClick={() => setOpened(false)}
-            >
-              <Icon icon="tabler:x" width={14} height={14} />
-            </ActionIcon>
+            <Group gap={6} wrap="nowrap">
+              {headerAction}
+              <ActionIcon
+                variant="subtle"
+                size="xs"
+                color="gray"
+                aria-label="Close viz controls"
+                title="Close"
+                onClick={() => setOpened(false)}
+              >
+                <Icon icon="tabler:x" width={14} height={14} />
+              </ActionIcon>
+            </Group>
           </Group>
+          <Divider />
           <div
             style={{
               overflowY: 'auto',
@@ -155,7 +171,7 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
               paddingRight: 6,
             }}
           >
-            {controls}
+            <VizControlsGrid layout="column">{controls}</VizControlsGrid>
           </div>
         </Stack>
       </Popover.Dropdown>

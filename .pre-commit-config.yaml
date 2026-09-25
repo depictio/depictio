@@ -21,6 +21,8 @@ repos:
     -   id: check-yaml
         exclude: ^(dev/|helm-charts/|kubernetes/)
     -   id: check-added-large-files
+        # bundled gene annotations (hg38/mm10, ~0.9 MB) and the cnv_profile showcase fixture
+        args: ['--maxkb=1100']
         exclude: ^dev/
 
 # Ruff lint & format (includes import sorting)

@@ -84,6 +84,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:chart-bell-curve",
       "icon_color": "cyan",
       "title_color": "cyan",
@@ -138,6 +139,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:family-tree",
       "icon_color": "teal",
       "title_color": "teal",
@@ -194,6 +196,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:check-decagram",
       "icon_color": "green",
       "title_color": "green",
@@ -250,6 +253,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:leaf",
       "icon_color": "orange",
       "title_color": "orange",
@@ -354,6 +358,7 @@
       "section": "Raw lane",
       "viz_kind": "stacked_taxonomy",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "stacked_taxonomy",
         "sample_id_col": "sample_id",
         "taxon_col": "taxon",
@@ -430,6 +435,7 @@
       "section": "Recipe lane",
       "viz_kind": "volcano",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "volcano",
         "feature_id_col": "id",
         "effect_size_col": "lfc",
@@ -440,7 +446,16 @@
         "significance_threshold": 0.05,
         "effect_threshold": 1.0,
         "top_n_labels": 20,
-        "show_labels": true
+        "show_labels": true,
+        "avg_log_intensity_col": null,
+        "log2_fold_change_col": null,
+        "fold_change_threshold": 1.0,
+        "p_value_col": null,
+        "view": "volcano",
+        "views": null,
+        "show_ci": true,
+        "show_identity": true,
+        "point_size": 5
       },
       "wf_tag": "python/catalog_conformance"
     },
@@ -599,6 +614,8 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:water",
       "wf_tag": "python/catalog_conformance"
     },
@@ -639,6 +656,8 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:leaf",
       "wf_tag": "python/catalog_conformance"
     },
@@ -679,6 +698,8 @@
       "group": "Ranks",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/catalog_conformance"
     },
@@ -719,6 +740,8 @@
       "group": "Ranks",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:dna",
       "wf_tag": "python/catalog_conformance"
     },
@@ -759,6 +782,8 @@
       "group": "Ranks",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:shield-check",
       "wf_tag": "python/catalog_conformance"
     },
@@ -799,6 +824,8 @@
       "group": "ANCOM-BC",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:scatter-plot",
       "wf_tag": "python/catalog_conformance"
     },
@@ -839,6 +866,8 @@
       "group": "ANCOM-BC",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:trending-up",
       "wf_tag": "python/catalog_conformance"
     },
@@ -879,6 +908,8 @@
       "group": "ANCOM-BC",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:target",
       "wf_tag": "python/catalog_conformance"
     }
@@ -1240,5 +1271,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

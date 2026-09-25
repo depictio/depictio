@@ -1198,14 +1198,29 @@ _KRAKEN_MODULE_ORDER = [
 ]
 
 
+# Falco output is read by MultiQC's FastQC module, which anchors itself `falco`
+# only when every file it parsed is Falco's. Run it twice, split by path, so a
+# report that also carries FastQC keeps both sections. As with Kraken, naming
+# `fastqc` here replaces its default run, hence the second entry.
+_FALCO_MODULE_ORDER = [
+    {"fastqc": {"name": "Falco", "anchor": "falco", "path_filters": ["*_falco/*"]}},
+    {"fastqc": {"path_filters_exclude": ["*_falco/*"]}},
+]
+
+
 def module_order_for(sections: list[str]) -> list[dict] | None:
     """The `module_order` these sections need, or None when the default will do.
 
-    Only requested when a Kraken-derived alias is in play: the override replaces
-    the plain `kraken` run, so applying it unconditionally would change how an
-    unrelated report is built.
+    Only requested when a Kraken-derived alias or Falco is in play: each
+    override replaces the plain module's run, so applying it unconditionally
+    would change how an unrelated report is built.
     """
-    return _KRAKEN_MODULE_ORDER if {"bracken", "centrifuge"} & set(sections) else None
+    order: list[dict] = []
+    if {"bracken", "centrifuge"} & set(sections):
+        order += _KRAKEN_MODULE_ORDER
+    if "falco" in sections:
+        order += _FALCO_MODULE_ORDER
+    return order or None
 
 
 def deeptools(sample: str) -> dict[str, str]:
@@ -1273,39 +1288,1091 @@ def preseq(sample: str) -> dict[str, str]:
     return {f"{sample}.lc_extrap.txt": body + "\n"}
 
 
+# --------------------------------------------------------------------------
+# Lot 2, gatk, vcftools, vep, cellranger, hicpro, bismark, nanostat,
+# adapterremoval, damageprofiler, checkm2, porechop, prokka
+#
+# vcftools, hicpro, bismark, adapterremoval and nanostat are trimmed straight
+# from real megatest output (sarek/3.10.0, hic/2.0.0, methylseq/2.3.0,
+# eager/2.4.5, nanoseq/3.0.0 respectively, see ~/Data/depictio-nfcore/). The
+# other six have no raw log anywhere in a bundled megatest run, sarek only
+# ships MultiQC's own already-parsed `multiqc_data/{gatk_base_recalibrator,
+# vep}.txt`, and mag/5.4.2's config never ran CheckM2/Porechop/Prokka, so
+# those follow the format each module's own source documents
+# (`multiqc.modules.<tool>`), cut to the minimum that module will parse.
+# --------------------------------------------------------------------------
+
+
+def gatk(sample: str) -> dict[str, str]:
+    """GATK4 BaseRecalibrator `.recal.table`: a GATKReport, keyed by MultiQC
+    on the literal `#:GATKTable:Arguments:Recalibration` line within the
+    first 3 lines (`multiqc.modules.gatk.base_recalibrator`). Carries the
+    `arguments` table (read for `recalibration_report`, so the module knows
+    which BQSR pass this is), the `Quantized` quality-histogram table, and
+    `RecalTable1` (reported vs. empirical quality), the two tables behind
+    this section's two plots.
+    """
+    q20 = _vary(sample, 800, 1500)
+    q30 = _vary(sample, 4000, 6000)
+    q40 = _vary(sample, 1500, 2500)
+    rg = f"{sample}.1"
+    return {
+        f"{sample}.recal.table": (
+            "#:GATKReport.v1.1:5\n"
+            "#:GATKTable:true:2:17:%s:%s:;\n"
+            "#:GATKTable:Arguments:Recalibration argument collection values used in this run\n"
+            "Argument\tValue\n"
+            "covariate\tReadGroupCovariate,QualityScoreCovariate,ContextCovariate,CycleCovariate\n"
+            "recalibration_report\tnull\n"
+            "\n"
+            "#:GATKTable:true:3:94:%s:%s:%s:;\n"
+            "#:GATKTable:Quantized:Quality quantization map\n"
+            "QualityScore\tCount\tQuantizedScore\n"
+            f"20\t{q20}\t20\n"
+            f"30\t{q30}\t30\n"
+            f"40\t{q40}\t40\n"
+            "\n"
+            "#:GATKTable:true:6:2:%s:%d:%s:%s:%d:%.4f:;\n"
+            "#:GATKTable:RecalTable1:\n"
+            "ReadGroup\tQualityScore\tEventType\tEmpiricalQuality\tObservations\tErrors\n"
+            f"{rg}\t20\tM\t20.4\t{q20}\t12.0000\n"
+            f"{rg}\t30\tM\t29.6\t{q30}\t24.0000\n"
+            f"{rg}\t40\tM\t38.9\t{q40}\t6.0000\n"
+            "\n"
+        )
+    }
+
+
+def vcftools(sample: str) -> dict[str, str]:
+    """VCFtools `--TsTv-by-count` / `--TsTv-by-qual` output, trimmed from a
+    real sarek/3.10.0 megatest run
+    (`reports/vcftools/haplotypecaller/*/*.TsTv.{count,qual}`), MultiQC
+    keys each purely on the filename suffix.
+    """
+    lo = _vary(sample, 15_000, 22_000)
+    return {
+        f"{sample}.TsTv.count": (
+            "ALT_ALLELE_COUNT\tN_Ts\tN_Tv\tTs/Tv\n"
+            "0\t0\t0\t-nan\n"
+            f"1\t{lo}\t{lo // 2}\t2.48266\n"
+            f"2\t{_vary(sample, 3000, 5000)}\t{_vary(sample, 1200, 2000)}\t2.51\n"
+        ),
+        f"{sample}.TsTv.qual": (
+            "QUAL_THRESHOLD\tN_Ts_LT_QUAL_THRESHOLD\tN_Tv_LT_QUAL_THRESHOLD\tTs/Tv_LT_QUAL_THRESHOLD\t"
+            "N_Ts_GT_QUAL_THRESHOLD\tN_Tv_GT_QUAL_THRESHOLD\tTs/Tv_GT_QUAL_THRESHOLD\n"
+            f"30.64\t0\t0\t-nan\t{lo + 8000}\t{_vary(sample, 4000, 6000)}\t2.539\n"
+            f"45.12\t{_vary(sample, 100, 400)}\t{_vary(sample, 40, 120)}\t2.6\t{lo + 4000}\t"
+            f"{_vary(sample, 2000, 3000)}\t2.4\n"
+        ),
+    }
+
+
+def vep(sample: str) -> dict[str, str]:
+    """Ensembl VEP `--stats_text` summary. MultiQC's `vep/vep_txt` parser keys
+    on `[VEP run statistics]` as the file's first line. No raw VEP stats file
+    ships in the bundled sarek run (only MultiQC's own parsed
+    `multiqc_data/vep.txt`), so this follows the plain-text layout documented
+    in `multiqc.modules.vep.vep`: `[Section]` headers, tab-separated
+    `key\tvalue` rows. `General statistics` is required: `add_stats_table`
+    reads it unconditionally for every sample.
+    """
+    return {
+        f"{sample}_summary.txt": (
+            "[VEP run statistics]\n"
+            "VEP version (API)\t113 (113)\n"
+            "\n"
+            "[General statistics]\n"
+            f"Lines of input read\t{_vary(sample, 24000, 30000)}\n"
+            f"Variants processed\t{_vary(sample, 22000, 28000)}\n"
+            f"Variants filtered out\t{_vary(sample, 80, 200)}\n"
+            f"Novel / existing variants\t{_vary(sample, 300, 500)} (8.3) / {_vary(sample, 4000, 4800)} (91.7)\n"
+            f"Overlapped genes\t{_vary(sample, 280, 380)}\n"
+            f"Overlapped transcripts\t{_vary(sample, 380, 480)}\n"
+            f"Overlapped regulatory features\t{_vary(sample, 30, 80)}\n"
+            "\n"
+            "[Variant classes]\n"
+            f"SNV\t{_vary(sample, 20000, 26000)}\n"
+            f"insertion\t{_vary(sample, 800, 1200)}\n"
+            f"deletion\t{_vary(sample, 700, 1100)}\n"
+            "\n"
+            "[Consequences (most severe)]\n"
+            f"missense_variant\t{_vary(sample, 800, 1400)}\n"
+            f"synonymous_variant\t{_vary(sample, 1500, 2200)}\n"
+            f"intron_variant\t{_vary(sample, 8000, 12000)}\n"
+            "\n"
+            "[SIFT summary]\n"
+            f"tolerated\t{_vary(sample, 350, 500)}\n"
+            f"deleterious\t{_vary(sample, 80, 150)}\n"
+            "\n"
+            "[PolyPhen summary]\n"
+            f"benign\t{_vary(sample, 300, 450)}\n"
+            f"probably_damaging\t{_vary(sample, 100, 180)}\n"
+            "\n"
+            "[Variants by chromosome]\n"
+            f"1\t{_vary(sample, 900, 1300)}\n"
+            f"2\t{_vary(sample, 700, 1100)}\n"
+            "\n"
+            "[Position in protein]\n"
+            f"0-10%\t{_vary(sample, 40, 90)}\n"
+            f"10-20%\t{_vary(sample, 60, 110)}\n"
+        )
+    }
+
+
+def cellranger(sample: str) -> dict[str, str]:
+    """Cell Ranger count's `web_summary.html`: MultiQC keys on the
+    `const data = {...}` JS blob and a `"command":"Cell Ranger",
+    "subcommand":"count"` marker within the first 20 lines
+    (`multiqc.modules.cellranger.count`). Shape lifted from a real
+    `web_summary.html` (scrnaseq/4.2.0 megatest, pbmc8k, Cell Ranger 10.0.0),
+    with the barcode-rank, median-genes and saturation curves trimmed from
+    hundreds of points to a handful, `parse_bcknee_data`/`transform_data`
+    only need `x`/`y` lists.
+    """
+    cells = _vary(sample, 6_000, 9_500)
+    reads = _vary(sample, 70_000, 95_000)
+    knee_x = [1, 2, 3, 5, 10, 50, 200, 1000, 5000, 9000]
+    knee_y = [
+        max(1, _vary(sample, 20_000, 40_000) - i * _vary(sample, 300, 900))
+        for i in range(len(knee_x))
+    ]
+    gene_x = [0, 1000, 3000, 5000, 8943]
+    gene_y = [
+        0,
+        _vary(sample, 300, 400),
+        _vary(sample, 700, 800),
+        _vary(sample, 950, 1050),
+        _vary(sample, 1200, 1350),
+    ]
+    sat_y = [0.0, 0.08, 0.22, 0.33, 0.48]
+    payload = {
+        "summary": {
+            "sample": {"id": sample},
+            "alarms": {"alarms": []},
+            "summary_tab": {
+                "pipeline_info_table": {"rows": [["Pipeline Version", "cellranger-10.0.0"]]},
+                "sequencing": {
+                    "table": {
+                        "rows": [
+                            ["Number of Reads", f"{reads:,}"],
+                            ["Q30 Bases in Barcode", "97.1%"],
+                        ]
+                    }
+                },
+                "mapping": {
+                    "table": {"rows": [["Reads Mapped Confidently to Transcriptome", "68.4%"]]}
+                },
+                "cells": {
+                    "help": {"data": [["Barcode Rank Plot", ["Barcode rank plot help text."]]]},
+                    "table": {
+                        "rows": [
+                            ["Estimated Number of Cells", f"{cells:,}"],
+                            ["Mean Reads per Cell", f"{reads:,}"],
+                            ["Fraction Reads in Cells", "94.1%"],
+                        ]
+                    },
+                    "barcode_knee_plot": {
+                        "layout": {
+                            "title": "Barcode Rank Plot",
+                            "xaxis": {"title": "Barcodes"},
+                            "yaxis": {"title": "UMI counts"},
+                        },
+                        "data": [{"name": "Cells", "x": knee_x, "y": knee_y}],
+                    },
+                },
+            },
+            "analysis_tab": {
+                "median_gene_plot": {
+                    "help": {
+                        "title": "Median Genes per Cell",
+                        "helpText": "Median genes per cell vs. downsampled sequencing depth.",
+                    },
+                    "plot": {
+                        "layout": {
+                            "xaxis": {"title": "Mean Reads per Cell"},
+                            "yaxis": {"title": "Median Genes per Cell"},
+                        },
+                        "data": [{"x": gene_x, "y": gene_y}],
+                    },
+                },
+                "seq_saturation_plot": {
+                    "help": {
+                        "title": "Sequencing Saturation",
+                        "helpText": "Sequencing saturation vs. downsampled sequencing depth.",
+                    },
+                    "plot": {
+                        "layout": {
+                            "xaxis": {"title": "Mean Reads per Cell"},
+                            "yaxis": {"title": "Sequencing Saturation"},
+                        },
+                        "data": [{"x": gene_x, "y": sat_y}],
+                    },
+                },
+            },
+        }
+    }
+    html = (
+        "<html><body><script>\n"
+        '// "command":"Cell Ranger","subcommand":"count"\n'
+        f"const data = {json.dumps(payload)}\n"
+        ";</script></body></html>\n"
+    )
+    return {f"{sample}_web_summary.html": html}
+
+
+def hicpro(sample: str) -> dict[str, str]:
+    """HiC-Pro's four per-sample stats files, trimmed from a real hic/2.0.0
+    megatest run (`hicpro/stats/HIC_ES_4/`), MultiQC keys each on its
+    filename suffix (`mapstat`, `pairstat`, `.mergestat`, `RSstat`).
+    """
+    total = _vary(sample, 400_000, 600_000)
+    mapped = int(total * 0.94)
+    valid = int(total * 0.4)
+    return {
+        f"{sample}.mpairstat": (
+            f"Total_pairs_processed\t{total}\t100.0\n"
+            f"Unmapped_pairs\t{int(total * 0.008)}\t0.8\n"
+            f"Low_qual_pairs\t{int(total * 0.3)}\t30.0\n"
+            f"Unique_paired_alignments\t{int(total * 0.58)}\t58.2\n"
+            f"Reported_pairs\t{int(total * 0.58)}\t58.2\n"
+        ),
+        f"{sample}.R1.mmapstat": (
+            f"total_R1\t{total}\n"
+            f"mapped_R1\t{mapped}\n"
+            f"global_R1\t{int(mapped * 0.9)}\n"
+            f"local_R1\t{int(mapped * 0.1)}\n"
+        ),
+        f"{sample}.R2.mmapstat": (
+            f"total_R2\t{total}\n"
+            f"mapped_R2\t{mapped}\n"
+            f"global_R2\t{int(mapped * 0.9)}\n"
+            f"local_R2\t{int(mapped * 0.1)}\n"
+        ),
+        f"{sample}_allValidPairs.mergestat": (
+            f"valid_interaction\t{valid}\n"
+            f"valid_interaction_rmdup\t{int(valid * 0.9)}\n"
+            f"trans_interaction\t{int(valid * 0.15)}\n"
+            f"cis_interaction\t{int(valid * 0.75)}\n"
+            f"cis_shortRange\t{int(valid * 0.15)}\n"
+            f"cis_longRange\t{int(valid * 0.6)}\n"
+        ),
+        f"{sample}.mRSstat": (
+            f"Valid_interaction_pairs\t{valid}\n"
+            f"Valid_interaction_pairs_FF\t{int(valid * 0.25)}\n"
+            f"Valid_interaction_pairs_RR\t{int(valid * 0.25)}\n"
+            f"Valid_interaction_pairs_RF\t{int(valid * 0.25)}\n"
+            f"Valid_interaction_pairs_FR\t{int(valid * 0.25)}\n"
+            f"Dangling_end_pairs\t{int(valid * 0.2)}\n"
+            f"Religation_pairs\t{int(valid * 0.1)}\n"
+        ),
+    }
+
+
+def bismark(sample: str) -> dict[str, str]:
+    """Bismark's four per-sample reports, trimmed from a real methylseq/2.3.0
+    megatest run (`bismark/{alignments,deduplicated,methylation_calls}/`) ,
+    MultiQC keys each on its filename suffix, not content.
+    """
+    pairs = _vary(sample, 9_000_000, 11_500_000)
+    unique = int(pairs * 0.82)
+    return {
+        f"{sample}_PE_report.txt": (
+            f"Bismark report for: {sample}_1.fq.gz and {sample}_2.fq.gz (version: v0.24.0)\n"
+            "Bismark was run with Bowtie 2 against the bisulfite genome with the specified options: -q\n"
+            "Option '--directional' specified (default mode)\n"
+            "\n"
+            "Final Alignment report\n"
+            "======================\n"
+            f"Sequence pairs analysed in total:\t{pairs}\n"
+            f"Number of paired-end alignments with a unique best hit:\t{unique}\n"
+            "Mapping efficiency:\t82.3%\n"
+            f"Sequence pairs with no alignments under any condition:\t{pairs - unique}\n"
+            "Sequence pairs did not map uniquely:\t0\n"
+            "\n"
+            "Total number of C's analysed:\t338189991\n"
+            "Total methylated C's in CpG context:\t12510664\n"
+            "Total methylated C's in CHG context:\t351199\n"
+            "Total methylated C's in CHH context:\t1000996\n"
+            "Total unmethylated C's in CpG context:\t2074790\n"
+            "Total unmethylated C's in CHG context:\t70083213\n"
+            "Total unmethylated C's in CHH context:\t252169129\n"
+            "C methylated in CpG context:\t85.8%\n"
+            "C methylated in CHG context:\t0.5%\n"
+            "C methylated in CHH context:\t0.4%\n"
+        ),
+        f"{sample}.deduplication_report.txt": (
+            f"Total number of alignments analysed in {sample}.bam:\t{unique}\n"
+            f"Total number duplicated alignments removed:\t{int(unique * 0.007)} (0.74%)\n"
+            "Duplicated alignments were found at:\t66491 different position(s)\n"
+            f"Total count of deduplicated leftover sequences: {int(unique * 0.993)} (99.26% of total)\n"
+        ),
+        f"{sample}_splitting_report.txt": (
+            f"{sample}.deduplicated.bam\n"
+            "\n"
+            "Parameters used to extract methylation information:\n"
+            "Bismark Extractor Version: v0.24.0\n"
+            "Bismark result file: paired-end (SAM format)\n"
+            "\n"
+            f"Processed {int(unique * 0.993)} lines in total\n"
+            "\n"
+            "Total number of C's analysed:\t271125431\n"
+            "Total methylated C's in CpG context:\t10100984\n"
+            "Total methylated C's in CHG context:\t278005\n"
+            "Total methylated C's in CHH context:\t789763\n"
+            "Total C to T conversions in CpG context:\t1559476\n"
+            "Total C to T conversions in CHG context:\t56264318\n"
+            "Total C to T conversions in CHH context:\t202132885\n"
+            "C methylated in CpG context:\t86.6%\n"
+            "C methylated in CHG context:\t0.5%\n"
+            "C methylated in CHH context:\t0.4%\n"
+        ),
+        f"{sample}.M-bias.txt": (
+            "CpG context (R1)\n"
+            "================\n"
+            "position\tcount methylated\tcount unmethylated\t% methylation\tcoverage\n"
+            + "\n".join(
+                f"{p}\t{_vary(sample, 45000, 62000)}\t{_vary(sample, 6000, 8000)}\t87.4\t{_vary(sample, 55000, 65000)}"
+                for p in range(1, 11)
+            )
+            + "\n"
+        ),
+    }
+
+
+def nanostat(sample: str) -> dict[str, str]:
+    """NanoStat's legacy plain-text summary, trimmed from a real nanoseq/3.0.0
+    megatest run (`nanoplot/fastq/*/NanoStats.txt`), MultiQC keys on
+    `General summary:` as the file's first line (the `nanostat/legacy`
+    pattern; the un-suffixed `nanostat` pattern is the newer `Metrics
+    dataset` layout, not used here). No name follows `General summary:`, so
+    the module falls back to the filename for the sample name.
+    """
+    reads = _vary(sample, 2_500_000, 3_200_000)
+    return {
+        f"{sample}_NanoStats.txt": (
+            "General summary:         \n"
+            f"Mean read length:                   {_vary(sample, 700, 900)}.2\n"
+            f"Mean read quality:                    {_vary(sample, 7, 9)}.5\n"
+            f"Median read length:                 {_vary(sample, 600, 750)}.0\n"
+            f"Median read quality:                  {_vary(sample, 8, 10)}.0\n"
+            f"Number of reads:              {reads:,}.0\n"
+            f"Read length N50:                    {_vary(sample, 850, 950)}.0\n"
+            f"STDEV read length:                  {_vary(sample, 400, 500)}.8\n"
+            f"Total bases:              {reads * 800:,}.0\n"
+        )
+    }
+
+
+def adapterremoval(sample: str) -> dict[str, str]:
+    """AdapterRemoval's `.settings` log, trimmed from a real eager/2.4.5
+    megatest run (`adapterremoval/output/*.settings`), MultiQC keys on the
+    `.settings` extension plus the literal `AdapterRemoval` on the first
+    line, then reads fixed row indices out of `[Trimming statistics]` and the
+    `[Length distribution]` header to tell paired/collapsed apart.
+    """
+    total = _vary(sample, 25_000_000, 32_000_000)
+    unaligned = int(total * 0.024)
+    aligned = total - unaligned
+    return {
+        f"{sample}.settings": (
+            "AdapterRemoval ver. 2.3.2\n"
+            "Trimming of paired-end reads\n"
+            "\n"
+            "[Adapter sequences]\n"
+            "Adapter1[1]: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC\n"
+            "\n"
+            "[Trimming statistics]\n"
+            f"Total number of read pairs: {total}\n"
+            f"Number of unaligned read pairs: {unaligned}\n"
+            f"Number of well aligned read pairs: {aligned}\n"
+            f"Number of discarded mate 1 reads: {int(total * 0.256)}\n"
+            "Number of singleton mate 1 reads: 745\n"
+            f"Number of discarded mate 2 reads: {int(total * 0.256)}\n"
+            "Number of singleton mate 2 reads: 0\n"
+            f"Number of reads with adapters[1]: {int(total * 1.94)}\n"
+            f"Number of full-length collapsed pairs: {int(total * 0.71)}\n"
+            f"Number of truncated collapsed pairs: {int(total * 0.006)}\n"
+            f"Number of retained reads: {int(total * 0.77)}\n"
+            f"Number of retained nucleotides: {int(total * 41)}\n"
+            "Average length of retained reads: 53.6721\n"
+            "\n"
+            "[Length distribution]\n"
+            "Length\tMate1\tMate2\tSingleton\tCollapsed\tCollapsedTruncated\tDiscarded\tAll\n"
+            + "\n".join(
+                f"{ln}\t0\t0\t0\t0\t0\t{_vary(sample, 1000, 30000)}\t{_vary(sample, 1000, 30000)}"
+                for ln in range(0, 10)
+            )
+            + "\n"
+        )
+    }
+
+
+def damageprofiler(sample: str) -> dict[str, str]:
+    """DamageProfiler's `dmgprof.json`, trimmed from a real eager/2.4.5
+    megatest run (`damageprofiler/*_rmdup/dmgprof.json`), MultiQC keys on
+    the `*dmgprof.json` filename alone. `dmg_5p`/`dmg_3p` are already short
+    (15 read-end positions) in the real file; `lendist_fw`/`lendist_rv` are
+    cut down from ~150 read-length buckets to ten.
+    """
+    dmg_5p = [round(0.14 - i * 0.009, 4) for i in range(15)]
+    dmg_3p = [round(0.09 - i * 0.005, 4) for i in range(15)]
+    lendist_fw = {str(ln): _vary(sample, 80_000, 120_000) for ln in range(30, 40)}
+    lendist_rv = {str(ln): _vary(sample, 75_000, 115_000) for ln in range(30, 40)}
+    payload = {
+        "metadata": {
+            "tool_name": "DamageProfiler",
+            "version": "0.4.9",
+            "sample_name": f"{sample}.bam",
+        },
+        "dmg_5p": dmg_5p,
+        "dmg_3p": dmg_3p,
+        "lendist_fw": lendist_fw,
+        "lendist_rv": lendist_rv,
+        "summary_stats": {
+            "std": 13.47,
+            "median": 47.0,
+            "mean_readlength": _vary(sample, 45, 55) + 0.4,
+        },
+    }
+    return {f"{sample}.dmgprof.json": json.dumps(payload)}
+
+
+def checkm2(sample: str) -> dict[str, str]:
+    """CheckM2's `quality_report.tsv`: MultiQC keys on the literal
+    tab-separated header. No standalone CheckM2 report ships in the
+    mag/5.4.2 megatest run (this config's binning step doesn't run CheckM2),
+    so this follows the column layout documented in
+    `multiqc.modules.checkm2.checkm2` (`parse_file`/`mag_quality_table`):
+    one bin (row) per file, named after the catalog's synthetic sample.
+    """
+    completeness = _vary(sample, 85, 99) + 0.32
+    contamination = _vary(sample, 0, 3) + 0.45
+    return {
+        f"{sample}.quality_report.tsv": (
+            "Name\tCompleteness\tContamination\tCompleteness_Model_Used\tTranslation_Table_Used\t"
+            "Coding_Density\tContig_N50\tAverage_Gene_Length\tGenome_Size\tGC_Content\tTotal_Coding_Sequences\n"
+            f"{sample}\t{completeness}\t{contamination}\tNeural Network (Specific Model)\t11\t"
+            f"0.87\t{_vary(sample, 30000, 60000)}\t312.5\t{_vary(sample, 3500000, 5500000)}\t0.42\t"
+            f"{_vary(sample, 3800, 4600)}\n"
+        )
+    }
+
+
+def porechop(sample: str) -> dict[str, str]:
+    """Porechop_ABI's stdout log. No raw log ships in any bundled megatest run
+    for this catalog's tool set (neither nanoseq/3.0.0 nor mag/5.4.2 runs it
+    in this config), so this follows the line-by-line format documented in
+    `multiqc.modules.porechop.porechop.parse_logs`: a `Loading reads` /
+    sample-name pair, then the three trimmed-read-count lines the general
+    stats table and bar graphs are built from.
+    """
+    loaded = _vary(sample, 8_000, 12_000)
+    start = _vary(sample, 5_000, 7_500)
+    end = _vary(sample, 3_500, 5_500)
+    split = _vary(sample, 4, 12)
+    return {
+        f"{sample}.porechop.log": (
+            "Looking for known adapter sets\n"
+            "\n"
+            "Loading reads\n"
+            f"{sample}\n"
+            f"{loaded:,} reads loaded\n"
+            "\n"
+            "Trimming adapters from read ends\n"
+            f"{start:,} / {loaded:,} reads had adapters trimmed from their start ({start * 60:,} bp removed)\n"
+            f"{end:,} / {loaded:,} reads had adapters trimmed from their end ({end * 60:,} bp removed)\n"
+            "\n"
+            "Splitting reads containing middle adapters\n"
+            f"{split} / {loaded:,} reads were split based on middle adapters\n"
+        )
+    }
+
+
+def prokka(sample: str) -> dict[str, str]:
+    """Prokka's plain-text annotation summary. No raw report ships in any
+    bundled megatest run (mag/5.4.2's config doesn't run bin annotation in
+    this megatest), so this follows the three-line header plus
+    `description: value` layout documented in
+    `multiqc.modules.prokka.prokka.parse_prokka` (the sample name is taken
+    from the fourth word onward of the `organism:` line).
+    """
+    return {
+        f"{sample}.txt": (
+            f"organism: Genusname speciesname {sample}\n"
+            f"contigs: {_vary(sample, 8, 25)}\n"
+            f"bases: {_vary(sample, 3800000, 5200000)}\n"
+            f"CDS: {_vary(sample, 3800, 4600)}\n"
+            f"rRNA: {_vary(sample, 2, 8)}\n"
+            f"tRNA: {_vary(sample, 35, 55)}\n"
+            "tmRNA: 1\n"
+            f"misc_RNA: {_vary(sample, 0, 4)}\n"
+        )
+    }
+
+
+def _spp_bar(
+    sample: str, anchor: str, title: str, ylab: str, value: float, ymin: int
+) -> dict[str, str]:
+    """One phantompeakqualtools / FRiP custom-content bar file, as nf-core's
+    ChIP-family pipelines write them: the `#id` header is the section anchor,
+    one headerless `sample\tvalue` row below it.
+    """
+    return {
+        f"{sample}_{anchor}_mqc.tsv": (
+            f"#id: '{anchor}'\n"
+            f"#section_name: 'MERGED LIB: {title}'\n"
+            "#plot_type: 'bargraph'\n"
+            f"#anchor: '{anchor}'\n"
+            "#pconfig:\n"
+            f"#    title: '{title}'\n"
+            f"#    ylab: '{ylab}'\n"
+            f"#    ymin: {ymin}\n"
+            f"{sample}\t{value:.6f}\n"
+        )
+    }
+
+
+def frip_score(sample: str) -> dict[str, str]:
+    """`*_peaks.FRiP_mqc.tsv` from nf-core chipseq / atacseq / cutandrun."""
+    return _spp_bar(sample, "frip_score", "FRiP score", "FRiP score", _vary(sample, 5, 60) / 100, 0)
+
+
+def nsc_coefficient(sample: str) -> dict[str, str]:
+    """`*_spp_nsc_mqc.tsv` from phantompeakqualtools via run_spp.R."""
+    return _spp_bar(
+        sample,
+        "nsc_coefficient",
+        "spp NSC coefficient",
+        "NSC coefficient",
+        1 + _vary(sample, 5, 40) / 100,
+        1,
+    )
+
+
+def rsc_coefficient(sample: str) -> dict[str, str]:
+    """`*_spp_rsc_mqc.tsv` from phantompeakqualtools via run_spp.R."""
+    return _spp_bar(
+        sample,
+        "rsc_coefficient",
+        "spp RSC coefficient",
+        "RSC coefficient",
+        _vary(sample, 8, 120) / 10,
+        0,
+    )
+
+
+def strand_shift_correlation(sample: str) -> dict[str, str]:
+    """`*_spp_correlation_mqc.tsv`: cross-correlation per strand shift, one
+    headerless `shift\tcorrelation` row per 5 bp from -500 to 1500, with a
+    phantom peak at the read length and the real one at the fragment length.
+    """
+    fragment = _vary(sample, 150, 260)
+    rows = []
+    for shift in range(-500, 1505, 5):
+        base = 0.18 + 0.02 * max(0.0, 1 - abs(shift) / 1500)
+        phantom = 0.015 * max(0.0, 1 - abs(shift - 50) / 20)
+        real = 0.06 * max(0.0, 1 - abs(shift - fragment) / 60)
+        rows.append(f"{shift}\t{base + phantom + real:.6f}")
+    return {
+        f"{sample}_strand_shift_correlation_mqc.tsv": (
+            "#id: 'strand_shift_correlation'\n"
+            "#section_name: 'MERGED LIB: spp strand-shift correlation'\n"
+            "#plot_type: 'linegraph'\n"
+            "#anchor: 'strand_shift_correlation'\n"
+            "#pconfig:\n"
+            "#    title: 'Strand-shift correlation plot'\n"
+            "#    ylab: 'Cross-correlation'\n"
+            "#    xlab: 'Strand-shift (bp)'\n" + "\n".join(rows) + "\n"
+        )
+    }
+
+
+def gtdbtk(sample: str) -> dict[str, str]:
+    """GTDB-Tk `*.bac120.summary.tsv`: MultiQC keys on the 20-column header
+    and skips any row whose width differs, so every column is written even
+    when its value is `N/A`, as GTDB-Tk itself does.
+    """
+    header = (
+        "user_genome\tclassification\tclosest_genome_reference\t"
+        "closest_genome_reference_radius\tclosest_genome_taxonomy\tclosest_genome_ani\t"
+        "closest_genome_af\tclosest_placement_reference\tclosest_placement_radius\t"
+        "closest_placement_taxonomy\tclosest_placement_ani\tclosest_placement_af\t"
+        "pplacer_taxonomy\tclassification_method\tnote\t"
+        "other_related_references(genome_id,species_name,radius,ANI,AF)\tmsa_percent\t"
+        "translation_table\tred_value\twarnings"
+    )
+    lineage = (
+        "d__Bacteria;p__Bacteroidota;c__Bacteroidia;o__Bacteroidales;"
+        "f__Tannerellaceae;g__Parabacteroides;s__Parabacteroides distasonis"
+    )
+    ani = 95 + _vary(sample, 0, 49) / 10
+    af = _vary(sample, 60, 95) / 100
+    row = "\t".join(
+        [
+            f"{sample}.1.fa",
+            lineage,
+            "GCF_000012845.1",
+            "95.0",
+            lineage,
+            f"{ani:.2f}",
+            f"{af:.3f}",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            lineage.rsplit(";", 1)[0] + ";s__",
+            "taxonomic classification defined by topology and ANI",
+            "N/A",
+            "N/A",
+            f"{_vary(sample, 70, 99)}.0",
+            "11",
+            "N/A",
+            "N/A",
+        ]
+    )
+    return {f"{sample}.bac120.summary.tsv": header + "\n" + row + "\n"}
+
+
+def sortmerna(sample: str) -> dict[str, str]:
+    """SortMeRNA >= 4.2 `*.sortmerna.log`. MultiQC keys on the literal
+    `Minimal SW score based on E-value` line; the sample is the basename of the
+    `Reads file` path, and the per-database block after `Coverage by database:`
+    is what the detailed hit-count bar plot draws.
+    """
+    total = _vary(sample, 900_000, 1_100_000)
+    rrna = _vary(sample, 20_000, 90_000)
+    body = f"""
+ Program:     SortMeRNA version 4.3.6
+ Command:     sortmerna --ref rfam-5.8s-database-id98.fasta --ref silva-euk-18s-id95.fasta --reads {sample}.fastq.gz
+
+ Process pid = 12345
+
+ Parameters summary:
+    Reference file: rfam-5.8s-database-id98.fasta
+        Seed length = 18
+        Pass 1 = 18, Pass 2 = 9, Pass 3 = 3
+        Gumbel lambda = 0.602330
+        Gumbel K = 0.332702
+        Minimal SW score based on E-value = 48
+    Number of seeds = 2
+    Edges = 4
+    SW match = 2
+    SW mismatch = -3
+    SW gap open penalty = 5
+    SW gap extend penalty = 2
+    SW ambiguous nucleotide = -3
+    SQ tags are not output
+    Number of alignment processing threads = 4
+    Reads file = {sample}.fastq.gz
+    Total reads = {total}
+
+ Results:
+    Total reads = {total}
+    Total reads passing E-value threshold = {rrna} ({rrna / total * 100:.2f})
+    Total reads failing E-value threshold = {total - rrna} ({(total - rrna) / total * 100:.2f})
+    Minimum read length = 30
+    Maximum read length = 75
+    Mean read length    = 73
+
+ Coverage by database:
+    rfam-5.8s-database-id98.fasta\t\t{_vary(sample, 1, 30) / 100:.2f}%
+    silva-euk-18s-id95.fasta\t\t{rrna / total * 100 - 0.3:.2f}%
+
+"""
+    return {f"{sample}.sortmerna.log": body}
+
+
+# riboWaltz regions exactly as the module names its bar categories.
+_RIBO_REGIONS = ("5' UTR", "CDS", "3' UTR")
+
+
+def ribowaltz(sample: str) -> dict[str, str]:
+    """The three riboWaltz QC tables nf-core/riboseq writes per sample.
+
+    MultiQC needs `ribowaltz` in each filename (the headers are generic) and
+    keys on the header line; the sample name comes from the `sample` column.
+    """
+    cds = _vary(sample, 70, 85)
+    utr5 = _vary(sample, 5, 15)
+    shares = {"5' UTR": utr5, "CDS": cds, "3' UTR": 100 - cds - utr5}
+    region = ["sample\tregion\tcount\tscaled_count"]
+    region += [f"{sample}\t{r}\t{shares[r] * 1_000}\t{shares[r]:.1f}" for r in _RIBO_REGIONS]
+
+    frames = ["sample\tregion\tframe\tcount\tscaled_count"]
+    for r in _RIBO_REGIONS:
+        # In-frame enrichment in the CDS only, as real footprints show.
+        split = (60, 25, 15) if r == "CDS" else (34, 33, 33)
+        frames += [
+            f"{sample}\t{r}\t{f}\t{split[f] * shares[r] * 10}\t{split[f]:.1f}" for f in range(3)
+        ]
+
+    meta = ["sample\tregion\tx\ty"]
+    for label in ("Distance from start (nt)", "Distance from stop (nt)"):
+        for x in range(-24, 25):
+            # A 3-nt period peaking on frame 0: the periodicity the plot is for.
+            y = (6.0 if x % 3 == 0 else 1.5) + _vary(sample, 0, 9) / 10.0
+            meta.append(f"{sample}\t{label}\t{x}\t{y:.2f}")
+    return {
+        f"{sample}.ribowaltz_psite_region.tsv": "\n".join(region) + "\n",
+        f"{sample}.ribowaltz_frames.tsv": "\n".join(frames) + "\n",
+        f"{sample}.ribowaltz_metaprofile_psite.tsv": "\n".join(meta) + "\n",
+    }
+
+
+def ribotish(sample: str) -> dict[str, str]:
+    """Ribo-TISH `quality` output `{sample}_qual.txt`.
+
+    The module reads line 4 only: a Python dict literal of read length to the
+    per-frame counts `[f0, f1, f2]`. The first three lines are the other
+    profiles `ribotish quality` writes and are not parsed.
+    """
+    lengths = range(25, 35)
+    frames = {
+        n: [
+            _vary(sample, 4_000, 6_000) * (3 if n in (28, 29) else 1),
+            _vary(sample, 900, 1_300),
+            _vary(sample, 700, 1_100),
+        ]
+        for n in lengths
+    }
+    profile = {n: [0] * 3 for n in lengths}
+    body = "\n".join(
+        [
+            str({n: 1 for n in lengths}),
+            str(profile),
+            str(profile),
+            str(frames),
+        ]
+    )
+    return {f"{sample}_qual.txt": body + "\n"}
+
+
+def mirtrace(sample: str) -> dict[str, str]:
+    """miRTrace `qc` outputs, one set for the whole run.
+
+    Emitted once, like `nonpareil`: miRTrace writes a single results JSON and
+    single per-statistic tables with one column per library, and the module
+    takes the sample names from the JSON `verbosename` and the table headers.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    results = []
+    for s in SAMPLES:
+        total = _vary(s, 800_000, 1_200_000)
+        qc = [_vary(s, 5_000, 9_000), _vary(s, 2_000, 4_000), _vary(s, 60_000, 90_000)]
+        qc.append(_vary(s, 10_000, 20_000))
+        qc.append(total - sum(qc))
+        rna = [_vary(s, 400_000, 600_000), _vary(s, 50_000, 90_000), _vary(s, 20_000, 40_000)]
+        rna.append(_vary(s, 5_000, 10_000))
+        rna.append(qc[4] - sum(rna))
+        results.append(
+            {
+                "filename": f"{s}.fastq.gz",
+                "verbosename": s,
+                "stats": {"allSeqsCount": total, "statsQC": qc, "statsRNAType": rna},
+            }
+        )
+    lengths = range(15, 41)
+    header = "\t".join(SAMPLES)
+    length = [f"LENGTH\t{header}"] + [
+        f"{n}\t"
+        + "\t".join(str(_vary(s, 100, 900) * (20 if 20 <= n <= 24 else 1)) for s in SAMPLES)
+        for n in lengths
+    ]
+    clades = ("primates", "rodents", "lizards_and_birds", "fish", "insects", "nematode", "monocots")
+    contamination = [f"CLADE\t{header}"] + [
+        f"{c}\t" + "\t".join(str(_vary(s, 10, 90) * (500 if i == 0 else 1)) for s in SAMPLES)
+        for i, c in enumerate(clades)
+    ]
+    complexity = [f"DISTINCT_MIRNA_HAIRPINS_ACCUMULATED_COUNT\t{header}"] + [
+        f"{depth}\t" + "\t".join(str(min(900, depth // 200 + _vary(s, 0, 40))) for s in SAMPLES)
+        for depth in range(0, 200_001, 20_000)
+    ]
+    return {
+        "mirtrace/mirtrace-results.json": json.dumps({"results": results}),
+        "mirtrace/mirtrace-stats-length.tsv": "\n".join(length) + "\n",
+        "mirtrace/mirtrace-stats-contamination_basic.tsv": "\n".join(contamination) + "\n",
+        "mirtrace/mirtrace-stats-mirna-complexity.tsv": "\n".join(complexity) + "\n",
+    }
+
+
+# The isomiR categories mirtop stats reports; the module plots `{cat}_sum`,
+# `{cat}_count` and `{cat}_mean` for each.
+_MIRTOP_CATS = ("ref_miRNA", "iso_3p", "iso_5p", "iso_add3p", "iso_snv")
+
+
+def mirtop(sample: str) -> dict[str, str]:
+    """`mirtop stats` JSON log `*_mirtop_stats.log` (one sample per file here).
+
+    The sample name is the key under `metrics`, not the filename.
+    """
+    metrics: dict[str, float] = {}
+    for idx, cat in enumerate(_MIRTOP_CATS):
+        count = _vary(sample, 50, 300) // (idx + 1)
+        total = count * _vary(sample, 20, 60)
+        metrics[f"{cat}_count"] = count
+        metrics[f"{cat}_sum"] = total
+        metrics[f"{cat}_mean"] = round(total / count, 3)
+    iso = [c for c in _MIRTOP_CATS if c != "ref_miRNA"]
+    metrics["isomiR_count"] = sum(metrics[f"{c}_count"] for c in iso)
+    metrics["isomiR_sum"] = sum(metrics[f"{c}_sum"] for c in iso)
+    payload = {"meta": {"version": "v0.4.25"}, "metrics": {sample: metrics}}
+    return {f"{sample}_mirtop_stats.log": json.dumps(payload)}
+
+
+_PERCOLATOR_FEATURES = (
+    "MS:1002252",
+    "MS:1002255",
+    "ionb_min_abs_diff",
+    "iony_min_abs_diff",
+    "rt_diff",
+)
+
+
+def percolator(sample: str) -> dict[str, str]:
+    """Percolator `--weights` output `*percolator_feature_weights.tsv`.
+
+    A header of feature names, then three rows per cross-validation fold of
+    which the module reads the first (the normalised weights). The sample name
+    is the filename.
+    """
+    rows = ["\t".join(_PERCOLATOR_FEATURES)]
+    for fold in range(3):
+        normalised = [
+            f"{(_vary(sample, 1, 90) + 13 * i + fold) / 100 * (1 if i % 2 else -1):.4f}"
+            for i in range(len(_PERCOLATOR_FEATURES))
+        ]
+        raw = [f"{float(v) * 2.5:.4f}" for v in normalised]
+        rows += ["\t".join(normalised), "\t".join(raw), "\t".join(raw)]
+    return {f"{sample}.percolator_feature_weights.tsv": "\n".join(rows) + "\n"}
+
+
+def bcl2fastq(sample: str) -> dict[str, str]:
+    """bcl2fastq `Stats/Stats.json`, one file for the flow cell.
+
+    Emitted once: every library of the run is a `DemuxResults` entry of one
+    JSON, and `UnknownBarcodes` feeds the undetermined-barcodes plot.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    conversion = []
+    unknown = []
+    for lane in (1, 2):
+        demux = []
+        for s in SAMPLES:
+            reads = _vary(s, 800_000, 1_200_000) + lane * 1_000
+            yield_ = reads * 150
+            demux.append(
+                {
+                    "SampleId": s,
+                    "SampleName": s,
+                    "IndexMetrics": [
+                        {
+                            "IndexSequence": "ACGTACGT",
+                            "MismatchCounts": {
+                                "0": int(reads * 0.97),
+                                "1": reads - int(reads * 0.97),
+                            },
+                        }
+                    ],
+                    "NumberReads": reads,
+                    "Yield": yield_,
+                    "ReadMetrics": [
+                        {
+                            "ReadNumber": 1,
+                            "Yield": yield_,
+                            "YieldQ30": int(yield_ * 0.92),
+                            "QualityScoreSum": yield_ * 35,
+                            "TrimmedBases": 0,
+                        }
+                    ],
+                }
+            )
+        undetermined = 40_000 + lane * 5_000
+        conversion.append(
+            {
+                "LaneNumber": lane,
+                "TotalClustersRaw": 5_000_000,
+                "TotalClustersPF": 4_000_000,
+                "Yield": sum(d["Yield"] for d in demux),
+                "DemuxResults": demux,
+                "Undetermined": {
+                    "NumberReads": undetermined,
+                    "Yield": undetermined * 150,
+                    "ReadMetrics": [
+                        {
+                            "ReadNumber": 1,
+                            "Yield": undetermined * 150,
+                            "YieldQ30": undetermined * 120,
+                            "QualityScoreSum": undetermined * 150 * 30,
+                            "TrimmedBases": 0,
+                        }
+                    ],
+                },
+            }
+        )
+        unknown.append(
+            {
+                "Lane": lane,
+                "Barcodes": {
+                    "GGGGGGGG": 20_000 + lane * 100,
+                    "NNNNNNNN": 8_000,
+                    "ACGTACGA": 3_000,
+                },
+            }
+        )
+    payload = {
+        "Flowcell": "CONFFLOWCELL",
+        "RunNumber": 1,
+        "RunId": "240101_CONF_0001_ACONFFLOWCELL",
+        "ReadInfosForLanes": [],
+        "ConversionResults": conversion,
+        "UnknownBarcodes": unknown,
+    }
+    return {"Stats/Stats.json": json.dumps(payload, indent=2)}
+
+
+def checkqc(sample: str) -> dict[str, str]:
+    """CheckQC `--json` stdout, one file per run folder.
+
+    CheckQC only reports what fails, so a sample appears in the report only
+    through an issue: every stub library gets a reads-per-sample warning, and
+    one lane each carries an undetermined-percentage and an overrepresented
+    unknown-index issue so all three catalogued plots have data.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    reads = [
+        {
+            "type": "warning",
+            "message": f"Number of reads for sample {s} was too low on lane 1",
+            "data": {
+                "lane": 1,
+                "number_of_samples": len(SAMPLES),
+                "sample_id": s,
+                "sample_name": s,
+                "sample_reads": _vary(s, 5, 9),
+                "threshold": 10,
+            },
+        }
+        for s in SAMPLES
+    ]
+    undetermined = [
+        {
+            "type": "error",
+            "message": "The percentage of undetermined indexes was to high on lane 1",
+            "data": {
+                "lane": 1,
+                "percentage_undetermined": 12.5,
+                "threshold": 10,
+                "computed_threshold": 10.8,
+                "phix_on_lane": 0.8,
+            },
+        }
+    ]
+    unidentified = [
+        {
+            "type": "warning",
+            "message": "Overrepresented unknown barcode",
+            "data": {
+                "msg": (
+                    f"Index: {index} on lane: 1 was significantly overrepresented "
+                    f"({share}%) at significance threshold of: 1.0%."
+                )
+            },
+        }
+        for index, share in (("GGGGGGGG+AGATCTCG", 4.2), ("NNNNNNNN+NNNNNNNN", 1.7))
+    ]
+    payload = {
+        "exit_status": 1,
+        "version": "4.0.7",
+        "run_summary": {
+            "instrument_and_reagent_type": "novaseq_SP",
+            "read_length": "151-151",
+            "handlers": [],
+        },
+        "ReadsPerSampleHandler": reads,
+        "UndeterminedPercentageHandler": undetermined,
+        "UnidentifiedIndexHandler": unidentified,
+    }
+    return {"checkqc.json": json.dumps(payload, indent=2)}
+
+
+def falco(sample: str) -> dict[str, str]:
+    """Falco's `fastqc_data.txt`: FastQC's format under a `##Falco` banner.
+
+    MultiQC has no Falco module; its FastQC module reads Falco output and only
+    anchors the result `falco` when *every* file it parsed came from Falco. With
+    a FastQC stub in the same report both would merge into one `fastqc` section,
+    so `module_order_for` runs the FastQC module twice, split by path.
+    """
+    files = fastqc(sample)
+    ((_, body),) = files.items()
+    return {
+        f"{sample}_falco/fastqc_data.txt": body.replace("##FastQC\t0.12.1", "##Falco\t1.2.1", 1)
+    }
+
+
 STUB_BUILDERS = {
+    "adapterremoval": adapterremoval,
     "ataqv": ataqv,
     "bcftools": bcftools,
+    "bcl2fastq": bcl2fastq,
+    "bismark": bismark,
     "bowtie2": bowtie2,
     "bracken": bracken,
+    "cellranger": cellranger,
     "centrifuge": centrifuge,
+    "checkm2": checkm2,
+    "checkqc": checkqc,
     "cutadapt": cutadapt,
+    "damageprofiler": damageprofiler,
     "deeptools": deeptools,
     "dupradar": dupradar,
+    "falco": falco,
     "fastp": fastp,
     "fastqc": fastqc,
     "featurecounts": featurecounts,
+    "frip": frip_score,
+    "gatk": gatk,
+    "gtdbtk": gtdbtk,
     "happy": happy,
+    "hicpro": hicpro,
     "ivar": ivar,
     "kaiju": kaiju,
     "kraken": kraken,
     "malt": malt,
     "metaphlan": metaphlan,
+    "mirtop": mirtop,
+    "mirtrace": mirtrace,
     "mosdepth": mosdepth,
     "nanoq": nanoq,
+    "nanostat": nanostat,
     "nonpareil": nonpareil,
+    "nsc": nsc_coefficient,
+    "percolator": percolator,
     "picard": picard,
+    "porechop": porechop,
     "preseq": preseq,
+    "prokka": prokka,
     "qualimap": qualimap,
     "quast": quast,
+    "ribotish": ribotish,
+    "ribowaltz": ribowaltz,
+    "rsc": rsc_coefficient,
     "rseqc": rseqc,
     "salmon": salmon,
     "samtools": samtools,
     "snpeff": snpeff,
     "sompy": sompy,
+    "sortmerna": sortmerna,
     "star": star,
+    "strand": strand_shift_correlation,
     "summary": summary,
     "truvari": truvari,
+    "vcftools": vcftools,
+    "vep": vep,
 }
 
 

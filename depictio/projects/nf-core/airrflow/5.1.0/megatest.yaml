@@ -34,12 +34,19 @@ keys:
   # MultiQC parquet (fastp + FastQC modules, raw and post-assembly reads).
   - multiqc/multiqc_data/multiqc.parquet
   # enchantR repertoire analysis report: Hill diversity profiles with bootstrap
-  # CIs, the clone size table, pairwise clonal overlap and per-sample clone
-  # counts. clone_sizes_table.tsv is the bulk of the download (about 2.7 MB).
+  # CIs, the bootstrapped rank-abundance curve, the clone size table, pairwise
+  # clonal overlap and per-sample clone counts. clonal_abundance.tsv is the bulk
+  # of the download (about 17 MB); the recipe thins it to 200 points per sample
+  # at ingest, so only the fetch pays for it, not the dashboard.
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_abundance.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_diversity.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_overlap.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clone_sizes_table.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/num_clones_table.tsv
+  # The AIRR rearrangement table the repertoire analysis starts from (all
+  # samples, one row per collapsed sequence, about 310 MB). The spectratype and
+  # V-J recipes read six or seven of its 74 columns; nothing else ingests it.
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/repertoires/All_samples__repertoire-pass.tsv
   # enchantR find-threshold report: the shazam distance threshold per subject.
   - clonal_analysis/find_threshold/all_reps_dist_report/tables/all_reps_threshold-summary.tsv
   # Repertoire comparison report: V family and V gene usage per sample, plus the
@@ -51,24 +58,45 @@ keys:
   - parsed_logs/Table_sequences_process.tsv
   #
   # Deliberately NOT fetched:
-  #   clonal_abundance.tsv (17 MB) is alakazam's bootstrapped rank-abundance
-  #     curve. clone_sizes_table.tsv already carries rank and frequency per
-  #     clone, which is what the dashboard's rank-abundance panel plots; the
-  #     extra file is five times the rest of the subset for a confidence ribbon.
   #   repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembly.tsv
   #     is byte-identical to parsed_logs/Table_sequences_process.tsv.
   #   parsed_logs/Table_all_details_*.tsv and report_file_size/ are the
   #     per-process and per-file detail behind the same counts; nothing reads them.
-  #   vdj_annotation/*/*_db-pass.tsv (about 20 MB) are the per-sample AIRR
-  #     rearrangement tables. They would add V by J pairing, CDR3 length and
-  #     isotype panels; see VALIDATION_REPORT.md.
+  #   vdj_annotation/*/02-make-db/*_db-pass.tsv (860 MB for the ten samples)
+  #     and clonal_assignment/*/repertoires/*_clone-pass.tsv (320 MB) carry the
+  #     same rearrangements as the repertoire-pass table above, before and
+  #     after clone definition.
 prefix_keys: []
+# Megatest-specific values that must never appear in dashboard texts, titles or
+# defaults (checked by depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - SRR1383451
+  - SRR1383452
+  - SRR1383453
+  - SRR1383456
+  - SRR1383463
+  - SRR1383464
+  - SRR1383465
+  - SRR1383466
+  - SRR1383467
+  - SRR1383468
+  - M4
+  - M5
+  - Lymph_node
+  - lymph node
+  - Brain_lesion
+  - brain lesion
+  - sampling site
+  - uni_tue
+  - IGHJ4
+  - 12 to 16
 renames: {}
 post_fetch_help: |
   === Quick test commands ===
 
-  # The samplesheet is fetched with the run and the dashboard binds only the
-  # columns airrflow's samplesheet schema guarantees, so no --var is needed. The
+  # The samplesheet is fetched with the run. The design column defaults to
+  # GROUP_COL=treatment, which this run's samplesheet has; another run whose
+  # samplesheet names it differently passes --var GROUP_COL=<column>. The
   # route flags (SKIP_CLONAL_ANALYSIS, ASSEMBLED_MODE, ...) are not read from
   # params.json yet: pass them by hand if the run skipped a step.
 

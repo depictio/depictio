@@ -38,6 +38,8 @@ Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps,
 | 9 | Spatial scatter + simple image overlay | spatial transcriptomics, IF imaging (small images) | image opacity, colour-by, ROI lasso | gene set, cell-type filter | ROI cells (sample IDs) | plotly.js image annotation, or deck.gl BitmapLayer + ScatterplotLayer |
 | 10 | Pathway / network (STRING/KEGG) | enrichment, sc, multi-omic | layout algo, edge-confidence slider, colour-by logFC, expand neighbours | gene-set from #1/#3 | selected node → drill-back | cytoscape.js |
 
+**Note on #8:** the igv.js / jbrowse-react framing above predates the `advanced_viz` family. GenomeSpy, a declarative, coordinate-bound track grammar, was evaluated against it in `docs/design/genomespy-eval.md` (#1083) and landed as the `genome_view` kind; that document also lists which of the hand-built genome renderers it could replace.
+
 **Note on #9:** kept deliberately lightweight. Single image (PNG/JPG) as background, scatter overlay, lasso ROI. No pyramid / no zarr / no Vitessce. If imaging requirements grow later, swap the renderer for deck.gl + viv without touching the coordination contract.
 
 ### 2.1 Input schema per viz (required vs optional roles)
@@ -302,6 +304,7 @@ Anything where p99 latency could exceed ~500ms or memory could spike beyond ~250
 | Pathway (#10) network expansion via STRING/KEGG | external API + graph traversal | `depictio.advanced_viz.pathway_expand` |
 | Volcano label-top-N when N is large (>1000) | layout / collision avoidance | client-side; only server-side if requested as PNG/PDF |
 | Embedding (#2) initial render with >100k points | server-side downsampling / tiling | `depictio.advanced_viz.embedding_tile` |
+| `group_compare` two-group differential test | per-feature test over a wide observation x feature matrix, plus BH correction | `depictio.advanced_viz.compute_group_compare` |
 
 Light operations (threshold filtering on already-loaded data, axis flips, hover formatting) stay in the browser. The principle: **pre-compute on the server, react in the browser.**
 
@@ -367,6 +370,341 @@ Once this MVP is stable, the rest of the catalogue is incremental: each new viz 
 8. **Recipe vs first-class compute** — should clustering/DR kinds be implemented as recipes under the existing `TransformConfig` system (pro: leverages existing scan/materialise pipeline) or as standalone Celery tasks bypassing recipes (pro: tighter typing, no `.py` recipe file per kind)? Recommendation: **standalone Celery tasks** for the eight builtin kinds, while leaving `TransformConfig` available for user-authored custom transforms.
 9. **Worker queue topology** — separate `compute` queue from default? Yes (long jobs shouldn't block previews). Helm chart needs an additional worker deployment.
 10. **DC schema-validation surface** — surface mismatches in editor only, or also at runtime? Recommend both, but editor-time should block save while runtime should display a non-fatal banner.
+
+---
+
+## 7. Kinds added with the nf-core template lots (2026-09)
+
+The kinds below were added in the second template lot and its remediation wave. Each one
+went through the seven registry touchpoints (`types.py`, `CANONICAL_SCHEMAS` / `ROLE_NAMES` /
+`_OPTIONAL_ROLES` / `KIND_METADATA` in `schemas.py`, a `<Kind>Config` in `configs.py`,
+`KIND_SAMPLING_POLICY`), the TypeScript union, `AdvancedVizDispatch` and `splitPanels`, plus a
+showcase tab and a pytest / vitest pair. The `contact_map`, `knee_plot` and `damage_profile`
+kinds of the first lot 2 cut follow the same pattern.
+
+**`genome_view`** (renamed from the spike's `genomespy_track`). A GenomeSpy-backed track:
+required roles `chr`, `pos`, `score`, optional `end` (interval), `feature` (label and selection
+id), `sample` (one lane per value, `facet_by_sample`, capped by `max_facets`) and `category`
+(colour). Marks are `point`, `rect` (needs `end_col`, silently falls back to `point` without it)
+and `bar` (score as height from zero; GenomeSpy core has no line or area mark, so there is no
+smooth coverage curve). An optional gene lane reads a bundled hg38 or mm10 asset
+(`depictio/viewer/public/assets/genomes/*.genes.json`, protein-coding GENCODE basic, built by
+`dev/advanced_viz_kinds/build_genome_gene_assets.py`; `@genome-spy/core` ships chromosome sizes
+only). A brush emits two `InteractiveFilter`s with source `genome_selection`, a `MultiSelect` on
+`chr_col` and a `RangeSlider` on `pos_col`, which `add_filter` already understands, so any tile on
+a collection carrying the same columns narrows with it; `follow_region_filter: true` makes a
+tile zoom to an incoming region instead. Measured on atacseq's `macs2_broad_peaks` (224,137
+rows): one WebGL context against Plotly scattergl's two, gesture frames at the vsync floor for
+both, so the honest reading is "no worse" (`docs/design/genomespy-eval.md`).
+
+**`group_compare`.** Compute on a selection. The first kind whose input is not a column binding
+but a pair of row groups picked in the dashboard: two saved selection groups (a lasso kept
+through "select & compare") or two values of a label column. Both collapse to one
+`{label, column, values}` selector before they leave the browser. The endpoint pair
+`POST /advanced_viz/compute_group_compare` + `GET /advanced_viz/compute_group_compare/{job_id}`
+follows the dispatch / poll / cache contract of `compute_upset`: the cache key hashes the whole
+payload, so re-running an identical comparison is free. The worker loads the collection through
+`load_deltatable_lite` with the dashboard's `filter_metadata`, infers the features from the
+schema as `complex_heatmap` infers its matrix (capped by variance at `max_features`), runs a
+Wilcoxon rank-sum (default) or Welch t-test, Benjamini-Hochberg across the tested features and a
+log2 fold change of the raw means with a pseudocount. The renderer draws a volcano and the ranked
+marker table; thresholds and the label budget are client-side, so moving them never costs a job.
+Known artefact: any numeric column is a feature, so embedding axes stored beside the genes get
+tested too; a feature-exclusion list on the config is the follow-up.
+
+**`transcript_structure`.** The isoforms of one gene as lanes on a base-pair axis: exon blocks,
+coding blocks drawn taller so the UTRs stay visible, introns as thin lines carrying strand
+chevrons. One row per exon or CDS block (`transcript_id`, `gene_id`, `chrom`, `start`, `end`,
+`feature`, `strand`, optionally `sample`, `gene_name`, `transcript_class`, `expression`), which
+is what `gtf/transcripts` makes of any GTF or GFF3 a run publishes (StringTie, bambu
+`extended_annotations.gtf`, gffcompare). Lanes are ordered by expression and cut to
+`max_transcripts`; the novelty class colours them. One gene at a time is deliberate: a track
+showing every locus is a genome browser, and that is `genome_view`'s job.
+
+**`cnv_profile`.** One collection carries both halves of a somatic copy-number call, told apart
+by the optional `segment` role: a bin row is one window of the ratio track and draws as a point,
+a segment row is the caller's own call and draws as a thick horizontal stroke over it, coloured
+gain, neutral or loss by `gain_threshold` / `loss_threshold`. The x axis is the genome with the
+same chromosome offsets `manhattan` uses, so the chromosome Select zooms onto one contig. When
+`baf_col` is bound, a second panel plots the B-allele frequency against a dotted 0.5 rule: that
+panel is the reason the kind exists, because copy-neutral loss of heterozygosity never moves the
+log2 track. Bins go out as `scattergl` and fall back to a downsampled SVG trace when the WebGL
+budget is spent; above `max_bins` they are averaged into windows, never sampled, and segments are
+never thinned. Producers: `cnvkit` (`.cnr` bins + `.cns` segments), `ascat` (allele counts to
+log2 ratio, copy number and expected BAF) and `controlfreec` (segments recovered by run-length
+encoding `MedianRatio`), all on nf-core/sarek's somatic `variant_calling/` layout and gated
+behind a somatic run.
+
+**`genome_chord`.** The one kind with no library behind it: Plotly has no chord trace and d3 is
+not a dependency, so `GenomeChordRenderer` draws plain SVG and keeps every number in
+`genome_chord/chordLayout.ts`, unit-tested without a DOM. Chromosomes are arcs proportional to
+length (hg38 / hg19 / mm10 sizes, or derived from the data), laid clockwise from noon; the chord
+joining two loci is a quadratic Bezier whose control point moves from the rim to the centre as
+the loci move apart, so an intra-chromosomal deletion stays a short arc rather than a spike
+through the picture. Width is log10 of the weight. The server never samples it
+(`KIND_SAMPLING_POLICY: "none"`: a random subset of breakpoint pairs would drop exactly the rare
+translocations the picture exists to show); the renderer sorts by weight and draws the heaviest
+`max_links`, reporting the remainder. Clicking a chord emits a `scatter_selection` filter on
+`label_col`. Producer: `arriba/fusion_links`.
+
+**`contact_map`, `display: triangle`.** Rotates the matrix 45 degrees so genomic position is on
+x alone and a `genome_view` track stacked above shares the axis; `max_separation_bins` caps the
+apex. The pure helper `contactMapTriangle.ts` does the rotation and fills the odd-parity lattice
+gaps from horizontal neighbours.
+
+## 8. When a new kind is justified
+
+Thirty-nine kinds is enough to have learned what a kind costs. Each one is seven registry
+entries, a renderer, a showcase tab, a pair of alignment tests and a line in every snapshot
+that enumerates kinds, and none of that is paid back by a kind that draws the same marks as
+its neighbour with different column names. This section is the rule the next one is measured
+against.
+
+### The rule
+
+A new kind needs **a new set of marks** or **a new interaction shape**. Anything else is a
+preset.
+
+- **New set of marks.** The picture is built from primitives the existing kinds do not draw.
+  `genome_chord` earns it: Plotly has no chord trace, so the renderer lays out arcs and Bezier
+  ribbons itself. `parallel_coordinates` earns it: one polyline per row across N axes is not a
+  scatter with more columns.
+- **New interaction shape.** What the reader does to the picture, and what the picture does
+  back, is different. `genome_view` earns it against `manhattan`: the same chr / pos / score
+  roles, but a locus axis that zooms and a brush that becomes a dashboard filter.
+  `record_card` earns it: it consumes a selection instead of emitting one, which no other kind
+  does.
+- **Everything else is a preset.** A column set, a palette, an axis default, a sort order, a
+  threshold: those go in the kind's `config`, and the way an author gets them without typing
+  them is a catalog `Render` entry on the output that produces those columns. A catalog Render
+  already carries `kind` plus the role to column mapping, so "the GO enrichment view of a dot
+  plot" is one YAML block, not one kind.
+
+### Two worked counter-examples
+
+**`ma`.** An MA plot is a volcano's table with mean log intensity on x instead of effect size,
+and the same tier colouring, the same thresholds, the same top-N labelling, the same
+selection. Same marks, same interaction, different axis binding: a preset. It is now
+`volcano` with `view: ma`, and `VolcanoConfig` carries `avg_log_intensity_col` so the axis has
+somewhere to come from. The tile offers all three views behind one control, which is strictly
+more than the split gave a reader, because a reader who wants to check the same hits on a QQ
+plot no longer needs a second tile bound to the same collection.
+
+**`enrichment`.** A pathway enrichment plot is a dot plot whose y axis is a term, whose x is
+the NES, whose dot area is the gene-set size and whose colour is the adjusted p-value. Marks:
+dots with a size and a colour channel, exactly `dot_plot`. Interaction: none that `dot_plot`
+lacks. It is now `dot_plot` with `view: enrichment`. What made it look like a kind was that
+nobody had written this rule down, so "the columns are different" read as "the chart is
+different".
+
+The same reasoning retired `qq` into `volcano` and `roc_pr_curve` into `pr_benchmark`.
+
+### The migration path: the alias table
+
+Retiring a kind may not break a dashboard. `_KIND_ALIASES` in
+`depictio/models/components/advanced_viz/configs.py` maps each retired kind to the kind that
+survived it plus the `view` that reproduces it:
+
+| retired kind | resolves to | view |
+| --- | --- | --- |
+| `ma` | `volcano` | `ma` |
+| `qq` | `volcano` | `qq` |
+| `enrichment` | `dot_plot` | `enrichment` |
+| `roc_pr_curve` | `pr_benchmark` | `roc` |
+
+It runs as a `BeforeValidator` on the `VizConfig` union, so it applies everywhere a config is
+validated: a dashboard read out of Mongo, a shipped YAML, a `use:` expansion, the CLI
+validator, the save route. A stored document is rewritten at read time and written back only
+if the user saves. Three rules make that safe:
+
+1. **The survivor takes the retired config's field names verbatim.** `VolcanoConfig` gained
+   `avg_log_intensity_col`, `DotPlotConfig` gained `term_col`, `PrBenchmarkConfig` gained
+   `fpr_col`. The translation is the identity, which is the only kind of translation that
+   cannot silently drop a binding. A null the survivor does not accept is dropped rather than
+   raising, because the retired config had the field optional and the survivor does not.
+2. **The old literal stays in `AdvancedVizKind`,** flagged `legacy: True` in `KIND_METADATA`.
+   Every snapshot that enumerates kinds (`GET /advanced_viz/kinds`, `catalog.schema.json`,
+   Tool Studio's `kinds.json`) keeps validating, and pickers hide the flagged entries. A
+   consumer that predates the flag reads an absent flag as "not legacy", which is the old
+   behaviour.
+3. **The React `RENDERERS` map keeps the old key.** `stored_metadata` reaches the client
+   without passing through the Pydantic models, so a dashboard saved before the merge still
+   arrives carrying `viz_kind: ma`, and the old key has to dispatch to something. No renderer
+   file is deleted in the PR that retires a kind.
+
+### `INCUBATING`
+
+`test_every_kind_is_reachable` asserts that every kind is bound by a catalog output's
+`renders_as` or by a shipped dashboard YAML. A kind nobody can reach is a kind whose only
+proof of life was the author's local stack, and we shipped several of those before the test
+existed.
+
+`INCUBATING` in `schemas.py` is the audit list of the exceptions, and it is a promise rather
+than a parking space: each entry carries the reason it is unbound next to it. Two reasons are
+legitimate. The first is a kind whose input no pipeline publishes at the pinned revision
+(`gsea_running_score`: differentialabundance's pinned prefix writes no `tables/gsea/`), kept
+so a re-pin costs nothing. The second is a kind registered ahead of the renderer or the
+showcase tab that will bind it, within the same PR. Anything else means the kind should not
+have been added.
+
+## 9. Beyond the standard Plotly chart (wave 2 of the nf-core lots, 2026-09)
+
+The wave 1 audit found that the dashboards read as an aggregation of scatter, line and bar
+tiles even though 37 kinds existed. The causes were structural rather than a missing kind:
+every tile carried the same chrome, genomic tiles shared neither an axis nor a region, several
+kinds overlapped, and nothing sized a tile to its content. This section records the
+mechanisms that answer each cause. Every default reproduces the behaviour before the wave.
+
+### Content-aware sizing (autofit v2)
+
+Precedence: YAML size, then autofit, then a manual resize. Each component carries
+`layout: {fit: auto | fixed}`, stored on `stored_metadata.fit` (never on the grid item, which
+react-grid-layout strips on the first drag). Absent means auto for text, card, table and
+advanced_viz, fixed for figure and multiqc. Autofit runs in the viewer and the editor over
+the auto members only, levels a row of tiles to one height, and never persists a fitted
+height. A manual resize in the editor flips the tile to `fixed`; "Reset to auto height" in
+its menu undoes it; a dashboard-level `autofit: false` restores today's layout exactly.
+
+Content demand travels on one channel, `publishContentDemand(index, {rows})` in
+`autofit.ts`. Figures publish it server side (`content_demand` in the response metadata,
+category counts for bar, box and violin). Tables publish header plus rows plus chrome, and
+are shrink-only because AG Grid pages and scrolls. Advanced viz tiles pass `contentDemand`
+to `AdvancedVizFrame` from the data they already hold (facets, genes, heatmap rows, sets),
+and only grow. Per-type clamps: text 1 to 12 rows, card 1 to 4, table 2 to 12, figure 2 to
+12, advanced_viz 3 to 16. A tile a type cannot reach (a 2-row card beside a 6-row figure)
+keeps its own height rather than growing towards a floor it would never fill.
+
+### Controls placement and the selection echo
+
+A renderer splits its controls in two tiers when it calls `AdvancedVizFrame`:
+`primaryControls` (encoding: axes, colour-by, normalise, rank, view switch, run button) and
+`controls` (cosmetic). `controls_placement` on the viz config decides where they are drawn:
+`popover` (default, both tiers behind the settings icon), `header` (encoding tier as a strip
+under the title, cosmetics in the popover) or `rail` (both tiers in a 220 px column beside
+the plot, under it below 480 px of tile width). A dashboard-level `advanced_viz_controls`
+sets the default for every tile; the tile's own value wins. The placement is picked from a
+three-icon switch in the header of the controls block itself (popover, rail or strip), so the
+way back to the popover is always on the block that is showing.
+Data and Load-All stay in the chrome whatever the placement. `primaryControls` is a fragment
+of individual compact controls, never a pre-arranged Stack, so the frame can lay the same
+node out as a strip, a rail or a popover list. The inline area counts towards the tile's
+content demand.
+
+Under the title the frame echoes what the tile shows: the row count (or `shown / total`
+when the server sampled), the region a `genome_selection` filter carried in, and whatever
+summary a renderer passes as `echo` (`A (412) vs B (388)` for group_compare, `chr1 · 500 kb`
+for contact_map). This is the pattern the FAIR² data portals use: the selection is stated in
+plain text next to the figure it narrows.
+
+### Modes, not kinds
+
+Four figures the omics literature expects are the same marks on the same bindings with a
+different y, a different mark or an extra panel, so they are opt-in modes rather than new
+kinds. `manhattan` `mode: rainfall` puts log10 of the distance to the previous variant on the
+same chromosome on y and colours by `rainfall_class_col`, which is how a cancer-genome paper
+shows kataegis. `scatter_xy` `density: true` draws a binned 2D histogram instead of one marker
+per row; points stay the default, the reader flips the view from the tile, and an author who
+wants the automatic switch names the row count in `density_threshold` (0, the default, never
+switches); `quadrants: {x, y, labels}` cuts the plane into four named regions (MIMAG
+completeness against contamination); `reference_highlight: above | below` dims the side of
+the reference line the reader is not looking at and ranks the top-N labels on the other, the
+same reading as the Manhattan score threshold. `profile` `derivative: true` forces log-log
+and adds a
+slope panel underneath, the Hi-C P(s) convention. `damage_profile` `facet_by: length_bin`
+draws one lane per read-length bin, and stays on one lane when the collection has no such
+column. `violin` joined the figure types the model accepts, as the API already did.
+
+### The genomic axis substrate
+
+Filters are the shared bus for genomic regions (`genome_selection` emits a chromosome
+multi-select and a position range). `genomicAxis.ts` maps a kind's declared roles onto those
+filters without renaming any config field: `genomicRoles(kind, config)` and
+`useFollowedRegion(metadata, config, filters)` give every genomic renderer (coverage_track,
+cnv_profile, transcript_structure, gene_arrow_track, manhattan, sashimi, contact_map) the same
+region as an x-range clamp, so tiles stacked in one section share one axis. Across
+collections a region link (`link_config.resolver: region`, `columns: {chrom, pos}`) rewrites
+the emitting DC's column names onto the target's. `genome_view` carries a `LocusInput`
+(chr:start-end text plus gene search) as its primary control, emitting the same two filters
+as the brush. A template lint forbids binding `coverage_track` and `genome_view` on the same
+DC in one tab; the pair becomes one tile with `views: [track, locus]`.
+
+### Hi-C at the resolution the view deserves
+
+`cooler/binned_contact_map` keeps every resolution a run dumped as a partition on a
+`resolution` column, deriving 2x, 4x and 8x by summing bins when the run dumped one. A
+`compute_contact_map` route serves one region at one resolution, picking the level whose
+bins-per-pixel is closest to 0.25 in log space and stepping coarser when the window would
+exceed the cell budget. The tile defaults to the triangle reading when a region reaches it,
+pins its x-axis to the region so a `genome_view` under it aligns, and re-bins on zoom. A
+collection with a single resolution is served as before. TAD triangles and loop arcs (the
+gghic `geom_tad` and `geom_loop` layers) are the remaining gap: nf-core/hic publishes
+boundaries in a separate collection, so the overlay needs `tad_dc` / `loop_dc` fields on the
+config.
+
+### File-backed tracks
+
+`genome_view` `source: file` reads a new `indexed_file` data collection (VCF, BAM, bigWig,
+bigBed, GFF3, FASTA, tabix; one object plus its index per sample, stored under
+`indexed_files/<dc_id>/<sample>/`, outside the prefix the orphan cleanup garbage-collects)
+through GenomeSpy's lazy sources over HTTP range requests. The API hands out presigned URLs
+signed against the external S3 URL, so the bucket must answer CORS preflights from the
+viewer origin (SeaweedFS `-s3.allowedOrigins`, `*` by default; see docs/indexed-files.md). The
+full GenomeSpy bundle loads behind a dynamic import only for file tiles; table tiles keep the
+minimal bundle. `@gmod/vcf` returns every INFO value as an array, which the spec builder
+unwraps before an ordinal colour scale sees it. Sashimi and cnv_profile file views are not
+built yet.
+
+### New kinds justified by section 8
+
+`record_card` is a selection-driven fact panel: a click in any tile fills the card with the
+row's fields grouped by section, with URL templates per column. `parallel_coordinates` draws
+one polyline per sample across N metric axes, coloured by a group column; an axis brush
+emits an ordinary range filter with source `axis_selection`. Both are new interaction shapes,
+not presets, which is why they are kinds.
+
+#### Linking a record card to its source
+
+By default a `record_card` follows whichever selection reaches it (`selection_source`). Set
+`config.linked_component` to the `tag` of one component and the card follows that component's
+selection only. The dashboard import rewrites the tag to the component's `index`, which is
+what selection filters carry, and refuses a tag that names no component of the same
+dashboard tab.
+
+```yaml
+- tag: <source-tag>
+  component_type: table
+  row_selection_enabled: true
+  row_selection_column: <id column>
+  section: <section>
+  layout: { x: 0, y: <row>, w: 5, h: 6 }
+- component_type: advanced_viz
+  viz_kind: record_card
+  config:
+    viz_kind: record_card
+    id_col: <id column>
+    linked_component: <source-tag>
+  section: <section>
+  layout: { x: 5, y: <row>, w: 3, h: 6 }
+```
+
+The source has to emit a selection: a table with `row_selection_enabled` and
+`row_selection_column`, a figure or map with `selection_enabled` and `selection_column`, or
+an advanced_viz kind that selects (`embedding`, `manhattan`, `genome_view`, `profile`,
+`scatter_xy`, `genome_chord`) with `selection_enabled`. When the source reads the same data
+collection as the card, its selection column must be the card's `id_col`, since the card
+matches the picked values on that column. A source on another collection is exempt: its
+pick reaches the card through a project link, whose two sides are named independently.
+
+**Collapsible side panel.** A linked card placed in the same section and on the same row as
+its source, touching it edge to edge on either side, becomes the source's side panel in the
+viewer. While the source holds no selection the card folds into a one-column rail (icon,
+vertical title, unfold chevron) and the source widens into the freed columns; a selection
+unfolds it, and the chevron in the rail or in the card header toggles it by hand until the
+source's selection next appears or clears. The fold is a derived layout
+(`packages/depictio-react-core/src/components/recordPanelLayout.ts`), never written back,
+and the editor always shows the stored layout unfolded. This pairing is also the one
+exception to the full-width table rule of the shipped-template lint: a table may be narrower
+than the grid when its linked record card fills the rest of the row.
 
 ---
 

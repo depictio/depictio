@@ -1,0 +1,27 @@
+id: merqury_assembly_qv
+name: Assembly QV and k-mer completeness
+mode: assembly-qv
+description: >-
+  One row per assembly: the consensus quality value Merqury derives from
+  k-mers found in the assembly but not in the reads, and the share of solid read
+  k-mers the assembly recovers. QV is logarithmic (QV 40 is one error per 10 kbp,
+  QV 50 one per 100 kbp); completeness below the expected level points at
+  sequence the assembly lost, completeness near 100 with a low QV at an assembly
+  that kept everything but did not polish it.
+find:
+  path_glob: "**/merqury/*.qv"
+  path_glob_alt:
+    - "**/*.completeness.stats"
+recipe: merqury/assembly_qv.py
+fixture: assembly_qv.tsv
+renders_as:
+  - { id: qv_vs_completeness, component: advanced_viz, kind: scatter_xy,
+      roles: {x: kmer_completeness, y: qv, label: assembly_id, color: assembly_id, size: total_kmers} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: qv, title: Consensus QV per assembly} }
+  - { component: card, column: qv, aggregation: max,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: kmer_completeness, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: asm_only_kmers, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
+  - { component: table }

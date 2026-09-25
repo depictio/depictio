@@ -1,0 +1,19 @@
+id: enchantr_diversity_orders
+name: Hill diversity at the named orders
+mode: repertoire-analysis/diversity-orders
+description: >-
+  alakazam Hill diversity per sample at q = 0 (richness), q = 1 (Shannon) and
+  q = 2 (inverse Simpson), with the bootstrap confidence interval, one labelled
+  row per sample and order.
+find: { path_glob: "**/repertoire_analysis_report/tables/clonal_diversity.tsv" }
+recipe: enchantr/diversity_orders.py
+fixture: diversity_orders.tsv
+renders_as:
+  # One order at a time (a single-choice filter on `order`) reads as one Hill
+  # number per sample with its confidence whiskers.
+  - id: diversity_order_ci_bars
+    component: advanced_viz
+    kind: metric_ci_bars
+    roles: { label: sample_id, value: d, lower: d_lower, upper: d_upper }
+  - { id: diversity_order_picker, component: interactive, interactive_type: Select, column_name: order }
+  - { component: table }

@@ -1,0 +1,19 @@
+id: qualimap_coverage_per_contig
+name: Coverage per contig
+description: >-
+  Per-contig length, mapped bases and mean depth from the last block of
+  Qualimap BamQC's genome_results.txt, plus the depth relative to the library's
+  own genome-wide mean. The substrate of a coverage-ratio sex call and the
+  quickest read on whether one scaffold soaked up the library.
+find:
+  path_glob: "**/genome_results.txt"
+recipe: qualimap/coverage_per_contig.py
+fixture: coverage_per_contig.tsv
+renders_as:
+  - { id: contig_depth_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: length, y: relative_coverage, label: chromosome, color: sample, size: mapped_bases} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: chromosome, y: relative_coverage, color: sample, title: 'Depth per contig, relative to the library mean'} }
+  - { component: card, column: relative_coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: mapped_bases, aggregation: sum, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: card, column: length, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
+  - { component: table, page_size: 25 }

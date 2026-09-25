@@ -1,0 +1,21 @@
+id: bismark_alignment_summary
+name: Alignment summary
+mode: alignment
+description: >-
+  Per-sample Bismark bisulfite alignment: pairs analysed, the unique-best-hit
+  count and mapping efficiency Bismark itself reports, plus how many pairs
+  never aligned or mapped to more than one place. MultiQC draws the bar; the
+  exact counts behind it are only readable here.
+find:
+  path_glob: "**/*_bismark_bt2_PE_report.txt"
+  path_glob_alt:
+    - "**/*_bismark_bt2_SE_report.txt"
+recipe: bismark/alignment_summary.py
+fixture: alignment_summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mapping_efficiency_pct, color: sample, title: Mapping efficiency per sample} }
+  - { component: card, column: mapping_efficiency_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: mapping_efficiency_pct, aggregation: average, secondary_layout: threshold, threshold_value: 60.0, threshold_direction: min, threshold_warn: 70.0 }
+  - { component: card, column: pairs_analysed, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: no_alignment, aggregation: sum, secondary_layout: histogram }
+  - { component: table }

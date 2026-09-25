@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Compositionally corrected differential abundance, one row per feature and contrast. The bars are signed by direction and ordered by effect, so the two ends of the chart are the two directions of the comparison. Pick a contrast on the left first: every bar is conditional on it.\n",
+      "body": "ANCOM-BC results for three habitat contrasts, one panel per contrast: bars are the bias- corrected log fold change of the top taxa, signed by direction and greyed when the q-value misses the threshold. Top-N and the significance threshold sit in the tile header; the tabs inside the tile drill into one contrast. This is the differential abundance output of nf-core/ampliseq (ANCOM-BC through QIIME2).\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Top-N taxa by |lfc| per contrast. Bars are coloured by direction (blue = up, red = down). Bars with q > threshold are greyed out. Switch tabs to drill into a single contrast or use the 'All' tab for faceted side-by-side comparison.",
+      "description": "Top taxa by absolute log fold change per contrast, signed by direction, greyed above the q-value threshold. The tabs inside the tile drill into one contrast.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Differential calls",
       "viz_kind": "da_barplot",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "da_barplot",
         "feature_id_col": "feature_id",
         "contrast_col": "contrast",
@@ -114,6 +115,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#E74C3C",
       "icon_name": "mdi:bullseye-arrow",
       "wf_tag": "python/advanced_viz_demo"
@@ -156,6 +158,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#F68B33",
       "icon_name": "mdi:target",
       "wf_tag": "python/advanced_viz_demo"
@@ -198,6 +201,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#1976D2",
       "icon_name": "mdi:trending-up",
       "wf_tag": "python/advanced_viz_demo"
@@ -239,7 +243,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -252,9 +256,9 @@
     {
       "i": "box-bc-bar",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -274,8 +278,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Differential abundance (with filters & cards)",
-  "subtitle": "Signed-LFC horizontal bars of differentially-abundant taxa from an ANCOM-BC-style output. Use the contrast filter on the left or switch tabs in-viz to pick a contrast (or 'All' for faceted side-by-side).",
+  "title": "Differentially abundant taxa",
+  "subtitle": "ANCOM-BC log fold changes of the top taxa, one panel per habitat contrast",
   "icon": "mdi:chart-bar",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -337,5 +341,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

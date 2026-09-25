@@ -1,0 +1,9 @@
+# BCL Convert: Illumina's current BCL-to-FASTQ converter, selected in
+# nf-core/demultiplex with `--demultiplexer bclconvert`. It writes its
+# statistics as flat CSV files under `Reports/`. Every output here produces the
+# same schema as its twin in `depictio/catalog/bcl2fastq/`, so a dashboard
+# built on one demultiplexer reads the other unchanged.
+id: bclconvert
+name: BCL Convert
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bclconvert
+homepage: https://support.illumina.com/sequencing/sequencing_software/bcl-convert.html

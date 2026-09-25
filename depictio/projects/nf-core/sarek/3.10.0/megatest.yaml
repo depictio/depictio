@@ -1,0 +1,118 @@
+# Megatest manifest for nf-core/sarek 3.10.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline sarek --version 3.10.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# The run publishes several profiles side by side (test_full_germline_aws/,
+# test_full_germline_ncbench_agilent/, ...); the template covers the germline
+# NCBench Agilent exome route, so run_root is test_full_germline_ncbench_agilent/
+# and the keys below are relative to it. They are mirrored 1:1 below the
+# destination, which becomes the template DATA_ROOT. No somatic profile is
+# published, so ASCAT / ControlFREEC / MSIsensor outputs do not exist here.
+#
+# One patient (NA12878), two samples (the same exome at 75M and 200M reads),
+# five germline callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta,
+# Strelka), both annotators (snpEff, VEP). `reports/` nests every QC file under
+# <tool>/[<caller>/]<sample>/, and the sample name lives only in the file name.
+#
+# Fetched since 2026-09-22: the per-sample per-caller VCFs and their
+# snpEff-annotated twins (20 objects, 44 MB), which is what the variant-level
+# tabs read. bgzip is gzip-compatible so Polars reads them directly, no VCF
+# dependency needed. Deliberately still skipped inside variant_calling/ and
+# annotation/: the gVCFs (`*.g.vcf.gz`, `*.genome.vcf.gz`, 6-46 MB each, only
+# useful for joint genotyping) and the VEP-annotated duplicates (VEP publishes
+# the same calls with a second vocabulary, and its own summary is HTML only,
+# see VALIDATION_REPORT.md SK-D3).
+#
+# Not fetched on purpose: preprocessing/ (16 GB of CRAM), the mosdepth per-base beds
+# (219-587 MB each; the 200 MB cap skips them anyway), every HTML report
+# (fastp, FastQC, snpEff, VEP: MultiQC already parsed them, and VEP publishes
+# nothing but HTML, see VALIDATION_REPORT.md SK-D3) and the bed indices.
+#
+# The samplesheet is not part of the run output; the template builds its sample
+# hub from the csv/*.csv manifests sarek writes, so nothing else is fetched.
+pipeline: sarek
+version: "3.10.0"
+# s3://nf-core-awsmegatests/sarek/results-<results_sha>/ == the 3.10.0 release tag_sha.
+results_sha: "8ccac7ad37b05dd792447763bf9671b719824587"
+run_root: "test_full_germline_ncbench_agilent/"
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params (the samplesheet URL, the tool list, --wes), software
+  # versions, the trace, and the CSV manifests the pipeline writes for its own
+  # resume points (csv/variantcalled.csv is the per-caller VCF list).
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  - csv/*.csv
+  # MultiQC 1.35 parquet + the per-module tables exported next to it.
+  - multiqc/multiqc_data/multiqc.parquet
+  - multiqc/multiqc_data/*.txt
+  - multiqc/multiqc_data/*.json
+  - multiqc/multiqc_data/*.log
+  # --- per-caller variant statistics (bcftools stats, vcftools) --------------
+  - reports/bcftools/*/*/*.bcftools_stats.txt
+  - reports/vcftools/*/*/*.TsTv.qual
+  - reports/vcftools/*/*/*.TsTv.count
+  - reports/vcftools/*/*/*.FILTER.summary
+  # --- coverage (mosdepth, once on the duplicate-marked and once on the
+  # recalibrated CRAM). The regions bed is the per-target mean depth of the
+  # Agilent exome (2.4 MB gz each); per-base beds are left out.
+  - reports/mosdepth/*/*.mosdepth.summary.txt
+  - reports/mosdepth/*/*.mosdepth.region.dist.txt
+  - reports/mosdepth/*/*.mosdepth.global.dist.txt
+  - reports/mosdepth/*/*.regions.bed.gz
+  # --- alignment QC MultiQC parsed (kept for provenance / reprocessing) -------
+  - reports/samtools/*/*.cram.stats
+  - reports/markduplicates/*/*.md.cram.metrics
+  - reports/fastp/*/*.fastp.json
+  - reports/fastp/*/*.fastp.log
+  - reports/fastqc/*/*_fastqc.zip
+  # --- the calls themselves. One VCF per sample and caller (1-3 MB each) and
+  # its snpEff-annotated twin (3-7 MB). The two FreeBayes objects under
+  # variant_calling/ come back as 196-byte Fusion symlink targets rather than
+  # VCFs (VALIDATION_REPORT.md SK-D6); the raw scan drops the junk line and the
+  # annotated twin carries FreeBayes' calls in full, so nothing is lost.
+  - variant_calling/deepvariant/*/*.deepvariant.vcf.gz
+  - variant_calling/*/*/*.filtered.vcf.gz
+  - variant_calling/manta/*/*.diploid_sv.vcf.gz
+  - variant_calling/strelka/*/*.variants.vcf.gz
+  - annotation/*/*/*_snpEff.ann.vcf.gz
+  # Their tabix indexes (3-235 kB each, fetched 2026-09-23), so the annotated
+  # VCFs can also be ingested as the `snpeff_vcf_files` indexed_file
+  # collection and range-read by the browser in the Cohort QC locus section.
+  # The variant_calling/ twins' indexes are not needed: no tile reads those
+  # files as files.
+  - annotation/*/*/*_snpEff.ann.vcf.gz.tbi
+  # --- annotation summaries: snpEff's CSV stats + per-gene effect counts. VEP
+  # writes only *_VEP.ann.summary.html, which MultiQC parses and nothing else can.
+  - reports/snpeff/*/*/*_snpEff.csv
+  - reports/snpeff/*/*/*_snpEff.genes.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest}
+# Run-specific values the dashboard texts must not quote (lint rule e,
+# test_template_conventions.py): the megatest sample, its read depths, and the
+# variant and locus the former default record opened on.
+forbidden_terms:
+  - NA12878
+  - 75M
+  - 200M
+  - TP53
+  - Pro72Arg
+  - chr17
+  - Agilent
+  - NCBench

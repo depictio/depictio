@@ -1,0 +1,305 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8db0"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8db0"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "pcoords-text",
+      "component_type": "text",
+      "title": "Library QC profile",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample QC profile",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Eight QC metrics per library (MultiQC general statistics of nf-core/rnaseq), one axis each, one line per library coloured by group. The degraded libraries are not the worst on any single axis; they bend the same way across duplication, alignment rate and rRNA. Drag along the duplication axis to brush a range: the brush becomes a dashboard filter, and the Duplicates slider on the left shows the distribution you are cutting.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoords-axes",
+      "component_type": "advanced_viz",
+      "title": "Per-library QC profile",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "parallel_coordinates_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric",
+        "data_collection_tag": "parallel_coordinates_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One polyline per library across eight metrics, coloured by group. Each axis is rescaled so the axes are comparable, while the tick labels keep the original units. Brushing an axis emits a range filter on that column.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample QC profile",
+      "viz_kind": "parallel_coordinates",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "parallel_coordinates",
+        "sample_col": "sample",
+        "metric_cols": [
+          "total_reads_m",
+          "percent_duplicates",
+          "percent_gc",
+          "mean_quality",
+          "percent_aligned",
+          "insert_size_median",
+          "percent_rrna",
+          "genes_detected"
+        ],
+        "group_col": "group",
+        "scale": "minmax",
+        "max_rows": 2000,
+        "max_axes": 12,
+        "colour_scale": "Viridis",
+        "line_opacity": 0.6
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoords-f-group",
+      "component_type": "interactive",
+      "title": "Group",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "parallel_coordinates_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric",
+        "data_collection_tag": "parallel_coordinates_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Library scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "group",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Library filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#0CA678",
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pcoords-f-dup",
+      "component_type": "interactive",
+      "title": "Duplicates (%)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "parallel_coordinates_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric",
+        "data_collection_tag": "parallel_coordinates_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Library scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "percent_duplicates",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Library filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "custom_color": "#0CA678",
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-pcoords-f-group",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-pcoords-f-dup",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-pcoords-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-pcoords-axes",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Library QC profile",
+  "subtitle": "One polyline per library across eight QC metrics. Degraded libraries are not the worst on any single axis; they are the ones that bend the same way across four of them.",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 46,
+  "main_tab_name": null,
+  "tab_icon": "mdi:check-decagram",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Library scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which libraries are drawn as polylines",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Sample QC profile",
+      "icon": "mdi:chart-timeline-variant",
+      "color": "teal",
+      "description": "Eight per-library metrics on parallel axes, coloured by group",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

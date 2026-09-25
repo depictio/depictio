@@ -40,7 +40,10 @@ keys:
   - multiqc/multiqc_data/multiqc.parquet
   # fusion-report: the caller-consensus table, hub of the whole template.
   - fusionreport/*/*.fusions.csv
-  # Per-caller evidence tables.
+  # Per-caller evidence tables. The Arriba file feeds two recipes: arriba/fusions.py
+  # (the call table) and arriba/fusion_links.py (the same calls as breakpoint pairs
+  # with integer positions, which is the row shape the chord diagram binds), so no
+  # extra key is needed for the partner map.
   - arriba/*.arriba.fusions.tsv
   - starfusion/*.starfusion.abridged.tsv
   - fusioncatcher/*.fusion-genes.txt
@@ -80,3 +83,36 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root {dest}
+
+# Megatest fusion partners that must never appear in a dashboard text (lint:
+# depictio/tests/models/test_template_conventions.py). The megatest sample id,
+# `test`, is left out: it is an English word the texts use generically.
+forbidden_terms:
+  - AKAP9
+  - ALK
+  - ATF1
+  - BRAF
+  - BRD4
+  - CD74
+  - CIC
+  - CRLF2
+  - DUX4
+  - EML4
+  - ETV1
+  - ETV6
+  - EWSR1
+  - FGFR3
+  - FIP1L1
+  - FLI1
+  - GOPC
+  - HOOK3
+  - MALT1
+  - NPM1
+  - NTRK3
+  - NUTM1
+  - PDGFRA
+  - RET
+  - ROS1
+  - TACC3
+  - TMPRSS2
+  - single sample

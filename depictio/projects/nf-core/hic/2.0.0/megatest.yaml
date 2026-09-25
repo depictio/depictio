@@ -1,0 +1,97 @@
+# Megatest manifest for nf-core/hic 2.0.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline hic --version 2.0.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# 2.0.0 is pinned because the 2.1.0 megatest prefix is a truncated sync (two
+# BAMs and one allValidPairs file, every other directory an empty marker). The
+# run wrote a pre-parquet MultiQC (multiqc/multiqc_data/mqc_*.txt), so the
+# manifest fetches the raw MultiQC inputs and the parquet Depictio reads is
+# produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+# Valid-pair lists and BAMs are left out; contact maps are fetched at the two
+# coarsest resolutions only (the contact_map tile downsamples further).
+pipeline: hic
+version: "2.0.0"
+# s3://nf-core-awsmegatests/hic/results-<results_sha>/ == the 2.0.0 release tag_sha.
+results_sha: "b4d89cfacf97a5835fba804887cf0fc7e0449e8d"
+run_root: ""
+multiqc:
+  version: "1.13"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/*.csv
+  - pipeline_info/*.txt
+  - samplesheet/*
+  # Provenance of the original MultiQC report.
+  - multiqc/multiqc_data/multiqc_data.json
+  - multiqc/multiqc_data/*.txt
+  - multiqc/multiqc_data/*.log
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ---------------------
+  - fastqc/*.zip
+  # HiC-Pro's five stat files per sample live under hicpro/stats/<sample>/,
+  # never directly under hicpro/, so this one key is what actually matches
+  # them (an earlier guess also listed hicpro/*.mapstat, *.pairstat,
+  # *.RSstat, *.mergestat at the top level; those never matched anything
+  # real and were dead weight).
+  - hicpro/stats/*
+  # Contact maps (raw + ICE-normalised) at the two coarsest resolutions + bins.
+  - contact_maps/*1000000*
+  - contact_maps/*500000*
+  # TADs, compartments, distance decay.
+  - tads/*.bed
+  - tads/*.txt
+  - tads/*.tsv
+  - tads/*.bedgraph
+  - compartments/*.bedgraph
+  - compartments/*.txt
+  - compartments/*.tsv
+  - compartments/*.bed
+  - distance_decay/*.txt
+  - distance_decay/*.tsv
+  - distance_decay/*.csv
+  - distance_decay/*.bedgraph
+# Megatest facts that must never appear in a dashboard text (lint rule e in
+# depictio/tests/models/test_template_conventions.py): the sample id, its SRA
+# runs, the organism and cell type, and the loci the review named.
+forbidden_terms:
+  - HIC_ES_4
+  - SRR5339783
+  - SRR5339784
+  - SRR5339785
+  - mESC
+  - ES cell
+  - ES cells
+  - mouse
+  - Mus musculus
+  - HoxD
+  - Hoxd
+  - mm10
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Reprocess MultiQC (the run wrote a pre-parquet MultiQC, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/hic/2.0.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/hic/2.0.0 --data-root {dest}

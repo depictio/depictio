@@ -9,15 +9,13 @@
 # megatest.yaml next to this file.
 # ============================================================================
 #
-# THE FUSION IS THE UNIT OF ANALYSIS, NOT THE SAMPLE.
+# ONE ROW IS ONE FUSION IN ONE SAMPLE.
 # rnafusion writes one file per tool per sample and none of those files carries a
-# sample column; the recipe harness concatenates the globbed files without their
-# path, so a sample column cannot be recovered from them. Every fusion table is
-# therefore keyed on the fusion name, the links fan a fusion selection out across
-# the callers, and the samplesheet only drives the MultiQC panels. On the
-# validation run this costs nothing (the megatest is a single sample, so every
-# cross-sample panel would be degenerate anyway); on a cohort run the caller
-# tables pool the samples, which is called out in docs/dashboards.md.
+# sample column. Every catalog recipe the template binds declares `source_path`
+# on its source and reads the sample off the file name (`<tool>/<sample>.<suffix>`),
+# so every fusion and splicing table carries `sample`, and the samplesheet links
+# to all of them on it: the Sample scope narrows every tab on a cohort run. The
+# fusion name stays the key the links fan a fusion selection out on.
 #
 # rnafusion's route flags are NOT auto-detected from params.json (the CLI's
 # _introspect_pipeline_params only knows the ampliseq and viralrecon flags), so a
@@ -161,7 +159,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             # rnafusion runs FastQC twice, on the raw reads and on the trimmed
             # ones, so MultiQC anchors the second instance as 'fastqc-1'. Both
@@ -264,6 +262,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion name, 5' partner and 3' partner joined by two dashes (the key every other collection is filtered by)"
               "gene_5p": "5' partner gene"
               "gene_3p": "3' partner gene"
@@ -271,12 +270,12 @@ workflows:
               "n_databases": "How many of those knowledge bases"
               "fii": "Fusion Indication Index, the 0 to 1 score fusion-report ranks by"
               "explained_fii": "The arithmetic behind the index, as fusion-report writes it"
-              "arriba": "1 when Arriba reported the fusion"
+              "arriba": "1 when Arriba reported the fusion (one such 0/1 column per caller the run executed)"
               "fusioncatcher": "1 when FusionCatcher reported the fusion"
               "starfusion": "1 when STAR-Fusion reported the fusion"
               "n_tools": "How many callers agreed on the fusion"
               "tool_support": "Caller agreement as a label, for grouping and colouring"
-              "rank": "Position in fusion-report's own ranking, 1 being the top call"
+              "rank": "Position in fusion-report's own ranking within the sample, 1 being the top call"
 
       - data_collection_tag: "caller_evidence"
         description: "Per-caller evidence in long form: one row per fusion and caller, with the read support that caller reported"
@@ -288,6 +287,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion the evidence belongs to"
               "caller": "Caller that produced this row"
               "position_5p": "Breakpoint on the 5' partner, as that caller writes it"
@@ -299,7 +299,7 @@ workflows:
               "detail": "The caller's full evidence string, unparsed"
 
       - data_collection_tag: "arriba_fusions"
-        description: "Arriba fusion calls with split reads, discordant mates, local coverage, confidence and reading frame"
+        description: "Arriba fusion calls with split reads, discordant mates, local coverage, confidence, reading frame and the two partner contigs"
         config:
           type: "Table"
           source: "transformed"
@@ -308,9 +308,15 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion name, matching the consensus collection"
               "breakpoint_5p": "5' breakpoint coordinate"
               "breakpoint_3p": "3' breakpoint coordinate"
+              "chrom_5p": "Contig the 5' breakpoint sits on"
+              "chrom_3p": "Contig the 3' breakpoint sits on"
+              "chrom_pair": "The two contigs as one label, so an intra-chromosomal event and a translocation separate"
+              "site_5p": "Transcript feature the 5' breakpoint fell in"
+              "site_3p": "Transcript feature the 3' breakpoint fell in"
               "fusion_type": "Structural class Arriba assigned (deletion, translocation, inversion, duplication)"
               "confidence": "Arriba's own confidence class for the call"
               "reading_frame": "Whether the fusion transcript stays in frame"
@@ -320,6 +326,31 @@ workflows:
               "coverage": "Local coverage at both breakpoints"
               "support_fraction": "Share of the local reads that support the fusion"
               "retained_protein_domains": "Protein domains Arriba predicts the fusion keeps"
+
+      # The coordinate view of the same Arriba file: one link per call with both
+      # breakpoints split into chromosome and position, which is the row shape a
+      # chord diagram binds. Kept as its own collection rather than as more
+      # columns on `arriba_fusions` because the two answer different questions
+      # and the chord needs integer positions, not the "chr:pos" strings.
+      - data_collection_tag: "arriba_fusion_links"
+        description: "Arriba calls as breakpoint pairs: both loci split into contig and position, with the summed read evidence as the link weight"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "arriba/fusion_links.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the row was called in, read off the file name"
+              "label": "Fusion name, matching the consensus collection"
+              "chrom_a": "Contig of the 5' breakpoint"
+              "pos_a": "Position of the 5' breakpoint in base pairs"
+              "chrom_b": "Contig of the 3' breakpoint"
+              "pos_b": "Position of the 3' breakpoint in base pairs"
+              "weight": "Split reads on both sides plus discordant mates, the width of the chord"
+              "category": "Structural class Arriba assigned, which colours the chord"
+              "confidence": "Arriba's own confidence class for the call"
 
       - data_collection_tag: "starfusion_fusions"
         description: "STAR-Fusion calls with junction and spanning read counts, splice type and normalised abundance"
@@ -331,6 +362,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion name, matching the consensus collection"
               "breakpoint_5p": "5' breakpoint coordinate"
               "breakpoint_3p": "3' breakpoint coordinate"
@@ -352,6 +384,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion name, matching the consensus collection"
               "description": "FusionCatcher's annotation labels for the pair (known, oncogene, tcga, read-through)"
               "n_annotations": "How many of those labels apply"
@@ -373,6 +406,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion name, matching the consensus collection"
               "splice_type": "Whether the validated junction sits on reference splice sites"
               "junction_reads": "Reads crossing the junction after re-alignment"
@@ -396,6 +430,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "fusion": "Fusion the domain belongs to"
               "partner": "Which side of the fusion the domain sits on, 5p or 3p"
               "domain": "Pfam domain name; a PARTIAL suffix means the breakpoint cuts through it"
@@ -416,6 +451,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "intron": "Junction coordinate as CTAT-splicing writes it"
               "chrom": "Chromosome the junction sits on"
               "start": "Junction start"
@@ -443,6 +479,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the row was called in, read off the file name"
               "intron": "Junction coordinate"
               "chrom": "Chromosome the junction sits on"
               "gene": "Gene symbol the junction was assigned to"
@@ -489,6 +526,19 @@ links:
       resolver: "direct"
       target_field: "fusion"
     description: "Filter the Arriba calls by the selected fusions"
+    enabled: true
+
+  # The chord view is keyed on `label`, not `fusion`, so the persistent fusion
+  # filter needs its own link to reach it. Without this the ring would keep
+  # every call while the rest of the tab narrowed.
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "arriba_fusion_links"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "label"
+    description: "Filter the Arriba breakpoint links by the selected fusions"
     enabled: true
 
   - source_dc_tag: "fusion_consensus"
@@ -557,3 +607,105 @@ links:
   # splice_junctions and cancer_introns are keyed on the junction, not on the
   # fusion: CTAT-splicing scores introns of a single gene, so a fusion name has
   # nothing to match there. Left unlinked on purpose.
+
+  # Every fusion and splicing table carries the sample its file was written for
+  # (recipes read it off the file name), so the Sample scope reaches them all.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "fusion_consensus"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow fusion consensus to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "caller_evidence"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow caller evidence to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "arriba_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow arriba fusions to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "arriba_fusion_links"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow arriba fusion links to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "starfusion_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow starfusion fusions to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "fusioncatcher_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow fusioncatcher fusions to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "fusioninspector_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow fusioninspector fusions to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "fusion_protein_domains"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow fusion protein domains to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "splice_junctions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow splice junctions to the selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "cancer_introns"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow cancer introns to the selected samples"
+    enabled: true

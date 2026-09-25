@@ -26,8 +26,11 @@ run_root: ""
 multiqc:
   # The run wrote a MultiQC 1.34 report, but funcscan feeds MultiQC nothing but
   # software versions: the parquet holds a single run_metadata row, with no
-  # general-stats table and no module sections. The template keeps the
-  # multiqc_data DC optional and ships no QC tab.
+  # general-stats table and no module sections (multiqc.list_plots() returns
+  # two modules with zero plots, list_samples() is empty). The template keeps
+  # the multiqc_data DC optional and ships no MultiQC tab; the versions payload
+  # is read back out of this same parquet by funcscan/software_versions.py and
+  # shown as a table on the Run report tab.
   version: "1.34"
   parquet: multiqc/multiqc_data/multiqc.parquet
   reprocess: false
@@ -82,3 +85,38 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/funcscan/4.0.0 --data-root {dest}
+
+# Megatest facts that must never reach a dashboard text (lint rule e in
+# depictio/tests/models/test_template_conventions.py): sample ids, biome,
+# run-specific counts.
+forbidden_terms:
+  - ERZ1664520
+  - ERZ1664518
+  - ERZ1664517
+  - ERZ1664528
+  - ERZ1664524
+  - ERZ1664523
+  - ERZ1664521
+  - ERZ1664516
+  - ERZ1664515
+  - ERZ1664511
+  - ERZ1664510
+  - ERZ1664509
+  - ERZ1664508
+  - ERZ1664507
+  - ERZ1664506
+  - ERZ1664505
+  - ERZ1664504
+  - ERZ1664503
+  - ERZ1664501
+  - "MGnify"
+  - "megatest"
+  - "gut"
+  - "gut metagenome"
+  - "human gut"
+  - "155 regions"
+  - "119 gene rows"
+  - "nineteen"
+  - "19 samples"
+  - "19 assemblies"
+  - "in this run"

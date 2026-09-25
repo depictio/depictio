@@ -52,9 +52,10 @@
  * `box-sizing` is spelled out because the border must sit inside the
  * `inset: 0` box, or the backdrop grows 2px past the row it is backing.
  *
- * Visible on hover/focus, and pinned on for a row that keeps an icon on screen
- * without hover (`has-persistent-action` — the active-reset icon, the analysis
- * marker), which would otherwise float with nothing behind it. */
+ * Visible on hover/focus only. The actions that stay on screen without hover
+ * (the analysis marker, the clear-selection action) are `light` ActionIcons
+ * with their own tint, so pinning the backdrop on for them only drew an empty
+ * chip around the invisible rest of the row. */
 .depictio-component-actions::before {
   content: '';
   position: absolute;
@@ -68,32 +69,46 @@
   z-index: -1;
 }
 .depictio-component-chrome:hover .depictio-component-actions::before,
-.depictio-component-chrome:focus-within .depictio-component-actions::before,
-.depictio-component-actions.has-persistent-action::before {
+.depictio-component-actions:has(:focus-visible)::before {
   opacity: 1;
 }
-/* Per-child opacity so the active-reset icon can stay visible while the
- * rest of the row remains hover-only. (Opacity on the row container would
- * collapse the whole subtree together.) */
+/* Per-child opacity so a single action (the analysis marker) can stay
+ * visible while the rest of the row remains hover-only. (Opacity on the row
+ * container would collapse the whole subtree together.)
+ *
+ * Keyboard focus reveals the row too, but only keyboard focus (`:focus-visible`)
+ * on one of its own actions: the row precedes the component in the DOM, so
+ * tabbing into a tile lands on its actions first and they appear. Focus
+ * elsewhere in the tile is not enough. Ticking a table row leaves AG Grid's
+ * checkbox focused, and that focus (and, once the page has seen a keystroke,
+ * its `:focus-visible` state) kept the whole row and its frame on screen next
+ * to the clear-selection action after the pointer had left the tile. A mouse
+ * click on an action does not match `:focus-visible` either, so the row does
+ * not stick after its popover closes. */
 .depictio-component-actions > * {
   opacity: 0;
   transition: opacity 0.15s ease;
   pointer-events: none;
 }
 .depictio-component-chrome:hover .depictio-component-actions > *,
-.depictio-component-chrome:focus-within .depictio-component-actions > * {
+.depictio-component-actions:has(:focus-visible) > * {
   opacity: 1;
   pointer-events: auto;
 }
-/* The reset icon stays visible without hover when its component is the
- * source of the dashboard's active filter — gives users a persistent
- * affordance to clear the filter from where it originated. Which components
- * get it is decided in ComponentChrome (`persistentReset`); interactive
- * controls are excluded, because this row floats and their frame has nothing
- * under the top-right corner to spare. */
-.depictio-component-actions > .depictio-active-reset {
+/* The clear-selection slot of a tile that is the source of an active
+ * selection (see `showClear` in ComponentChrome). Like the analysis marker it
+ * escapes the hover-only default, so at rest it is the one visible icon of the
+ * row, with no frame and the other slots hidden; on hover the row and its
+ * frame appear around it.
+ *
+ * The body-coloured underlay is only as large as the icon. The `light` tint on
+ * top is translucent, and over a dense plot or table it would otherwise read
+ * as a smudge. On hover it disappears into the row's own body-coloured frame. */
+.depictio-component-actions > .depictio-clear-selection {
   opacity: 1;
   pointer-events: auto;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
 }
 /* Filter-panel density — see `compact` in ComponentChrome.
  *
@@ -212,10 +227,10 @@
  * selectable, so fading it would defeat the point. Fully opaque — it is already
  * rare (only while analysis is engaged, only on the four selectable component
  * types), so it costs no clutter in ordinary viewing. Same escape from the
- * hover-only default as `.depictio-active-reset` above.
+ * hover-only default the other actions follow.
  *
- * Deliberately WITHOUT the row's backdrop pill: unlike the reset icon (a bare
- * subtle ActionIcon that needs something behind it), this one is a Mantine
+ * Deliberately WITHOUT the row's backdrop pill: unlike the bare subtle
+ * ActionIcons of the rest of the row, this one is a Mantine
  * `light` variant and carries its own tint, so the pill only showed up as a
  * white box around it. The background stays transparent until hover. */
 .depictio-component-actions > .depictio-selection-hint {

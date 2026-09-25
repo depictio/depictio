@@ -1,0 +1,10 @@
+# miRDeep2: discovers miRNA precursors from reads mapped to the genome, scoring
+# each candidate hairpin on read stacking (mature, loop and star reads), fold
+# energy and randfold significance. One result table per sample, holding a
+# score-cutoff summary, the novel candidates, the known miRBase miRNAs it
+# re-detected, and the miRBase miRNAs it did not. The outputs here parse that
+# table; the per-sample HTML report stays a download.
+id: mirdeep2
+name: miRDeep2
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mirdeep2/mirdeep2
+homepage: https://github.com/rajewsky-lab/mirdeep2

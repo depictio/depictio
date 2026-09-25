@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../output.schema.json
+id: cnvkit_cnv_profile
+name: Copy-number profile
+mode: batch
+description: >-
+  CNVkit's bin-level copy ratios and its called segments in one long table.
+  Per CNVkit's file-format documentation the .cnr file carries chromosome,
+  start, end, gene, depth, log2 and weight, one row per bin, and the .cns file
+  carries chromosome, start, end, gene, log2, depth, probes and weight, one row
+  per segment, with cn and baf added when cnvkit call has run. The two are
+  folded together and told apart by the segment column, so one component draws
+  the evidence and the call on the same axis.
+find:
+  path_glob: "**/variant_calling/cnvkit/*/*.cnr"
+recipe: cnvkit/cnv_profile.py
+fixture: cnv_profile.tsv
+renders_as:
+  - { id: cnvkit_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
+  - { id: cnvkit_log2_spread, component: card, column: log2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: cnvkit_bin_depth, component: card, column: depth, aggregation: median, secondary_layout: histogram }
+  - { component: table, columns: [sample, chrom, start, end, log2, copy_number, segment, label] }

@@ -1,0 +1,856 @@
+# nf-core/nanoseq Template v3.0.0 - Nanopore DNA/RNA sequencing QC, alignment
+# and long-read RNA quantification / differential expression
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/nanoseq/3.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/nanoseq AWS megatest results:
+#   s3://nf-core-awsmegatests/nanoseq/results-1e60482a2c4621234393a6eef8e9a104309c20ae
+#   (SG-NEx A549 and K562 cell lines, direct cDNA / cDNA nanopore RNA-seq,
+#    3 replicates each. See megatest.yaml.)
+# ============================================================================
+#
+# SCOPE
+# The megatest run is a directRNA/cDNA transcript-quantification run: minimap2
+# alignment (no genome variant calling), Bambu gene/transcript counting and a
+# Bambu-count-based DESeq2 / DEXSeq differential step. It carries NEITHER
+# pycoQC NOR JAFFAL fusion calls NOR a variant_calling/ directory, the
+# manifest (megatest.yaml, before this session) assumed all three; none exist
+# on disk. See VALIDATION_REPORT.md §Discrepancies (NS-D1..NS-D4) for the full
+# list of manifest keys fixed against the real layout.
+#
+# MULTIQC WAS ALREADY REPROCESSED.
+# The run shipped MultiQC 1.11 (multiqc/minimap2/multiqc_data/, JSON only, no
+# parquet); depictio/multiqc/multiqc_data/multiqc.parquet next to it was
+# already produced by
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+# before this session started (REPROCESSED.json: reprocessed_with 1.35,
+# modules fastqc, multiqc_software_versions, nanostat, samtools). `modules` /
+# `plots` below are the 1.35 names.
+#
+# NO params.json. As with cutandrun, this run predates the nf-core params
+# dump; provenance collects only pipeline_info/software_versions.yml.
+#
+# DESIGN IS A VARIABLE.
+# The validated samplesheet keeps only the sample name the pipeline builds as
+# `<group>_R<replicate>`, so the group and replicate are recovered from that
+# construction and nothing else is read out of a sample or file name. The
+# condition (GROUP_COL) and the confounders the dashboard offers beside it
+# (library preparation, source replicate, flow-cell run: design-table columns
+# `protocol`, `source_replicate`, `run_id`) come from an optional design table
+# declared through METADATA_FILE, the ampliseq convention. Without it the
+# condition is the samplesheet group and the three confounders read "unknown".
+#
+# LAYOUT NOTE. bambu/, dexseq/ and deseq2/ sit under a single BAMBU/ output
+# stage rather than per-sample directories: bambu/counts_gene.txt and
+# counts_transcript.txt are single files covering every sample as columns;
+# bambu/deseq2/deseq2.results.txt and bambu/dexseq/dexseq.results.txt are each
+# a single file for the run's one A549-vs-K562 comparison.
+#
+# WIDE MATRICES, AND WHY EVERY ONE OF THEM NOW HAS A LONG TWIN.
+# Bambu publishes counts as feature x sample matrices, so nothing downstream
+# of quantification carried a `sample` column and the hub's sample filter
+# reached the MultiQC panels and stopped there. `bambu/counts_*_long.py` melt
+# those matrices; the `links:` block below fans the hub out to them and to
+# every other per-sample collection, so one pick in the left panel narrows
+# read QC, alignment distributions, sample structure and counts together.
+#
+# CATALOG NOTE. `deseq2_results` no longer uses the pipeline-agnostic
+# `deseq2/results_long.py`: nanoseq runs DESeq2 straight on Bambu's matrix, so
+# every feature id is a GTF attribute string and the volcano / MA labels were
+# unreadable. `recipes/deseq2_results.py` emits the same schema those catalog
+# renders bind, with `gene_id` replaced by the Ensembl id extracted from the
+# string (NS-D5). `bambu`, `dexseq` and `nanoplot` are catalog tools this
+# template owns, as is the `samtools/stats_sections` output;
+# `multiqc/nanostat.yaml` is a MultiQC panel it owns. `multiqc/fastqc.yaml`,
+# `multiqc/samtools.yaml` and the `deseq2` renders already existed and are
+# only referenced.
+template:
+  template_id: "nf-core/nanoseq/3.0.0"
+  description: "nf-core/nanoseq template: Nanopore long-read QC (NanoStat, FastQC, samtools stats), minimap2 alignment distributions, Bambu gene/transcript quantification with sample structure, and the DESeq2 / DEXSeq differential expression and usage results computed on top of it."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing nanoseq output (bambu/, fastqc/, minimap2/, nanoplot/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample name (or samplesheet group) in METADATA_ID_COL, one column per factor. GROUP_COL becomes the condition; columns named protocol, source_replicate and run_id feed the library preparation, source replicate and flow-cell run filters; other factors are carried as extra columns."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table id column. Auto-detected as the first column."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design table factor the run compares, carried as the condition column. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+  # The bundled reference dataset: the megatest's design table is vendored in
+  # input/ (built once from the source dataset's library annotations; see
+  # VALIDATION_REPORT.md).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # No design table: the hub falls back to the samplesheet group, so only
+    # the table's own collection goes.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Nanopore RNA-Seq"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "nanoseq"
+    version: "3.0.0"
+    engine:
+      name: "nextflow"
+      version: "22.04.3"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/nanoseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the sample name
+      # or the samplesheet group. Pruned when METADATA_FILE is absent. The
+      # hub below joins it, so every design filter reads the hub.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample or group, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample name (or samplesheet group) as the pipeline names it. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # Hub: one row per sample. nanoseq's samplesheet `sample` column
+      # already is the name every output file uses. The recipe recovers the
+      # group and replicate from the pipeline-built `<group>_R<replicate>`
+      # and takes the condition (GROUP_COL) and the confounders (protocol,
+      # source replicate, run; NS-D6) from the optional design table.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: condition, replicate, and the library preparation, source replicate and flow-cell run of the design table"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/samples.py"
+            params:
+              group_col: "{GROUP_COL}"
+              id_col: "{METADATA_ID_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "The samplesheet sample name, used by every output file"
+              "condition": "GROUP_COL of the design table (METADATA_FILE), else the samplesheet group"
+              "replicate": "Samplesheet replicate number inside the group"
+              "protocol": "Library preparation (cdna, directcdna, ...), the design table's protocol column; unknown without it"
+              "source_replicate": "The replicate number the source dataset gave this library, the design table's source_replicate column; unknown without it"
+              "run_id": "The flow-cell run the library came off, the design table's run_id column; unknown without it"
+              "reference": "Genome/transcriptome build used for alignment (the samplesheet `fasta` column)"
+              "is_transcripts": "True when the input FASTQ is already a transcriptome, not reads to align"
+              "has_fast5": "True when a nanopolish fast5 directory was supplied for this sample"
+
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet the pipeline validated, one row per sample with its input FASTQ, reference and nanopolish inputs"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "samplesheet\\.valid\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier, used by every output file"
+              "barcode": "Nanopore barcode number, empty when the run was not multiplexed"
+              "input_file": "Input FASTQ (or transcriptome FASTA) location the pipeline read"
+              "fasta": "Reference genome/transcriptome build"
+              "gtf": "Reference annotation, empty when the run supplied none"
+              "is_transcripts": "1 when input_file is already a transcriptome"
+              "nanopolish_fast5": "Nanopolish fast5 directory, empty when methylation calling was not requested"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Already reprocessed with MultiQC 1.35 before this session
+      # (the run itself wrote MultiQC 1.11, JSON only): see the module-level
+      # comment above and REPROCESSED.json next to the parquet. The regex is
+      # the shared one: a real run writes multiqc/<aligner>/multiqc_data/,
+      # the reprocessed artefact sits at the root, and both must match.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.11, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "nanostat"
+              - "samtools"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              nanostat:
+                - "Summary Statistics (FASTQ)"
+                - "Reads by quality"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+                - "Flagstat"
+                - "Flagstat: Percentage of total"
+                - "XY counts"
+                - "Mapped reads per contig":
+                    - "Normalised Counts"
+                    - "Observed over Expected Counts"
+                    - "Raw Counts"
+
+      # ----------------------------------------------------------------
+      # NanoPlot. NanoStats.txt is free-form text, not a table: a block of
+      # `Key: value` lines, a `>Q<n>:` yield ladder and two "top 5" blocks.
+      # The raw DC scans it with a separator that never occurs in the file
+      # so each line lands whole in `raw_line`, and the two `nanoplot`
+      # recipes parse it from there (the two-step the bcftools outputs use).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "nanoplot_nanostats_raw"
+        description: "Raw NanoStat summary reports, one line per row (input of nanostats and nanostats_quality)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*_)?NanoStats\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1e"
+              has_header: false
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full line of the NanoStat report, padding as written"
+              "source_path": "File the row came from; the sample is derived from it"
+
+      - data_collection_tag: "nanostats"
+        description: "NanoStat per-sample long-read summary: reads, yield, read length and quality, N50, and the run's longest and best read"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nanoplot/nanostats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the report belongs to, from the directory NanoPlot wrote into"
+              "n_reads": "Reads in the input FASTQ"
+              "total_bases": "Bases in the input FASTQ"
+              "total_gigabases": "Bases in gigabases, the unit a yield card reads in"
+              "mean_read_length": "Mean read length in bases"
+              "median_read_length": "Median read length in bases"
+              "read_length_n50": "Read length N50: half the yield sits in reads at least this long"
+              "stdev_read_length": "Standard deviation of read length"
+              "mean_read_quality": "Mean per-read basecall quality (Phred)"
+              "median_read_quality": "Median per-read basecall quality (Phred)"
+              "longest_read_length": "Longest read the run produced"
+              "top_read_quality": "Highest mean basecall quality of any read"
+
+      - data_collection_tag: "nanostats_quality"
+        description: "Reads, percentage and megabases above each NanoStat quality cutoff, one row per sample and cutoff"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nanoplot/nanostats_quality.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the report belongs to"
+              "q_cutoff": "Phred quality floor (5, 7, 10, 12, 15)"
+              "n_reads": "Reads at or above the cutoff"
+              "pct_reads": "Percentage of the library at or above the cutoff"
+              "megabases": "Yield in megabases at or above the cutoff"
+
+      # ----------------------------------------------------------------
+      # samtools stats. Same raw-line two-step, for the same reason plus
+      # one more: the row width varies by section (SN is 4 fields, ID is 4,
+      # IS is 6) and a normal read infers the width from the first data row
+      # and truncates everything wider.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_stats_raw"
+        description: "Raw samtools stats reports, one line per row (input of samtools_stats_sections)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.bam\\.stats$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated samtools stats data line (record type first: SN, RL, COV, ID, GCC, ...), comments already stripped"
+              "source_path": "File the row came from; the sample is derived from its name"
+
+      - data_collection_tag: "samtools_stats_sections"
+        description: "Read-length, coverage-depth and indel-length distributions from samtools stats, with the SN summary block on one row per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/stats_sections.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the alignment belongs to"
+              "section": "samtools stats record type: SN (summary), RL (read lengths), COV (coverage depth), ID (indel lengths), IS (insert sizes)"
+              "series": "Curve label: the sample, or the sample and the indel direction for ID rows"
+              "metric": "What the row measures inside its section"
+              "bin": "The section's x axis: read length, coverage depth, indel length or insert size"
+              "n_reads": "RL rows: reads at that read length"
+              "n_bases": "COV rows: bases covered at that depth"
+              "n_indels": "ID rows: insertions or deletions of that length, per the series"
+              "n_pairs": "IS rows: read pairs at that insert size (empty for single-end nanopore data)"
+              "reads_total": "SN row: reads in the BAM, supplementary and secondary excluded"
+              "reads_mapped": "SN row: reads placed on the reference"
+              "reads_mapped_pct": "SN row: percentage of reads placed"
+              "bases_mapped": "SN row: bases placed, counted from the CIGAR"
+              "error_rate": "SN row: mismatches per mapped base"
+              "identity_pct": "SN row: 100 x (1 - error rate), the per-base agreement with the reference"
+              "average_length": "SN row: mean aligned read length"
+              "maximum_length": "SN row: longest aligned read"
+              "average_quality": "SN row: mean base quality of mapped bases"
+              "supplementary_alignments": "SN row: supplementary alignments, the split-read signal of a long-read run"
+
+      # Nx ladder. NanoStat reports N50 alone and nanoseq publishes no
+      # per-read table, but the RL block of samtools stats is an exact
+      # read-length histogram, so every rung N1..N99 is recomputed from it
+      # (the N50 rung equals NanoStat's N50 on the megatest, NS-D15).
+      - data_collection_tag: "samtools_read_length_nx"
+        description: "Nx ladder per library (N1 to N99), recomputed from the samtools stats read-length histogram"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/read_length_nx.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the ladder belongs to"
+              "nx": "Rung of the ladder, in percent of the library's bases (50 is N50)"
+              "read_length": "Nx: the shortest read length inside that share of the bases"
+              "bases_share": "Share of the bases held by reads at least that long"
+
+      # ----------------------------------------------------------------
+      # Bambu gene / transcript quantification. The long (melted) matrices
+      # carry `sample` so the hub filter reaches them, and the three derived
+      # collections (PCA, correlation, top-variable) answer "do the samples sit
+      # where the design says". The wide top-50 matrices (bambu/counts_gene,
+      # bambu/counts_transcript) are not bound: their count-ranked heatmaps
+      # were dropped in wave 3 for the variance-ranked one and DEXSeq usage.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bambu_counts_gene_long"
+        description: "Bambu gene counts melted to one row per sample and gene, with CPM and log2(CPM + 1)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/counts_gene_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the count belongs to (the matrix column, stage suffix stripped)"
+              "condition": "Condition the sample belongs to, derived from its replicate name"
+              "gene_id": "Ensembl gene id; Bambu's annotation entries sharing an id are summed"
+              "gene_biotype": "Ensembl biotype (protein_coding, lincRNA, Mt_rRNA, ...)"
+              "count": "Reads Bambu assigned to the gene in this sample"
+              "cpm": "Counts per million of that sample's library"
+              "log_cpm": "log2(cpm + 1), the scale the heatmaps and the PCA are built on"
+
+      - data_collection_tag: "bambu_counts_transcript_long"
+        description: "Bambu transcript counts melted to one row per sample and transcript, with CPM and log2(CPM + 1)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/counts_transcript_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the count belongs to"
+              "condition": "Condition the sample belongs to"
+              "transcript_id": "Ensembl transcript id (Bambu TXNAME)"
+              "gene_id": "Ensembl gene id the isoform belongs to"
+              "gene_biotype": "Ensembl biotype of that gene"
+              "count": "Reads Bambu assigned to the isoform in this sample"
+              "cpm": "Counts per million of that sample's library"
+              "log_cpm": "log2(cpm + 1)"
+
+      - data_collection_tag: "bambu_sample_pca"
+        description: "One row per sample: principal components of the log-CPM gene matrix next to library size, genes detected and library complexity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/sample_pca.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample the row describes"
+              "condition": "Condition the sample belongs to"
+              "dim_1": "First principal component of log CPM over the 500 most variable genes"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "pc1_var_pct": "Percentage of variance the first component explains"
+              "pc2_var_pct": "Percentage of variance the second component explains"
+              "total_counts": "Reads Bambu assigned to any gene in this sample"
+              "n_genes_detected": "Genes with at least one read in this sample"
+              "pct_protein_coding": "Share of the library sitting in protein-coding genes"
+              "top50_share_pct": "Share of the library sitting in its 50 highest genes, a library-complexity reading"
+
+      - data_collection_tag: "bambu_sample_correlation"
+        description: "Square sample-by-sample Spearman correlation of log-CPM gene expression"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/sample_correlation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample the row describes"
+              "condition": "Condition the sample belongs to"
+              "mean_correlation": "Mean Spearman correlation with the other samples, diagonal excluded"
+
+      - data_collection_tag: "bambu_top_variable_genes"
+        description: "The 100 genes with the highest variance of log2(CPM + 1) across the run, wide (genes x samples)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/top_variable_genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene id"
+              "gene_biotype": "Ensembl biotype"
+              "log_cpm_variance": "Variance of log2(CPM + 1) across the samples, the ranking key"
+
+      # ----------------------------------------------------------------
+      # DESeq2 differential expression, on Bambu's gene counts. The scan is
+      # not anchored on `bambu/`: the stringtie2 route publishes the same
+      # file under `stringtie2/deseq2/`, and a pinned prefix would miss it.
+      # `format: CSV`: nanoseq's DESeq2 output is R `write.csv` (comma,
+      # quoted), unlike the TSV other pipelines write.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_results_raw"
+        description: "Raw DESeq2 results table on Bambu gene counts (input of deseq2_results and deseq2_top_expressed)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?deseq2/deseq2\\.results\\.txt$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              null_values: ["NA", "NaN", ""]
+              infer_schema_length: 0
+            columns_description:
+              "baseMean": "Mean of normalised counts across samples"
+              "log2FoldChange": "Effect size of the run's contrast"
+              "lfcSE": "Standard error of log2FoldChange"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+
+      - data_collection_tag: "deseq2_results"
+        description: "DESeq2 statistics per tested feature, with a readable Ensembl gene id, the biotype, the significance call and the MA abscissa precomputed"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/deseq2_results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "The two conditions compared, read off the samplesheet"
+              "gene_id": "Ensembl gene id extracted from Bambu's row label (NS-D5)"
+              "gene_biotype": "Ensembl biotype of that gene"
+              "feature_label": "Bambu's full GTF-attribute row label, kept so nothing is lost"
+              "exon_id": "Ensembl exon id of the annotation entry DESeq2 tested, where the label carries one"
+              "base_mean": "Mean of normalised counts across samples"
+              "log2fc": "log2 fold change (volcano / MA effect size)"
+              "lfc_se": "Standard error of log2fc"
+              "pvalue": "Raw Wald p-value (QQ plot)"
+              "padj": "Adjusted p-value; null where DESeq2 filtered the feature out"
+              "log2_base_mean": "log2(baseMean + 1), the MA abscissa"
+              "neg_log10_padj": "-log10(padj), capped at 300 where padj underflowed to 0"
+              "significant": "padj below 0.05 and |log2fc| at least 1"
+              "direction": "up / down / not significant"
+
+      - data_collection_tag: "deseq2_top_expressed"
+        description: "The 200 best-measured DESeq2 rows by mean normalised count, the pinned reference table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/deseq2_top_expressed.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "The two conditions compared"
+              "gene_id": "Ensembl gene id"
+              "gene_biotype": "Ensembl biotype"
+              "feature_label": "Bambu's full GTF-attribute row label"
+              "exon_id": "Ensembl exon id of the annotation entry tested"
+              "base_mean": "Mean of normalised counts across samples, the ranking key"
+              "log2fc": "log2 fold change"
+              "lfc_se": "Standard error of log2fc"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Adjusted p-value"
+              "log2_base_mean": "log2(baseMean + 1)"
+              "neg_log10_padj": "-log10(padj), capped at 300"
+              "significant": "padj below 0.05 and |log2fc| at least 1"
+              "direction": "up / down / not significant"
+
+      # ----------------------------------------------------------------
+      # DEXSeq differential exon/transcript usage, on Bambu's transcript
+      # counts. Catalog tool `dexseq`: direct glob_pattern read, no raw DC.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "dexseq_results"
+        description: "DEXSeq per-transcript usage statistics, with the significance call precomputed on the gene-level adjusted q-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "dexseq/results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "DEXSeq featureID (a Bambu transcript id)"
+              "gene_id": "Ensembl gene id, extracted from DEXSeq's groupID"
+              "log2fc": "log2 fold change of the feature's relative usage in the run's contrast"
+              "pvalue": "Raw DEXSeq p-value"
+              "padj": "Gene-level Benjamini-Hochberg adjusted q-value (dex.padj$gene)"
+              "significant": "padj below 0.05"
+              "direction": "up / down / not significant"
+
+      # DEXSeq usage proportions. The results table carries the verdict,
+      # not the per-library shares it was computed from; those are
+      # recomputed from the Bambu transcript counts DEXSeq ran on, for the
+      # genes the table ranks first.
+      - data_collection_tag: "dexseq_usage"
+        description: "Per-library transcript usage (share of the gene's reads) for the genes with the smallest DEXSeq gene-level q-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/dexseq_usage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the share is measured in"
+              "condition": "Condition the library belongs to"
+              "gene_id": "Ensembl gene id DEXSeq tested"
+              "gene_label": "The gene id with its DEXSeq gene-level q-value, the facet title"
+              "transcript_id": "Bambu transcript DEXSeq tested inside that gene"
+              "count": "Reads Bambu assigned to the transcript in this library"
+              "usage_pct": "100 x the transcript's reads over the gene's reads in this library"
+              "gene_padj": "DEXSeq gene-level adjusted q-value (dex.padj$gene)"
+              "usage_log2fc": "DEXSeq log2 fold change of the transcript's usage"
+              "significant": "gene_padj below 0.05"
+
+      # ----------------------------------------------------------------
+      # Isoform structures. GATED: no annotation is on disk in the megatest
+      # this template is pinned to, which was quantification-only. A run that
+      # lets Bambu extend the annotation publishes
+      # bambu/extended_annotations.gtf, and these two collections read it
+      # through the shared gtf/transcripts catalog recipe. Both are optional,
+      # so a run without the file ingests cleanly and the tile bound to them
+      # stays empty rather than failing.
+      #
+      # The regex is deliberately narrower than the catalog's own
+      # `**/*.gtf` glob: a nanoseq work directory also holds the reference
+      # annotation the run was quantified against, and scanning that would
+      # draw every Ensembl isoform beside the discovered ones.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gtf_transcripts_raw"
+        description: "Raw GTF lines of the annotation Bambu extended, one line per row"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?bambu/extended_annotations\\.gtf(?:\\.gz)?$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              comment_prefix: "#"
+              quote_char: null
+              new_columns: ["seqname", "source", "feature", "start", "end",
+                            "score", "strand", "frame", "attributes"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              truncate_ragged_lines: true
+            columns_description:
+              "seqname": "Contig the feature sits on"
+              "source": "Program that produced the line"
+              "feature": "Feature type (exon, CDS, transcript, gene)"
+              "start": "Feature start, 1-based inclusive"
+              "end": "Feature end, inclusive"
+              "score": "Score column, unused by nanoseq"
+              "strand": "Feature strand"
+              "frame": "Codon phase for CDS lines"
+              "attributes": "Key/value attribute column carrying the transcript and gene ids"
+              "source_path": "Annotation file the row came from"
+
+      - data_collection_tag: "gtf_transcripts"
+        description: "Exon and CDS blocks of the isoforms the run carries, one row per block, for the isoform lane view"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "gtf/transcripts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "transcript_id": "Isoform the block belongs to"
+              "gene_id": "Gene the isoform belongs to"
+              "gene_name": "Readable gene symbol, falling back to the gene id"
+              "chrom": "Contig the isoform sits on"
+              "start": "Block start, 1-based inclusive"
+              "end": "Block end, inclusive"
+              "feature": "Block type (exon, CDS)"
+              "strand": "Transcript strand"
+              "transcript_class": "Novelty label from Bambu's `novel` flag, else `known`"
+              "sample": "Annotation the block was read from; `all_samples` for the run-level extended annotation"
+              "expression": "TPM, else FPKM, else coverage, when the writer recorded one"
+
+links:
+  # Hub -> MultiQC, keyed on the sample name.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  # Hub -> every per-sample collection. These are what turn the hub's sample,
+  # condition and protocol filters into a scope that reaches read QC,
+  # alignment, quantification and sample structure rather than MultiQC alone.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "nanostats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the NanoStat summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "nanostats_quality"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the quality-cutoff ladder by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "samtools_stats_sections"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the alignment distributions by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bambu_counts_gene_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the gene counts by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bambu_counts_transcript_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the transcript counts by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bambu_sample_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the sample structure readings by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bambu_sample_correlation"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the correlation matrix rows by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "samtools_read_length_nx"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Nx ladder by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "dexseq_usage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the DEXSeq usage shares by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "gtf_transcripts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the isoform structures by the samples picked in the left panel"
+    enabled: true
+
+  # Reverse: picking a library on the read-QC table scopes the hub and, through
+  # it, the rest of the dashboard.
+  - source_dc_tag: "nanostats"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Scope the sample hub to a library picked on the NanoStat table"
+    enabled: true
+
+  - source_dc_tag: "bambu_sample_pca"
+    source_column: "sample_id"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Scope the sample hub to a sample picked on the PCA"
+    enabled: true

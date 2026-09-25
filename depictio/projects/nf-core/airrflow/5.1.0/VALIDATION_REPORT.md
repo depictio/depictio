@@ -191,3 +191,184 @@ workstream's tool folder is incomplete
 tests plus the airrflow `advanced_viz` assertion failed on it. The folder was completed by its
 own workstream during this run and the tests now pass; recorded here because the failure mode is
 not obvious from the error, which names only the offending folder.
+
+---
+
+## 2026-09-22: lot 1 remediation pass
+
+Filter semantics, the unbound rank-abundance file, the overlap ordination, table sizing and the
+text-tile height convention, against the same megatest run.
+
+### What changed
+
+* **Dead filter removed.** `tissue` holds one value for every sample of this cohort, so the
+  filter on it could never narrow anything. It is replaced by `treatment`, which is where the
+  megatest submitters put the sampling site (lymph node against brain lesion): the only
+  biological contrast that varies here. The filter is titled `Sampling site`, and
+  `columns_description` now documents the values rather than trusting the column names. The
+  `Subjects` card's `breakdown_col` moved from `tissue` to `treatment` for the same reason.
+* **`clonal_abundance.tsv` is now ingested.** It was on disk and unbound: 238 651 rows,
+  17 MB, alakazam's `estimateAbundance` output. New catalog output `enchantr/clonal_abundance`
+  (`clonal_abundance.py` / `.yaml` / `.tsv`) casts it and decimates each sample onto a
+  log-spaced rank grid: every rank up to 20 kept exactly, the tail thinned, 200 points per
+  sample at most. 238 651 rows in, 1 296 out, 132 to 151 points per sample. It renders as a
+  `profile` with the bootstrap interval as a ribbon (`enchantr/abundance_ribbon`), two cards and
+  a table. The manifest key is added and the "deliberately NOT fetched" note removed.
+* **Overlap MDS.** `enchantr/clonal_overlap` gained an `embedding` render (`overlap_mds`) bound
+  to the existing wide matrix. The dashboard tile sets `compute_method: pcoa` with a
+  Bray-Curtis distance, so the ordination is computed per request and follows the sample filter
+  instead of freezing a layout at ingest.
+* **Orphan DCs linked.** `clone_sets` and `threshold_summary` reached no filter before.
+  `threshold_summary` is per subject, so it is now linked on `subject_id`. `clone_sets` has no
+  `sample_id` column at all (its sample columns are the membership flags), so the link exists to
+  carry the filter as far as `_narrow_wide_matrix_columns`, which mirrors it onto the column set
+  by value. `clonal_abundance` is linked from both the samplesheet and the repertoire summary.
+* **Half row filled.** `Clones and depth` had a lone `w: 4` figure. A new `scatter_xy` render
+  on `enchantr/repertoire_summary` (`richness_evenness`) fills the other half: rarefied richness
+  against evenness, sized by sequencing depth.
+* **Tables resized to their real row counts.** samplesheet h5 to h4 (10 rows), repertoire
+  summary h4 (10), sequence counts h4 (10), clonal overlap h4 (10), clonal threshold h4 to h3
+  (2 rows).
+* **Glance strip on every tab.** The four cohort cards moved out of the collapsed `Sample sheet`
+  section into a new persistent, pinned, uncollapsed `Cohort at a glance` section, so a reader
+  on any tab sees what the tiles are computed from. The samplesheet table stays collapsed below.
+* **Text tiles.** Eleven intros whose rendered body exceeds 120 characters moved from `h: 1` to
+  `h: 2`, and the `y` of every tile below them in the same section was recomputed so each grid
+  row still sums to 8.
+
+### Commands
+
+```bash
+# recipe on the real file
+uv run python -c "...transform(...)"        # 238651 -> 1296 rows, 8 columns, dtypes match
+uv run python <scratchpad>/audit.py .../airrflow/5.1.0/dashboards/base.yaml   # 0 problems
+uv run python <scratchpad>/catcheck.py .../airrflow/5.1.0/dashboards/base.yaml # 11 advanced_viz, 0 invalid
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k airrflow
+uv run python -m depictio.cli run --template nf-core/airrflow/5.1.0 \
+  --data-root ~/Data/depictio-nfcore/airrflow/5.1.0/megatest --dry-run   # 8/8 steps
+```
+
+### Discrepancies
+
+#### AF-D9: alakazam drops a sample from the abundance table
+
+`clonal_abundance.tsv` has nine of the ten samples. SRR1383456 contributed 27 sequences in 24
+clones, below what `estimateAbundance` will bootstrap, so it has no row. This is the same reason
+it has no diversity numbers (AF-D5). The DC is declared `optional: true` and the profile simply
+has one curve fewer; no tile fails.
+
+#### AF-D10: AF-D1 is reversed
+
+AF-D1 argued `clonal_abundance.tsv` was not worth 17 MB of a 20 MB download because
+`clone_sizes_table.tsv` already carries rank and frequency. That is true of the point estimates
+and false of the confidence band, which is the only thing on this template that says whether a
+difference in clonal expansion is supported by the sequences behind it. The decimation keeps the
+cost at ingest: the download grows, the delta table does not.
+
+#### AF-D11: the whole-catalog test is red for reasons outside this template
+
+`test_advanced_viz_components_validate` and `test_advanced_viz_survives_the_component_union`
+fail on every template while other agents of this wave are mid-write in `depictio/catalog/`
+(`ascat` without output files, `cooltools` still naming the pre-rename `genomespy_track` kind).
+Catalog loading is all-or-nothing, so the failure is unrelated to airrflow. Validated instead
+against a catalog copy restricted to the tool dirs this dashboard uses (`enchantr`, `multiqc`):
+11 advanced_viz components, 0 invalid. This is AF-X3 recurring, and it is the argument for that
+issue's proposed per-tool validation path.
+
+## 2026-09-22 review fixes
+
+MultiQC scan regex brought to the mandated form
+(`(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$`). Not done: a pinned
+`pcr_target_locus` factor. On the reference run (`pipeline_info/samplesheet.valid.tsv`,
+10 rows) the column is constant (`IG` throughout), so a control on it could never narrow
+anything and stays out per the dead-filter rule; `subject_id` (2), `treatment` (2) and
+`sex` (2) already carry the varying factors.
+
+## 2026-09-23: wave 2b (spectratype, V-J pairing, ribbon profile, header controls)
+
+What changed:
+
+- New optional collections `cdr3_spectratype` and `vj_usage_matrix`, built by two
+  version-local recipes (`recipes/cdr3_spectratype.py`, `recipes/vj_usage_matrix.py`) from
+  the AIRR rearrangement table `clonal_analysis/.../repertoires/All_samples__repertoire-pass.tsv`
+  (now a `megatest.yaml` key, 308 MB, 130,232 rows, IGH only). The recipes read six and
+  seven of its 74 columns through `read_kwargs.columns` (0.06 s), so the raw table never
+  reaches Delta. Links: `sample_id` to the spectratype, `subject_id` to the V-J grid.
+- Repertoire tab: sections `CDR3 spectratype` (text + faceted bar figure, one panel per
+  sample, coloured by donor) and `V-J pairing` (text + `complex_heatmap`, rows donor and V
+  gene, columns IGHJ1 to IGHJ6, subject row annotation); a `CDR3 length (aa)` slider with
+  histogram in `Repertoire scope`.
+- Clonal analysis: the hand-written Plotly ribbon figure (own palette, `code_content`) is
+  replaced by a `profile` tile with `lower_col: d_lower`, `upper_col: d_upper`.
+- `controls_placement: header` on the V gene composition, richness against evenness and
+  overlap MDS; `show_histogram: true` on four threshold sliders.
+
+Discrepancies:
+
+- AF-D12: the spectratype and V-J tiles bind no catalog render (`use:`): the collections are
+  version-local recipes, and `enchantr` is not in this pass's partition. Promoting them to
+  `depictio/catalog/enchantr/{cdr3_spectratype,vj_usage}.yaml` would restore the `use:` ratio.
+- AF-D13: the diversity ribbon tile is a direct `viz_kind: profile` for the same reason.
+- AF-D14: SRR1383456 has 27 sequences in the repertoire table, so its spectratype panel is a
+  handful of bars; it is kept (filtering is the reader's call through the sample filter).
+
+Commands and results:
+
+| command | result |
+| --- | --- |
+| recipes on the real table (`resolve_sources` + `transform` + `validate_schema`) | spectratype 259 x 6, V-J 103 x 10 |
+| `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k airrflow` | 10 passed |
+| `depictio.cli run --template nf-core/airrflow/5.1.0 ... --dry-run` | 8/8 steps |
+| delete + re-ingest | project `6ab3cc7c81d2d7032d3ff302`, dashboard `6ab3ccdce8b8ace33d32c9f6`; cdr3_spectratype 259 rows, vj_usage_matrix 103 rows |
+| Playwright, 1600x1000 | `/tmp/shots-airrflow/` (tabs + `verify-repertoire-*.png`, `verify-rep2-*`, `verify-clonal-*`) |
+
+## Wave 3 (sc-immune family rework)
+
+Applied from `review-sc-immune.md` and the consolidated review, in the order P0 genericity,
+blockers, redundancies, conventions.
+
+What changed:
+
+- Genericity: new `GROUP_COL` (default `treatment`) and `GROUP_COL_DISPLAY` (default
+  "Condition") template variables, ampliseq 2.18.0 convention, also set in `reference.vars`.
+  The "Sampling site" filter is now `airr-filter-group` on `{GROUP_COL}`; the subject card
+  breaks down by `{GROUP_COL}`. No IGHJ4, no CDR3 "12 to 16" range, no shazam threshold stated
+  as a fact; the UMI wording is gone from the MultiQC and funnel intros. `megatest.yaml` gets a
+  `forbidden_terms:` list (sample ids, subject ids, sampling sites, provider, IGHJ4, "12 to 16").
+- Blockers: `airr-clone-div-cibars` now reads a new `diversity_orders` collection (catalog
+  output `enchantr/diversity_orders`, q = 0, 1, 2 labelled) filtered by a Select
+  (`airr-clone-filter-order`, `default_value: q = 1, Shannon`); the q RangeSlider is gone, so the
+  profile ribbons keep every order. `airr-seq-card-retention`: median with `box_plot`, no gauge.
+  `airr-rep-filter-rank` and `airr-rep-fig-family` deleted. Clone size card: "Median clone
+  size", `box_plot`, no threshold. `airr-clone-card-threshold`: no verdict (P17), median with
+  per-subject `top_n`.
+- Redundancies removed: `airr-clone-div-profile`, `airr-clone-fig-rank`,
+  `airr-clone-overlap-mds`, `airr-rep-table-summary`, `airr-rep-card-samples`,
+  `airr-clone-card-sizeclass` (the sunburst carries size classes), `airr-tables-intro`.
+- Conventions: Repertoire = gene usage only, with 4 new cards (V families, V genes, largest V
+  family share, productive sequences). `Clones and depth` and the clones / clone size / evenness
+  cards moved to the top of Clonal analysis; `airr-rep-filter-clones` moved to `Clonal scope`.
+  Two pinned tables (samplesheet, repertoire summary); sequence counts, threshold and overlap
+  tables moved collapsed to the tab that reads them. All tab-local filter sections open. Intros
+  at most 2 sentences. Overlap heatmap colourscale `Blues`. Target loci card without the
+  subject composition strip. `SKIP_MULTIQC` description corrected.
+
+Verification (offline):
+
+| command | result |
+| --- | --- |
+| `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py depictio/tests/models/test_template_conventions.py -q -rxX -k airrflow` | 13 passed, 3 xpassed (all KNOWN_VIOLATIONS entries now pass) |
+| `execute_recipe("enchantr/diversity_orders.py", ...)` on megatest and test runs | 27 x 7 and 9 x 7, three orders each |
+| `depictio.cli run --template nf-core/airrflow/5.1.0 --dry-run` on megatest, test, test_tcr | configuration validation passed |
+
+Still open:
+
+- The CLI resolver sets `GROUP_COL=__no_group__` before declared variable defaults are applied,
+  so on the CLI path the `treatment` default is shadowed until the resolver is patched (reference
+  seeding is unaffected thanks to `reference.vars`).
+- A samplesheet without the `GROUP_COL` column (the nf-core `test` and `test_tcr` profiles have
+  no `treatment`) leaves the condition filter empty and the subject card without breakdown; pass
+  `--var GROUP_COL=<column>`.
+- Not re-ingested or checked live (no stack in this wave). Seeds, kinds and conformance for the
+  new `diversity_orders` output are regenerated by the main session.
+- No record_card "detail" section and no isotype or SHM angle yet (lot 3 candidates).

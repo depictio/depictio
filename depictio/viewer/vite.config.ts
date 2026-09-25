@@ -104,6 +104,14 @@ export default defineConfig({
           if (id.includes('cytoscape')) {
             return 'vendor-cytoscape';
           }
+          // GenomeSpy (and its @gmod / generic-filehandle file readers) is left
+          // to Rollup. It is only reachable through the `import()`s in
+          // `useGenomeSpy`, so Rollup already emits it as async chunks split
+          // along those two imports (the minimal build for table-backed tiles,
+          // the full one for file-backed tracks). Forcing it into two manual
+          // chunks made them import each other and pulled both into the entry,
+          // where the cycle threw "Cannot access ... before initialization" at
+          // boot and left every page blank.
           if (id.includes('@mantine')) {
             return 'vendor-mantine';
           }

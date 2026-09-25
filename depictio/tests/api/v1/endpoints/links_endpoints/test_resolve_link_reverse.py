@@ -70,6 +70,7 @@ async def test_reverse_reads_the_filter_column_on_the_link_target():
         filter_column="peak_id",
         filter_values=["peak_1", "peak_7"],
         link_column="sample",
+        range_filter=False,
     )
     assert response.resolved_values == ["LIB1.mLb.clN", "LIB2.mLb.clN"]
     assert response.link_id == LINK_ID

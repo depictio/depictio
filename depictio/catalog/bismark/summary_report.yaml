@@ -1,0 +1,30 @@
+id: bismark_summary_report
+name: Run summary report
+mode: summary
+description: >-
+  Bismark's own run-level table (bismark2summary), one row per library, the only
+  file a methylseq run publishes that puts the read funnel and the cytosine
+  counts side by side. Adds the ratios a reader asks of those counts: alignment
+  and duplication yields, methylation level per context, and the bisulfite
+  conversion efficiency read off the CHH calls.
+find:
+  path_glob: "**/bismark_summary_report.txt"
+recipe: bismark/summary_report.py
+fixture: summary_report.tsv
+renders_as:
+  # Reads to methylome in one card: what was sequenced, what aligned, what
+  # survived deduplication, how many CpG calls came out the far end.
+  - component: card
+    column: total_reads
+    aggregation: sum
+    secondary_layout: attrition
+    attrition_cols: [aligned_reads, unique_reads, cpgs_called]
+  # Mammalian CHH methylation is near zero, so its complement is the conversion
+  # rate. Below ~98 % the CpG calls inherit the same false-positive rate.
+  - { component: card, column: conversion_efficiency_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100 }
+  - { component: card, column: pct_aligned, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_duplicate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_cpg_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: cpgs_called, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: conversion_efficiency_pct, color: sample, title: Bisulfite conversion efficiency per library} }
+  - { component: table }

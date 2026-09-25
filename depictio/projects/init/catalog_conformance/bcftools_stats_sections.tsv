@@ -1,0 +1,16 @@
+sample	caller	section	bin	label	count
+NA12878_200M	deepvariant	allele_frequency	0.0		47060
+NA12878_200M	freebayes	allele_frequency	0.0		23918
+NA12878_200M	freebayes	allele_frequency	0.99		14443
+NA12878_200M	deepvariant	indel_length	-60.0		15
+NA12878_200M	deepvariant	indel_length	-56.0		1
+NA12878_200M	deepvariant	indel_length	-52.0		1
+NA12878_200M	deepvariant	singleton_stats		singleton SNPs	47060
+NA12878_200M	deepvariant	singleton_stats		singleton indels	6662
+NA12878_200M	freebayes	singleton_stats		singleton SNPs	23914
+NA12878_200M	deepvariant	substitution		A>C	2320
+NA12878_200M	deepvariant	substitution		A>G	7148
+NA12878_200M	deepvariant	substitution		A>T	1092
+NA12878_200M	freebayes	depth	2.0	2	61
+NA12878_200M	freebayes	depth	3.0	3	79
+NA12878_200M	freebayes	depth	4.0	4	57

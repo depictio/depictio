@@ -1,0 +1,16 @@
+id: ribowaltz_metaprofile_start
+name: Metagene profile at the start codon
+mode: riboseq/metagene
+description: >-
+  P-site signal summed over all transcripts at each nucleotide around the
+  annotated start codon, per library. A phased library peaks at the start codon
+  and shows a 3-nt saw-tooth along the CDS.
+find: { path_glob: "**/*.ribowaltz.metaprofile_psite.tsv" }
+recipe: ribowaltz/metaprofile_start.py
+fixture: metaprofile_start.tsv
+renders_as:
+  - id: start_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: position, y: signal }
+  - { component: table }

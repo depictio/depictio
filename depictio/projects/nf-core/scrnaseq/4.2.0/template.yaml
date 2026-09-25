@@ -1,0 +1,1672 @@
+# nf-core/scrnaseq Template v4.2.0 - single-cell RNA-seq
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/scrnaseq/4.2.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/scrnaseq AWS megatest results:
+#   s3://nf-core-awsmegatests/scrnaseq/results-3fc17b4f971a89e47c88337de71d0e777ffad8cc/
+#   (pbmc8k: 10x Genomics v2 chemistry, GRCh38, 8 767 cells called out of
+#    499 387 raw barcodes on the Cell Ranger route. See megatest.yaml.)
+# ============================================================================
+#
+# DATA LAYOUT (v2). DATA_ROOT is now the megatest RESULTS ROOT itself
+# (`run_root: ""` in megatest.yaml), holding one directory per `--aligner`
+# route the pipeline supports: `aligner_cellranger/`, `aligner_simpleaf/`,
+# `aligner_kallisto/` (`aligner_star/` publishes no MultiQC and nothing this
+# template reads, so it is not fetched). Every scan pattern below is
+# path-qualified from that root (`.*/` for a pattern any route could satisfy,
+# or an explicit `aligner_<x>/` prefix where the route matters), because scan
+# regexes are `re.match`-ed against the basename first, then against the path
+# relative to DATA_ROOT: an unqualified pattern that used to match under
+# `aligner_cellranger/` on its own no longer matches once that prefix is part
+# of the relative path.
+#
+# CORE (Cell Ranger route, required): the per-cell QC/cluster/embedding hub
+# (`cellranger_cell_qc`, streamed off the filtered feature-barcode matrix),
+# its cluster summary, marker genes and expression, library metrics and
+# mapping breakdown, the barcode-rank curve off the raw matrix, PCA scree and
+# CellBender's ambient-RNA accounting, on top of the MultiQC report (FastQC +
+# Cell Ranger panels only; scanned from `aligner_cellranger/` alone, since
+# neither other route publishes a parquet with anything beyond the same
+# sample's FastQC data already in the Cell Ranger one, see megatest.yaml).
+#
+# OPTIONAL (aligner concordance, `optional: true` throughout): simpleaf /
+# alevin-fry's barcode-rank curve and mapping numbers, QCatch's own cell
+# call, kallisto | bustools' run numbers, and CellBender's accounting on both
+# of those routes, plus two pipeline-local tables (`cell_calls_by_method`,
+# `aligner_summary`) that line every route's cell calls up on one normalised
+# 16-mer barcode. A Cell Ranger-only run (the pipeline default) simply leaves
+# every one of these empty; the Aligner concordance tab documents that.
+#
+# RAW BARCODES, NOT ONLY CELLS. `raw_feature_bc_matrix/` carries every
+# barcode the run ever saw (~500k for a 10x v2 lane), most of them empty
+# droplets. The barcode-rank ("knee") curve sums UMI counts per barcode
+# straight out of the MatrixMarket file with a streaming column scan
+# (`skip_rows: 3` past the 2 comment + 1 dimensions header lines) rather than
+# loading a dense matrix; see cellranger/barcode_rank.py. `cellranger_cell_qc`
+# does the same streaming trick on the (much smaller) FILTERED matrix, the
+# barcodes Cell Ranger actually called cells.
+#
+# FILENAME COLLISIONS. Cell Ranger writes the SAME file names
+# (`matrix.mtx.gz`, `barcodes.tsv.gz`, `features.tsv.gz`) under both
+# `raw_feature_bc_matrix/` and `filtered_feature_bc_matrix/`; the scans below
+# match on the parent directory too. CellBender writes the SAME file names
+# (`*_metrics.csv`, `*_cell_barcodes.csv`) under all three aligner routes'
+# `cellbender_removebackground/` dirs; every CellBender scan below is
+# qualified with its route (`aligner_cellranger/cellranger/...`,
+# `aligner_simpleaf/simpleaf/...`, `aligner_kallisto/kallisto/...`) so a
+# route's cell hub or the concordance table never silently pulls in another
+# route's rows. `cellranger_cellbender_barcodes_raw` is declared ONCE, shared
+# by `cellranger_cell_qc` (CellBender agreement) and the two pipeline-local
+# concordance recipes.
+#
+# CELL RANGER DOES NOT PUBLISH A SAMPLE COLUMN anywhere in `analysis/`,
+# `metrics_summary.csv` or the raw matrix files: it writes one file per
+# sample under `cellranger/count/<sample>/outs/...`. Every recipe reading
+# those files uses the raw-scan + recipe two-step (`<x>_raw` feeding `<x>`
+# via `dc_ref`, `include_file_paths: source_path` on the raw scan) and
+# recovers the sample from that path. simpleaf and kallisto route files are
+# keyed the same way, one directory per sample under `simpleaf/<sample>/` /
+# `kallisto/<sample>.count/` (`kallisto/<sample>/` for its CellBender run).
+#
+# HUMAN-ONLY RULES. The mitochondrial fraction and the MAD mito rule
+# (`mad_high_mito`) read gene symbols starting with `MT-`, and the cell-cycle
+# scores read the human Tirosh sets: on another organism (or a reference
+# without mitochondrial genes, such as the megatest's bundled GRCh38, where
+# `pct_mito` is 0 for every cell) the mito columns read 0 and the phase
+# degrades to NA. The dashboard shows the mito rule anyway, since it is the
+# standard scRNA QC axis on any reference that carries MT- genes.
+#
+# MARKER PANEL. No tissue or organism gene panel is hardcoded. The optional
+# `MARKER_PANEL` variable (comma list of gene symbols) is forwarded to the
+# two per-cell expression recipes as their `marker_panel` transform param;
+# without it, or when none of its genes is in the reference, they fall back
+# to the top markers of every graph-based cluster from `cellranger_diffexp`.
+#
+# CellBender is optional (`--skip_cellbender`, default false here) and its
+# per-sample metrics/cell-barcode lists are `optional: true` so a run
+# launched with it disabled still ingests.
+template:
+  template_id: "nf-core/scrnaseq/4.2.0"
+  description: "nf-core/scrnaseq template: per-cell QC and MAD-based flagging, graph-based clusters and their marker genes, UMAP/t-SNE/PCA embeddings and CellBender's ambient-RNA removal on the Cell Ranger route, on top of the MultiQC report, plus an optional aligner-concordance comparison against simpleaf/alevin-fry and kallisto|bustools."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of the megatest results: one subdirectory per --aligner route (aligner_cellranger/ required; aligner_simpleaf/, aligner_kallisto/ optional, feed the Aligner concordance tab) plus aligner_cellranger/multiqc/multiqc_data/multiqc.parquet."
+      required: true
+    - name: "MARKER_PANEL"
+      description: "Optional comma-separated gene symbols the per-cell marker tiles (Markers violin, gene UMAP Colour by menu) always carry, e.g. the lineage markers of the tissue. Unset, or with none of its genes in the reference, the tiles use the top markers of every graph-based cluster instead."
+      required: false
+  reference:
+    vars: {}
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "yaml" # params.json parses fine as YAML (JSON is a YAML subset)
+        pick: "latest"
+        group: "Pipeline parameters"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+      - group: "Pipeline parameters"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Single-Cell RNA-seq"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "scrnaseq"
+    version: "4.2.0"
+    engine:
+      name: "nextflow"
+      version: "26.04.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/scrnaseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per sample, from the samplesheet the pipeline
+      # validated. The raw samplesheet is library-level (one row per
+      # FASTQ pair / lane); the hub groups it by sample. Lives at the
+      # DATA_ROOT top level, shared by every aligner route.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet nf-core/scrnaseq validated, one row per FASTQ pair (a sample split across lanes gets several rows)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "samplesheet\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample name; Cell Ranger pools every lane of a sample into one count run"
+              "fastq_1": "Read 1 FASTQ"
+              "fastq_2": "Read 2 FASTQ"
+              "expected_cells": "Expected cell count passed to Cell Ranger (--expect-cells)"
+
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: the sample name every aligner route's output files use, its expected cell count and how many lanes were merged"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/scrnaseq/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample name, e.g. cellranger/count/<sample_id>/outs/; the key most other collections are linked on"
+              "expected_cells": "Expected cell count passed to the aligner"
+              "n_lanes": "FASTQ pairs (lanes) merged into this sample's run"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Scanned from the Cell Ranger route only: neither the
+      # simpleaf nor the kallisto route parquet on this megatest carries
+      # anything beyond the same sample's FastQC data already in this one.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC 1.35 report (Cell Ranger route): FastQC on the raw reads and Cell Ranger count's summary stats, barcode-rank, median-genes and saturation curves"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "cellranger"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              cellranger:
+                - "Count - Summary stats"
+                - "Count - BC rank plot"
+                - "Count - Median genes"
+                - "Count - Saturation plot"
+
+      # ----------------------------------------------------------------
+      # Cell Ranger metrics_summary.csv: one row per sample, headline
+      # QC numbers, no sample column of its own.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_metrics_raw"
+        description: "Raw per-sample Cell Ranger metrics_summary.csv (input of cellranger_metrics, cellranger_library_metrics_long, cellranger_mapping_breakdown)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?cellranger/count/[^/]+/outs/metrics_summary\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_metrics"
+        description: "Cell Ranger count's headline per-sample metrics: cells called, sequencing depth and saturation, mapping and Q30 rates, both as the original percent and as a 0-1 fraction"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/metrics_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the metrics belong to"
+              "estimated_cells": "Estimated Number of Cells"
+              "mean_reads_per_cell": "Mean Reads per Cell"
+              "median_genes_per_cell": "Median Genes per Cell"
+              "number_of_reads": "Number of Reads"
+              "valid_barcodes_pct": "Reads with a valid 10x barcode (%)"
+              "sequencing_saturation_pct": "Sequencing Saturation (%)"
+              "q30_barcode_pct": "Q30 Bases in Barcode (%)"
+              "q30_rna_read_pct": "Q30 Bases in RNA Read (%)"
+              "q30_umi_pct": "Q30 Bases in UMI (%)"
+              "reads_mapped_confidently_transcriptome_pct": "Reads Mapped Confidently to Transcriptome (%)"
+              "reads_mapped_antisense_pct": "Reads Mapped Antisense to Gene (%)"
+              "fraction_reads_in_cells_pct": "Fraction of confidently-mapped reads in cell-associated barcodes (%)"
+              "total_genes_detected": "Total Genes Detected"
+              "median_umi_counts_per_cell": "Median UMI Counts per Cell"
+              "valid_barcodes_frac": "Reads with a valid 10x barcode, as a 0-1 fraction"
+              "sequencing_saturation_frac": "Sequencing Saturation, as a 0-1 fraction"
+              "q30_barcode_frac": "Q30 Bases in Barcode, as a 0-1 fraction"
+              "q30_rna_read_frac": "Q30 Bases in RNA Read, as a 0-1 fraction"
+              "q30_umi_frac": "Q30 Bases in UMI, as a 0-1 fraction"
+              "reads_mapped_confidently_transcriptome_frac": "Reads Mapped Confidently to Transcriptome, as a 0-1 fraction"
+              "reads_mapped_antisense_frac": "Reads Mapped Antisense to Gene, as a 0-1 fraction"
+              "fraction_reads_in_cells_frac": "Fraction of confidently-mapped reads in cell-associated barcodes, as a 0-1 fraction"
+
+      - data_collection_tag: "cellranger_library_metrics_long"
+        description: "The 5 headline Cell Ranger metrics 10x's QC guidance gives a pass/warn/fail band for, one row per (sample, metric), with the threshold and the status it crosses"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/library_metrics_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "metric": "One of: sequencing_saturation, fraction_reads_in_cells, valid_barcodes, q30_rna, confidently_mapped_transcriptome"
+              "value": "The metric's value, as a 0-1 fraction"
+              "unit": "Always 'fraction'"
+              "threshold": "The pass/warn (or pass/fail) cutoff for this metric"
+              "status": "pass, warn, or fail"
+
+      - data_collection_tag: "cellranger_mapping_breakdown"
+        description: "Confidently-mapped reads split into exonic, intronic and intergenic regions, plus the antisense and unmapped shares, per sample (antisense overlaps exonic/intronic; the regions do not sum to 1)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/mapping_breakdown.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "region": "exonic, intronic, intergenic, antisense, or unmapped"
+              "fraction": "0-1 share of reads (regions do not sum to 1; antisense overlaps exonic/intronic)"
+
+      # ----------------------------------------------------------------
+      # Barcode-rank curve. Raw matrix + both barcode lists, joined by
+      # the recipe (cellranger/barcode_rank.py).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_raw_matrix_raw"
+        description: "Raw feature-barcode sparse matrix (MatrixMarket), every barcode the run saw (input of cellranger_barcode_rank)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?raw_feature_bc_matrix/matrix\\.mtx\\.gz$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: " "
+              has_header: false
+              skip_rows: 3 # 2 MatrixMarket comment lines + the dimensions line
+              new_columns: ["gene_idx", "barcode_idx", "count"]
+              include_file_paths: "source_path"
+            columns_description:
+              "gene_idx": "1-based row index into features.tsv.gz"
+              "barcode_idx": "1-based column index into barcodes.tsv.gz"
+              "count": "UMI count for this gene x barcode entry"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_raw_barcodes_raw"
+        description: "Raw feature-barcode matrix's barcode list, row position == matrix barcode_idx (input of cellranger_barcode_rank)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?raw_feature_bc_matrix/barcodes\\.tsv\\.gz$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+              row_index_name: "barcode_idx"
+              row_index_offset: 1
+            columns_description:
+              "barcode_idx": "1-based position in the file, matches the raw matrix's barcode_idx"
+              "barcode": "10x cell barcode"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_filtered_barcodes_raw"
+        description: "Filtered feature-barcode matrix's barcode list: the barcodes Cell Ranger called cells (input of cellranger_barcode_rank and cell_calls_by_method)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/barcodes\\.tsv\\.gz$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+            columns_description:
+              "barcode": "10x cell barcode Cell Ranger kept as a cell"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_barcode_rank"
+        description: "UMI count per barcode against its rank, flagged against the barcodes Cell Ranger called cells (canonical knee_plot schema)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/barcode_rank.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the barcode was sequenced in"
+              "rank": "Barcode rank within the sample; 1 = highest UMI count"
+              "umi_count": "Total UMI count summed across every gene for that barcode"
+              "is_cell": "True when Cell Ranger kept this barcode in the filtered matrix"
+
+      # ----------------------------------------------------------------
+      # Secondary analysis raw scans, shared between cellranger_cell_qc
+      # (below) and cellranger_pca_variance.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_clusters_raw"
+        description: "Graph-based cluster assignment per cell barcode (input of cellranger_cell_qc)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/clustering/gene_expression_graphclust/clusters\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "Barcode": "10x cell barcode"
+              "Cluster": "Graph-based cluster id"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_kmeans_clusters_raw"
+        description: "All 9 k-means clusterings (k=2..10) in one scan, the sample and k are recovered from the path (input of cellranger_cell_qc)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/clustering/gene_expression_kmeans_[0-9]+_clusters/clusters\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "Barcode": "10x cell barcode"
+              "Cluster": "K-means cluster id for this k"
+              "source_path": "File the row came from; the sample and k are derived from it"
+
+      - data_collection_tag: "cellranger_umap_raw"
+        description: "UMAP projection per cell barcode (input of cellranger_cell_qc)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/umap/[^/]+/projection\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "Barcode": "10x cell barcode"
+              "UMAP-1": "First UMAP dimension"
+              "UMAP-2": "Second UMAP dimension"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_tsne_raw"
+        description: "t-SNE projection per cell barcode (input of cellranger_cell_qc)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/tsne/[^/]+/projection\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "Barcode": "10x cell barcode"
+              "TSNE-1": "First t-SNE dimension"
+              "TSNE-2": "Second t-SNE dimension"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_pca_raw"
+        description: "PCA projection per cell barcode, 10 components (input of cellranger_cell_qc)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/pca/[^/]+/projection\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "Barcode": "10x cell barcode"
+              "PC-1": "First principal component"
+              "PC-2": "Second principal component"
+              "PC-3": "Third principal component"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      # ----------------------------------------------------------------
+      # PCA variance explained (the scree behind the PCA embedding).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_pca_variance_raw"
+        description: "Raw per-PC variance-explained table (input of cellranger_pca_variance)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/pca/[^/]+/variance\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "PC": "Component number, 1-based"
+              "Proportion.Variance.Explained": "Share of total variance this component explains"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_pca_variance"
+        description: "Share of total expression variance each principal component explains"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/pca_variance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the PCA was computed on"
+              "pc": "Component number, 1-based"
+              "variance_explained": "Share of total variance this component explains"
+
+      # ----------------------------------------------------------------
+      # Feature selection: the two files Cell Ranger writes next to the
+      # PCA that say which genes the embedding was computed on.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_dispersion_raw"
+        description: "Raw normalised dispersion per gene, next to the PCA (input of cellranger_hvg_dispersion and of cellranger_cell_expression's gene panel)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/pca/[^/]+/dispersion\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+            columns_description:
+              "Feature": "Gene symbol"
+              "Normalized.Dispersion": "Cell Ranger's normalised dispersion for the gene; NaN when it could not be normalised"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_features_selected_raw"
+        description: "Raw list of the genes Cell Ranger kept as variable and ran the PCA on (input of cellranger_hvg_dispersion). The file's header names one column while its rows carry two, so it is scanned headerless past the first line."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/pca/[^/]+/features_selected\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              skip_rows: 1
+              new_columns: ["selection_rank", "feature"]
+              include_file_paths: "source_path"
+            columns_description:
+              "selection_rank": "1-based position in the file, Cell Ranger's own ordering"
+              "feature": "Gene symbol Cell Ranger selected for the PCA"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      # ----------------------------------------------------------------
+      # Cluster marker genes (raw wide table).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_diffexp_raw"
+        description: "Raw wide differential-expression tables, one file per clustering Cell Ranger ran (graph-based plus one per k-means k), one row per gene and 3 columns per cluster (input of cellranger_diffexp, cellranger_cell_qc, cellranger_marker_expression, cellranger_marker_matrix, cellranger_cell_expression)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/diffexp/gene_expression_[^/]+/differential_expression\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            # Read as text. The per-cluster p-value columns open with runs of
+            # 1.0 in the k-means files, so per-file type inference lands on
+            # Int64 and then fails on the first real float; the recipe casts.
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Feature ID": "Gene id"
+              "Feature Name": "Gene symbol"
+              "source_path": "File the row came from; the sample and the clustering resolution are derived from it"
+
+      - data_collection_tag: "cellranger_diffexp"
+        description: "Top marker genes per cluster, for every clustering resolution Cell Ranger ran, ranked by adjusted p-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/diffexp.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the clustering was computed on"
+              "resolution": "graphclust, or kmeans_2 .. kmeans_10, the clustering this row belongs to"
+              "cluster": "Cluster this gene was tested against the rest for"
+              "cluster_label": "Cn top1/top2 marker genes for this cluster; a k-means resolution prefixes it with its k"
+              "rank_in_cluster": "1-based rank within the cluster by adjusted p-value, most significant first"
+              "gene_id": "Cell Ranger Feature ID"
+              "gene": "Feature Name (gene symbol)"
+              "mean_counts": "Mean UMI counts for this gene inside the cluster"
+              "log2fc": "Log2 fold change vs every other cluster"
+              "adjusted_pvalue": "Benjamini-Hochberg adjusted p-value"
+
+      # ----------------------------------------------------------------
+      # Per-cell QC / cluster / embedding hub, the cell-level backbone
+      # of the redesigned dashboard. Streams the FILTERED matrix (the
+      # cells Cell Ranger called), never densifies it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_filtered_matrix_raw"
+        description: "Filtered feature-barcode sparse matrix (MatrixMarket), the cells Cell Ranger called (input of cellranger_cell_qc, cellranger_marker_expression)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/matrix\\.mtx\\.gz$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: " "
+              has_header: false
+              skip_rows: 3 # 2 MatrixMarket comment lines + the dimensions line
+              new_columns: ["gene_idx", "barcode_idx", "count"]
+              include_file_paths: "source_path"
+            columns_description:
+              "gene_idx": "1-based row index into features.tsv.gz (filtered matrix)"
+              "barcode_idx": "1-based column index into barcodes.tsv.gz (filtered matrix)"
+              "count": "UMI count for this gene x barcode entry"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_filtered_features_raw"
+        description: "Filtered feature-barcode matrix's feature list, row position == matrix gene_idx (input of cellranger_cell_qc, cellranger_marker_expression)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/features\\.tsv\\.gz$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["feature_id", "feature_name", "feature_type"]
+              include_file_paths: "source_path"
+              row_index_name: "gene_idx"
+              row_index_offset: 1
+            columns_description:
+              "gene_idx": "1-based row position in the file, matches the filtered matrix's gene_idx"
+              "feature_id": "Cell Ranger Feature ID"
+              "feature_name": "Gene symbol"
+              "feature_type": "Feature type (Gene Expression)"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      # cellranger_hvg_dispersion reads cellranger_filtered_matrix_raw and
+      # cellranger_filtered_features_raw through dc_ref, so it is declared after
+      # them: dc_ref declaration order is the processing order.
+      - data_collection_tag: "cellranger_hvg_dispersion"
+        description: "Mean expression against normalised dispersion for every gene Cell Ranger measured, flagged with whether it kept the gene for the PCA"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/hvg_dispersion.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the PCA was computed on"
+              "gene": "Gene symbol"
+              "normalized_dispersion": "Cell Ranger's normalised dispersion; empty for a gene it could not normalise"
+              "mean_expression": "Mean log1p(CP10k) over every called cell, undetected cells counted as 0"
+              "detection_rate": "Share of called cells with at least 1 UMI of this gene"
+              "selection": "selected or not selected, whether Cell Ranger ran the PCA on this gene"
+
+      - data_collection_tag: "cellranger_filtered_barcode_index_raw"
+        description: "Filtered feature-barcode matrix's barcode list WITH row index, row position == matrix barcode_idx (input of cellranger_cell_qc, cellranger_marker_expression; distinct from cellranger_filtered_barcodes_raw, which cellranger_barcode_rank scans without a row index)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/barcodes\\.tsv\\.gz$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+              row_index_name: "barcode_idx"
+              row_index_offset: 1
+            columns_description:
+              "barcode_idx": "1-based row position in the file, matches the filtered matrix's barcode_idx"
+              "barcode": "10x cell barcode Cell Ranger kept as a cell"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      # Shared with the pipeline-local aligner-concordance recipes below:
+      # declared ONCE (agent A's cell_qc and agent B's cell_calls_by_method /
+      # aligner_summary all reference this same tag).
+      - data_collection_tag: "cellranger_cellbender_barcodes_raw"
+        description: "CellBender's cell-barcode list for the Cell Ranger route (raw input of cellranger_cell_qc, cell_calls_by_method and aligner_summary)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?cellranger/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+            columns_description:
+              "barcode": "10x cell barcode CellBender kept as a cell on the Cell Ranger route (carries the -1 GEM-well suffix)"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_cell_qc"
+        description: "One row per called cell: UMI / gene counts, mito / ribo / hemoglobin / top-20 fractions, graph-based and k-means clusters, UMAP / t-SNE / PCA coordinates, CellBender agreement and a MAD-based QC flag. The hub every other cell-level cellranger output joins to"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell was sequenced in"
+              "barcode": "10x cell barcode, with the -1 suffix"
+              "barcode_core": "Barcode without the Cell Ranger -1 suffix"
+              "n_umi": "Total UMI counts for this cell"
+              "n_genes": "Genes with >=1 UMI in this cell"
+              "pct_mito": "Percent of n_umi from MT- genes (0 on this reference, see the note at the top of this file)"
+              "pct_ribo": "Percent of n_umi from RPS/RPL genes"
+              "pct_hb": "Percent of n_umi from HBA/HBB genes"
+              "pct_top20": "Percent of n_umi from the 20 highest-expressed genes in the cell"
+              "log10_n_umi": "log10(n_umi)"
+              "log10_n_genes": "log10(n_genes)"
+              "graphclust": "Graph-based cluster id, C1..Cn"
+              "cluster_label": "C<n> top1/top2 marker genes for the cell's graph-based cluster"
+              "kmeans_2": "K-means cluster id, k=2"
+              "kmeans_3": "K-means cluster id, k=3"
+              "kmeans_4": "K-means cluster id, k=4"
+              "kmeans_5": "K-means cluster id, k=5"
+              "kmeans_6": "K-means cluster id, k=6"
+              "kmeans_7": "K-means cluster id, k=7"
+              "kmeans_8": "K-means cluster id, k=8"
+              "kmeans_9": "K-means cluster id, k=9"
+              "kmeans_10": "K-means cluster id, k=10"
+              "umap_1": "First UMAP dimension"
+              "umap_2": "Second UMAP dimension"
+              "tsne_1": "First t-SNE dimension"
+              "tsne_2": "Second t-SNE dimension"
+              "pc_1": "First principal component"
+              "pc_2": "Second principal component"
+              "pc_3": "Third principal component"
+              "cellbender_cell": "True if CellBender also called this barcode a cell"
+              "mad_low_umi": "True if log1p(n_umi) is a low MAD outlier for the sample"
+              "mad_low_genes": "True if log1p(n_genes) is a low MAD outlier for the sample"
+              "mad_high_top20": "True if pct_top20 is a high MAD outlier for the sample"
+              "mad_high_mito": "True if pct_mito is a high MAD outlier for the sample, or exceeds 8 percent"
+              "qc_status": "pass or flagged"
+              "qc_reason": "pass, or the first failing MAD criterion"
+              "qc_flagged": "0/1 form of qc_status, so a card can average it into a percent-flagged reading"
+
+      - data_collection_tag: "cellranger_cluster_summary"
+        description: "One row per graph-based cluster: size, QC medians and the share of cells CellBender also called, aggregated from the per-cell QC hub"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cluster_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "graphclust": "Graph-based cluster id, C1..Cn"
+              "cluster_label": "C<n> top1/top2 marker genes"
+              "n_cells": "Cells in this cluster"
+              "pct_cells": "Percent of the sample's cells in this cluster"
+              "median_n_umi": "Median n_umi over the cluster's cells"
+              "median_n_genes": "Median n_genes over the cluster's cells"
+              "median_pct_mito": "Median pct_mito over the cluster's cells (0 on this reference)"
+              "pct_flagged": "Percent of this cluster's cells with qc_status flagged"
+              "pct_cellbender_cell": "Percent of this cluster's cells CellBender also called a cell"
+
+      - data_collection_tag: "cellranger_marker_expression"
+        description: "Mean log-normalised expression and detection rate of the top graph-based cluster marker genes, for every cluster, so the dot plot shows cluster-specificity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/marker_expression.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cluster_label": "C<n> top1/top2"
+              "gene": "Marker gene symbol"
+              "mean_expression": "Mean log1p(CP10k) over every cell in the cluster"
+              "frac_expressing": "Fraction of the cluster's cells with >=1 UMI of this gene"
+
+      - data_collection_tag: "cellranger_marker_matrix"
+        description: "Wide companion to marker_expression: one row per marker gene, one column per cluster, mean log-normalised expression, for the heatmap"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/marker_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene": "Marker gene symbol (row id); one Float64 column per cluster label follows, added at pivot time"
+
+      # ----------------------------------------------------------------
+      # Per-cell expression of a marker gene panel, the keystone of the
+      # Markers and Compare selections tabs: one row per cell, one
+      # Float64 column per panel gene, plus the embedding coordinates, so
+      # the embedding tile's Colour by menu lists every gene.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_cell_expression"
+        description: "Wide cell by gene table: one row per called cell, one column per marker panel gene (the optional MARKER_PANEL genes, the top markers of every graph-based cluster and the most dispersed genes), log1p(CP10k) normalised, carrying the UMAP coordinates and the cluster label"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_expression.py"
+            params:
+              marker_panel: "{MARKER_PANEL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell belongs to"
+              "barcode": "10x cell barcode, the row id and the index column of the group comparison"
+              "cluster_label": "Graph-based cluster of the cell, Cn top1/top2 marker genes"
+              "qc_status": "pass or flagged, carried over from the per-cell QC hub"
+              "umap_1": "First UMAP coordinate"
+              "umap_2": "Second UMAP coordinate"
+
+      - data_collection_tag: "cellranger_cell_expression_long"
+        description: "A marker panel slice of cellranger_cell_expression (MARKER_PANEL when set, otherwise the top 2 markers of every graph-based cluster, at most 24 genes), melted to one row per cell and gene, so a box shows a marker's whole per-cell distribution across clusters. Capped to a fixed number of cells per cluster, the figure service does not downsample a box."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_expression_long.py"
+            params:
+              marker_panel: "{MARKER_PANEL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell belongs to"
+              "barcode": "10x cell barcode"
+              "cluster_label": "Graph-based cluster of the cell"
+              "qc_status": "pass or flagged"
+              "gene": "Marker gene symbol, the column the gene picker filters on"
+              "expression": "log1p(CP10k) of that gene in that cell, 0 when undetected"
+
+      - data_collection_tag: "cellranger_cell_cycle"
+        description: "Cell-cycle S and G2/M scores per cell from the Tirosh gene sets, and the phase call that follows from them. Cell Ranger publishes no cell-cycle call, so a cluster that is really the same cell type cycling is invisible without this."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_cycle.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell belongs to"
+              "barcode": "10x cell barcode, joins the per-cell QC hub"
+              "cluster_label": "Graph-based cluster of the cell"
+              "s_score": "Mean expression of the S-phase set minus the cell's mean over every measured gene"
+              "g2m_score": "Mean expression of the G2/M set minus the same background"
+              "phase": "G1, S or G2M, the larger score when it is positive"
+              "n_s_genes": "S-phase genes of the set this reference carries"
+              "n_g2m_genes": "G2/M genes of the set this reference carries"
+
+      - data_collection_tag: "cellranger_cell_funnel"
+        description: "One row per sample with the nested barcode counts of the filtering waterfall: every barcode the run observed, the ones Cell Ranger called a cell, the ones CellBender kept, and the ones that pass the per-cell QC"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_funnel.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "barcodes_observed": "Barcodes in the raw matrix, before any cell calling"
+              "cells_called": "Barcodes Cell Ranger called a cell"
+              "cellbender_cells": "Called cells CellBender also called a cell"
+              "cells_qc_pass": "Called cells with qc_status pass"
+              "pct_called": "Percent of observed barcodes Cell Ranger called a cell"
+              "pct_qc_pass": "Percent of called cells that pass the QC"
+
+      # ----------------------------------------------------------------
+      # CellBender (Cell Ranger route). Optional: a run launched with
+      # --skip_cellbender writes none of these files.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellbender_metrics_raw"
+        description: "Raw per-sample CellBender metrics for the Cell Ranger route (key,value pairs, no header; input of cellbender_metrics). Qualified with cellranger/, aligner_simpleaf and aligner_kallisto publish identically-named *_metrics.csv files under their own cellbender_removebackground/ dirs, scanned separately below."
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?cellranger/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["metric", "value"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "metric": "CellBender metric name"
+              "value": "Metric value"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellbender_metrics"
+        description: "CellBender's per-sample ambient-RNA removal accounting on the Cell Ranger route, one row per sample"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellbender/metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample CellBender ran on"
+              "total_raw_counts": "Summed counts before removal"
+              "total_output_counts": "Summed counts after removal"
+              "total_counts_removed": "Counts CellBender called ambient"
+              "fraction_counts_removed": "total_counts_removed / total_raw_counts"
+              "expected_cells": "--expected-cells (or Cell Ranger's estimate)"
+              "found_cells": "Barcodes CellBender kept as cells"
+              "ratio_of_found_cells_to_expected_cells": "found_cells / expected_cells"
+              "target_fpr": "Target false-positive rate parameter"
+
+      # ==================================================================
+      # OPTIONAL: simpleaf / alevin-fry route (aligner_simpleaf/)
+      # ==================================================================
+      - data_collection_tag: "simpleaf_featuredump_raw"
+        description: "alevin-fry's per-barcode feature dump (raw input of simpleaf_barcode_rank)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?simpleaf/[^/]+/simpleaf_quant/af_quant/featureDump\\.txt$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+            columns_description:
+              "CB": "16-mer cell barcode alevin-fry quantified"
+              "CorrectedReads": "Reads assigned to this barcode after barcode correction"
+              "MappedReads": "Reads mapped to the transcriptome for this barcode"
+              "DeduplicatedReads": "UMI count for this barcode after deduplication (the knee-curve y-axis)"
+              "MappingRate": "MappedReads divided by CorrectedReads for this barcode"
+              "DedupRate": "Deduplication rate for this barcode"
+              "MeanByMax": "Mean-to-max expression ratio across genes for this barcode"
+              "NumGenesExpressed": "Genes with nonzero counts for this barcode"
+              "NumGenesOverMean": "Genes expressed above the mean for this barcode"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "simpleaf_cellbender_barcodes_raw"
+        description: "CellBender's cell-barcode list for the simpleaf route (raw input of simpleaf_barcode_rank and cell_calls_by_method)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?simpleaf/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+            columns_description:
+              "barcode": "16-mer cell barcode CellBender kept as a cell on the simpleaf route (no GEM-well suffix)"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "simpleaf_mapinfo_raw"
+        description: "piscem/alevin-fry mapping headline JSON (raw input of simpleaf_mapping_metrics)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?simpleaf/[^/]+/simpleaf_quant/af_map/map_info\\.json$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              separator: "\x1f"
+              quote_char: null
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One physical line of map_info.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "simpleaf_quantjson_raw"
+        description: "alevin-fry quant headline JSON (raw input of simpleaf_mapping_metrics)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?simpleaf/[^/]+/simpleaf_quant/af_quant/quant\\.json$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              separator: "\x1f"
+              quote_char: null
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One physical line of quant.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "qcatch_metrics_raw"
+        description: "QCatch's per-sample metrics_summary.csv (raw input of qcatch_metrics_summary)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?simpleaf/[^/]+/qcatch/[^/]+_metrics_summary\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Number of retained cells": "QCatch's own cell call for the simpleaf/alevin-fry quantification"
+              "Number of all processed cells": "Barcodes QCatch considered before retention filtering"
+              "Mean reads per retained cell": "Mean sequencing reads per retained cell"
+              "Median UMI per retained cell": "Median UMI count per retained cell"
+              "Median genes per retained cell": "Median genes detected per retained cell"
+              "Total genes detected for retained cells": "Genes with nonzero counts across retained cells"
+              "Mapping rate": "Percent of reads mapped (quoted with a percent sign)"
+              "Sequencing saturation": "Percent sequencing saturation (quoted with a percent sign)"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "simpleaf_cellbender_metrics_raw"
+        description: "CellBender's per-sample metrics.csv for the simpleaf route (raw input of simpleaf_cellbender_metrics, shared cellbender/metrics.py recipe)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?simpleaf/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["metric", "value"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "metric": "CellBender metric name"
+              "value": "Metric value as text, cast to Float64 by the recipe"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "simpleaf_barcode_rank"
+        description: "Barcode-rank curve from alevin-fry's per-barcode feature dump, flagged against CellBender's simpleaf-route cell list"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "simpleaf/barcode_rank.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the barcode was quantified in"
+              "aligner": "Constant \"simpleaf\"; lets this knee curve share a tile with the Cell Ranger one"
+              "rank": "Barcode rank within the sample; 1 = highest UMI count"
+              "umi_count": "DeduplicatedReads for that barcode (UMI count)"
+              "is_cell": "True when CellBender kept this barcode as a cell"
+
+      - data_collection_tag: "simpleaf_mapping_metrics"
+        description: "simpleaf/alevin-fry mapping headline numbers, one row per sample"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "simpleaf/mapping_metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample simpleaf/alevin-fry ran on"
+              "num_processed": "Reads processed by piscem/alevin-fry mapping (map_info.json num_reads)"
+              "num_mapped": "Reads mapped (map_info.json num_mapped)"
+              "mapping_rate": "num_mapped divided by num_processed, 0-1"
+              "num_cells": "Barcodes alevin-fry quantified (quant.json num_quantified_cells); not a final cell call"
+
+      - data_collection_tag: "qcatch_metrics_summary"
+        description: "QCatch's per-sample headline numbers for the simpleaf/alevin-fry quantification"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qcatch/metrics_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample QCatch reported on"
+              "retained_cells": "QCatch's own cell call"
+              "processed_cells": "Barcodes considered before retention filtering"
+              "mean_reads_per_retained_cell": "Mean sequencing reads per retained cell"
+              "median_umi_per_retained_cell": "Median UMI count per retained cell"
+              "median_genes_per_retained_cell": "Median genes detected per retained cell"
+              "total_genes_detected": "Genes with nonzero counts across retained cells"
+              "mapping_rate_pct": "Percent of reads mapped"
+              "sequencing_saturation_pct": "Percent sequencing saturation"
+
+      - data_collection_tag: "simpleaf_cellbender_metrics"
+        description: "CellBender's per-sample ambient-RNA removal metrics on the simpleaf route (shared cellbender/metrics.py recipe)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/scrnaseq/simpleaf_cellbender_metrics.py" # cellbender/metrics.py on this route's own raw scan
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample CellBender ran on"
+              "total_raw_counts": "Summed counts before ambient-RNA removal"
+              "total_output_counts": "Summed counts after ambient-RNA removal"
+              "total_counts_removed": "Counts CellBender called ambient"
+              "fraction_counts_removed": "total_counts_removed divided by total_raw_counts"
+              "expected_cells": "--expected-cells (or the upstream aligner's estimate)"
+              "found_cells": "Barcodes CellBender kept as cells"
+              "ratio_of_found_cells_to_expected_cells": "found_cells divided by expected_cells"
+              "target_fpr": "Target false-positive rate parameter"
+
+      # ==================================================================
+      # OPTIONAL: kallisto | bustools route (aligner_kallisto/)
+      # ==================================================================
+      - data_collection_tag: "kallisto_run_info_raw"
+        description: "kallisto bus run_info.json (raw input of kallisto_run_metrics)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?kallisto/[^/]+\\.count/run_info\\.json$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              separator: "\x1f"
+              quote_char: null
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One physical line of run_info.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "kallisto_inspect_raw"
+        description: "bustools inspect.json, post barcode correction (raw input of kallisto_run_metrics)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?kallisto/[^/]+\\.count/inspect\\.json$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              separator: "\x1f"
+              quote_char: null
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One physical line of inspect.json's pretty-printed text, reassembled and JSON-decoded per file by the recipe"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "kallisto_barcodes_raw"
+        description: "kb count --filter's own cell-barcode list (raw input of kallisto_run_metrics and cell_calls_by_method)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?kallisto/[^/]+\\.count/counts_filtered/cells_x_genes\\.barcodes\\.txt$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+            columns_description:
+              "barcode": "16-mer cell barcode kb count --filter kept as a cell (no GEM-well suffix)"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "kallisto_cellbender_barcodes_raw"
+        description: "CellBender's cell-barcode list for the kallisto route (raw input of cell_calls_by_method)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?kallisto/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["barcode"]
+              include_file_paths: "source_path"
+            columns_description:
+              "barcode": "16-mer cell barcode CellBender kept as a cell on the kallisto route (no GEM-well suffix)"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "kallisto_cellbender_metrics_raw"
+        description: "CellBender's per-sample metrics.csv for the kallisto route (raw input of kallisto_cellbender_metrics, shared cellbender/metrics.py recipe)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?kallisto/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              new_columns: ["metric", "value"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "metric": "CellBender metric name"
+              "value": "Metric value as text, cast to Float64 by the recipe"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "kallisto_run_metrics"
+        description: "kallisto | bustools run headline numbers, one row per sample"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "kallisto/run_metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample kb count ran on"
+              "n_processed": "Reads processed by kallisto bus (run_info.json n_processed)"
+              "n_pseudoaligned": "Reads pseudoaligned (run_info.json n_pseudoaligned)"
+              "p_pseudoaligned": "n_pseudoaligned divided by n_processed, 0-1"
+              "n_barcodes": "Barcodes on the 10x whitelist after correction (inspect.json numBarcodes)"
+              "cells_called": "Rows in counts_filtered/cells_x_genes.barcodes.txt (kb's own knee-based cell call)"
+
+      - data_collection_tag: "kallisto_cellbender_metrics"
+        description: "CellBender's per-sample ambient-RNA removal metrics on the kallisto route (shared cellbender/metrics.py recipe)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/scrnaseq/kallisto_cellbender_metrics.py" # cellbender/metrics.py on this route's own raw scan
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample CellBender ran on"
+              "total_raw_counts": "Summed counts before ambient-RNA removal"
+              "total_output_counts": "Summed counts after ambient-RNA removal"
+              "total_counts_removed": "Counts CellBender called ambient"
+              "fraction_counts_removed": "total_counts_removed divided by total_raw_counts"
+              "expected_cells": "--expected-cells (or the upstream aligner's estimate)"
+              "found_cells": "Barcodes CellBender kept as cells"
+              "ratio_of_found_cells_to_expected_cells": "found_cells divided by expected_cells"
+              "target_fpr": "Target false-positive rate parameter"
+
+      # ==================================================================
+      # OPTIONAL: pipeline-local aligner-concordance tables, across all
+      # three routes on one normalised 16-mer barcode.
+      # ==================================================================
+      - data_collection_tag: "cell_calls_by_method"
+        description: "One row per barcode called a cell by any method, across all three aligner routes"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_calls_by_method.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "barcode_core": "16-mer 10x barcode, GEM-well suffix stripped"
+              "cellranger": "True when Cell Ranger's own filtered-matrix cell call includes this barcode"
+              "cellranger_cellbender": "True when CellBender kept this barcode as a cell on the Cell Ranger route"
+              "simpleaf_cellbender": "True when CellBender kept this barcode as a cell on the simpleaf route"
+              "kallisto": "True when kb count --filter's own knee-based cell call includes this barcode"
+              "kallisto_cellbender": "True when CellBender kept this barcode as a cell on the kallisto route"
+              "n_callers": "How many of the 5 boolean columns are True"
+
+      - data_collection_tag: "aligner_summary"
+        description: "One row per --aligner route: cells called, CellBender cells, median UMI per cell and mapping rate"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/aligner_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "aligner": "\"cellranger\" | \"simpleaf\" | \"kallisto\""
+              "cells_called": "The route's own primary cell call"
+              "cellbender_cells": "CellBender's cell call for the same route, null when CellBender was not run on it"
+              "median_umi_per_cell": "Median UMI per cell for the route; null when not computed (kallisto)"
+              "mapping_rate": "Reads mapped divided by reads processed, 0-1"
+
+links:
+  # Hub -> everything keyed on the sample name.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Cell Ranger metrics table by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_library_metrics_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the thresholded library-metrics table by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_mapping_breakdown"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the mapping-region breakdown by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_barcode_rank"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the barcode-rank curve by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_qc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-cell QC hub by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cluster_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cluster summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_pca_variance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the PCA scree by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_diffexp"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the marker-gene table by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellbender_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the CellBender metrics by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "simpleaf_barcode_rank"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the simpleaf barcode-rank curve by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "simpleaf_mapping_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the simpleaf mapping metrics by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qcatch_metrics_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the QCatch metrics by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "kallisto_run_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the kallisto run metrics by the samples picked in the left panel"
+    enabled: true
+
+  # Cluster selection: pick a cluster on cell_qc (the hub), read its
+  # cluster summary, marker expression and marker genes.
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cluster_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to the cluster summary"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_marker_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to its marker expression"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_diffexp"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to its marker genes"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cell_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to the per-cell expression matrix"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cell_expression_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to the melted marker expression"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cell_cycle"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to its cell-cycle scores"
+    enabled: true
+
+  # Sample hub -> the data collections added for feature selection, the
+  # per-cell expression matrix, the cell-cycle scores and the funnel.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_hvg_dispersion"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the gene dispersion cloud by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-cell expression matrix by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_expression_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the melted marker expression by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_cycle"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cell-cycle scores by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_funnel"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cell-calling funnel by the samples picked in the left panel"
+    enabled: true

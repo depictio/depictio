@@ -8,8 +8,8 @@ per-sample files, strips the alignment coordinates from the HMM hits
 (``GH2(23-690)`` -> ``GH2``), resolves a family for single-tool genes from the
 one tool that called it and derives the CAZy class from the family prefix.
 
-The overview carries no sample column and the recipe harness concatenates the
-globbed files without their path, so ``sample`` is read from the gene id,
+The overview carries no sample column, so ``sample`` is read from the
+per-sample directory the file sits in (``source_path``), else from the gene id,
 which nf-core/funcscan inherits from the assembly contig headers
 (``<sample>.<contig>_<orf>`` for MGnify / ENA assemblies). Assemblies whose
 contig names do not start with the sample id yield a single pseudo-sample.
@@ -28,6 +28,7 @@ SOURCES: list[RecipeSource] = [
         ref="overview",
         glob_pattern="cazyme/dbcan/cazyme_annotation/*/*_overview.tsv",
         format="TSV",
+        source_path="source_path",
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
     ),
 ]
@@ -66,6 +67,25 @@ def _clean(col: pl.Expr) -> pl.Expr:
     )
 
 
+def _sample(df: pl.DataFrame, contig: pl.Expr, subdir: str) -> pl.Expr:
+    """Sample from the per-sample directory the file sits in, else the contig prefix.
+
+    run_dbCAN writes one ``<subdir>/<sample>/`` directory per sample and no
+    sample column; ``source_path`` carries that directory. Rows read without it
+    (fixtures) fall back to the ``<sample>.<contig>`` prefix of MGnify / ENA
+    assemblies, then to a single ``run`` pseudo-sample.
+    """
+    from_prefix = (
+        pl.when(contig.str.contains(r"^[^.]+\..+"))
+        .then(contig.str.extract(r"^([^.]+)\.", 1))
+        .otherwise(pl.lit("run"))
+    )
+    if "source_path" not in df.columns:
+        return from_prefix
+    from_path = pl.col("source_path").str.extract(rf"{subdir}/([^/]+)/[^/]+$", 1)
+    return pl.coalesce(from_path, from_prefix)
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Normalise the overview and derive family / class per gene."""
     df = sources["overview"].rename(
@@ -92,6 +112,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         _clean(pl.col("recommended").cast(pl.Utf8)).alias("recommended"),
         _clean(pl.col("substrate").cast(pl.Utf8)).fill_null("unassigned").alias("substrate"),
         _clean(pl.col("ec_number").cast(pl.Utf8)).alias("ec_number"),
+        *([pl.col("source_path")] if "source_path" in df.columns else []),
     )
     # dbCAN recommends a family only when two tools agree; single-tool genes
     # take the family of the one tool that called them (first domain when the
@@ -111,11 +132,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .replace_strict(_CLASS_NAMES, default=pl.col("class_code"))
             .fill_null("Unclassified")
             .alias("cazy_class"),
-            # Sample from the contig header prefix (see module docstring).
-            pl.when(pl.col("contig").str.contains(r"^[^.]+\..+"))
-            .then(pl.col("contig").str.extract(r"^([^.]+)\.", 1))
-            .otherwise(pl.lit("run"))
-            .alias("sample"),
+            # Sample from the per-sample directory (see _sample).
+            _sample(df, pl.col("contig"), "cazyme_annotation").alias("sample"),
             pl.lit(1, dtype=pl.Int64).alias("genes"),
         )
         .sort("sample", "gene_id")

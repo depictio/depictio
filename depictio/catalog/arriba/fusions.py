@@ -15,24 +15,48 @@ recipe fills the text columns with an empty string and the read counts with 0.
 That keeps every rendered column non-null. The discarded calls Arriba writes to
 ``fusions.discarded.tsv`` are a different file and are not matched here.
 
-The per-sample file carries no sample column and the recipe harness concatenates
-the globbed files without their path, so no ``sample`` column can be recovered:
-the fusion call is the unit of analysis.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
+
+Each breakpoint is a ``chrom:position`` string, so the recipe also splits the
+chromosome out of both of them and pairs them into ``chrom_pair``. That reads the
+same rows as a partner-chromosome flow (an intra-chromosomal duplication and a
+translocation are different events) and gives a fusion-level grouping on a run
+whose sample column is constant.
 
 Output columns:
-    fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, site_5p, site_3p,
-    fusion_type, confidence, reading_frame, split_reads, discordant_mates,
-    supporting_reads, coverage, log_support, support_fraction,
-    retained_protein_domains, tags
+    sample, fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, chrom_5p, chrom_3p,
+    chrom_pair, site_5p, site_3p, fusion_type, confidence, reading_frame,
+    split_reads, discordant_mates, supporting_reads, coverage, log_support,
+    support_fraction, retained_protein_domains, tags
 """
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`arriba/<sample>.arriba.fusions.tsv`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".arriba.fusions.tsv"
+
+
+def _sample() -> pl.Expr:
+    """``arriba/S1.arriba.fusions.tsv`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
+        source_path=_SOURCE_PATH,
         glob_pattern="arriba/*.arriba.fusions.tsv",
         format="TSV",
         read_kwargs={
@@ -46,11 +70,15 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
     "breakpoint_5p": pl.Utf8,
     "breakpoint_3p": pl.Utf8,
+    "chrom_5p": pl.Utf8,
+    "chrom_3p": pl.Utf8,
+    "chrom_pair": pl.Utf8,
     "site_5p": pl.Utf8,
     "site_3p": pl.Utf8,
     "fusion_type": pl.Utf8,
@@ -77,11 +105,24 @@ def _count(name: str) -> pl.Expr:
     return pl.col(name).cast(pl.Int64, strict=False).fill_null(0)
 
 
+def _chrom(breakpoint_col: str) -> pl.Expr:
+    """The contig half of Arriba's ``chrom:position`` breakpoint string."""
+    return (
+        pl.col(breakpoint_col)
+        .str.split(":")
+        .list.first()
+        .cast(pl.Utf8)
+        .fill_null("")
+        .replace("", "unknown")
+    )
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Label each fusion and derive its aggregated read evidence."""
     df = sources["fusions"]
 
     base = df.select(
+        _sample(),
         _text("#gene1").alias("gene_5p"),
         _text("gene2").alias("gene_3p"),
         _text("breakpoint1").alias("breakpoint_5p"),
@@ -102,11 +143,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
 
     local_reads = pl.col("supporting_reads") + pl.col("coverage")
-    return base.with_columns(
-        (pl.col("supporting_reads") + 1).log10().cast(pl.Float64).alias("log_support"),
-        pl.when(local_reads > 0)
-        .then(pl.col("supporting_reads") / local_reads)
-        .otherwise(0.0)
-        .cast(pl.Float64)
-        .alias("support_fraction"),
-    ).select(list(EXPECTED_SCHEMA))
+    return (
+        base.with_columns(
+            (pl.col("supporting_reads") + 1).log10().cast(pl.Float64).alias("log_support"),
+            pl.when(local_reads > 0)
+            .then(pl.col("supporting_reads") / local_reads)
+            .otherwise(0.0)
+            .cast(pl.Float64)
+            .alias("support_fraction"),
+            _chrom("breakpoint_5p").alias("chrom_5p"),
+            _chrom("breakpoint_3p").alias("chrom_3p"),
+        )
+        .with_columns(
+            pl.concat_str("chrom_5p", pl.lit(" to "), "chrom_3p").alias("chrom_pair"),
+        )
+        .select(list(EXPECTED_SCHEMA))
+    )

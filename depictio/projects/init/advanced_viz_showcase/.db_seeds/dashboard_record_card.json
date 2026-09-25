@@ -1,0 +1,400 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7f"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7f"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "card-text",
+      "component_type": "text",
+      "title": "Gene record",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Pick a gene",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The card on the right opens on GENE072, the strongest up-regulated gene, and shows its whole row: identity, location, test result, variant load and pathway, with the Ensembl and UniProt identifiers as links. Click a gene in the scatter (fold change against mean expression) to swap the card to it; a box or lasso selection stacks one card per gene, and clearing the selection returns to the default. The row is a gene-level summary of the kind nf-core/rnaseq and nf-core/differentialabundance results give once joined to the annotation.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "card-scatter",
+      "component_type": "advanced_viz",
+      "title": "Effect size against mean expression",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "record_card_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "120 genes with the fields a fact panel groups: identity, location, differential expression, variant summary and two external identifiers",
+        "data_collection_tag": "record_card_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One point per gene. Selection is enabled on the feature id, so a click publishes that gene as a dashboard filter and the card beside it reads it back.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Pick a gene",
+      "viz_kind": "scatter_xy",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "scatter_xy",
+        "x_col": "mean_expression",
+        "y_col": "effect_size",
+        "label_col": "gene_symbol",
+        "color_col": "pathway",
+        "size_col": null,
+        "log_x": false,
+        "log_y": false,
+        "x_title": "Mean expression",
+        "y_title": "Effect size (log2 fold change)",
+        "reference_line": "horizontal",
+        "reference_value": 0.0,
+        "min_size": 4.0,
+        "max_size": 22.0,
+        "marker_size": 7.0,
+        "opacity": 0.8,
+        "marker_outline": true,
+        "top_n_labels": 0,
+        "color_scale": "Viridis",
+        "legend_pos": "bottom",
+        "selection_enabled": true,
+        "selection_column": "feature_id",
+        "density": false,
+        "density_threshold": 3000,
+        "density_bins": 60,
+        "quadrants": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "card-panel",
+      "component_type": "advanced_viz",
+      "title": "Gene record",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "record_card_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "120 genes with the fields a fact panel groups: identity, location, differential expression, variant summary and two external identifiers",
+        "data_collection_tag": "record_card_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The selected row as a fact panel. Sections are declared by the tile; the reference columns render as links built from a URL template.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Pick a gene",
+      "viz_kind": "record_card",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "record_card",
+        "id_col": "feature_id",
+        "title_col": "gene_symbol",
+        "sections": {
+          "Identity": [
+            "gene_symbol",
+            "gene_name",
+            "biotype"
+          ],
+          "Location": [
+            "chromosome",
+            "start",
+            "end",
+            "strand"
+          ],
+          "Differential expression": [
+            "effect_size",
+            "significance",
+            "mean_expression"
+          ],
+          "Variants": [
+            "n_variants",
+            "top_consequence",
+            "pathway"
+          ],
+          "References": [
+            "ensembl_id",
+            "uniprot_id"
+          ]
+        },
+        "link_templates": {
+          "ensembl_id": "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g={value}",
+          "uniprot_id": "https://www.uniprot.org/uniprotkb/{value}"
+        },
+        "selection_source": "any",
+        "max_fields": 40,
+        "default_record": "GENE072"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "card-f-pathway",
+      "component_type": "interactive",
+      "title": "Pathway",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "record_card_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "120 genes with the fields a fact panel groups: identity, location, differential expression, variant summary and two external identifiers",
+        "data_collection_tag": "record_card_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "pathway",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Gene filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#4C6EF5",
+      "icon_name": "mdi:relation-many-to-many",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "card-f-biotype",
+      "component_type": "interactive",
+      "title": "Biotype",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "record_card_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "120 genes with the fields a fact panel groups: identity, location, differential expression, variant summary and two external identifiers",
+        "data_collection_tag": "record_card_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8db1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "biotype",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Gene filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#4C6EF5",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-card-f-pathway",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-card-f-biotype",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-card-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-card-scatter",
+      "x": 0,
+      "y": 2,
+      "w": 5,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-card-panel",
+      "x": 5,
+      "y": 2,
+      "w": 3,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Gene record",
+  "subtitle": "Click a gene in the scatter and its full record opens beside it, grouped into sections, with links out to Ensembl and UniProt",
+  "icon": "mdi:information-outline",
+  "icon_color": "indigo",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 45,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "indigo",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Gene scope",
+      "icon": "mdi:filter-variant",
+      "color": "indigo",
+      "description": "Narrows the genes the scatter offers, and so the ones the card can show",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Pick a gene",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "indigo",
+      "description": "A scatter whose selection drives the card beside it",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

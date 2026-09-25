@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Slider,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -24,8 +15,16 @@ import {
   advancedVizSelectionFilter,
   extractScatterSelection,
   filtersExcludingOwn,
+  hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -33,7 +32,9 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { logLogSlope } from './logLogSlope';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
@@ -66,6 +67,8 @@ interface ProfileConfig {
   legend_pos?: LegendPos;
   selection_enabled?: boolean;
   selection_column?: string | null;
+  derivative?: boolean;
+  derivative_window?: number;
 }
 
 interface Props {
@@ -107,6 +110,13 @@ const PLOT_CONFIG_SELECT = {
 // curves at a fixed weight rather than following `band_opacity`, which belongs
 // to the confidence ribbon the user can actually tune away.
 const SHADE_OPACITY = 0.1;
+
+// Vertical split when the slope panel is on: the curves keep roughly 70% of
+// the height, because the derivative is read as an annotation of the curve
+// rather than a figure in its own right.
+const CURVE_PANEL: [number, number] = [0.32, 1];
+const SLOPE_PANEL: [number, number] = [0, 0.26];
+const DEFAULT_DERIVATIVE_WINDOW = 5;
 
 const PALETTE = TAB10_PALETTE;
 
@@ -150,6 +160,7 @@ const ProfilePlot = React.memo<{
     () => applyLayoutTheme(figure.layout as any, isDark, theme),
     [figure.layout, isDark, theme],
   );
+  const selection = useGestureGuardedSelection(onSelected);
   return (
     <Plot
       data={themedData as any}
@@ -157,7 +168,8 @@ const ProfilePlot = React.memo<{
       useResizeHandler
       style={PLOT_STYLE}
       config={plotConfig as any}
-      onSelected={onSelected}
+      onSelecting={selection.onSelecting}
+      onSelected={selection.onSelected}
       onClick={onClick}
       onDeselect={onDeselect}
     />
@@ -187,6 +199,9 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const [bandOpacity, setBandOpacity] = usePersistedVizControl<number>(metadata, 'band_opacity', 0.2);
   const [lineWidth, setLineWidth] = usePersistedVizControl<number>(metadata, 'line_width', 2);
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
+  // The Hi-C P(s) convention, useful to any log-log profile: the slope is what
+  // separates one regime from another and it is unreadable off the curve.
+  const [derivative, setDerivative] = usePersistedVizControl<boolean>(metadata, 'derivative', false);
 
   // ---- Selection as a cross-filter ---------------------------------------
   // The column resolves through selection.ts (named column, else the series
@@ -217,6 +232,9 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const filtersForFetch = useMemo(
     () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
     [filters, metadata.index],
+  );
+  const selectionRevision = useSelectionRevision(
+    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
   );
 
   // What this component currently has selected, read back out of the filter
@@ -353,9 +371,17 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     const xLabel = config.x_title || config.x_col || 'x';
     const yLabel = config.y_title || config.y_col || 'y';
 
+    // A local log-log slope is only defined on log-log axes, so the panel
+    // forces both scales rather than drawing the derivative of something the
+    // reader is not looking at.
+    const logAxisX = derivative || logX;
+    const logAxisY = derivative || logY;
+    const derivativeWindow = Math.max(1, config.derivative_window ?? DEFAULT_DERIVATIVE_WINDOW);
+
     // Bands go in first so no series' ribbon can cover another series' line.
     const bands: any[] = [];
     const lines: any[] = [];
+    const slopes: any[] = [];
     for (const name of names) {
       const pts = bySeries.get(name)!;
       const colour = colours.get(name);
@@ -411,6 +437,37 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         hovertemplate:
           `<b>${name}</b><br>${xLabel}: %{x}<br>${yLabel}: %{y:.4g}<extra></extra>`,
       });
+
+      if (derivative) {
+        const slope = logLogSlope(
+          px,
+          pts.map((p) => p.y),
+          derivativeWindow,
+        );
+        if (slope.length > 1) {
+          slopes.push({
+            type: 'scatter' as const,
+            mode: 'lines' as const,
+            x: slope.map((s) => s.x),
+            y: slope.map((s) => s.slope),
+            xaxis: 'x2',
+            yaxis: 'y2',
+            name,
+            legendgroup: name,
+            showlegend: false,
+            // Same identity slot as the curve above it, so an analysis group
+            // recolours the slope and its curve together instead of leaving
+            // the lower panel in the series' original colours.
+            customdata: slope.map(() => [name]),
+            line: {
+              color: lit ? colour : withAlpha(colour, 0.25),
+              width: lineWidth,
+              shape: 'linear' as const,
+            },
+            hovertemplate: `<b>${name}</b><br>${xLabel}: %{x}<br>slope: %{y:.3f}<extra></extra>`,
+          });
+        }
+      }
     }
 
     const { textColor, gridColor, zeroLineColor } = plotlyThemeColors(isDark, theme);
@@ -419,7 +476,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     // on a log axis are the log10 of the value. A non-positive x has no place
     // on a log axis at all, so those markers are dropped rather than clamped.
     const toAxisX = (v: number): number | null => {
-      if (!logX) return v;
+      if (!logAxisX) return v;
       return v > 0 ? Math.log10(v) : null;
     };
 
@@ -496,25 +553,53 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         ? { orientation: 'h', x: 0, y: -0.22, font: { size: 10, color: textColor }, bgcolor: 'rgba(0,0,0,0)' }
         : { orientation: 'v', x: 1.02, y: 1, font: { size: 10, color: textColor }, bgcolor: 'rgba(0,0,0,0)' };
 
+    // Two rows sharing one x range when the slope panel is on. The upper
+    // panel's tick labels go, since the axis is named once under the lower
+    // one; `matches` keeps a zoom on either panel applied to both.
+    const slopePanel = derivative
+      ? {
+          xaxis2: {
+            ...plotlyAxisOverrides(isDark, theme),
+            title: { text: xLabel },
+            type: 'log',
+            matches: 'x',
+            anchor: 'y2',
+            zeroline: false,
+            gridcolor: gridColor,
+          },
+          yaxis2: {
+            ...plotlyAxisOverrides(isDark, theme),
+            title: { text: 'd log y / d log x', font: { size: 10 } },
+            domain: SLOPE_PANEL,
+            anchor: 'x2',
+            zeroline: false,
+            gridcolor: gridColor,
+          },
+        }
+      : {};
+
     return {
-      data: [...bands, ...lines],
+      data: [...bands, ...lines, ...slopes],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
         margin: { l: 60, r: 16, t: 24, b: legendPos === 'bottom' ? 68 : 48 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
-          title: { text: xLabel },
-          type: logX ? 'log' : 'linear',
+          title: derivative ? undefined : { text: xLabel },
+          type: logAxisX ? 'log' : 'linear',
           zeroline: false,
           gridcolor: gridColor,
+          ...(derivative ? { showticklabels: false, anchor: 'y' } : {}),
         },
         yaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: yLabel },
-          type: logY ? 'log' : 'linear',
+          type: logAxisY ? 'log' : 'linear',
           zeroline: false,
           gridcolor: gridColor,
+          ...(derivative ? { domain: CURVE_PANEL } : {}),
         },
+        ...slopePanel,
         showlegend: legendPos !== 'none',
         legend,
         shapes,
@@ -523,8 +608,14 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         autosize: true,
         // Preserve the user's zoom / pan across re-renders. It must change
         // when the axis scale does, because a log flip is the one case where
-        // the old range is meaningless and autorange should win.
-        uirevision: `profile:${metadata.dc_id}:${logX ? 'logx' : 'linx'}:${logY ? 'logy' : 'liny'}`,
+        // the old range is meaningless and autorange should win. The slope
+        // panel forces both scales, so it belongs in the key too.
+        uirevision: `profile:${metadata.dc_id}:${logAxisX ? 'logx' : 'linx'}:${
+          logAxisY ? 'logy' : 'liny'
+        }:${derivative ? 'slope' : 'plain'}`,
+        // Selected points are keyed apart from the zoom: an outside clear
+        // (group saved, filter removed) undims the plot and keeps the view.
+        selectionrevision: `sel-${selectionRevision}`,
         dragmode: selectionEnabled ? 'select' : 'zoom',
       },
     };
@@ -539,10 +630,12 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     selectedSeries,
     logX,
     logY,
+    derivative,
     bandOpacity,
     lineWidth,
     legendPos,
     selectionEnabled,
+    selectionRevision,
     metadata.dc_id,
   ]);
 
@@ -568,64 +661,71 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   );
   const handleDeselect = useCallback(() => emitSelection([]), [emitSelection]);
 
-  const controls = (
-    <Stack gap="xs">
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Axes
-        </Text>
-        <Switch
-          size="xs"
-          checked={logX}
+  // Encoding tier: the axis scales and the slope panel decide what the curve
+  // says (a power law is only a line on log-log). Width, band and legend are
+  // paint.
+  const primaryControls = (
+    <>
+      <VizControlGroup title="Axes">
+        <VizSwitch
+          checked={logX || derivative}
+          disabled={derivative}
           onChange={(e) => setLogX(e.currentTarget.checked)}
           label="Log x"
         />
-        <Switch
-          size="xs"
-          checked={logY}
+        <VizSwitch
+          checked={logY || derivative}
+          disabled={derivative}
           onChange={(e) => setLogY(e.currentTarget.checked)}
           label="Log y"
         />
-      </Stack>
-      <NumberInput
-        size="xs"
-        label="Line width"
-        value={lineWidth}
-        onChange={(v) => setLineWidth(Math.max(0.5, Number(v) || 2))}
-        min={0.5}
-        max={8}
-        step={0.5}
-        decimalScale={1}
-      />
-      {bandCols ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Band opacity
-          </Text>
-          <Slider
-            size="xs"
+        <VizSwitch
+          checked={derivative}
+          onChange={(e) => setDerivative(e.currentTarget.checked)}
+          label="Local log-log slope panel"
+        />
+      </VizControlGroup>
+    </>
+  );
+
+  const controls = (
+    <>
+      <VizControlGroup title="Lines">
+        <VizNumberInput
+          label="Line width"
+          value={lineWidth}
+          onChange={(v) => setLineWidth(Math.max(0.5, Number(v) || 2))}
+          min={0.5}
+          max={8}
+          step={0.5}
+          decimalScale={1}
+        />
+        {bandCols ? (
+          <VizSlider
+            label="Band opacity"
             value={bandOpacity}
             onChangeEnd={setBandOpacity}
             min={0}
             max={1}
             step={0.05}
-            label={(v) => v.toFixed(2)}
+            thumbLabel={(v) => v.toFixed(2)}
           />
-        </Stack>
-      ) : null}
-      <Select
-        size="xs"
-        label="Legend"
-        value={legendPos}
-        onChange={(v) => setLegendPos((v as LegendPos) || 'right')}
-        data={[
-          { value: 'right', label: 'Right' },
-          { value: 'bottom', label: 'Bottom' },
-          { value: 'none', label: 'Hidden' },
-        ]}
-        allowDeselect={false}
-      />
-    </Stack>
+        ) : null}
+      </VizControlGroup>
+      <VizControlGroup title="Legend">
+        <VizSelect
+          label="Legend"
+          value={legendPos}
+          onChange={(v) => setLegendPos((v as LegendPos) || 'right')}
+          data={[
+            { value: 'right', label: 'Right' },
+            { value: 'bottom', label: 'Bottom' },
+            { value: 'none', label: 'Hidden' },
+          ]}
+          allowDeselect={false}
+        />
+      </VizControlGroup>
+    </>
   );
 
   // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is
@@ -655,6 +755,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       estimated={estimated}
       title={metadata.title || 'Profile'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

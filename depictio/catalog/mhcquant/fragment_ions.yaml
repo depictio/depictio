@@ -1,0 +1,15 @@
+id: mhcquant_fragment_ions
+name: Fragment-ion annotation
+mode: immunopeptidomics/fragment-ions
+description: >-
+  Matched fragment ions per identified peptide (b, y and other series) with the
+  median absolute fragment mass error in ppm, summarised from the
+  pyOpenMS ion annotation mhcquant writes with --annotate_ions.
+find: { path_glob: "**/ion_annotations/*_matching_ions.tsv" }
+recipe: mhcquant/fragment_ions.py
+fixture: fragment_ions.tsv
+renders_as:
+  - { component: card, column: fragment_ions, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fragment_error_ppm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: { x: fragment_error_ppm, color: sample } }
+  - { component: table }

@@ -1,0 +1,100 @@
+# Megatest manifest for nf-core/smrnaseq 2.4.1 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline smrnaseq --version 2.4.1 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# Published layout quirks of this run: the miRDeep2 per-sample results
+# (result_<sample>.csv / .bed / .html) sit at the run root, not under mirdeep2/;
+# the mature / hairpin count matrices and the edgeR QC tables were not
+# published (mirna_quant/edger_qc/ is an empty prefix), so expression is
+# aggregated from the mirtop joined isomiR table; the miRTrace output holds only
+# collapsed read FASTAs (its QC tables live in the MultiQC parquet).
+pipeline: smrnaseq
+version: "2.4.1"
+# s3://nf-core-awsmegatests/smrnaseq/results-<results_sha>/ == the 2.4.1 release tag_sha.
+results_sha: "cb0af579b24cb8d5a3accd87b2f14ea93fe04832"
+run_root: ""
+multiqc:
+  version: "1.33"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet (fastp, miRTrace, mirtop, samtools, bowtie ...).
+  - multiqc/multiqc_data/multiqc.parquet
+  # mirtop isomiR table joined across samples (one row per isomiR, one count
+  # column per sample): the source of the expression, isomiR and design views.
+  - mirna_quant/mirtop/joined_samples_mirtop.tsv
+  # miRDeep2 novel / known miRNA predictions, one table + BED per sample.
+  - result_*.csv
+  - result_*.bed
+# Run-specific values the dashboard texts must never name (checked by
+# depictio/tests/models/test_template_conventions.py): the test samples, the
+# test organism and assembly, the design levels of this run, and the miRNAs
+# that dominate it.
+forbidden_terms:
+  - c1
+  - c2
+  - c3
+  - c4
+  - c5
+  - c6
+  - c7
+  - cc1
+  - cc2
+  - cc3
+  - cc4
+  - cc5
+  - cc6
+  - cc7
+  - cpc1
+  - cpc2
+  - cpc3
+  - cpc4
+  - cpc5
+  - cpc6
+  - cpc7
+  - pc1
+  - pc2
+  - pc3
+  - pc4
+  - pc5
+  - pc6
+  - pc7
+  - GRCh37
+  - hg19
+  - Homo sapiens
+  - human
+  - hsa
+  - Primates
+  - clinic
+  - preclinic
+  - let-7a
+  - miR-21
+  - miR-181a
+  - miR-26a
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The run's design (condition x stage) is vendored with the template; the
+  # reference seed reads it from {dest}/input/, so copy it there first:
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/smrnaseq/2.4.1/input/sample_metadata.tsv {dest}/input/
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/smrnaseq/2.4.1 --data-root {dest} --dry-run \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/smrnaseq/2.4.1 --data-root {dest}

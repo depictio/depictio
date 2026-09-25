@@ -1,0 +1,3 @@
+Workflow:
+    nf-core/genomeassembler: v2.0.0-ga72d47d
+    Nextflow: 26.04.6

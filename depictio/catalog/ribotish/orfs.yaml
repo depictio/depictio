@@ -1,0 +1,21 @@
+id: ribotish_orfs
+name: Ribo-TISH ORF predictions
+mode: riboseq/orfs
+description: >-
+  Ribo-TISH ORF predictions per library, collapsed from one row per start codon
+  to one row per ORF and keyed by the genomic stop codon, with the Ribo-TISH
+  initiation type, a class shared with other ORF callers, the protein length
+  and the frame-test q-value.
+find: { path_glob: "**/ribotish/*_pred.txt" }
+recipe: ribotish/orfs.py
+fixture: orfs.tsv
+renders_as:
+  - id: orf_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: orf_id, title: gene_name }
+  - { component: card, column: orf_id, aggregation: nunique, secondary_layout: donut, breakdown_col: orf_class }
+  - { component: card, column: aa_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: { x: aa_length, color: orf_class } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: orf_class }
+  - { component: table, row_selection_enabled: true, row_selection_column: orf_id }

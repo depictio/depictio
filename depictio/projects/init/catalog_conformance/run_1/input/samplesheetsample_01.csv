@@ -1,0 +1,4 @@
+sample	fasta
+sample_01	assemblies/sample_01.contigs.fa.gz
+sample_02	assemblies/sample_02.contigs.fa.gz
+sample_03	assemblies/sample_03.contigs.fa.gz

@@ -1,0 +1,250 @@
+# nf-core/mag 5.5.0: template ingestion validation report
+
+Date: 2026-09-22. Supersedes the 5.4.2 report entirely.
+
+The 5.4.2 report described a template built on
+`s3://nf-core-awsmegatests/mag/results-5dabb0159ac0104885e09f301db22126e8fcb394/`.
+That prefix is a **truncated S3 sync**, not a thin pipeline run: 7554 keys, 987
+non-zero objects, and a smallest non-zero object of 8.4 MB. Every object under
+roughly 8 MB is missing or zero-byte, which is precisely the set of report
+tables a dashboard reads. Its three findings MG-D1, MG-D2 and MG-D5, which
+concluded that mag publishes no taxonomy, no assembly QC and no bin quality,
+were conclusions about the sync and not about the pipeline. They are withdrawn.
+
+## Data used
+
+Prefix `results-171cf36971499cea4c9bccac4536cccbfc540e14`, 15 494 objects. It
+is the 5.5.0 release candidate: `nextflow.config` at that commit carries
+`manifest.version = '5.5.0'`, and the commit predates the 5.5.0 tag by four
+days. It is the only complete mag megatest in the bucket. The tagged 5.5.0 run
+(`56abab5b`) crashed after read QC and holds 52 objects; `8ac0a2cf` is 5.6.0dev.
+
+```bash
+bash depictio/projects/nf-core/mag/5.5.0/download_test_data.sh
+python -m depictio.dev_scripts.multiqc_reprocess --src <DATA_ROOT> --dest <DATA_ROOT>
+```
+
+673 files, 65 MB. Three samples (CAPES_S7, CAPES_S11, CAPES_S21), short and
+long reads, four assemblers (MEGAHIT, SPAdes, FLYE, METAMDBG) and five binners
+(MetaBAT2, MaxBin2, CONCOCT, COMEBin, and the DAS Tool refinement).
+
+## What the run publishes, and what it does not
+
+Published and used: QUAST assembly and per-bin reports, CheckM2 quality
+reports, GTDB-Tk classify summaries, jgi contig depth tables, Prokka per-bin
+feature summaries and GFFs, fastp JSON, Bowtie2 logs, NanoStats, and a real
+`pipeline_info/` with `params_2026-07-28_08-20-27.json`,
+`nf_core_mag_software_mqc_versions.yml` and an execution trace.
+
+Not published, and therefore not in the template:
+
+| Missing | Consequence |
+| --- | --- |
+| `multiqc/` (the whole directory) | The report is re-generated locally with MultiQC 1.35 from the run's own raw inputs. Eight modules parse. |
+| `GenomeBinning/bin_summary.tsv` | Rebuilt Depictio-side by `depictio/catalog/mag/bin_summary.py` as a four-way outer join. |
+| `GenomeBinning/depths/bins/` | No per-bin depth table, so no bin-by-sample depth heatmap. |
+| `busco_summary.tsv`, `GUNC/`, `BIgMAG/` | 5.5.0 publishes CheckM2 only; the other bin-QC tools did not run. |
+| `GenomeBinning/contig_to_bin/contig_to_bin_map.tsv` | Exists only under `5dabb015` (1283 bins) and `8ac0a2cf`. Joining it onto this run's 479 bins would be wrong, so it is dropped. |
+
+Prokka's GFF is not a substitute for the contig-to-bin map: Prokka renames
+every contig to an internal `gnl|<centre>|<hash>_N`, so its coordinates join to
+nothing outside the bin they came from.
+
+## Discrepancies
+
+- **MG-D6. The unit is the bin, not the sample.** Three samples produce 479
+  bins, 74 055 contigs and 222 165 contig-by-sample coverage rows. A sample
+  filter is the least selective control on the dashboard; assembler, binner,
+  phylum and the quality thresholds are what actually narrow it.
+- **MG-D7. The four bin tools see different bins.** QUAST measured 479,
+  CheckM2 scored 427, Prokka annotated 449 and GTDB-Tk placed 150. The joined
+  `bin_summary` therefore carries a `sources_present` column (1 to 4) rather
+  than dropping rows: 10 bins are known to one tool, 54 to two, 274 to three
+  and 141 to all four.
+- **MG-D8. GTDB-Tk leaves `msa_percent` empty.** This run classified through
+  ANI screening rather than pplacer, so `msa_percent` is null for every bin.
+  The catalog card over it was moved to `closest_af`.
+- **MG-D9. No read-level table.** fastp publishes JSON and NanoPlot publishes
+  a free-text `NanoStats.txt`; neither is a format a table data collection can
+  read. Read QC therefore exists only as MultiQC panels on the landing tab,
+  and the dashboard has no Reads tab.
+- **MG-D10. Prokka GFFs are 1.1 GB.** Each of the 449 files carries the bin's
+  whole FASTA after `##FASTA`. Only METAMDBG's 44 GFFs are fetched, 54 MB,
+  which bounds the whole fetch at 65 MB and still gives a real locus map.
+
+## Data collections and row counts
+
+All counts are from the fetched megatest, verified recipe by recipe.
+
+| Data collection | Kind | Rows |
+| --- | --- | --- |
+| `samples` | transformed (samplesheet) | 3 |
+| `multiqc_data` | MultiQC | 1 report, 8 modules |
+| `quast_assembly_raw` | scan | 10 files |
+| `assembly_report` | transformed | 10 |
+| `length_ladder` | transformed | 60 |
+| `mag_contig_depths_raw` | scan | 10 files |
+| `contig_depths` | transformed | 222 165 |
+| `checkm2_quality_raw` | scan | 24 files |
+| `checkm2_quality_report` | transformed | 427 |
+| `quast_bins_raw` | scan | 24 files |
+| `quast_bins_summary` | transformed | 479 |
+| `gtdbtk_summary_raw` | scan | 26 files |
+| `gtdbtk_summary` | transformed | 150 |
+| `gtdbtk_rank_composition` | transformed | 421 |
+| `prokka_summary_raw` | scan | 449 files |
+| `prokka_summary` | transformed | 449 |
+| `prokka_gff_raw` | scan | 44 files |
+| `prokka_gene_track` | transformed | 47 878 |
+| `bin_summary` | transformed (`dc_ref` x4) | 479 |
+
+`bin_summary` MIMAG tiers: 9 high-quality drafts, 154 medium, 248 low, 16
+contaminated, 52 unknown. GTDB-Tk phyla: Bacillota 67, Bacteroidota 44,
+Pseudomonadota 20, Actinomycetota 17, Bacillota_I 1, one unplaced.
+
+## Catalog modules authored
+
+Five new tool directories, ten outputs, all pipeline-agnostic (any workflow
+running these tools recognises them):
+
+- `depictio/catalog/checkm2/`: `quality_report`
+- `depictio/catalog/quast/`: `assembly_report`, `length_ladder`, `bins_summary`
+- `depictio/catalog/gtdbtk/`: `summary`, `rank_composition`
+- `depictio/catalog/prokka/`: `summary`, `gene_track`
+- `depictio/catalog/mag/`: `bin_summary`, `contig_depths`
+- `depictio/catalog/multiqc/gtdbtk.yaml`: the MultiQC GTDB-Tk panel
+
+Shared helpers: `depictio/recipes/lib/mag_bins.py` (bin identity parsing and
+the MIMAG tier rule) and `depictio/recipes/lib/quast_report.py` (QUAST column
+folding, which differs between QUAST versions and between assembly and bin
+reports).
+
+## Validation run
+
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py   # 873 passed
+uv run pytest depictio/tests/models/test_catalog.py                    # mag entries pass
+uv run python -m depictio.cli dev catalog validate                     # no mag findings
+uv run python -m depictio.cli run --template nf-core/mag/5.5.0 \
+  --data-root ~/Data/depictio-nfcore/mag/5.5.0/megatest --dry-run      # 8/8 steps
+```
+
+## Open questions
+
+1. The 5.4.2 prefix should be re-synced upstream; its report tables exist, the
+   sync dropped them. Worth an nf-core issue.
+2. The tagged 5.5.0 megatest crashed and was never re-run, which is why this
+   template pins a release candidate rather than a tag sha.
+3. Whether a future mag release publishes `bin_summary.tsv` and
+   `GenomeBinning/depths/bins/` again. If it does, the catalog recipe already
+   recognises the former by its own glob and a bin-by-sample depth heatmap
+   becomes possible.
+
+## 2026-09-22 review fixes
+
+- `dashboards/base.yaml`: tab-local, non-persistent `Glance scope` section on the main tab, a
+  `MultiSelect` on `bin_summary.mimag_tier` (the DC behind the pinned bin strip), so the
+  MultiQC tab has its own control beside the two pinned scopes.
+- No new pinned samplesheet factor: `group` is `0` on all three rows of
+  `input/samplesheet.full.v4.csv`, so a filter on it would be dead on the reference run. It
+  stays in the hub table.
+- `test_shipped_dashboard_yamls.py -k mag` passes.
+
+## 2026-09-23 wave 2b (analysis modes, header controls, record card)
+
+What changed:
+
+- Bins tab: completeness against contamination is cut into MIMAG `quadrants` at
+  x 90 / y 5 (the CheckM2 half of the high-quality draft); the old 5 percent
+  reference line is gone.
+- Bin detail tab: the MIMAG scatter carries the same quadrants, selects on
+  `bin_id`, and sits beside a `record_card` (w 3) on `bin_summary` with
+  `default_record: SPAdes-MetaBAT2-CAPES_S7.15` (a high-quality Klebsiella
+  pneumoniae draft, 96.3 / 1.25) and GTDB search links on genus and species.
+- Contigs tab: length against depth stays in points mode (`density: false`,
+  `density_threshold: 20000`, see MG-D14); new section
+  "Cross-sample recruitment" with a `complex_heatmap` (log1p) on the new
+  `assembly_recruitment` collection.
+- Assembly tab: new section "Nx curve" with a `profile` on the new
+  `assembly_nx` collection (N50 marked), plus an assembly MultiSelect on it.
+- `controls_placement: header` on every scatter_xy tile (9) and on the
+  stacked_taxonomy rank tile; `show_histogram: true` on all 8 RangeSliders.
+- Two pipeline-local recipes, `recipes/nx_curve.py` (contig lengths off the raw
+  depth scan, QUAST's 500 bp floor, 101 points per assembly) and
+  `recipes/assembly_recruitment.py` (length-weighted mean depth per assembly and
+  read sample, pivoted wide), with links from `samples` (sample) and
+  `bin_summary` (assembler). Tests: `depictio/tests/recipes/test_mag_assembly_views.py`.
+
+Discrepancies:
+
+- **MG-D11. No bin by sample depth.** `GenomeBinning/depths/bins/` and any
+  contig-to-bin membership are not published, so the canonical bin by sample
+  heatmap cannot be built; the assembly by read-sample recruitment matrix is
+  the honest level above.
+- **MG-D12. No contig GC.** GC against coverage coloured by bin needs contig GC
+  (assembly FASTA) and contig-to-bin membership; neither is published. The
+  length against depth scatter gets the density mode instead.
+- **MG-D13. Nx covers nine of ten assemblies.** The curve reads the depth
+  tables; QUAST reports ten assemblies, nine have a depth table. At x = 50 the
+  curve equals the QUAST N50 (MEGAHIT-CAPES_S7: 12 863 bp both).
+- **MG-D14. Density on log axes crashes the tab.** With the scatter's density
+  view on log axes (set explicitly, or switched on by itself above 3000 rows,
+  which the 9 539-row sample exceeds) headless Chromium crashed the Contigs tab
+  9 of 9 times; points mode and a linear density did not crash in 9 runs. The
+  tile is pinned to points mode until the renderer is fixed.
+
+Results: `test_shipped_dashboard_yamls.py -k mag` 30 passed; `test_catalog.py`
+99 passed; the recipe tests 2 passed; dry run 8/8. Live ingest as `lot2-mag`
+(project 6ab3caf59cf1ab2ab1503cbc, dashboard 6ab3cb74e8b8ace33d32c8b1):
+`assembly_nx` 909 rows, `assembly_recruitment` 9 x 6, every other collection
+unchanged (contig_depths 222 165, bin_summary 479).
+
+## Wave 3 (family review rework)
+
+What changed (review-metagenomics.md, consolidated-review.md):
+
+- Genericity: no megatest counts, sample ids, assembler names or result claims
+  in any dashboard text (main subtitle, Assembly subtitle and sections,
+  reference table description, sample-scope description, every intro).
+  `forbidden_terms` added to `megatest.yaml` (sample ids, the old default bin
+  id, the organism it opened on, the run's counts); lint rule e passes.
+- Blockers: `mg-det-av-record` has no `default_record` (it waits for a table
+  selection, `selection_source: table_selection`) and the Klebsiella sentence
+  is gone. `mg-filter-ladder-rung` (an equality Slider that collapsed both
+  curves to one point) is now a RangeSlider on `min_contig_length`, titled
+  "Minimum contig length range (bp)": it windows the thresholds and keeps
+  every curve intact inside the window.
+- Redundancies removed: `mg-det-av-sankey` (one sankey per template, Taxonomy
+  keeps `mg-tax-av-sankey`), `mg-det-av-mimag` (the bin table drives the record
+  card), `mg-asm-fig-n50`, `mg-ladder-av-cumulative` (retained fraction and Nx
+  now share one "Contig length" section), `mg-ctg-fig-hist` (the box plot
+  stays), `mg-filter-tax-rank` (the tile header picker is the rank control),
+  `mg-det-card-phyla`.
+- Cards: `mg-det-card-bins` (duplicate of the glance card) became
+  `mg-det-card-hq` (high-quality MIMAG drafts, `filter_expr` on `mimag_tier`),
+  plus a new `mg-det-card-rna` (bins meeting the MIMAG RNA criteria) to keep 4
+  cards. `mg-bin-card-completeness/-contamination` (duplicates of the glance
+  strip) became `mg-bin-card-n50` and `mg-bin-card-size` (CheckM2 `contig_n50`
+  and `genome_size` medians, box plot).
+- Link `checkm2_quality_report.bin_id -> quast_bins_summary.bin_id`: the Bins
+  tab's quality filters now reach "Bin assembly statistics" (both recipes keep
+  the bin id as the binner wrote it; verified on the catalog fixtures).
+- Composition bars: `default_rank: genus`, `top_n: 12`, `sort_by: abundance`,
+  `normalise_to_one: true` (percentages), header rank picker only.
+- Bin detail: the joined table and the record card sit in a "Bin detail"
+  section at the end of the tab; the record card opens on Quality and carries
+  `labels:` for every raw column name.
+- Intros cut to at most 2 sentences; `advanced_viz_controls: header` on every
+  tab; the Prokka GFF DC description no longer names one assembler.
+
+Verified: `pytest test_shipped_dashboard_yamls.py test_template_conventions.py
+depictio/tests/catalog -k mag`; dry run 8/8 against the local megatest.
+
+Still open:
+
+- Not re-checked live (no ingest in wave 3b): table row selection driving the
+  record card and the locus map at the same time, and the RangeSlider over the
+  six discrete QUAST thresholds.
+- Live row cap of the recruitment and contig tiles unchanged (MG-D14 still
+  pins the scatter to points mode).
+- Hardcoded `display` colours on cards are pre-existing and left as they are.

@@ -1,0 +1,896 @@
+# nf-core/genomeassembler Template v2.0.0 - De novo genome assembly QC
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/genomeassembler/2.0.0 --data-root /path/to/results
+#
+# Validated against the AWS megatest of the 2.0.0 release:
+#   s3://nf-core-awsmegatests/genomeassembler/results-a72d47d9cdb50f21b97882dfb2abf4af8f4c74ad
+# (see megatest.yaml for the fetched subset and VALIDATION_REPORT.md for what
+# that run did and did not publish).
+#
+# WHAT THIS TEMPLATE READS
+# ------------------------
+# nf-core/genomeassembler assesses every intermediate it writes (the raw
+# assembly, each polishing step, each scaffolder) and names every QC output
+# after the assessed assembly, `<sample>_<stage>`. There is no MultiQC report.
+# The template reads, per assessed assembly:
+#   * `QC/alignments/<sample>_<stage>.idxstats`: every sequence and its length,
+#     from which contiguity (N50, L50, N90, auN) and the Nx curve are computed;
+#   * `QC/merqury/`: consensus QV, k-mer completeness, per-sequence QV and the
+#     read k-mer copy-number spectrum;
+#   * `QC/BUSCO/*.batch_summary.txt`: BUSCO class percentages;
+#   * `QC/QUAST/<sample>_<stage>/transposed_report.tsv`: QUAST, reference-free and,
+#     when the run had a reference, reference-based;
+# and, per read set, the jellyfish k-mer histogram and GenomeScope's genome
+# profile. Every one of those collections is optional: a run that skipped a tool,
+# or an assembly a tool never reached, leaves its tiles empty, not the import
+# broken.
+#
+# DESIGN
+# ------
+# The design is the samplesheet (strategy, assemblers, polishing, scaffolders,
+# read group), read from METADATA_FILE. GROUP_COL picks the column the design
+# filters and colours group on (default `strategy`). Every per-assembly table
+# carries the samplesheet columns through, so any of them can be GROUP_COL.
+template:
+  template_id: "nf-core/genomeassembler/2.0.0"
+  description: "nf-core/genomeassembler template: contiguity, k-mer accuracy and completeness, and BUSCO gene completeness of every assembly, polishing and scaffolding stage, compared across assembly strategies, with the read-based genome profile as the yardstick."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing genomeassembler output: one directory per sample (and per read group) with assembly/, polish/, scaffold/, QC/ and reads/, plus pipeline_info/."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (the pipeline publishes no copy of it). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet column holding the sample name every output directory is named after."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the design filters and colours group on (strategy, assembler, polish, group or any column you added)."
+      required: false
+      default: "strategy"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Display label for GROUP_COL in titles."
+      required: false
+      default: "Strategy"
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "strategy"
+      GROUP_COL_DISPLAY: "Strategy"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Assembly"
+        key_patterns: ["strategy", "assembler*", "flye_*", "hifiasm_*", "genome_size", "assembly*"]
+      - group: "Polishing"
+        key_patterns: ["polish*", "medaka_*"]
+      - group: "Scaffolding"
+        key_patterns: ["scaffold_*", "hic_*", "assembly_scaffolding_order"]
+      - group: "Quality control"
+        key_patterns: ["busco*", "merqury", "meryl_k", "quast", "jellyfish*", "qc_reads", "use_ref", "ref_*"]
+      - group: "Reads"
+        key_patterns: ["ontreads", "ont_*", "hifireads", "hifi_*", "shortread_*", "use_short_reads", "paired"]
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+name: "Genome Assembly QC"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "genomeassembler"
+    version: "2.0.0"
+    engine:
+      name: "nextflow"
+      version: "26.04.6"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/genomeassembler"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet the run was started with: one row per sample with its assembly strategy, assemblers, polishing and scaffolding switches"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample name; every output directory and QC file is named after it"
+              "strategy": "Assembly strategy: single (one long-read type), hybrid (ONT and HiFi together) or scaffold (one assembly scaffolded onto the other)"
+              "assembler": "Assembler, or assembler pair for the scaffold strategy; blank falls back to the ONT / HiFi specific columns or the run default"
+              "assembler_ont": "Assembler for the ONT reads"
+              "assembler_hifi": "Assembler for the HiFi reads"
+              "scaffold_ragtag": "Reference-guided scaffolding with RagTag"
+              "scaffold_longstitch": "Long-read scaffolding with LongStitch"
+              "scaffold_links": "Long-read scaffolding with LINKS"
+              "use_ref": "Whether a reference was used for QC and scaffolding"
+              "group": "Read group: samples in one group share read preparation and k-mer databases"
+              "qc_reads": "Long-read type used for the QC alignments"
+              "assembly_scaffolding_order": "For the scaffold strategy, which assembly is scaffolded onto which"
+              "polish": "Polishing tool(s)"
+              "hic_F": "Hi-C forward reads"
+              "hic_R": "Hi-C reverse reads"
+              "hic_trim": "Whether the Hi-C reads are trimmed"
+              "scaffold_hic": "Hi-C scaffolding"
+
+      # ----------------------------------------------------------------
+      # Raw scans (inputs of the recipes below)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_idxstats_raw"
+        description: "samtools idxstats of the reads mapped back to each assessed assembly, one row per sequence (input of assemblies and nx_curve)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+\\.idxstats$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["sequence", "length", "mapped", "unmapped"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "sequence": "Sequence name (`*` is the unmapped-reads line)"
+              "length": "Sequence length in bp"
+              "mapped": "Alignments on the sequence"
+              "unmapped": "Unmapped reads placed on it (mate mapped)"
+              "source_path": "The idxstats file, named `<sample>_<stage>.idxstats`"
+
+      - data_collection_tag: "merqury_qv_raw"
+        description: "Merqury assembly-level QV files `SAMPLE_STAGE.qv` (input of merqury_assembly_qv)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^[^.]+\\.qv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["c1", "c2", "c3", "c4", "c5"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "c1": "Assembly name as Merqury printed it"
+              "c2": "K-mers found only in the assembly"
+              "c3": "All assembly k-mers"
+              "c4": "QV"
+              "c5": "Error rate"
+              "source_path": "The QV file"
+
+      - data_collection_tag: "merqury_completeness_raw"
+        description: "Merqury k-mer completeness files `SAMPLE_STAGE.completeness.stats` (input of merqury_assembly_qv)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+\\.completeness\\.stats$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["c1", "c2", "c3", "c4", "c5"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "c1": "Assembly name as Merqury printed it"
+              "c2": "K-mer set (all, or a hap-mer set)"
+              "c3": "Solid read k-mers found in the assembly"
+              "c4": "Solid read k-mers"
+              "c5": "Completeness, percent"
+              "source_path": "The completeness file"
+
+      - data_collection_tag: "merqury_sequence_qv_raw"
+        description: "Merqury per-sequence QV files `SAMPLE_STAGE.ASM.qv` (input of merqury_sequence_qv)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^[^.]+\\..+\\.qv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["c1", "c2", "c3", "c4", "c5"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "c1": "Sequence name"
+              "c2": "K-mers of the sequence found only in the assembly"
+              "c3": "All k-mers of the sequence"
+              "c4": "QV (+inf when error-free)"
+              "c5": "Error rate"
+              "source_path": "The per-sequence QV file"
+
+      - data_collection_tag: "merqury_spectra_cn_raw"
+        description: "Merqury copy-number spectra `SAMPLE_STAGE.ASM.spectra-cn.hist` (input of merqury_copy_number_composition)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+\\.spectra-cn\\.hist$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Copies": "Copy number of the read k-mer in the assembly (read-only, 1, 2, 3, 4, >4)"
+              "kmer_multiplicity": "How often the k-mer occurs in the reads"
+              "Count": "Distinct k-mers"
+              "source_path": "The spectrum file"
+
+      - data_collection_tag: "busco_batch_raw"
+        description: "BUSCO batch summaries `SAMPLE_STAGE-LINEAGE-busco.batch_summary.txt` (input of busco_batch_summary)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+\\.batch_summary\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Input_file": "FASTA BUSCO read"
+              "Dataset": "Lineage dataset"
+              "Complete": "Complete BUSCOs, percent"
+              "Single": "Complete single-copy, percent"
+              "Duplicated": "Complete duplicated, percent"
+              "Fragmented": "Fragmented, percent"
+              "Missing": "Missing, percent"
+              "n_markers": "BUSCO groups searched"
+              "source_path": "The batch summary file"
+
+      - data_collection_tag: "quast_assembly_raw"
+        description: "QUAST transposed reports, one per assessed assembly under QC/QUAST/SAMPLE_STAGE/ (input of the three quast collections)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^transposed_report\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Assembly": "Assembly label QUAST printed (the FASTA stem)"
+              "source_path": "The report, inside the QC/QUAST/<sample>_<stage>/ directory"
+
+      - data_collection_tag: "genomescope_raw"
+        description: "GenomeScope summaries `READSET_genomescope.txt`, one line per row (input of genomescope_summary)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+_genomescope\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the summary"
+              "source_path": "The summary file"
+
+      - data_collection_tag: "jellyfish_histo_raw"
+        description: "jellyfish k-mer histograms `READSET_hist.tsv` (input of jellyfish_histogram)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+_hist\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: " "
+              has_header: false
+              new_columns: ["multiplicity", "kmers"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "multiplicity": "K-mer multiplicity"
+              "kmers": "Distinct k-mers with that multiplicity"
+              "source_path": "The histogram file"
+
+      # ----------------------------------------------------------------
+      # Catalog recipes, one tool at a time
+      # ----------------------------------------------------------------
+      - data_collection_tag: "merqury_assembly_qv"
+        description: "Merqury consensus QV and k-mer completeness, one row per assessed assembly"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "merqury/assembly_qv.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "merqury_name": "Assembly name Merqury printed"
+              "asm_only_kmers": "K-mers found in the assembly and never in the reads (errors)"
+              "total_kmers": "All assembly k-mers"
+              "qv": "Consensus quality value (QV 40 = one error per 10 kbp)"
+              "error_rate": "Per-base error rate"
+              "solid_kmers_assembly": "Solid read k-mers found in the assembly"
+              "solid_kmers_reads": "Solid read k-mers"
+              "kmer_completeness": "Percent of solid read k-mers the assembly recovers"
+
+      - data_collection_tag: "merqury_sequence_qv"
+        description: "Merqury QV of every sequence of every assessed assembly"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "merqury/sequence_qv.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "sequence": "Contig or scaffold name"
+              "asm_only_kmers": "Error k-mers in the sequence"
+              "total_kmers": "All k-mers of the sequence (its length minus k plus 1)"
+              "qv": "Per-sequence QV, null when error-free"
+              "error_rate": "Per-base error rate"
+              "error_free": "yes when the sequence has no error k-mer"
+
+      - data_collection_tag: "merqury_copy_number"
+        description: "Share of solid read k-mers absent, single-copy or multi-copy in each assessed assembly"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "merqury/copy_number_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "copy_class": "Copy number of the read k-mers in the assembly"
+              "rank": "Constant: Copy number"
+              "class_order": "0 absent, then 1 to 5 in copy order"
+              "solid_kmers": "Solid read k-mers in the class"
+              "percent": "Class share of the solid read k-mers"
+              "error_cutoff": "Read multiplicity at or below which k-mers count as errors"
+
+      - data_collection_tag: "busco_batch_summary"
+        description: "BUSCO class percentages, one row per assessed assembly and lineage"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "busco/batch_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "input_file": "FASTA BUSCO read"
+              "lineage": "Lineage dataset"
+              "complete_pct": "Complete BUSCOs, percent"
+              "single_pct": "Complete single-copy, percent"
+              "duplicated_pct": "Complete duplicated, percent"
+              "fragmented_pct": "Fragmented, percent"
+              "missing_pct": "Missing, percent"
+              "n_markers": "BUSCO groups in the lineage set"
+              "stop_codon_pct": "Complete BUSCOs with an internal stop codon, percent"
+              "scaffold_n50": "Scaffold N50 BUSCO measured"
+              "contig_n50": "Contig N50 BUSCO measured"
+              "percent_gaps": "N bases, percent"
+              "n_scaffolds": "Sequences in the assembly"
+
+      - data_collection_tag: "busco_composition"
+        description: "BUSCO classes per assessed assembly, unpivoted for composition bars"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "busco/composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "lineage": "Lineage dataset"
+              "busco_class": "Complete single-copy, complete duplicated, fragmented or missing"
+              "rank": "Constant: BUSCO class"
+              "class_order": "1 to 4, single-copy first"
+              "percent": "Class share of the lineage set"
+
+      - data_collection_tag: "quast_assembly_report"
+        description: "QUAST reference-free statistics, one row per QUAST report"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/assembly_report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly label QUAST printed"
+              "assembler": "Assembler part of a `<assembler>-<sample>` label (null here)"
+              "sample": "Sample part of such a label (null here)"
+              "n_contigs": "Contigs past QUAST's minimum length"
+              "total_length": "Assembled bases"
+              "largest_contig": "Longest contig"
+              "n50": "N50"
+              "n75": "N75"
+              "l50": "L50"
+              "l75": "L75"
+              "gc_percent": "GC percent"
+              "ns_per_100_kbp": "N bases per 100 kbp"
+              "predicted_rrna_genes": "Predicted rRNA genes, as QUAST printed them"
+              "contigs_over_1kb": "Contigs at least 1 kbp long"
+              "length_over_1kb": "Bases in those contigs"
+
+      - data_collection_tag: "quast_length_ladder"
+        description: "QUAST contig-length ladder, one row per QUAST report and length threshold"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/length_ladder.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly label QUAST printed"
+              "assembler": "Assembler part of the label (null here)"
+              "sample": "Sample part of the label (null here)"
+              "min_contig_length": "Length threshold, bp"
+              "n_contigs": "Contigs at least that long"
+              "total_length": "Bases in those contigs"
+              "length_fraction": "Those bases as a fraction of the whole assembly"
+
+      - data_collection_tag: "quast_reference_report"
+        description: "QUAST reference-based statistics, one row per assessed assembly (runs with a reference only)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/reference_report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly label QUAST printed"
+              "report_id": "Assessed assembly, `<sample>_<stage>` (the report directory)"
+              "reference_length": "Reference bases"
+              "genome_fraction": "Percent of the reference covered"
+              "duplication_ratio": "Aligned bases over covered reference bases"
+              "misassemblies": "Relocations, translocations and inversions"
+              "misassembled_contigs": "Contigs with at least one misassembly"
+              "misassembled_length": "Bases in those contigs"
+              "local_misassemblies": "Breakpoints under 1 kbp apart"
+              "mismatches_per_100kbp": "Substitutions per 100 kbp against the reference"
+              "indels_per_100kbp": "Indels per 100 kbp against the reference"
+              "unaligned_length": "Assembly bases aligned nowhere"
+              "largest_alignment": "Longest aligned block"
+              "total_aligned_length": "Aligned bases"
+              "ng50": "NG50"
+              "nga50": "NGA50, contiguity after cutting at misassemblies"
+              "lga50": "LGA50"
+
+      - data_collection_tag: "genomescope_summary"
+        description: "GenomeScope genome profile per read set: haploid length, heterozygosity, repeats, model fit"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "genomescope/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "read_set": "Read set the spectrum was counted from"
+              "genomescope_version": "GenomeScope version"
+              "k": "K-mer length"
+              "ploidy": "Ploidy (GenomeScope 2 only)"
+              "heterozygosity_min": "Heterozygosity, lower bound, percent"
+              "heterozygosity_max": "Heterozygosity, upper bound, percent"
+              "haploid_length_min": "Haploid genome length, lower bound, bp"
+              "haploid_length_max": "Haploid genome length, upper bound, bp"
+              "repeat_length_min": "Repeat length, lower bound, bp"
+              "repeat_length_max": "Repeat length, upper bound, bp"
+              "unique_length_min": "Unique length, lower bound, bp"
+              "unique_length_max": "Unique length, upper bound, bp"
+              "repeat_fraction": "Repeat length over haploid length, percent"
+              "model_fit_min": "Model fit, lower bound, percent"
+              "model_fit_max": "Model fit, upper bound, percent"
+              "read_error_rate_min": "Read error rate, lower bound, percent"
+              "read_error_rate_max": "Read error rate, upper bound, percent"
+
+      - data_collection_tag: "jellyfish_histogram"
+        description: "Read k-mer spectrum per read set, cut past the main peak"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "jellyfish/histogram.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "read_set": "Read set"
+              "multiplicity": "K-mer multiplicity"
+              "kmers": "Distinct k-mers with that multiplicity"
+              "kmer_mass": "Multiplicity times k-mers"
+              "peak_multiplicity": "Main peak of the read set, the k-mer depth"
+
+      # ----------------------------------------------------------------
+      # Pipeline recipes: the per-assembly join and its views
+      # ----------------------------------------------------------------
+      - data_collection_tag: "assemblies"
+        description: "One row per assessed assembly (sample and stage): contiguity, QV, k-mer completeness, BUSCO and QUAST joined, with the samplesheet design"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeassembler/assemblies.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "sample": "Samplesheet sample"
+              "stage": "assembly, a polisher (medaka, dorado, pilon) or a scaffolder (links, longstitch, ragtag, hic)"
+              "stage_class": "assembly, polish or scaffold"
+              "stage_rank": "0 assembly, 1 long-read polish, 2 short-read polish, 3 scaffold"
+              "assembler_used": "Assembler(s) of the sample, from the samplesheet"
+              "scaffolders": "Scaffolders switched on for the sample"
+              "n_sequences": "Contigs or scaffolds"
+              "total_length": "Assembled bases"
+              "largest_sequence": "Longest sequence"
+              "n50": "N50"
+              "l50": "L50"
+              "n90": "N90"
+              "l90": "L90"
+              "aun": "Area under the Nx curve"
+              "qv": "Merqury consensus QV"
+              "error_rate": "Merqury per-base error rate"
+              "kmer_completeness": "Merqury k-mer completeness, percent"
+              "busco_lineage": "BUSCO lineage dataset (the most specific one scored)"
+              "busco_complete": "BUSCO complete, percent"
+              "busco_single": "BUSCO complete single-copy, percent"
+              "busco_duplicated": "BUSCO complete duplicated, percent"
+              "busco_fragmented": "BUSCO fragmented, percent"
+              "busco_missing": "BUSCO missing, percent"
+              "genome_fraction": "QUAST percent of the reference covered"
+              "misassemblies": "QUAST misassemblies against the reference"
+              "mismatches_per_100kbp": "QUAST substitutions per 100 kbp"
+              "nga50": "QUAST NGA50"
+              "qc_tools": "QC tools that reported on this assembly"
+              "n_qc_tools": "How many"
+              "strategy": "Samplesheet strategy (passed through, like every samplesheet column)"
+              "assembler": "Samplesheet assembler column (passed through)"
+              "polish": "Samplesheet polishing column (passed through)"
+              "group": "Samplesheet read group (passed through)"
+
+      - data_collection_tag: "nx_curve"
+        description: "Nx curve of every assessed assembly, from the sequence lengths samtools idxstats lists"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeassembler/nx_curve.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assessed assembly, `<sample>_<stage>`"
+              "sample": "Samplesheet sample"
+              "stage": "Stage of the assessed assembly"
+              "nx": "Percent of the assembly's bases, 0 to 100"
+              "sequence_length": "Nx: length of the sequence reaching that percent"
+              "n_sequences": "Lx: sequences it took"
+              "total_length": "Assembled bases"
+
+      - data_collection_tag: "stage_steps"
+        description: "Each sample's route from raw assembly through polishing to each scaffolder, one row per step, with the change from the raw assembly"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeassembler/stage_steps.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "route": "`<sample> to <final stage>`, one series per route"
+              "assembly_id": "Assessed assembly at this step"
+              "sample": "Samplesheet sample"
+              "stage": "Stage of this step"
+              "stage_rank": "0 assembly, 1 long-read polish, 2 short-read polish, 3 scaffold"
+              "final_stage": "Last stage of the route"
+              "qv": "Merqury QV at this step"
+              "qv_gain": "QV minus the raw assembly's QV"
+              "n50": "N50 at this step"
+              "n50_fold": "N50 over the raw assembly's N50"
+              "total_length": "Assembled bases at this step"
+              "kmer_completeness": "Merqury k-mer completeness at this step"
+              "busco_complete": "BUSCO complete at this step"
+
+      - data_collection_tag: "sample_status"
+        description: "One row per samplesheet sample: design and what assembly QC was published for it"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeassembler/sample_status.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample"
+              "assembler_used": "Assembler(s), from the samplesheet"
+              "scaffolders": "Scaffolders switched on"
+              "n_assemblies_assessed": "Assessed assemblies (stages) of the sample"
+              "stages_assessed": "Their stages, in pipeline order"
+              "best_qv": "Highest Merqury QV over the stages"
+              "best_busco_complete": "Highest BUSCO complete over the stages"
+              "best_n50": "Highest N50 over the stages"
+              "qc_status": "Assembly QC published, or No assembly QC"
+              "strategy": "Samplesheet strategy (passed through, like every samplesheet column)"
+
+# ----------------------------------------------------------------------------
+# Links. The samplesheet is the hub: its sample column reaches the per-sample
+# tables directly and the per-assembly catalog tables by prefix, since every
+# assessed assembly is named `<sample>_<stage>`. The per-assembly table reaches
+# the catalog tables on the assembly name, so a pick in the Overview carries to
+# the tool-level tabs.
+# ----------------------------------------------------------------------------
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "assemblies"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the per-assembly table to the samples picked in the sample filters"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "sample_status"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the sample status table to the picked samples"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "stage_steps"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the stage routes to the picked samples"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "nx_curve"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the Nx curves to the picked samples"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "merqury_assembly_qv"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "assembly_id"
+    description: "Narrow the Merqury QV table to the picked samples' assemblies"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "merqury_sequence_qv"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "assembly_id"
+    description: "Narrow the per-sequence QV table to the picked samples' assemblies"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "merqury_copy_number"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "assembly_id"
+    description: "Narrow the copy-number composition to the picked samples' assemblies"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "busco_batch_summary"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "assembly_id"
+    description: "Narrow the BUSCO table to the picked samples' assemblies"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "busco_composition"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "assembly_id"
+    description: "Narrow the BUSCO composition bars to the picked samples' assemblies"
+    enabled: true
+  - source_dc_tag: "samplesheet"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "quast_reference_report"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "report_id"
+    description: "Narrow the QUAST reference table to the picked samples' assemblies"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "assembly_id"
+    target_dc_tag: "nx_curve"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "assembly_id"
+    description: "Carry the assemblies picked in the per-assembly filters to the Nx curves"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "assembly_id"
+    target_dc_tag: "busco_composition"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "assembly_id"
+    description: "Carry the assemblies picked in the per-assembly filters to the BUSCO bars"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "assembly_id"
+    target_dc_tag: "merqury_copy_number"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "assembly_id"
+    description: "Carry the assemblies picked in the per-assembly filters to the copy-number bars"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "assembly_id"
+    target_dc_tag: "merqury_sequence_qv"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "assembly_id"
+    description: "Carry the assemblies picked in the per-assembly filters to the per-sequence QV"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "sample"
+    target_dc_tag: "stage_steps"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry the samples of the picked assemblies to the stage routes"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "assembly_id"
+    target_dc_tag: "merqury_assembly_qv"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "assembly_id"
+    description: "Carry the assemblies picked in the per-assembly filters to the Merqury QV tiles"
+    enabled: true
+  - source_dc_tag: "assemblies"
+    source_column: "assembly_id"
+    target_dc_tag: "busco_batch_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "assembly_id"
+    description: "Carry the assemblies picked in the per-assembly filters to the BUSCO tiles"
+    enabled: true
+  - source_dc_tag: "genomescope_summary"
+    source_column: "read_set"
+    target_dc_tag: "jellyfish_histogram"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "read_set"
+    description: "Carry the read sets picked in the genome profile filters to the k-mer spectrum"
+    enabled: true

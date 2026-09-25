@@ -1,0 +1,40 @@
+id: cellranger_cell_qc
+name: Per-cell QC, clusters and embeddings
+mode: analysis/cell_qc
+description: >-
+  One row per called cell: UMI / gene counts, mito / ribo / hemoglobin /
+  top-20 fractions, graph-based and k-means clusters, UMAP / t-SNE / PCA
+  coordinates, CellBender agreement and a MAD-based QC flag. The hub every
+  other cell-level cellranger output joins to.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/cell_qc.py
+fixture: cell_qc.tsv
+renders_as:
+  - { id: umap_qc, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, color: log10_n_genes, cluster: graphclust} }
+  - { id: umap_label, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label} }
+  - { id: tsne_label, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster_label, color: cluster_label} }
+  - { id: umi_vs_genes, component: advanced_viz, kind: scatter_xy, roles: {x: n_umi, y: n_genes, color: qc_status} }
+  - { id: cluster_stability, component: advanced_viz, kind: sankey, roles: {steps: [graphclust, kmeans_6, kmeans_10]} }
+  - { id: umi_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: n_umi, title: UMI counts per cell} }
+  - { id: genes_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: n_genes, title: Genes detected per cell} }
+  - { id: mito_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: pct_mito, title: Mitochondrial fraction by cluster} }
+  - { id: ribo_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: pct_ribo, title: Ribosomal fraction by cluster} }
+  - { id: umi_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: log10_n_umi, title: log10 UMI count by cluster} }
+  - { id: qc_status_by_cluster, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, color: qc_status, title: QC status per cluster} }
+  - { id: qc_reason_picker, component: interactive, interactive_type: MultiSelect, column_name: qc_reason }
+  - { id: cluster_picker, component: interactive, interactive_type: MultiSelect, column_name: cluster_label }
+  - { id: qc_status_picker, component: interactive, interactive_type: SegmentedControl, column_name: qc_status }
+  - { id: n_umi_filter, component: interactive, interactive_type: RangeSlider, column_name: n_umi }
+  - { id: n_genes_filter, component: interactive, interactive_type: RangeSlider, column_name: n_genes }
+  - { id: top20_share_filter, component: interactive, interactive_type: RangeSlider, column_name: pct_top20 }
+  - { component: card, column: n_umi, aggregation: median, secondary_layout: histogram }
+  - { component: card, column: n_genes, aggregation: median, secondary_layout: histogram }
+  - { component: card, column: pct_mito, aggregation: median, secondary_layout: threshold, threshold_value: 8.0 }
+  - { component: card, column: qc_flagged, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: pct_top20, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: pct_ribo, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: log10_n_umi, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: log10_n_genes, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: cellbender_cell, aggregation: count, secondary_layout: composition, breakdown_col: cellbender_cell }
+  - { component: table, row_selection_enabled: true, row_selection_column: barcode }

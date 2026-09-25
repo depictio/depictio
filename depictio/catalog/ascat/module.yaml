@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../module.schema.json
+# ASCAT — multi-output tool, so a folder. Lightweight: identity is derived from
+# the nf-core meta.yml that `nf_core_url` points at (not duplicated).
+# nf-core/sarek publishes ASCAT under `variant_calling/ascat/<sample>/`.
+id: ascat
+name: ASCAT
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ascat
+biotools_url: https://bio.tools/ascat

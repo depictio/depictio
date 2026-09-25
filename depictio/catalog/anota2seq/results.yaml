@@ -1,0 +1,20 @@
+id: anota2seq_results
+name: anota2seq results per analysis
+mode: translation/differential
+description: >-
+  The four anota2seq analyses of every contrast stacked in one table: change in
+  ribosome-bound mRNA, change in total mRNA, the translation effect (ribosome
+  association not explained by mRNA level) and buffering, each with its effect,
+  RVM p-value, adjusted p-value and anota2seq's default significance call.
+find: { path_glob: "**/*.anota2seq.results.tsv" }
+recipe: anota2seq/results.py
+fixture: results.tsv
+renders_as:
+  - id: analysis_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: gene_name, effect_size: effect, significance: padj, category: direction }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: effect, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: Select, column_name: analysis }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

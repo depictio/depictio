@@ -1,12 +1,12 @@
-# Splice junctions (sashimi) — one tab of the advanced-visualisation showcase.
+# Alternative splicing (sashimi), one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Splice junctions'
-subtitle: 'Junction arcs on a base-pair axis, arc width scaled by supporting reads. Cassette-exon skipping across two conditions, one lane per sample.'
+title: 'Alternative splicing'
+subtitle: 'Read coverage and splice junctions per sample over one gene: a cassette exon skipped in the knockdown.'
 icon: 'mdi:dna'
 icon_color: 'violet'
 icon_variant: filled
@@ -38,18 +38,18 @@ components:
   - tag: text-sashimi
     index: sash-text
     component_type: text
-    title: 'Splice junctions'
+    title: 'Alternative splicing'
     order: 3
     alignment: left
     vertical_alignment: top
     section: 'Splice junctions'
     body: >
-      Each intron is an arc from its donor to its acceptor, drawn thicker the more reads
-      support it, one lane per sample. Introns here run from 430 bp to 15 kb, so the arcs
-      are deliberately uneven: a real locus never splices on a regular pitch. Follow the
-      novel arc that bridges exon 2 straight to exon 4. It is a handful of reads in the
-      controls and carries as much support as a constitutive junction in the knockdowns,
-      while the two arcs into and out of exon 3 collapse. That exon is being skipped.
+      A sashimi plot: per sample, read coverage as bars and every splice junction as a dome from
+      donor to acceptor, its height and width set by the reads crossing it. In the knockdowns the
+      dome from exon 2 straight to exon 4 rises while coverage over exon 3 drops: that exon is
+      skipped. Drag or scroll to zoom, raise Min reads to hide weak junctions, switch to Arcs for
+      the Plotly panel. Inputs are STAR SJ.out.tab junctions plus binned coverage, as written by
+      nf-core/rnaseq, rnafusion and nanoseq (synthetic exons placed in CHD4, hg38).
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-sashimi
@@ -57,8 +57,8 @@ components:
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'sashimi_demo'
-    title: 'Splice junctions'
-    description: 'Junction arcs over a cassette-exon locus, coloured known vs novel and stacked one lane per sample. Minimum read support, junctions per lane, log-scaled arc width and the region picker all live in the Settings ⚙ popover.'
+    title: 'Splice junctions and coverage'
+    description: 'Coverage bars and junction domes per sample over a cassette-exon locus, known and novel junctions coloured apart, with the inferred exon model and the hg38 gene lane underneath.'
     section: 'Splice junctions'
     viz_kind: 'sashimi'
     config:
@@ -72,11 +72,20 @@ components:
       min_count: 1
       top_n: 25
       log_width: true
+      max_arc_width: 3
+      # Opens on the GenomeSpy view; the header switch goes back to the
+      # Plotly arc panel. The gene lane and the axis come from hg38.
+      view: "genomespy"
+      views: ["genomespy", "plotly"]
+      annotation: "hg38"
+      controls_placement: "header"
       # Real read depth, from a second collection. The junction table counts
       # spliced reads only, so the exon support the renderer can infer from it
-      # is an estimate; this is the measurement. Bound by tag so a fresh
-      # deployment resolves it to whatever ids that project mints.
+      # is an estimate; this is the measurement. The tag is what a dashboard
+      # import resolves; the id is this project's static one, which the seed
+      # path (no import step) needs to find the collection at all.
       coverage_dc_tag: "sashimi_coverage_demo"
+      coverage_dc_id: "646b0f3c1e4a2d7f8e5b8d87"
       coverage_chr_col: "chromosome"
       coverage_position_col: "position"
       coverage_end_col: "end"

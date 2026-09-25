@@ -1,0 +1,20 @@
+id: damageprofiler_lgdistribution
+name: Fragment length distribution
+description: >-
+  Mapped fragment length by strand, from DamageProfiler's lgdistribution table.
+  The second authenticity signal after the misincorporation profile: ancient DNA
+  is depurination-fragmented and rarely survives past about 100 bp, so a length
+  distribution that looks like a modern library's is a contamination flag even
+  when the damage curve passes.
+find:
+  path_glob: "**/lgdistribution.txt"
+recipe: damageprofiler/lgdistribution.py
+fixture: lgdistribution.tsv
+renders_as:
+  - { id: fragment_length_profile, component: advanced_viz, kind: profile,
+      roles: {series: series, x: length, y: fraction} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: length, y: occurrences, color: series, title: Fragment length distribution} }
+  - { component: card, column: occurrences, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: occurrences, aggregation: max, secondary_layout: donut, breakdown_col: strand }
+  - { component: table, page_size: 25 }

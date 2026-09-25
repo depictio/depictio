@@ -1,0 +1,26 @@
+id: quast_length_ladder
+name: Contig length ladder
+mode: length-ladder
+description: >-
+  How much of each assembly survives a minimum contig length. A curve that
+  holds its length out to 25 kbp is an assembly a binner can work with; one
+  that loses most of its bases between 1 and 5 kbp is a drift of fragments
+  that will bin into chimeras whatever the binner.
+find:
+  path_glob: "**/QUAST/transposed_report.tsv"
+  path_glob_alt:
+    - "**/quast/transposed_report.tsv"
+    - "**/QUAST/*/transposed_report.tsv"
+recipe: quast/length_ladder.py
+fixture: length_ladder.tsv
+renders_as:
+  - { id: cumulative_length, component: advanced_viz, kind: profile,
+      roles: {series: assembly_id, x: min_contig_length, y: total_length} }
+  - { id: retained_fraction, component: advanced_viz, kind: profile,
+      roles: {series: assembly_id, x: min_contig_length, y: length_fraction} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: min_contig_length, y: n_contigs, color: assembly_id, title: Contigs surviving each minimum length} }
+  - { component: card, column: length_fraction, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_contigs, aggregation: max,
+      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
+  - { component: table }

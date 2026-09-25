@@ -2155,6 +2155,15 @@ def bulk_compute_cards(
     # extend_filters_via_links).
     base_filter_metadata = _build_filter_metadata(filters)
 
+    # A genome region (a locus navigator's brush or default_region) is a place
+    # to look, not a subset to summarise: cards drop it unless they opt in with
+    # ``follow_region_filter`` (see ``region_scope``). Two filter lists, then,
+    # and every per-DC cache below is keyed on which one a card reads.
+    from depictio.api.v1.region_scope import follows_region, scope_region_filters
+
+    region_free_filters = scope_region_filters(filters, "card")
+    has_region_free_filters = len(_build_filter_metadata(region_free_filters)) > 0
+
     # Dedupe Delta loads per (wf_id, dc_id). One load can serve N cards.
     df_cache: dict[tuple, Any] = {}
     # Per-DC precomputed aggregation specs cache (one DB hit per unique dc_id).
@@ -2176,20 +2185,21 @@ def bulk_compute_cards(
     # Per-DC link-resolved filter cache so we only call the link API once per
     # target DC. The result already includes the original React-supplied
     # filters, so it can be passed straight to load_deltatable_lite.
-    resolved_per_dc: dict[str, list[dict]] = {}
+    resolved_per_dc: dict[tuple[str, bool], list[dict]] = {}
 
-    def _resolved_filters_for(dc_id_str: str) -> list[dict]:
-        if dc_id_str in resolved_per_dc:
-            return resolved_per_dc[dc_id_str]
+    def _resolved_filters_for(dc_id_str: str, follow_region: bool = False) -> list[dict]:
+        key = (dc_id_str, follow_region)
+        if key in resolved_per_dc:
+            return resolved_per_dc[key]
         merged = _resolve_link_filters_cached(
-            filters=filters,
+            filters=filters if follow_region else region_free_filters,
             target_dc_id=dc_id_str,
             project_id=project_id,
             access_token=access_token,
             component_type="card",
         )
-        resolved_per_dc[dc_id_str] = _build_filter_metadata(merged)
-        return resolved_per_dc[dc_id_str]
+        resolved_per_dc[key] = _build_filter_metadata(merged)
+        return resolved_per_dc[key]
 
     def _get_specs(dc_id_str: str) -> dict[str, dict]:
         """Return precomputed column aggregations as ``{column_name: specs_dict}``.
@@ -2236,7 +2246,9 @@ def bulk_compute_cards(
             )
         return groups_per_dc[dc_id_str]
 
-    def _card_cache_key(wf_id: Any, dc_id: Any, filter_expr: str | None = None) -> tuple:
+    def _card_cache_key(
+        wf_id: Any, dc_id: Any, filter_expr: str | None = None, follow_region: bool = False
+    ) -> tuple:
         """``(wf_id, dc_id, filter signature, filter_expr)`` — the dedupe key for a
         card's Delta load. Cards sharing it share one loaded frame (via
         ``df_cache``), so a projected load must carry the union of their columns.
@@ -2244,7 +2256,7 @@ def bulk_compute_cards(
         ``filter_expr`` is part of the key because the cached frame is stored
         *after* the expression has been applied: two cards on the same DC with
         different expressions must not read each other's rows."""
-        card_filters = _resolved_filters_for(str(dc_id))
+        card_filters = _resolved_filters_for(str(dc_id), follow_region)
         filter_sig = tuple(
             sorted(
                 (
@@ -2255,7 +2267,7 @@ def bulk_compute_cards(
                 for fm in card_filters
             )
         )
-        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "")
+        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "", follow_region)
 
     # Column projection (#7) pre-pass: the slow Delta load is shared across
     # every card with the same (wf_id, dc_id, filter) signature, so the
@@ -2273,7 +2285,7 @@ def bulk_compute_cards(
             continue
         card_filter_expr = card.get("filter_expr")
         key_cols = needed_cols_by_key.setdefault(
-            _card_cache_key(wf_id, dc_id, card_filter_expr), set()
+            _card_cache_key(wf_id, dc_id, card_filter_expr, follows_region(card)), set()
         )
         key_cols.add(column)
         key_cols |= _card_payload_columns(card)
@@ -2295,7 +2307,10 @@ def bulk_compute_cards(
         if not (card.get("wf_id") and card.get("dc_id") and card.get("column_name")):
             continue
         cards_by_key.setdefault(
-            _card_cache_key(card["wf_id"], card["dc_id"], card.get("filter_expr")), []
+            _card_cache_key(
+                card["wf_id"], card["dc_id"], card.get("filter_expr"), follows_region(card)
+            ),
+            [],
         ).append(card)
 
     # ``(component_index, aggregation) -> value`` filled by the pushdown pass.
@@ -2344,7 +2359,8 @@ def bulk_compute_cards(
         scan = open_deltatable_scan(
             workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
             data_collection_id=str(dc_id),
-            metadata=_resolved_filters_for(str(dc_id)) or None,
+            # The key's last slot is whether its cards follow the region.
+            metadata=_resolved_filters_for(str(dc_id), bool(cache_key[-1])) or None,
             init_data=init_data,
             select_columns=sorted(needed_cols_by_key.get(cache_key, set())) or None,
         )
@@ -2395,7 +2411,9 @@ def bulk_compute_cards(
         # A card-level ``filter_expr`` narrows the rows before aggregating, so the
         # precomputed specs — computed over the whole collection — are the wrong
         # answer for it. Skip straight to a path that can apply the expression.
-        if not has_filters and not card_filter_expr:
+        card_follows = follows_region(card)
+        card_has_filters = has_filters if card_follows else has_region_free_filters
+        if not card_has_filters and not card_filter_expr:
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
             specs_value = _spec_value(col_specs, aggregation)
@@ -2437,8 +2455,8 @@ def bulk_compute_cards(
         # changed the input set, or the aggregation isn't in the specs).
         # Cache key includes the filter signature so two cards on the same DC
         # with different (link-resolved) filter sets don't collide.
-        card_filters = _resolved_filters_for(str(dc_id))
-        cache_key = _card_cache_key(wf_id, dc_id, card_filter_expr)
+        card_filters = _resolved_filters_for(str(dc_id), card_follows)
+        cache_key = _card_cache_key(wf_id, dc_id, card_filter_expr, card_follows)
 
         # Try the scan-level pushdown once per cache key before considering a
         # load. It answers every expressible aggregation for all cards sharing
@@ -2925,6 +2943,11 @@ async def render_figure_endpoint(
     # whole duration, so a burst of filtered figure renders stalls not just each
     # other but every unrelated request that worker owns. (The other render
     # endpoints are plain ``def`` and already get a threadpool for free.)
+    # A genome region reaches a figure only when its encodings name a region
+    # column, or when it opts in (``region_scope``).
+    from depictio.api.v1.region_scope import scope_region_filters
+
+    filters = scope_region_filters(filters, "figure", component)
     merged_filters = await run_in_threadpool(
         _resolve_link_filters_cached,
         filters,
@@ -4229,6 +4252,7 @@ def _resolve_multiqc_sample_filter(
     from depictio.api.v1.services.multiqc.patching import (
         expand_canonical_samples_to_variants,
     )
+    from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
 
     # Each constraint is expressed in variant space so intersection is
     # well-defined regardless of whether the filter emitted canonical IDs,
@@ -4236,8 +4260,9 @@ def _resolve_multiqc_sample_filter(
     constraint_sets: list[set[str]] = []
 
     for values in direct_sample_filters:
+        wanted = list(dict.fromkeys(values))
         expanded = expand_canonical_samples_to_variants(
-            list(dict.fromkeys(values)), sample_mappings
+            wanted, remap_mappings_to_hub(sample_mappings, wanted)
         )
         constraint_sets.append({str(s) for s in expanded})
 
@@ -4322,7 +4347,9 @@ def _resolve_multiqc_sample_filter(
                 canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
                 # Always run the canonical→variants expansion. When no
                 # mappings are available, this returns canonical unchanged.
-                expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
+                expanded = expand_canonical_samples_to_variants(
+                    canonical, remap_mappings_to_hub(sample_mappings, canonical)
+                )
                 logger.debug(
                     f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
                     f"join_col={link_source_column!r} canonical={len(canonical)} "
@@ -5074,6 +5101,7 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
         return
 
     layout_keys = ["left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"]
+    renamed: dict[str, str] = {}
 
     for component in dashboard_dict["stored_metadata"]:
         old_index = component.get("index", "")
@@ -5086,11 +5114,19 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
 
         new_index = str(uuid.uuid4())
         component["index"] = new_index
+        renamed[old_index] = new_index
 
         for layout_key in layout_keys:
             for layout_item in dashboard_dict.get(layout_key, []):
                 if layout_item.get("i") == f"box-{old_index}":
                     layout_item["i"] = f"box-{new_index}"
+
+    # A record card's `linked_component` holds its source's index (see
+    # `DashboardDataLite.to_full`), so it has to follow the source's new one.
+    for component in dashboard_dict["stored_metadata"]:
+        config = component.get("config")
+        if isinstance(config, dict) and config.get("linked_component") in renamed:
+            config["linked_component"] = renamed[config["linked_component"]]
 
 
 # Component types that carry a visualisation — a tab needs at least one of these
@@ -5528,7 +5564,9 @@ def _import_multi_tab_dashboard(
         raise HTTPException(status_code=400, detail="Multi-tab YAML missing 'main_dashboard' key")
 
     # Import main dashboard first
-    main_yaml = yaml.dump(main_dashboard_data, default_flow_style=False, allow_unicode=True)
+    main_yaml = yaml.dump(
+        main_dashboard_data, default_flow_style=False, allow_unicode=True, sort_keys=False
+    )
     main_lite = DashboardDataLite.from_yaml(main_yaml)
 
     # Check for existing main dashboard
@@ -5609,7 +5647,9 @@ def _import_multi_tab_dashboard(
         [main_dashboard_data, *(tabs_data or [])],
     )
     for idx, tab_data in enumerate(tabs_data):
-        tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
+        tab_yaml = yaml.dump(
+            tab_data, default_flow_style=False, allow_unicode=True, sort_keys=False
+        )
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
 
         # Check for existing tab if overwrite is requested
@@ -7111,6 +7151,7 @@ def funnel_values_endpoint(
     include_stages = bool(request.get("include_stages", False))
 
     active_filters = [f for f in filters if _funnel_filter_is_active(f)]
+    from depictio.api.v1.region_scope import scope_region_filters
 
     # Indexed over the whole tab FAMILY, not this document alone. A persistent
     # filter section is declared on one tab and rendered on every tab of the
@@ -7146,6 +7187,10 @@ def funnel_values_endpoint(
             targets[index] = {"status": "unsupported"}
             continue
         remaining = [f for f in active_filters if str(f.get("index") or "") != index]
+        # A locus navigator's region does not narrow a sidebar selector (a
+        # contig picker would offer one contig) unless it opts in, same rule
+        # as cards (``region_scope``).
+        remaining = scope_region_filters(remaining, "interactive", meta)
         result = _funnel_target_values(dashboard_data, project_id, access_token, meta, remaining)
         result.setdefault("column", meta.get("column_name"))
         result.setdefault("dc_id", str(meta.get("dc_id") or ""))

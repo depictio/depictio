@@ -1,0 +1,4 @@
+id: cellbender
+name: CellBender
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cellbender/removebackground
+homepage: https://cellbender.readthedocs.io/

@@ -185,3 +185,292 @@ The import succeeds as soon as those folders are completed or removed. Nothing i
 funcscan template needs to change: `dashboard validate` passes, and validating the YAML with
 the catalog loader patched to skip incomplete folders resolves every tab, every `use:` and
 every component.
+
+---
+
+# 2026-09-22 remediation pass
+
+**Date:** 2026-09-22
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
+**Validator:** local `uv run python -m depictio.cli` against the lot2 docker stack
+(API `:8112`, viewer `:5612`, Mongo `:27112`,
+config `~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml`), same DATA_ROOT
+(`~/Data/depictio-nfcore/funcscan/4.0.0/megatest`, 19 MGnify metagenome assemblies).
+
+## What this pass changed
+
+The 2026-09-05 report validated the data path. This pass closes the dashboard-side
+findings that audit raised: a filter that could not filter, tiles with no catalog home,
+grid rows that did not add up, a declared data collection nothing read, and a missing
+layer between the assembly and the four screens.
+
+- **A new hub collection with a catalog home.** `screening_summary.py` moved out of
+  `depictio/projects/nf-core/funcscan/recipes/` into a new catalog module,
+  `depictio/catalog/funcscan/`, together with the eleven tiles that used to be written
+  inline on the dashboard. `use:` coverage on the shipped YAML went from 77 % to
+  **73 / 73 non-text tiles**. The module carries no `nf_core_url`: funcscan's aggregation
+  is pipeline-local, so it declares `source_url: https://github.com/nf-core/funcscan`
+  the way `depictio/catalog/combgc/module.yaml` does.
+- **Three new catalog outputs.** `funcscan/contig_annotation` (the locus layer, rebuilt
+  from the four screens), `funcscan/software_versions` (the only payload funcscan's
+  MultiQC report holds) and `combgc/region_track` (BGC regions in coordinates).
+- **Two new views on existing collections.** `hamronization/class_matrix` is the ARG
+  matrix one aggregation level above `gene_matrix`, drug class against sample, drawn as
+  a `complex_heatmap`; `ampcombi/summary` gained an `amp_property_scatter`
+  (`scatter_xy`) over the physicochemical plane AMPcombi actually reports.
+- **Two new tabs.** `Annotation` (tab_order 1) sits between the overview and the four
+  screens; `Run report` (tab_order 6) is where `multiqc_data` finally surfaces, through
+  `software_versions`. Existing tabs renumbered 2 to 5.
+- **Filters and layout.** The dead `screens` control is gone, every one of the seven tabs
+  now carries the pinned persistent sample section plus a tab-local, non-persistent
+  section on its own collection's columns, seven `links:` entries were added so the
+  persistent filters reach the new collections, every tab opens on a four-card glance
+  strip (`w: 2 h: 2` at x 0/2/4/6), and every grid row sums to 8.
+
+## Ingestion result: 19 / 19 data collections processed, exit 0
+
+```bash
+uv run python -m depictio.cli run \
+  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+  --template nf-core/funcscan/4.0.0 \
+  --data-root ~/Data/depictio-nfcore/funcscan/4.0.0/megatest
+```
+
+Delta tables read back through `GET /depictio/api/v1/deltatables/shape/{dc_id}` after the
+run. The four rows marked **new** did not exist in the 2026-09-05 pass.
+
+| Data collection | Rows | Columns | |
+|---|---|---|---|
+| `multiqc_data` | (versions only, see FS-D1) | | |
+| `software_versions` | 50 | 5 | new |
+| `samplesheet` | 19 | 4 | |
+| `hamronization_report` | 6160 | 18 | |
+| `hamronization_gene_presence` | 926 | 8 | |
+| `hamronization_gene_matrix` | 119 | 22 | |
+| `hamronization_class_matrix` | 34 | 22 | new |
+| `hamronization_tool_overlap` | 5232 | 7 | |
+| `ampcombi_summary` | 8442 | 26 | |
+| `ampcombi_embedding` | 8442 | 9 | |
+| `ampcombi_clusters` | 678 | 4 | |
+| `combgc_summary` | 155 | 14 | |
+| `combgc_region_track` | 155 | 11 | new |
+| `combgc_tool_overlap` | 144 | 4 | |
+| `dbcan_overview` | 17235 | 12 | |
+| `dbcan_tool_overlap` | 17235 | 5 | |
+| `dbcan_substrates` | 164 | 9 | |
+| `screening_summary` | 19 | 11 | |
+| `contig_annotation` | 29348 | 12 | new |
+
+The open blocker recorded on 2026-09-05 is closed: `GET /dashboards/tabs/{id}` reports the
+main tab plus six children, 126 components in total, every tab carrying two filter sections
+and a four-card glance strip.
+
+| Tab | Components | Grid sections | Filter sections |
+|---|---|---|---|
+| Screening overview (0) | 28 | 5 | 2 |
+| Annotation (1) | 13 | 2 | 2 |
+| Resistome (2) | 20 | 4 | 2 |
+| AMPs (3) | 15 | 3 | 2 |
+| BGCs (4) | 22 | 4 | 2 |
+| CAZymes (5) | 17 | 4 | 2 |
+| Run report (6) | 11 | 2 | 2 |
+
+## Commands run
+
+| Command | Result |
+|---|---|
+| `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -k funcscan` | 10 passed |
+| `uv run pytest depictio/tests/recipes/test_funcscan_screens.py` | 7 passed |
+| `uv run pytest depictio/tests/models/test_catalog.py` | 95 passed, 4 failed, none in a funcscan tool (see FS-D14) |
+| `uv run python -m depictio.cli run --template nf-core/funcscan/4.0.0 --data-root ... --dry-run` | 8 / 8 steps |
+| `uv run python -m depictio.cli run --template nf-core/funcscan/4.0.0 --data-root ...` | 8 / 8 steps, 19 / 19 collections |
+| `ruff format` and `ruff check` on the touched files | clean |
+| `uv run pre-commit run --files ...` | Passed or Skipped throughout |
+
+## Discrepancies
+
+### FS-D8: the `screens` control could never filter anything
+
+The samplesheet the megatest ran on is `sample,fasta` and nothing else, so the template
+had no experimental variable to filter on and the dashboard fell back to filtering on
+`screening_summary.screens`. All four screening arms were on for every sample, so that
+column is the constant 4: `nunique == 1`, which makes both the RangeSlider and the
+`fs-card-screens` threshold card inert. Neither was hidden, both were removed. The sample
+scope now filters on `sample`, `arg_hits`, `amp_candidates` and `cazymes`, and a second,
+tab-local `Cohort thresholds` section covers `bgc_regions`, `bgc_classes` and
+`cazyme_families`. Every tab got the same treatment on its own collection's columns.
+A run whose samplesheet does carry metadata columns is unaffected: the samplesheet
+collection is separate and its columns are not what these controls read.
+
+### FS-D9: funcscan's MultiQC parquet has no panel to bind, so the versions are the panel
+
+FS-D1 recorded that funcscan feeds MultiQC nothing but software versions. This pass
+confirmed it from the report itself (`multiqc.list_plots()` returns
+`nf-core-funcscan-methods-description: 0 plots` and `nf-core-funcscan-summary: 0 plots`,
+`list_samples()` is empty) and the ingest agreed: `0 samples, 2 modules, 0 plots`. The
+declared-but-unbound `multiqc_data` collection is therefore not bound to a `multiqc`
+tile, because that tile would render blank. Instead `funcscan/software_versions.py` reads
+the `software_versions` JSON back out of the same parquet and the Run report tab shows it
+as a table, a bar figure and four cards. The tab is deliberately not named after MultiQC,
+so the shipped-dashboard rule that a MultiQC tab may hold only MultiQC panels does not
+apply to it. `multiqc_data` stays declared, and its path regex was widened to
+`(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$` so a run that nests the
+report one directory deeper still matches.
+
+### FS-D10: AMPcombi reports no net charge
+
+The brief asked for a hydrophobicity against charge scatter. The shipped
+`Ampcombi_summary.tsv` carries `hydrophobicity`, `isoelectric_point`, `molecular_weight`
+and the helix / turn / sheet fractions, but **no net-charge column at pH 7**, so no such
+column was invented. `amp_property_scatter` plots hydrophobicity against isoelectric
+point, which is the charge-related quantity AMPcombi does report, with a pI 7 reference
+line; the YAML comment says so, and so does `docs/dashboards.md`.
+
+### FS-D11: comBGC reports no region orientation
+
+`combgc_complete_summary.tsv` has `BGC_start` and `BGC_end` but no strand. The
+`gene_arrow_track` binding needs one, so `combgc/region_track.py` emits GFF's `.`
+("no strand") for every region. The renderer only reverses an arrow on `-`, so every BGC
+is drawn left to right; that is a drawing convention, not a claim about the locus.
+
+### FS-D12: `complex_heatmap` names its row-label field `index_column`
+
+`validate_binding` reads the `<role>_col` naming convention, and `ComplexHeatmapConfig`
+calls its row-label field `index_column`, so `validate_binding` reports the `index` role
+as unbound even on a correct config. The `class_matrix` test checks what the renderer
+actually needs instead: the index column is a String column and every remaining matrix
+column is Float64. Worth aligning the field name, in `depictio/models/`, which is outside
+this template's partition.
+
+### FS-D13: `execute_recipe(extra_sources=...)` is keyed by source ref, not by `dc_ref`
+
+A recipe whose sources are `dc_ref` handles still declares a `ref` per source, and
+`extra_sources` is matched on the `ref`. Passing the `dc_ref` tag (`hamronization_report`)
+instead of the ref (`arg`) silently injects nothing, and the recipe fails with its own
+"no source available" error rather than with a keying error. Only a documentation gap, but
+it cost a debugging round here.
+
+### FS-D14: the advanced-viz kind registry is mid-rename in this worktree
+
+HEAD registers the GenomeSpy kind as `genomespy_track`; the working tree registers it as
+`genome_view`. `combgc/region_track.yaml` names `genome_view`, which is the only place in
+the funcscan work that names the kind at all (the dashboard reaches it through
+`use: combgc/bgc_genome_track`), so a single line has to follow whichever name lands. The
+four `test_catalog.py` failures in this pass are all in other workstreams' tools
+(cellbender, kallisto, qcatch, simpleaf cards; cooltools and gtdbtk string aggregations)
+plus the two generated JSON schemas that the same rename left stale.
+
+### FS-D15: `scatter_xy`'s optional `color` role is String-only
+
+`funcscan/screen_scatter` wanted to colour points by `amp_candidates`, an Int64.
+`ground_render_dtypes` rejects that, because the `color` role on `scatter_xy` is `_STRING`.
+The catalog render therefore binds no `color` role and the dashboard tile carries
+`color_col: amp_candidates` with a continuous scale in its own `config:` instead. A
+numeric colour role on `scatter_xy` would remove the need for that split.
+
+## 2026-09-23: wave 2b (header controls, histograms, BGC double binding)
+
+What changed (dashboard only; `template.yaml`, recipes and `megatest.yaml` untouched):
+
+- BGCs, `Region maps`: the `coverage_track` tile (`combgc/bgc_region_coverage`) is gone. It
+  drew the same `combgc_region_track` rows as the `genome_view` above it, which the
+  `test_no_double_track_binding` lint forbids. The genome track stays (the rows are
+  intervals, which is what it draws) with `controls_placement: header`; its brush or a
+  contig typed in its locus field emits a region filter on `contig`/`start` that the arrow
+  lanes and the region table on the same collection follow. No `default_region`: every
+  contig carries one or two regions, so the whole axis is the fair landing view.
+- `controls_placement: header` on the hub scatter, the contig feature plane, the ARG dot
+  plot, the AMP property plane, the AMP PCA and the BGC genome track.
+- `show_histogram: true` on all 17 threshold `RangeSlider`s.
+
+Discrepancies:
+
+- FS-D16: `depictio/catalog/combgc/region_track.yaml` still describes three tracks and keeps
+  the `bgc_region_coverage` render. It is harmless (nothing binds it now) but its comment is
+  stale; the catalog module is outside this pass's partition.
+
+Commands and results:
+
+| command | result |
+| --- | --- |
+| `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k funcscan` | 10 passed |
+| `... -k double_track --runxfail` | funcscan no longer listed |
+| `uv run pytest -q depictio/tests/models/test_catalog.py` | 99 passed |
+| `depictio.cli run --template nf-core/funcscan/4.0.0 ... --dry-run` | 8/8 steps |
+| delete + re-ingest | project `6ab3c9f17129744458ef4194`, dashboard `6ab3ca0ee8b8ace33d32c787`; 18/18 table DCs have rows (combgc_region_track 155) |
+| Playwright, 1600x1000 | `/tmp/shots-funcscan/` (one per tab + BGC region maps) |
+
+Live check (2026-09-23, after the stack restart): picking
+`ERZ1664511.16-NODE-16-length-49668-cov-9.810473` in the genome track's chromosome picker
+zooms the track to that contig, narrows the arrow lanes to its 2 regions and the region
+table (and the linked `combgc_summary` table) from 155 to 2 rows; the caller UpSet follows.
+Typing the same name in the locus field is refused ("Not a locus on this collection").
+
+- FS-D17: the `genome_view` locus field cannot parse assembler contig names that contain
+  dashes (`...-NODE-16-length-49668-...`); the chromosome picker works. Viewer-side, outside
+  this partition.
+
+# Wave 3 (family review, metagenomics)
+
+## What changed
+
+- **Landing strip.** `Screening at a glance` (8 cards, mixed sum / median / average /
+  max, a `coverage_max: 1500` gauge) became `Run at a glance`: 4 cards (ARG hits, AMP
+  candidates, BGC regions, CAZyme genes), all `sum` + `top_n` by sample, persistent and
+  pinned to the top of every tab. The three wrong-looking cards are gone:
+  `fs-card-arg-genes` (a sum of per-sample distinct genes; the true distinct count stays on
+  Resistome as `arg-card-genes`, nunique `gene_symbol`), `fs-card-amp-hc` (a sum beside a
+  median of its superset) and `fs-card-bgc-classes` (a max with a per-sample top_n).
+  `fs-card-cazy-fam` and `fs-intro` went with them.
+- **Redundancy.** Dropped `fs-fig-arg-vs-cazyme` (kept `fs-av-screen-scatter`, now w 8),
+  the pinned `Reference tables` section (`fs-ref-arg/-amp/-bgc/-cazyme`, each repeating a
+  tab table), `bgc-table-regions` (kept `bgc-table-track`), `arg-av-heatmap` (kept the dot
+  plot and the class heatmap). Each screen tab's first card no longer repeats the glance
+  strip: `arg-card-hits` -> `arg-card-classes` (nunique drug class), `amp-card-count` ->
+  `amp-card-contigs`, `bgc-card-regions` -> `bgc-card-classes`, `caz-card-genes` ->
+  `caz-card-contigs`.
+- **Run report.** Kept `run-versions-intro`, `run-fig-tools`, `run-table-versions` and the
+  `Version scope` filters; dropped the 4 cards, `run-intro` and `Process scope`.
+- **Cards.** `arg-card-coverage` (mean of a percentage, `threshold_warn` on the passing
+  side) -> `arg-card-close`, sum of hits at 90 % identity and 80 % coverage or more, by
+  tool. `arg-card-identity` is scoped to aligned hits with `filter_expr`.
+  `amp-card-prob` reads `prob_max` instead of `prob_ampir`; `amp-card-confidence` (mean
+  probability against an arbitrary 0.8) -> `amp-card-agreement`, candidates called by two
+  predictors or more. `caz-card-substrates` is titled "Genes with a substrate call" and
+  filters out `unassigned`. Per-row measures (`aa_length`, `cds_count`) use `box_plot`.
+- **Filters.** Only the Sample MultiSelect is persistent; the per-screen count sliders
+  (ARG hits, AMP candidates, BGC regions, CAZyme genes) sit in an open, landing-only
+  `Sample thresholds` section. Tab-local threshold sections are no longer collapsed.
+  `advanced_viz_controls: header` on every tab.
+- **Genericity.** Removed "gut metagenome", "155 regions", "119 gene rows", "In this run
+  ampir carried the screen", "dbCAN-sub ... its private set is the largest", the megatest
+  mention in `ann-intro`; every intro is at most 2 sentences. `megatest.yaml` gains a
+  `forbidden_terms:` list (the 19 sample ids, MGnify, megatest, gut, run counts).
+- **Recipes.** `funcscan/contig_annotation.py` parsed only the dashed, renamed SPAdes names
+  (`...-NODE-16-length-49668-cov-9.81`): the nf-core `test` profile's plain SPAdes names
+  (`NODE_1_length_248_cov_0.98`) gave null lengths everywhere. It now reads
+  `length[_-]` / `cov[_-]` and MEGAHIT `len=` / `multi=`, and keeps a null (contig in the
+  table, off the length axis) for any other naming. `dbcan/overview.py`,
+  `dbcan/tool_overlap.py` and `dbcan/substrates.py` now take the sample from the
+  per-sample directory through `RecipeSource.source_path` (the contig prefix is the
+  fallback): on the `test` profile they previously collapsed both samples into one `run`
+  pseudo-sample.
+
+## Verified
+
+- `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py depictio/tests/models/test_template_conventions.py -k funcscan -rxX`: all pass, the three funcscan
+  KNOWN_VIOLATIONS entries xpass (pinned table, top_n aggregation, warn side); no
+  percentage-mean warning left.
+- `uv run pytest depictio/tests/recipes/test_funcscan_screens.py`: 7 passed.
+- Recipes on local data (`execute_recipe`): megatest and nf-core `test` profile.
+  `contig_annotation` has no null length on either; dbCAN recipes give `sample_1`,
+  `sample_2` on `test` and the 19 sample ids on the megatest.
+- `depictio-cli run --dry-run` on both data roots: 8/8 steps.
+
+## Still open
+
+- Not checked live (no ingest in this wave): tile heights after the removals, the new
+  `filter_expr` cards rendering, and the glance strip on every tab.
+- A `record_card` for an AMP candidate or a BGC region (review suggestion) is not added.
+- Hardcoded `custom_color` / `icon_color` values on every tile predate this wave.
+- The locus field still refuses contig names with dashes (platform, P28).

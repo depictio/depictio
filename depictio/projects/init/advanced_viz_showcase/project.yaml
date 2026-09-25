@@ -624,7 +624,7 @@ workflows:
 
       - id: "646b0f3c1e4a2d7f8e5b8d85"
         data_collection_tag: "sashimi_demo"
-        description: "Splice junctions across an exon-skipping event: two loci on chr12, 4 samples in two conditions, known and novel junctions"
+        description: "Splice junctions across an exon-skipping event: two loci on chr12 (the first inside the hg38 CHD4 footprint), 4 samples in two conditions, known and novel junctions"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -686,4 +686,329 @@ workflows:
               mean_expression: "Mean of the two replicates. Drives the marker size, so the reader can see the off-diagonal points are not the faint ones."
               regulation: "up in B, down in B or unchanged. Colours the points; a tenth of the genes are regulated."
 
-# No joins. Filters in each dashboard are scoped to a single DC.
+      # nf-core template lot 2: each kind exists because a megatest output
+      # needed it and no existing kind could bind it (contact_map sits on the
+      # JBrowse boundary: a binned matrix, never per-base signal).
+      - id: "646b0f3c1e4a2d7f8e5b8d88"
+        data_collection_tag: "contact_map_demo"
+        description: "Hi-C contact matrix over three GRCh38 loci (HOXA, MYC, IGF2 and KCNQ1) at 10, 20 and 40 kb, one partition per resolution"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/contact_map_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom: "Chromosome of the first bin. Named like the peak and coverage tracks so a brushed region reaches the matrix on its own column."
+              start: "Start of the first bin, in GRCh38 coordinates."
+              end: "End of the first bin."
+              chrom2: "Chromosome of the second bin. Equal to chrom throughout; only intra-chromosomal contacts are in this demo."
+              start2: "Start of the second bin."
+              end2: "End of the second bin."
+              count: "Contact count for the (bin1, bin2) pair. Power-law decay with distance, a boost inside each TAD and a focal dot at each loop anchor pair."
+              resolution: "Bin size in base pairs: 10000, 20000 or 40000. The coarser levels are the 10 kb pixels summed over 2x2 and 4x4 blocks, as cooler coarsen does."
+
+      # Locus tracks stacked under the contact matrix, on the same loci and the
+      # same chrom / start column names, so one region moves all three.
+      - id: "646b0f3c1e4a2d7f8e5b8dc1"
+        data_collection_tag: "locus_peaks_demo"
+        description: "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/locus_peaks_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom: "Chromosome."
+              start: "Peak start."
+              end: "Peak end."
+              peak_id: "Peak identifier."
+              score: "Peak strength as -log10 q-value. Loop anchors are the strongest, internal sites the weakest."
+              peak_class: "Where the site sits: TAD boundary, loop anchor or internal."
+
+      - id: "646b0f3c1e4a2d7f8e5b8dc2"
+        data_collection_tag: "locus_coverage_demo"
+        description: "CTCF and H3K27ac ChIP-seq depth in 2 kb bins over the three contact-map loci"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/locus_coverage_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom: "Chromosome."
+              start: "Bin start."
+              end: "Bin end."
+              coverage: "Normalised read depth in the bin."
+              sample: "ChIP track: GM12878_CTCF, sharp at the CTCF peaks, or GM12878_H3K27ac, broad over the promoters of the genes in the window."
+
+      - id: "646b0f3c1e4a2d7f8e5b8dc3"
+        data_collection_tag: "somatic_snv_demo"
+        description: "One tumour genome of somatic SNVs: a clock-like background plus three kataegis foci, for the rainfall view"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/somatic_snv_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chr: "Chromosome (GRCh38)."
+              pos: "Position of the variant."
+              vaf: "Variant allele fraction. Bound as the score role; the rainfall view ignores it."
+              mutation_class: "Base substitution class, reference base then alternate base, such as C to T. Colours the rainfall points."
+              sample: "Tumour sample."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d89"
+        data_collection_tag: "knee_plot_demo"
+        description: "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/knee_plot_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample / library the curve belongs to."
+              rank: "Barcode rank, ascending from 1 (highest UMI count first)."
+              umi_count: "UMI count at that rank."
+              is_cell: "Whether this rank was called a cell. The boundary between true and false is the cutoff the renderer draws."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8a"
+        data_collection_tag: "damage_profile_demo"
+        description: "Ancient-DNA misincorporation profile for 2 samples: C-to-T at the 5' end and G-to-A at the 3' end, both decaying from ~0.3 at position 1"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/damage_profile_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample / library the profile belongs to."
+              end: "Read end the position is measured from: 5p or 3p."
+              position: "Distance from the read end, 1 to 25."
+              base_change: "Substitution class: C-to-T, G-to-A, T-to-C, A-to-G or other."
+              frequency: "Substitution frequency at that position. C-to-T at 5p and G-to-A at 3p are the deamination signature; every other class sits near background."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8b"
+        data_collection_tag: "group_compare_demo"
+        description: "A 600 cell by 60 gene matrix in 3 clusters, with two planted marker genes per cluster: the wide shape a two-group differential test reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/group_compare_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              cell_id: "Observation identifier, one per row. The comparison names its rows with it; a lasso saved as a selection group captures its values."
+              cluster: "Precomputed cluster label: cluster_1, cluster_2 or cluster_3. What the two group pickers fall back to when no selection group has been saved."
+              gene_01: "Marker of cluster_1: eight times the background level in those cells, near background elsewhere."
+              gene_02: "Second marker of cluster_1."
+              gene_03: "Marker of cluster_2."
+              gene_04: "Second marker of cluster_2."
+              gene_05: "Marker of cluster_3."
+              gene_06: "Second marker of cluster_3."
+              gene_07: "Mildly enriched in cluster_3 only, so the effect-size line has something to cut."
+              gene_08: "Mildly enriched in cluster_3 only."
+              gene_09: "Mildly depleted in cluster_3 only."
+              gene_10: "Background gene. gene_10 through gene_60 are drawn from one distribution with no cluster structure, which is what puts the cloud around zero on the volcano."
+
+      # Isoform structures. The id sits in the 8d9x block rather than after the
+      # 8d8x run because five kind agents added a DC to this file at once, and a
+      # block of its own is what keeps the reserved ids from colliding.
+      - id: "646b0f3c1e4a2d7f8e5b8d9c"
+        data_collection_tag: "transcript_structure_demo"
+        description: "Eight isoforms across two genes: exon skipping, an alternative first exon, an alternative 3' end, a retained intron and one novel transcript"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/transcript_structure_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              transcript_id: "Isoform the block belongs to. One lane of the plot per distinct value."
+              gene_id: "Gene the isoform belongs to. The renderer draws one gene at a time and this is what it selects on."
+              gene_name: "Readable gene symbol, shown in the gene picker beside the identifier."
+              chrom: "Sequence the blocks sit on. Both genes of this demo are on chr7."
+              start: "Block start in base pairs, 1-based inclusive as a GTF writes it."
+              end: "Block end in base pairs, inclusive."
+              feature: "Block type: exon, or CDS for the coding part of the same exon. CDS blocks are drawn taller, which is what leaves the UTRs visible either side of the ORF."
+              strand: "Transcript strand. DPX1 is on the plus strand, DPX2 on the minus; the chevrons on the intron lines point the way each transcript is read."
+              transcript_class: "Novelty class the caller assigned: known, NIC (novel in catalogue, reuses known junctions), NNC (novel, does not) or novel. Colours the lanes."
+              sample: "Library the annotation was assembled from. One library here, so every isoform gets a lane of its own."
+              expression: "Per-transcript expression in TPM. Orders the lanes, drives the bar beside each of them, and is the alternative lane colouring."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8e"
+        data_collection_tag: "genome_chord_demo"
+        description: "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/genome_chord_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom_a: "Chromosome of the first breakpoint. Named as GRCh38 names them, so the ring can be laid out on the real chromosome lengths."
+              pos_a: "Position of the first breakpoint, in base pairs along chrom_a."
+              chrom_b: "Chromosome of the second breakpoint. Equal to chrom_a for the intra-chromosomal classes."
+              pos_b: "Position of the second breakpoint, in base pairs along chrom_b."
+              label: "Name of the link. The six recurrent events carry their gene-pair name; the rest are numbered. This is the column a click on a chord filters on."
+              weight: "Supporting reads. Spans two orders of magnitude, which is what the log-scaled chord width is for."
+              category: "Event class: translocation, inversion, deletion or duplication. Colours the chords; only translocations join two chromosomes."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8d"
+        data_collection_tag: "cnv_profile_demo"
+        description: "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/cnv_profile_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Tumour sample the profile belongs to. TUMOUR_A carries six planted events, TUMOUR_B four different ones, so the sample selector changes the picture."
+              chrom: "Chromosome of the bin or segment, on a synthetic 5-contig genome."
+              start: "Start of the 20 kb bin, or of the called segment, in base pairs."
+              end: "End of the same bin or segment."
+              log2: "Log2 copy ratio against a diploid baseline. Around 0 for a balanced region, +0.58 for three copies, -1 for one, -2.6 for a homozygous deletion."
+              baf: "B-allele frequency. A balanced region sits at 0.5; an unbalanced one splits into two bands, which is the only signal a copy-neutral LOH gives."
+              copy_number: "Absolute copy number called for the row. Colours the bins when it is bound."
+              minor_copy_number: "Minor-allele copy number (ASCAT nMinor); the major allele is copy_number minus it. 1 on a balanced region, 0 on a loss or a copy-neutral LOH, which is what separates the LOH from a normal diploid stretch."
+              segment: "Row type: bin for the evidence, segment for the call. This is what lets one collection carry both tracks."
+              label: "Short call label on the segments (CN 3 gain, CN 2 copy-neutral LOH). Empty on the bins, which have nothing to name."
+
+      # The two portal-shaped kinds. Their ids sit in the 8dbx block rather
+      # than after the 8d9x run for the same reason the 8d9x block exists:
+      # several kind agents reserve ids in this file at once, and a block of
+      # its own is what keeps them from colliding.
+      - id: "646b0f3c1e4a2d7f8e5b8db1"
+        data_collection_tag: "record_card_demo"
+        description: "120 genes with the fields a fact panel groups: identity, location, differential expression, variant summary and two external identifiers"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/record_card_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              feature_id: "Stable gene identifier. The card is keyed on it, and it is the column the scatter beside the card publishes when a point is clicked."
+              gene_symbol: "Readable gene symbol. The card uses it as the heading."
+              gene_name: "Longer description of the gene, one line."
+              biotype: "Gene class: protein_coding, lncRNA or pseudogene."
+              chromosome: "Chromosome the gene sits on, over 5 synthetic contigs."
+              start: "Gene start in base pairs."
+              end: "Gene end in base pairs."
+              strand: "Strand the gene is read from."
+              effect_size: "Log2 fold change against the control condition. Every fourth gene is planted as a hit, which is what gives the scatter something worth clicking."
+              significance: "Adjusted p-value for that effect."
+              mean_expression: "Mean normalised expression across the cohort. The scatter's x axis."
+              n_variants: "How many variants were called in this gene."
+              top_consequence: "Most severe consequence among those variants."
+              pathway: "Pathway the gene was assigned to. Colours the scatter and is the tab's first filter."
+              ensembl_id: "Ensembl gene identifier. Rendered by the card as a link, built from a URL template."
+              uniprot_id: "UniProt accession. Rendered as a link the same way."
+
+      - id: "646b0f3c1e4a2d7f8e5b8db2"
+        data_collection_tag: "parallel_coordinates_demo"
+        description: "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/parallel_coordinates_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Library identifier, one per row. Each row is one polyline across the axes."
+              group: "Library group: control, treated or degraded. Colours the polylines."
+              total_reads_m: "Total reads in millions."
+              percent_duplicates: "Duplicate rate as a percentage. High in the degraded group."
+              percent_gc: "Mean GC content as a percentage. The axis the three groups overlap most on."
+              mean_quality: "Mean base-call quality score."
+              percent_aligned: "Percentage of reads that aligned to the reference."
+              insert_size_median: "Median insert size in base pairs."
+              percent_rrna: "Percentage of reads assigned to rRNA. The clearest single separator of the degraded group."
+              genes_detected: "Number of genes with at least one assigned read."
+
+# Region links. A genomic region travels as a chromosome filter plus a
+# position range on the emitting collection's own columns; a region link
+# renames that pair onto the target's columns (depictio/models/models/links.py),
+# so the locus tabs can stack a peak track, a coverage track and a contact
+# matrix read from three collections on one region. Every other tab keeps its
+# filters scoped to its own collection.
+links:
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8dc1"  # locus_peaks_demo
+    source_column: "chrom"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8d88"  # contact_map_demo
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: { chrom: "chrom", pos: "start" }
+    description: "A region brushed or typed on the CTCF peak track narrows the contact matrix"
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8dc1"  # locus_peaks_demo
+    source_column: "chrom"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8dc2"  # locus_coverage_demo
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: { chrom: "chrom", pos: "start" }
+    description: "A region brushed or typed on the CTCF peak track narrows the ChIP coverage"

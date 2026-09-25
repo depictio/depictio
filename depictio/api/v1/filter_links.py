@@ -83,6 +83,89 @@ def _link_target_column(link: dict, resolved: dict | None = None) -> str | None:
 # key on a copy of the link dict: it never reaches the API or the database.
 _REVERSED = "_depictio_reversed"
 
+# The filter source a genome region travels under, written by the genome_view
+# brush and by any sidebar control bound to the same two columns. Mirrors
+# ``genomeRegionFilters`` in packages/depictio-react-core/src/selection.ts.
+GENOME_SELECTION_SOURCE = "genome_selection"
+
+# Which half of the region pair a filter is, by its component type. The pair is
+# emitted as a unit, so the component type identifies the role without the link
+# having to name the source-side coordinate column.
+_REGION_ROLE_BY_COMPONENT = {
+    "MultiSelect": "chrom",
+    "Select": "chrom",
+    "RangeSlider": "pos",
+    "Slider": "pos",
+}
+
+
+# Interactive components whose value is a [low, high] pair, not a value set.
+_RANGE_COMPONENTS = frozenset({"RangeSlider", "DateRangePicker"})
+
+
+def _is_range_filter(source_filter: dict) -> bool:
+    """True for a slider filter: its two values are a span, not two members."""
+    meta = source_filter.get("metadata") or {}
+    component = str(
+        meta.get("interactive_component_type")
+        or source_filter.get("interactive_component_type")
+        or ""
+    )
+    value = source_filter.get("value")
+    return component in _RANGE_COMPONENTS and isinstance(value, list) and len(value) == 2
+
+
+def _is_region_link(link: dict) -> bool:
+    """True for a link that renames a genomic region rather than resolving values."""
+    return (link.get("link_config") or {}).get("resolver") == "region"
+
+
+# The position half of a region pair carries the chromosome half's index with
+# this suffix (``genomePosFilterIndex``), which is how the two are paired back
+# up when one collection publishes more than one region.
+_GENOME_POS_INDEX_SUFFIX = "::pos"
+
+
+def _region_halves(source_filters: list, source_column: str) -> tuple[dict | None, dict | None]:
+    """The (chromosome, position) filters of one region pair on one DC.
+
+    ``source_column`` names the chromosome column the link follows, so a
+    collection carrying two coordinate bindings (a junction table and its
+    coverage, say) can be linked once per binding. Left empty, the first
+    region pair found wins.
+
+    The position half is matched by index rather than by column, because that
+    is what ties it to *its* chromosome: the brush writes it as the chromosome
+    filter's index plus ``::pos``.
+    """
+    chrom_half: dict | None = None
+    positions: dict[str, dict] = {}
+    for f in source_filters:
+        if not isinstance(f, dict) or f.get("source") != GENOME_SELECTION_SOURCE:
+            continue
+        if f.get("value") in (None, [], "", False):
+            continue
+        meta = f.get("metadata") or {}
+        component = str(
+            meta.get("interactive_component_type") or f.get("interactive_component_type") or ""
+        )
+        role = _REGION_ROLE_BY_COMPONENT.get(component)
+        if role == "pos":
+            positions[str(f.get("index", ""))] = f
+        elif role == "chrom" and chrom_half is None:
+            column = str(meta.get("column_name") or f.get("column_name") or "")
+            if not source_column or column == source_column:
+                chrom_half = f
+    if chrom_half is None:
+        return None, None
+    chrom_index = str(chrom_half.get("index", ""))
+    pos_half = positions.get(f"{chrom_index}{_GENOME_POS_INDEX_SUFFIX}")
+    if pos_half is None and len(positions) == 1:
+        # A sidebar RangeSlider is not indexed off the chromosome control, so
+        # an unambiguous single range still pairs with the chromosome.
+        pos_half = next(iter(positions.values()))
+    return chrom_half, pos_half
+
 
 def _is_reversed(hop: dict) -> bool:
     return bool(hop.get(_REVERSED))
@@ -140,7 +223,13 @@ def _link_paths(
         return []
 
     edges: dict[str, list[dict]] = {}
-    enabled = [link for link in project_links if link.get("enabled", True)]
+    # Region links are not value routes: they rename a chromosome and a
+    # coordinate column and resolve nothing, so walking one through
+    # ``resolve_link_values`` would scan a coordinate column for values that
+    # need no translation. ``region_link_filters`` handles them instead.
+    enabled = [
+        link for link in project_links if link.get("enabled", True) and not _is_region_link(link)
+    ]
     for link in enabled:
         edges.setdefault(str(link.get("source_dc_id", "")), []).append(link)
     if allow_reverse:
@@ -177,8 +266,13 @@ def _walk_link_path(
     origin_values: list,
     access_token: str,
     component_type: str,
+    range_filter: bool = False,
 ) -> tuple[str | None, list]:
     """Resolve a filter along a chain of links, hop by hop.
+
+    ``range_filter`` applies to the first hop only: the origin values are the
+    slider's ``[low, high]``, every later hop receives the discrete join values
+    the previous one resolved.
 
     Each hop translates the values it receives into the next DC's join column;
     that output becomes the next hop's input.
@@ -212,6 +306,7 @@ def _walk_link_path(
             target_dc_id=next_dc,
             token=access_token,
             reverse=_is_reversed(link),
+            range_filter=range_filter and hop == 0,
         )
         final_column = _hop_target_column(path[-1])
         if resolved is None:
@@ -272,12 +367,16 @@ def resolve_link_values(
     token: str | None,
     use_cache: bool = True,
     reverse: bool = False,
+    range_filter: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Resolve filtered values from source DC to target DC via link.
 
     ``reverse`` asks for a ``direct`` link declared ``target_dc_id ->
     source_dc_id`` to be walked backwards (see ``_link_paths``). The endpoint
     answers 404 for any other resolver, which reads here as "no link".
+
+    ``range_filter`` says ``filter_values`` is a ``[low, high]`` pair to read as
+    a span on ``source_column`` (see ``LinkResolutionRequest.range_filter``).
     """
     if not token:
         logger.warning("No token provided for link resolution")
@@ -293,8 +392,9 @@ def resolve_link_values(
     # simply absent from every linked component — with nothing to indicate it.
     versions = f"{_agg_hash(source_dc_id)}_{_agg_hash(target_dc_id)}"
     direction = "rev" if reverse else "fwd"
+    shape = "range" if range_filter else "set"
     cache_key = (
-        f"link_{project_id}_{source_dc_id}_{target_dc_id}_{direction}_{versions}_"
+        f"link_{project_id}_{source_dc_id}_{target_dc_id}_{direction}_{shape}_{versions}_"
         f"{hash(tuple(sorted(str(v) for v in filter_values)))}"
     )
 
@@ -311,6 +411,7 @@ def resolve_link_values(
         "filter_values": filter_values,
         "target_dc_id": target_dc_id,
         "reverse": reverse,
+        "range_filter": range_filter,
     }
 
     try:
@@ -522,6 +623,96 @@ def resolve_values_via_links(
     return None
 
 
+def region_link_filters(
+    target_dc_id: str,
+    filters_by_dc: dict,
+    project_links: list[dict],
+    component_type: str = "unknown",
+) -> list:
+    """Rewrite genome-region filters onto a target DC's own coordinate columns.
+
+    A region is not a value set, it is a chromosome name and a base-pair
+    interval, and both mean the same thing in every collection of the same
+    assembly. So a ``region`` link needs no resolution and no data read: it
+    only says which columns carry the chromosome and the coordinate on the
+    target, and the two filters are re-emitted under those names.
+
+    This is what the hic Genome-architecture tab asks for in its own comment:
+    one brush on a genome_view narrowing the matrix, the insulation track and
+    the boundary calls, each of which is a separate collection with its own
+    column names.
+
+    One hop only, deliberately. A chain of renames is still the same region,
+    so a second hop would add nothing but a way for two links to disagree.
+
+    Returns the synthetic filters to apply, in the shape ``add_filter``
+    already understands (``MultiSelect`` on the chromosome, ``RangeSlider`` on
+    the coordinate).
+    """
+    out: list = []
+    region_links = [
+        link
+        for link in project_links
+        if link.get("enabled", True)
+        and _is_region_link(link)
+        and str(link.get("target_dc_id", "")) == str(target_dc_id)
+    ]
+    if not region_links:
+        return out
+
+    for link in region_links:
+        origin_dc = str(link.get("source_dc_id", ""))
+        if not origin_dc or origin_dc == str(target_dc_id):
+            continue
+        columns = (link.get("link_config") or {}).get("columns") or {}
+        chrom_col = columns.get("chrom")
+        pos_col = columns.get("pos")
+        if not chrom_col or not pos_col:
+            logger.warning(
+                f"[{component_type}] region link {link.get('id')} names no "
+                "chrom/pos columns on its target; skipped"
+            )
+            continue
+
+        source_column = str(link.get("source_column") or "")
+        chrom_half, pos_half = _region_halves(filters_by_dc.get(origin_dc, []) or [], source_column)
+        # The chromosome half is what makes a coordinate range mean anything:
+        # 12 000 000 to 13 000 000 on no named contig would narrow every contig
+        # of the target at once. So the pair travels together or not at all.
+        if not chrom_half:
+            continue
+        for role, source_filter, target_column in (
+            ("chrom", chrom_half, chrom_col),
+            ("pos", pos_half, pos_col),
+        ):
+            if not source_filter:
+                continue
+            meta = source_filter.get("metadata") or {}
+            component = str(
+                meta.get("interactive_component_type")
+                or source_filter.get("interactive_component_type")
+                or ""
+            )
+            out.append(
+                {
+                    "index": f"region_link_{link.get('id', '?')}_{role}",
+                    "value": source_filter.get("value"),
+                    "source": GENOME_SELECTION_SOURCE,
+                    "metadata": {
+                        "dc_id": str(target_dc_id),
+                        "column_name": target_column,
+                        "interactive_component_type": component,
+                    },
+                }
+            )
+    if out:
+        logger.debug(
+            f"[{component_type}] region links rewrote {len(out)} filter(s) onto "
+            f"{str(target_dc_id)[:8]}"
+        )
+    return out
+
+
 def extend_filters_via_links(
     target_dc_id: str,
     filters_by_dc: dict,
@@ -548,12 +739,24 @@ def extend_filters_via_links(
     """
     link_filters: list = []
 
-    if not project_metadata or not access_token:
-        logger.info(
-            f"[{component_type}] Link resolution skipped: "
-            f"project_metadata={project_metadata is not None}, "
-            f"access_token={access_token is not None}"
+    if not project_metadata:
+        logger.info(f"[{component_type}] Link resolution skipped: no project metadata")
+        return link_filters
+
+    # Region links first, and without the access-token guard: they rename two
+    # columns and read nothing, so there is no API call to authenticate.
+    _, all_links = _project_links(project_metadata)
+    link_filters.extend(
+        region_link_filters(
+            target_dc_id=target_dc_id,
+            filters_by_dc=filters_by_dc,
+            project_links=all_links,
+            component_type=component_type,
         )
+    )
+
+    if not access_token:
+        logger.info(f"[{component_type}] Link resolution skipped: no access token")
         return link_filters
 
     project_id, project_links = _project_links(project_metadata)
@@ -600,6 +803,7 @@ def extend_filters_via_links(
                     origin_values=filter_values,
                     access_token=access_token,
                     component_type=component_type,
+                    range_filter=_is_range_filter(source_filter),
                 )
                 if not target_column:
                     continue  # unusable chain — not a result, so claim nothing

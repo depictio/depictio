@@ -16,8 +16,10 @@
 # point them at the STAR + Salmon copies instead.
 #
 # MultiQC 1.33 wrote this run's data dir as `multiqc/star_salmon/multiqc_report_data/`
-# rather than `multiqc/multiqc_data/`. The MultiQC scan pattern pins that literal
-# path: a bare basename would attach whichever nested report was found first.
+# rather than `multiqc/multiqc_data/`. The scan pattern below accepts both
+# spellings and any aligner sub-directory, because pinning `star_salmon` made a
+# --skip_alignment run (which writes `multiqc/salmon/`) find no report at all
+# while PSEUDOALIGNER_ONLY repointed everything else correctly.
 # ============================================================================
 template:
   template_id: "nf-core/rnaseq/3.26.0"
@@ -95,14 +97,14 @@ template:
     # collection has no file. Dropping it lets the run ingest its expression
     # panels instead of aborting on a missing scan.
     - if_var_present: "SKIP_MULTIQC"
-      remove_dc_tags: ["multiqc_data"]
+      remove_dc_tags: ["multiqc_data", "general_stats"]
       dashboards: ["dashboards/base.yaml"]
     # --skip_quantification_merge suppresses the merged matrices every
     # expression panel is built from (the per-sample quant.sf files stay, but
     # nothing in this template reads them). Drop the whole expression chain.
     - if_var_present: "SKIP_QUANTIFICATION_MERGE"
       remove_dc_tags:
-        ["sample_overview", "expression_heatmap", "gene_expression", "gene_counts"]
+        ["sample_overview", "expression_heatmap", "gene_expression", "gene_summary", "gene_counts"]
       dashboards: ["dashboards/base.yaml"]
     # --skip_alignment: no star_salmon/ subtree at all. The pseudo-aligner
     # writes the same file names under salmon/, which is also where the catalog
@@ -119,8 +121,17 @@ template:
         - data_collection_tag: "gene_expression"
           source_overrides:
             matrix: {path: "salmon/salmon.merged.gene_tpm.tsv"}
+        - data_collection_tag: "gene_summary"
+          source_overrides:
+            matrix: {path: "salmon/salmon.merged.gene_tpm.tsv"}
         - data_collection_tag: "gene_counts"
           scan_filename: "{DATA_ROOT}/salmon/salmon.merged.gene_counts.tsv"
+        - data_collection_tag: "deseq2_qc_pca"
+          source_overrides:
+            pca: {glob_pattern: "salmon/deseq2_qc/*pca.vals.txt"}
+        - data_collection_tag: "deseq2_qc_dists"
+          source_overrides:
+            dists: {glob_pattern: "salmon/deseq2_qc/*sample.dists.txt"}
       dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
@@ -146,8 +157,11 @@ workflows:
     data_collections:
       # ----------------------------------------------------------------
       # MultiQC: the whole QC funnel of the run, read from the parquet.
-      # The pattern pins the nested report dir MultiQC 1.33 wrote here
-      # (multiqc/star_salmon/multiqc_report_data/), not a bare basename.
+      # The pattern is path-qualified but aligner-agnostic: `multiqc/` then an
+      # optional route directory (`star_salmon/`, `salmon/`, `hisat2/`, absent
+      # on a single-route run) then either MultiQC spelling of the data dir
+      # (`multiqc_report_data/` up to 1.33, `multiqc_data/` after). `(?:.*/)?`
+      # in front lets it match from the run root or from any depth below it.
       # ----------------------------------------------------------------
       - data_collection_tag: "multiqc_data"
         description: "MultiQC report data for the STAR + Salmon route"
@@ -157,7 +171,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/star_salmon/multiqc_report_data/multiqc\\.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc(?:_report)?_data/multiqc\\.parquet$"
           dc_specific_properties:
             modules:
               - "fastqc_raw"
@@ -331,6 +345,171 @@ workflows:
               "group": "Condition the sample belongs to"
 
       # ----------------------------------------------------------------
+      # DESeq2 QC. nf-core/rnaseq runs its own deseq2_qc.r over the count
+      # matrix and publishes the PCA coordinates and the sample-distance
+      # matrix under star_salmon/deseq2_qc/. Both files were on disk and
+      # unbound: MultiQC rendered them as two static images and nothing else
+      # could filter, cluster or read them. The catalog recipes key on the file
+      # suffix rather than on a pipeline directory, so chipseq and atacseq can
+      # bind the same two outputs.
+      #
+      # Optional because deseq2_qc.r is skipped by --skip_deseq2_qc and does
+      # not run at all below three samples.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_qc_pca"
+        optional: true
+        description: "Principal components of the count matrix as the pipeline's own DESeq2 QC step computed them"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/qc_pca.py"
+            # One route only: a run with both aligner routes writes a
+            # deseq2_qc/ under each, and the catalog glob would read both.
+            source_overrides:
+              pca:
+                glob_pattern: "star_salmon/deseq2_qc/*pca.vals.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "First principal component, as DESeq2 computed it"
+              "dim_2": "Second principal component"
+              "dim_1_percent": "Variance the first component explains, in percent"
+              "dim_2_percent": "Variance the second component explains, in percent"
+              "pca_set": "Which count matrix the components come from"
+
+      - data_collection_tag: "deseq2_qc_dists"
+        optional: true
+        description: "Square sample-to-sample Euclidean distance matrix from the pipeline's DESeq2 QC step"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/qc_sample_dists.py"
+            source_overrides:
+              dists:
+                glob_pattern: "star_salmon/deseq2_qc/*sample.dists.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Row sample; every other column is a sample and holds the distance to it"
+
+      # ----------------------------------------------------------------
+      # RSeQC read distribution. One fixed-width report per sample, so the
+      # sample name lives only in the file name: the raw scan attaches the
+      # path and the recipe parses the report out of it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "rseqc_read_distribution_raw"
+        optional: true
+        description: "Raw RSeQC read_distribution reports, one line per row (input of rseqc_read_distribution)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.read_distribution\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["line"]
+              # `5'UTR_Exons` would otherwise open a quoted field that never closes.
+              quote_char: null
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              truncate_ragged_lines: true
+            columns_description:
+              "line": "One line of an RSeQC read_distribution report, as written"
+              "source_path": "File the line came from; the sample name is derived from it"
+
+      - data_collection_tag: "rseqc_read_distribution"
+        optional: true
+        description: "Share of each library's tags per annotation feature, at two resolutions"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "rseqc/read_distribution.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "rank": "Resolution of the row, 'Region class' or 'Feature'"
+              "taxon": "The region class or the RSeQC feature name"
+              "region_class": "Exonic, intronic, promoter, downstream or other intergenic"
+              "tag_count": "Tags counted in this class or feature"
+              "abundance": "Share of the sample's total tags"
+
+      # ----------------------------------------------------------------
+      # MultiQC general statistics as one numeric row per library: the input
+      # of the per-library QC profile (parallel coordinates). The MultiQC DC
+      # above feeds the report panels only; its per-module columns carry
+      # `<module>-<metric>` names and per-read-file rows, which the recipe
+      # folds into eleven plainly named metrics. Optional: a --skip_multiqc
+      # run writes no table, and a metric a module did not run for stays null.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "general_stats"
+        optional: true
+        description: "MultiQC general statistics, one row per library with eleven QC metrics"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnaseq/general_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library identifier, as the samplesheet names it"
+              "condition": "Biological group, read off the sample name"
+              "total_reads_m": "Reads STAR received after trimming, in millions"
+              "pct_trimmed": "Share of bases Cutadapt trimmed, in percent"
+              "pct_gc": "GC content of the trimmed reads, in percent"
+              "pct_uniquely_mapped": "Reads STAR mapped to one locus, in percent"
+              "pct_salmon_mapped": "Fragments Salmon assigned to a transcript, in percent"
+              "pct_duplication": "Duplicate reads Picard MarkDuplicates flagged, in percent"
+              "dupradar_intercept": "dupRadar intercept: duplication rate of lowly expressed genes, high means PCR over-amplification"
+              "pct_exonic": "Qualimap exonic reads over exonic, intronic and intergenic reads, in percent"
+              "bias_5_3": "Qualimap 5 prime to 3 prime coverage bias, 1 is even and above 1 points at degradation"
+              "error_rate": "Mismatch rate samtools stats reports, in percent"
+              "insert_size": "Mean insert size samtools stats reports, in bases"
+
+      # ----------------------------------------------------------------
+      # One row per expressed gene: where it sits on the mean-variance plane
+      # and which condition it peaks in. It feeds the gene record (a scatter
+      # to pick a gene on and the card that reads the pick back); the
+      # pipeline runs no differential test, so variability across libraries
+      # is the honest thing to rank on.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gene_summary"
+        description: "Expressed genes, one row each: mean and spread of log2(TPM + 1) and the condition each peaks in"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnaseq/gene_summary.py"
+            source_overrides:
+              matrix:
+                path: "star_salmon/salmon.merged.gene_tpm.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene identifier, the key the gene record selects on"
+              "gene_name": "Gene symbol"
+              "mean_log2_tpm": "Mean log2(TPM + 1) over the libraries"
+              "sd_log2_tpm": "Standard deviation of log2(TPM + 1) over the libraries"
+              "max_tpm": "Highest TPM any library reached"
+              "top_sample": "Library with the highest TPM"
+              "top_condition": "Condition with the highest mean log2(TPM + 1)"
+              "log2fc_top_vs_rest": "Mean log2(TPM + 1) of the top condition minus the mean of the other conditions"
+              "libraries_detected": "Libraries with a TPM above zero"
+
+      # ----------------------------------------------------------------
       # The raw merged count matrix, shown as rows in Reference tables.
       # ----------------------------------------------------------------
       - data_collection_tag: "gene_counts"
@@ -415,6 +594,40 @@ links:
     description: "Narrow the merged count matrix to the selected samples (column subset on a wide matrix)"
     enabled: true
 
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "deseq2_qc_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the DESeq2 QC PCA by samplesheet selection"
+    enabled: true
+
+  # Unlike the expression matrices, this one is square: samples are BOTH the
+  # rows and the columns. `sample` is a real column here, so the row filter
+  # applies normally and `_narrow_wide_matrix_columns` mirrors the same values
+  # onto the column set, which is what keeps the matrix square under a filter.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "deseq2_qc_dists"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the DESeq2 QC distance matrix to the selected samples, rows and columns"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "rseqc_read_distribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the read distribution composition by samplesheet selection"
+    enabled: true
+
   # The PCA embedding and the sample table both select on sample_id: this link
   # is what carries that selection into the gene explorer and the heatmap.
   - source_dc_tag: "sample_overview"
@@ -424,7 +637,7 @@ links:
     link_config:
       resolver: "direct"
       target_field: "sample"
-    description: "Filter the gene explorer by the samples picked in the PCA or the sample table"
+    description: "Filter the gene explorer by the samples picked in the library summary table"
     enabled: true
 
   - source_dc_tag: "sample_overview"
@@ -439,10 +652,144 @@ links:
 
   - source_dc_tag: "sample_overview"
     source_column: "sample_id"
+    target_dc_tag: "deseq2_qc_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the DESeq2 QC PCA by the samples picked in the library summary table"
+    enabled: true
+
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_qc_dists"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the DESeq2 QC distance matrix to the samples picked in the library summary table"
+    enabled: true
+
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "rseqc_read_distribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the read distribution composition by the samples picked in the library summary table"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "general_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-library QC profile by samplesheet selection"
+    enabled: true
+
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "general_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-library QC profile by the samples picked in the library summary table"
+    enabled: true
+
+  # A gene picked on the mean-variance plane narrows the box plot and the gene
+  # rows to that gene.
+  - source_dc_tag: "gene_summary"
+    source_column: "gene_id"
+    target_dc_tag: "gene_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "gene_id"
+    description: "Filter the gene explorer to the genes picked on the mean-variance plane"
+    enabled: true
+
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
     target_dc_tag: "multiqc_data"
     target_type: "multiqc"
     link_config:
       resolver: "sample_mapping"
       target_field: "sample"
-    description: "Filter the MultiQC panels by the samples picked in the PCA"
+    description: "Filter the MultiQC panels by the samples picked in the library summary table"
+    enabled: true
+
+  # The DESeq2 QC PCA is the one sample PCA of the template: a selection on
+  # it narrows every per-sample tile, as the library summary table does.
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "sample_overview"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the library summary to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "gene_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the gene explorer to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "expression_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the top variable gene heatmap (column subset) to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_qc_dists"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the DESeq2 QC distance matrix to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "rseqc_read_distribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the read distribution composition to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "general_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the per-library QC profile to the samples picked on the DESeq2 QC PCA"
+    enabled: true
+
+  - source_dc_tag: "deseq2_qc_pca"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by the samples picked on the DESeq2 QC PCA"
     enabled: true

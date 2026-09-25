@@ -17,12 +17,13 @@ That is correct because the cancer introns are a subset of all introns: every
 cancer row is already present in the full table, with the same coordinates,
 strand, gene and read counts.
 
-The junction table carries no sample column and the recipe harness concatenates
-the globbed files without their path, so a row cannot be attributed to a sample.
-The intron is the unit of analysis here, not the sample.
+The junction table carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name
+(``ctatsplicing/<sample>.introns``, or ``<sample>.cancer.introns`` for the
+twin); intron keys are deduplicated per sample.
 
 Output columns:
-    intron, chrom, start, end, intron_length, strand, gene, gene_id,
+    sample, intron, chrom, start, end, intron_length, strand, gene, gene_id,
     uniq_mapped, multi_mapped, total_mapped, uniq_fraction, score
 """
 
@@ -30,9 +31,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME: the source hands every row the path
+# of its file, and the sample is the basename minus the tool suffix. The cancer
+# twin's longer suffix is stripped first.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIXES = (".cancer.introns", ".introns")
+
+
+def _sample() -> pl.Expr:
+    """``ctatsplicing/S1.introns`` or ``ctatsplicing/S1.cancer.introns`` -> ``S1``."""
+    name = pl.col(_SOURCE_PATH).str.split("/").list.last()
+    expr = name
+    for suffix in _SAMPLE_SUFFIXES:
+        expr = (
+            pl.when(name.str.ends_with(suffix)).then(name.str.strip_suffix(suffix)).otherwise(expr)
+        )
+    return expr.alias("sample")
+
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="introns",
+        source_path=_SOURCE_PATH,
         glob_pattern="ctatsplicing/*.introns",
         format="TSV",
         read_kwargs={"infer_schema_length": 10000},
@@ -40,6 +60,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "intron": pl.Utf8,
     "chrom": pl.Utf8,
     "start": pl.Int64,
@@ -62,7 +83,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Split the packed intron and gene strings, then derive lengths and totals."""
     # Only the base columns: the cancer-intron file matched by the same glob
     # brings three extra annotation columns along (see the module docstring).
-    df = sources["introns"].select(_BASE_COLUMNS).unique(subset=["intron"], keep="first")
+    df = (
+        sources["introns"]
+        .select(_sample(), *_BASE_COLUMNS)
+        .unique(subset=["sample", "intron"], keep="first", maintain_order=True)
+    )
 
     intron = pl.col("intron").cast(pl.Utf8)
     # The first gene wins when a junction is annotated against several of them.
@@ -71,6 +96,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     multi = pl.col("multi_mapped").cast(pl.Int64, strict=False).fill_null(0)
 
     out = df.select(
+        pl.col("sample"),
         intron.alias("intron"),
         intron.str.extract(r"^([^:]+):", 1).alias("chrom"),
         intron.str.extract(r":(\d+)-", 1).cast(pl.Int64, strict=False).alias("start"),
@@ -95,6 +121,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             # The manhattan render needs a float score.
             pl.col("uniq_mapped").cast(pl.Float64).alias("score"),
         )
-        .sort("chrom", "start")
+        .sort("sample", "chrom", "start")
         .select(list(EXPECTED_SCHEMA))
     )

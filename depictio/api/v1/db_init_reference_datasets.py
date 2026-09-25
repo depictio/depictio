@@ -200,6 +200,26 @@ STATIC_IDS = {
             "sashimi_demo": "646b0f3c1e4a2d7f8e5b8d85",
             "scatter_xy_demo": "646b0f3c1e4a2d7f8e5b8d86",
             "sashimi_coverage_demo": "646b0f3c1e4a2d7f8e5b8d87",
+            # nf-core template lot 2: contact_map, knee_plot, damage_profile.
+            "contact_map_demo": "646b0f3c1e4a2d7f8e5b8d88",
+            "knee_plot_demo": "646b0f3c1e4a2d7f8e5b8d89",
+            "damage_profile_demo": "646b0f3c1e4a2d7f8e5b8d8a",
+            # Kinds added with the lot 2 remediation wave; ids as declared in
+            # the showcase project.yaml (transcript_structure took 8d9c).
+            "group_compare_demo": "646b0f3c1e4a2d7f8e5b8d8b",
+            "cnv_profile_demo": "646b0f3c1e4a2d7f8e5b8d8d",
+            "genome_chord_demo": "646b0f3c1e4a2d7f8e5b8d8e",
+            "transcript_structure_demo": "646b0f3c1e4a2d7f8e5b8d9c",
+            # The two portal-shaped kinds sit in their own 8dbx block, as the
+            # showcase project.yaml explains: several kind agents reserve ids
+            # in that file at once.
+            "record_card_demo": "646b0f3c1e4a2d7f8e5b8db1",
+            "parallel_coordinates_demo": "646b0f3c1e4a2d7f8e5b8db2",
+            # Locus tracks on the contact-map loci (the 8dcx block), and the
+            # somatic SNVs behind the Manhattan tab's rainfall view.
+            "locus_peaks_demo": "646b0f3c1e4a2d7f8e5b8dc1",
+            "locus_coverage_demo": "646b0f3c1e4a2d7f8e5b8dc2",
+            "somatic_snv_demo": "646b0f3c1e4a2d7f8e5b8dc3",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -220,13 +240,10 @@ STATIC_IDS = {
             "advanced_viz_rarefaction": "646b0f3c1e4a2d7f8e5b8d22",
             "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
             "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
-            "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
             "advanced_viz_complex_heatmap": "646b0f3c1e4a2d7f8e5b8d27",
             "advanced_viz_upset": "646b0f3c1e4a2d7f8e5b8d29",
-            "advanced_viz_ma": "646b0f3c1e4a2d7f8e5b8d40",
             "advanced_viz_dotplot": "646b0f3c1e4a2d7f8e5b8d41",
             "advanced_viz_lollipop": "646b0f3c1e4a2d7f8e5b8d42",
-            "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
             "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
             "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
             "advanced_viz_coverage_track": "646b0f3c1e4a2d7f8e5b8d46",
@@ -238,6 +255,25 @@ STATIC_IDS = {
             "advanced_viz_gsea_running_score": "646b0f3c1e4a2d7f8e5b8d74",
             "advanced_viz_sashimi": "646b0f3c1e4a2d7f8e5b8d75",
             "advanced_viz_scatter_xy": "646b0f3c1e4a2d7f8e5b8d76",
+            "advanced_viz_contact_map": "646b0f3c1e4a2d7f8e5b8d77",
+            "advanced_viz_knee_plot": "646b0f3c1e4a2d7f8e5b8d78",
+            "advanced_viz_damage_profile": "646b0f3c1e4a2d7f8e5b8d79",
+            "advanced_viz_genome_view": "646b0f3c1e4a2d7f8e5b8d7a",
+            "advanced_viz_group_compare": "646b0f3c1e4a2d7f8e5b8d7b",
+            "advanced_viz_transcript_structure": "646b0f3c1e4a2d7f8e5b8d7c",
+            "advanced_viz_cnv_profile": "646b0f3c1e4a2d7f8e5b8d7d",
+            "advanced_viz_genome_chord": "646b0f3c1e4a2d7f8e5b8d7e",
+            "advanced_viz_record_card": "646b0f3c1e4a2d7f8e5b8d7f",
+            # 8d80 is already the profile_demo collection, so the parallel
+            # coordinates tab takes the next free id in the 8dbx block.
+            "advanced_viz_parallel_coordinates": "646b0f3c1e4a2d7f8e5b8db0",
+            # The locus section (contact matrix, CTCF peaks, ChIP coverage and
+            # genes on one region) opens the 8dcx block; 8dc1 and 8dc2 are its
+            # collections, 8dc3 the somatic SNVs of the Manhattan tab.
+            "advanced_viz_locus_section": "646b0f3c1e4a2d7f8e5b8dc0",
+            "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
+            "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
+            "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab
@@ -574,6 +610,13 @@ class ReferenceDatasetRegistry:
                 continue
             variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
         provided_vars: set[str] = set(variables.keys())
+        # Declared variable defaults (e.g. GENOME) fill in whatever the reference left unset;
+        # like the CLI, a default satisfies `required` but does not fire `if_var_present`.
+        for var in template_section.get("variables") or []:
+            if var.get("default") is not None:
+                variables.setdefault(
+                    var["name"], str(var["default"]).replace("{DATA_ROOT}", data_root)
+                )
         config = substitute_template_variables(config, variables)
 
         # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)

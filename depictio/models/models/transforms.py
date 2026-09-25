@@ -15,6 +15,11 @@ class RecipeSource(BaseModel):
     format: str = "CSV"  # CSV, TSV, Parquet
     read_kwargs: dict | None = None  # Extra kwargs passed to polars read function
     optional: bool = False  # If True and dc_ref not resolvable, passes None to transform()
+    # Name of a column to add to every row, holding the path (relative to the data
+    # root, POSIX separators) of the file the row was read from. Lets a recipe
+    # derive a key the file content lacks, e.g. the sample of a per-sample fusion
+    # table: `pl.col("source_path").map_elements(...)` or a `str.extract`.
+    source_path: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -65,6 +70,10 @@ class TransformConfig(BaseModel):
     # Output already computed and shipped as a seed file: keep the lineage, never
     # re-run the recipe. Set by the init resolver, never declared in a YAML.
     materialized: bool = False
+    # Template-substituted parameters passed to recipes whose transform() accepts
+    # a ``params`` keyword (e.g. ``marker_panel: "{MARKER_PANEL}"``). Values still
+    # holding an unresolved ``{VAR}`` placeholder are dropped before the call.
+    params: dict[str, str] | None = None
 
     model_config = ConfigDict(extra="forbid")
 

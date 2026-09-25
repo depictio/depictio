@@ -1,0 +1,192 @@
+# Locus section: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+#
+# The locus section of docs/design/advanced-viz.md section 9: three
+# collections, one region. The navigator opens zoomed on its `default_region`
+# and zooms itself on a locus entry or a brush; a second genome_view on the same
+# peaks follows it with the gene lane. The navigator's `default_region` emits the
+# chromosome and position filters once on open; the project's region links
+# (locus_peaks_demo -> contact_map_demo, locus_peaks_demo -> locus_coverage_demo)
+# carry them to the other two collections, and every tile clamps its x axis to
+# the region because all three name their coordinate columns chrom / start.
+# `coverage_track` and `genome_view` never share a collection here, which the
+# shipped-YAML lint (`test_no_double_track_binding`) enforces.
+title: 'Regulatory locus'
+subtitle: 'The MYC neighbourhood on one axis: CTCF peaks and genes, the Hi-C contact triangle and two ChIP-seq tracks, all following one region.'
+icon: 'tabler:dna-2'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8dc0'
+is_main_tab: false
+tab_order: 43
+parent_dashboard_tag: volcano
+tab_icon: 'tabler:dna-2'
+tab_icon_color: 'teal'
+
+filter_sections:
+  - name: 'Track scope'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Restricts the peak classes and the ChIP tracks drawn on the region'
+
+grid_sections:
+  - name: 'One region, three collections'
+    icon: 'mdi:dna'
+    color: 'teal'
+    description: 'Peaks, contacts and coverage stacked on one genomic axis'
+
+components:
+  - tag: text-locus-section
+    index: locus-text
+    component_type: text
+    title: 'Regulatory locus'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'One region, three collections'
+    body: >
+      Three collections on one region around MYC: CTCF peaks with the hg38 genes, the Hi-C
+      contact triangle, and CTCF and H3K27ac ChIP depth. Type a locus or a gene in the
+      navigator header, or brush its axis, and the navigator and every track below move to
+      that region; the matrix re-reads it at the resolution that fits. This is the layout nf-core/hic, chipseq and
+      cutandrun outputs combine into once their peaks, coverage and mcool are ingested.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-locus-navigator
+    index: 'locus-navigator'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    title: 'Locus navigator'
+    description: 'CTCF peaks on the current region. The locus field in the header (a region or a gene symbol) and a brush on this axis move this tile and every tile below.'
+    section: 'One region, three collections'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      controls_placement: "header"
+      chr_col: "chrom"
+      pos_col: "start"
+      end_col: "end"
+      score_col: "score"
+      feature_col: "peak_id"
+      category_col: "peak_class"
+      mark: "bar"
+      score_title: "CTCF -log10(q)"
+      assembly: "hg38"
+      default_region: "chr8:127,400,000-128,100,000"
+      region_filter_enabled: true
+    layout: { x: 0, y: 2, w: 8, h: 3 }
+
+  - tag: viz-locus-peaks
+    index: 'locus-peaks'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    title: 'CTCF peaks and genes'
+    description: 'The region itself: CTCF peaks coloured by where they sit (TAD boundary, loop anchor, internal) over the hg38 gene lane.'
+    section: 'One region, three collections'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      chr_col: "chrom"
+      pos_col: "start"
+      end_col: "end"
+      score_col: "score"
+      feature_col: "peak_id"
+      category_col: "peak_class"
+      mark: "bar"
+      score_title: "CTCF -log10(q)"
+      annotation: "hg38"
+      assembly: "hg38"
+      region_filter_enabled: false
+      follow_region_filter: true
+    layout: { x: 0, y: 5, w: 8, h: 3 }
+
+  - tag: viz-locus-contacts
+    index: 'locus-contacts'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'contact_map_demo'
+    title: 'Contact triangle'
+    description: 'Hi-C contacts on the same region, x aligned with the peaks above. TADs are the triangles, the MYC loop the dot at the apex between its two anchors.'
+    section: 'One region, three collections'
+    viz_kind: 'contact_map'
+    config:
+      viz_kind: "contact_map"
+      controls_placement: "header"
+      chrom1_col: "chrom"
+      start1_col: "start"
+      end1_col: "end"
+      chrom2_col: "chrom2"
+      start2_col: "start2"
+      end2_col: "end2"
+      count_col: "count"
+      resolution_col: "resolution"
+      display: "triangle"
+      log_scale: true
+      colour_scale: "Viridis"
+    layout: { x: 0, y: 8, w: 8, h: 6 }
+
+  - tag: viz-locus-coverage
+    index: 'locus-coverage'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_coverage_demo'
+    title: 'ChIP-seq depth'
+    description: 'CTCF depth peaks sharply on the sites above; H3K27ac spreads over the active promoters. One lane per track, clamped to the region.'
+    section: 'One region, three collections'
+    viz_kind: 'coverage_track'
+    config:
+      viz_kind: "coverage_track"
+      chromosome_col: "chrom"
+      position_col: "start"
+      end_col: "end"
+      value_col: "coverage"
+      sample_col: "sample"
+      view_mode: "facet"
+      color_by: "sample"
+      smoothing_window: 0
+      show_annotation_lane: false
+      view: "track"
+      views: ["track"]
+    layout: { x: 0, y: 14, w: 8, h: 4 }
+
+  - tag: filter-locus-peak-class
+    index: locus-f-peak-class
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'peak_class'
+    column_type: 'object'
+    title: 'CTCF peak class'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-locus-sample
+    index: locus-f-sample
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_coverage_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'sample'
+    column_type: 'object'
+    title: 'ChIP track'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

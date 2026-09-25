@@ -1,24 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
-  MultiSelect,
-  NumberInput,
-  SegmentedControl,
-  Slider,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   InteractiveFilter,
   SankeyResult,
   StoredMetadata,
   dispatchSankey,
-  fetchAdvancedVizData,
   pollSankey,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
@@ -100,44 +102,58 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   const [error, setError] = useState<string | null>(null);
   const [computeStatus, setComputeStatus] = useState<string | null>(null);
   const [computeMs, setComputeMs] = useState<number | null>(null);
-  const [dataRows, setDataRows] = useState<Record<string, unknown[]> | null>(null);
+  // Step-picker options and the data popover both come from the compute
+  // result, which aggregates every row of the filtered collection. A separate
+  // row fetch used to feed them, capped at 5,000 rows: on a larger collection
+  // the pickers missed values and the popover reported a row count that was
+  // really the cap.
+  const stepOptions = useMemo<Record<string, string[]>>(() => {
+    const fromServer = result?.step_options;
+    if (fromServer) return fromServer;
+    // An API that predates `step_options`: the nodes still list every value of
+    // the active steps.
+    const out: Record<string, string[]> = {};
+    for (const node of result?.nodes ?? []) {
+      (out[node.step] = out[node.step] || []).push(node.label);
+    }
+    for (const col of Object.keys(out)) out[col] = Array.from(new Set(out[col])).sort();
+    return out;
+  }, [result]);
 
-  // Step-filter options come from the underlying DC (server-side aggregation
-  // would otherwise drop unselected values before we could list them). One
-  // /data fetch is enough to populate every step's MultiSelect.
-  const [stepOptions, setStepOptions] = useState<Record<string, string[]>>({});
-
-  useEffect(() => {
-    if (!metadata.wf_id || !metadata.dc_id || !effectiveStepCols.length) return;
-    let cancelled = false;
-    fetchAdvancedVizData({
-      wfId: metadata.wf_id,
-      dcId: metadata.dc_id,
-      // Fetch the WHOLE possible-step universe, not just the depth-sliced
-      // active prefix — so the step-filter MultiSelects keep working when the
-      // user expands depth without a refetch.
-      columns: allSteps,
-      filters,
-      limitRows: 5000,
-      vizKind: 'sankey',
-    })
-      .then((res) => {
-        if (cancelled) return;
-        const opts: Record<string, string[]> = {};
-        for (const col of allSteps) {
-          const vals = (res.rows[col] as unknown[]) || [];
-          opts[col] = Array.from(new Set(vals.map((v) => String(v ?? '')))).sort();
-        }
-        setStepOptions(opts);
-        setDataRows(res.rows);
-      })
-      .catch(() => {
-        /* options are best-effort; popover MultiSelects stay empty */
-      });
-    return () => {
-      cancelled = true;
+  /** The aggregated flows as a table: one row per link, which is what the
+   *  figure draws, so the popover and the picture always agree. */
+  const flowRows = useMemo<Record<string, unknown[]> | null>(() => {
+    const trace = (result?.figure?.data?.[0] ?? null) as {
+      link?: { source?: number[]; target?: number[]; value?: number[] };
+    } | null;
+    const link = trace?.link;
+    if (!result || !link?.source || !link.target || !link.value) return null;
+    const nodes = result.nodes;
+    const out: Record<string, unknown[]> = {
+      from_step: [],
+      from: [],
+      to_step: [],
+      to: [],
+      flow: [],
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(allSteps), JSON.stringify(filters), refreshTick]);
+    for (let i = 0; i < link.source.length; i++) {
+      const a = nodes[link.source[i]];
+      const b = nodes[link.target[i]];
+      if (!a || !b) continue;
+      out.from_step.push(a.step);
+      out.from.push(a.label);
+      out.to_step.push(b.step);
+      out.to.push(b.label);
+      out.flow.push(link.value[i]);
+    }
+    return out;
+  }, [result]);
+
+  const echo = useMemo(() => {
+    if (!result) return undefined;
+    const rows = result.input_rows ?? result.row_count;
+    return `${rows.toLocaleString()} rows in ${result.link_count.toLocaleString()} flows`;
+  }, [result]);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id) {
@@ -166,6 +182,9 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       step_filters: Object.fromEntries(
         Object.entries(stepFilters).filter(([, v]) => v.length > 0),
       ),
+      // Every step the depth control can reach, so its pickers are listed
+      // before the reader deepens the flow.
+      option_cols: allSteps,
       filter_metadata: filters,
     };
 
@@ -225,6 +244,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     JSON.stringify(filters),
     refreshTick,
     JSON.stringify(effectiveStepCols),
+    JSON.stringify(allSteps),
     config.value_col,
     sortMode,
     minLinkValue,
@@ -385,131 +405,114 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     config.value_format,
   ]);
 
+  // Encoding tier: how many steps the flow runs through, how the nodes are
+  // ordered and what the link colour means. Opacity, labels, the minimum link
+  // and the per-step value filters are the second tier.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {/* Depth picker: SegmentedControl chosen over Slider because (a) the
+            value set is tiny (2..available_step_cols.length, typically 2-6)
+            and (b) Slider marks visually bleed into the controls below it.
+            Hidden entirely when the dashboard didn't supply an
+            available_step_cols list longer than the configured step_cols.
+            The label is a plain string so its truncation keeps the full step
+            chain as a tooltip. */}
+        {allSteps.length > 2 ? (
+          <VizSegmented
+            label={`Depth: ${effectiveStepCols.join(' → ')}`}
+            aria-label="Depth"
+            value={String(depth)}
+            onChange={(v) => setDepth(Number(v))}
+            data={Array.from({ length: allSteps.length - 1 }, (_, i) => {
+              const n = i + 2;
+              return { value: String(n), label: String(n) };
+            })}
+          />
+        ) : null}
+        <VizSegmented
+          label="Sort nodes"
+          value={sortMode}
+          onChange={(v) => setSortMode(v as typeof sortMode)}
+          data={[
+            { value: 'total_flow', label: 'By flow' },
+            { value: 'alphabetical', label: 'A–Z' },
+            { value: 'input', label: 'Input' },
+          ]}
+        />
+        <VizSegmented
+          label="Colour links by"
+          value={colorMode}
+          onChange={(v) => setColorMode(v as typeof colorMode)}
+          data={[
+            { value: 'source', label: 'Source' },
+            { value: 'target', label: 'Target' },
+            { value: 'step', label: 'Step' },
+          ]}
+        />
+      </>
+    ),
+    [allSteps, depth, effectiveStepCols, sortMode, colorMode],
+  );
+
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        {/* Depth picker — SegmentedControl chosen over Slider because (a) the
-            value set is tiny (2..available_step_cols.length, typically 2–6)
-            and (b) Slider marks visually bleed into the SegmentedControl
-            below it, making the popover layout confusing. Hidden entirely
-            when the dashboard didn't supply an available_step_cols list
-            longer than the configured step_cols. */}
-        {allSteps.length > 2 ? (
-          <Stack gap={4}>
-            {/* Match Mantine's default input-label style (fw=500, size=xs)
-                so this label visually aligns with the NumberInput / Switch /
-                MultiSelect labels below in the same popover. */}
-            <Text size="xs" fw={500}>
-              Depth — {effectiveStepCols.join(' → ')}
-            </Text>
-            <SegmentedControl
-              size="xs"
-              fullWidth
-              value={String(depth)}
-              onChange={(v) => setDepth(Number(v))}
-              data={Array.from({ length: allSteps.length - 1 }, (_, i) => {
-                const n = i + 2;
-                return { value: String(n), label: String(n) };
-              })}
-            />
-          </Stack>
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Sort nodes
-          </Text>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={sortMode}
-            onChange={(v) => setSortMode(v as typeof sortMode)}
-            data={[
-              { value: 'total_flow', label: 'By flow' },
-              { value: 'alphabetical', label: 'A–Z' },
-              { value: 'input', label: 'Input' },
-            ]}
-          />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Colour links by
-          </Text>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={colorMode}
-            onChange={(v) => setColorMode(v as typeof colorMode)}
-            data={[
-              { value: 'source', label: 'Source' },
-              { value: 'target', label: 'Target' },
-              { value: 'step', label: 'Step' },
-            ]}
-          />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Link opacity
-          </Text>
-          <Slider
-            size="xs"
+      <>
+        <VizControlGroup title="Display">
+          <VizSlider
+            label="Link opacity"
             value={linkOpacity}
             onChange={setLinkOpacity}
             min={0.1}
             max={1}
             step={0.05}
-            label={(v) => v.toFixed(2)}
+            thumbLabel={(v) => v.toFixed(2)}
           />
-        </Stack>
-        <NumberInput
-          size="xs"
-          label="Min link value"
-          value={minLinkValue}
-          onChange={(v) => setMinLinkValue(Math.max(0, Number(v) || 0))}
-          min={0}
-          step={1}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Labels
-          </Text>
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={showNodeLabels}
             onChange={(e) => setShowNodeLabels(e.currentTarget.checked)}
             label="Show node labels"
           />
-        </Stack>
-        {effectiveStepCols.map((col) => (
-          <MultiSelect
-            key={col}
-            size="xs"
-            label={col}
-            value={stepFilters[col] ?? []}
-            onChange={(v) => setStepFilters((prev) => ({ ...prev, [col]: v }))}
-            data={(stepOptions[col] ?? []).map((s) => ({ value: s, label: s }))}
-            placeholder={stepOptions[col]?.length ? 'All values' : 'Loading…'}
-            searchable
-            clearable
+        </VizControlGroup>
+        <VizControlGroup title="Filters">
+          <VizNumberInput
+            label="Min link value"
+            value={minLinkValue}
+            onChange={(v) => setMinLinkValue(Math.max(0, Number(v) || 0))}
+            min={0}
+            step={1}
           />
-        ))}
-        {computeStatus ? (
-          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-            {computeStatus}
-          </Badge>
-        ) : null}
-        {computeMs != null && !computeStatus && result ? (
-          <Text size="xs" c="dimmed">
-            Built in {computeMs} ms ({result.node_count} nodes / {result.link_count} links)
-          </Text>
-        ) : null}
-      </Stack>
+          {effectiveStepCols.map((col) => (
+            <VizMultiSelect
+              key={col}
+              label={col}
+              value={stepFilters[col] ?? []}
+              onChange={(v) => setStepFilters((prev) => ({ ...prev, [col]: v }))}
+              data={(stepOptions[col] ?? []).map((s) => ({ value: s, label: s }))}
+              placeholder={stepOptions[col]?.length ? 'All values' : 'Loading…'}
+              searchable
+              clearable
+            />
+          ))}
+          {computeStatus ? (
+            <VizFullRow>
+              <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                {computeStatus}
+              </Badge>
+            </VizFullRow>
+          ) : null}
+          {computeMs != null && !computeStatus && result ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Built in {computeMs} ms ({result.node_count} nodes / {result.link_count} links)
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+      </>
     ),
     [
-      allSteps,
-      depth,
       effectiveStepCols,
-      sortMode,
-      colorMode,
       linkOpacity,
       minLinkValue,
       showNodeLabels,
@@ -525,11 +528,13 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     <AdvancedVizFrame
       title={metadata.title || 'Categorical flow'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
-      dataRows={dataRows ?? undefined}
-      dataColumns={effectiveStepCols}
+      dataRows={flowRows ?? undefined}
+      dataColumns={['from_step', 'from', 'to_step', 'to', 'flow']}
+      echo={echo}
     >
       {figureSpec ? (
         <Plot

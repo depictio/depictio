@@ -1,0 +1,35 @@
+id: combgc_region_track
+name: BGC region coordinates
+mode: bgc/track
+description: >-
+  The comBGC regions as coordinates rather than counts: contig, interval,
+  product class and region length in kilobases, one row per predicted cluster.
+  Three tracks read the same rows, so a run whose genome renderer is
+  unavailable still has the lane view and the density profile.
+find: { path_glob: "**/combgc/combgc_complete_summary.tsv" }
+recipe: combgc/region_track.py
+fixture: region_track.tsv
+renders_as:
+  # The regions on a genome axis, as intervals rather than points: `rect`
+  # needs `end_col`, which is what turns each row into the cluster's real
+  # footprint on the contig instead of a tick at its start.
+  - id: bgc_genome_track
+    component: advanced_viz
+    kind: genome_view
+    roles: {chr: contig, pos: start, score: length_kb, feature: region_id, end: end, category: product_class}
+  # The same intervals as arrows in one lane per contig, re-parameterising the
+  # pattern the ARG island track uses: several clusters packed onto one contig
+  # is a biosynthetic locus, which an aggregate over product classes hides.
+  - id: bgc_region_arrows
+    component: advanced_viz
+    kind: gene_arrow_track
+    roles: {contig: contig, feature_id: region_id, start: start, end: end, strand: strand, class: product_class, label: product_class}
+  # Fallback on the same collection: a plain coordinate profile that needs no
+  # genome renderer, so the tab is never empty.
+  - id: bgc_region_coverage
+    component: advanced_viz
+    kind: coverage_track
+    roles: {chromosome: contig, position: start, value: length_kb, end: end, sample: sample, category: product_class}
+  - { component: card, column: length_kb, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: region_id, aggregation: count, secondary_layout: top_n, breakdown_col: product_class, top_n_count: 4 }
+  - { component: table, row_selection_enabled: true, row_selection_column: contig }

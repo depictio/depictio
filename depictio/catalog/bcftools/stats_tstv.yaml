@@ -1,0 +1,16 @@
+id: bcftools_stats_tstv
+name: Per-caller Ts/Tv ratio
+mode: stats-tstv
+description: >-
+  Per-sample, per-caller transition/transversion ratio from `bcftools stats`.
+  A germline WES/WGS SNP call set typically lands close to 2.0-2.1; a caller
+  with too few SNPs to score (e.g. a structural-variant caller) reads 0.0
+  rather than being absent.
+find:
+  path_glob: "**/*.bcftools_stats.txt"
+recipe: bcftools/stats_tstv.py
+fixture: stats_tstv.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: ts_tv, color: sample, barmode: group} }
+  - { component: card, column: ts_tv, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

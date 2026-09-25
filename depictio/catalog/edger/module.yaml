@@ -1,0 +1,14 @@
+# edgeR differential exon usage (diffSpliceDGE). nf-core/rnasplice runs it from
+# a LOCAL module (modules/local/edger_exon.nf) on the featureCounts exon
+# counts, not from a shared nf-core/modules entry, so identity is declared with
+# `source_url` (the documented exception, like bambu or cutandrun). Not to be
+# confused with edgeR's differential gene expression: diffSpliceDGE tests each
+# exon's fold change against the rest of its gene.
+id: edger
+name: edgeR diffSpliceDGE
+description: >-
+  Differential exon usage with edgeR's diffSpliceDGE: an exon-level test, a
+  gene-level F-test and a Simes-combined gene test per contrast, run by
+  nf-core/rnasplice on featureCounts exon counts.
+homepage: https://bioconductor.org/packages/edgeR
+source_url: https://github.com/nf-core/rnasplice/blob/1.0.4/modules/local/edger_exon.nf

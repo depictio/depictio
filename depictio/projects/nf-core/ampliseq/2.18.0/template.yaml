@@ -718,6 +718,9 @@ workflows:
           source: "transformed"
           transform:
             recipe: "nf-core/ampliseq/tree_metadata_canonical.py"
+            params:
+              group_col: "{GROUP_COL}"
+              id_col: "{METADATA_ID_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -731,6 +734,7 @@ workflows:
               "Species": "Species"
               "confidence": "Classifier confidence (0–1)"
               "label": "Short display label (Phylum if known)"
+              "dominant_habitat": "Level of GROUP_COL carrying most of the ASV's abundance (Mixed below a 0.6 share, Rare below 0.01 % of the cohort, No abundance when absent from the ASV table); the column name is historical"
 
       # ----------------------------------------------------------------
       # SIDLE / multiregion route DCs. Only the multiregion sub-workflow

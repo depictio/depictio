@@ -15,12 +15,11 @@ count as a float ``score`` because the manhattan render requires a float score.
 A run in which no junction matched a cancer intron writes this file with a
 header and no rows.
 
-The candidate table carries no sample column and the recipe harness concatenates
-the globbed files without their path, so a row cannot be attributed to a sample.
-The intron is the unit of analysis here, not the sample.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
 
 Output columns:
-    intron, chrom, start, end, strand, gene, gene_id, uniq_mapped, multi_mapped,
+    sample, intron, chrom, start, end, strand, gene, gene_id, uniq_mapped, multi_mapped,
     score, n_tcga_cohorts, top_tcga_cohort, top_tcga_pct, n_gtex_tissues,
     top_gtex_tissue, top_gtex_pct, variant_name
 """
@@ -29,9 +28,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`ctatsplicing/<sample>.cancer.introns`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".cancer.introns"
+
+
+def _sample() -> pl.Expr:
+    """``ctatsplicing/S1.cancer.introns`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="cancer_introns",
+        source_path=_SOURCE_PATH,
         glob_pattern="ctatsplicing/*.cancer.introns",
         format="TSV",
         read_kwargs={"infer_schema_length": 10000},
@@ -39,6 +57,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "intron": pl.Utf8,
     "chrom": pl.Utf8,
     "start": pl.Int64,
@@ -102,6 +121,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     variant = pl.col("variant_name").cast(pl.Utf8).fill_null("")
 
     out = df.select(
+        _sample(),
         intron.alias("intron"),
         intron.str.extract(r"^([^:]+):", 1).alias("chrom"),
         intron.str.extract(r":(\d+)-", 1).cast(pl.Int64, strict=False).alias("start"),
@@ -128,6 +148,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             # The manhattan render needs a float score.
             pl.col("uniq_mapped").cast(pl.Float64).alias("score"),
         )
-        .sort("chrom", "start")
+        .sort("sample", "chrom", "start")
         .select(list(EXPECTED_SCHEMA))
     )

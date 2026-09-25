@@ -1,0 +1,29 @@
+id: snpeff_ann_variants
+name: Annotated variant calls
+mode: per-variant
+description: >-
+  One row per annotated variant call: the locus and allele the caller reported,
+  its quality, filter status, genotype, depth and allele fraction, and SnpEff's
+  most severe consequence for it (gene, impact class, consequence term and
+  protein change). The per-variant counterpart of the SnpEff CSV summary.
+find:
+  path_glob: "**/*_snpEff.ann.vcf.gz"
+  path_glob_alt:
+    - "**/annotation/*/*/*_snpEff.ann.vcf.gz"
+recipe: snpeff/ann_variants.py
+fixture: ann_variants.tsv
+renders_as:
+  - { id: impact_composition, component: card, column: variant_key, aggregation: count,
+      secondary_layout: donut, breakdown_col: impact }
+  - { component: card, column: vaf, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: dp, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: variant_key, aggregation: count, secondary_layout: top_n,
+      breakdown_col: consequence, top_n_count: 4 }
+  - { id: annotated_vaf_against_depth, component: advanced_viz, kind: scatter_xy,
+      roles: {x: dp, y: vaf, label: hgvs_p, color: impact} }
+  # Density of calls along the genome, coloured by allele fraction: the rainfall
+  # view, drawn by the chr/pos/score kind that asks nothing of the score.
+  - { id: annotated_rainfall, component: advanced_viz, kind: manhattan,
+      roles: {chr: chrom, pos: pos, score: vaf, feature: gene} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: vaf, color: impact} }
+  - { component: table }

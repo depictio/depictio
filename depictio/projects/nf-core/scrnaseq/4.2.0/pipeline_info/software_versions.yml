@@ -1,0 +1,26 @@
+ANNDATA_BARCODES:
+  anndata: 0.11.4
+  pandas: 2.3.0
+  python: 3.12.11
+CELLBENDER_REMOVEBACKGROUND:
+  cellbender: 0.3.2
+CELLRANGER_COUNT:
+  cellranger: 'cellranger 10.0.0 '
+CELLRANGER_MKGTF:
+  cellranger: cellranger 10.0.0
+CELLRANGER_MKREF:
+  cellranger: cellranger 10.0.0
+FASTQC:
+  fastqc: 0.12.1
+GTF_GENE_FILTER:
+  python: 3.9.5
+GTF_SOURCE_FIX:
+  gawk: 5.3.1
+MTX_TO_H5AD:
+  python: 3.12.5
+  scanpy: 1.10.2
+  pandas: 2.2.2
+  anndata: 0.10.8
+Workflow:
+    nf-core/scrnaseq: v4.2.0-g3fc17b4
+    Nextflow: 26.04.4

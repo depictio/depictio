@@ -1,14 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Select, Slider, Stack, Switch, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { COLORSCALE_NAMES, plotlyColorscale } from '../../utils/colorScale';
+import { demandForItems } from './contentDemand';
+
+/** Room one callset needs: the point estimate, its CI whisker, the value
+ *  label that sits above the dot, and the gap to the next row. */
+const CI_ROW_PX = 34;
+/** The x axis and its title under the rows, plus the top margin. */
+const CI_CHROME_PX = 90;
 
 interface MetricCiBarsConfig {
   label_col: string;
@@ -106,6 +114,9 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const pad = Math.max((hi - lo) * 0.15, 0.01);
 
     return {
+      // Labels on the y axis, i.e. the rows the tile has to be tall enough
+      // for. Feeds the content demand.
+      rowsDrawn: y.length,
       data: [
         {
           type: 'scatter',
@@ -184,33 +195,45 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // Whether any label matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  // One row per callset on the y axis. Keyed on the count, so re-sorting or
+  // recolouring the same callsets republishes nothing.
+  const rowsDrawn = figure?.rowsDrawn ?? 0;
+  const contentDemand = useMemo(
+    () => demandForItems(rowsDrawn, CI_ROW_PX, CI_CHROME_PX),
+    [rowsDrawn],
+  );
+
+  // Ranking the bars is what turns this into a comparison; the rest is paint.
+  const primaryControls = useMemo(
+    () => (
+      <VizSwitch checked={sortDesc} onChange={(e) => setSortDesc(e.currentTarget.checked)} label="Sort by value" />
+    ),
+    [sortDesc],
+  );
+
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Switch size="xs" checked={sortDesc} onChange={(e) => setSortDesc(e.currentTarget.checked)} label="Sort by value" />
-        <Switch size="xs" checked={showLabels} onChange={(e) => setShowLabels(e.currentTarget.checked)} label="Value labels" />
-        <Select
-          size="xs"
+      <>
+        <VizSwitch checked={showLabels} onChange={(e) => setShowLabels(e.currentTarget.checked)} label="Value labels" />
+        <VizSelect
           label="Colour scale"
           value={colorscale}
           onChange={(v) => setColorscale(v || 'Tealgrn')}
           data={COLORSCALE_NAMES}
-          comboboxProps={{ withinPortal: true }}
         />
-        <Stack gap={2}>
-          <Text size="xs" fw={500}>Point size</Text>
-          <Slider size="xs" min={6} max={22} value={pointSize} onChange={setPointSize} />
-        </Stack>
-      </Stack>
+        <VizSlider label="Point size" min={6} max={22} value={pointSize} onChange={setPointSize} />
+      </>
     ),
-    [sortDesc, showLabels, colorscale, pointSize],
+    [showLabels, colorscale, pointSize],
   );
 
   return (
     <AdvancedVizFrame
       title={metadata.title || `${metricName} with 95% CI`}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}

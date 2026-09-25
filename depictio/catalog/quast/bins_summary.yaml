@@ -1,0 +1,32 @@
+id: quast_bins_summary
+name: Bin assembly statistics
+mode: bins-summary
+description: >-
+  Contig counts, N50 and length of every recovered bin. Read beside a
+  completeness estimate it separates the bins that are a genome from the bins
+  that are a pile of fragments carrying the right genes: same completeness,
+  three contigs against four hundred.
+find:
+  path_glob: "**/*-quast_summary.tsv"
+  path_glob_alt:
+    - "**/quast_summary.tsv"
+    - "**/QUAST/*/transposed_report.tsv"
+recipe: quast/bins_summary.py
+fixture: bins_summary.tsv
+renders_as:
+  - { id: bin_n50_vs_length, component: advanced_viz, kind: scatter_xy,
+      roles: {x: total_length, y: n50, label: bin_id, color: binner, size: n_contigs} }
+  - { id: bin_gc_vs_length, component: advanced_viz, kind: scatter_xy,
+      roles: {x: total_length, y: gc_percent, label: bin_id, color: assembler, size: n_contigs} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: n_contigs, color: binner, title: Contigs per bin by binner} }
+  - { component: card, column: total_length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n50, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_contigs, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: binner, top_n_count: 5 }
+  - { component: card, column: gc_percent, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: table }

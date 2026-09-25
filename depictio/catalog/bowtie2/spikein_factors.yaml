@@ -1,0 +1,29 @@
+id: bowtie2_spikein_factors
+name: Spike-in normalisation factors
+mode: alignment/normalisation
+description: >-
+  The two Bowtie 2 alignments of a spike-in normalised run, side by side: how
+  much of each library reached the target genome, how much reached the carrier
+  spike-in genome, and the scale factor the pipeline divides the coverage by
+  before two samples are compared.
+# The CUT&RUN family aligns every library twice and names the second log
+# `<sample>.spikein.bowtie2.log`, so one glob on the file name collects both
+# sets and the infix separates them. The factor itself is
+# `normalisation_c / spikein_aligned_pairs` (nf-core/cutandrun's default
+# normalisation_c is 10000); a run that publishes its own scale-factor table
+# should be read from that table instead.
+find:
+  path_glob: "**/*.bowtie2.log"
+recipe: bowtie2/spikein_factors.py
+fixture: spikein_factors.tsv
+renders_as:
+  # A library sequenced deeper for the same chromatin carries more spike-in, so
+  # the factor is the first thing to read, and the target-against-spike-in
+  # scatter says whether the two depths moved together at all.
+  - { id: spikein_factor_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: scale_factor, color: sample, title: Spike-in scale factor per sample} }
+  - { id: spikein_depth_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: spikein_aligned, y: target_aligned, color: sample, title: Target depth against spike-in depth} }
+  - { component: card, column: scale_factor, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: spikein_aligned, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: spikein_fraction, aggregation: max, secondary_layout: threshold, threshold_value: 0.05 }
+  - { component: card, column: target_align_rate, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: table }

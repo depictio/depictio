@@ -1,0 +1,1980 @@
+version: 1
+# nf-core/methylseq 2.3.0 reference dashboard (Bismark route).
+#
+# The funnel, tab by tab: the reprocessed MultiQC report (every module, as
+# MultiQC draws it) -> the run's own numbers, read to methylome, with the
+# alignment, duplication and conversion floors -> how deep and how even the
+# coverage is -> whether the extraction needs a read-position trim -> the
+# methylome as a whole (per-CpG shape, CpG-density classes, library structure)
+# -> the comparison the cohort was sequenced for, then one locus of it.
+#
+# The design is a variable, never parsed from sample names: METADATA_FILE's
+# factors reach the `samples` hub, and `{GROUP_COL}` / `{GROUP_COL_DISPLAY}`
+# below are the factor the dashboards colour and filter by. The sample and
+# design filters in the left panel reach the MultiQC panels and every
+# per-library collection through the project links. Each tab adds its own
+# non-persistent filters on its own columns.
+#
+# The MultiQC tab holds MultiQC panels only, plus the two pinned sections
+# (the glance strip and the sample sheet) every tab carries.
+#
+# Genome coverage is Qualimap's, not Bismark's: the Coverage tab binds
+# `depictio/catalog/qualimap/`, owned by nf-core/eager, and does not recreate it.
+#
+# The MultiQC report bound here was re-generated with MultiQC 1.35 from the
+# run's raw tool outputs; the run itself published MultiQC 1.13, which writes
+# no parquet. Module and plot names are therefore the 1.35 ones.
+main_dashboard:
+  title: nf-core/methylseq
+  subtitle: Bisulfite sequencing with Bismark, from read QC to the methylome and a window-level group comparison
+  project_tag: Bisulfite Methylation Profiling
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: QC thresholds
+    icon: mdi:tune
+    color: cyan
+    description: Mapping efficiency, duplication and conversion floors on the per-library summaries
+    collapsed: true
+    persistent: true
+    pin: bottom
+  - name: Glance scope
+    icon: mdi:tune
+    color: orange
+    description: CpG methylation window on the per-library summary the pinned glance strip reads
+  grid_sections:
+  # Pinned to the top and carried by every tab: the four numbers that size the
+  # run and its design. Cards are legal on the MultiQC tab only inside a pinned
+  # persistent section, which is exactly what this is.
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The run and its design in four numbers, on every tab
+    persistent: true
+    pin: top
+  # Pinned to the top and carried by every tab: the design the whole
+  # dashboard is filtered by should be one collapse away wherever the viewer
+  # lands.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The sample hub every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: MultiQC general statistics
+    icon: mdi:view-dashboard-outline
+    color: blue
+    description: One row per sample, pooling the headline numbers of every module
+  - name: Read quality
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: Every FastQC panel on the raw libraries
+  - name: Trimming
+    icon: mdi:ruler
+    color: indigo
+    description: What Trim Galore (Cutadapt underneath) removed before Bismark saw the reads
+  - name: Bisulfite alignment
+    icon: mdi:dna
+    color: indigo
+    description: Bismark's own alignment, strand, deduplication, methylation and M-bias plots
+  - name: Coverage
+    icon: mdi:chart-line
+    color: cyan
+    description: Qualimap BamQC coverage, insert size and GC content, the panel nf-core/eager also binds
+  components:
+  # ------------------------------------------------------------- at a glance
+  - component_type: card
+    tag: ms-glance-card-design
+    index: ms-glance-card-design
+    section: Run at a glance
+    workflow_tag: methylseq
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    display: {icon_name: 'mdi:test-tube', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples by {GROUP_COL_DISPLAY}
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ms-glance-card-funnel
+    index: ms-glance-card-funnel
+    section: Run at a glance
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: sum
+    column_name: total_reads
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [aligned_reads, unique_reads, cpgs_called]
+    display: {icon_name: 'mdi:counter', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads to CpG calls
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ms-glance-card-cpg
+    index: ms-glance-card-cpg
+    section: Run at a glance
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_cpg_methylation
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: CpG methylation
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ms-glance-card-conversion
+    index: ms-glance-card-conversion
+    section: Run at a glance
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: min
+    secondary_layout: gauge
+    coverage_max: 100
+    column_name: conversion_efficiency_pct
+    column_type: float64
+    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Lowest conversion efficiency
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: ms-sheet-intro
+    section: Sample sheet
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample: its FASTQ pair and the design factors of the table
+      the run was ingested with. The sample and {GROUP_COL_DISPLAY} filters in
+      the left panel are sourced on it, so it is what narrows every other tab.
+    workflow_tag: methylseq
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: ms-sheet-table-samples
+    section: Sample sheet
+    workflow_tag: methylseq
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Sample hub
+    description: One row per sample, with its FASTQ paths and its design factors.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 3}
+
+  # ------------------------------------------------------ general statistics
+  - component_type: text
+    tag: ms-qc-intro
+    section: MultiQC general statistics
+    title: A methylseq run, from reads to methylation
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The reprocessed [MultiQC](https://multiqc.info) report: general
+      statistics, every read-quality panel, Bismark's own plots and Qualimap
+      coverage. Exact per-library counts, the methylome itself and the group
+      comparison are on the five tabs beside this one.
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ms-qc-general-stats
+    section: MultiQC general statistics
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per sample, pooling the FastQC, Cutadapt, Bismark and Qualimap headline numbers.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+
+  # ------------------------------------------------------------ read quality
+  - component_type: text
+    tag: ms-qc-reads-intro
+    section: Read quality
+    title: Raw reads, every FastQC panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
+      the raw libraries. A bisulfite library legitimately fails the per-base
+      sequence content and GC checks, because converting unmethylated cytosines
+      to thymines is the point; read the quality, length and adapter panels
+      instead.
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-counts
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    use: multiqc/fastqc
+    title: Sequence counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-quality
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    use: multiqc/fastqc
+    title: Per-base sequence quality
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-perseq-quality
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence Quality Scores
+    use: multiqc/fastqc
+    title: Per-sequence quality scores
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-gc
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    use: multiqc/fastqc
+    title: GC content
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-ncontent
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Base N Content
+    use: multiqc/fastqc
+    title: Per-base N content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 11, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-length
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Length Distribution
+    use: multiqc/fastqc
+    title: Sequence length distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 11, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-duplication
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    use: multiqc/fastqc
+    title: Sequence duplication levels
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 16, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-overrepresented
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Top overrepresented sequences
+    use: multiqc/fastqc
+    title: Top overrepresented sequences
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 16, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-adapter
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    use: multiqc/fastqc
+    title: Adapter content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 21, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-fastqc-status
+    section: Read quality
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Status Checks
+    use: multiqc/fastqc
+    title: Status checks
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 21, w: 4, h: 5}
+
+  # ---------------------------------------------------------------- trimming
+  - component_type: text
+    tag: ms-qc-trim-intro
+    section: Trimming
+    title: What Trim Galore removed
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/)
+      with Cutadapt underneath, run before Bismark ever saw the reads. The
+      trimmed-length distribution is where an over-aggressive adapter setting
+      shows up as a library that lost its long fragments.
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ms-qc-cutadapt
+    section: Trimming
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: cutadapt
+    selected_plot: Filtered Reads
+    use: multiqc/cutadapt
+    title: Reads kept after trimming
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-cutadapt-lengths
+    section: Trimming
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: cutadapt
+    selected_plot: Trimmed Sequence Lengths (3')
+    use: multiqc/cutadapt
+    title: Trimmed sequence lengths
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+
+  # -------------------------------------------------------- bisulfite align.
+  - component_type: text
+    tag: ms-qc-bismark-intro
+    section: Bisulfite alignment
+    title: Bismark, module by module
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Bismark](https://github.com/FelixKrueger/Bismark)'s own plots: how
+      many read pairs aligned, which bisulfite strand they came from, how many
+      were removed as PCR duplicates, the per-context methylation table and the
+      M-bias picker over all three contexts. The exact numbers behind them are
+      on the Run QC and Bias and context tabs.
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ms-qc-bismark-align
+    section: Bisulfite alignment
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: bismark
+    selected_plot: Alignment Rates
+    use: multiqc/bismark
+    title: Alignment rates
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-bismark-strand
+    section: Bisulfite alignment
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: bismark
+    selected_plot: Strand Alignment
+    use: multiqc/bismark
+    title: Alignment to individual bisulfite strands
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-bismark-dedup
+    section: Bisulfite alignment
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: bismark
+    selected_plot: Deduplication
+    use: multiqc/bismark
+    title: Deduplication
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-bismark-methylation
+    section: Bisulfite alignment
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: bismark
+    selected_plot: Cytosine Methylation
+    use: multiqc/bismark
+    title: Cytosine methylation
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-bismark-mbias
+    section: Bisulfite alignment
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: bismark
+    selected_plot: M-Bias
+    use: multiqc/bismark
+    title: M-bias, CpG, CHG and CHH for both reads
+    description: MultiQC's own six-panel picker; the queryable version is on the Bias and context tab.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 11, w: 8, h: 5}
+
+  # -------------------------------------------------------------- coverage
+  - component_type: text
+    tag: ms-qc-coverage-intro
+    section: Coverage
+    title: Genome coverage, from Qualimap
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Qualimap](http://qualimap.conesalab.org/) BamQC on the deduplicated
+      alignments: how deep and how even coverage is, the insert size
+      distribution and the GC content of mapped reads.
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ms-qc-qualimap-coverage
+    section: Coverage
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Coverage histogram
+    use: multiqc/qualimap
+    title: Coverage histogram
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-qualimap-cumcoverage
+    section: Coverage
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Cumulative genome coverage
+    use: multiqc/qualimap
+    title: Cumulative genome coverage
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-qualimap-insert
+    section: Coverage
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Insert size histogram
+    use: multiqc/qualimap
+    title: Insert size
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ms-qc-qualimap-gc
+    section: Coverage
+    workflow_tag: methylseq
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: GC content distribution
+    use: multiqc/qualimap
+    title: GC content of mapped reads
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  # ---------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: ms-filter-sample
+    index: ms-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: methylseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-filter-group
+    index: ms-group-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: methylseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-filter-mapeff
+    index: ms-mapeff-range
+    section: QC thresholds
+    group: Alignment quality
+    workflow_tag: methylseq
+    data_collection_tag: bismark_alignment_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: mapping_efficiency_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-line'}
+    placement: left
+    title: Mapping efficiency
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-filter-dup
+    index: ms-dup-range
+    section: QC thresholds
+    group: Alignment quality
+    workflow_tag: methylseq
+    data_collection_tag: bismark_deduplication_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: pct_duplication
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:counter'}
+    placement: left
+    title: Duplication rate
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-filter-conversion
+    index: ms-conversion-range
+    section: QC thresholds
+    group: Alignment quality
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: conversion_efficiency_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:shield-check-outline'}
+    placement: left
+    title: Conversion efficiency
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  # Tab-local, not persistent: this tab's own control beside the pinned ones.
+  # It narrows the pinned glance strip that rides this tab.
+  - component_type: interactive
+    tag: ms-mq-filter-cpg
+    index: ms-mq-cpg-range
+    section: Glance scope
+    group: Methylation level
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: pct_cpg_methylation
+    column_type: float64
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:dna'}
+    placement: left
+    title: CpG methylation
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+# ============================================================================
+# Run QC
+# ============================================================================
+# Bismark's own run-level table plus the alignment and deduplication reports:
+# which libraries fail the alignment, duplication or conversion floors. The
+# funnel itself rides the pinned glance strip, so it is not repeated here.
+- title: Run QC
+  subtitle: Which libraries fail the alignment, duplication or bisulfite conversion floors
+  tab_order: 2
+  tab_icon: mdi:check-decagram
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Run QC scope
+    icon: mdi:tune
+    color: teal
+    description: Narrow the per-library summaries to the libraries in a depth or yield band
+  grid_sections:
+  - name: Alignment and duplication
+    icon: mdi:chart-bar
+    color: indigo
+    description: Mapping and duplication per library, against the floors a library should clear
+  - name: Cytosine yield
+    icon: mdi:chart-donut
+    color: green
+    description: Non-CpG methylation and the bisulfite conversion rate it implies
+  - name: Library QC profile
+    icon: mdi:chart-timeline-variant
+    color: teal
+    description: Every per-library QC ratio on its own axis, one line per library
+  - name: Library detail
+    icon: mdi:table
+    color: gray
+    description: The exact per-library counts behind every card on this tab
+    collapsed: true
+  components:
+  # ------------------------------------------------ alignment and duplication
+  - component_type: text
+    tag: ms-run-intro
+    section: Alignment and duplication
+    title: Did every library align and survive deduplication
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A bisulfite aligner searches four converted genomes, so a mapping
+      efficiency in the seventies is the expected ceiling rather than a failure.
+      The two floor cards turn amber, then red, on the worst library of the
+      selection.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ms-run-card-aligned
+    index: ms-run-card-aligned
+    section: Alignment and duplication
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_aligned
+    column_type: float64
+    display: {icon_name: 'mdi:chart-line', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "% reads aligned"
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-run-card-duplicate
+    index: ms-run-card-duplicate
+    section: Alignment and duplication
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_duplicate
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "% duplicates"
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  # Floors. The card reads the worst library of the selection (min for a
+  # higher-is-better column, max for a lower-is-better one); the warn band
+  # sits on the failing side of the cut-off.
+  - component_type: card
+    tag: ms-aln-card-eff-threshold
+    index: ms-aln-card-eff-threshold
+    section: Alignment and duplication
+    workflow_tag: methylseq
+    data_collection_tag: bismark_alignment_summary
+    use: bismark/alignment_summary
+    aggregation: min
+    column_name: mapping_efficiency_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 70.0
+    threshold_direction: min
+    threshold_warn: 60.0
+    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mapping efficiency floor
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-dedup-card-rate-threshold
+    index: ms-dedup-card-rate-threshold
+    section: Alignment and duplication
+    workflow_tag: methylseq
+    data_collection_tag: bismark_deduplication_summary
+    use: bismark/deduplication_summary
+    aggregation: max
+    column_name: pct_duplication
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 10.0
+    threshold_direction: max
+    threshold_warn: 20.0
+    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Duplication ceiling
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # ---------------------------------------------------------- cytosine yield
+  - component_type: text
+    tag: ms-run-yield-intro
+    section: Cytosine yield
+    title: Non-CpG methylation as a conversion check
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Conversion efficiency is read as 100 minus the CHH methylation, which
+      assumes a mammalian genome where CHG and CHH methylation is near zero; for
+      plants, judge conversion on an unmethylated spike-in such as lambda instead.
+      Below about 98 % the CpG calls inherit the same false-positive rate.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ms-run-card-chg
+    index: ms-run-card-chg
+    section: Cytosine yield
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_chg_methylation
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "% CHG methylation"
+    layout: {x: 0, y: 2, w: 4, h: 2}
+  - component_type: card
+    tag: ms-run-card-chh
+    index: ms-run-card-chh
+    section: Cytosine yield
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_chh_methylation
+    column_type: float64
+    display: {icon_name: 'mdi:alert-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "% CHH methylation"
+    layout: {x: 4, y: 2, w: 4, h: 2}
+  - component_type: figure
+    tag: ms-run-fig-conversion
+    section: Cytosine yield
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    visu_type: bar
+    dict_kwargs: {x: sample, y: conversion_efficiency_pct, color: '{GROUP_COL}', title: Bisulfite conversion efficiency per library}
+    title: Bisulfite conversion efficiency per library
+    description: One bar per library, coloured by {GROUP_COL_DISPLAY}, so a conversion difference that follows the design stands out.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+
+  # ------------------------------------------------------- library QC profile
+  - component_type: text
+    tag: ms-run-profile-intro
+    section: Library QC profile
+    title: One line per library across the QC ratios
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A library that crosses the others on the CHH axis is a conversion
+      problem; one that crosses them on the alignment and duplication axes
+      together is a library preparation problem. Brush an axis to keep only the
+      libraries inside it.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ms-run-av-parallel
+    index: ms-run-av-parallel
+    section: Library QC profile
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      sample_col: sample
+      group_col: '{GROUP_COL}'
+      scale: minmax
+      metric_cols:
+      - total_reads
+      - pct_aligned
+      - pct_duplicate
+      - cpgs_called
+      - pct_cpg_methylation
+      - pct_chg_methylation
+      - pct_chh_methylation
+      - conversion_efficiency_pct
+      controls_placement: header
+    title: Per-library QC profile
+    description: Eight run-summary metrics per library, each rescaled to its own range and coloured by {GROUP_COL_DISPLAY}; brushing an axis emits a range filter on that column.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
+  # ---------------------------------------------------------- library detail
+  - component_type: table
+    tag: ms-run-table-summary
+    section: Library detail
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    use: bismark/summary_report
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Bismark run summary
+    description: Every column of bismark2summary plus the ratios derived from it, one row per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: table
+    tag: ms-aln-table
+    section: Library detail
+    workflow_tag: methylseq
+    data_collection_tag: bismark_alignment_summary
+    use: bismark/alignment_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Alignment summary
+    description: Every field of Bismark's alignment report, one row per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 3, w: 8, h: 3}
+  - component_type: table
+    tag: ms-dedup-table
+    section: Library detail
+    workflow_tag: methylseq
+    data_collection_tag: bismark_deduplication_summary
+    use: bismark/deduplication_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Deduplication summary
+    description: Every field of the deduplication report, one row per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 3}
+
+  # ----------------------------------------------------------- tab filters
+  - component_type: interactive
+    tag: ms-run-filter-reads
+    index: ms-run-reads-range
+    section: Run QC scope
+    group: Run summary
+    workflow_tag: methylseq
+    data_collection_tag: bismark_summary_report
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: total_reads
+    column_type: int64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:counter'}
+    placement: left
+    title: Reads analysed
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-aln-filter-leftover
+    index: ms-aln-leftover-range
+    section: Run QC scope
+    group: Run summary
+    workflow_tag: methylseq
+    data_collection_tag: bismark_deduplication_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: leftover_sequences
+    column_type: int64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:database-outline'}
+    placement: left
+    title: Sequences kept after deduplication
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Coverage
+# ============================================================================
+# Qualimap BamQC read at full resolution rather than as a MultiQC picture: the
+# per-library depth summary, the depth along the reference, and the two curves
+# that say whether a shallow library is spread or piled.
+- title: Coverage
+  subtitle: How deep and how evenly the deduplicated alignments cover the reference
+  tab_order: 3
+  tab_icon: mdi:chart-line
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Coverage scope
+    icon: mdi:tune
+    color: cyan
+    description: Pick the contigs and the depth range the coverage panels read
+  grid_sections:
+  - name: Depth summary
+    icon: mdi:counter
+    color: cyan
+    description: Qualimap's per-library depth, mapping quality, GC and duplication
+  - name: Depth along the reference
+    icon: mdi:chart-line
+    color: blue
+    description: Windowed depth mapped back onto its contig, one lane per library
+  - name: Depth distribution
+    icon: mdi:chart-bell-curve
+    color: teal
+    description: How many bases sit at each depth, and how much of the reference clears a threshold
+  - name: Coverage detail
+    icon: mdi:table
+    color: gray
+    description: Qualimap's per-library BamQC numbers
+    collapsed: true
+  components:
+  # ---------------------------------------------------------- depth summary
+  - component_type: text
+    tag: ms-cov-intro
+    section: Depth summary
+    title: What Qualimap measured on the deduplicated BAMs
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Mean depth is over the whole reference including the bases at zero, so
+      for a shallow whole-genome run the genome-fraction curve further down is
+      the number to judge, not the mean. A low GC share in the mapped bases is
+      the bisulfite conversion itself, not a contamination.
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_bamqc_genome_results
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ms-cov-card-mean
+    index: ms-cov-card-mean
+    section: Depth summary
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_coverage
+    column_type: float64
+    display: {icon_name: 'mdi:chart-line', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean depth
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-cov-card-dup
+    index: ms-cov-card-dup
+    section: Depth summary
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: duplication_rate
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Duplication rate
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-cov-card-mapq
+    index: ms-cov-card-mapq
+    section: Depth summary
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_bamqc_genome_results
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_mapping_quality
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean MAPQ
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-cov-card-gc
+    index: ms-cov-card-gc
+    section: Depth summary
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: gc_percentage
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: GC of mapped bases
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # ------------------------------------------------- depth along the genome
+  - component_type: text
+    tag: ms-cov-track-intro
+    section: Depth along the reference
+    title: Where the reads landed
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Qualimap reports depth in windows along the concatenated reference; the
+      recipe maps each window back onto its contig using the per-contig lengths
+      in the same run's genome_results.txt, so the track below reads as a
+      genome. Use the contig filter on the left to drop the unplaced scaffolds.
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_coverage_across_reference
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: ms-cov-av-track
+    index: ms-cov-av-track
+    section: Depth along the reference
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/reference_coverage_track
+    config:
+      facet_by_sample: true
+      view_mode: facet
+      smoothing_window: 0
+      color_by: sample
+    title: Read depth along the reference
+    description: One lane per library; a lane that is flat at zero over a whole contig is a reference the library never reached.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 9}
+
+  # ----------------------------------------------------- depth distribution
+  - component_type: text
+    tag: ms-cov-dist-intro
+    section: Depth distribution
+    title: Spread or piled
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The histogram says how many bases sit at each depth; the genome-fraction
+      curve says how much of the reference clears a given threshold, which
+      separates a library spread thinly over the genome from one piled on a
+      small part of it.
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_coverage_histogram
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ms-cov-av-histogram
+    index: ms-cov-av-histogram
+    section: Depth distribution
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_coverage_histogram
+    use: qualimap/depth_histogram_profile
+    config:
+      x_title: Depth (X)
+      y_title: Share of the reference
+      log_y: true
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    title: Bases of the reference at each depth
+    description: One curve per library, on a log y axis because the zero-depth bucket is most of the genome.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ms-cov-av-fraction
+    index: ms-cov-av-fraction
+    section: Depth distribution
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_genome_fraction_coverage
+    use: qualimap/genome_fraction_profile
+    config:
+      x_title: Minimum depth (X)
+      y_title: "% of the reference covered"
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    title: Share of the reference covered at least X deep
+    description: Where the curves separate is where the libraries stop being comparable for a per-site call.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+  # ------------------------------------------------------ coverage detail
+  - component_type: table
+    tag: ms-cov-table-bamqc
+    section: Coverage detail
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Qualimap BamQC summary
+    description: Depth, mapping quality, error rate, GC and duplication, one row per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 3}
+
+  # ----------------------------------------------------------- tab filters
+  - component_type: interactive
+    tag: ms-cov-filter-contig
+    index: ms-cov-contig-filter
+    section: Coverage scope
+    group: Genomic scope
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_coverage_across_reference
+    interactive_component_type: MultiSelect
+    column_name: chromosome
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
+    placement: left
+    title: Contig
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-cov-filter-depth
+    index: ms-cov-depth-range
+    section: Coverage scope
+    group: Genomic scope
+    workflow_tag: methylseq
+    data_collection_tag: qualimap_genome_fraction_coverage
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: min_coverage
+    column_type: int64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-line'}
+    placement: left
+    title: Depth threshold
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Bias and context
+# ============================================================================
+# Whether the extraction needs an --ignore trim: one M-bias explorer over all
+# six tables of the M-bias file, context and read picked on the left. MultiQC's
+# own picker stays on the MultiQC tab; nothing else redraws the curve.
+- title: Bias and context
+  subtitle: Whether the methylation extraction needs a read-position trim
+  tab_order: 4
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Context and read
+    icon: mdi:filter-variant
+    color: pink
+    description: Pick the cytosine context, the read and the read positions the M-bias explorer draws
+  grid_sections:
+  - name: M-bias
+    icon: mdi:chart-bell-curve
+    color: pink
+    description: Methylation by read position, per context and read, the curve the extraction decision turns on
+  - name: Context detail
+    icon: mdi:table
+    color: gray
+    description: The raw M-bias positions and the per-context methylation counts
+    collapsed: true
+  components:
+  # ----------------------------------------------------------------- M-bias
+  - component_type: text
+    tag: ms-mbias-intro
+    section: M-bias
+    title: Read-position methylation bias
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A CpG curve that has not flattened by the end of the read argues for an
+      `--ignore` or `--ignore_r2` trim and a re-extraction; a flat curve needs
+      none. A CHH curve that climbs at one end is unconverted cytosine at those
+      positions, read as such on a mammalian genome only (plants methylate CHH).
+    workflow_tag: methylseq
+    data_collection_tag: bismark_mbias_all_contexts
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ms-mbias-all-av-curve
+    index: ms-mbias-all-av-curve
+    section: M-bias
+    workflow_tag: methylseq
+    data_collection_tag: bismark_mbias_all_contexts
+    use: bismark/mbias_context_profile
+    config:
+      x_title: Position in read (bp)
+      y_title: "% methylation"
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: right
+    title: M-bias by context and read
+    description: One curve per library, context and read; the context filter on the left opens on CpG, and the read filter isolates read 1 or read 2.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
+  # ---------------------------------------------------------- context detail
+  - component_type: table
+    tag: ms-mbias-all-table
+    section: Context detail
+    workflow_tag: methylseq
+    data_collection_tag: bismark_mbias_all_contexts
+    use: bismark/mbias_all_contexts
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: M-bias, every context and read
+    description: "% methylation and coverage at every read position, in all three contexts."
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    tag: ms-meth-table
+    section: Context detail
+    workflow_tag: methylseq
+    data_collection_tag: bismark_methylation_context_summary
+    use: bismark/methylation_context_summary
+    row_selection_enabled: false
+    title: Methylation by context
+    description: Methylated and unmethylated cytosine counts and the percentage, one row per library per context.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 5}
+
+  # ----------------------------------------------------------- tab filters
+  - component_type: interactive
+    tag: ms-mbias-filter-context
+    index: ms-mbias-context-filter
+    section: Context and read
+    group: M-bias panel
+    workflow_tag: methylseq
+    data_collection_tag: bismark_mbias_all_contexts
+    interactive_component_type: Select
+    column_name: context
+    column_type: object
+    default_value: CpG
+    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Cytosine context
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-mbias-filter-read
+    index: ms-mbias-read-filter
+    section: Context and read
+    group: M-bias panel
+    workflow_tag: methylseq
+    data_collection_tag: bismark_mbias_all_contexts
+    interactive_component_type: Select
+    column_name: read
+    column_type: object
+    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Read
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-mbias-filter-position
+    index: ms-mbias-position-range
+    section: Context and read
+    group: M-bias panel
+    workflow_tag: methylseq
+    data_collection_tag: bismark_mbias_all_contexts
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: position
+    column_type: int64
+    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Read position
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+# ============================================================================
+# Global methylome
+# ============================================================================
+# The methylome itself, out of the per-CpG bedGraphs: the per-site
+# distribution, methylation by CpG-density class (the annotation-free stand-in
+# for a CpG-island panel), and where the libraries sit relative to one another.
+- title: Global methylome
+  subtitle: Is each methylome bimodal, and do the libraries group by the design
+  tab_order: 5
+  tab_icon: mdi:dna
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Window scope
+    icon: mdi:tune
+    color: violet
+    description: Narrow the binned windows to a CpG-density class or a methylation band
+  grid_sections:
+  - name: Per-CpG methylation
+    icon: mdi:chart-bell-curve
+    color: violet
+    description: The distribution of methylation across every covered CpG, one curve per library
+  - name: CpG density
+    icon: mdi:shape-outline
+    color: lime
+    description: Windows split into CpG-poor, intermediate and CpG-dense tertiles, a proxy for island-like and bulk genome
+  - name: Cohort structure
+    icon: mdi:relation-many-to-many
+    color: grape
+    description: Where the libraries sit relative to one another over the same windows
+  components:
+  # ------------------------------------------------------- per-CpG density
+  - component_type: text
+    tag: ms-meth-density-intro
+    section: Per-CpG methylation
+    title: The shape of the methylome, site by site
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A healthy mammalian methylome is bimodal, with a peak at 0 % for
+      unmethylated islands and a taller one at 100 % for the methylated bulk. A
+      library whose 0 % peak has drifted upward or lost its bimodality points to
+      incomplete conversion or a depth too low for a site call.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_methylation_density
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ms-density-card-full
+    index: ms-density-card-full
+    section: Per-CpG methylation
+    workflow_tag: methylseq
+    data_collection_tag: bismark_methylation_density
+    use: bismark/methylation_density
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: col('methylation_bin') > 98
+    column_name: fraction_of_cpgs
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "% of CpGs at 98 to 100 % methylation"
+    layout: {x: 0, y: 2, w: 4, h: 2}
+  - component_type: card
+    tag: ms-density-card-empty
+    index: ms-density-card-empty
+    section: Per-CpG methylation
+    workflow_tag: methylseq
+    data_collection_tag: bismark_methylation_density
+    use: bismark/methylation_density
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: col('methylation_bin') < 2
+    column_name: fraction_of_cpgs
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "% of CpGs at 0 to 2 % methylation"
+    layout: {x: 4, y: 2, w: 4, h: 2}
+  - component_type: advanced_viz
+    tag: ms-density-av-profile
+    index: ms-density-av-profile
+    section: Per-CpG methylation
+    workflow_tag: methylseq
+    data_collection_tag: bismark_methylation_density
+    use: bismark/density_profile
+    config:
+      x_title: "% methylation at a CpG"
+      y_title: "% of the library's CpGs"
+      log_y: true
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    title: Per-CpG methylation density
+    description: One curve per library in 2 % buckets, on a log y axis so the shoulders between the two peaks stay readable.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+
+  # ------------------------------------------------------------- CpG density
+  - component_type: text
+    tag: ms-feat-intro
+    section: CpG density
+    title: A CpG-island view without a CpG-island annotation
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Windows are split into tertiles of their CpG count, the property a CpG
+      island is defined by, so a CpG-dense window is island-like, not an
+      annotated island. The island-like end should sit well below the CpG-poor
+      bulk.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ms-feat-card-level
+    index: ms-feat-card-level
+    section: CpG density
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    use: bismark/binned_methylation
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: methylation_pct
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Window methylation in the picked class
+    layout: {x: 0, y: 2, w: 4, h: 2}
+  - component_type: card
+    tag: ms-feat-card-cpgs
+    index: ms-feat-card-cpgs
+    section: CpG density
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    use: bismark/binned_methylation
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n_cpg
+    column_type: int64
+    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: CpGs per window
+    layout: {x: 4, y: 2, w: 4, h: 2}
+  - component_type: figure
+    tag: ms-feat-fig-box
+    section: CpG density
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    use: bismark/binned_methylation
+    visu_type: box
+    dict_kwargs: {x: cpg_density_class, y: methylation_pct, color: cpg_density_class, title: Methylation by CpG-density class}
+    title: Methylation by CpG-density class
+    description: Window methylation per CpG-density tertile; the gap between the CpG-dense and CpG-poor classes is what a real island annotation would sharpen.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+
+  # ------------------------------------------------------ cohort structure
+  - component_type: text
+    tag: ms-structure-intro
+    section: Cohort structure
+    title: Do the libraries separate by the design
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The same library-by-window matrix read three ways: a PCA, the pairwise
+      correlation and the windows that vary most. A library that lands with the
+      wrong block in all three is a swap, a mislabelled sheet, or a conversion
+      failure that flattened its methylome.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_pca
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ms-structure-av-pca
+    index: ms-structure-av-pca
+    section: Cohort structure
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_pca
+    use: bismark/pca_embedding
+    config:
+      color_col: '{GROUP_COL}'
+      cluster_col: '{GROUP_COL}'
+      controls_placement: header
+      point_size: 14
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample_id
+      show_centroids: true
+    title: Libraries on the first components of their binned methylome
+    description: Coloured by {GROUP_COL_DISPLAY}; with few libraries the first component can carry depth as much as design.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ms-structure-av-correlation
+    index: ms-structure-av-correlation
+    section: Cohort structure
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_correlation
+    use: bismark/correlation_heatmap
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      colorscale: Viridis
+    title: Library correlation over the shared windows
+    description: Pearson correlation of the 10 kb window means, clustered on both axes.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 9}
+  - component_type: advanced_viz
+    tag: ms-structure-av-variable
+    index: ms-structure-av-variable
+    section: Cohort structure
+    workflow_tag: methylseq
+    data_collection_tag: bismark_top_variable_windows
+    use: bismark/variable_windows_heatmap
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      colorscale: RdBu
+      row_annotation_cols: [chromosome]
+    title: The 150 windows that move most across the cohort
+    description: A ranking by variance, not a test; the block structure here is where the group comparison should be looked at first.
+    title_size: h3
+    layout: {x: 0, y: 18, w: 8, h: 9}
+
+  # ----------------------------------------------------------- tab filters
+  - component_type: interactive
+    tag: ms-window-filter-density
+    index: ms-window-density-filter
+    section: Window scope
+    group: Window scope
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    interactive_component_type: Select
+    column_name: cpg_density_class
+    column_type: object
+    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: CpG density class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-window-filter-level
+    index: ms-window-level-range
+    section: Window scope
+    group: Window scope
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: methylation_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Window methylation
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Group comparison
+# ============================================================================
+# The comparison the cohort was sequenced for, run on the windows: nf-core/
+# methylseq ships no differential-methylation caller at any version, so this is
+# the screen the published files support, labelled as one. The genome-wide
+# views open the funnel; the locus section below narrows it to one region.
+# The whole tab reads bismark_window_group_compare, which is pruned (and its
+# tiles with it) when the run declares no two-level design factor.
+- title: Group comparison
+  subtitle: Where the two {GROUP_COL_DISPLAY} groups differ, genome-wide and at one locus
+  tab_order: 6
+  tab_icon: mdi:scale-balance
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Comparison scope
+    icon: mdi:tune
+    color: grape
+    description: Narrow the tested windows by call, effect size and adjusted p
+  grid_sections:
+  - name: Window comparison
+    icon: mdi:scale-balance
+    color: grape
+    description: Effect size against significance, and the same windows along the genome
+  - name: Effect size distribution
+    icon: mdi:chart-bar
+    color: violet
+    description: How the differences are spread across the tested windows
+  - name: Methylation at a locus
+    icon: mdi:chart-line
+    color: blue
+    description: One region, the significance of the difference with the per-library windows and the difference on the same axis
+  - name: Window detail
+    icon: mdi:table
+    color: gray
+    description: Every tested window with its group means, difference and adjusted p
+    collapsed: true
+  components:
+  # -------------------------------------------------------- the comparison
+  - component_type: text
+    tag: ms-gc-intro
+    section: Window comparison
+    title: What this comparison is, and is not
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every 10 kb window covered in every library is tested between the two
+      {GROUP_COL_DISPLAY} groups (group_a against group_b in the table), and the
+      unit is a window, not a CpG or a called DMR. With few libraries a side the
+      screen is low-powered by construction, so read clusters of windows, not a
+      lone hit.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ms-gc-card-delta
+    index: ms-gc-card-delta
+    section: Window comparison
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_group_compare
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: delta_methylation
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Methylation difference (pp)
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-gc-card-called
+    index: ms-gc-card-called
+    section: Window comparison
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_group_compare
+    aggregation: count
+    filter_expr: col('direction') != 'Not significant'
+    column_name: window_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: direction
+    top_n_count: 2
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Windows called
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-gc-card-contig
+    index: ms-gc-card-contig
+    section: Window comparison
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_group_compare
+    aggregation: nunique
+    column_name: window_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Windows tested
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ms-gc-card-padj
+    index: ms-gc-card-padj
+    section: Window comparison
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_group_compare
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: neg_log10_padj
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bar', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Strongest call, -log10(padj)
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ms-gc-av-manhattan
+    index: ms-gc-av-manhattan
+    section: Window comparison
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_manhattan
+    config:
+      score_kind: "-log10(padj)"
+      score_threshold: 1.3
+      selection_enabled: true
+      selection_column: chromosome
+      top_n_labels: 10
+    title: Tested windows along the genome
+    description: Every tested window on its contig, the line at padj 0.05; a cluster of near-threshold windows on one contig is worth more than a lone hit.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ms-gc-av-volcano
+    index: ms-gc-av-volcano
+    section: Window comparison
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_volcano
+    config:
+      controls_placement: header
+      view: volcano
+      views: [volcano, qq]
+      p_value_col: p_value
+      significance_threshold: 0.05
+      effect_threshold: 10.0
+      top_n_labels: 10
+      show_labels: true
+    title: Window methylation difference against significance
+    description: group_a minus group_b in percentage points on x, adjusted significance on y; the cut-offs drawn are 0.05 and ten points.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 7}
+
+  # ------------------------------------------------------ effect size spread
+  - component_type: text
+    tag: ms-gc-spread-intro
+    section: Effect size distribution
+    title: How far apart the groups actually are
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A histogram that is a single mode centred on zero has found no systematic
+      shift, whatever its most significant window says. A shoulder on one side
+      is what a real difference looks like before any test.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: ms-gc-fig-histogram
+    section: Effect size distribution
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_group_compare
+    visu_type: histogram
+    dict_kwargs: {x: delta_methylation, color: direction}
+    title: Distribution of the per-window difference
+    description: group_a minus group_b in percentage points, coloured by the call the window received.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  # ------------------------------------------------------ the locus section
+  # One navigator and the tracks that follow its region. The navigator (the
+  # significance of the group difference per window) reads the comparison
+  # itself, so it sits on this tab rather than on Global methylome. Its
+  # score_threshold makes the server keep every window above padj 0.05 whole
+  # while it samples the rest for drawing, so a hit is never sampled away; the
+  # difference track is a follower on the same collection, whose fetch is
+  # narrowed to the region and therefore complete. The per-library lanes follow
+  # the region through the region link in template.yaml. default_region is a
+  # documented default (why this one: VALIDATION_REPORT.md); no lateral
+  # chromosome filter, which would fight the navigator.
+  - component_type: text
+    tag: ms-track-intro
+    section: Methylation at a locus
+    title: One region, the methylome and the comparison on one axis
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The navigator opens on a documented default region; type another locus or
+      a gene symbol in its header, or brush its axis, and the per-library lanes
+      and the difference track redraw on the same region.
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ms-track-av-navigator
+    index: ms-track-av-navigator
+    section: Methylation at a locus
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      controls_placement: header
+      chr_col: chromosome
+      pos_col: position
+      end_col: end
+      score_col: neg_log10_padj
+      feature_col: window_id
+      category_col: direction
+      mark: point
+      point_size: 7
+      score_threshold: 1.3
+      annotation: "{GENOME}"
+      assembly: '{GENOME}'
+      score_title: "-log10(padj)"
+      region_filter_enabled: true
+      default_region: "chr14:35,500,000-37,500,000"
+      selection_enabled: true
+      selection_column: window_id
+    title: Locus navigator, significance of the group difference per window
+    description: The adjusted significance of the group_a against group_b difference per 10 kb window, coloured by the call; windows above padj 0.05 are always drawn. The locus field in the header and a brush on the axis move every track below.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: ms-track-av-genomeview
+    index: ms-track-av-genomeview
+    section: Methylation at a locus
+    workflow_tag: methylseq
+    data_collection_tag: bismark_binned_methylation
+    use: bismark/methylation_genome_view
+    config:
+      mark: point
+      point_size: 6
+      facet_by_sample: true
+      max_facets: 8
+      assembly: '{GENOME}'
+      score_title: "% methylation"
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: Binned CpG methylation per library on the same region
+    description: One lane per library over the navigator's region; the lanes draw the uniformly strided windows of the binned collection, the navigator and the difference track every tested window.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ms-track-av-delta
+    index: ms-track-av-delta
+    section: Methylation at a locus
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chromosome
+      pos_col: position
+      end_col: end
+      score_col: delta_methylation
+      feature_col: window_id
+      category_col: direction
+      mark: point
+      point_size: 7
+      assembly: '{GENOME}'
+      score_title: "Difference (pp)"
+      region_filter_enabled: false
+      follow_region_filter: true
+      selection_enabled: true
+      selection_column: window_id
+    title: group_a minus group_b on the same region
+    description: The group difference in percentage points for every window of the navigator's region, group_a and group_b being the two levels named in the table; a run of windows on one side of zero is a regional shift, a lone point is noise.
+    title_size: h3
+    layout: {x: 0, y: 12, w: 8, h: 3}
+
+  # ------------------------------------------------------------ window detail
+  - component_type: table
+    tag: ms-gc-table
+    section: Window detail
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    use: bismark/window_group_compare
+    row_selection_enabled: true
+    row_selection_column: window_id
+    title: Tested windows
+    description: Every window with its two group means, the difference, the statistic and the adjusted p, sorted by significance.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  # ----------------------------------------------------------- tab filters
+  - component_type: interactive
+    tag: ms-gc-filter-direction
+    index: ms-gc-direction-filter
+    section: Comparison scope
+    group: Comparison scope
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    interactive_component_type: Select
+    column_name: direction
+    column_type: object
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Call
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-gc-filter-delta
+    index: ms-gc-delta-range
+    section: Comparison scope
+    group: Comparison scope
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: delta_methylation
+    column_type: float64
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Methylation difference
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ms-gc-filter-padj
+    index: ms-gc-padj-range
+    section: Comparison scope
+    group: Comparison scope
+    workflow_tag: methylseq
+    data_collection_tag: bismark_window_group_compare
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: padj
+    column_type: float64
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:filter-variant'}
+    placement: left
+    title: Adjusted p
+    layout: {x: 0, y: 6, w: 1, h: 3}

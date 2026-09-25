@@ -1,0 +1,14 @@
+# HiC-Pro runs inside nf-core/hic as a set of pipeline-local modules
+# (`modules/local/hicpro/`), not as a shared nf-core/modules component, so
+# `nf_core_url` (reserved for github.com/nf-core/modules/...) stays empty and
+# the pipeline-local source lives in `source_url`.
+id: hicpro
+name: HiC-Pro
+description: >-
+  Maps, pairs and filters Hi-C reads down to valid 3C products, then splits the
+  survivors into cis and trans contacts. Its `stats/` directory is the run's
+  valid-pair funnel, one small key/value file per processing stage.
+homepage: https://github.com/nservant/HiC-Pro
+source_url: https://github.com/nf-core/hic/tree/master/modules/local/hicpro
+edam_topics:
+  - http://edamontology.org/topic_3940 # Chromosome conformation capture

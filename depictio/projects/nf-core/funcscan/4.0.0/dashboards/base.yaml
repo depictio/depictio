@@ -1,14 +1,21 @@
 # nf-core/funcscan 4.0.0 functional screening dashboard
 # ============================================================================
 # Funnel: Screening overview (what did the four screens find, per sample) ->
-# Resistome -> AMPs -> BGCs -> CAZymes, each drilling into one screen. The
-# `Sample sheet` section is persistent and pinned to the top and `Reference
-# tables` to the bottom, so the cohort and the rows behind every tile are one
-# click away on every tab.
+# Annotation (which contigs they touched) -> Resistome -> AMPs -> BGCs ->
+# CAZymes, each drilling into one screen, then Run report. The `Run at a
+# glance` strip (4 cards) and the `Sample sheet` section are persistent and
+# pinned to the top, so the run size and the cohort are one glance away on
+# every tab. Each screen's rows live in a table on its own tab only.
 #
-# The run's MultiQC report carries software versions only (no general-stats,
-# no module sections), so there is no QC tab; the tool versions reach the UI
-# through the template's provenance block instead.
+# The run's MultiQC report carries software versions only: a single
+# run_metadata row, no general-stats and no plot sections at all, which is why
+# there is no MultiQC tab. The versions are read out of the same parquet and
+# shown as a table on the Run report tab instead.
+#
+# The funcscan samplesheet is `sample,fasta`, with no experimental factor, so
+# the persistent filter section carries the sample only; the per-screen count
+# sliders sit in one landing-only section, and every tab adds a non-persistent
+# section on its own collection's columns.
 # ============================================================================
 version: 1
 
@@ -22,6 +29,7 @@ main_dashboard:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  advanced_viz_controls: header
 
   filter_sections:
   - name: Sample scope
@@ -30,12 +38,18 @@ main_dashboard:
     description: Reaches every tab and every screen through the project links
     persistent: true
     pin: top
+  - name: Sample thresholds
+    icon: mdi:tune
+    color: indigo
+    description: Per-sample screen counts, on this tab only
 
   grid_sections:
-  - name: Screening at a glance
+  - name: Run at a glance
     icon: mdi:counter
     color: indigo
-    description: What the four screens found across the whole run
+    description: What the four screens found across the run, before any tab narrows it
+    persistent: true
+    pin: top
   - name: Screen composition
     icon: mdi:chart-donut
     color: violet
@@ -47,20 +61,16 @@ main_dashboard:
   - name: Sample sheet
     icon: mdi:table-account
     color: teal
-    description: The assemblies the run screened, on every tab
+    description: The assemblies the run screened, one row per sample. Open it to check which assembly a sample name stands for.
     collapsed: true
     persistent: true
     pin: top
-  - name: Reference tables
-    icon: mdi:table
-    color: gray
-    description: The rows behind every tile, on every tab
-    collapsed: true
-    persistent: true
-    pin: bottom
 
   components:
-  # --- left rail (persistent) ---------------------------------------------
+  # --- left rail -----------------------------------------------------------
+  # The funcscan samplesheet is `sample,fasta`: no experimental factor to
+  # filter on. The Sample MultiSelect is the only persistent filter; the
+  # per-screen count sliders narrow the cohort on the landing tab only.
   - component_type: interactive
     tag: fs-filter-sample
     index: fs-sample
@@ -76,56 +86,75 @@ main_dashboard:
     title: Sample
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: fs-filter-screens
-    index: fs-screens
-    section: Sample scope
-    group: Samples
-    workflow_tag: funcscan
-    data_collection_tag: screening_summary
-    interactive_component_type: RangeSlider
-    column_name: screens
-    column_type: int64
-    display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:counter'}
-    placement: left
-    title: Screens with a result
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
     tag: fs-filter-arg-hits
     index: fs-arg-hits
-    section: Sample scope
-    group: Samples
+    section: Sample thresholds
+    group: Thresholds
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: arg_hits
     column_type: int64
-    display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:bacteria-outline'}
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:bacteria-outline'}
     placement: left
     title: ARG hits per sample
-    layout: {x: 0, y: 6, w: 1, h: 3}
-
-  # --- Screening at a glance ----------------------------------------------
-  - component_type: text
-    tag: fs-intro
-    section: Screening at a glance
-    title: Four screens, one assembly set
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      funcscan screens every assembly four times over: for resistance genes,
-      antimicrobial peptides, biosynthetic gene clusters and CAZymes. Nothing
-      joins the four reports, so this tab derives one row per sample from all
-      of them and the sample filter on the left drives every other tab.
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: fs-filter-amp-candidates
+    index: fs-amp-candidates
+    section: Sample thresholds
+    group: Thresholds
     workflow_tag: funcscan
     data_collection_tag: screening_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: amp_candidates
+    column_type: int64
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:atom'}
+    placement: left
+    title: AMP candidates per sample
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: fs-filter-bgc-regions
+    index: fs-bgc-regions
+    section: Sample thresholds
+    group: Thresholds
+    workflow_tag: funcscan
+    data_collection_tag: screening_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: bgc_regions
+    column_type: int64
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:graph-outline'}
+    placement: left
+    title: BGC regions per sample
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: interactive
+    tag: fs-filter-cazymes
+    index: fs-cazymes
+    section: Sample thresholds
+    group: Thresholds
+    workflow_tag: funcscan
+    data_collection_tag: screening_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: cazymes
+    column_type: int64
+    display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:leaf'}
+    placement: left
+    title: CAZyme genes per sample
+    layout: {x: 0, y: 12, w: 1, h: 3}
+
+  # --- Run at a glance (persistent, pinned top) -----------------------------
+  # One aggregation for the whole strip: every card is a run total with the
+  # samples carrying the most findings underneath.
   - component_type: card
     tag: fs-card-arg-hits
-    section: Screening at a glance
+    section: Run at a glance
     workflow_tag: funcscan
     data_collection_tag: screening_summary
+    use: funcscan/screening_summary
     aggregation: sum
     column_name: arg_hits
     column_type: int64
@@ -136,116 +165,58 @@ main_dashboard:
     title_size: sm
     title_align: left
     title: ARG hits
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     tag: fs-card-amp
-    section: Screening at a glance
+    section: Run at a glance
     workflow_tag: funcscan
     data_collection_tag: screening_summary
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    use: funcscan/screening_summary
+    aggregation: sum
     column_name: amp_candidates
     column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
     display: {icon_name: 'mdi:atom', icon_color: '#9C36B5', title_color: '#9C36B5', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
     title: AMP candidates
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     tag: fs-card-bgc
-    section: Screening at a glance
+    section: Run at a glance
     workflow_tag: funcscan
     data_collection_tag: screening_summary
+    use: funcscan/screening_summary
     aggregation: sum
     column_name: bgc_regions
     column_type: int64
-    secondary_layout: donut
+    secondary_layout: top_n
     breakdown_col: sample
     top_n_count: 4
     display: {icon_name: 'mdi:graph-outline', icon_color: '#0C8599', title_color: '#0C8599', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
     title: BGC regions
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     tag: fs-card-cazyme
-    section: Screening at a glance
+    section: Run at a glance
     workflow_tag: funcscan
     data_collection_tag: screening_summary
-    aggregation: average
-    column_name: cazymes
-    column_type: int64
-    secondary_layout: gauge
-    coverage_max: 1500
-    display: {icon_name: 'mdi:leaf', icon_color: '#2F9E44', title_color: '#2F9E44', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: CAZymes per sample
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: fs-card-screens
-    section: Screening at a glance
-    workflow_tag: funcscan
-    data_collection_tag: screening_summary
-    aggregation: average
-    column_name: screens
-    column_type: int64
-    secondary_layout: threshold
-    threshold_value: 4
-    threshold_direction: min
-    threshold_warn: 3
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#1971C2', title_color: '#1971C2', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Screens per sample
-    layout: {x: 0, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: fs-card-amp-hc
-    section: Screening at a glance
-    workflow_tag: funcscan
-    data_collection_tag: screening_summary
+    use: funcscan/screening_summary
     aggregation: sum
-    column_name: amp_high_confidence
-    column_type: int64
-    secondary_layout: composition
-    breakdown_col: sample
-    top_n_count: 4
-    display: {icon_name: 'mdi:star-outline', icon_color: '#9C36B5', title_color: '#9C36B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: High-confidence AMPs
-    layout: {x: 2, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: fs-card-cazy-fam
-    section: Screening at a glance
-    workflow_tag: funcscan
-    data_collection_tag: screening_summary
-    aggregation: average
-    column_name: cazyme_families
-    column_type: int64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:shape-outline', icon_color: '#2F9E44', title_color: '#2F9E44', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: CAZy families per sample
-    layout: {x: 4, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: fs-card-bgc-classes
-    section: Screening at a glance
-    workflow_tag: funcscan
-    data_collection_tag: screening_summary
-    aggregation: max
-    column_name: bgc_classes
+    column_name: cazymes
     column_type: int64
     secondary_layout: top_n
     breakdown_col: sample
     top_n_count: 4
-    display: {icon_name: 'mdi:shape-outline', icon_color: '#0C8599', title_color: '#0C8599', title_font_size: xl, value_font_size: xl}
+    display: {icon_name: 'mdi:leaf', icon_color: '#2F9E44', title_color: '#2F9E44', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: BGC classes
-    layout: {x: 6, y: 4, w: 2, h: 2}
+    title: CAZyme genes
+    layout: {x: 6, y: 0, w: 2, h: 2}
 
   # --- Screen composition --------------------------------------------------
   - component_type: text
@@ -257,9 +228,10 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The four screens work on very different scales, so the bars are drawn on
-      a log axis. A sample missing from one colour means that screen returned
-      nothing for it, not that the screen was skipped.
+      One row per sample, derived from the resistance, peptide, cluster and
+      CAZyme screens, drawn on a log axis because the four work on different
+      scales. A sample missing from one colour means that screen returned
+      nothing for it; the Run report tab says whether the screen ran.
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -269,6 +241,7 @@ main_dashboard:
     section: Screen composition
     workflow_tag: funcscan
     data_collection_tag: screening_summary
+    use: funcscan/screening_summary
     mode: code
     code_content: |
       # The colour channel belongs to the screen here, so the dashboard's
@@ -339,59 +312,32 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: figure
-    tag: fs-fig-arg-vs-cazyme
-    index: fs-arg-vs-cazyme
+  - component_type: advanced_viz
+    tag: fs-av-screen-scatter
+    index: fs-screen-scatter
     section: Sample comparison
     workflow_tag: funcscan
     data_collection_tag: screening_summary
-    mode: code
-    code_content: |
-      # resistome load against carbohydrate-degradation capacity, one point per sample
-      df_modified = df.with_columns(
-          (pl.col("bgc_regions") + 1).alias("bgc_size")
-      )
-
-      # The dashboard's analysis groups take the colour channel when the viewer
-      # has made some, in whichever display the Colour/Split toggle asks for.
-      # Without groups the colour stays the AMP candidate count.
-      colour_kwargs = dict(depictio_group_kwargs) or {
-          "color": "amp_candidates",
-          "color_continuous_scale": "Tealgrn",
-      }
-
-      fig = px.scatter(
-          df_modified.to_pandas(),
-          x="arg_hits",
-          y="cazymes",
-          size="bgc_size",
-          size_max=26,
-          hover_name="sample",
-          custom_data=["sample"],
-          **colour_kwargs,
-      )
-      fig.update_layout(
-          xaxis_title="ARG hits",
-          yaxis_title="CAZyme genes",
-          margin={"t": 24, "l": 64, "r": 16, "b": 48},
-      )
-      if depictio_group_kwargs:
-          # Panel titles read as the group name, not the annotation column and
-          # an equals sign. A no-op unless the toggle asked for Split.
-          fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-      else:
-          fig.update_layout(coloraxis_colorbar_title="AMP candidates")
-    selection_enabled: true
-    selection_column: sample
+    use: funcscan/screen_scatter
+    config:
+      controls_placement: header
+      color_col: amp_candidates
+      color_scale: Tealgrn
+      x_title: ARG hits
+      y_title: CAZyme genes
+      top_n_labels: 4
+      selection_enabled: true
+      selection_column: sample
     title: Resistome load against CAZyme capacity
-    description: One point per sample; size is the BGC region count, colour the AMP candidate count.
+    description: One point per sample, coloured by the AMP candidate count and sized by the BGC region count. The four samples with the most regions are labelled, so an outlier can be read without hovering.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: table
     tag: fs-table-hub
     section: Sample comparison
     workflow_tag: funcscan
     data_collection_tag: screening_summary
+    use: funcscan/screening_summary
     row_selection_enabled: true
     row_selection_column: sample
     title: Per-sample screening summary
@@ -399,69 +345,13 @@ main_dashboard:
     title_size: h3
     layout: {x: 0, y: 7, w: 8, h: 6}
 
-  # --- Reference tables (persistent, pinned) -------------------------------
-  - component_type: text
-    tag: fs-ref-intro
-    section: Reference tables
-    title: The rows behind the tiles
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Every screening report, filtered by whatever the left rail and the tab
-      selections currently narrow to. A table whose screen did not run is
-      pruned at import instead of rendering empty.
-    workflow_tag: funcscan
-    data_collection_tag: screening_summary
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: table
-    tag: fs-ref-arg
-    section: Reference tables
-    workflow_tag: funcscan
-    data_collection_tag: hamronization_report
-    use: hamronization/report
-    title: ARG hits
-    description: One row per resistance-gene hit, normalised across the five ARG tools.
-    title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 4}
-  - component_type: table
-    tag: fs-ref-amp
-    section: Reference tables
-    workflow_tag: funcscan
-    data_collection_tag: ampcombi_summary
-    use: ampcombi/summary
-    title: AMP candidates
-    description: One row per antimicrobial-peptide candidate with its physicochemistry.
-    title_size: h3
-    layout: {x: 0, y: 5, w: 8, h: 4}
-  - component_type: table
-    tag: fs-ref-bgc
-    section: Reference tables
-    workflow_tag: funcscan
-    data_collection_tag: combgc_summary
-    use: combgc/summary
-    title: BGC regions
-    description: One row per predicted biosynthetic gene cluster region.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 4}
-  - component_type: table
-    tag: fs-ref-cazyme
-    section: Reference tables
-    workflow_tag: funcscan
-    data_collection_tag: dbcan_overview
-    use: dbcan/overview
-    title: CAZyme annotations
-    description: One row per CAZyme gene with the family each of the three tools called.
-    title_size: h3
-    layout: {x: 0, y: 13, w: 8, h: 4}
-
   # --- Sample sheet (persistent, pinned top) -------------------------------
   - component_type: table
     tag: fs-ref-samplesheet
     section: Sample sheet
     workflow_tag: funcscan
     data_collection_tag: samplesheet
+    use: funcscan/samplesheet
     title: Samplesheet
     description: The assemblies the run screened, one row per sample.
     title_size: h3
@@ -469,16 +359,259 @@ main_dashboard:
 
 tabs:
 # ============================================================================
-# Tab 1: Resistome (ARG)
+# Tab 1: Annotation (the locus layer the four screens share)
+# ============================================================================
+- title: Annotation
+  subtitle: The annotated contigs the four screens work on, and how dense they are
+  tab_order: 1
+  tab_icon: mdi:file-document-outline
+  tab_icon_color: yellow
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+
+  filter_sections:
+  - name: Locus scope
+    icon: mdi:filter-variant
+    color: yellow
+    description: Which contigs the tab is looking at, on the contig collection's own columns
+  - name: Locus thresholds
+    icon: mdi:ruler
+    color: orange
+    description: Contig size and feature density floors
+
+  grid_sections:
+  - name: Annotation at a glance
+    icon: mdi:counter
+    color: yellow
+    description: How much of the assembly the four screens actually touch
+  - name: Loci
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: Contig size against feature count, and the density that follows
+
+  components:
+  - component_type: interactive
+    tag: ann-filter-screen
+    index: ann-screen
+    section: Locus scope
+    group: Contigs
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    interactive_component_type: MultiSelect
+    column_name: top_screen
+    column_type: object
+    display: {title_size: md, custom_color: '#F08C00', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Leading screen
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ann-filter-screens-on-contig
+    index: ann-screens-on-contig
+    section: Locus scope
+    group: Contigs
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: screens_on_contig
+    column_type: int64
+    display: {title_size: md, custom_color: '#F08C00', icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Screens on the contig
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ann-filter-length
+    index: ann-length
+    section: Locus thresholds
+    group: Thresholds
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: contig_length
+    column_type: int64
+    display: {title_size: md, custom_color: '#E8590C', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Contig length (bp)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: ann-filter-density
+    index: ann-density
+    section: Locus thresholds
+    group: Thresholds
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: features_per_kb
+    column_type: float64
+    display: {title_size: md, custom_color: '#E8590C', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Features per kb
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+  - component_type: text
+    tag: ann-intro
+    section: Annotation at a glance
+    title: The layer under the four screens
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every screen names the contig its feature sits on, so this layer counts,
+      per contig, what each of the four screens put there. Contig length is
+      read from the contig name when the assembler wrote it there (SPAdes or
+      MEGAHIT headers); other names keep the contig in the table but off the
+      length axis.
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ann-card-features
+    section: Annotation at a glance
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_annotation
+    aggregation: sum
+    column_name: features
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: top_screen
+    top_n_count: 4
+    display: {icon_name: 'mdi:counter', icon_color: '#F08C00', title_color: '#F08C00', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Features
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ann-card-contigs
+    section: Annotation at a glance
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_annotation
+    aggregation: nunique
+    column_name: contig
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: top_screen
+    top_n_count: 4
+    display: {icon_name: 'mdi:dna', icon_color: '#E8590C', title_color: '#E8590C', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Annotated contigs
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ann-card-length
+    section: Annotation at a glance
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_annotation
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: contig_length
+    column_type: int64
+    display: {icon_name: 'mdi:ruler', icon_color: '#C2255C', title_color: '#C2255C', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Contig length
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ann-card-screens
+    section: Annotation at a glance
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_annotation
+    aggregation: average
+    column_name: screens_on_contig
+    column_type: int64
+    secondary_layout: gauge
+    coverage_max: 4
+    display: {icon_name: 'mdi:set-merge', icon_color: '#1971C2', title_color: '#1971C2', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Screens per contig
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: ann-loci-intro
+    section: Loci
+    title: Long contigs or dense ones
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Long contigs carry more of everything, so look for short contigs high on
+      the y axis: dense loci rather than large ones. Lasso points or tick rows
+      and the contig travels to the screen tabs through the project links.
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ann-av-loci
+    index: ann-loci
+    section: Loci
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_feature_scatter
+    config:
+      controls_placement: header
+      log_x: true
+      x_title: Contig length (bp, log scale)
+      y_title: Features on the contig
+      top_n_labels: 5
+      selection_enabled: true
+      selection_column: contig
+    title: Features against contig length
+    description: One point per annotated contig, coloured by the screen contributing the most features and sized by the density. The x axis is logarithmic because contig lengths span orders of magnitude.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: ann-fig-density
+    index: ann-density-hist
+    section: Loci
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_annotation
+    visu_type: histogram
+    mode: ui
+    figure_params:
+      x: features_per_kb
+      color: top_screen
+      title: Feature density per contig
+    title: Feature density
+    description: How many features per kilobase each contig carries, split by the screen that leads on it.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 6}
+  - component_type: table
+    tag: ann-table-contigs
+    section: Loci
+    workflow_tag: funcscan
+    data_collection_tag: contig_annotation
+    use: funcscan/contig_annotation
+    row_selection_enabled: true
+    row_selection_column: contig
+    title: Annotated contigs
+    description: One row per contig, with what each screen put on it. Selecting rows narrows the scatter to the same loci.
+    title_size: h3
+    layout: {x: 0, y: 15, w: 8, h: 7}
+
+# ============================================================================
+# Tab 2: Resistome (ARG)
 # ============================================================================
 - title: Resistome
   subtitle: Resistance genes across five ARG screens, harmonised by hAMRonization
-  tab_order: 1
+  tab_order: 2
   tab_icon: mdi:bacteria-outline
   tab_icon_color: red
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  advanced_viz_controls: header
 
   filter_sections:
   - name: ARG scope
@@ -489,7 +622,6 @@ tabs:
     icon: mdi:tune
     color: orange
     description: Identity and cross-tool agreement floors
-    collapsed: true
 
   grid_sections:
   - name: Resistome at a glance
@@ -546,6 +678,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: identity_pct
     column_type: float64
     display: {title_size: md, custom_color: '#F76707', icon_name: 'mdi:ruler'}
@@ -560,6 +693,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_gene_presence
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: n_tools
     column_type: int64
     display: {title_size: md, custom_color: '#F76707', icon_name: 'mdi:scale-balance'}
@@ -589,21 +723,21 @@ tabs:
     data_collection_tag: hamronization_report
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: arg-card-hits
+    tag: arg-card-classes
     section: Resistome at a glance
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
     use: hamronization/report
-    aggregation: sum
-    column_name: hits
-    column_type: int64
+    aggregation: nunique
+    column_name: drug_class
+    column_type: object
     secondary_layout: top_n
-    breakdown_col: drug_class
-    top_n_count: 4
+    breakdown_col: tool
+    top_n_count: 5
     display: {icon_name: 'mdi:bacteria-outline', icon_color: '#E03131', title_color: '#E03131', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Hits
+    title: Drug classes
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: arg-card-genes
@@ -633,28 +767,33 @@ tabs:
     secondary_layout: box_plot
     column_name: identity_pct
     column_type: float64
+    # HMM-based tools report no identity: the median is over aligned hits only.
+    filter_expr: "col('identity_pct').is_not_null()"
     display: {icon_name: 'mdi:ruler', icon_color: '#C2255C', title_color: '#C2255C', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Sequence identity
+    title: Identity of aligned hits
     layout: {x: 4, y: 2, w: 2, h: 2}
+  # Replaces a mean of reference coverage: the hits that align closely over
+  # most of the reference (the common 90 % identity, 80 % coverage cut-off),
+  # counted per tool.
   - component_type: card
-    tag: arg-card-coverage
+    tag: arg-card-close
     section: Resistome at a glance
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
     use: hamronization/report
-    aggregation: average
-    column_name: coverage_pct
-    column_type: float64
-    secondary_layout: threshold
-    threshold_value: 80
-    threshold_direction: min
-    threshold_warn: 90
+    aggregation: sum
+    column_name: hits
+    column_type: int64
+    filter_expr: "(col('identity_pct') >= 90) & (col('coverage_pct') >= 80)"
+    secondary_layout: top_n
+    breakdown_col: tool
+    top_n_count: 4
     display: {icon_name: 'mdi:check-decagram', icon_color: '#9C36B5', title_color: '#9C36B5', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Reference coverage
+    title: Close reference matches
     layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
@@ -684,16 +823,16 @@ tabs:
     title_size: h3
     layout: {x: 0, y: 1, w: 8, h: 8}
   - component_type: advanced_viz
-    tag: arg-av-heatmap
-    index: arg-heatmap
+    tag: arg-av-class-heatmap
+    index: arg-class-heatmap
     section: Resistance hierarchy
     workflow_tag: funcscan
-    data_collection_tag: hamronization_gene_matrix
-    use: hamronization/arg_heatmap
-    title: Gene by sample hit matrix
-    description: Rows are resistance genes, columns samples, the right-hand strip the gene's drug class.
+    data_collection_tag: hamronization_class_matrix
+    use: hamronization/arg_class_heatmap
+    title: Drug class by sample hit matrix
+    description: Hit counts per drug class and sample, so the rows are phenotypes rather than genes. A class carried by every assembly separates from one that only a few carry; the gene-level view is the dot plot under Tool concordance.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 8}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   - component_type: text
     tag: arg-conc-intro
@@ -728,6 +867,8 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_gene_presence
     use: hamronization/arg_dot_plot
+    config:
+      controls_placement: header
     title: Gene support per sample
     description: Dot colour is the mean identity of the hits, dot size the share of tools that called the gene.
     title_size: h3
@@ -780,7 +921,7 @@ tabs:
     title: Hit quality per tool
     description: Coverage against identity for every alignment-based hit, coloured by the reporting tool.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: table
     tag: arg-table-hits
     section: Gene detail
@@ -810,16 +951,17 @@ tabs:
     layout: {x: 0, y: 13, w: 8, h: 6}
 
 # ============================================================================
-# Tab 2: AMPs
+# Tab 3: AMPs
 # ============================================================================
 - title: AMPs
   subtitle: Antimicrobial peptide candidates, their physicochemistry and their clusters
-  tab_order: 2
+  tab_order: 3
   tab_icon: mdi:atom
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  advanced_viz_controls: header
 
   filter_sections:
   - name: Candidate scope
@@ -830,7 +972,6 @@ tabs:
     icon: mdi:ruler
     color: violet
     description: Probability and size floors
-    collapsed: true
 
   grid_sections:
   - name: AMPs at a glance
@@ -869,6 +1010,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: prob_max
     column_type: float64
     display: {title_size: md, custom_color: '#7048E8', icon_name: 'mdi:check-decagram'}
@@ -883,6 +1025,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: aa_length
     column_type: int64
     display: {title_size: md, custom_color: '#7048E8', icon_name: 'mdi:ruler'}
@@ -900,30 +1043,29 @@ tabs:
     alignment: left
     body: >
       [AMPcombi](https://github.com/Darcy220606/AMPcombi) merges the per-tool
-      predictions, keeps the peptides above the run's probability cut-off and
-      annotates each with physicochemistry. In this run
-      [ampir](https://github.com/Legana/ampir) carried the screen and
-      [Macrel](https://github.com/BigDataBiology/macrel) agreed on almost
-      nothing, so the best-probability column is effectively ampir's.
+      predictions (ampir, Macrel, AMPlify), keeps the peptides above the
+      probability cut-off and annotates each with physicochemistry. Read the
+      best probability across tools and how many predictors agree, not one
+      tool's score, since any predictor can be switched off.
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: amp-card-count
+    tag: amp-card-contigs
     section: AMPs at a glance
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     use: ampcombi/summary
-    aggregation: count
-    column_name: cds_id
+    aggregation: nunique
+    column_name: contig
     column_type: object
-    secondary_layout: donut
-    breakdown_col: charge_class
-    top_n_count: 3
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
     display: {icon_name: 'mdi:atom', icon_color: '#9C36B5', title_color: '#9C36B5', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Candidates
+    title: Contigs with a candidate
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: amp-card-prob
@@ -934,12 +1076,12 @@ tabs:
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: prob_ampir
+    column_name: prob_max
     column_type: float64
     display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#7048E8', title_color: '#7048E8', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: ampir probability
+    title: Best probability
     layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: amp-card-length
@@ -947,32 +1089,33 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     use: ampcombi/summary
-    aggregation: average
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     column_name: aa_length
     column_type: int64
-    secondary_layout: histogram
     display: {icon_name: 'mdi:ruler', icon_color: '#4C6EF5', title_color: '#4C6EF5', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
     title: Peptide length
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: amp-card-confidence
+    tag: amp-card-agreement
     section: AMPs at a glance
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     use: ampcombi/summary
-    aggregation: average
-    column_name: prob_max
-    column_type: float64
-    secondary_layout: threshold
-    threshold_value: 0.8
-    threshold_direction: min
-    threshold_warn: 0.6
+    aggregation: count
+    column_name: cds_id
+    column_type: object
+    filter_expr: "col('n_tools') >= 2"
+    secondary_layout: donut
+    breakdown_col: charge_class
+    top_n_count: 3
     display: {icon_name: 'mdi:check-decagram', icon_color: '#0C8599', title_color: '#0C8599', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Best probability
+    title: Called by two predictors or more
     layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
@@ -990,42 +1133,54 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: figure
-    tag: amp-fig-property
+  - component_type: advanced_viz
+    tag: amp-av-property
     index: amp-property
     section: Property space
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
-    use: ampcombi/summary
-    mode: code
-    code_content: |
-      # keep the physicochemistry complete so no point is silently dropped
-      df_modified = df.drop_nulls(["hydrophobicity", "isoelectric_point", "prob_max"])
-
-      fig = px.scatter(
-          df_modified.to_pandas(),
-          x="hydrophobicity",
-          y="isoelectric_point",
-          color="prob_max",
-          size="aa_length",
-          size_max=18,
-          opacity=0.75,
-          color_continuous_scale="Tealgrn",
-          hover_name="cds_id",
-          custom_data=["cds_id"],
-      )
-      fig.update_layout(
-          xaxis_title="Hydrophobicity",
-          yaxis_title="Isoelectric point (pI)",
-          coloraxis_colorbar_title="Best probability",
-          margin={"t": 24, "l": 56, "r": 16, "b": 48},
-      )
-    selection_enabled: true
-    selection_column: cds_id
+    use: ampcombi/amp_property_scatter
+    config:
+      controls_placement: header
+      x_title: Hydrophobicity
+      y_title: Isoelectric point (pI)
+      reference_line: horizontal
+      reference_value: 7.0
+      opacity: 0.7
+      selection_enabled: true
+      selection_column: cds_id
     title: Charge against hydrophobicity
-    description: One point per candidate; colour is the best tool probability, size the peptide length.
+    description: One point per candidate, coloured by charge class and sized by peptide length. The line at pI 7 is where a peptide turns cationic at physiological pH; hydrophobic peptides above it are the classic membrane-active shape. AMPcombi reports no net charge, so the isoelectric point is the charge axis.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 1, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: amp-av-record
+    index: amp-record
+    section: Property space
+    workflow_tag: funcscan
+    data_collection_tag: ampcombi_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: cds_id
+      title_col: cds_id
+      selection_source: any
+      linked_component: amp-av-property
+      sections:
+        Origin: [sample, contig, db_hit]
+        Prediction: [prob_max, n_tools, prob_ampir, prob_macrel, prob_amplify]
+        Physicochemistry: [aa_length, molecular_weight, isoelectric_point, hydrophobicity, charge_class]
+      labels:
+        prob_max: Best probability
+        n_tools: Predictors agreeing
+        aa_length: Length (aa)
+        molecular_weight: Molecular weight (Da)
+        isoelectric_point: Isoelectric point (pI)
+        db_hit: Reference AMP hit
+    title: Candidate record
+    description: The peptide picked in the scatter beside it (or in the candidate table), with what each predictor gave it and its physicochemistry.
+    title_size: h3
+    layout: {x: 5, y: 1, w: 3, h: 7}
   - component_type: advanced_viz
     tag: amp-av-embedding
     index: amp-embedding
@@ -1033,11 +1188,11 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_embedding
     use: ampcombi/amp_embedding
-    config: {color_col: charge_class}
+    config: {color_col: charge_class, controls_placement: header}
     title: Physicochemistry PCA
     description: Two components over weight, pI, hydrophobicity and the three structure fractions.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
   - component_type: table
     tag: amp-table-candidates
     section: Property space
@@ -1049,7 +1204,7 @@ tabs:
     title: AMP candidates
     description: Selecting rows narrows the property scatter to the same peptides.
     title_size: h3
-    layout: {x: 0, y: 13, w: 8, h: 5}
+    layout: {x: 0, y: 14, w: 8, h: 5}
 
   - component_type: text
     tag: amp-cluster-intro
@@ -1083,29 +1238,32 @@ tabs:
     title: Cluster sizes
     description: How many sequences each cluster holds, split by the sample that contributed the representative.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: table
     tag: amp-table-clusters
     section: Clusters
     workflow_tag: funcscan
     data_collection_tag: ampcombi_clusters
     use: ampcombi/clusters
+    row_selection_enabled: true
+    row_selection_column: cluster_id
     title: Peptide clusters
     description: One row per cluster, largest first.
     title_size: h3
     layout: {x: 0, y: 7, w: 8, h: 6}
 
 # ============================================================================
-# Tab 3: BGCs
+# Tab 4: BGCs
 # ============================================================================
 - title: BGCs
   subtitle: Biosynthetic gene clusters merged from antiSMASH, DeepBGC and GECCO
-  tab_order: 3
+  tab_order: 4
   tab_icon: mdi:graph-outline
   tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  advanced_viz_controls: header
 
   filter_sections:
   - name: Cluster scope
@@ -1116,7 +1274,6 @@ tabs:
     icon: mdi:ruler
     color: blue
     description: Region length and coding density floors
-    collapsed: true
 
   grid_sections:
   - name: BGCs at a glance
@@ -1127,6 +1284,10 @@ tabs:
     icon: mdi:chart-bar
     color: blue
     description: Which chemistry each sample is predicted to make
+  - name: Region maps
+    icon: mdi:chart-timeline-variant
+    color: violet
+    description: Where the predicted clusters sit on their contigs
   - name: Caller concordance
     icon: mdi:set-merge
     color: indigo
@@ -1169,6 +1330,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: length
     column_type: int64
     display: {title_size: md, custom_color: '#1971C2', icon_name: 'mdi:ruler'}
@@ -1183,12 +1345,44 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: cds_count
     column_type: int64
     display: {title_size: md, custom_color: '#1971C2', icon_name: 'mdi:counter'}
     placement: left
     title: CDS in the region
     layout: {x: 0, y: 9, w: 1, h: 3}
+  # The three track tiles read combgc_region_track, a different collection from
+  # the counts above, so the tab-local filters that reach them live here.
+  - component_type: interactive
+    tag: bgc-filter-track-class
+    index: bgc-track-class
+    section: Cluster scope
+    group: Callers
+    workflow_tag: funcscan
+    data_collection_tag: combgc_region_track
+    interactive_component_type: MultiSelect
+    column_name: product_class
+    column_type: object
+    display: {title_size: md, custom_color: '#0C8599', icon_name: 'mdi:chart-timeline-variant'}
+    placement: left
+    title: Product class on the map
+    layout: {x: 0, y: 12, w: 1, h: 3}
+  - component_type: interactive
+    tag: bgc-filter-track-length
+    index: bgc-track-length
+    section: Region size
+    group: Thresholds
+    workflow_tag: funcscan
+    data_collection_tag: combgc_region_track
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: length_kb
+    column_type: float64
+    display: {title_size: md, custom_color: '#1971C2', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Region length on the map (kb)
+    layout: {x: 0, y: 15, w: 1, h: 3}
 
   - component_type: text
     tag: bgc-intro
@@ -1206,21 +1400,21 @@ tabs:
     data_collection_tag: combgc_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: bgc-card-regions
+    tag: bgc-card-classes
     section: BGCs at a glance
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
     use: combgc/summary
-    aggregation: sum
-    column_name: regions
-    column_type: int64
+    aggregation: nunique
+    column_name: product_class
+    column_type: object
     secondary_layout: top_n
-    breakdown_col: product_class
-    top_n_count: 4
+    breakdown_col: tool
+    top_n_count: 3
     display: {icon_name: 'mdi:graph-outline', icon_color: '#0C8599', title_color: '#0C8599', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Regions
+    title: Product classes
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: bgc-card-contigs
@@ -1261,10 +1455,11 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
     use: combgc/summary
-    aggregation: average
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     column_name: cds_count
     column_type: int64
-    secondary_layout: histogram
     display: {icon_name: 'mdi:counter', icon_color: '#5F3DC4', title_color: '#5F3DC4', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
@@ -1280,8 +1475,8 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Terpene precursors and arylpolyenes dominate gut-metagenome assemblies.
-      A tall single-class bar usually means one contig family repeated across
+      Each bar is one sample's predicted regions, stacked by product class. A
+      tall single-class bar usually means one contig family repeated across
       the assembly rather than a rich biosynthetic repertoire.
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
@@ -1315,18 +1510,66 @@ tabs:
     description: Inner ring is the prediction tool, outer ring the product class it called.
     title_size: h3
     layout: {x: 0, y: 7, w: 8, h: 6}
-  - component_type: table
-    tag: bgc-table-regions
-    section: Product classes
+
+  - component_type: text
+    tag: bgc-map-intro
+    section: Region maps
+    title: Where the clusters sit
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The same regions as coordinates: one contig carrying two clusters head
+      to tail is a different finding from two contigs carrying one each. Pick
+      a contig or brush the genome axis to narrow the arrow lanes and the table
+      (arrows run left to right because comBGC reports no strand).
     workflow_tag: funcscan
-    data_collection_tag: combgc_summary
-    use: combgc/summary
+    data_collection_tag: combgc_region_track
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: bgc-av-genome-track
+    index: bgc-genome-track
+    section: Region maps
+    workflow_tag: funcscan
+    data_collection_tag: combgc_region_track
+    use: combgc/bgc_genome_track
+    config:
+      controls_placement: header
+      mark: rect
+      score_title: Region length (kb)
+      selection_enabled: true
+      selection_column: contig
+    title: Cluster footprints on the genome axis
+    description: One rectangle per region, drawn from its start to its end on a locus axis that zooms. The height is the region length in kilobases and the colour the product class.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: bgc-av-region-arrows
+    index: bgc-region-arrows
+    section: Region maps
+    workflow_tag: funcscan
+    data_collection_tag: combgc_region_track
+    use: combgc/bgc_region_arrows
+    config:
+      show_labels: true
+      arrow_height: 0.5
+    title: Clusters along their contig
+    description: One lane per contig and one arrow per predicted region, the same pattern the Resistome tab uses for resistance islands. Several arrows packed into one lane is a biosynthetic locus rather than a scattered repertoire.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 6}
+  - component_type: table
+    tag: bgc-table-track
+    section: Region maps
+    workflow_tag: funcscan
+    data_collection_tag: combgc_region_track
+    use: combgc/region_track
     row_selection_enabled: true
     row_selection_column: contig
-    title: BGC regions
-    description: One row per predicted region, with its coordinates and PFAM domains.
+    title: BGC region coordinates
+    description: One row per predicted region with its coordinates; a brush on the genome axis narrows them, and selecting rows narrows the maps to the same contigs.
     title_size: h3
-    layout: {x: 0, y: 13, w: 8, h: 5}
+    layout: {x: 0, y: 15, w: 8, h: 5}
 
   - component_type: text
     tag: bgc-conc-intro
@@ -1356,16 +1599,17 @@ tabs:
     layout: {x: 0, y: 1, w: 8, h: 6}
 
 # ============================================================================
-# Tab 4: CAZymes
+# Tab 5: CAZymes
 # ============================================================================
 - title: CAZymes
   subtitle: Carbohydrate-active enzymes and the substrates their gene clusters target
-  tab_order: 4
+  tab_order: 5
   tab_icon: mdi:leaf
   tab_icon_color: green
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  advanced_viz_controls: header
 
   filter_sections:
   - name: CAZyme scope
@@ -1376,7 +1620,6 @@ tabs:
     icon: mdi:tune
     color: lime
     description: How many of the three annotation tools have to agree
-    collapsed: true
 
   grid_sections:
   - name: CAZymes at a glance
@@ -1433,6 +1676,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: n_tools
     column_type: int64
     display: {title_size: md, custom_color: '#66A80F', icon_name: 'mdi:scale-balance'}
@@ -1458,21 +1702,21 @@ tabs:
     data_collection_tag: dbcan_overview
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: caz-card-genes
+    tag: caz-card-contigs
     section: CAZymes at a glance
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
     use: dbcan/overview
-    aggregation: sum
-    column_name: genes
-    column_type: int64
-    secondary_layout: donut
-    breakdown_col: cazy_class
+    aggregation: nunique
+    column_name: contig
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
     top_n_count: 4
     display: {icon_name: 'mdi:leaf', icon_color: '#2F9E44', title_color: '#2F9E44', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: CAZyme genes
+    title: Contigs with a CAZyme
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: caz-card-families
@@ -1500,13 +1744,14 @@ tabs:
     aggregation: count
     column_name: gene_id
     column_type: object
-    secondary_layout: composition
+    filter_expr: "col('substrate') != 'unassigned'"
+    secondary_layout: top_n
     breakdown_col: substrate
     top_n_count: 4
     display: {icon_name: 'mdi:chart-donut', icon_color: '#099268', title_color: '#099268', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Annotated genes
+    title: Genes with a substrate call
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: caz-card-ntools
@@ -1534,9 +1779,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Glycoside hydrolases and glycosyltransferases carry the bulk of any gut
-      metagenome. Most genes have no substrate call, so the outer ring is
-      dominated by the unassigned arc unless the substrate filter is set.
+      The rings read CAZy class, then family, then predicted substrate. Genes
+      without a substrate call form the unassigned arc; set the substrate
+      filter to read the called ones.
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1602,13 +1847,15 @@ tabs:
     title: Substrates predicted
     description: How many gene clusters target each polysaccharide, split by sample.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: table
     tag: caz-table-substrates
     section: Substrates
     workflow_tag: funcscan
     data_collection_tag: dbcan_substrates
     use: dbcan/substrates
+    row_selection_enabled: true
+    row_selection_column: cgc_id
     title: CGC substrate predictions
     description: One row per CAZyme gene cluster with a dbCAN-PUL match.
     title_size: h3
@@ -1624,8 +1871,7 @@ tabs:
     alignment: left
     body: >
       Genes in the three-tool intersection carry a recommended family; genes in
-      a single-tool set are the ones to treat as provisional. dbCAN-sub is the
-      most permissive of the three, so its private set is the largest.
+      a single-tool set are the ones to treat as provisional.
     workflow_tag: funcscan
     data_collection_tag: dbcan_tool_overlap
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1652,3 +1898,103 @@ tabs:
     description: One row per gene with the family each of the three tools called.
     title_size: h3
     layout: {x: 0, y: 7, w: 8, h: 5}
+# ============================================================================
+# Tab 6: Run report (what the pipeline actually ran)
+# ============================================================================
+- title: Run report
+  subtitle: The tools and versions the run recorded, read out of the MultiQC report
+  tab_order: 6
+  tab_icon: mdi:file-document-outline
+  tab_icon_color: gray
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+
+  filter_sections:
+  - name: Version scope
+    icon: mdi:filter-variant
+    color: gray
+    description: Which screen and which tool the tab is looking at
+
+  grid_sections:
+  - name: Tools and versions
+    icon: mdi:file-document-outline
+    color: blue
+    description: Every process, the software it ran and the version it reported
+
+  components:
+  - component_type: interactive
+    tag: run-filter-screen
+    index: run-screen
+    section: Version scope
+    group: Versions
+    workflow_tag: funcscan
+    data_collection_tag: software_versions
+    interactive_component_type: MultiSelect
+    column_name: screen
+    column_type: object
+    display: {title_size: md, custom_color: '#868E96', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Screen
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: run-filter-tool
+    index: run-tool
+    section: Version scope
+    group: Versions
+    workflow_tag: funcscan
+    data_collection_tag: software_versions
+    interactive_component_type: MultiSelect
+    column_name: tool
+    column_type: object
+    display: {title_size: md, custom_color: '#868E96', icon_name: 'mdi:tune'}
+    placement: left
+    title: Tool
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - component_type: text
+    tag: run-versions-intro
+    section: Tools and versions
+    title: Which screen ran what
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per Nextflow process and tool, read from the MultiQC versions
+      table. A screen that reports no tool here did not run, so this is the
+      first place to look when a tab is empty.
+    workflow_tag: funcscan
+    data_collection_tag: software_versions
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: run-fig-tools
+    index: run-tools
+    section: Tools and versions
+    workflow_tag: funcscan
+    data_collection_tag: software_versions
+    use: funcscan/software_versions
+    visu_type: bar
+    mode: ui
+    figure_params:
+      x: screen
+      y: tools
+      color: tool
+      title: Tools per screen
+    title: Tools per screen
+    description: How many version entries each screen contributed, stacked by tool.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 6}
+  - component_type: table
+    tag: run-table-versions
+    section: Tools and versions
+    workflow_tag: funcscan
+    data_collection_tag: software_versions
+    use: funcscan/software_versions
+    row_selection_enabled: true
+    row_selection_column: tool
+    title: Software versions
+    description: One row per process and tool, as the run recorded it.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 7}

@@ -1,0 +1,19 @@
+id: bismark_methylation_density
+name: Per-CpG methylation density
+mode: methylation/density
+description: >-
+  Distribution of per-CpG methylation, one curve per library, binned to 2 %
+  buckets out of the full bedGraph. A healthy mammalian methylome is sharply
+  bimodal at 0 % and 100 %; a curve that has lost the bimodality, or whose 0 %
+  peak has drifted up, is reporting incomplete conversion or a depth too low
+  for a site call.
+find:
+  path_glob: "**/*.bedGraph.gz"
+recipe: bismark/methylation_density.py
+fixture: methylation_density.tsv
+renders_as:
+  - { id: density_profile, component: advanced_viz, kind: profile, roles: {series: series, x: methylation_bin, y: fraction_of_cpgs} }
+  - { component: card, column: fraction_of_cpgs, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_cpgs, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: figure, visu_type: line, dict_kwargs: {x: methylation_bin, y: fraction_of_cpgs, color: sample, title: Per-CpG methylation density} }
+  - { component: table }

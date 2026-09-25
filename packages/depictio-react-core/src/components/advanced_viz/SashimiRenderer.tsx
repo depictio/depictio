@@ -3,11 +3,6 @@ import {
   Button,
   ColorInput,
   Group,
-  NumberInput,
-  Select,
-  Slider,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -26,6 +21,17 @@ import {
 } from '../../colors';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlCell,
+  VizControlGroup,
+  VizFullRow,
+  VizInlineField,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import AdvancedVizPlot from './AdvancedVizPlot';
 import {
   applyDataTheme,
@@ -34,7 +40,10 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import SashimiGenomeSpyView from './sashimi/SashimiGenomeSpyView';
+import { coverageData, junctionData, UNANNOTATED } from './sashimi/sashimiGenomeSpySpec';
 
 /** Mirrors `SashimiConfig` (depictio/models/components/advanced_viz/configs.py).
  *  Only keys declared there may be read — see
@@ -70,7 +79,14 @@ interface SashimiConfig {
   max_arc_width?: number;
   arc_width_by_support?: boolean;
   arc_split?: 'annotation' | 'alternate';
+  view?: SashimiView;
+  views?: SashimiView[] | null;
+  annotation?: 'none' | 'hg38' | 'mm10';
 }
+
+type SashimiView = 'plotly' | 'genomespy';
+const SASHIMI_VIEWS: SashimiView[] = ['plotly', 'genomespy'];
+const VIEW_LABELS: Record<SashimiView, string> = { plotly: 'Arcs', genomespy: 'GenomeSpy' };
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: SashimiConfig };
@@ -345,6 +361,20 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   );
   // Local-only: no field on SashimiConfig carries them, and a region pick or a
   // zoom is a reading position rather than an authored default.
+  /** Which view draws the junctions. Named apart from `view`, the x window. */
+  const allowedViews = useMemo<SashimiView[]>(() => {
+    const listed = (config.views ?? SASHIMI_VIEWS).filter((v) => SASHIMI_VIEWS.includes(v));
+    return listed.length ? listed : SASHIMI_VIEWS;
+  }, [config.views]);
+  const [storedVizView, setVizView] = usePersistedVizControl<SashimiView>(
+    metadata,
+    'view',
+    config.view ?? 'plotly',
+  );
+  const vizView: SashimiView = allowedViews.includes(storedVizView)
+    ? storedVizView
+    : allowedViews[0];
+
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [showCounts, setShowCounts] = useState<boolean>(true);
   /** Explicit x window, or null to fit the region. Set by the zoom buttons and
@@ -572,10 +602,26 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     return [...loci.slice(0, MAX_LOCUS_OPTIONS), ...whole];
   }, [supported]);
 
+  // ---- Following a region someone else brushed ----------------------------
+  // This kind already opens on one locus at a time, so following a region
+  // means picking the locus it falls in rather than clamping an axis: the
+  // busiest cluster that overlaps the window, else that chromosome as a whole.
+  // The x window itself is set below, through the same `view` state the zoom
+  // buttons and Plotly's drag-zoom write, so the reader can zoom out again.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  const regionLocus = useMemo<Region | null>(() => {
+    if (!followedRegion) return null;
+    const onChrom = regions.filter((r) => sameChrom(r.chrom, followedRegion.chrom));
+    const overlapping = onChrom.find(
+      (r) => !r.whole && r.end >= followedRegion.start && r.start <= followedRegion.end,
+    );
+    return overlapping ?? onChrom.find((r) => r.whole) ?? null;
+  }, [followedRegion, regions]);
+
   // Derived rather than stored so a filter change that empties the current
   // region falls back on its own instead of leaving an empty panel.
   const activeRegion =
-    regions.find((r) => r.key === selectedRegion) ?? regions[0] ?? null;
+    regionLocus ?? regions.find((r) => r.key === selectedRegion) ?? regions[0] ?? null;
 
   /** The junctions actually drawn: one region, strongest `top_n` per lane.
    *  Per lane rather than overall so a quiet sample keeps a panel of its own
@@ -727,6 +773,15 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   useEffect(() => {
     setView(null);
   }, [activeRegion?.key]);
+
+  // A followed region is narrower than the locus that contains it, so it opens
+  // as a zoom rather than as a new locus. Written into the same state the zoom
+  // buttons use, so the reader can widen it again straight away. Declared after
+  // the reset above so that when both fire in one commit, the window wins.
+  useEffect(() => {
+    const window = regionXRange(followedRegion);
+    if (window) setView(window);
+  }, [followedRegion]);
 
   /** Scale the window about its own centre. `factor` < 1 zooms in. */
   const zoomBy = useCallback(
@@ -1429,217 +1484,353 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     [arcColors, setArcColors],
   );
 
+  // ---- The GenomeSpy view -------------------------------------------------
+  // Built only while that view is on screen: the Plotly view pays nothing.
+  const genomeSpyOn = vizView === 'genomespy';
+
+  /** Every lane in the data, not just the region's, so moving the region or
+   *  the min-reads slider swaps rows instead of rebuilding the lanes. */
+  const allLanes = useMemo(
+    () =>
+      Array.from(new Set(junctions.map((j) => j.lane))).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true }),
+      ),
+    [junctions],
+  );
+
+  const gsJunctions = useMemo(() => {
+    if (!genomeSpyOn) return [];
+    // The same per-lane top-N as the arc panel, taken over the whole data
+    // rather than one locus, since GenomeSpy lets the reader pan to the rest.
+    const byLane = new Map<string, Junction[]>();
+    for (const j of supported) {
+      const bucket = byLane.get(j.lane);
+      if (bucket) bucket.push(j);
+      else byLane.set(j.lane, [j]);
+    }
+    const kept: Junction[] = [];
+    for (const arcs of byLane.values()) {
+      kept.push(...arcs.slice().sort((a, b) => b.count - a.count).slice(0, Math.max(1, topN)));
+    }
+    return junctionData(kept);
+  }, [genomeSpyOn, supported, topN]);
+
+  const gsCoverage = useMemo(() => {
+    if (!genomeSpyOn || !config.coverage_dc_id || !showCoverage || !coverageRows) return null;
+    return coverageData(
+      coverageRows,
+      {
+        chr: config.coverage_chr_col || 'chromosome',
+        pos: config.coverage_position_col || 'position',
+        value: config.coverage_value_col || 'value',
+        end: config.coverage_end_col,
+        sample: config.coverage_sample_col,
+      },
+      SINGLE_LANE,
+      coverageLog,
+    );
+  }, [
+    genomeSpyOn,
+    coverageRows,
+    showCoverage,
+    coverageLog,
+    config.coverage_dc_id,
+    config.coverage_chr_col,
+    config.coverage_position_col,
+    config.coverage_value_col,
+    config.coverage_end_col,
+    config.coverage_sample_col,
+  ]);
+
+  const gsExons = useMemo(
+    () =>
+      genomeSpyOn && activeRegion && showGeneModel
+        ? exons.map((e) => ({
+            chrom: activeRegion.chrom,
+            start: e.start,
+            end: e.end,
+            terminal: e.terminal,
+          }))
+        : [],
+    [genomeSpyOn, activeRegion, exons, showGeneModel],
+  );
+
+  /** The window GenomeSpy opens on and zooms to: the zoom state the arc panel
+   *  shares, else the drawn junctions, else the region itself. */
+  const gsRegion = useMemo(() => {
+    if (!activeRegion) return null;
+    const win = view ?? fitRange ?? [activeRegion.start, activeRegion.end];
+    return {
+      chrom: activeRegion.chrom,
+      start: Math.max(0, Math.floor(win[0])),
+      end: Math.ceil(win[1]),
+    };
+  }, [activeRegion, view, fitRange]);
+
+  const gsColours = useMemo(() => {
+    const themeColours = plotlyThemeColors(isDark, theme);
+    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
+    const stable = stableColorMap(annotationValues, palette);
+    const base = arcColors[ARC_COLOR_ALL] || palette[0];
+    const annotations = junctions.some((j) => !j.annotation)
+      ? [...annotationValues, UNANNOTATED]
+      : annotationValues;
+    return {
+      colors: {
+        textColor: themeColours.textColor,
+        gridColor: themeColours.gridColor,
+        ruleColor: themeColours.zeroLineColor,
+        palette,
+      },
+      annotations,
+      annotationColours: annotations.map(
+        (a) => arcColors[a] || stable.get(a) || base,
+      ),
+      laneColours: allLanes.map((_, i) => palette[i % palette.length] ?? base),
+    };
+  }, [isDark, theme, annotationValues, arcColors, junctions, allLanes]);
+
+  // The min-reads slider drags a local value and commits on release, so a
+  // drag is one data swap rather than one per tick.
+  const [minDraft, setMinDraft] = useState<number>(minCount);
+  useEffect(() => setMinDraft(minCount), [minCount]);
+  const sliderMax = useMemo(
+    () => Math.max(10, ...junctions.map((j) => j.count)),
+    [junctions],
+  );
+
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {allowedViews.length > 1 ? (
+          <VizSegmented
+            aria-label="View"
+            value={vizView}
+            onChange={(v) => setVizView(v as SashimiView)}
+            data={allowedViews.map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
+          />
+        ) : null}
+        <VizSelect
+          aria-label="Locus"
+          value={activeRegion?.key ?? null}
+          onChange={setSelectedRegion}
+          data={[
+            {
+              group: 'Loci',
+              items: regions.filter((r) => !r.whole).map((r) => ({ value: r.key, label: r.label })),
+            },
+            {
+              group: 'Whole chromosome',
+              items: regions.filter((r) => r.whole).map((r) => ({ value: r.key, label: r.label })),
+            },
+          ]}
+          placeholder={rows ? 'No junctions' : 'Loading…'}
+          disabled={regions.length < 2}
+          searchable
+          comboboxProps={{ portalProps: { target: fsPortalTarget } }}
+        />
+        <VizSlider
+          label={`Min reads ${minDraft}`}
+          min={0}
+          max={sliderMax}
+          step={1}
+          value={Math.min(minDraft, sliderMax)}
+          onChange={setMinDraft}
+          onChangeEnd={(v) => setMinCount(v)}
+          thumbLabel={(v) => `at least ${v}`}
+        />
+      </>
+    ),
+    [
+      allowedViews,
+      vizView,
+      setVizView,
+      activeRegion,
+      regions,
+      rows,
+      fsPortalTarget,
+      minDraft,
+      sliderMax,
+      setMinCount,
+    ],
+  );
+
   const controls = useMemo(
     () => (
-      <Stack gap="sm">
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Region
-          </Text>
-          <Select
-            size="xs"
-            value={activeRegion?.key ?? null}
-            onChange={setSelectedRegion}
-            data={[
-              {
-                group: 'Loci',
-                items: regions
-                  .filter((r) => !r.whole)
-                  .map((r) => ({ value: r.key, label: r.label })),
-              },
-              {
-                group: 'Whole chromosome',
-                items: regions.filter((r) => r.whole).map((r) => ({ value: r.key, label: r.label })),
-              },
-            ]}
-            placeholder={rows ? 'No junctions' : 'Loading…'}
-            disabled={regions.length < 2}
-            searchable
-            comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
-          />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Junctions kept
-          </Text>
-          <NumberInput
-            size="xs"
-            label="Min supporting reads"
-            min={0}
-            step={1}
-            value={minCount}
-            onChange={(v) => setMinCount(Math.max(0, Number(v) || 0))}
-          />
-          <NumberInput
-            size="xs"
+      <>
+        <VizControlGroup title="Junctions kept">
+          <VizNumberInput
             label={config.sample_col ? 'Max junctions per sample' : 'Max junctions'}
             min={1}
             step={5}
             value={topN}
             onChange={(v) => setTopN(Math.max(1, Number(v) || 1))}
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Zoom
-          </Text>
-          <Group gap={4} wrap="nowrap">
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => panBy(-0.25)}
-            >
-              ←
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => zoomBy(ZOOM_FACTOR)}
-            >
-              +
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => zoomBy(1 / ZOOM_FACTOR)}
-            >
-              −
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() => panBy(0.25)}
-            >
-              →
-            </Button>
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              onClick={() => setView(null)}
-              disabled={!view}
-            >
-              Fit
-            </Button>
-          </Group>
-          <Text size="xs" c="dimmed">
-            {view
-              ? `${bp(Math.round(view[0]))}-${bp(Math.round(view[1]))} · ${bp(
-                  Math.round(view[1] - view[0]),
-                )} bp`
-              : 'Whole region. Drag on the plot to zoom into a span.'}
-          </Text>
-        </Stack>
-        {config.coverage_dc_id ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Coverage
+          {rows ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {visible.length.toLocaleString()} of {junctions.length.toLocaleString()} junctions
+                {activeRegion ? ` in ${activeRegion.chrom}` : ''}
+                {minCount > 1 ? `, at least ${minCount} reads` : ''}
+              </Text>
+            </VizFullRow>
+          ) : null}
+          {lanes.length > MAX_LANES_HINT ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {lanes.length} samples stacked. Filter down to a few for a readable panel.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Zoom">
+          <VizControlCell>
+            <Group gap={4} wrap="nowrap">
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => panBy(-0.25)}
+              >
+                ←
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => zoomBy(ZOOM_FACTOR)}
+              >
+                +
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => zoomBy(1 / ZOOM_FACTOR)}
+              >
+                −
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="default"
+                onClick={() => panBy(0.25)}
+              >
+                →
+              </Button>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                onClick={() => setView(null)}
+                disabled={!view}
+              >
+                Fit
+              </Button>
+            </Group>
+          </VizControlCell>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {view
+                ? `${bp(Math.round(view[0]))}-${bp(Math.round(view[1]))} · ${bp(
+                    Math.round(view[1] - view[0]),
+                  )} bp`
+                : 'Whole region. Drag on the plot to zoom into a span.'}
             </Text>
-            <Switch
-              size="xs"
+          </VizFullRow>
+          {regionLocus ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Following the dashboard region on {regionLocus.chrom}.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+        {config.coverage_dc_id ? (
+          <VizControlGroup title="Coverage">
+            <VizSwitch
               checked={showCoverage}
               onChange={(e) => setShowCoverage(e.currentTarget.checked)}
               label="Read depth under the arcs"
             />
             {showCoverage ? (
               <>
-                <Text size="xs" c="dimmed">
-                  Coverage height: {Math.round(coverageHeight * 100)}% of each lane
-                </Text>
-                <Slider
-                  size="xs"
+                <VizSlider
+                  label={`Coverage height: ${Math.round(coverageHeight * 100)}% of each lane`}
                   min={10}
                   max={80}
                   value={Math.round(coverageHeight * 100)}
                   onChange={(v) => setCoverageHeight(v / 100)}
                 />
-                <Switch
-                  size="xs"
+                <VizSwitch
                   checked={coverageLog}
                   onChange={(e) => setCoverageLog(e.currentTarget.checked)}
                   label="Log depth axis"
                 />
-                <ColorInput
-                  size="xs"
-                  format="hex"
-                  label="Coverage fill"
-                  withEyeDropper={false}
-                  popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
-                  swatches={paletteDefaults.palette.slice(0, 12)}
-                  value={coverageColor}
-                  onChange={(v) => setCoverageColor(v || '')}
-                />
+                <VizInlineField label="Coverage fill">
+                  <ColorInput
+                    size="xs"
+                    aria-label="Coverage fill"
+                    format="hex"
+                    withEyeDropper={false}
+                    popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+                    swatches={paletteDefaults.palette.slice(0, 12)}
+                    value={coverageColor}
+                    onChange={(v) => setCoverageColor(v || '')}
+                  />
+                </VizInlineField>
               </>
             ) : null}
-            <Text size="xs" c="dimmed">
-              {coverageError
-                ? `Coverage collection failed to load: ${coverageError}`
-                : coverageActive
-                  ? `Measured depth, peaking at ${coverage.max.toLocaleString()}` +
-                    (coverage.shared && lanes.length > 1
-                      ? '. One profile for the locus: the coverage collection has no sample column, so the same depth is drawn under every lane.'
-                      : '. Replaces the inferred exon support, which estimates the same thing from spliced reads only.')
-                : 'No coverage in this region.'}
-            </Text>
-          </Stack>
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                {coverageError
+                  ? `Coverage collection failed to load: ${coverageError}`
+                  : coverageActive
+                    ? `Measured depth, peaking at ${coverage.max.toLocaleString()}` +
+                      (coverage.shared && lanes.length > 1
+                        ? '. One profile for the locus: the coverage collection has no sample column, so the same depth is drawn under every lane.'
+                        : '. Replaces the inferred exon support, which estimates the same thing from spliced reads only.')
+                    : 'No coverage in this region.'}
+              </Text>
+            </VizFullRow>
+          </VizControlGroup>
         ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Tracks
-          </Text>
-          <Switch
-            size="xs"
+        <VizControlGroup title="Tracks">
+          <VizSwitch
             checked={showSupport}
             onChange={(e) => setShowSupport(e.currentTarget.checked)}
             label="Exon support under the arcs"
             disabled={coverageActive}
           />
           {showSupport ? (
-            <>
-              <Text size="xs" c="dimmed">
-                Support height: {Math.round(supportHeight * 100)}% of each lane
-              </Text>
-              <Slider
-                size="xs"
-                min={10}
-                max={60}
-                value={Math.round(supportHeight * 100)}
-                onChange={(v) => setSupportHeight(v / 100)}
-              />
-            </>
+            <VizSlider
+              label={`Support height: ${Math.round(supportHeight * 100)}% of each lane`}
+              min={10}
+              max={60}
+              value={Math.round(supportHeight * 100)}
+              onChange={(v) => setSupportHeight(v / 100)}
+            />
           ) : null}
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={showGeneModel}
             onChange={(e) => setShowGeneModel(e.currentTarget.checked)}
             label="Exon model lane"
           />
           {showGeneModel ? (
-            <>
-              <Text size="xs" c="dimmed">
-                Exon lane height: {Math.round(geneModelHeight * 100)}% of the panel
-              </Text>
-              <Slider
-                size="xs"
-                min={5}
-                max={40}
-                value={Math.round(geneModelHeight * 100)}
-                onChange={(v) => setGeneModelHeight(v / 100)}
-              />
-            </>
+            <VizSlider
+              label={`Exon lane height: ${Math.round(geneModelHeight * 100)}% of the panel`}
+              min={5}
+              max={40}
+              value={Math.round(geneModelHeight * 100)}
+              onChange={(v) => setGeneModelHeight(v / 100)}
+            />
           ) : null}
-          <Text size="xs" c="dimmed">
-            {coverageActive
-              ? 'The exon model is inferred from the junction ends in this table. Support is off while measured coverage is shown.'
-              : 'Both are inferred from the junction ends in this table, not read from an alignment or an annotation file. Support counts spliced reads only.'}
-          </Text>
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Arcs
-          </Text>
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {coverageActive
+                ? 'The exon model is inferred from the junction ends in this table. Support is off while measured coverage is shown.'
+                : 'Both are inferred from the junction ends in this table, not read from an alignment or an annotation file. Support counts spliced reads only.'}
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+        <VizControlGroup title="Arcs">
           {annotationValues.length > 1 ? (
-            <Select
-              size="xs"
+            <VizSelect
               label="Sides"
               value={arcSplit}
               onChange={(v) => setArcSplit(v === 'alternate' ? 'alternate' : 'annotation')}
@@ -1651,45 +1842,44 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
                 { value: 'alternate', label: 'Alternate along the locus' },
               ]}
               allowDeselect={false}
-              comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+              comboboxProps={{ portalProps: { target: fsPortalTarget } }}
             />
           ) : null}
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={widthBySupport}
             onChange={(e) => setWidthBySupport(e.currentTarget.checked)}
             label="Scale width by read support"
           />
           {widthBySupport ? (
-            <Switch
-              size="xs"
+            <VizSwitch
               checked={logWidth}
               onChange={(e) => setLogWidth(e.currentTarget.checked)}
               label="Log-scaled arc width"
             />
           ) : null}
-          <Text size="xs" c="dimmed">
-            {widthBySupport ? `Thickest arc: ${maxArcWidth} px` : `Arc width: ${maxArcWidth} px`}
-          </Text>
-          <Slider size="xs" min={1} max={18} value={maxArcWidth} onChange={setMaxArcWidth} />
-          <Text size="xs" c="dimmed">
-            Arc height: {Math.round(arcHeight * 100)}%
-          </Text>
-          <Slider
-            size="xs"
+          <VizSlider
+            label={widthBySupport ? `Thickest arc: ${maxArcWidth} px` : `Arc width: ${maxArcWidth} px`}
+            min={1}
+            max={18}
+            value={maxArcWidth}
+            onChange={setMaxArcWidth}
+          />
+          <VizSlider
+            label={`Arc height: ${Math.round(arcHeight * 100)}%`}
             min={30}
             max={150}
             value={Math.round(arcHeight * 100)}
             onChange={(v) => setArcHeight(v / 100)}
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Arc colours
-          </Text>
+          <VizSwitch
+            checked={showCounts}
+            onChange={(e) => setShowCounts(e.currentTarget.checked)}
+            label="Read count at each apex"
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Arc colours">
           {annotationValues.length ? (
-            <Select
-              size="xs"
+            <VizSelect
               label="Colour arcs by"
               value={colorBy}
               onChange={(v) => setColorBy(v === 'sample' ? 'sample' : 'annotation')}
@@ -1698,68 +1888,51 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
                 { value: 'sample', label: config.sample_col || 'Sample' },
               ]}
               allowDeselect={false}
-              comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+              comboboxProps={{ portalProps: { target: fsPortalTarget } }}
             />
           ) : null}
           {annotationValues.length ? (
             annotationValues.map((value) => (
+              <VizInlineField key={value} label={value}>
+                <ColorInput
+                  size="xs"
+                  aria-label={value}
+                  format="hex"
+                  withEyeDropper={false}
+                  popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+                  swatches={paletteDefaults.palette.slice(0, 12)}
+                  value={arcColors[value] || paletteDefaults.map.get(value) || ''}
+                  onChange={(v) => setArcColor(value, v)}
+                />
+              </VizInlineField>
+            ))
+          ) : (
+            <VizInlineField label="All junctions">
               <ColorInput
-                key={value}
                 size="xs"
+                aria-label="All junctions"
                 format="hex"
-                label={value}
                 withEyeDropper={false}
                 popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
                 swatches={paletteDefaults.palette.slice(0, 12)}
-                value={arcColors[value] || paletteDefaults.map.get(value) || ''}
-                onChange={(v) => setArcColor(value, v)}
+                value={arcColors[ARC_COLOR_ALL] || paletteDefaults.palette[0] || ''}
+                onChange={(v) => setArcColor(ARC_COLOR_ALL, v)}
               />
-            ))
-          ) : (
-            <ColorInput
-              size="xs"
-              format="hex"
-              label="All junctions"
-              withEyeDropper={false}
-              popoverProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
-              swatches={paletteDefaults.palette.slice(0, 12)}
-              value={arcColors[ARC_COLOR_ALL] || paletteDefaults.palette[0] || ''}
-              onChange={(v) => setArcColor(ARC_COLOR_ALL, v)}
-            />
+            </VizInlineField>
           )}
           {Object.keys(arcColors).length ? (
-            <Button size="compact-xs" variant="subtle" onClick={() => setArcColors({})}>
-              Back to theme colours
-            </Button>
+            <VizControlCell>
+              <Button size="compact-xs" variant="subtle" onClick={() => setArcColors({})}>
+                Back to theme colours
+              </Button>
+            </VizControlCell>
           ) : null}
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Labels
-          </Text>
-          <Switch
-            size="xs"
-            checked={showCounts}
-            onChange={(e) => setShowCounts(e.currentTarget.checked)}
-            label="Read count at each apex"
-          />
-        </Stack>
-        {lanes.length > MAX_LANES_HINT ? (
-          <Text size="xs" c="dimmed">
-            {lanes.length} samples stacked. Filter down to a few for a readable panel.
-          </Text>
-        ) : null}
-        {rows ? (
-          <Text size="xs" c="dimmed">
-            {visible.length.toLocaleString()} of {junctions.length.toLocaleString()} junctions
-            {activeRegion ? ` in ${activeRegion.chrom}` : ''}
-            {minCount > 1 ? `, at least ${minCount} reads` : ''}
-          </Text>
-        ) : null}
-      </Stack>
+        </VizControlGroup>
+      </>
     ),
     [
       activeRegion,
+      regionLocus,
       regions,
       rows,
       minCount,
@@ -1835,6 +2008,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     <AdvancedVizFrame
       title={metadata.title || 'Splice junctions'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
@@ -1842,7 +2016,27 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       dataRows={dataRows}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {genomeSpyOn && figure ? (
+        <SashimiGenomeSpyView
+          junctions={gsJunctions}
+          coverage={gsCoverage}
+          coverageShared={!config.coverage_sample_col}
+          coverageTitle={coverageLog ? 'log10(1 + depth)' : 'depth'}
+          coverageColour={coverageColor || null}
+          exons={gsExons}
+          lanes={allLanes}
+          annotations={gsColours.annotations}
+          colorBy={colorBy}
+          laneColours={gsColours.laneColours}
+          annotationColours={gsColours.annotationColours}
+          colors={gsColours.colors}
+          region={gsRegion}
+          annotation={config.annotation ?? 'none'}
+          logWidth={logWidth}
+          maxArcWidth={maxArcWidth}
+          showCounts={showCounts}
+        />
+      ) : figure ? (
         <AdvancedVizPlot
           data={applyDataTheme(figure.data, isDark, theme) as any}
           layout={

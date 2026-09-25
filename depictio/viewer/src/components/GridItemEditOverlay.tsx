@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ActionIcon, Group, Menu, ScrollArea, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { SectionIcon } from 'depictio-react-core';
+import { effectiveFit, SectionIcon } from 'depictio-react-core';
 import type { FilterSectionSpec } from 'depictio-react-core';
 
 /**
@@ -24,6 +24,16 @@ import type { FilterSectionSpec } from 'depictio-react-core';
  * read-only mode.
  */
 const DUPLICATABLE_COMPONENT_TYPES = new Set(['card', 'interactive', 'figure']);
+
+/** The types that publish a height of their own, the ones `fitLayoutHeights`
+ *  has a policy for. Mirrors `FIT_POLICIES` in depictio-react-core's autofit. */
+const AUTOFITTABLE_COMPONENT_TYPES = new Set([
+  'text',
+  'card',
+  'table',
+  'figure',
+  'advanced_viz',
+]);
 
 /** Steps for the per-figure font-size multiplier. Wider than the
  *  dashboard-wide preference on purpose: axis labels on a dense figure are
@@ -80,6 +90,12 @@ interface GridItemEditOverlayProps {
   /** Fires with the new multiplier when the user steps the font-size control.
    *  Only rendered for figure components; omit to hide the control. */
   onFontScale?: (componentId: string, scale: number) => void;
+  /** The component's `fit` (`stored_metadata.fit`). Undefined means the
+   *  per-type default. */
+  fit?: 'auto' | 'fixed' | null;
+  /** Puts a tile back under autofit after a manual resize (or opts a figure
+   *  in). Omit to hide the item. */
+  onResetFit?: (componentId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -95,6 +111,8 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   groupSize = 1,
   fontScale,
   onFontScale,
+  fit,
+  onResetFit,
 }) => {
   // The dropdown shows one page at a time: the actions, or the section list.
   // A dashboard can declare any number of sections, and a flat list would grow
@@ -127,6 +145,16 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   // is where that starts, so offering only "No section" here would be a dead
   // end.
   const showMoveToSection = !!onMoveToSection && !!sections?.length;
+
+  // "Size to content" is offered on the types that can answer with a height of
+  // their own, and only when the tile is not already following its content  -
+  // after a manual resize, or on a figure, which holds its authored aspect
+  // ratio until someone asks for this.
+  const showResetFit =
+    !!onResetFit &&
+    !!componentType &&
+    AUTOFITTABLE_COMPONENT_TYPES.has(componentType) &&
+    effectiveFit(componentType, fit) !== 'auto';
 
   // Per-figure font-size multiplier (#854 follow-up). Figures only: their
   // whole Plotly layout font (axis labels, ticks, legend) follows it.
@@ -174,6 +202,15 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                 onClick={handleDuplicate}
               >
                 Duplicate
+              </Menu.Item>
+            )}
+            {showResetFit && (
+              <Menu.Item
+                leftSection={<Icon icon="tabler:arrow-autofit-height" width={14} />}
+                onClick={() => onResetFit!(componentId)}
+                data-testid="reset-auto-height"
+              >
+                Reset to auto height
               </Menu.Item>
             )}
             {showMoveToSection && (

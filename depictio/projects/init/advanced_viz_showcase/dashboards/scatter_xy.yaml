@@ -1,11 +1,11 @@
-# Scatter (X/Y) — one tab of the advanced-visualisation showcase.
+# Replicate concordance: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Scatter (X/Y)'
+title: 'Replicate concordance'
 subtitle: 'Numeric against numeric: replicate concordance for 900 genes, sized by expression, coloured by regulation, against the identity diagonal.'
 icon: 'mdi:chart-scatter-plot'
 icon_color: 'blue'
@@ -44,11 +44,11 @@ components:
     vertical_alignment: top
     section: 'Replicate concordance'
     body: >
-      Both axes are the same measurement, taken in two replicates, so the dashed identity
-      line is the reading: a well-behaved pair hugs it and the points that leave it are
-      the regulated genes. Marker size is mean expression, which is what shows the
-      off-diagonal points are not simply the faint ones. Click or box-select to filter the
-      rest of the dashboard by gene.
+      The same expression measured in two replicates, one point per gene, against the identity
+      line: a good pair hugs it, and the genes that leave it are the regulated ones, sized by
+      mean expression so they are visibly not just the faint ones. Axes and colour-by are in
+      the tile header; click or box-select to filter by gene. Input: normalised counts of nf-
+      core/rnaseq.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-scatter-xy
@@ -57,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'scatter_xy_demo'
     title: 'Replicate concordance'
-    description: 'One point per gene, replicate A against replicate B, sized by mean expression and coloured by the regulation call. Log axes, the reference line, marker size, opacity and top-N labels all live in the Settings ⚙ popover.'
+    description: 'One point per gene, replicate A against replicate B, sized by mean expression and coloured by the regulation call. Axes and colour-by sit in the tile header.'
     section: 'Replicate concordance'
     viz_kind: 'scatter_xy'
     config:
@@ -80,7 +80,8 @@ components:
       legend_pos: "right"
       selection_enabled: true
       selection_column: "gene"
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-scatter-xy-regulation
     index: sxy-f-regulation
@@ -112,6 +113,7 @@ components:
     placement: left
     section: 'Point scope'
     group: 'Point filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#15AABF'

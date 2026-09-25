@@ -1,11 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
-  MultiSelect,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -22,10 +17,30 @@ import {
   UpsetResult,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { emphasizeUpsetColumn, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { demandForItems } from './contentDemand';
+
+/** Room one matrix row (one set) needs: the dot, its label and the gap that
+ *  keeps the connecting line readable. */
+const SET_ROW_PX = 26;
+/** The intersection-size bar panel above the matrix, which is the panel the
+ *  plot is actually read from and must not be squeezed. */
+const INTERSECTION_PANEL_PX = 220;
+/** The intersection labels along the bottom plus the figure's own margins. */
+const UPSET_CHROME_PX = 90;
+/** One annotation track, drawn as its own band under the matrix. */
+const ANNOTATION_TRACK_PX = 90;
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -263,111 +278,107 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   // Memo the controls JSX so its reference is stable — AdvancedVizFrame
   // publishes it via useEffect and a fresh inline JSX every render would
   // refire that effect into an infinite setState loop.
+  // Encoding tier: which intersections are drawn, in what order, and what
+  // their colour means. The annotation tracks and the count labels decorate
+  // whatever survives those four.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        <VizControlGroup title="Intersections">
+          <VizSelect
+            label="Sort by"
+            value={sortBy}
+            onChange={(v) => v && setSortBy(v as typeof sortBy)}
+            data={[
+              { value: 'cardinality', label: 'Cardinality (set size)' },
+              { value: 'degree', label: 'Degree (# of sets)' },
+              { value: 'degree-cardinality', label: 'Degree → cardinality' },
+              { value: 'input', label: 'Input order' },
+            ]}
+          />
+          <VizSelect
+            label="Order"
+            value={sortOrder}
+            onChange={(v) => v && setSortOrder(v as typeof sortOrder)}
+            data={[
+              { value: 'descending', label: 'Descending' },
+              { value: 'ascending', label: 'Ascending' },
+            ]}
+          />
+          <VizNumberInput
+            label="Min intersection size"
+            value={minSize}
+            onChange={(v) => setMinSize(Math.max(0, Number(v) || 0))}
+            min={0}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Colour intersections by"
+            value={colorBy}
+            onChange={(v) => v && setColorBy(v as typeof colorBy)}
+            data={[
+              { value: 'none', label: 'Single colour' },
+              { value: 'set', label: 'Per set (degree-1 bars)' },
+              { value: 'degree', label: 'By degree' },
+            ]}
+          />
+        </VizControlGroup>
+      </>
+    ),
+    [sortBy, sortOrder, minSize, colorBy],
+  );
+
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Select
-          size="xs"
-          label="Sort by"
-          value={sortBy}
-          onChange={(v) => v && setSortBy(v as typeof sortBy)}
-          data={[
-            { value: 'cardinality', label: 'Cardinality (set size)' },
-            { value: 'degree', label: 'Degree (# of sets)' },
-            { value: 'degree-cardinality', label: 'Degree → cardinality' },
-            { value: 'input', label: 'Input order' },
-          ]}
-        />
-        <Select
-          size="xs"
-          label="Order"
-          value={sortOrder}
-          onChange={(v) => v && setSortOrder(v as typeof sortOrder)}
-          data={[
-            { value: 'descending', label: 'Descending' },
-            { value: 'ascending', label: 'Ascending' },
-          ]}
-        />
-        <NumberInput
-          size="xs"
-          label="Min intersection size"
-          value={minSize}
-          onChange={(v) => setMinSize(Math.max(0, Number(v) || 0))}
-          min={0}
-        />
-        <Select
-          size="xs"
-          label="Colour intersections by"
-          value={colorBy}
-          onChange={(v) => v && setColorBy(v as typeof colorBy)}
-          data={[
-            { value: 'none', label: 'Single colour' },
-            { value: 'set', label: 'Per set (degree-1 bars)' },
-            { value: 'degree', label: 'By degree' },
-          ]}
-        />
-        <Text size="xs" c="dimmed" fw={500} mt={4}>
-          Annotations
-        </Text>
-        <Switch
-          size="xs"
-          checked={showAnnotations}
-          onChange={(e) => setShowAnnotations(e.currentTarget.checked)}
-          label="Show annotations"
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
-          size="xs"
-          checked={showSetSizes}
-          onChange={(e) => setShowSetSizes(e.currentTarget.checked)}
-          disabled={!showAnnotations}
-          label="Show set-size bars"
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Intersections
-          </Text>
-          <Switch
-          size="xs"
-          checked={showValues}
-          onChange={(e) => setShowValues(e.currentTarget.checked)}
-          disabled={!showAnnotations}
-          label="Intersection count labels"
-        />
-        </Stack>
-        <MultiSelect
-          size="xs"
-          label="Annotation tracks"
-          description="Per-intersection summary tracks above the bars"
-          placeholder={annotationOptions.length ? 'Pick columns…' : 'No annotation candidates'}
-          value={annotationCols}
-          onChange={setAnnotationCols}
-          data={annotationOptions}
-          disabled={!showAnnotations || annotationOptions.length === 0}
-          clearable
-          searchable
-        />
-        {computeStatus ? (
-          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-            {computeStatus}
-          </Badge>
-        ) : null}
-        {computeMs != null && !computeStatus ? (
-          <Text size="xs" c="dimmed">
-            Built in {computeMs} ms ({rowCount ?? '?'} rows)
-          </Text>
-        ) : null}
-      </Stack>
+      <>
+        <VizControlGroup title="Annotations">
+          <VizSwitch
+            checked={showAnnotations}
+            onChange={(e) => setShowAnnotations(e.currentTarget.checked)}
+            label="Show annotations"
+          />
+          <VizSwitch
+            checked={showSetSizes}
+            onChange={(e) => setShowSetSizes(e.currentTarget.checked)}
+            disabled={!showAnnotations}
+            label="Show set-size bars"
+          />
+          <VizSwitch
+            checked={showValues}
+            onChange={(e) => setShowValues(e.currentTarget.checked)}
+            disabled={!showAnnotations}
+            label="Intersection count labels"
+          />
+          <VizMultiSelect
+            label="Annotation tracks"
+            description="Per-intersection summary tracks above the bars"
+            placeholder={annotationOptions.length ? 'Pick columns…' : 'No annotation candidates'}
+            value={annotationCols}
+            onChange={setAnnotationCols}
+            data={annotationOptions}
+            disabled={!showAnnotations || annotationOptions.length === 0}
+            clearable
+            searchable
+          />
+          {computeStatus ? (
+            <VizFullRow>
+              <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                {computeStatus}
+              </Badge>
+            </VizFullRow>
+          ) : null}
+          {computeMs != null && !computeStatus ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Built in {computeMs} ms ({rowCount ?? '?'} rows)
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+      </>
     ),
     [
-      sortBy,
-      sortOrder,
-      minSize,
-      colorBy,
       showAnnotations,
       showSetSizes,
       showValues,
@@ -423,11 +434,29 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     [figure, figureRevision, isDark, theme],
   );
 
+  // One matrix row per set, under the intersection-bar panel and over any
+  // annotation tracks. Only once a figure exists: the set columns are known
+  // from the schema well before the worker has drawn anything, and a demand
+  // published then would size the tile for a plot that is not there yet.
+  const setsDrawn = figure ? setColumns.length : 0;
+  const annotationTracks = effectiveAnnotationCols.length;
+  const contentDemand = useMemo(
+    () =>
+      demandForItems(
+        setsDrawn,
+        SET_ROW_PX,
+        INTERSECTION_PANEL_PX + UPSET_CHROME_PX + annotationTracks * ANNOTATION_TRACK_PX,
+      ),
+    [setsDrawn, annotationTracks],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'UpSet plot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={undefined}

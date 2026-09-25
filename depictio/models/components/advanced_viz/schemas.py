@@ -114,6 +114,15 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "pos": _INT,
         "score": _FLOAT,
     },
+    # Same three roles as `manhattan`, drawn by GenomeSpy on a locus scale. Kept
+    # identical on purpose so any DC a Manhattan binds renders here unchanged;
+    # the optional roles (end, sample, category) are what turn the same rows
+    # into intervals, per-sample lanes and a coloured coverage profile.
+    "genome_view": {
+        "chr": _STRING,
+        "pos": _INT,
+        "score": _FLOAT,
+    },
     "stacked_taxonomy": {
         "sample_id": _STRING,
         "taxon": _STRING,
@@ -213,6 +222,82 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "lower": _FLOAT,
         "upper": _FLOAT,
     },
+    # One binned resolution of a Hi-C matrix, one row per (bin, bin) pair,
+    # intra- or inter-chromosomal. Coordinate-bound and below the JBrowse
+    # boundary: bins, never per-read pairs. Only a triangle needs to be
+    # present; the renderer mirrors it (`symmetric`).
+    "contact_map": {
+        "chrom1": _STRING,
+        "start1": _NUMERIC,
+        "chrom2": _STRING,
+        "start2": _NUMERIC,
+        "count": _NUMERIC,
+    },
+    # Barcode-rank ("knee") curve: one row per barcode rank per sample, UMI
+    # count descending with rank. The cell-calling threshold comes from the
+    # optional `is_cell` flag, or is estimated from the curve.
+    "knee_plot": {
+        "sample": _STRING,
+        "rank": _NUMERIC,
+        "umi_count": _NUMERIC,
+    },
+    # Ancient-DNA misincorporation profile: frequency of each base change at
+    # each position from a read end, for both ends. `end` is "5p" or "3p".
+    "damage_profile": {
+        "sample": _STRING,
+        "end": _STRING,
+        "position": _NUMERIC,
+        "base_change": _STRING,
+        "frequency": _NUMERIC,
+    },
+    # Two-group comparison computed on demand: one row per observation
+    # (cell, sample) named by `index`; the feature columns are inferred like
+    # complex_heatmap's matrix. The two groups are the dashboard's saved
+    # selection groups, resolved at compute time, not a bound column.
+    "group_compare": {
+        "index": _STRING,
+    },
+    # Isoform structures: one row per exon / CDS block of a transcript on a
+    # base-pair axis, transcripts stacked per gene.
+    "transcript_structure": {
+        "transcript_id": _STRING,
+        "gene_id": _STRING,
+        "chrom": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "feature": _STRING,
+        "strand": _STRING,
+    },
+    # Copy-number profile: one row per bin or per called segment with its
+    # log2 ratio; the optional `segment` role tells the two apart.
+    "cnv_profile": {
+        "sample": _STRING,
+        "chrom": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "log2": _NUMERIC,
+    },
+    # Chord diagram: one row per link between two loci (fusion partners,
+    # structural-variant breakends, translocations).
+    "genome_chord": {
+        "chrom_a": _STRING,
+        "pos_a": _NUMERIC,
+        "chrom_b": _STRING,
+        "pos_b": _NUMERIC,
+    },
+    # One row read as text. Only the identifier is a role: every other column
+    # of the collection is a field the card can show, so listing them here
+    # would be a second copy of the schema that goes stale on the next
+    # pipeline release.
+    "record_card": {
+        "id": _STRING,
+    },
+    # One polyline per sample across N numeric axes. The axes are inferred
+    # from the numeric columns the same way `complex_heatmap` infers its
+    # matrix, so only the line identity is a required role.
+    "parallel_coordinates": {
+        "sample": _STRING,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -308,6 +393,24 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
                 "neg_log_p",
                 "minus_log10_p",
                 "af",
+            }
+        ),
+    },
+    "genome_view": {
+        "chr": frozenset({"chr", "chrom", "chromosome", "#chrom", "contig"}),
+        "pos": frozenset({"pos", "position", "bp", "start", "chromstart"}),
+        "score": frozenset(
+            {
+                "score",
+                "p_value",
+                "pvalue",
+                "neg_log_p",
+                "minus_log10_p",
+                "af",
+                "coverage",
+                "depth",
+                "value",
+                "signal",
             }
         ),
     },
@@ -526,6 +629,75 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "end": frozenset({"end", "stop", "acceptor", "intron_end", "junction_end"}),
         "count": frozenset({"count", "reads", "n_reads", "unique_reads", "support", "depth"}),
     },
+    "contact_map": {
+        "chrom1": frozenset({"chrom1", "chr1", "chromosome1", "chrom_1", "chr_1", "chrom_a"}),
+        "start1": frozenset({"start1", "start_1", "pos1", "bin1", "bin1_start", "start_a"}),
+        "chrom2": frozenset({"chrom2", "chr2", "chromosome2", "chrom_2", "chr_2", "chrom_b"}),
+        "start2": frozenset({"start2", "start_2", "pos2", "bin2", "bin2_start", "start_b"}),
+        "count": frozenset({"count", "contacts", "value", "score", "balanced", "iced", "n"}),
+        "sample": frozenset({"sample", "sample_id", "library", "replicate"}),
+        "end1": frozenset({"end1", "end_1", "bin1_end", "end_a"}),
+        "end2": frozenset({"end2", "end_2", "bin2_end", "end_b"}),
+        "resolution": frozenset({"resolution", "bin_size", "binsize"}),
+    },
+    "knee_plot": {
+        "sample": frozenset({"sample", "sample_id", "library", "run"}),
+        "rank": frozenset({"rank", "barcode_rank", "index", "order"}),
+        "umi_count": frozenset({"umi_count", "umis", "umi", "total_umi", "counts", "total"}),
+        "is_cell": frozenset({"is_cell", "cell", "called", "filtered", "in_filtered"}),
+    },
+    "damage_profile": {
+        "sample": frozenset({"sample", "sample_id", "library", "run"}),
+        "end": frozenset({"end", "read_end", "side", "terminus", "strand_end"}),
+        "position": frozenset({"position", "pos", "offset", "distance", "cycle"}),
+        "base_change": frozenset({"base_change", "change", "substitution", "mutation", "type"}),
+        "frequency": frozenset({"frequency", "freq", "rate", "fraction", "value", "damage"}),
+    },
+    "group_compare": {
+        "index": frozenset({"index", "cell_id", "barcode", "cell", "sample_id", "sample", "id"}),
+    },
+    "transcript_structure": {
+        "transcript_id": frozenset(
+            {"transcript_id", "transcript", "isoform_id", "isoform", "tx_id"}
+        ),
+        "gene_id": frozenset({"gene_id", "gene", "gene_name", "symbol"}),
+        "chrom": frozenset({"chrom", "chr", "chromosome", "contig", "seqid", "seqname"}),
+        "start": frozenset({"start", "begin", "from", "exon_start", "block_start"}),
+        "end": frozenset({"end", "stop", "to", "exon_end", "block_end"}),
+        "feature": frozenset({"feature", "feature_type", "type", "block", "block_type"}),
+        "strand": frozenset({"strand", "sense", "orientation"}),
+    },
+    "cnv_profile": {
+        "sample": frozenset({"sample", "sample_id", "tumour", "tumor", "library", "id"}),
+        "chrom": frozenset({"chrom", "chr", "chromosome", "contig", "seqid"}),
+        "start": frozenset({"start", "begin", "bin_start", "from", "loc_start"}),
+        "end": frozenset({"end", "stop", "bin_end", "to", "loc_end"}),
+        "log2": frozenset(
+            {"log2", "log2_ratio", "log2ratio", "ratio", "logr", "lrr", "depth_ratio", "seg_mean"}
+        ),
+    },
+    "genome_chord": {
+        "chrom_a": frozenset(
+            {"chrom_a", "chrom1", "chr1", "chr_a", "left_chrom", "chromosome_1", "chrom_left"}
+        ),
+        "pos_a": frozenset(
+            {"pos_a", "pos1", "start1", "breakpoint1", "left_pos", "pos_left", "start_a"}
+        ),
+        "chrom_b": frozenset(
+            {"chrom_b", "chrom2", "chr2", "chr_b", "right_chrom", "chromosome_2", "chrom_right"}
+        ),
+        "pos_b": frozenset(
+            {"pos_b", "pos2", "start2", "breakpoint2", "right_pos", "pos_right", "start_b"}
+        ),
+    },
+    "record_card": {
+        "id": frozenset({"id", "sample", "sample_id", "run_id", "library", "name", "feature_id"}),
+        "title": frozenset({"title", "name", "label", "description", "sample_name"}),
+    },
+    "parallel_coordinates": {
+        "sample": frozenset({"sample", "sample_id", "library", "run", "run_id", "id", "name"}),
+        "group": frozenset({"group", "condition", "treatment", "batch", "category", "class"}),
+    },
 }
 
 
@@ -543,6 +715,15 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "manhattan": {
         "feature": _STRING,
         "effect": _FLOAT,
+    },
+    # `end` makes a row an interval (peak, coverage bin), `sample` stacks one
+    # lane per sample on a shared genome axis, `category` colours the marks by
+    # a per-row annotation (gene region, peak caller) instead of by chromosome.
+    "genome_view": {
+        "feature": _STRING,
+        "end": _INT,
+        "sample": _STRING,
+        "category": _STRING,
     },
     "stacked_taxonomy": {},
     "phylogenetic": {
@@ -634,6 +815,43 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": _STRING,
         "annotation": _STRING,
     },
+    "contact_map": {
+        "sample": _STRING,
+        "end1": _NUMERIC,
+        "end2": _NUMERIC,
+        "resolution": _NUMERIC,
+    },
+    "knee_plot": {
+        "is_cell": _BOOLEAN,
+    },
+    "damage_profile": {},
+    "group_compare": {
+        "group": _STRING,
+    },
+    "transcript_structure": {
+        "sample": _STRING,
+        "gene_name": _STRING,
+        "transcript_class": _STRING,
+        "expression": _NUMERIC,
+    },
+    "cnv_profile": {
+        "baf": _FLOAT,
+        "copy_number": _NUMERIC,
+        "segment": _STRING,
+        "label": _STRING,
+    },
+    "genome_chord": {
+        "label": _STRING,
+        "weight": _NUMERIC,
+        "category": _STRING,
+        "sample": _STRING,
+    },
+    "record_card": {
+        "title": _STRING,
+    },
+    "parallel_coordinates": {
+        "group": _STRING,
+    },
 }
 
 
@@ -708,7 +926,9 @@ def _name_score(col: str, aliases: frozenset[str]) -> float:
         # aliases still match a column named exactly that, via the exact-hit and
         # shared-token branches above.
         if len(alias) >= 3:
-            if alias in n or n in alias:
+            # Same guard the other way round: a one-letter column ("a") sits
+            # inside half the alias vocabulary.
+            if alias in n or (len(n) >= 3 and n in alias):
                 best = max(best, 0.85)
             ratio = difflib.SequenceMatcher(None, n, alias).ratio()
             if ratio > 0.8:
@@ -830,30 +1050,86 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
 # source of truth. Kinds whose Pydantic config has a permissive role schema but
 # whose renderer needs a wide matrix / many set columns get a structural floor;
 # falling short multiplies the score down rather than hiding the kind.
-_MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8}
+# group_compare reads a wide observation x feature matrix exactly like
+# complex_heatmap does, and its only required role is a string row id, so the
+# same gate keeps it from claiming every metadata table.
+_MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8, "group_compare": 8}
 _MIN_INT_COLS: dict[AdvancedVizKind, int] = {"upset_plot": 3}
 _MIN_STRING_COLS: dict[AdvancedVizKind, int] = {"sankey": 2}
 _KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {"phylogenetic": "phylogeny"}
 _EMBEDDING_LIVE_MIN_NUMERIC = 10
+# A live embedding is the obvious read only on a wide matrix (an expression or
+# abundance table). Between the two floors it stays pickable but unannounced: a
+# dozen QC metrics can be projected, but a scatter or parallel axes say more.
+_EMBEDDING_LIVE_STRONG_NUMERIC = 30
 
 # Float columns whose name is purely a statistic (DESeq2-style results) — used
 # to reject complex_heatmap / sankey, which want a sample matrix / categorical
 # flow, not a stats table.
 _STAT_LIKE_FLOAT_RE = re.compile(
-    r"^(basemean|log2foldchange|lfcse|stat|pvalue|padj|qvalue|p_?val|fdr|"
-    r"log2fc|effect_size|significance|nes|es|score)$"
+    r"^(basemean|base_mean|log2foldchange|log2_fold_change|lfcse|lfc_se|stat|pvalue|p_value|"
+    r"padj|p_adj|qvalue|q_value|p_?val|fdr|log2fc|lfc|effect_size|significance|nes|es|score)$"
+)
+
+# Numeric columns that are coordinates rather than measurements (genomic,
+# ordinal or geographic: a latitude/longitude pair belongs on a map). They are
+# not axes a parallel-coordinates plot or a generic scatter should propose.
+_POSITIONAL_RE = re.compile(
+    r"^(start|end|stop|begin|pos|position|bp|chromstart|chromend|"
+    r"start_?\d|end_?\d|pos_?\d|rank|index|order|row|row_id|iter|iteration|"
+    r"lat|latitude|lon|lng|long|longitude)$"
+)
+
+# A String column that names the row: what a scatter labels its points with,
+# what a parallel-coordinates line is keyed on, and what a record card shows as
+# its heading. Deliberately about the name only: any String column can be an
+# id, but these are the ones an author would pick.
+_ID_NAME_RE = re.compile(
+    r"^(id|name|label|sample|samples|barcode|cell|gene|feature|accession|run|library|"
+    r"assembly|bin|contig|taxon|transcript|isoform|peak|region|species|strain|tool|caller)$"
+    r"|_(id|name|label|barcode|accession)$|^sample_"
+)
+
+# Coordinate pairs: two numeric columns whose names differ only in the axis
+# marker (`dim_1`/`dim_2`, `pc1`/`pc2`, `umap_x`/`umap_y`, `x_pos`/`y_pos`).
+_PAIR_DIGIT_RE = re.compile(r"^(?P<stem>[a-z][a-z0-9_]*?)_?(?P<axis>[12])$")
+_PAIR_SUFFIX_RE = re.compile(r"^(?P<stem>[a-z0-9_]+)_(?P<axis>[xy])$")
+_PAIR_PREFIX_RE = re.compile(r"^(?P<axis>[xy])_(?P<stem>[a-z0-9_]+)$")
+# Stems that mean the pair is a dimensionality reduction, which `embedding`
+# reads better than a plain scatter (it adds colour-by and live recompute).
+_EMBEDDING_STEMS = frozenset(
+    {"dim", "pc", "pca", "umap", "tsne", "t_sne", "comp", "component", "mds", "lsi", "phate"}
+)
+# Taxonomic or hierarchy level names: the rank columns a sunburst nests. Its
+# only required role is a numeric abundance, which on its own fits any table.
+_RANK_NAME_RE = re.compile(
+    r"^(domain|superkingdom|kingdom|phylum|class|order|family|genus|species|strain|"
+    r"subspecies|rank|level|lineage|taxonomy|taxonomy_lvl|taxon_rank|level_\d+|l\d)$"
 )
 
 # Multiplier applied when a structural gate isn't met: the kind stays in the
 # ranked list but drops well below the "recommended" threshold.
 _GATE_PENALTY = 0.25
 
-# A required role scoring at/above this counts as a strong (name-aware) match;
-# below it the role is "weak" (satisfied by dtype/cast only).
-_STRONG_ROLE_SCORE = 0.75
+# A column name scoring at/above this against a role's aliases is a real name
+# match (an exact alias, or an alias that is a whole snake_case part of it).
+# Below it the role is satisfied by dtype, or by a partial token overlap, only.
+_NAMED_ROLE = 0.85
+
+# Roles that only say which column names the row. Every tabular output has
+# one, so a match on them is no evidence for a kind: a knee plot is not argued
+# by a `sample` column, only by a barcode rank and a UMI count.
+_IDENTITY_ROLES = frozenset({"sample", "sample_id", "feature_id", "id", "index", "label", "series"})
 
 # Score at/above which the builder surfaces a kind under "Recommended".
 RECOMMENDED_SCORE = 0.8
+
+# A kind whose distinctive roles are not all matched by name tops out here,
+# under the recommended bar, however well its dtypes line up.
+_WEAK_CAP = 0.75
+_WEAK_FACTOR = 0.85
+# A named match resting on a partial alias hit tops out here, under an exact one.
+_PARTIAL_NAMED_CAP = 0.95
 
 # Kinds with no required roles (upset_plot, sankey) can only ever be matched on
 # the shape of the table, never on what its columns are called. That is enough
@@ -863,22 +1139,70 @@ RECOMMENDED_SCORE = 0.8
 # so a structural-only match is offered but never announced.
 _STRUCTURAL_ONLY_SCORE = 0.7
 
+# Shape scores for the generic kinds, which bind columns by shape rather than by
+# domain name. A coordinate pair is a strong read; any two measurements plus a
+# row label sit at the bar (a scatter is a sound default, never the only one);
+# two measurements with nothing to label the points stay just under it.
+_SHAPE_PAIR_SCORE = 0.9
+_SHAPE_NUMERIC_ID_SCORE = RECOMMENDED_SCORE
+_SHAPE_NUMERIC_SCORE = 0.7
+# parallel_coordinates' only required role is a string line id, so without a
+# floor it would match every table that has a `sample` column. Its point is the
+# many-metric read, and below four axes a scatter or a small-multiples grid says
+# the same thing more plainly, so a narrow table drops out of "recommended"
+# while staying pickable. Counted over numeric measurement columns (Ints
+# included: read counts and lengths are exactly the axes a QC table carries),
+# not coordinates or statistics. See `_shape_parallel`.
+_PARALLEL_MIN_AXES = 4
+_PARALLEL_WIDE_AXES = 6
+
+# A record card is the detail half of a master/detail pair, so what makes it
+# right is the dashboard, not the columns: another tile on the tab has to select
+# rows the card can look up. With that context it is recommended when the
+# collection holds the selected column and enough fields to be worth a card;
+# without it the card stays pickable under the bar.
+_CONTEXT_SCORE = 0.9
+_RECORD_CARD_MIN_FIELDS = 4
+
+MatchKind = Literal["named", "shape", "context", "weak"]
+
+
+@dataclass(frozen=True)
+class SuggestionContext:
+    """What the builder knows about the dashboard tab the new tile lands on.
+
+    selection_columns: columns emitted by the tab's selection-capable tiles
+    (a table with row selection, a lasso scatter). A record card needs one.
+    existing_kinds: advanced-viz kinds already on the tab, surfaced as a reason
+    only; they do not change the score.
+    """
+
+    selection_columns: frozenset[str] = frozenset()
+    existing_kinds: frozenset[str] = frozenset()
+
 
 @dataclass(frozen=True)
 class VizSuggestion:
     """How well a viz kind fits a DC schema, plus the matching detail.
 
-    score is 0.0 - 1.0 (graded): a weighted blend of per-role dtype
-    compatibility and column-name similarity across the kind's required roles,
-    nudged by optional-role matches and structural gates. ~1.0 means every
-    required role has a strongly-named, dtype-exact column.
+    score is 0.0 - 1.0 and exists to rank. It is not a quality measure: what
+    the UI shows is `match`, the kind of evidence behind the score:
+
+      - ``named``: every distinctive role has a column named like it.
+      - ``shape``: the table has the shape the kind reads (a numeric pair, many
+        numeric axes, set-membership columns), whatever the columns are called.
+      - ``context``: the dashboard tab makes the kind right (a record card
+        following another tile's selection).
+      - ``weak``: dtypes line up, names and shape do not argue for it.
+
+    reasons are short, human strings behind the match (e.g. "x/y: numeric pair
+    dim_1, dim_2"), shown in the picker's tooltip.
 
     role_candidates maps each required role → dtype-compatible column names,
     ranked best-first. The UI uses this to pre-fill the binding dropdowns.
 
     unmet_roles are required roles with no compatible column at all; weak_roles
-    are satisfied only by dtype/cast (no strong name match). Both drive the
-    builder's inline guidance.
+    have a compatible column but none named like the role.
     """
 
     viz_kind: AdvancedVizKind
@@ -886,10 +1210,106 @@ class VizSuggestion:
     role_candidates: dict[str, list[str]]
     unmet_roles: list[str]
     weak_roles: list[str]
+    match: MatchKind = "weak"
+    reasons: tuple[str, ...] = ()
 
 
 def _count_dtypes(dc_schema: dict[str, str], dtypes: frozenset[str]) -> int:
     return sum(1 for d in dc_schema.values() if d in dtypes)
+
+
+def _is_string(dtype: str) -> bool:
+    return dtype in _STRING or dtype == "Categorical"
+
+
+def _id_columns(dc_schema: dict[str, str]) -> list[str]:
+    """String columns whose name says they identify the row."""
+    return [
+        c for c, d in dc_schema.items() if _is_string(d) and _ID_NAME_RE.search(_normalize_name(c))
+    ]
+
+
+def _measure_columns(dc_schema: dict[str, str]) -> list[str]:
+    """Numeric columns that are measurements: not coordinates, not statistics."""
+    out: list[str] = []
+    for c, d in dc_schema.items():
+        if d not in _NUMERIC:
+            continue
+        n = _normalize_name(c)
+        if _POSITIONAL_RE.match(n) or _STAT_LIKE_FLOAT_RE.match(n):
+            continue
+        out.append(c)
+    return out
+
+
+def _numeric_pairs(dc_schema: dict[str, str]) -> list[tuple[str, str, str]]:
+    """Coordinate pairs among the numeric columns, as ``(stem, first, second)``.
+
+    Schema order is kept, so the first pair a table declares comes first.
+    """
+    firsts: dict[tuple[str, str], str] = {}
+    seconds: dict[tuple[str, str], str] = {}
+    order: list[tuple[str, str]] = []
+    for c, d in dc_schema.items():
+        if d not in _NUMERIC:
+            continue
+        n = _normalize_name(c)
+        if n in ("x", "y"):
+            key, axis = ("xy", ""), n
+        else:
+            m = _PAIR_DIGIT_RE.match(n) or _PAIR_SUFFIX_RE.match(n) or _PAIR_PREFIX_RE.match(n)
+            if not m:
+                continue
+            kind = "digit" if m.re is _PAIR_DIGIT_RE else "xy"
+            key, axis = (kind, m.group("stem")), m.group("axis")
+        if key not in order:
+            order.append(key)
+        (firsts if axis in ("1", "x") else seconds).setdefault(key, c)
+    return [
+        (key[1], firsts[key], seconds[key]) for key in order if key in firsts and key in seconds
+    ]
+
+
+def _role_reason(role: str, column: str) -> str:
+    """``"effect_size: log2fc"``, or ``"dim_1 column"`` when the names agree."""
+    return f"{column} column" if _normalize_name(column) == role else f"{role}: {column}"
+
+
+def _front(candidates: list[str], first: str) -> list[str]:
+    """``candidates`` with ``first`` moved to the front."""
+    return [first, *[c for c in candidates if c != first]]
+
+
+def _gate_reason(
+    kind: AdvancedVizKind, dc_schema: dict[str, str], dc_type: str | None
+) -> str | None:
+    """Why a structural gate held the kind down, or None when every gate passed."""
+    min_float = _MIN_FLOAT_COLS.get(kind)
+    if min_float is not None:
+        float_cols = [c for c, d in dc_schema.items() if d in _FLOAT]
+        if len(float_cols) < min_float:
+            return (
+                f"needs a wide numeric matrix ({min_float}+ float columns, has {len(float_cols)})"
+            )
+        if all(_STAT_LIKE_FLOAT_RE.match(_normalize_name(c)) for c in float_cols):
+            return "the float columns are statistics, not a sample matrix"
+    min_int = _MIN_INT_COLS.get(kind)
+    if min_int is not None and _count_dtypes(dc_schema, _INT) < min_int:
+        return f"needs {min_int}+ integer set-membership columns"
+    min_string = _MIN_STRING_COLS.get(kind)
+    if min_string is not None:
+        if _count_dtypes(dc_schema, _STRING) < min_string:
+            return f"needs {min_string}+ categorical columns"
+        if any(
+            _STAT_LIKE_FLOAT_RE.match(_normalize_name(c))
+            for c, d in dc_schema.items()
+            if d in _FLOAT
+        ):
+            return "reads like a statistics table, not a categorical flow"
+    required_dc_type = _KIND_REQUIRES_DC_TYPE.get(kind)
+    if required_dc_type is not None and dc_type is not None and dc_type != required_dc_type:
+        return f"needs a {required_dc_type} data collection"
+    return None
 
 
 def _apply_structural_gates(
@@ -935,17 +1355,147 @@ def _apply_structural_gates(
     return min(score, 1.0)
 
 
+@dataclass
+class _Draft:
+    """A kind's score while the evidence rules refine it."""
+
+    score: float
+    match: MatchKind
+    reasons: list[str]
+    role_candidates: dict[str, list[str]]
+
+
+def _shape_scatter(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """scatter_xy by shape: a coordinate pair, or two measurements plus a label."""
+    ids = _id_columns(dc_schema)
+    pairs = _numeric_pairs(dc_schema)
+    # Statistics are fair axes here (base mean against log2 fold change is an
+    # MA plot); coordinates are not.
+    measures = [
+        c
+        for c, d in dc_schema.items()
+        if d in _NUMERIC and not _POSITIONAL_RE.match(_normalize_name(c))
+    ]
+    if pairs:
+        _stem, first, second = pairs[0]
+        score, reasons = _SHAPE_PAIR_SCORE, [f"x/y: numeric pair {first}, {second}"]
+    elif len(measures) >= 2:
+        first, second = measures[0], measures[1]
+        score = _SHAPE_NUMERIC_ID_SCORE if ids else _SHAPE_NUMERIC_SCORE
+        reasons = [f"x/y: {len(measures)} numeric columns, starting with {first}, {second}"]
+    else:
+        return
+    if ids:
+        reasons.append(f"points labelled by {ids[0]}")
+    if score <= draft.score and draft.match == "named":
+        return
+    draft.score, draft.match, draft.reasons = score, "shape", reasons
+    draft.role_candidates["x"] = _front(draft.role_candidates.get("x", []), first)
+    draft.role_candidates["y"] = _front(draft.role_candidates.get("y", []), second)
+
+
+def _shape_parallel(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """parallel_coordinates by shape: a line id and several measurement axes."""
+    axes = _measure_columns(dc_schema)
+    if not draft.role_candidates.get("sample"):
+        draft.score, draft.match = min(draft.score, _GATE_PENALTY), "weak"
+        draft.reasons = ["needs a String column to key each line on"]
+        return
+    line = draft.role_candidates["sample"][0]
+    if len(axes) < _PARALLEL_MIN_AXES:
+        draft.score *= _GATE_PENALTY
+        draft.match = "weak"
+        draft.reasons = [f"needs {_PARALLEL_MIN_AXES}+ numeric measurement axes, has {len(axes)}"]
+        return
+    draft.score = RECOMMENDED_SCORE + (0.05 if len(axes) >= _PARALLEL_WIDE_AXES else 0.0)
+    draft.match = "shape"
+    draft.reasons = [f"{len(axes)} numeric axes", f"one line per {line}"]
+
+
+def _shape_profile(dc_schema: dict[str, str], draft: _Draft, named: dict[str, str]) -> None:
+    """profile by shape: an ordered, position-like x plus a numeric y per series."""
+    if draft.match == "named" or "x" not in named:
+        return
+    series = draft.role_candidates.get("series") or []
+    ys = [c for c in draft.role_candidates.get("y", []) if c != named["x"]]
+    if not series or not ys:
+        return
+    draft.score, draft.match = RECOMMENDED_SCORE, "shape"
+    draft.reasons = [f"x: ordered axis {named['x']}", f"y: {ys[0]}", f"one curve per {series[0]}"]
+    draft.role_candidates["y"] = _front(draft.role_candidates["y"], ys[0])
+
+
+def _shape_embedding(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """embedding: a reduction pair (dim/PC/UMAP/tSNE), or a wide matrix to project."""
+    if draft.match == "named":
+        return
+    dims = set(draft.role_candidates.get("dim_1", []))
+    for stem, first, second in _numeric_pairs(dc_schema):
+        if stem in _EMBEDDING_STEMS and first in dims and second in dims:
+            draft.score, draft.match = 1.0, "named"
+            draft.reasons = [f"dim_1/dim_2: reduction pair {first}, {second}"]
+            draft.role_candidates["dim_1"] = _front(draft.role_candidates.get("dim_1", []), first)
+            draft.role_candidates["dim_2"] = _front(draft.role_candidates.get("dim_2", []), second)
+            return
+    if not draft.role_candidates.get("sample_id"):
+        return
+    n_numeric = _count_dtypes(dc_schema, _NUMERIC)
+    if n_numeric >= _EMBEDDING_LIVE_MIN_NUMERIC:
+        score = 0.85 if n_numeric >= _EMBEDDING_LIVE_STRONG_NUMERIC else _WEAK_CAP
+        if score > draft.score:
+            draft.score, draft.match = score, "shape"
+            draft.reasons = [f"PCA / UMAP computed live over {n_numeric} numeric columns"]
+
+
+def _context_record_card(
+    dc_schema: dict[str, str], draft: _Draft, context: SuggestionContext | None
+) -> None:
+    """record_card: recommended only when a tile on the tab selects its rows."""
+    draft.match = "weak"
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    if context is None or not context.selection_columns:
+        draft.reasons = ["needs a selecting component (a table or a lasso) on this tab"]
+        return
+    hits = [c for c, d in dc_schema.items() if c in context.selection_columns and _is_string(d)]
+    if not hits:
+        draft.reasons = ["no selecting component on this tab emits a column of this table"]
+        return
+    ids = set(_id_columns(dc_schema))
+    fields = [c for c in dc_schema if c not in ids and c not in hits]
+    draft.role_candidates["id"] = _front(draft.role_candidates.get("id", []), hits[0])
+    if len(fields) < _RECORD_CARD_MIN_FIELDS:
+        draft.reasons = [
+            f"{hits[0]} matches the selection, but only {len(fields)} other columns to show"
+        ]
+        return
+    draft.score, draft.match = _CONTEXT_SCORE, "context"
+    draft.reasons = [
+        f"id column {hits[0]} matches the selection on this tab",
+        f"{len(fields)} descriptive columns to show",
+    ]
+
+
 def _score_kind(
-    kind: AdvancedVizKind, dc_schema: dict[str, str], dc_type: str | None
+    kind: AdvancedVizKind,
+    dc_schema: dict[str, str],
+    dc_type: str | None,
+    context: SuggestionContext | None = None,
 ) -> VizSuggestion:
-    """Score one viz kind against the DC schema."""
+    """Score one viz kind against the DC schema and say what the score rests on."""
     required = CANONICAL_SCHEMAS[kind]
     role_aliases = ROLE_NAMES.get(kind, {})
     role_scores: dict[str, float] = {}
     role_candidates: dict[str, list[str]] = {}
+    # Role -> the column that matches it by name, for roles that have one.
+    named: dict[str, str] = {}
     for role, accepted in required.items():
         aliases = role_aliases.get(role, frozenset({role}))
         role_scores[role], role_candidates[role] = _score_role(dc_schema, aliases, accepted)
+        best = next(
+            (c for c in role_candidates[role] if _name_score(c, aliases) >= _NAMED_ROLE), None
+        )
+        if best is not None:
+            named[role] = best
 
     base = sum(role_scores.values()) / len(required) if required else 0.0
 
@@ -958,25 +1508,92 @@ def _score_kind(
         )
         base = base + 0.1 * (opt / len(optional))
 
-    # Live-compute embedding: a wide numeric matrix with a sample_id column is a
-    # valid embedding even without precomputed dim_1/dim_2.
-    if kind == "embedding":
-        sample_score, _ = _score_role(
-            dc_schema, role_aliases.get("sample_id", frozenset({"sample_id"})), _STRING
-        )
-        if sample_score > 0 and _count_dtypes(dc_schema, _NUMERIC) >= _EMBEDDING_LIVE_MIN_NUMERIC:
-            base = max(base, 0.5 + 0.35 * sample_score)
+    # Evidence from names: a kind is a named match only when every distinctive
+    # (non-identity) role has a column named like it. Otherwise it tops out
+    # under the bar, so a vocabulary-rich kind cannot win on dtypes plus a
+    # `sample` column.
+    distinctive = [r for r in required if r not in _IDENTITY_ROLES]
+    draft = _Draft(score=base, match="shape", reasons=[], role_candidates=role_candidates)
+    if distinctive:
+        missing = [r for r in distinctive if r not in named]
+        if not missing:
+            draft.match = "named"
+            # The identity roles are no evidence either way: a volcano keyed on
+            # an oddly named id column is still a volcano.
+            draft.score = max(base, sum(role_scores[r] for r in distinctive) / len(distinctive))
+            draft.reasons = [_role_reason(r, named[r]) for r in distinctive][:4]
+            # An exact alias for every role outranks a partial one ("name" in
+            # `gene_name`, "log2" in `log2fc`), so the kind whose vocabulary
+            # the table actually speaks comes first.
+            if any(
+                _name_score(named[r], role_aliases.get(r, frozenset({r}))) < 1.0
+                for r in distinctive
+            ):
+                draft.score = min(draft.score, _PARTIAL_NAMED_CAP)
+        else:
+            draft.match = "weak"
+            draft.score = min(base * _WEAK_FACTOR, _WEAK_CAP)
+            draft.reasons = [f"{r}: no column named like it" for r in missing][:3]
+            draft.reasons += [_role_reason(r, named[r]) for r in distinctive if r in named][:2]
+    elif not required:
+        draft.reasons = []
+    else:
+        role = next(iter(required))
+        if role_candidates[role]:
+            draft.reasons = [f"{role}: {role_candidates[role][0]}"]
+        if kind in _MIN_FLOAT_COLS:
+            n_float = _count_dtypes(dc_schema, _FLOAT)
+            draft.reasons.append(f"{n_float} float columns as the matrix")
 
-    score = _apply_structural_gates(kind, dc_schema, base, dc_type)
+    if kind == "scatter_xy":
+        _shape_scatter(dc_schema, draft)
+    elif kind == "parallel_coordinates":
+        _shape_parallel(dc_schema, draft)
+    elif kind == "profile":
+        _shape_profile(dc_schema, draft, named)
+    elif kind == "embedding":
+        _shape_embedding(dc_schema, draft)
+    elif kind == "sunburst" and not any(
+        _is_string(d) and _RANK_NAME_RE.match(_normalize_name(c)) for c, d in dc_schema.items()
+    ):
+        draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+        draft.match = "weak"
+        draft.reasons = ["no rank columns to nest (kingdom, phylum, ... or level_N)"]
+
+    gated = _apply_structural_gates(kind, dc_schema, draft.score, dc_type)
+    if gated < draft.score or (not required and kind in (*_MIN_INT_COLS, *_MIN_STRING_COLS)):
+        reason = _gate_reason(kind, dc_schema, dc_type)
+        if reason is not None:
+            draft.match = "weak"
+            draft.reasons = [reason]
+        elif not required:
+            n = _count_dtypes(dc_schema, _INT if kind in _MIN_INT_COLS else _STRING)
+            label = (
+                "integer columns read as set membership"
+                if kind in _MIN_INT_COLS
+                else "categorical columns"
+            )
+            draft.reasons = [f"{n} {label}"]
+    draft.score = gated
+
+    if kind == "record_card":
+        _context_record_card(dc_schema, draft, context)
+
+    if draft.match != "weak" and draft.score < 0.5:
+        draft.match = "weak"
+    if context is not None and kind in context.existing_kinds:
+        draft.reasons.append("already used on this tab")
 
     unmet = [r for r, s in role_scores.items() if s == 0.0]
-    weak = [r for r, s in role_scores.items() if 0.0 < s < _STRONG_ROLE_SCORE]
+    weak = [r for r, s in role_scores.items() if s > 0.0 and r not in named]
     return VizSuggestion(
         viz_kind=kind,
-        score=round(score, 4),
-        role_candidates=role_candidates,
+        score=round(min(draft.score, 1.0), 4),
+        role_candidates=draft.role_candidates,
         unmet_roles=unmet,
         weak_roles=weak,
+        match=draft.match,
+        reasons=tuple(draft.reasons),
     )
 
 
@@ -984,15 +1601,25 @@ def suggest_viz_kinds(
     dc_schema: dict[str, str],
     min_confidence: float = 0.0,
     dc_type: str | None = None,
+    context: SuggestionContext | None = None,
 ) -> list[VizSuggestion]:
     """Rank every viz kind by how well `dc_schema` fits it.
 
-    Each kind gets a graded `score` in [0, 1] blending per-role dtype
-    compatibility (exact > castable) and column-name similarity (exact alias >
-    fuzzy), plus optional-role nudges and structural gates (e.g. heatmap needs
-    a wide float matrix, phylogenetic needs a phylogeny-type DC). Unlike the
-    old binary matcher, NO kind is dropped by default — the builder presents a
-    ranked "suggest but tolerate" picker.
+    Three kinds of evidence feed the score, and each suggestion says which one
+    it rests on (`match`) and why (`reasons`):
+
+      - names: a domain kind (volcano, knee plot, sunburst) is a named match
+        only when every distinctive role has a column named like it; a partial
+        or dtype-only match stays under the recommended bar;
+      - shape: the generic kinds read a table by its shape (a coordinate pair
+        for scatter_xy, a reduction pair for embedding, several measurement
+        axes for parallel_coordinates), and the role-less kinds by their
+        structural gates;
+      - context: a record card is recommended only when the dashboard tab has
+        a tile whose selection it can follow (``context.selection_columns``).
+
+    NO kind is dropped by default: the builder presents a ranked "suggest but
+    tolerate" picker.
 
     Args:
         dc_schema: Map of column name → polars dtype name (the strings polars
@@ -1001,11 +1628,14 @@ def suggest_viz_kinds(
             ranked. Raise it (e.g. 0.8) to keep only confident matches.
         dc_type: The DC's `config.type` (e.g. "table", "phylogeny"), used by
             kinds with a hard DC-type requirement. None = unknown (no gate).
+        context: What the builder knows about the target dashboard tab. None =
+            no dashboard (the DC card, the CLI): context-only kinds stay
+            under the bar.
 
     Returns:
         List of VizSuggestion sorted by score desc, then viz_kind asc.
     """
-    suggestions = [_score_kind(kind, dc_schema, dc_type) for kind in CANONICAL_SCHEMAS]
+    suggestions = [_score_kind(kind, dc_schema, dc_type, context) for kind in CANONICAL_SCHEMAS]
     suggestions = [s for s in suggestions if s.score >= min_confidence]
     suggestions.sort(key=lambda s: (-s.score, s.viz_kind))
     return suggestions
@@ -1120,6 +1750,14 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "effect": "Optional magnitude, drawn as the stem height and the head size.",
         "label": "Optional name for each stem, used in the hover and the top-N labels.",
     },
+    "record_card": {
+        "id": "Column the incoming selection is matched against: which row the card shows.",
+        "title": "Optional column shown as the card's heading.",
+    },
+    "parallel_coordinates": {
+        "sample": "One polyline per distinct value: the line identity, not a facet.",
+        "group": "Optional categorical column driving the line colour.",
+    },
 }
 
 
@@ -1208,6 +1846,16 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:chart-histogram",
         "category": "tool",
     },
+    "genome_view": {
+        "label": "Genome view",
+        "description": (
+            "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: "
+            "native genome zoom, points, intervals or coverage bars, per-sample lanes, "
+            "a gene annotation lane, and a region brush that filters the dashboard."
+        ),
+        "icon": "tabler:dna-2",
+        "category": "tool",
+    },
     "stacked_taxonomy": {
         "label": "Stacked taxonomy",
         "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
@@ -1233,6 +1881,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
         "icon": "tabler:chart-dots",
         "category": "tool",
+        "legacy": True,
     },
     "complex_heatmap": {
         "label": "ComplexHeatmap (clustered)",
@@ -1248,6 +1897,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "MA plot",
         "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
         "icon": "tabler:chart-bubble",  # tabler has no chart-bell; that one rendered blank
+        "legacy": True,
     },
     "dot_plot": {
         "label": "Dot plot",
@@ -1263,6 +1913,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "QQ plot",
         "description": "Quantile-quantile of -log10(p) vs uniform null — standard p-value distribution QC.",
         "icon": "tabler:chart-line",
+        "legacy": True,
     },
     "sunburst": {
         "label": "Sunburst",
@@ -1293,6 +1944,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "ROC / PR curve",
         "description": "Threshold-sweep precision-recall curve with AUC, one line per tool / caller.",
         "icon": "tabler:chart-line",
+        "legacy": True,
     },
     "confusion_matrix": {
         "label": "Confusion matrix",
@@ -1353,7 +2005,103 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:chart-arcs",
     },
+    "contact_map": {
+        "label": "Contact map",
+        "description": (
+            "Binned Hi-C style contact matrix, symmetric heatmap with log "
+            "colour scale, chromosome selector and optional row/column "
+            "balancing."
+        ),
+        "icon": "tabler:layout-grid",
+    },
+    "knee_plot": {
+        "label": "Knee plot",
+        "description": (
+            "Barcode-rank curve, UMI count vs rank on log-log axes, one line "
+            "per sample, cell-calling cutoff marked."
+        ),
+        "icon": "tabler:trending-down",
+    },
+    "damage_profile": {
+        "label": "Damage profile",
+        "description": (
+            "Ancient-DNA misincorporation frequency by position from the read "
+            "end, 5p and 3p panels, C>T / G>A substitutions highlighted."
+        ),
+        "icon": "tabler:dna-2",
+    },
+    "group_compare": {
+        "label": "Group comparison",
+        "description": (
+            "Differential test between two saved selection groups, computed on "
+            "demand: a volcano of the features and the ranked table behind it."
+        ),
+        "icon": "tabler:arrows-diff",
+    },
+    "transcript_structure": {
+        "label": "Transcript structure",
+        "description": (
+            "Isoforms of one gene stacked on a base-pair axis, exons as blocks "
+            "and introns as lines, novel and known transcripts told apart."
+        ),
+        "icon": "tabler:layout-rows",
+    },
+    "cnv_profile": {
+        "label": "Copy-number profile",
+        "description": (
+            "Log2 ratio per bin along the genome with the called segments over "
+            "it and, when bound, the B-allele frequency underneath."
+        ),
+        "icon": "tabler:chart-dots-3",
+    },
+    "genome_chord": {
+        "label": "Genome chord",
+        "description": (
+            "Chromosomes on a ring, one chord per link between two loci: gene "
+            "fusions, translocations, structural variants."
+        ),
+        "icon": "tabler:circle-dotted",
+    },
+    "record_card": {
+        "label": "Record card",
+        "description": (
+            "One row of a collection read as labelled fields and links, filled "
+            "by the selection another tile emits. The detail half of a "
+            "master/detail dashboard."
+        ),
+        "icon": "tabler:id",
+    },
+    "parallel_coordinates": {
+        "label": "Parallel coordinates",
+        "description": (
+            "One polyline per sample across N metric axes, each axis brushable. "
+            "Reads a many-column QC table as a whole where a scatter would need "
+            "one panel per pair."
+        ),
+        "icon": "tabler:chart-line",
+    },
 }
+
+
+#: Kinds that ship without a producer binding them yet.
+#:
+#: The registry test ``test_every_kind_is_reachable`` asserts that every kind
+#: in ``AdvancedVizKind`` is reachable from a catalog ``renders_as`` entry or a
+#: shipped dashboard, so a kind cannot be added, forgotten, and then found
+#: years later with no way for a user to see it. This set is the audit list of
+#: the exceptions, and it is meant to shrink: an entry here is a promise, not a
+#: parking space. Retired kinds (``ma``, ``qq``, ``enrichment``,
+#: ``roc_pr_curve``) are exempt by a different route, the alias table in
+#: ``configs.py``.
+INCUBATING: frozenset[str] = frozenset(
+    {
+        # differentialabundance's pinned prefix publishes no `tables/gsea/`, so
+        # no pipeline run produces the ranked list this kind reads and only the
+        # showcase's synthetic fixture binds it. Kept and flagged rather than
+        # deleted; revisit on a re-pin.
+        "gsea_running_score",
+    }
+)
 
 
 def kind_descriptors() -> list[dict[str, Any]]:
@@ -1374,6 +2122,13 @@ def kind_descriptors() -> list[dict[str, Any]]:
             "roles": role_dtype_specs(kind),
             # Entries without an explicit category are pure visualisations.
             "category": meta.get("category", "plot"),
+            # True for a kind that survives only so stored dashboards keep
+            # loading: it is rewritten into a view of another kind at read
+            # time (see `_KIND_ALIASES` in configs.py). Pickers hide these;
+            # every other consumer treats an absent flag as False, which is
+            # what makes adding it safe for a snapshot read by an older
+            # client.
+            "legacy": bool(meta.get("legacy", False)),
         }
         for kind, meta in KIND_METADATA.items()
     ]

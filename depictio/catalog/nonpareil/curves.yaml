@@ -1,0 +1,29 @@
+id: nonpareil_curves
+name: Coverage curve
+mode: set/curve
+description: >-
+  The coverage each library would reach at a given sequencing effort, rebuilt from
+  the gamma model Nonpareil publishes in its merged summary. One curve per
+  sequencing library, decimated to 200 points, with the effort actually sequenced
+  and the effort projected for 95 percent coverage carried on every row.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nonpareil/set
+find:
+  path_glob: "**/nonpareil/*all_samples.tsv"
+recipe: nonpareil/curves.py
+fixture: curves.tsv
+renders_as:
+  # Long series x effort x coverage -> the `profile` kind, the same three columns
+  # as a preseq complexity curve or a TSS enrichment profile.
+  - {
+      id: coverage_curve,
+      component: advanced_viz,
+      kind: profile,
+      roles: { series: library, x: sequencing_effort, y: coverage },
+    }
+  - {
+      component: figure,
+      visu_type: line,
+      dict_kwargs: { x: sequencing_effort, y: coverage, color: library },
+    }
+  - { component: interactive, interactive_type: MultiSelect, column_name: library }
+  - { component: table }

@@ -99,9 +99,33 @@ keys:
   # `*.deseq2.FDR0.0*.results.txt` subsets are left out: they are filtered
   # copies of these same rows.
   - bwa/mergedLibrary/macs/broadPeak/consensus/deseq2/*/*.deseq2.results.txt
-  # PCA / sample-distance custom content MultiQC picks up.
+  # PCA / sample-distance custom content. MultiQC picks it up, and since the
+  # 2026-09-22 pass the same two files also back the `deseq2_qc_pca` and
+  # `deseq2_qc_sample_dists` collections behind the Consensus tab's Sample
+  # space section, so this line is load-bearing for the dashboard too.
   - bwa/mergedLibrary/macs/broadPeak/consensus/deseq2/*_mqc.tsv
 prefix_keys: []
+# The megatest is aligned to hg19; the template's GENOME default is hg38, so
+# ingest it with --var GENOME=hg19 (the bundled reference sets it through
+# template.yaml reference.vars).
+# Megatest-specific names the dashboard texts must never carry (lint:
+# depictio/tests/models/test_template_conventions.py, rule e).
+forbidden_terms:
+  - GM12878
+  - FAST
+  - OMNI
+  - STD
+  - HIST1
+  - GAPDH
+  - hg19
+  - GM12878_FAST_R1
+  - GM12878_FAST_R2
+  - GM12878_OMNI_R1
+  - GM12878_OMNI_R2
+  - GM12878_STD_R1
+  - GM12878_STD_R2
+  - protocol
+  - protocols
 renames: {}
 post_fetch_help: |
   === Reprocess MultiQC (the run wrote MultiQC 1.9, Depictio reads >= 1.31 parquet) ===
@@ -113,7 +137,7 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/atacseq/1.2.2 --data-root {dest} --dry-run
+  depictio-cli run --template nf-core/atacseq/1.2.2 --data-root {dest} --var GENOME=hg19 --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/atacseq/1.2.2 --data-root {dest}
+  depictio-cli run --template nf-core/atacseq/1.2.2 --data-root {dest} --var GENOME=hg19

@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   fetchAdvancedVizData,
@@ -21,6 +19,19 @@ import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { demandForPx } from './contentDemand';
+
+/** The stacked bars run vertically: samples are the x axis, so the tile's
+ *  height is furniture, not a count. This is the plot area a stack of
+ *  proportions stays readable in once the tilted sample labels and the axis
+ *  title have taken their share. */
+const TAXONOMY_PLOT_PX = 300;
+/** One wrapped row of the horizontal legend under the plot. */
+const LEGEND_ROW_PX = 22;
+/** Legend entries that fit on one row at a typical tile width. */
+const LEGEND_PER_ROW = 4;
+/** One annotation strip, matching the 22 px the figure's margins reserve. */
+const STRIP_BAND_PX = 22;
 
 /** Generic per-sample categorical annotation strip drawn above/below the
  *  stacked bars. Reusable across any viz with a sample axis when the DC
@@ -184,8 +195,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
-  const { figure, allRanks } = useMemo(() => {
-    if (!rows) return { figure: null, allRanks: [] as string[] };
+  const { figure, allRanks, seriesCount, stripCount } = useMemo(() => {
+    if (!rows) return { figure: null, allRanks: [] as string[], seriesCount: 0, stripCount: 0 };
     const samples = (rows[config.sample_id_col] || []).map((v) => String(v ?? '')) as string[];
     const taxa = (rows[config.taxon_col] || []).map((v) => String(v ?? '')) as string[];
     const ranks = (rows[config.rank_col] || []).map((v) => String(v ?? '')) as string[];
@@ -346,6 +357,10 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const tMargin = 30 + topStrips * 22;
 
     return {
+      // The legend and the strips are what actually grows this tile, so the
+      // figure reports them back rather than the renderer re-deriving them.
+      seriesCount: data.length,
+      stripCount: strips.length,
       figure: {
         data,
         layout: {
@@ -390,82 +405,89 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against
   // ComponentRenderer's setState ("Maximum update depth exceeded").
+  // Encoding tier: rank, sample order, how many taxa survive the pooling, and
+  // whether the bars are read as proportions. Change one of those and it is a
+  // different figure; the legend and the log scale only change how it looks.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        <VizSelect
+          label="Rank"
+          value={rank}
+          onChange={setRank}
+          data={allRanks}
+          clearable
+        />
+        <VizSelect
+          label="Sort samples"
+          value={sampleSort}
+          onChange={(v) => v && setSampleSort(v as SampleSort)}
+          data={[
+            { value: 'input', label: 'Input order' },
+            { value: 'total_abundance', label: 'Total abundance' },
+            { value: 'first_taxon', label: 'Top taxon' },
+          ]}
+          allowDeselect={false}
+        />
+        <VizNumberInput
+          label="Top-N taxa"
+          value={topN}
+          onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+          min={1}
+          max={50}
+        />
+        <VizSwitch
+          checked={normalise}
+          onChange={(e) => setNormalise(e.currentTarget.checked)}
+          label="Normalise"
+        />
+      </>
+    ),
+    [rank, sampleSort, topN, normalise, allRanks],
+  );
+
   const controls = useMemo(
     () => (
-    <Stack gap="xs">
-      <Select
-        size="xs"
-        label="Rank"
-        value={rank}
-        onChange={setRank}
-        data={allRanks}
-        clearable
-      />
-      <Select
-        size="xs"
-        label="Sort samples"
-        value={sampleSort}
-        onChange={(v) => v && setSampleSort(v as SampleSort)}
-        data={[
-          { value: 'input', label: 'Input order' },
-          { value: 'total_abundance', label: 'Total abundance' },
-          { value: 'first_taxon', label: 'Top taxon' },
-        ]}
-        allowDeselect={false}
-      />
-      <NumberInput
-        size="xs"
-        label="Top-N taxa"
-        value={topN}
-        onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
-        min={1}
-        max={50}
-      />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Normalise
-        </Text>
-        <Switch
-        size="xs"
-        checked={normalise}
-        onChange={(e) => setNormalise(e.currentTarget.checked)}
-        label="Normalise"
-      />
-      </Stack>
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Legend
-        </Text>
-        <Switch
-        size="xs"
-        checked={showLegend}
-        onChange={(e) => setShowLegend(e.currentTarget.checked)}
-        label="Legend"
-      />
-      </Stack>
-      {!normalise ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Scale
-          </Text>
-          <Switch
-          size="xs"
-          checked={logY}
-          onChange={(e) => setLogY(e.currentTarget.checked)}
-          label="Log y"
+      <VizControlGroup title="Display">
+        <VizSwitch
+          checked={showLegend}
+          onChange={(e) => setShowLegend(e.currentTarget.checked)}
+          label="Legend"
         />
-        </Stack>
-      ) : null}
-    </Stack>
+        {!normalise ? (
+          <VizSwitch
+            checked={logY}
+            onChange={(e) => setLogY(e.currentTarget.checked)}
+            label="Log y"
+          />
+        ) : null}
+      </VizControlGroup>
     ),
-    [rank, sampleSort, topN, normalise, showLegend, logY, allRanks],
+    [normalise, showLegend, logY],
+  );
+
+  // Vertical bars, so the sample count is the tile's width problem, not its
+  // height: the demand is the plot area plus whatever the legend and the
+  // annotation strips take off it.
+  const contentDemand = useMemo(
+    () =>
+      figure
+        ? demandForPx(
+            TAXONOMY_PLOT_PX +
+              (showLegend ? Math.ceil(seriesCount / LEGEND_PER_ROW) * LEGEND_ROW_PX : 0) +
+              stripCount * STRIP_BAND_PX,
+          )
+        : undefined,
+    [figure, showLegend, seriesCount, stripCount],
   );
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Stacked taxonomy'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}

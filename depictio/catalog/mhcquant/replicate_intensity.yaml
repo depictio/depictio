@@ -1,0 +1,14 @@
+id: mhcquant_replicate_intensity
+name: Peptide intensity per replicate
+mode: immunopeptidomics/replicate-intensity
+description: >-
+  Log10 intensity of every peptidoform in every raw replicate of its sample,
+  long format, from the per-replicate intensity columns of a quantified run.
+  Replicates are numbered in samplesheet ID order within the sample.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/replicate_intensity.py
+fixture: replicate_intensity.tsv
+renders_as:
+  - { component: figure, visu_type: box, dict_kwargs: { x: replicate_label, y: log10_intensity, color: sample } }
+  - { component: card, column: detected, aggregation: sum, secondary_layout: top_n, breakdown_col: replicate_label, top_n_count: 3 }
+  - { component: table }

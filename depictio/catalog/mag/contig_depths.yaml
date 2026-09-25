@@ -1,0 +1,30 @@
+id: mag_contig_depths
+name: Contig coverage
+mode: contig-depths
+description: >-
+  How deeply each contig is covered, once per sample whose reads were mapped
+  back onto the assembly. Length against depth is the plot a binner sees before
+  it decides anything: contigs of one organism sit in a band, and a contig deep
+  in one sample and flat in another belongs to something only one of them
+  carries. Contigs under 1 kbp are left out because no binner uses them.
+find:
+  path_glob: "**/depths/contigs/*-depth.txt.gz"
+  path_glob_alt:
+    - "**/depths/contigs/*-depth.txt"
+    - "**/*_depth.txt.gz"
+recipe: mag/contig_depths.py
+fixture: contig_depths.tsv
+renders_as:
+  - { id: length_vs_depth, component: advanced_viz, kind: scatter_xy,
+      roles: {x: contig_length, y: depth, label: contig_id, color: read_sample, size: mean_depth} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: depth, color: read_sample, title: Contig depth distribution per sample} }
+  - { component: figure, visu_type: box, dict_kwargs: {x: assembly_id, y: depth, color: read_sample, title: Contig depth by assembly and sample} }
+  - { component: card, column: depth, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: contig_length, aggregation: max,
+      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
+  - { component: card, column: contig_id, aggregation: nunique,
+      secondary_layout: composition, breakdown_col: assembler }
+  - { component: card, column: mean_depth, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: table }

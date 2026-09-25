@@ -20,4 +20,5 @@ renders_as:
   - { component: card, column: mitochondrial_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: hqaa_overlapping_peaks_percent, aggregation: average, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: min, threshold_warn: 10.0 }
   - { component: card, column: duplicate_fraction, aggregation: average, secondary_layout: histogram }
+  - { component: card, column: median_fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table, row_selection_enabled: true, row_selection_column: sample }

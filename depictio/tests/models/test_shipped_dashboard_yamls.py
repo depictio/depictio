@@ -37,6 +37,7 @@ import pytest
 import yaml
 
 from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
+from depictio.models.components.advanced_viz.record_link import side_panel_pairs
 from depictio.models.models.dashboards import DashboardDataLite
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -475,22 +476,76 @@ def test_tables_are_full_width(path: Path):
     height on the scrollbar. Half-width tables kept reappearing in shipped
     dashboards because a pair of them looks tidy in the YAML, which is why this
     is a test and not a review note.
+
+    The one exception is a table with a linked record card as its side panel
+    (see `_narrow_table_errors`): the viewer folds that card into a one-column
+    rail until a row is picked, so the table reads at nearly full width.
     """
     doc = yaml.safe_load(path.read_text())
     errors: list[str] = []
     for label, tab in _tabs_of(doc):
-        for comp in tab.get("components") or []:
-            if not isinstance(comp, dict) or comp.get("component_type") != "table":
-                continue
-            layout = comp.get("layout") or {}
-            width = layout.get("w")
-            if width is None or width == GRID_COLUMNS:
-                continue
-            errors.append(
-                f"{label} [{comp.get('tag', '?')}]: table at w={width}; tables span "
-                f"all {GRID_COLUMNS} columns"
-            )
+        errors += [f"{label} {e}" for e in _narrow_table_errors(tab.get("components") or [])]
     assert not errors, f"{_rel(path)} has narrow tables:\n" + "\n".join(errors)
+
+
+def _narrow_table_errors(components: list[Any]) -> list[str]:
+    """Tables narrower than the grid, bar those sharing the row with their card.
+
+    A table may leave room for a record card whose `linked_component` names it,
+    when the card sits beside it on the same row of the same section and the
+    two together span the whole grid.
+    """
+    comps = [c for c in components if isinstance(c, dict)]
+    paired: set[int] = set()
+    for source_pos, card_pos in side_panel_pairs(comps):
+        source_layout = comps[source_pos].get("layout") or {}
+        card_layout = comps[card_pos].get("layout") or {}
+        if source_layout.get("w", 0) + card_layout.get("w", 0) == GRID_COLUMNS:
+            paired.add(source_pos)
+    errors: list[str] = []
+    for pos, comp in enumerate(comps):
+        if comp.get("component_type") != "table" or pos in paired:
+            continue
+        width = (comp.get("layout") or {}).get("w")
+        if width is None or width == GRID_COLUMNS:
+            continue
+        errors.append(
+            f"[{comp.get('tag', '?')}]: table at w={width}; tables span all "
+            f"{GRID_COLUMNS} columns unless a linked record card fills the rest of the row"
+        )
+    return errors
+
+
+@pytest.mark.no_db
+def test_a_table_may_share_its_row_with_its_linked_record_card():
+    table = {
+        "component_type": "table",
+        "tag": "samples-table",
+        "section": "Samples",
+        "row_selection_enabled": True,
+        "row_selection_column": "sample",
+        "layout": {"x": 0, "y": 0, "w": 5, "h": 6},
+    }
+    card = {
+        "component_type": "advanced_viz",
+        "tag": "sample-card",
+        "section": "Samples",
+        "viz_kind": "record_card",
+        "config": {
+            "viz_kind": "record_card",
+            "id_col": "sample",
+            "linked_component": "samples-table",
+        },
+        "layout": {"x": 5, "y": 0, "w": 3, "h": 6},
+    }
+    assert _narrow_table_errors([table, card]) == []
+    # Unlinked, on another row, in another section, or leaving a gap: still narrow.
+    unlinked = {**card, "config": {"viz_kind": "record_card", "id_col": "sample"}}
+    other_row = {**card, "layout": {**card["layout"], "y": 6}}
+    other_section = {**card, "section": "Elsewhere"}
+    gap = {**card, "layout": {**card["layout"], "w": 2}}
+    for variant in (unlinked, other_row, other_section, gap):
+        assert len(_narrow_table_errors([table, variant])) == 1
 
 
 @pytest.mark.no_db
@@ -502,3 +557,56 @@ def test_a_tool_link_costs_the_tile_nothing():
     assert _rendered_length(plain) == len(plain)
     # A bare bracket pair is not a link and keeps its characters.
     assert _rendered_length("see [1] below") == len("see [1] below")
+
+
+def _viz_kind_of(comp: dict[str, Any]) -> str:
+    """The kind a component ends up rendering as, `use:` renders included.
+
+    A catalog render carries its kind in the catalog rather than in the YAML,
+    so the raw key is read first and the model is asked only when it is absent.
+    """
+    kind = comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind")
+    if kind:
+        return str(kind)
+    try:
+        return str(AdvancedVizLiteComponent.model_validate(comp).viz_kind or "")
+    except Exception:
+        return ""
+
+
+@pytest.mark.no_db
+def test_no_double_track_binding():
+    """One collection, one track: `coverage_track` and `genome_view` on the same
+    DC in one tab are two drawings of the same rows.
+
+    They are not the same tile and both are worth keeping as kinds
+    (`coverage_track` owns the Celery binning, the smoothing and the
+    median+IQR ribbon; `genome_view` owns the chromosome axis, the zoom and the
+    region brush), but binding both on one collection gives the reader two
+    tiles saying the same thing, one of which is always the less legible. The
+    answer is one tile with `views: [track, locus]`.
+
+    Enforced since wave 2b (2026-09-23): the six templates that bound both
+    (eager, sarek, methylseq, atacseq, chipseq, cutandrun, plus funcscan and hic)
+    now keep one navigator per collection and reach the other tracks through
+    region links.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        for label, tab in _tabs_of(doc):
+            kinds_by_dc: dict[str, set[str]] = {}
+            for comp in tab.get("components") or []:
+                if not isinstance(comp, dict) or comp.get("component_type") != "advanced_viz":
+                    continue
+                kind = _viz_kind_of(comp)
+                if not kind:
+                    continue
+                dc = str(comp.get("data_collection_tag") or comp.get("dc_tag") or "?")
+                kinds_by_dc.setdefault(dc, set()).add(kind)
+            for dc, kinds in sorted(kinds_by_dc.items()):
+                if {"coverage_track", "genome_view"} <= kinds:
+                    offenders.append(f"{_rel(path)} {label} on '{dc}'")
+    assert not offenders, "coverage_track and genome_view bound on one DC:\n" + "\n".join(offenders)

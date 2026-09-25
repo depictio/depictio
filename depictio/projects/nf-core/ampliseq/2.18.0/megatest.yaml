@@ -68,6 +68,23 @@ keys:
   - qiime2/ancombc/differentials/Category-habitat-level-3/*_slice.csv
 prefix_keys: []
 renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test). Only the sample ids: the habitat values
+# and the catchment name are the reference study's design, which the generated
+# reference_extended.yaml demo layer names on purpose.
+forbidden_terms:
+  - SRR10070130
+  - SRR10070131
+  - SRR10070132
+  - SRR10070133
+  - SRR10070134
+  - SRR10070141
+  - SRR10070149
+  - SRR10070150
+  - SRR10070151
+  - SRR10102392
+  - SRR10102393
+  - SRR10102394
 post_fetch_help: |
   === Quick test commands ===
 

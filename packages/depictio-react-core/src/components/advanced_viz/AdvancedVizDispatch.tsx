@@ -2,6 +2,8 @@ import React from 'react';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { wrapWithChrome } from '../chrome';
+import { clearedSelectionFilters, ownSelection } from '../../selection';
+import { defaultRegionKey, withoutDefaultRegion } from './genomespy/defaultRegionMemo';
 import VolcanoRenderer from './VolcanoRenderer';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
@@ -31,6 +33,16 @@ import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
+import ContactMapRenderer from './ContactMapRenderer';
+import KneePlotRenderer from './KneePlotRenderer';
+import DamageProfileRenderer from './DamageProfileRenderer';
+import GenomeViewRenderer from './GenomeViewRenderer';
+import GroupCompareRenderer from './GroupCompareRenderer';
+import TranscriptStructureRenderer from './TranscriptStructureRenderer';
+import CnvProfileRenderer from './CnvProfileRenderer';
+import GenomeChordRenderer from './GenomeChordRenderer';
+import RecordCardRenderer from './RecordCardRenderer';
+import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -38,6 +50,17 @@ import {
 } from './AdvancedVizExtras';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
+import {
+  AdvancedVizRegionEchoContext,
+  ControlsPlacementContext,
+  ControlsPlacementPicker,
+  genomeRegionEcho,
+  resolveControlsPlacement,
+  useAdvancedVizPlacementDefault,
+  type ControlsPlacement,
+  type ControlsPlacementState,
+} from './AdvancedVizInlineControls';
+import { useVizConfigWriter } from './usePersistedVizControl';
 import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext } from '../DashboardLoadingProvider';
 import type { GroupRenderState } from '../../selectionGroups';
@@ -101,6 +124,14 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   rarefaction: RarefactionRenderer,
   da_barplot: DaBarplotRenderer,
   ancombc_differentials: DaBarplotRenderer,
+  // The four retired kinds (`enrichment`, `ma`, `qq`, `roc_pr_curve`) resolve
+  // to a surviving renderer through a one-screen wrapper rather than by
+  // pointing this map straight at it. The backend rewrites a stored config
+  // into the survivor plus a `view`, but `stored_metadata` reaches the client
+  // unvalidated, so a config that never went through the model would land on
+  // the survivor with no view at all and be drawn as the wrong plot. The
+  // wrapper is what pins the view; it reads no config key of its own, which is
+  // also what keeps the alignment tests honest.
   enrichment: EnrichmentRenderer,
   complex_heatmap: ComplexHeatmapRenderer,
   upset_plot: UpsetRenderer,
@@ -123,6 +154,16 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   gsea_running_score: GseaRunningScoreRenderer,
   sashimi: SashimiRenderer,
   scatter_xy: ScatterXyRenderer,
+  contact_map: ContactMapRenderer,
+  knee_plot: KneePlotRenderer,
+  damage_profile: DamageProfileRenderer,
+  genome_view: GenomeViewRenderer,
+  group_compare: GroupCompareRenderer,
+  transcript_structure: TranscriptStructureRenderer,
+  cnv_profile: CnvProfileRenderer,
+  genome_chord: GenomeChordRenderer,
+  record_card: RecordCardRenderer,
+  parallel_coordinates: ParallelCoordinatesRenderer,
 };
 
 /**
@@ -165,13 +206,65 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     return () => publishToInspector(metadata.index, null);
   }, [publishToInspector, metadata.index, published]);
 
+  // Where this tile's controls are drawn: its own config wins, the
+  // dashboard-level default applies when it says nothing, `popover` (today's
+  // behaviour) is the floor. Resolved here rather than in the frame because
+  // this is the component that holds the metadata and the config sink, and
+  // because the popover content depends on the same answer.
+  const dashboardPlacement = useAdvancedVizPlacementDefault();
+  const storedPlacement = resolveControlsPlacement(metadata.config, dashboardPlacement);
+  // The pin is a view control everywhere and an authoring control where a
+  // config sink is mounted: local state moves the controls immediately, and
+  // `useVizConfigWriter` persists the same value on the surfaces that own the
+  // component's config (the editor, the builder preview). Dropped as soon as
+  // the stored value catches up, so a saved placement is read from one place.
+  const [placementOverride, setPlacementOverride] = React.useState<ControlsPlacement | null>(
+    null,
+  );
+  React.useEffect(() => setPlacementOverride(null), [storedPlacement]);
+  const placement = placementOverride ?? storedPlacement;
+  const writeConfig = useVizConfigWriter(metadata);
+  const setPlacement = React.useCallback(
+    (next: ControlsPlacement) => {
+      setPlacementOverride(next);
+      writeConfig({ controls_placement: next });
+    },
+    [writeConfig],
+  );
+  const placementState = React.useMemo<ControlsPlacementState>(
+    () => ({ placement, setPlacement }),
+    [placement, setPlacement],
+  );
+  // The region a `genome_selection` filter carries into this tile, echoed under
+  // its title. The dispatch is the only place that sees the dashboard filters.
+  const regionEcho = React.useMemo(() => genomeRegionEcho(filters), [filters]);
+
   // Rebuild the popovers from the payload — byte-for-byte what the frame used
-  // to publish ready-made.
+  // to publish ready-made, minus whatever the tile now draws inline.
   const popovers = React.useMemo<React.ReactNode>(() => {
     if (!published) return null;
     const nodes: React.ReactNode[] = [];
-    if (published.controls) {
-      nodes.push(<AdvancedVizSettingsPopover key="settings" controls={published.controls} />);
+    // `rail` draws both tiers in the tile, so there is nothing left to open;
+    // `header` draws the encoding tier and leaves the cosmetic one here.
+    const popoverControls =
+      placement === 'rail' ? null : placement === 'header' ? (
+        published.controls
+      ) : published.primaryControls && published.controls ? (
+        <>
+          {published.primaryControls}
+          {published.controls}
+        </>
+      ) : (
+        published.primaryControls ?? published.controls
+      );
+    if (popoverControls) {
+      nodes.push(
+        <AdvancedVizSettingsPopover
+          key="settings"
+          controls={popoverControls}
+          headerAction={<ControlsPlacementPicker state={placementState} />}
+        />,
+      );
     }
     if (published.data) {
       nodes.push(
@@ -186,8 +279,12 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     if (published.reduction) {
       nodes.push(<LoadAllButton key="load-all" state={published.reduction} />);
     }
+    // Data and reduction stay in the chrome whatever the placement: they are
+    // about the rows behind the figure, not about how it is drawn. Where the
+    // controls live is picked in the header of the controls block itself
+    // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
-  }, [published]);
+  }, [published, placement, placementState]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
@@ -325,6 +422,28 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     ],
   );
 
+  // The tile's own selection (a lasso, a pick, a genome brush), read back from
+  // the dashboard filters so the chrome can offer the same clear action a
+  // table or a scatter figure has. Each renderer already undims itself when
+  // its entry leaves the filters (see `useSelectionRevision`), so clearing the
+  // filter is also what clears the picture. A genome view's opening region
+  // (`default_region`) is not the reader's selection and does not count.
+  const own = React.useMemo(
+    () =>
+      withoutDefaultRegion(
+        ownSelection(filters, metadata.index),
+        metadata.index,
+        defaultRegionKey(metadata.index),
+      ),
+    [filters, metadata.index],
+  );
+  const onResetSelection =
+    onFilterChange && own.filters.length > 0
+      ? () => {
+          for (const cleared of clearedSelectionFilters(own.filters)) onFilterChange(cleared);
+        }
+      : undefined;
+
   const combinedExtras = popovers || extraActions ? (
     <>
       {popovers}
@@ -340,12 +459,22 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       <ComponentIndexContext.Provider value={metadata.index}>
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>
-            {inner}
+            <ControlsPlacementContext.Provider value={placementState}>
+              <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
+                {inner}
+              </AdvancedVizRegionEchoContext.Provider>
+            </ControlsPlacementContext.Provider>
           </GroupColouringReportContext.Provider>
         </GroupStatusBadgeContext.Provider>
       </ComponentIndexContext.Provider>
     </AdvancedVizExtrasProvider>,
-    { extraActions: combinedExtras, showDragHandle },
+    {
+      extraActions: combinedExtras,
+      showDragHandle,
+      onResetFilter: onResetSelection,
+      sourceFilterActive: own.filters.length > 0,
+      selectionCount: own.count,
+    },
   );
 };
 

@@ -22,6 +22,24 @@
 #
 # This pipeline runs no MultiQC: the shinyngs/R reports it ships are not
 # parquet-backed, so there is no multiqc_data DC and no QC tab.
+#
+# GSEA TABLES COME FROM A SIBLING PREFIX. The parameter-set directory of the
+# pinned run is named `deseq2_rnaseq_gsea,deseq2_rnaseq_gprofiler2`, which reads
+# like a promise that both enrichment steps ran. They did not: that string is
+# only the two parameter-set NAMES the run was launched with, and the prefix
+# publishes no `tables/gsea/` and no `tables/gprofiler2/` at all. The GSEA
+# reports the Enrichment tab is built on were fetched from a sibling prefix of
+# the same pipeline that did run the step:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline differentialabundance \
+#     --version 2.0.0 --results-hash 47e3d923bbf2311ace0b9dea12d756287798275e \
+#     --key 'tables/gsea/*/*.gsea_report_for_*.tsv'
+#
+# The key is kept in the manifest below so that a run which DID publish the
+# tables is picked up without editing anything, and so the gap is recorded
+# rather than rediscovered. No prefix of this pipeline publishes gprofiler2
+# TSVs, which is why there is no gprofiler2 collection (see VALIDATION_REPORT
+# DA-D3).
 pipeline: differentialabundance
 version: "2.0.0"
 # s3://nf-core-awsmegatests/differentialabundance/results-<results_sha>/ == the 2.0.0 release tag_sha.
@@ -52,6 +70,9 @@ keys:
   - tables/processed_abundance/*/all.vst.tsv
   # Per-sample DESeq2 size factors (644 B each): library-size normalisation cards.
   - other/deseq2/*/*.deseq2.sizefactors.tsv
+  # GSEA report tables, one per pole of each contrast (gsea_report_raw scan ->
+  # gsea/report.py). NOT PUBLISHED BY THE PINNED PREFIX: see the note below.
+  - tables/gsea/*/*.gsea_report_for_*.tsv
 prefix_keys: []
 renames: {}
 post_fetch_help: |
@@ -78,3 +99,21 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/differentialabundance/2.0.0 --data-root {dest}
+
+# Megatest sample ids, levels, genes and organism that must never appear in a
+# dashboard text (lint: depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - Sample1
+  - Sample24
+  - Uchl1
+  - ENSMUSG00000029223
+  - Mus musculus
+  - mouse
+  - KO
+  - WT
+  - Cre
+  - PBS
+  - Treated
+  - 16H
+  - Condition_genotype_WT_KO
+  - Condition_treatment_Control_Treated

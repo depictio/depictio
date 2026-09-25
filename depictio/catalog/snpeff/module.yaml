@@ -1,0 +1,11 @@
+# SnpEff, multi-output tool -> a folder. It writes three things side by side:
+# an annotated VCF (ANN= INFO key), a CSV summary of sections, and a per-gene
+# effect count table. All three are read here.
+id: snpeff
+name: SnpEff
+description: >-
+  Functional annotation of variant calls: the consequence, the impact class,
+  the gene and the protein change of every call, plus the run-level summaries
+  SnpEff writes next to the annotated VCF.
+homepage: https://pcingola.github.io/SnpEff/
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/snpeff/snpeff

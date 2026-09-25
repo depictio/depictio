@@ -33,6 +33,19 @@ keys:
   # Somatic (indel/): rtg-tools vcfeval + som.py aggregated summaries.
   - indel/summary/tables/*
 prefix_keys: []
+# Terms of the megatest (truth sets, sample ids, callers named in its results)
+# that must never appear in a dashboard text: the template reads any run.
+forbidden_terms:
+  - SEQC2
+  - GIAB
+  - HG002
+  - NA12878
+  - giab_v1
+  - giab_v2
+  - giab_beta
+  - test1
+  - test2
+  - test3
 renames: {}
 post_fetch_help: |
   === Quick test commands ===

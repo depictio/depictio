@@ -1,0 +1,10 @@
+# bcl2fastq: Illumina's BCL-to-FASTQ converter and demultiplexer, the default
+# `--demultiplexer` of nf-core/demultiplex. Every output here is read from the
+# one machine-readable report it writes per run (or per lane when the sample
+# sheet is split by lane): `Stats/Stats.json`. Its BCL Convert twin lives in
+# `depictio/catalog/bclconvert/` and writes the same four schemas, so a
+# dashboard binds either tool's collections with the same `use:` handles.
+id: bcl2fastq
+name: bcl2fastq
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bcl2fastq
+homepage: https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html

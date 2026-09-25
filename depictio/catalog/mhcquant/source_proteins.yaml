@@ -1,0 +1,18 @@
+id: mhcquant_source_proteins
+name: Source proteins
+mode: immunopeptidomics/source-proteins
+description: >-
+  One row per sample and source protein: distinct peptides, shared peptides,
+  PSMs, best score, summed intensity and the peptides themselves. Shared
+  peptides are credited to every protein they map to.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/source_proteins.py
+fixture: source_proteins.tsv
+renders_as:
+  - { component: card, column: protein, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: peptides, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: protein_coverage
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: peptides, y: log10_intensity, label: protein_entry, color: sample, size: psms }
+  - { component: table, row_selection_enabled: true, row_selection_column: protein }

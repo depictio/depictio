@@ -70,6 +70,14 @@ class InteractiveComponent(InteractiveLiteComponent):
     # Range slider specific
     scale: str = Field(default="linear", description="Scale type (linear, log)")
     marks_number: int = Field(default=5, description="Number of marks to show on slider")
+    show_histogram: bool = Field(
+        default=False,
+        description=(
+            "RangeSlider only. Draw the bound column's distribution as a compact "
+            "sparkline directly above the slider track, on the same min and max, so a "
+            "threshold is placed against the data instead of blind. Off by default."
+        ),
+    )
 
     # Select specific
     searchable: bool = Field(default=True, description="Enable search in select components")

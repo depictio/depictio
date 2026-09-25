@@ -1,0 +1,624 @@
+# nf-core/mhcquant Template v3.2.0 - Immunopeptidomics
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/mhcquant/3.2.0 --data-root /path/to/results \
+#     --var METADATA_FILE=/path/to/samplesheet.tsv
+#
+# Tested against nf-core/mhcquant AWS megatest results:
+#   s3://nf-core-awsmegatests/mhcquant/results-6ec12c97f7889a3e1f09ab89930723045c6bac68
+#   (test_full profile, see megatest.yaml for the fetch manifest)
+# ============================================================================
+#
+# DESIGN METADATA. mhcquant does not publish the samplesheet it ran on, so the
+# sample hub reads the file named by METADATA_FILE (default: input/samplesheet.tsv
+# under DATA_ROOT, where download_test_data.sh puts the vendored megatest sheet).
+# The pipeline's input schema guarantees the columns the template joins on (ID,
+# Sample, Condition, ReplicateFileName); GROUP_COL names the sheet column the
+# dashboard groups and filters by (Condition unless told otherwise).
+#
+# SAMPLE KEYS. mhcquant names per-sample outputs <Sample>_<Condition> and
+# per-file outputs after the raw file; the `samples` recipe derives both keys
+# (sample_id, run_id) so every other collection links to it.
+#
+# OPTIONAL ROUTES. Replicate intensities exist only with --quantify, fragment-ion
+# annotations only with --annotate_ions. Pass NO_QUANTIFICATION / NO_ION_ANNOTATION
+# for a run without them (see `conditional` below); the collections are also
+# marked optional.
+template:
+  template_id: "nf-core/mhcquant/3.2.0"
+  description: "nf-core/mhcquant immunopeptidomics template: identification yield and FDR, the MHC length and anchor-motif signature, replicate reproducibility, peptides shared between conditions with their source proteins, and retention-time and mass checks."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "mhcquant output directory (the per-sample <sample>.tsv tables, intermediate_results/, multiqc/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: ID, Sample, Condition, ReplicateFileName, optional Fasta and SearchPreset). Defaults to input/samplesheet.tsv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.tsv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. mhcquant fixes it to ID (one per raw file); the template joins on the derived sample_id and run_id keys instead, so this only records the auto-detected value."
+      required: false
+      default: "ID"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the dashboard groups and filters samples by. Defaults to Condition, the column the mhcquant input schema requires."
+      required: false
+      default: "Condition"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Condition"
+    - name: "NO_QUANTIFICATION"
+      description: "Set (--var NO_QUANTIFICATION=true) for a run without --quantify: the peptide tables carry no replicate intensities, so the replicate collections and the Reproducibility tab are removed."
+      required: false
+    - name: "NO_ION_ANNOTATION"
+      description: "Set (--var NO_ION_ANNOTATION=true) for a run without --annotate_ions: intermediate_results/ion_annotations/ is absent, so the fragment-ion collection is removed."
+      required: false
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.tsv"
+      METADATA_ID_COL: "ID"
+      GROUP_COL: "Condition"
+      GROUP_COL_DISPLAY: "Condition"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"
+          - "search_presets"     # absolute path inside the Nextflow asset clone
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Search (Comet)"
+        key_patterns: ["fasta", "search_presets", "skip_decoy_generation", "default_params_file_comet", "instrument", "enzyme", "activation_method", "digest_mass_range", "prec_charge", "precursor_*", "fragment_*", "number_mods", "fixed_mods", "variable_mods", "num_hits", "use_*_ions", "remove_precursor_peak", "spectrum_batch_size"]
+      - group: "Spectrum preprocessing"
+        key_patterns: ["run_centroidisation", "filter_mzml", "pick_ms_levels"]
+      - group: "Rescoring and FDR"
+        key_patterns: ["rescoring_engine", "feature_generators", "ms2pip_*", "deeplc_*", "fdr_*", "subset_max_train", "global_fdr", "peptide_min_length", "peptide_max_length"]
+      - group: "Quantification"
+        key_patterns: ["quantify", "max_rt_alignment_shift", "quantification_*"]
+      - group: "Downstream outputs"
+        key_patterns: ["generate_speclib", "annotate_ions", "epicore*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "fdr_threshold"
+      - "fdr_level"
+      - "peptide_min_length"
+      - "peptide_max_length"
+      - "rescoring_engine"
+      - "feature_generators"
+      - "precursor_mass_tolerance"
+      - "fragment_mass_tolerance"
+      - "variable_mods"
+      - "quantify"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_present: "NO_QUANTIFICATION"
+      remove_dc_tags:
+        ["mhcquant_replicate_intensity", "mhcquant_replicate_pairs", "mhcquant_replicate_detection"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "NO_ION_ANNOTATION"
+      remove_dc_tags: ["mhcquant_fragment_ions"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "mhcquant Immunopeptidomics"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "mhcquant"
+    version: "3.2.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/mhcquant"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the samplesheet, one row per raw file
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's samplesheet, one row per MS raw file, with the sample and raw-file keys every other collection joins on"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mhcquant/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample id as mhcquant writes it, Sample and Condition joined by an underscore"
+              "run_id": "Raw file name without its extension, the id of every per-file output"
+              "replicate": "Rank of the raw file within its sample, by samplesheet ID"
+              "raw_file": "Raw file name"
+              "ID": "Samplesheet row id, one per raw file"
+              "Condition": "Samplesheet condition"
+              "Sample": "Samplesheet sample name"
+              "ReplicateFileName": "Raw file path or URL as given to the pipeline"
+              "Fasta": "Protein database the raw file was searched against, when the sheet names one per row"
+
+      # ----------------------------------------------------------------
+      # MultiQC: mhcquant's own report sections (custom content)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run: identification counts, score, q-value, m/z, retention-time and intensity distributions, chromatograms, fragment mass error and Percolator feature weights"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            # mhcquant ships every section as custom content, so the module ids
+            # are its own section anchors, and each module holds one plot named
+            # after its section.
+            modules:
+              - "stats_table"
+              - "len_plot"
+              - "mz_plot"
+              - "rt_plot"
+              - "qvalue_plot"
+              - "scores_plot_xcorr"
+              - "peptide_intensity_plot"
+              - "chromatogram"
+              - "mass_error"
+              - "percolator"
+            plots:
+              stats_table: ["stats_table-section"]
+              len_plot: ["len_plot-section"]
+              mz_plot: ["mz_plot-section"]
+              rt_plot: ["rt_plot-section"]
+              qvalue_plot: ["qvalue_plot-section"]
+              scores_plot_xcorr: ["scores_plot_xcorr-section"]
+              peptide_intensity_plot: ["peptide_intensity_plot-section"]
+              chromatogram: ["chromatogram-section"]
+              mass_error: ["mass_error-section"]
+              percolator: ["percolator_median_feature_weights"]
+
+      # ----------------------------------------------------------------
+      # Identified peptides and what is derived from them
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mhcquant_fragment_ions"
+        optional: true  # only with --annotate_ions
+        description: "Matched fragment ions and median fragment mass error per identified peptide, from the pyOpenMS ion annotation"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/fragment_ions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "peptide": "Peptidoform, modifications in parentheses"
+              "fragment_ions": "Fragment ions matched to a peak"
+              "b_ions": "Matched b-series ions"
+              "y_ions": "Matched y-series ions"
+              "other_ions": "Matched internal, immonium and other ions"
+              "fragment_error_ppm": "Median absolute fragment mass error, ppm"
+              "matched_intensity": "Summed intensity of the matched peaks"
+
+      - data_collection_tag: "mhcquant_peptides"
+        description: "Every FDR-filtered peptide precursor of every sample, with score, retention time, m/z, charge, hydropathy, anchors, source proteins and intensity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/peptides.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "peptide": "Peptidoform, modifications in parentheses"
+              "sequence": "Unmodified peptide sequence"
+              "length": "Peptide length in residues"
+              "length_class": "Peptide length as a label, e.g. 9-mer"
+              "length_window": "Class I range (8 to 12), Class II range (13 to 25) or outside both"
+              "modification_state": "Modified or Unmodified"
+              "score": "Best search score of the peptide (score_type names it)"
+              "score_type": "Score the score column holds"
+              "psms": "Peptide-spectrum matches supporting the peptide"
+              "rt_min": "Observed retention time, minutes"
+              "predicted_rt_min": "DeepLC-predicted retention time, minutes"
+              "rt_error_min": "Observed minus predicted retention time, minutes"
+              "mz": "Precursor m/z"
+              "charge": "Precursor charge"
+              "charge_state": "Precursor charge as a label, e.g. 2+"
+              "neutral_mass": "Neutral precursor mass, Da"
+              "gravy": "Kyte-Doolittle grand average of hydropathy"
+              "anchor_p2": "Residue at position 2 (the class I N-terminal anchor)"
+              "anchor_c_term": "C-terminal residue (the class I C-terminal anchor)"
+              "protein": "First source protein accession"
+              "protein_entry": "First source protein entry name"
+              "proteins": "All source protein identifiers, semicolon-separated"
+              "n_proteins": "Number of source proteins"
+              "aa_before": "Residue before the peptide in its source protein(s)"
+              "aa_after": "Residue after the peptide in its source protein(s)"
+              "start": "Start position(s) in the source protein(s)"
+              "spectrum_correlation": "Pearson correlation of the observed and MS2PIP-predicted spectrum"
+              "log10_intensity": "log10 consensus intensity over the sample's replicates"
+              "replicates_quantified": "Replicates the peptide was quantified in"
+              "replicates_total": "Replicates the sample has"
+              "fragment_ions": "Matched fragment ions (with --annotate_ions)"
+              "fragment_error_ppm": "Median absolute fragment mass error, ppm (with --annotate_ions)"
+
+      - data_collection_tag: "mhcquant_sample_summary"
+        description: "One row per sample: yield, length signature, score and retention-time error, and replicate reproducibility"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/sample_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "psms": "Peptide-spectrum matches behind the sample's peptides"
+              "peptides": "Distinct peptide sequences"
+              "peptidoforms": "Distinct peptidoforms (sequence and modifications)"
+              "proteins": "Distinct source proteins"
+              "modified_fraction": "Share of precursors carrying a modification"
+              "median_length": "Median peptide length"
+              "ninemer_fraction": "Share of distinct sequences that are 9-mers"
+              "class_i_fraction": "Share of distinct sequences of 8 to 12 residues"
+              "class_ii_fraction": "Share of distinct sequences of 13 to 25 residues"
+              "median_score": "Median peptide score"
+              "median_abs_rt_error_min": "Median absolute difference between observed and predicted retention time, minutes"
+              "replicates": "Quantified replicates of the sample"
+              "all_replicates_fraction": "Share of peptides quantified in every replicate"
+              "replicate_median_r": "Median Pearson r of log10 intensities over replicate pairs"
+              "replicate_min_r": "Lowest Pearson r of log10 intensities over replicate pairs"
+
+      - data_collection_tag: "mhcquant_length_distribution"
+        description: "Distinct peptide sequences per length and sample, as counts and shares"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/length_distribution.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "length": "Peptide length in residues"
+              "length_class": "Peptide length as a label"
+              "length_window": "Class I range, Class II range or outside both"
+              "peptides": "Distinct sequences of that length"
+              "fraction": "Share of the sample's distinct sequences"
+
+      - data_collection_tag: "mhcquant_peptide_composition"
+        description: "Each sample's peptidoforms split by length, precursor charge and modification state"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/peptide_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "rank": "How the peptides are split: Peptide length, Precursor charge or Modification"
+              "category": "Category within the split"
+              "peptides": "Distinct peptidoforms in the category"
+
+      - data_collection_tag: "mhcquant_motif_matrix"
+        description: "Amino-acid frequency at every position of the well-supported peptide lengths, per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/motif_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "row_id": "Sample, length and position of the row"
+              "sample": "Sample id"
+              "length_class": "Peptide length as a label"
+              "position": "Position in the peptide, P1 at the N-terminus"
+              "peptides": "Distinct sequences of that length behind the frequencies"
+              "A": "Frequency of alanine at the position"
+              "C": "Frequency of cysteine at the position"
+              "D": "Frequency of aspartate at the position"
+              "E": "Frequency of glutamate at the position"
+              "F": "Frequency of phenylalanine at the position"
+              "G": "Frequency of glycine at the position"
+              "H": "Frequency of histidine at the position"
+              "I": "Frequency of isoleucine at the position"
+              "K": "Frequency of lysine at the position"
+              "L": "Frequency of leucine at the position"
+              "M": "Frequency of methionine at the position"
+              "N": "Frequency of asparagine at the position"
+              "P": "Frequency of proline at the position"
+              "Q": "Frequency of glutamine at the position"
+              "R": "Frequency of arginine at the position"
+              "S": "Frequency of serine at the position"
+              "T": "Frequency of threonine at the position"
+              "V": "Frequency of valine at the position"
+              "W": "Frequency of tryptophan at the position"
+              "Y": "Frequency of tyrosine at the position"
+
+      - data_collection_tag: "mhcquant_replicate_intensity"
+        optional: true  # only with --quantify
+        description: "log10 intensity of every peptidoform in every replicate of its sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/replicate_intensity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "peptide": "Peptidoform"
+              "sequence": "Unmodified peptide sequence"
+              "replicate": "Replicate index within the sample, in samplesheet ID order"
+              "replicate_label": "Replicate index as a label"
+              "detected": "1 when the peptide was quantified in the replicate"
+              "log10_intensity": "log10 intensity in the replicate, charge states summed"
+
+      - data_collection_tag: "mhcquant_replicate_pairs"
+        optional: true  # only with --quantify
+        description: "Peptide intensities in two replicates of the same sample, for every replicate pair"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/replicate_pairs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "peptide": "Peptidoform"
+              "pair": "The two replicates compared"
+              "intensity_a": "log10 intensity in the first replicate of the pair"
+              "intensity_b": "log10 intensity in the second replicate of the pair"
+
+      - data_collection_tag: "mhcquant_replicate_detection"
+        optional: true  # only with --quantify
+        description: "Peptidoform by replicate membership matrix, one 0/1 column per replicate index"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/replicate_detection.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "peptide": "Peptidoform"
+              "replicates_detected": "Replicates the peptide was quantified in"
+              "rep_1": "Quantified in replicate 1 (one rep_ column per replicate index)"
+
+      - data_collection_tag: "mhcquant_source_proteins"
+        description: "Source proteins of the identified peptides, one row per sample and protein"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/source_proteins.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "protein": "Protein accession"
+              "protein_entry": "Protein entry name"
+              "peptides": "Distinct peptides from the protein"
+              "shared_peptides": "Of those, peptides that also map to other proteins"
+              "psms": "Peptide-spectrum matches behind the protein's peptides"
+              "best_score": "Best peptide score"
+              "log10_intensity": "log10 of the summed peptide intensities"
+              "peptide_list": "The protein's peptides, alphabetical, first 25"
+
+      - data_collection_tag: "peptide_condition_sharing"
+        description: "Distinct peptide sequences with the samplesheet conditions they were identified in, one 0/1 column per condition"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mhcquant/condition_sharing.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sequence": "Peptide sequence"
+              "length": "Peptide length in residues"
+              "length_class": "Peptide length as a label"
+              "samples_detected": "Samples the peptide was identified in"
+              "conditions_detected": "Conditions the peptide was identified in"
+              "sharing": "All conditions, several conditions or one condition"
+              "conditions": "The conditions, comma-separated"
+
+      # ----------------------------------------------------------------
+      # Comet search, before rescoring (OpenMS CometAdapter pin tables)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "openms_comet_psms"
+        description: "Comet search yield per raw file: spectra, target and decoy PSMs, PSMs at 1% and 5% target-decoy FDR, score and mass-error medians"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "openms/comet_psms.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Raw file name without extension"
+              "spectra_searched": "MS2 spectra with a Comet match"
+              "target_psms": "Best matches to a target sequence"
+              "decoy_psms": "Best matches to a decoy sequence"
+              "psms_1pct_fdr": "Target PSMs at 1% target-decoy FDR on Comet Xcorr, before rescoring"
+              "psms_5pct_fdr": "Target PSMs at 5% target-decoy FDR on Comet Xcorr, before rescoring"
+              "identification_rate": "PSMs at 1% FDR over spectra searched"
+              "median_xcorr_target": "Median Xcorr of target matches"
+              "median_xcorr_decoy": "Median Xcorr of decoy matches"
+              "median_mass_error_ppm": "Median precursor mass error of target matches, ppm"
+              "median_peptide_length": "Median length of target matches"
+
+      - data_collection_tag: "openms_comet_fdr_curve"
+        description: "Target PSMs accepted per raw file as the Comet target-decoy q-value threshold is relaxed from 0 to 10%"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "openms/comet_fdr_curve.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Raw file name without extension"
+              "q_value": "Target-decoy q-value threshold"
+              "accepted_psms": "Target PSMs accepted at the threshold"
+              "xcorr_threshold": "Comet Xcorr of the last accepted PSM"
+
+# ============================================================================
+# LINKS: the samplesheet fans out to every collection
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC panels by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_peptides"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the peptides by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_fragment_ions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the fragment-ion summary by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_sample_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-sample summary by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_length_distribution"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the length distribution by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_peptide_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the peptide composition by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_motif_matrix"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the motif matrix by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_replicate_intensity"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the replicate intensities by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_replicate_pairs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the replicate pairs by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_replicate_detection"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the replicate detection matrix by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mhcquant_source_proteins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the source proteins by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "openms_comet_psms"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the Comet search yield by samplesheet raw files"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "openms_comet_fdr_curve"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the Comet FDR curves by samplesheet raw files"
+    enabled: true
+  # Peptide-level filters (length, score, charge) set on the peptide table reach
+  # the tables derived from it that carry the same key.
+  - source_dc_tag: "mhcquant_peptides"
+    source_column: "length_class"
+    target_dc_tag: "mhcquant_length_distribution"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "length_class"}
+    description: "Carry a peptide-length selection to the length distribution"
+    enabled: true
+  - source_dc_tag: "mhcquant_peptides"
+    source_column: "length_class"
+    target_dc_tag: "mhcquant_motif_matrix"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "length_class"}
+    description: "Carry a peptide-length selection to the motif matrix"
+    enabled: true
+  - source_dc_tag: "mhcquant_peptides"
+    source_column: "sequence"
+    target_dc_tag: "peptide_condition_sharing"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sequence"}
+    description: "Carry the peptides left by the sample and peptide filters to the condition sharing table"
+    enabled: true

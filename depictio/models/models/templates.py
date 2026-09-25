@@ -36,6 +36,13 @@ class TemplateVariable(BaseModel):
     name: str = Field(..., description="Variable name (e.g., 'DATA_ROOT')")
     description: str = Field(..., description="Human-readable description of this variable")
     required: bool = Field(default=True, description="Whether this variable must be provided")
+    default: str | None = Field(
+        default=None,
+        description="Value used when the run does not provide this variable (e.g. GENOME: hg38). "
+        "A defaulted variable resolves {NAME} in template.yaml and in the dashboard YAMLs, "
+        "and satisfies `required`, but does not count as provided for `if_var_present` "
+        "conditionals.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -296,6 +303,10 @@ class TemplateMetadata(BaseModel):
     def get_required_variable_names(self) -> list[str]:
         """Return names of all required variables."""
         return [var.name for var in self.variables if var.required]
+
+    def get_variable_defaults(self) -> dict[str, str]:
+        """Return ``{name: default}`` for every declared variable that has a default."""
+        return {var.name: var.default for var in self.variables if var.default is not None}
 
 
 class ExpectedDataCollection(BaseModel):

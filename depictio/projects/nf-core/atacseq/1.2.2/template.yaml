@@ -16,10 +16,18 @@
 # SCOPE: BROAD PEAKS, MERGED LIBRARY.
 # This run was called with `--narrow_peak false`, so the peak tree lives under
 # `bwa/mergedLibrary/macs/broadPeak/` and the calls are `*_peaks.broadPeak`
-# (BED6+3, no summit column). The narrowPeak route writes the same tree with
-# `*_peaks.narrowPeak` and is served by the catalog's `macs2/peaks.py`; the
-# broad route needs its own reader, which lives in `recipes/broad_peaks.py`
-# until the catalog gains a broadPeak output (see VALIDATION_REPORT.md).
+# (BED6+3, no summit column), read by the catalog's `macs2/broad_peaks.py`.
+#
+# There is deliberately NO narrowPeak route variant. The mechanism for one
+# exists (`template.conditional` with `override_dcs`, which would repoint
+# `macs2_broad_peaks` at `macs2/peaks.py`), but the two MACS2 schemas differ in
+# a bound column: broad reports `midpoint`, narrow reports `summit`, and the
+# dashboard binds the broad catalog renders. A narrow route would therefore also
+# need its own `dashboards:` override, i.e. a second copy of base.yaml, so it is
+# recorded as AT-D15 in VALIDATION_REPORT.md rather than half-built. Every other
+# collection already takes both routes: the HOMER, consensus and DESeq2 globs
+# match `macs/*/`, not `macs/broadPeak/`.
+#
 # atacseq also publishes the whole peak/consensus/DESeq2 tree a second time per
 # merged REPLICATE (`bwa/mergedReplicate/`, `.mRp.clN`). Only the merged-library
 # level is bound here: the recipes match on file name, so binding both would
@@ -61,10 +69,15 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing atacseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
-  # The bundled reference dataset needs no variable beyond DATA_ROOT: the design
-  # sheet is part of the run's own pipeline_info/ output.
+    - name: "GENOME"
+      description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=<assembly> for a run on another build."
+      required: false
+      default: "hg38"
+  # The bundled reference dataset: the design sheet is part of the run's own
+  # pipeline_info/ output, and the megatest was aligned to hg19.
   reference:
-    vars: {}
+    vars:
+      GENOME: "hg19"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -126,6 +139,7 @@ workflows:
               "merged_library": "<sample>.mLb.clN, the merged filtered library the peak calls are named after"
               "group": "Design group; the level the DESeq2 contrasts compare"
               "replicate": "Biological replicate number inside the group"
+              "replicate_label": "The replicate as a label (R1, R2, ...), what the replicate filter selects on"
               "n_libraries": "Sequencing libraries merged into the sample"
               "libraries": "Those library ids, comma separated"
 
@@ -148,9 +162,15 @@ workflows:
 
       # ----------------------------------------------------------------
       # MultiQC. Reprocessed with MultiQC 1.35: the anchors below are the
-      # 1.35 ones, not the 1.9 ones the run itself published. The scan
-      # pattern pins the reprocessed path so it can never pick up the old
-      # report, which sits one level deeper under multiqc/broadPeak/.
+      # 1.35 ones, not the 1.9 ones the run itself published.
+      #
+      # The scan pattern is the shared one every template uses. The optional
+      # middle segment is what makes it portable: this mirror carries the
+      # reprocessed report at `multiqc/multiqc_data/`, while a real atacseq run
+      # writes it one level deeper under the peak route it called
+      # (`multiqc/broadPeak/multiqc_data/`). Only one parquet exists either way,
+      # because the 1.9 report under `multiqc/broadPeak/` is JSON and never
+      # matches.
       # ----------------------------------------------------------------
       - data_collection_tag: "multiqc_data"
         description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.9, which ships no parquet)"
@@ -160,7 +180,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc\\.parquet$"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -298,6 +318,7 @@ workflows:
               "median_mapq": "Median mapping quality"
               "properly_paired_fraction": "Properly paired and mapped reads over total_reads"
               "maximum_proper_pair_fragment_size": "Longest proper pair observed"
+              "median_fragment_length": "Median fragment length of the library, weighted by read count over its fragment-length histogram"
               "ataqv_version": "ataqv version that wrote the report"
 
       - data_collection_tag: "ataqv_fragment_length"
@@ -509,7 +530,14 @@ workflows:
                 # tables and, on atacseq, the merged-REPLICATE copy of the whole
                 # peak tree, concatenating two aggregation levels into one table
                 # under a `sample` column that then means two different things.
-                glob_pattern: "bwa/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt"
+                #
+                # The leading `**/` is what keeps this portable: the aligner
+                # directory is `bwa/` only because this run used BWA, and a run
+                # with `--aligner bowtie2|chromap|star` writes the same tree under
+                # its own name. `mergedLibrary/macs/` is the part that carries the
+                # meaning and is the part the glob anchors on; the `*` after
+                # `macs/` covers both the broadPeak and the narrowPeak route.
+                glob_pattern: "**/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -647,7 +675,68 @@ workflows:
               "significant": "padj < 0.05 and |log2fc| >= 1"
               "direction": "up / down / not significant"
 
+      # ----------------------------------------------------------------
+      # DESeq2 QC on the consensus count matrix, before any contrast is
+      # read. nf-core's own `featurecounts_deseq2.r` writes both files as
+      # MultiQC custom content beside the contrast tables and names them
+      # after the consensus set (`consensus_peaks.mLb.clN.pca.vals_mqc.tsv`)
+      # rather than after DESeq2, so both DCs repoint the catalog glob at
+      # the merged-library consensus tree. The `_mqc` header block is a
+      # comment prefix the catalog recipes already skip.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_qc_pca"
+        optional: true  # atacseq runs DESeq2 only when the design has replicated groups
+        description: "Principal components of the consensus count matrix, one row per library, with the variance each component explains"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/qc_pca.py"
+            source_overrides:
+              pca:
+                glob_pattern: "**/mergedLibrary/macs/*/consensus/deseq2/*.pca.vals*"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Library the point belongs to"
+              "dim_1": "Coordinate on the first principal component"
+              "dim_2": "Coordinate on the second principal component"
+              "dim_1_percent": "Percent of the total variance the first component explains"
+              "dim_2_percent": "Percent of the total variance the second component explains"
+
+      - data_collection_tag: "deseq2_qc_sample_dists"
+        optional: true  # same route condition as deseq2_qc_pca above
+        description: "Euclidean distance between every pair of libraries on the consensus count matrix, as a square symmetric table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/qc_sample_dists.py"
+            source_overrides:
+              dists:
+                glob_pattern: "**/mergedLibrary/macs/*/consensus/deseq2/*.sample.dists*"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              # The remaining columns are one per library of the run, so they
+              # are named only at ingest, as in macs2_consensus_fc.
+              "sample": "Library the row is centred on; every other column is one library of the run"
+
 links:
+  # The library sheet reaches the read-level MultiQC panels on its own key
+  # (<sample>_T<n>), which is what the MultiQC tab's Library scope filter picks.
+  - source_dc_tag: "design_reads"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the read-level MultiQC panels by the sequencing libraries picked in the left panel"
+    enabled: true
+
   # Hub -> the collections that speak the short sample name.
   - source_dc_tag: "sample_design"
     source_column: "sample"
@@ -739,6 +828,13 @@ links:
       resolver: "direct"
       target_field: "peak_id"
     description: "Carry a peak selected on the MACS2 panels over to its HOMER annotation"
+    # Every filter on macs2_broad_peaks walks this link, not only a peak lasso:
+    # a slider's [min, max] used to be resolved as two discrete peak ids and
+    # emptied every HOMER tile (AT-D26, 2026-09-23). Range filters now travel as
+    # a span (`range_filter` on the resolve request), so the q-value and width
+    # sliders and the locus navigator's position range reach HOMER as the peaks
+    # they select. Re-enabled with that fix; the live project was patched to
+    # disabled during wave 2b and takes this value at the next ingest.
     enabled: true
 
   - source_dc_tag: "homer_annotated_peaks"
@@ -749,6 +845,31 @@ links:
       resolver: "direct"
       target_field: "peak_id"
     description: "Carry a peak selected in the annotation table back to the MACS2 panels"
+    enabled: true
+
+  # Region links: the Peak locus tab's navigator (a genome_view on
+  # macs2_broad_peaks) emits a chromosome and a position filter on its own
+  # `chr` / `start` columns. These rename that pair onto the two collections
+  # stacked under it, so the consensus intervals and the HOMER track clamp to
+  # the same region. No data is read to resolve them (resolver: region).
+  - source_dc_tag: "macs2_broad_peaks"
+    source_column: "chr"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region typed or brushed on the peak navigator narrows the consensus intervals"
+    enabled: true
+
+  - source_dc_tag: "macs2_broad_peaks"
+    source_column: "chr"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region typed or brushed on the peak navigator narrows the HOMER annotation track"
     enabled: true
 
   # Consensus level: the interval the overlap matrix carries is the interval the
@@ -832,4 +953,45 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the TSS distance profiles by the samples picked on the design sheet"
+    enabled: true
+
+  # The two DESeq2 QC collections are the only sample-keyed rows on the
+  # consensus level, so these two links are what carries the left-rail sample
+  # scope onto the Consensus tab at all.
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "deseq2_qc_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the consensus PCA by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "deseq2_qc_sample_dists"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the consensus distance matrix by the samples picked on the design sheet"
+    enabled: true
+
+  # The DESeq2 contrasts are per GROUP, not per sample: a contrast is named
+  # after the two protocols compared (GM12878_FASTvsGM12878_STD). The
+  # `wildcard` resolver matches a target value that starts with the group, so
+  # the persistent group filter reaches the Differential tab. The consensus
+  # tables cannot take the same link: atacseq 1.2.2 builds ONE consensus set
+  # across every library, so `consensus_set` holds a single value that no
+  # group name prefixes, and a per-sample link is impossible because both
+  # matrices aggregate over samples by construction (the samples are columns).
+  - source_dc_tag: "sample_design"
+    source_column: "group"
+    target_dc_tag: "deseq2_results"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "contrast"
+    description: "Narrow the differential accessibility panels to the contrasts of the group picked in the left rail"
     enabled: true

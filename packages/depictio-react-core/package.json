@@ -26,6 +26,7 @@
     "src"
   ],
   "peerDependencies": {
+    "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",
     "@mantine/colors-generator": "^7.17.8",
     "@mantine/core": "^7.14.0",
@@ -42,6 +43,7 @@
     "react-resizable": "^3.0.5"
   },
   "devDependencies": {
+    "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",
     "@mantine/colors-generator": "^7.17.8",
     "@mantine/core": "^7.14.0",

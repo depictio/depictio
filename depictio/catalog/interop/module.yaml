@@ -1,0 +1,10 @@
+# Illumina InterOp: the binary run metrics (tiles, clusters, quality, error
+# rate, phasing) an Illumina instrument writes under `InterOp/`, the numbers
+# Sequencing Analysis Viewer (SAV) draws. The binaries themselves are not
+# tabular, so this tool reads the text table the InterOp `summary` executable
+# prints from them (`interop_summary --csv=1 <run folder>`), the same file
+# MultiQC's `interop` module reads.
+id: interop
+name: Illumina InterOp
+source_url: https://github.com/Illumina/interop
+homepage: https://illumina.github.io/interop/summary_table.html

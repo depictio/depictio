@@ -1,0 +1,20 @@
+id: multiqc_mirtrace_length
+name: Read length distribution
+origin_tool: miRTrace
+mode: qc/small-rna
+description: >-
+  Reads per length for each library, as a percentage of the library, with the
+  length band miRTrace draws (under 18 nt, 18 to 26 nt for miRNA, 26 to 40 nt,
+  40 nt and over). A clean miRNA library peaks at 20 to 24 nt.
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. multiqc/<route>/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+recipe: multiqc/mirtrace_length.py
+fixture: mirtrace_length.tsv
+renders_as:
+  - { id: length_profile, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: length, y: percent} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: length, y: percent, color: sample} }
+  - { component: table }

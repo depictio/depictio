@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  alpha,
   Group,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
@@ -19,6 +16,15 @@ import {
 } from '../../api';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { dotSizeKey, dotSizes, type DotSizeKeyEntry } from './dotSizes';
 import { splitFigureByGroups } from './groupSplit';
@@ -26,6 +32,29 @@ import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { demandForItems } from './contentDemand';
+
+/** Room one y-axis category needs: a dot at its largest plus the gap that
+ *  keeps two neighbouring rows from touching. */
+const DOT_ROW_PX = 22;
+/** Fixed furniture around the rows: the tilted cluster labels along the
+ *  bottom (b: 100 in the layout), the top margin, and the dot-size key drawn
+ *  under the plot. */
+const DOT_PLOT_CHROME_PX = 170;
+
+/** Same marks, same size and colour channels, a different table.
+ *
+ *  `dotplot` is the single-cell marker layout (cluster by gene). `enrichment`
+ *  puts a pathway on the y axis and its NES on x, which is that same grammar
+ *  read over a gene-set table, so the two share a tile rather than a renderer
+ *  each. Which views a tile offers follows from its bindings. */
+const ALL_VIEWS = ['dotplot', 'enrichment'] as const;
+type View = (typeof ALL_VIEWS)[number];
+
+const VIEW_LABELS: Record<View, string> = {
+  dotplot: 'Markers',
+  enrichment: 'Enrichment',
+};
 
 interface DotPlotConfig {
   cluster_col: string;
@@ -34,6 +63,14 @@ interface DotPlotConfig {
   frac_expressing_col: string;
   max_dot_size?: number;
   min_dot_size?: number;
+  /** Enrichment-view bindings. All optional: a marker dot plot binds none. */
+  term_col?: string | null;
+  nes_col?: string | null;
+  padj_col?: string | null;
+  gene_count_col?: string | null;
+  source_col?: string | null;
+  view?: View;
+  views?: View[] | null;
 }
 
 interface Props {
@@ -47,6 +84,19 @@ interface Props {
 }
 
 type AxisSort = 'name' | 'mean' | 'frac';
+type TermSort = 'nes' | 'significance' | 'gene_count' | 'name';
+type ColourBy = 'neg_log10_padj' | 'abs_nes' | 'nes_sign' | 'gene_count';
+// 'Auto' keeps the per-mode, per-theme palette the enrichment view has always
+// drawn; any named scale overrides it, in either view.
+type DotPlotColourScale = 'Auto' | ColourScale;
+
+/** The scale a plain sequential channel draws with.
+ *
+ *  'Auto' has no per-mode answer outside the enrichment view's colour-by, so
+ *  here it only follows the theme: Plasma holds its contrast on a dark canvas
+ *  where Viridis sinks into it. */
+const sequentialScale = (scale: DotPlotColourScale, isDark: boolean): ColourScale =>
+  scale === 'Auto' ? (isDark ? 'Plasma' : 'Viridis') : scale;
 
 /** Significant digits that separate the key's steps without printing noise.
  *  The steps fall by quarters, so two digits keep 0.097 / 0.024 / 0.0060 apart
@@ -103,10 +153,11 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as DotPlotConfig;
 
+  const [view, setView] = usePersistedVizControl<View>(metadata, 'view', 'dotplot');
   const [maxSize, setMaxSize] = usePersistedVizControl(metadata, 'max_dot_size', 22);
   const [minSize, setMinSize] = usePersistedVizControl(metadata, 'min_dot_size', 2);
   const [reverseScale, setReverseScale] = usePersistedVizControl(metadata, 'reverse_scale', false);
-  const [colourScale, setColourScale] = usePersistedVizControl<ColourScale>(metadata, 'colour_scale', 'Viridis');
+  const [colourScale, setColourScale] = usePersistedVizControl<DotPlotColourScale>(metadata, 'colour_scale', 'Viridis');
   const [logTransform, setLogTransform] = usePersistedVizControl(metadata, 'log_transform', false);
   const [geneSort, setGeneSort] = usePersistedVizControl<AxisSort>(metadata, 'gene_sort', 'name');
   const [clusterSort, setClusterSort] = usePersistedVizControl<AxisSort>(metadata, 'cluster_sort', 'name');
@@ -116,17 +167,61 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // most cluster-discriminating genes are shown; Load-All (below) lifts the cap.
   const [maxGenes, setMaxGenes] = usePersistedVizControl(metadata, 'max_genes', 50);
   const [fullGenes, setFullGenes] = useState<boolean>(false);
+  // Enrichment view. The source filter stays local state: it narrows what is on
+  // screen rather than saying how the tile should look.
+  const [topN, setTopN] = usePersistedVizControl(metadata, 'top_n', 20);
+  const [padjThreshold, setPadjThreshold] = usePersistedVizControl(metadata, 'padj_threshold', 0.05);
+  const [colourBy, setColourBy] = usePersistedVizControl<ColourBy>(metadata, 'default_colour_by', 'neg_log10_padj');
+  const [termSort, setTermSort] = usePersistedVizControl<TermSort>(metadata, 'term_sort', 'nes');
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
 
-  const requiredCols = useMemo(
-    () =>
-      [
-        config.cluster_col,
-        config.gene_col,
-        config.mean_expression_col,
-        config.frac_expressing_col,
-      ].filter(Boolean) as string[],
-    [config],
+  const hasMarkerBinding = Boolean(
+    config.cluster_col &&
+      config.gene_col &&
+      config.mean_expression_col &&
+      config.frac_expressing_col,
   );
+  const hasEnrichmentBinding = Boolean(config.term_col && config.nes_col);
+
+  const offeredViews = useMemo<View[]>(() => {
+    const drawable = ALL_VIEWS.filter((v) =>
+      v === 'dotplot' ? hasMarkerBinding : hasEnrichmentBinding,
+    );
+    const requested = config.views;
+    const offered = requested ? drawable.filter((v) => requested.includes(v)) : drawable;
+    // An author may narrow the switch, but not to nothing: a tile with no view
+    // has no figure to build. With neither table bound the fetch guard below is
+    // what reports the missing binding.
+    if (offered.length > 0) return offered;
+    return drawable.length > 0 ? drawable : ['dotplot'];
+  }, [hasMarkerBinding, hasEnrichmentBinding, config.views]);
+
+  // The persisted pick is honoured only while it is on offer, and the fallback
+  // happens here rather than through the setter: a config that binds only the
+  // enrichment columns keeps the default `view` of 'dotplot' and still renders.
+  const activeView: View = offeredViews.includes(view) ? view : offeredViews[0];
+
+  // Union over the offered views, so switching view never refetches.
+  const requiredCols = useMemo(() => {
+    const cols: string[] = [];
+    const add = (col?: string | null) => {
+      if (col && !cols.includes(col)) cols.push(col);
+    };
+    if (offeredViews.includes('dotplot')) {
+      add(config.cluster_col);
+      add(config.gene_col);
+      add(config.mean_expression_col);
+      add(config.frac_expressing_col);
+    }
+    if (offeredViews.includes('enrichment')) {
+      add(config.term_col);
+      add(config.nes_col);
+      add(config.padj_col);
+      add(config.gene_count_col);
+      add(config.source_col);
+    }
+    return cols;
+  }, [config, offeredViews]);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -138,7 +233,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const [geneUniverse, setGeneUniverse] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 4) {
+    if (!metadata.wf_id || !metadata.dc_id || requiredCols.length === 0) {
       setError('Dot plot: missing data binding');
       setLoading(false);
       return;
@@ -193,11 +288,12 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
 
   // A dot plot draws one marker cloud, so it always competes for a bounded
   // WebGL slot; without one the trace renders as downsampled SVG — see
-  // webglBudget. Asked at mount from the kind, like Volcano/Manhattan.
-  const glGranted = useWebglSlot(true);
+  // webglBudget. The enrichment view draws a top-N of terms, small enough for
+  // SVG, so it hands the slot back to whichever tile wants it.
+  const glGranted = useWebglSlot(activeView === 'dotplot');
 
-  const figure = useMemo(() => {
-    if (!rows) return null;
+  const markerFigure = useMemo(() => {
+    if (!rows || activeView !== 'dotplot') return null;
     // Raw per-(cluster, gene) rows, before the gene cap.
     const clusterAll = (rows[config.cluster_col] || []) as (string | number)[];
     const geneAll = (rows[config.gene_col] || []) as (string | number)[];
@@ -327,6 +423,9 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       pointsShown,
       pointsTotal: geneAll.length,
       capActive,
+      // Categories on the y axis, i.e. the rows the tile actually has to be
+      // tall enough for, post-cap, post-sort. Feeds the content demand.
+      rowsDrawn: genes.length,
       // Built from the same values the markers were, so the key states the
       // scale actually on screen — including after the gene cap narrowed it.
       sizeKey: dotSizeKey(fracVals, minSize, maxSize),
@@ -351,7 +450,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             marker: {
               size: sizes,
               color: meanVals,
-              colorscale: colourScale,
+              colorscale: sequentialScale(colourScale, isDark),
               reversescale: reverseScale,
               showscale: true,
               colorbar: {
@@ -399,6 +498,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     };
   }, [
     rows,
+    activeView,
     config,
     maxSize,
     minSize,
@@ -419,127 +519,422 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     geneUniverse,
   ]);
 
+  const sources = useMemo(() => {
+    if (!rows || !config.source_col) return [] as string[];
+    const seen = new Set<string>();
+    for (const v of (rows[config.source_col] || []) as unknown[]) seen.add(String(v ?? ''));
+    return Array.from(seen).sort();
+  }, [rows, config.source_col]);
+
+  const enrichmentFigure = useMemo(() => {
+    if (!rows || activeView !== 'enrichment') return null;
+    const terms = (rows[config.term_col as string] || []) as (string | number)[];
+    const nesArr = (rows[config.nes_col as string] || []) as number[];
+    const padjArr = config.padj_col ? ((rows[config.padj_col] || []) as number[]) : null;
+    const countArr = config.gene_count_col
+      ? ((rows[config.gene_count_col] || []) as number[])
+      : null;
+    const srcArr = config.source_col ? (rows[config.source_col] as (string | number)[]) : null;
+
+    type Row = { term: string; nes: number; padj: number; count: number; src: string };
+    const collected: Row[] = [];
+    for (let i = 0; i < terms.length; i++) {
+      const nes = Number(nesArr[i]);
+      if (!Number.isFinite(nes)) continue;
+      // The significance column is an optional binding, so an unbound one means
+      // "no cutoff to apply" rather than "cut everything".
+      const padj = padjArr ? Number(padjArr[i]) : 1;
+      if (padjArr && (!Number.isFinite(padj) || padj > padjThreshold)) continue;
+      const src = srcArr ? String(srcArr[i] ?? '') : '';
+      if (selectedSources.length > 0 && srcArr && !selectedSources.includes(src)) continue;
+      collected.push({
+        term: String(terms[i] ?? ''),
+        nes,
+        padj,
+        count: countArr ? Number(countArr[i]) || 0 : 0,
+        src,
+      });
+    }
+    // Top-N by significance (smallest padj wins).
+    collected.sort((a, b) => a.padj - b.padj);
+    const top = collected.slice(0, topN);
+    // Then re-sort for the y-axis. Plotly draws the first item at the bottom,
+    // so each comparator puts the most notable term last.
+    top.sort((a, b) => {
+      if (termSort === 'significance') return b.padj - a.padj;
+      if (termSort === 'gene_count') return a.count - b.count;
+      if (termSort === 'name') return b.term.localeCompare(a.term);
+      return a.nes - b.nes;
+    });
+
+    if (top.length === 0) {
+      return null;
+    }
+
+    // Gene-set size drives the marker area, through the very scale the marker
+    // view uses, so whoever learned to read one dot plot can read this one.
+    const counts = top.map((r) => r.count);
+    const sizes = dotSizes(counts, minSize, maxSize);
+
+    // Annotation overlay: the N most significant terms get their gene count
+    // written beside the dot, since size alone is hard to read off precisely.
+    const annotations: any[] = [];
+    if (annotateTopN > 0) {
+      const ranked = [...top].sort((a, b) => a.padj - b.padj).slice(0, annotateTopN);
+      for (const r of ranked) {
+        annotations.push({
+          x: r.nes,
+          y: r.term,
+          text: String(r.count),
+          showarrow: false,
+          xanchor: 'left',
+          // Clear the marker itself, which grows with max_dot_size.
+          xshift: maxSize / 2 + 4,
+          // No font colour: applyLayoutTheme tints unstyled annotations.
+          font: { size: 9 },
+        });
+      }
+    }
+
+    // Colour-by maps the user's choice to (a) per-point colour values and
+    // (b) the colourscale + colourbar title. NES sign is the only discrete
+    // mode, encoded as the integer sign so plotly draws two colour buckets.
+    const colourValues: number[] =
+      colourBy === 'neg_log10_padj'
+        ? top.map((r) => -Math.log10(Math.max(r.padj, 1e-300)))
+        : colourBy === 'abs_nes'
+          ? top.map((r) => Math.abs(r.nes))
+          : colourBy === 'gene_count'
+            ? top.map((r) => r.count)
+            : top.map((r) => Math.sign(r.nes));
+    // 'Auto': NES sign uses a discrete blue (down) / red (up) palette; the
+    // other modes use perceptually-uniform sequential scales. YlOrRd reads
+    // better than Viridis when the user picked |NES| (magnitude-only, warm
+    // end signals "stronger enrichment"). A named scale wins over all of it,
+    // including NES sign, where cmin/cmax below keep the two buckets apart.
+    const autoScale: string | (string | number)[][] =
+      colourBy === 'nes_sign'
+        ? [
+            [0.0, '#1f77b4'],
+            [0.49, '#1f77b4'],
+            [0.51, '#d62728'],
+            [1.0, '#d62728'],
+          ]
+        : colourBy === 'abs_nes'
+          ? isDark
+            ? 'Plasma'
+            : 'YlOrRd'
+          : isDark
+            ? 'Plasma'
+            : 'Viridis';
+    const colorscale: string | (string | number)[][] =
+      colourScale === 'Auto' ? autoScale : colourScale;
+    const colourbarTitle: string =
+      colourBy === 'neg_log10_padj'
+        ? '-log10(padj)'
+        : colourBy === 'abs_nes'
+          ? '|NES|'
+          : colourBy === 'gene_count'
+            ? 'gene count'
+            : 'NES sign';
+
+    return {
+      // Terms on the y axis after the top-N cut, the enrichment view's answer
+      // to the marker view's gene count. Feeds the content demand.
+      rowsDrawn: top.length,
+      sizeKey: dotSizeKey(counts, minSize, maxSize),
+      data: [
+        {
+          type: 'scatter' as const,
+          mode: 'markers' as const,
+          x: top.map((r) => r.nes),
+          y: top.map((r) => r.term),
+          // Slot 3 carries the term, so an analysis group can be read back off
+          // a point the way the marker view reads its gene and its cluster.
+          customdata: top.map((r) => [r.padj, r.count, r.src, r.term]),
+          hovertemplate:
+            `<b>%{y}</b><br>NES: %{x:.2f}` +
+            (config.padj_col ? `<br>padj: %{customdata[0]:.2e}` : '') +
+            (config.gene_count_col ? `<br>genes: %{customdata[1]}` : '') +
+            (config.source_col ? `<br>source: %{customdata[2]}` : '') +
+            `<extra></extra>`,
+          marker: {
+            size: sizes,
+            color: colourValues,
+            colorscale: colorscale,
+            reversescale: reverseScale,
+            showscale: true,
+            // Discrete two-bucket palette needs an explicit min/max so the
+            // boundary lands at 0 rather than auto-fitting to the data.
+            ...(colourBy === 'nes_sign' ? { cmin: -1, cmax: 1 } : {}),
+            colorbar: {
+              title: { text: colourbarTitle, side: 'right' },
+              thickness: 10,
+              len: 0.85,
+              ...(colourBy === 'nes_sign'
+                ? { tickvals: [-1, 1], ticktext: ['down', 'up'] }
+                : {}),
+            },
+            line: markerOutline
+              ? {
+                  width: 0.6,
+                  color: isDark ? alpha(theme.black, 0.7) : alpha(theme.white, 0.85),
+                }
+              : { width: 0 },
+          },
+        },
+      ],
+      layout: {
+        ...plotlyThemeFragment(isDark, theme),
+        margin: { l: 220, r: 60, t: 16, b: 48 },
+        xaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          title: { text: 'NES (normalized enrichment score)' },
+          zeroline: true,
+        },
+        yaxis: {
+          ...plotlyAxisOverrides(isDark, theme),
+          automargin: true,
+          ticks: '',
+          showgrid: true,
+        },
+        annotations,
+        showlegend: false,
+        autosize: true,
+      },
+    };
+  }, [
+    rows,
+    activeView,
+    config,
+    topN,
+    padjThreshold,
+    selectedSources,
+    colourBy,
+    colourScale,
+    reverseScale,
+    maxSize,
+    minSize,
+    termSort,
+    annotateTopN,
+    markerOutline,
+    isDark,
+    theme,
+  ]);
+
+  const figure = activeView === 'enrichment' ? enrichmentFigure : markerFigure;
+
+  // Rows on the y axis (genes, or enriched terms) at a height a dot and its
+  // tick label stay legible at, inside the axis furniture: the tilted cluster
+  // labels along the bottom, the title strip, and the dot-size key drawn
+  // under the plot. Keyed on the count, so re-sorting or recolouring the same
+  // rows republishes nothing.
+  const rowsDrawn = figure?.rowsDrawn ?? 0;
+  const contentDemand = useMemo(
+    () => demandForItems(rowsDrawn, DOT_ROW_PX, DOT_PLOT_CHROME_PX),
+    [rowsDrawn],
+  );
+
+  const viewControl =
+    offeredViews.length > 1 ? (
+      <VizSegmented
+        aria-label="View"
+        value={activeView}
+        onChange={(v) => setView(v as View)}
+        data={offeredViews.map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
+      />
+    ) : null;
+
+  // Encoding tier: which view, which terms or genes are on the axes, in what
+  // order and under which colour semantics. Handed to the frame as a flat
+  // fragment; the strip's grid owns the widths.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {viewControl}
+        {activeView === 'enrichment' ? (
+          <>
+            <VizControlGroup title="Terms">
+              {sources.length > 0 ? (
+                <VizMultiSelect
+                  label="Source"
+                  value={selectedSources}
+                  onChange={setSelectedSources}
+                  data={sources}
+                  placeholder="all sources"
+                  clearable
+                />
+              ) : null}
+              <VizNumberInput
+                label="Top-N pathways"
+                value={topN}
+                onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+                min={1}
+                max={100}
+              />
+              <VizNumberInput
+                label="padj threshold"
+                value={padjThreshold}
+                onChange={(v) => setPadjThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
+                min={0}
+                max={1}
+                step={0.01}
+                decimalScale={3}
+              />
+            </VizControlGroup>
+            <VizControlGroup title="Colour and order">
+              <VizSelect
+                label="Colour by"
+                value={colourBy}
+                onChange={(v) => v && setColourBy(v as ColourBy)}
+                data={[
+                  { value: 'neg_log10_padj', label: '-log10(padj)' },
+                  { value: 'abs_nes', label: '|NES|' },
+                  { value: 'nes_sign', label: 'NES sign (up / down)' },
+                  { value: 'gene_count', label: 'Gene count' },
+                ]}
+                allowDeselect={false}
+              />
+              <VizSelect
+                label="Sort terms"
+                value={termSort}
+                onChange={(v) => v && setTermSort(v as TermSort)}
+                data={[
+                  { value: 'nes', label: 'NES' },
+                  { value: 'significance', label: 'Significance' },
+                  { value: 'gene_count', label: 'Gene count' },
+                  { value: 'name', label: 'Name' },
+                ]}
+                allowDeselect={false}
+              />
+            </VizControlGroup>
+          </>
+        ) : (
+          <VizControlGroup title="Axes">
+            <VizSelect
+              label="Sort genes"
+              value={geneSort}
+              onChange={(v) => v && setGeneSort(v as AxisSort)}
+              data={[
+                { value: 'name', label: 'Name' },
+                { value: 'mean', label: 'Mean expression' },
+                { value: 'frac', label: 'Fraction expressing' },
+              ]}
+              allowDeselect={false}
+            />
+            <VizSelect
+              label="Sort clusters"
+              value={clusterSort}
+              onChange={(v) => v && setClusterSort(v as AxisSort)}
+              data={[
+                { value: 'name', label: 'Name' },
+                { value: 'mean', label: 'Mean expression' },
+                { value: 'frac', label: 'Fraction expressing' },
+              ]}
+              allowDeselect={false}
+            />
+            <VizNumberInput
+              label="Max genes"
+              value={maxGenes}
+              onChange={(v) => setMaxGenes(Math.max(5, Math.min(500, Number(v) || 50)))}
+              min={5}
+              max={500}
+              disabled={fullGenes}
+            />
+          </VizControlGroup>
+        )}
+      </>
+    ),
+    [
+      viewControl,
+      activeView,
+      sources,
+      selectedSources,
+      topN,
+      padjThreshold,
+      colourBy,
+      termSort,
+      geneSort,
+      clusterSort,
+      maxGenes,
+      fullGenes,
+    ],
+  );
+
+  // Cosmetic tier: how the same dots are painted.
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Select
-          size="xs"
-          label="Colourscale"
-          value={colourScale}
-          onChange={(v) => v && setColourScale(v as ColourScale)}
-          data={COLOUR_SCALES}
-          allowDeselect={false}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Direction
-          </Text>
-          <Switch
-          size="xs"
-          checked={reverseScale}
-          onChange={(e) => setReverseScale(e.currentTarget.checked)}
-          label="Reverse colourscale"
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Sort
-          </Text>
-          <Switch
-          size="xs"
-          checked={logTransform}
-          onChange={(e) => setLogTransform(e.currentTarget.checked)}
-          label={`log10(${config.mean_expression_col}+1)`}
-        />
-        </Stack>
-        <Group gap="xs" grow>
-          <Select
-            size="xs"
-            label="Sort genes"
-            value={geneSort}
-            onChange={(v) => v && setGeneSort(v as AxisSort)}
-            data={[
-              { value: 'name', label: 'Name' },
-              { value: 'mean', label: 'Mean expression' },
-              { value: 'frac', label: 'Fraction expressing' },
-            ]}
+      <>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Colourscale"
+            description="Auto follows the colour-by mode and the theme"
+            value={colourScale}
+            onChange={(v) => v && setColourScale(v as DotPlotColourScale)}
+            data={['Auto', ...COLOUR_SCALES]}
             allowDeselect={false}
           />
-          <Select
-            size="xs"
-            label="Sort clusters"
-            value={clusterSort}
-            onChange={(v) => v && setClusterSort(v as AxisSort)}
-            data={[
-              { value: 'name', label: 'Name' },
-              { value: 'mean', label: 'Mean expression' },
-              { value: 'frac', label: 'Fraction expressing' },
-            ]}
-            allowDeselect={false}
+          <VizSwitch
+            checked={reverseScale}
+            onChange={(e) => setReverseScale(e.currentTarget.checked)}
+            label="Reverse colourscale"
           />
-        </Group>
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
+          {activeView === 'dotplot' ? (
+            <VizSwitch
+              checked={logTransform}
+              onChange={(e) => setLogTransform(e.currentTarget.checked)}
+              label={`log10(${config.mean_expression_col}+1)`}
+            />
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Markers">
+          <VizNumberInput
             label="Max dot size"
             value={maxSize}
             onChange={(v) => setMaxSize(Math.max(4, Math.min(60, Number(v) || 22)))}
             min={4}
             max={60}
           />
-          <NumberInput
-            size="xs"
+          <VizNumberInput
             label="Min dot size"
             value={minSize}
             onChange={(v) => setMinSize(Math.max(0, Math.min(20, Number(v) || 2)))}
             min={0}
             max={20}
           />
-        </Group>
-        <NumberInput
-          size="xs"
-          label="Max genes"
-          description="Top genes by cross-cluster variance (Load-All to override)"
-          value={maxGenes}
-          onChange={(v) => setMaxGenes(Math.max(5, Math.min(500, Number(v) || 50)))}
-          min={5}
-          max={500}
-          disabled={fullGenes}
-        />
-        <NumberInput
-          size="xs"
-          label="Annotate top-N frac"
-          description="0 = off"
-          value={annotateTopN}
-          onChange={(v) => setAnnotateTopN(Math.max(0, Math.min(40, Number(v) || 0)))}
-          min={0}
-          max={40}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Markers
-          </Text>
-          <Switch
-          size="xs"
-          checked={markerOutline}
-          onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
-          label="Marker outline"
-        />
-        </Stack>
-      </Stack>
+          <VizSwitch
+            checked={markerOutline}
+            onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
+            label="Outline"
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label={activeView === 'enrichment' ? 'Annotate top-N' : 'Annotate top-N frac'}
+            value={annotateTopN}
+            onChange={(v) => setAnnotateTopN(Math.max(0, Math.min(40, Number(v) || 0)))}
+            min={0}
+            max={40}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {activeView === 'enrichment'
+                ? 'Gene count on the most significant dots; 0 = off'
+                : '0 = off'}
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+      </>
     ),
     [
+      activeView,
       colourScale,
       reverseScale,
       logTransform,
-      geneSort,
-      clusterSort,
       maxSize,
       minSize,
       annotateTopN,
       markerOutline,
-      maxGenes,
-      fullGenes,
       config.mean_expression_col,
     ],
   );
@@ -549,44 +944,52 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // A dot plot is a matrix: slot 0 of `customdata` is the feature, slot 1 the
   // cluster/sample. Both are legitimate group keys here — a group of samples is
   // the common case and slot 0 alone never matched it — so both are offered and
-  // the first that belongs to a group wins.
+  // the first that belongs to a group wins. The enrichment view has a single
+  // identity, the term, and carries it in slot 3.
   const groupedFigure = useMemo(
     () =>
       figure
         ? splitFigureByGroups(figure, {
             groupRender,
-            identitySlot: 0,
-            identitySlots: [1],
+            identitySlot: activeView === 'enrichment' ? 3 : 0,
+            identitySlots: activeView === 'enrichment' ? [] : [1],
             facetable: false,
             showLegend: true,
           })
         : figure,
-    [figure, groupRender],
+    [figure, groupRender, activeView],
   );
   // Whether any dot matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  const sizeKeyLabel =
+    activeView === 'enrichment'
+      ? config.gene_count_col || 'gene set size'
+      : config.frac_expressing_col;
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
-      title={metadata.title || 'Dot plot'}
+      title={metadata.title || (activeView === 'enrichment' ? 'Pathway enrichment' : 'Dot plot')}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
       reduction={
-        figure && (figure.capActive || fullGenes)
+        markerFigure && (markerFigure.capActive || fullGenes)
           ? {
               // Points on screen — post-cap, and clamped to the SVG budget when
               // this plot missed a WebGL slot and fell back to downsampled SVG.
               displayed: glGranted
-                ? figure.pointsShown
-                : Math.min(figure.pointsShown, SVG_MAX_POINTS),
-              total: figure.pointsTotal,
-              sampled: figure.capActive,
+                ? markerFigure.pointsShown
+                : Math.min(markerFigure.pointsShown, SVG_MAX_POINTS),
+              total: markerFigure.pointsTotal,
+              sampled: markerFigure.capActive,
               full: fullGenes,
               loading: false,
               onToggle: () => setFullGenes((v) => !v),
@@ -608,7 +1011,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
               the top of a 3-26 px scale would collapse and the key would
               understate the very dots it explains. Drawn here in SVG instead,
               at the exact diameters the plot used. */}
-          <DotSizeKey entries={figure?.sizeKey ?? []} label={config.frac_expressing_col} />
+          <DotSizeKey entries={figure?.sizeKey ?? []} label={sizeKeyLabel} />
         </div>
       ) : null}
     </AdvancedVizFrame>

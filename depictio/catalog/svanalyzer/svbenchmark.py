@@ -22,6 +22,21 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+
+#: The pipeline names every per-callset file ``<id>.<truth set>.<caller>.<ext>``
+#: and its summary tables carry that name in ``File`` next to ``Tool`` (the
+#: samplesheet id) and ``Caller``, so the truth set is the token after the id.
+def truth_set_expr(file_col: str = "File", tool_col: str = "Tool") -> pl.Expr:
+    """The truth-set token of the pipeline's ``<id>.<truth>.<caller>.<ext>`` file name."""
+    return (
+        pl.col(file_col)
+        .cast(pl.Utf8)
+        .str.strip_prefix(pl.col(tool_col).cast(pl.Utf8) + pl.lit("."))
+        .str.split(".")
+        .list.first()
+    )
+
+
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "precision": pl.Float64,
@@ -30,6 +45,8 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+    "caller": pl.Utf8,  # the tool that made the calls (pipeline `Caller` column)
+    "truth_set": pl.Utf8,  # read off the `<id>.<truth set>.<caller>.<ext>` File name
     "tp": pl.Int64,
     "fp": pl.Int64,
     "fn": pl.Int64,
@@ -55,6 +72,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         if label_col
         else df.with_columns(pl.lit("svbenchmark").alias("label"))
     )
+
+    caller_col = _find(df, "Caller")
+    if caller_col is not None:
+        df = df.with_columns(pl.col(caller_col).cast(pl.Utf8).alias("caller"))
+    if "File" in df.columns and "Tool" in df.columns:
+        df = df.with_columns(truth_set_expr().alias("truth_set"))
 
     prec = _find(df, "precision", "ppv")
     rec = _find(df, "recall", "sensitivity")
@@ -83,5 +106,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         if col is not None:
             df = df.with_columns(pl.col(col).cast(pl.Int64, strict=False).alias(out))
 
-    keep = ["label", "precision", "recall", "f1", "tp", "fp", "fn"]
+    keep = ["label", "caller", "truth_set", "precision", "recall", "f1", "tp", "fp", "fn"]
     return df.select([c for c in keep if c in df.columns])

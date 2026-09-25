@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  alpha,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { alpha, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   type AdvancedVizKind,
@@ -548,21 +545,20 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
     return { 'gene sets': shown.length, ranks };
   }, [allSeries.length, shown]);
 
-  const controls = (
-    <Stack gap="xs">
-      <NumberInput
-        size="xs"
+  // Encoding tier: which gene sets are walked and whether they share an axis.
+  // The leading-edge shading, the hit rug and the metric panel annotate those
+  // same curves.
+  const primaryControls = (
+    <>
+      <VizNumberInput
         label="Top-N gene sets"
-        description="Ranked by the size of their peak running score"
         value={topNSets}
         onChange={(v) => setTopNSets(Math.max(1, Math.min(20, Number(v) || 5)))}
         min={1}
         max={20}
       />
-      <Select
-        size="xs"
+      <VizSelect
         label="Layout"
-        description="One panel per set, or every curve on one axis"
         value={layoutMode}
         onChange={(v) => v && setLayoutMode(v as LayoutMode)}
         data={[
@@ -571,35 +567,32 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
         ]}
         allowDeselect={false}
       />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Panels
-        </Text>
-        <Switch
-          size="xs"
-          checked={showLeadingEdge}
-          onChange={(e) => setShowLeadingEdge(e.currentTarget.checked)}
-          label="Shade the leading edge"
+    </>
+  );
+
+  const controls = (
+    <VizControlGroup title="Annotations">
+      <VizSwitch
+        checked={showLeadingEdge}
+        onChange={(e) => setShowLeadingEdge(e.currentTarget.checked)}
+        label="Shade the leading edge"
+      />
+      {config.member_col ? (
+        <VizSwitch
+          checked={showHits}
+          onChange={(e) => setShowHits(e.currentTarget.checked)}
+          label="Hit rug"
+          disabled={!hasHits}
         />
-        {config.member_col ? (
-          <Switch
-            size="xs"
-            checked={showHits}
-            onChange={(e) => setShowHits(e.currentTarget.checked)}
-            label="Hit rug"
-            disabled={!hasHits}
-          />
-        ) : null}
-        {config.metric_col ? (
-          <Switch
-            size="xs"
-            checked={showMetric}
-            onChange={(e) => setShowMetric(e.currentTarget.checked)}
-            label="Ranked metric"
-          />
-        ) : null}
-      </Stack>
-    </Stack>
+      ) : null}
+      {config.metric_col ? (
+        <VizSwitch
+          checked={showMetric}
+          onChange={(e) => setShowMetric(e.currentTarget.checked)}
+          label="Ranked metric"
+        />
+      ) : null}
+    </VizControlGroup>
   );
 
   return (
@@ -608,6 +601,7 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       title={metadata.title || 'GSEA running enrichment score'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       counts={counts}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

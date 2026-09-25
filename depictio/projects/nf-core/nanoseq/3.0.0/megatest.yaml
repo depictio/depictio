@@ -1,0 +1,98 @@
+# Megatest manifest for nf-core/nanoseq 3.0.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline nanoseq --version 3.0.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# 3.0.0 is pinned because the 3.1.0 megatest prefix is empty. The run wrote a
+# pre-parquet MultiQC (multiqc/minimap2/multiqc_data/, multiqc_data.json only),
+# so the manifest fetches the raw MultiQC inputs and the parquet Depictio reads
+# is produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+#
+# KEYS BELOW WERE FIXED AGAINST THE REAL LAYOUT (see VALIDATION_REPORT.md
+# NS-D1..NS-D4): the run this manifest fetches carries NEITHER pycoQC NOR
+# featureCounts NOR JAFFAL fusion calls NOR a variant_calling/ directory, and
+# NanoPlot/minimap2 outputs sit one directory level deeper than first assumed
+# (`nanoplot/fastq/<sample>/NanoStats.txt`, `minimap2/samtools_stats/*`). There
+# is also no `pipeline_info/params_*.json` (like cutandrun, this run predates
+# the nf-core params dump).
+pipeline: nanoseq
+version: "3.0.0"
+# s3://nf-core-awsmegatests/nanoseq/results-<results_sha>/ == the 3.0.0 release tag_sha.
+results_sha: "1e60482a2c4621234393a6eef8e9a104309c20ae"
+run_root: ""
+multiqc:
+  version: "1.11"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/*.csv
+  - pipeline_info/*.txt
+  # Provenance of the original MultiQC report.
+  - multiqc/*/multiqc_data/multiqc_data.json
+  - multiqc/*/multiqc_data/*.txt
+  - multiqc/*/multiqc_data/*.log
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ---------------------
+  - fastqc/*.zip
+  - nanoplot/fastq/*/*.txt
+  - minimap2/samtools_stats/*.stats
+  - minimap2/samtools_stats/*.flagstat
+  - minimap2/samtools_stats/*.idxstats
+  # Bambu gene/transcript quantification and the DESeq2 / DEXSeq differential
+  # step run on top of it (one file each for this run's single A549-vs-K562
+  # comparison, not a per-contrast set).
+  - bambu/counts_gene.txt
+  - bambu/counts_transcript.txt
+  - bambu/deseq2/deseq2.results.txt
+  - bambu/dexseq/dexseq.results.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Design table ===
+
+  # The run's design (condition, preparation, source replicate, flow-cell run) is
+  # vendored with the template; the reference seed reads it from {dest}/input/:
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/nanoseq/3.0.0/input/sample_metadata.tsv {dest}/input/
+
+  === Reprocess MultiQC (the run wrote a pre-parquet MultiQC, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} --dry-run \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
+# Megatest-specific names no dashboard text may carry (lint rule e of
+# depictio/tests/models/test_template_conventions.py).
+forbidden_terms:
+  - A549
+  - K562
+  - A549_R1
+  - A549_R2
+  - A549_R3
+  - K562_R1
+  - K562_R2
+  - K562_R3
+  - SG-NEx
+  - SGNex
+  - ENSG00000124570
+  - GRCh37
+  - replicate1
+  - run2

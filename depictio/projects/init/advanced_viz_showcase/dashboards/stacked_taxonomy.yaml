@@ -1,11 +1,11 @@
-# Stacked taxonomy — one tab of the advanced-visualisation showcase.
+# Community composition: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Stacked taxonomy'
+title: 'Community composition'
 subtitle: 'Per-sample composition. Toggle ''Normalise'' inside the viz to switch between raw counts and 0–100% stacks.'
 icon: 'mdi:chart-bar-stacked'
 icon_color: 'blue'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d14'
 is_main_tab: false
 tab_order: 3
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:chart-bar-stacked'
+tab_icon: 'mdi:bacteria-outline'
 tab_icon_color: 'blue'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,11 +44,12 @@ components:
     vertical_alignment: top
     section: 'Community composition'
     body: >
-      One stacked bar per sample, segments sized by abundance and coloured by taxon.
-      Switching the rank in the settings menu recomputes the stack from the lineage columns
-      rather than re-aggregating upstream. Filtering to a phylum on the left is what turns a
-      wall of colour into a readable comparison.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      One stacked bar per sample, segments sized by relative abundance and coloured by taxon.
+      The rank picker in the tile header re-aggregates the stack from phylum down to genus,
+      and Top-N lumps the tail into Other; filter to one phylum on the left to compare its
+      members across samples. Input: taxonomic abundance tables from nf-core/ampliseq, nf-
+      core/taxprofiler or nf-core/mag.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-stacked_taxonomy
     index: 'tax-stacked'
@@ -56,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'stacked_taxonomy_demo'
     title: 'Stacked composition by sample'
-    description: 'Per-sample relative abundance per rank. Toggle Normalise in Settings ⚙ to switch between raw counts and 0–100 % stacks.'
+    description: 'Per-sample relative abundance at the chosen rank. Rank, Top-N and normalisation sit in the tile header.'
     section: 'Community composition'
     viz_kind: 'stacked_taxonomy'
     config:
@@ -69,7 +70,8 @@ components:
       top_n: 12
       sort_by: "abundance"
       normalise_to_one: true
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-stacked_taxonomy-phylum
     index: tax-f-phylum

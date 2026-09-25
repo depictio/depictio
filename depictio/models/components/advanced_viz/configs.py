@@ -9,9 +9,16 @@ its ``config`` field; Pydantic discriminates by ``viz_kind``.
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 # The continuous colour scales every viz kind that exposes one offers. Single
 # definition on the Python side; its React twin lives in
@@ -20,10 +27,48 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 ColourScale = Literal["Viridis", "Plasma", "Inferno", "Magma", "Cividis", "RdBu", "Spectral"]
 
 
+#: Assembly aliases a template's ``GENOME`` variable may carry, mapped onto
+#: the bundled gene tables. Anything else (another organism, an unresolved
+#: ``{GENOME}`` placeholder in a raw YAML) draws no gene lane.
+_GENE_LANE_ALIASES: dict[str, str] = {
+    "none": "none",
+    "hg38": "hg38",
+    "grch38": "hg38",
+    "mm10": "mm10",
+    "grcm38": "mm10",
+}
+
+
+def _coerce_gene_lane(value: Any) -> Any:
+    """Map a free assembly string onto a bundled gene lane, else ``none``."""
+    if value is None:
+        return "none"
+    if isinstance(value, str):
+        return _GENE_LANE_ALIASES.get(value.strip().lower(), "none")
+    return value
+
+
+GeneLaneAssembly = Annotated[Literal["none", "hg38", "mm10"], BeforeValidator(_coerce_gene_lane)]
+
+
 class _BaseVizConfig(BaseModel):
     """Common base for all viz-kind configs."""
 
     model_config = ConfigDict(extra="forbid")
+
+    # Where the tile puts its encoding controls. ``popover`` is what every tile
+    # did before this field existed: everything behind the Settings icon.
+    # ``header`` lifts the primary controls (axes, colour-by, view switch, gene
+    # picker) into the tile header, ``rail`` into a strip beside the plot. The
+    # cosmetic tier stays in the popover either way. Declared on the base so
+    # every kind carries it without one copy of the field per kind.
+    controls_placement: Literal["popover", "rail", "header"] = Field(
+        default="popover",
+        description=(
+            "Where the primary (encoding) controls live: the settings popover, "
+            "a side rail, or the tile header"
+        ),
+    )
 
 
 class VolcanoConfig(_BaseVizConfig):
@@ -57,6 +102,49 @@ class VolcanoConfig(_BaseVizConfig):
     show_labels: bool = Field(
         default=True, description="Draw text labels on the highlighted points"
     )
+
+    # --- Switchable views ---------------------------------------------------
+    # The same differential-expression table drawn three ways (volcano, MA, QQ),
+    # picked from a control in the tile header. The fields below are the extra
+    # bindings the MA and QQ views need. All optional, so a volcano authored
+    # before they existed keeps validating and keeps its look. They deliberately
+    # carry the field names the retired ``ma`` and ``qq`` configs used, so a
+    # stored config of either kind maps onto this one without a rename.
+    avg_log_intensity_col: str | None = Field(
+        default=None,
+        description=(
+            "MA view: column with the average log intensity (the A axis). Null "
+            "means the MA view has nothing to put on x and is not offered."
+        ),
+    )
+    log2_fold_change_col: str | None = Field(
+        default=None,
+        description=(
+            "MA view: column with the log2 fold change (the M axis). Null falls "
+            "back to effect_size_col, which is the same quantity in most tables."
+        ),
+    )
+    fold_change_threshold: float = Field(
+        default=1.0, ge=0.0, description="MA view: absolute fold-change cutoff"
+    )
+    p_value_col: str | None = Field(
+        default=None,
+        description=(
+            "QQ view: raw p-value column. Null falls back to significance_col, "
+            "which holds raw p-values unless significance_is_neg_log10 is set."
+        ),
+    )
+    view: Literal["volcano", "ma", "qq"] = Field(
+        default="volcano",
+        description="Which of the three differential-expression views the tile opens on",
+    )
+    views: list[Literal["volcano", "ma", "qq"]] | None = Field(
+        default=None,
+        description="Views offered in the tile's switch; null offers every view the bindings allow",
+    )
+    show_ci: bool = Field(default=True, description="QQ view: shade the 95% null CI band")
+    show_identity: bool = Field(default=True, description="QQ view: draw the y = x line")
+    point_size: int = Field(default=5, ge=1, le=30, description="QQ view: marker size")
 
 
 class EmbeddingConfig(_BaseVizConfig):
@@ -137,7 +225,7 @@ class EmbeddingConfig(_BaseVizConfig):
         default=None,
         description=(
             "Initial value for the Colour-by dropdown. Falls back to "
-            "``cluster_col`` then ``color_col`` when unset."
+            "``color_col`` then ``cluster_col`` when unset."
         ),
     )
     show_centroids: bool = Field(default=False, description="Mark each colour group's centroid")
@@ -294,6 +382,28 @@ class ManhattanConfig(_BaseVizConfig):
             "has to say which of the two it means. The column is fetched "
             "automatically; it does not also have to appear in "
             "``color_by_columns``."
+        ),
+    )
+
+    # --- Rainfall mode ------------------------------------------------------
+    # The mutation-density figure of every cancer-genome paper: the same
+    # chr / pos rows, but y is the distance to the previous variant on the same
+    # chromosome, so clustered events (kataegis) fall to the bottom of the plot
+    # and the eye reads density rather than significance. Opt-in, so a Manhattan
+    # authored before this existed keeps drawing its score.
+    mode: Literal["manhattan", "rainfall"] = Field(
+        default="manhattan",
+        description=(
+            "``manhattan`` (default) puts score_col on y. ``rainfall`` puts "
+            "log10 of the distance to the previous variant on the same "
+            "chromosome on y and ignores score_col."
+        ),
+    )
+    rainfall_class_col: str | None = Field(
+        default=None,
+        description=(
+            "Rainfall mode: column whose values colour each point (mutation "
+            "class, consequence, caller). Null colours by chromosome as usual."
         ),
     )
 
@@ -819,8 +929,12 @@ class DotPlotConfig(_BaseVizConfig):
 
     max_dot_size: int = Field(default=22, ge=4, le=60, description="Max marker size in pixels")
     min_dot_size: int = Field(default=2, ge=0, le=20)
-    colour_scale: ColourScale = Field(
-        default="Viridis", description="Continuous colour scale for mean expression"
+    colour_scale: Literal["Auto"] | ColourScale = Field(
+        default="Viridis",
+        description=(
+            "Continuous colour scale for mean expression. 'Auto' lets the "
+            "enrichment view pick per colour-by mode and theme."
+        ),
     )
     reverse_scale: bool = Field(default=False, description="Reverse the colour scale")
     log_transform: bool = Field(
@@ -837,6 +951,48 @@ class DotPlotConfig(_BaseVizConfig):
     )
     marker_outline: bool = Field(default=True, description="Draw an outline around each dot")
     max_genes: int = Field(default=50, ge=1, description="How many genes to draw before truncating")
+
+    # --- Switchable views ---------------------------------------------------
+    # Same marks, same size and colour channels, a different table: the
+    # enrichment view puts a pathway on the y axis, its NES on x, the gene-set
+    # size in the dot area and the adjusted p-value in the colour. The fields
+    # below carry the names the retired ``enrichment`` config used, so a stored
+    # config of that kind maps onto this one without a rename. All optional:
+    # a marker dot plot authored before they existed is untouched.
+    term_col: str | None = Field(
+        default=None, description="Enrichment view: pathway / GO-term name column (y axis)"
+    )
+    nes_col: str | None = Field(
+        default=None, description="Enrichment view: normalised enrichment score column (x axis)"
+    )
+    padj_col: str | None = Field(
+        default=None, description="Enrichment view: FDR-adjusted p-value column (dot colour)"
+    )
+    gene_count_col: str | None = Field(
+        default=None, description="Enrichment view: gene-set size column (dot size)"
+    )
+    source_col: str | None = Field(
+        default=None,
+        description="Enrichment view: optional ontology / source column (GO_BP, KEGG, ...)",
+    )
+    padj_threshold: float = Field(
+        default=0.05, ge=0.0, le=1.0, description="Enrichment view: significance cutoff"
+    )
+    top_n: int = Field(default=20, ge=1, description="Enrichment view: how many terms to draw")
+    default_colour_by: Literal["neg_log10_padj", "abs_nes", "nes_sign", "gene_count"] = Field(
+        default="neg_log10_padj",
+        description="Enrichment view: which quantity drives the point colour",
+    )
+    term_sort: Literal["nes", "significance", "gene_count", "name"] = Field(
+        default="nes", description="Enrichment view: ordering of the term axis"
+    )
+    view: Literal["dotplot", "enrichment"] = Field(
+        default="dotplot", description="Which of the two dot-plot views the tile opens on"
+    )
+    views: list[Literal["dotplot", "enrichment"]] | None = Field(
+        default=None,
+        description="Views offered in the tile's switch; null offers every view the bindings allow",
+    )
 
 
 class LollipopConfig(_BaseVizConfig):
@@ -1064,6 +1220,46 @@ class CoverageTrackConfig(_BaseVizConfig):
     show_individuals: bool = Field(
         default=True, description="Draw the per-sample traces under the aggregate"
     )
+    mark: Literal["line", "rect", "point"] = Field(
+        default="line",
+        description=(
+            "Trace geometry: a continuous line (default, today's rendering), "
+            "filled rects per bin, or discrete points. Recorded so a later "
+            "GenomeSpy spec can bind the same rows to an equivalent mark."
+        ),
+    )
+    facet_by_sample: bool = Field(
+        default=False,
+        description=(
+            "Force one lane per sample regardless of view_mode / sample count. "
+            "Optional, defaults keep today's rendering."
+        ),
+    )
+
+    # --- Switchable views ---------------------------------------------------
+    # The ``locus`` view hands the same rows to the GenomeSpy track the
+    # genome_view kind draws, so a template that used to bind coverage_track and
+    # genome_view on one data collection can bind one tile instead. Both fields
+    # below only reach that view; the smoothed Plotly track ignores them.
+    locus_annotation: GeneLaneAssembly = Field(
+        default="none",
+        description="Locus view: bundled gene lane drawn under the track",
+    )
+    locus_assembly: str | None = Field(
+        default=None,
+        description=(
+            "Locus view: assembly whose contig lengths lay out the genome axis "
+            "(hg38, mm10, ...). Null derives the axis from the rows themselves."
+        ),
+    )
+    view: Literal["track", "locus"] = Field(
+        default="track",
+        description="``track`` draws the smoothed Plotly line; ``locus`` draws the zoomable genome track",
+    )
+    views: list[Literal["track", "locus"]] | None = Field(
+        default=None,
+        description="Views offered in the tile's switch; null offers every view the bindings allow",
+    )
 
 
 class SankeyConfig(_BaseVizConfig):
@@ -1191,6 +1387,36 @@ class PrBenchmarkConfig(_BaseVizConfig):
         default="Tealgrn", description="Continuous colour scale for the F1 point colour"
     )
 
+    # --- Switchable views ---------------------------------------------------
+    # One operating point per callset (the ``pr`` view) and the threshold sweep
+    # that point sits on (the ``roc`` view) are the same benchmark read at two
+    # zoom levels, so they share a tile and a control in its header. The fields
+    # below carry the names the retired ``roc_pr_curve`` config used, so a
+    # stored config of that kind maps onto this one without a rename. The sweep
+    # views need a threshold column; without one only the ``pr`` view is
+    # offered, which is what every benchmark authored so far draws.
+    fpr_col: str | None = Field(
+        default=None,
+        description="ROC view: false-positive-rate column, which turns the curve into a true ROC",
+    )
+    threshold_col: str | None = Field(
+        default=None, description="ROC view: quality-threshold column swept along the curve"
+    )
+    group_col: str | None = Field(
+        default=None, description="ROC view: column that splits the sweep into one curve per group"
+    )
+    show_auc: bool = Field(
+        default=True, description="ROC view: compute and show the area under the curve"
+    )
+    fill: bool = Field(default=False, description="ROC view: shade the area under each curve")
+    view: Literal["pr", "roc", "both"] = Field(
+        default="pr", description="Which of the benchmark views the tile opens on"
+    )
+    views: list[Literal["pr", "roc", "both"]] | None = Field(
+        default=None,
+        description="Views offered in the tile's switch; null offers every view the bindings allow",
+    )
+
 
 class RocPrCurveConfig(_BaseVizConfig):
     """Threshold-sweep precision-recall / ROC curve.
@@ -1294,6 +1520,15 @@ class ScatterXyConfig(_BaseVizConfig):
     reference_value: float | None = Field(
         default=None, description="Where a horizontal or vertical reference line sits"
     )
+    reference_highlight: Literal["none", "above", "below"] = Field(
+        default="none",
+        description=(
+            "Which side of the reference line to look at: the other side is dimmed "
+            "and the top-N labels rank the highlighted side only, as on the Manhattan "
+            "plot. Above is y greater than a horizontal line, x greater than a "
+            "vertical one, y greater than x against the diagonal."
+        ),
+    )
 
     min_size: float = Field(default=4.0, gt=0.0, description="Marker size at the smallest value")
     max_size: float = Field(default=22.0, gt=0.0, description="Marker size at the largest value")
@@ -1313,6 +1548,62 @@ class ScatterXyConfig(_BaseVizConfig):
     legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
     selection_enabled: bool = Field(default=False)
     selection_column: str | None = Field(default=None)
+
+    # --- Density and quadrants ---------------------------------------------
+    # Two modes the omics figures ask for and a marker cloud cannot give: a
+    # binned density when the points overplot (read length vs quality, VAF vs
+    # depth, GC vs coverage), and reference lines that cut the plane into the
+    # four named regions a reader is looking for (MIMAG completeness vs
+    # contamination). Both opt-in; defaults draw today's scatter.
+    density: bool = Field(
+        default=False,
+        description=(
+            "Draw a binned 2D histogram instead of one marker per row. Points "
+            "are the default; the reader can flip the view from the tile."
+        ),
+    )
+    density_threshold: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Row count above which the renderer switches to the density view on "
+            "its own, where a marker cloud is a solid blob. 0 (default) never "
+            "switches: an author who wants the switch names the row count."
+        ),
+    )
+    density_bins: int = Field(
+        default=60, ge=5, le=400, description="Bins per axis in the density view"
+    )
+    quadrants: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Reference lines cutting the plane into four named regions, as "
+            "``{x: number, y: number, labels: [top-left, top-right, "
+            "bottom-left, bottom-right]}``. Labels are optional."
+        ),
+    )
+
+    @field_validator("quadrants")
+    @classmethod
+    def _quadrants_are_two_numbers_and_four_labels(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Reject a quadrant block the renderer would silently half-draw."""
+        if value is None:
+            return value
+        for axis in ("x", "y"):
+            if not isinstance(value.get(axis), int | float) or isinstance(value.get(axis), bool):
+                raise ValueError(f"quadrants.{axis} must be a number")
+        labels = value.get("labels")
+        if labels is not None:
+            if not isinstance(labels, list) or len(labels) != 4:
+                raise ValueError("quadrants.labels must be a list of exactly 4 strings")
+            if not all(isinstance(label, str) for label in labels):
+                raise ValueError("quadrants.labels must be a list of exactly 4 strings")
+        unknown = sorted(set(value) - {"x", "y", "labels"})
+        if unknown:
+            raise ValueError(f"quadrants has unknown keys: {unknown}")
+        return value
 
 
 class ProfileConfig(_BaseVizConfig):
@@ -1371,6 +1662,28 @@ class ProfileConfig(_BaseVizConfig):
     legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
     selection_enabled: bool = Field(default=False)
     selection_column: str | None = Field(default=None)
+
+    # --- Derivative panel ---------------------------------------------------
+    # The Hi-C contact-probability convention: P(s) on log-log axes with its
+    # local slope d log y / d log x underneath, because the slope is what
+    # separates a polymer regime from a loop-extrusion one and it is unreadable
+    # off the curve itself. Opt-in, and useful to any log-log profile.
+    derivative: bool = Field(
+        default=False,
+        description=(
+            "Draw a second panel under the curves with the local log-log slope "
+            "d log y / d log x. Forces both axes to log in the upper panel."
+        ),
+    )
+    derivative_window: int = Field(
+        default=5,
+        ge=1,
+        le=51,
+        description=(
+            "Points either side used for the slope's least-squares fit. Larger "
+            "windows trade resolution for a smoother slope."
+        ),
+    )
 
 
 class SignalMatrixConfig(_BaseVizConfig):
@@ -1606,8 +1919,950 @@ class SashimiConfig(_BaseVizConfig):
         ),
     )
 
+    # --- Switchable views ---------------------------------------------------
+    # ``plotly`` is the arc panel above; ``genomespy`` redraws the same
+    # junctions and coverage as a zoomable GenomeSpy track: coverage bars per
+    # lane, junctions as dome links whose width follows read support, and the
+    # bundled gene lane when ``annotation`` names an assembly.
+    view: Literal["plotly", "genomespy"] = Field(
+        default="plotly",
+        description="Which of the two sashimi views the tile opens on",
+    )
+    views: list[Literal["plotly", "genomespy"]] | None = Field(
+        default=None,
+        description="Views offered in the tile's switch; null offers both",
+    )
+    annotation: GeneLaneAssembly = Field(
+        default="none",
+        description=(
+            "GenomeSpy view: bundled protein-coding gene lane drawn under the "
+            "lanes, and the assembly whose contig lengths lay out the axis. "
+            "none draws no gene lane and derives the axis from the rows."
+        ),
+    )
 
-VizConfig = Annotated[
+
+class ContactMapConfig(_BaseVizConfig):
+    """Binned Hi-C style contact matrix: one row per (bin1, bin2) pair.
+
+    Coordinate-bound like ``coverage_track``, and on the same side of the
+    JBrowse boundary: it draws a binned matrix of counts, never per-read
+    pairs. Only one triangle of the matrix needs to be present in the data;
+    the renderer mirrors it across the diagonal.
+    """
+
+    viz_kind: Literal["contact_map"] = "contact_map"
+
+    chrom1_col: str = Field(default="chrom1", description="Chromosome of the first bin")
+    start1_col: str = Field(default="start1", description="Start of the first bin")
+    chrom2_col: str = Field(default="chrom2", description="Chromosome of the second bin")
+    start2_col: str = Field(default="start2", description="Start of the second bin")
+    count_col: str = Field(default="count", description="Contact count / interaction score")
+    end1_col: str | None = Field(default=None, description="Optional end of the first bin")
+    end2_col: str | None = Field(default=None, description="Optional end of the second bin")
+    sample_col: str | None = Field(
+        default=None, description="Optional column selecting a sample when a DC holds several"
+    )
+    resolution_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column naming the bin size each row was counted at. A "
+            "cooler holds every resolution, so one data collection can carry "
+            "them all as partitions; the renderer then re-reads the resolution "
+            "matching the visible span instead of one fixed matrix. Null means "
+            "the collection holds a single resolution, which is how every "
+            "contact map authored so far is stored."
+        ),
+    )
+
+    chrom: str | None = Field(
+        default=None,
+        description="Chromosome to display (intra-chromosomal view); null picks the first seen",
+    )
+    log_scale: bool = Field(default=True, description="Log-transform counts before colouring")
+    colour_scale: ColourScale = Field(default="Viridis")
+    balance: bool = Field(
+        default=False,
+        description="Single-pass row/column coverage normalisation before display (not iterative ICE)",
+    )
+    display: Literal["square", "triangle"] | None = Field(
+        default=None,
+        description=(
+            "Square puts genomic position on both axes. Triangle rotates the "
+            "matrix 45 degrees so the diagonal becomes the horizontal axis: x "
+            "is then genomic position on the same scale as a genome_view track "
+            "stacked above it, and y is the separation between the two bins. "
+            "Unset: triangle when a region filter reaches the tile, square otherwise"
+        ),
+    )
+    max_separation_bins: int = Field(
+        default=0,
+        ge=0,
+        le=5000,
+        description=(
+            "Triangle display only: how many bins of separation to draw before "
+            "the apex is cut off. Hi-C signal decays with distance, so the far "
+            "corner flattens the colour scale. 0 keeps every separation"
+        ),
+    )
+    max_bins: int = Field(
+        default=500,
+        ge=10,
+        le=5000,
+        description="Guard on the matrix side length; larger requests are rejected client-side",
+    )
+
+
+class KneePlotConfig(_BaseVizConfig):
+    """Barcode-rank ("knee") curve: UMI count vs rank, descending, per sample."""
+
+    viz_kind: Literal["knee_plot"] = "knee_plot"
+
+    sample_col: str = Field(default="sample", description="Column naming each curve / library")
+    rank_col: str = Field(default="rank", description="Barcode rank, ascending from 1")
+    umi_count_col: str = Field(default="umi_count", description="UMI count at that rank")
+    is_cell_col: str | None = Field(
+        default=None,
+        description="Optional boolean column marking called cells; else the cutoff is estimated",
+    )
+
+    log_x: bool = Field(default=True, description="Log-scale the rank axis")
+    log_y: bool = Field(default=True, description="Log-scale the UMI-count axis")
+    show_cutoff: bool = Field(
+        default=True, description="Draw the cell-calling threshold as a reference line"
+    )
+
+
+class DamageProfileConfig(_BaseVizConfig):
+    """Ancient-DNA misincorporation profile: substitution frequency by read-end position."""
+
+    viz_kind: Literal["damage_profile"] = "damage_profile"
+
+    sample_col: str = Field(default="sample", description="Column naming each sample / library")
+    end_col: str = Field(
+        default="end", description="Read end the position is measured from: 5p or 3p"
+    )
+    position_col: str = Field(default="position", description="Distance from the read end")
+    base_change_col: str = Field(
+        default="base_change", description="Substitution, e.g. C>T, G>A, other"
+    )
+    frequency_col: str = Field(
+        default="frequency", description="Substitution frequency at that position"
+    )
+
+    ends: Literal["both", "5p", "3p"] = Field(
+        default="both", description="Which read end(s) to draw a panel for"
+    )
+    max_position: int = Field(
+        default=25, ge=1, le=200, description="Furthest distance from the read end to display"
+    )
+    highlight: list[str] = Field(
+        default_factory=lambda: ["C>T", "G>A"],
+        description="Substitutions drawn in the deamination colours; others render muted",
+    )
+
+    # --- Read-length facet --------------------------------------------------
+    # Authenticity is read off the interaction, not the marginal: short reads
+    # should carry more deamination than long ones, and one curve per length
+    # bin is how an aDNA paper shows it. Opt-in and inert unless the bound
+    # collection actually carries the column.
+    facet_by: Literal["none", "length_bin"] = Field(
+        default="none",
+        description=(
+            "``length_bin`` draws one lane per read-length bin, using the "
+            "``length_bin_col`` column. ``none`` (default) keeps one panel."
+        ),
+    )
+    length_bin_col: str = Field(
+        default="length_bin",
+        description="Column holding the read-length bin, used when facet_by is length_bin",
+    )
+    max_facets: int = Field(
+        default=6, ge=1, le=20, description="How many length-bin lanes to draw before truncating"
+    )
+
+
+# --- Locus grammar, mirrored from locusParse.ts -----------------------------
+# The address bar of a locus section accepts one grammar and the YAML that
+# pre-loads that address bar must accept the same one, or a dashboard would
+# validate here and resolve to nothing in the browser. Kept beside the only
+# field that uses it; the React twin is ``parseLocusText`` in
+# ``packages/depictio-react-core/src/components/advanced_viz/genomespy/
+# locusParse.ts``.
+_LOCUS_COORD_RE = re.compile(r"^\d+(?:\.\d+)?(?:kb|mb|gb|k|m|g)?$", re.IGNORECASE)
+_LOCUS_CONTIG_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+# ``..`` is the Ensembl separator; the two dashes are the ones a copy from a
+# paper carries (en dash U+2013, em dash U+2014).
+_LOCUS_RANGE_SEP_RE = re.compile(r"\.\.|[-– - ]")
+
+
+def _is_locus_text(text: str) -> bool:
+    """True when ``text`` is a locus the browser's address bar would resolve.
+
+    Accepts ``chr7:55,000,000-56,000,000``, ``chr7:55.0Mb-56Mb``,
+    ``chr7:55000000..56000000``, ``chr7:55000000`` (a window around one
+    coordinate) and a bare contig name.
+    """
+    trimmed = text.strip()
+    if not trimmed:
+        return False
+    colon = trimmed.rfind(":")
+    if colon < 0:
+        return bool(_LOCUS_CONTIG_RE.match(trimmed))
+    chrom = trimmed[:colon].strip()
+    rest = trimmed[colon + 1 :].strip()
+    if not chrom:
+        return False
+    if not rest:
+        return True
+    parts = [p.strip() for p in _LOCUS_RANGE_SEP_RE.split(rest) if p.strip()]
+    if len(parts) not in (1, 2):
+        return False
+    return all(_LOCUS_COORD_RE.match(re.sub(r"[,_\s]", "", p)) for p in parts)
+
+
+class GenomeViewConfig(_BaseVizConfig):
+    """A genome view drawn by GenomeSpy on a chromosome-aware ``locus`` axis.
+
+    Binds the same ``chr / pos / score`` roles as ``manhattan`` so every DC a
+    Manhattan reads renders here unchanged, but the genome axis, the locus
+    zoom, the mark picking and the region brush are GenomeSpy's own rather than
+    rebuilt from Plotly primitives. ``end_col`` turns each row into an interval
+    (``rect`` mark), which covers coverage bins and peak calls; ``bar`` draws
+    the score as a bar from a baseline, which is the coverage look GenomeSpy
+    has no line mark for.
+
+    An advanced_viz tile binds exactly one data collection, so "multi-track"
+    here means several ``genome_view`` tiles stacked in one dashboard section
+    that share a region filter, not one tile over several collections. The
+    brush emits that region as an ordinary chromosome + position filter pair
+    (see ``genomeRegionFilters`` in ``packages/depictio-react-core/src/
+    selection.ts``) and ``follow_region_filter`` makes a tile zoom to an
+    incoming one.
+    """
+
+    viz_kind: Literal["genome_view"] = "genome_view"
+
+    source: Literal["table", "file"] = Field(
+        default="table",
+        description=(
+            "Where the track's rows come from. ``table`` (default) reads the "
+            "bound data collection through the advanced_viz data endpoint. "
+            "``file`` hands GenomeSpy an indexed file (bigWig, tabix, VCF, "
+            "GFF3) it range-loads itself, for tracks too dense to materialise."
+        ),
+    )
+
+    chr_col: str = Field(default="chr", description="Column with chromosome / contig name")
+    pos_col: str = Field(default="pos", description="Column with the genomic start position")
+    score_col: str = Field(default="score", description="Column with the y-axis value")
+    feature_col: str | None = Field(
+        default=None, description="Optional column naming the row (SNP, peak, gene) for hover"
+    )
+    end_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column with the interval end. When set the track draws one "
+            "rectangle per row from pos to end instead of a point."
+        ),
+    )
+    sample_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column naming the sample a row belongs to. Enables "
+            "``facet_by_sample``, which stacks one lane per sample on a shared "
+            "genome axis."
+        ),
+    )
+    category_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional per-row annotation (gene region, peak caller, cluster) used "
+            "as the colour channel in place of the chromosome."
+        ),
+    )
+    mark: Literal["point", "rect", "bar"] = Field(
+        default="point",
+        description=(
+            "Mark type. ``rect`` needs ``end_col`` and draws one rectangle per "
+            "interval; ``bar`` draws the score as a bar from a baseline (GenomeSpy "
+            "has no line or area mark, so this is the coverage profile look); "
+            "without ``end_col`` both degrade to points."
+        ),
+    )
+    facet_by_sample: bool = Field(
+        default=False,
+        description=(
+            "Stack one lane per value of ``sample_col``, vertically concatenated "
+            "and sharing the genome axis. Needs ``sample_col``."
+        ),
+    )
+    max_facets: int = Field(
+        default=8,
+        ge=1,
+        le=40,
+        description=(
+            "Upper bound on stacked lanes. Beyond it the lanes would be a few "
+            "pixels tall each, so the renderer keeps the first ``max_facets`` "
+            "samples in genome order and says how many it dropped."
+        ),
+    )
+    annotation: GeneLaneAssembly = Field(
+        default="none",
+        description=(
+            "Gene annotation lane drawn under the data track, from the bundled "
+            "protein-coding gene table for that assembly "
+            "(``assets/genomes/<assembly>.genes.json``, lazily fetched). ``none`` "
+            "draws no lane."
+        ),
+    )
+    assembly: str | None = Field(
+        default=None,
+        description=(
+            "GenomeSpy built-in assembly (hg38, hg19, hg18, mm10, mm9, dm6). Null derives "
+            "the contig list and sizes from the data itself, which is what a viral "
+            "reference or a draft assembly needs."
+        ),
+    )
+    score_title: str = Field(default="score", description="Y-axis label")
+    score_threshold: float | None = Field(
+        default=None, description="Horizontal reference rule; None hides it"
+    )
+    point_size: int = Field(default=5, ge=1, le=30, description="Point diameter in pixels")
+    opacity: float = Field(default=0.85, ge=0.05, le=1.0)
+
+    # --- Region brush as a cross-filter ------------------------------------
+    region_filter_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let a brush along the genome axis emit a chromosome multi-select plus "
+            "a position range on this tile's own collection, so other tiles bound "
+            "to the same columns (directly, or through a project link) narrow to "
+            "the brushed region."
+        ),
+    )
+    follow_region_filter: bool = Field(
+        default=False,
+        description=(
+            "Zoom this tile to an incoming region filter instead of showing the "
+            "whole genome. Off by default so a tile keeps its overview unless the "
+            "dashboard asks it to follow."
+        ),
+    )
+    default_region: str | None = Field(
+        default=None,
+        description=(
+            "Region the section opens on, written the way the locus field takes "
+            "it: ``chr1:10,000,000-12,000,000``. On its first render the tile "
+            "emits the same chromosome and position filters the locus field "
+            "emits, so every tile of the section starts on that region instead "
+            "of on the whole genome or on nothing at all. Emitted once per "
+            "session and only when no region is already in force, so a reader "
+            "who moves or clears the region keeps their own choice. Needs "
+            "``region_filter_enabled``. Coordinates may carry thousands "
+            "separators and a kb / Mb / Gb suffix, ``..`` works as the "
+            "separator, one coordinate opens a 10 kb window around it, and a "
+            "bare contig name opens the whole contig."
+        ),
+    )
+
+    @field_validator("default_region")
+    @classmethod
+    def _check_default_region(cls, value: str | None) -> str | None:
+        """Refuse a region the browser's address bar could not resolve.
+
+        The contig name is not checked against the data: which contigs exist is
+        known only once the collection is read, and the renderer matches the
+        name against them (with or without the ``chr`` prefix) at that point.
+        """
+        if value is None:
+            return None
+        if not _is_locus_text(value):
+            raise ValueError(
+                f"default_region {value!r} is not a locus. Write it as "
+                "chr:start-end, for example chr1:10,000,000-12,000,000."
+            )
+        return value.strip()
+
+    # --- Selection as a cross-filter (same contract as ManhattanConfig) -----
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a mark emit a dashboard filter the Analysis panel can "
+            "turn into a group. Requires ``selection_column``."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. No default, for the "
+            "same reason as the Manhattan plot: a row here is one feature at one "
+            "locus and the dashboard has to say what a pick means."
+        ),
+    )
+
+    # --- source: file ------------------------------------------------------
+    # Only read when ``source`` is ``file``. The bound DC is then an
+    # ``indexed_file`` collection and the browser range-loads its objects
+    # itself; nothing below applies to a table-backed tile.
+    file_info_fields: list[str] | None = Field(
+        default=None,
+        description=(
+            "VCF only. INFO keys promoted to columns before encoding, so a "
+            "classification or an allele frequency can drive the y axis and the "
+            "colour. Null promotes none."
+        ),
+    )
+    file_category_field: str | None = Field(
+        default=None,
+        description=(
+            "VCF only. Which promoted INFO field ranks the variants on the y "
+            "axis and colours them. Null draws one row of marks instead."
+        ),
+    )
+    file_categories: list[str] | None = Field(
+        default=None,
+        description=(
+            "Ordered values of ``file_category_field``, bottom to top. Null "
+            "lets the values order themselves as they arrive."
+        ),
+    )
+    file_add_chr_prefix: bool = Field(
+        default=False,
+        description=(
+            "Prepend 'chr' to the contig names read from the file, for a file "
+            "called on an Ensembl-style reference shown on a UCSC assembly."
+        ),
+    )
+    file_window_size: int | None = Field(
+        default=None,
+        ge=1000,
+        description=(
+            "Visible span, in bases, below which the browser starts fetching. "
+            "Null uses the per-format default (1 Mb for VCF, 2 Mb for GFF3). "
+            "Raising it fetches sooner and costs more bandwidth."
+        ),
+    )
+    file_max_lanes: int = Field(
+        default=8,
+        ge=1,
+        le=40,
+        description="Upper bound on per-sample lanes drawn from the collection's files.",
+    )
+    file_tabix_columns: list[str] | None = Field(
+        default=None,
+        description=(
+            "Field names of a bgzip and tabix indexed interval file, in column "
+            "order. Null assumes BED order: chrom, chromStart, chromEnd, name, "
+            "score, strand."
+        ),
+    )
+    file_bam_view: Literal["coverage", "pileup"] = Field(
+        default="coverage",
+        description=(
+            "BAM only. 'coverage' draws a depth profile; 'pileup' stacks the "
+            "reads themselves, which is only legible over a few kilobases."
+        ),
+    )
+
+
+class GroupCompareConfig(_BaseVizConfig):
+    """Two saved selection groups compared feature by feature, on demand.
+
+    The observations are the rows (``index_col`` names them) and the features
+    are every other numeric column, as in ``complex_heatmap``. The two groups
+    are not bound columns: they are the dashboard's saved selection groups
+    (lasso on an embedding, ticked table rows), resolved to row ids when the
+    ``compute_group_compare`` endpoint runs the test as a background job and
+    caches the result, the same contract as ``compute_embedding``.
+    """
+
+    viz_kind: Literal["group_compare"] = "group_compare"
+
+    index_col: str = Field(
+        default="index", description="Column naming each observation (cell, sample)"
+    )
+    group_col: str | None = Field(
+        default=None,
+        description="Optional column with a precomputed group label, used when no saved groups are picked",
+    )
+    test: Literal["wilcoxon", "t_test"] = Field(
+        default="wilcoxon", description="Per-feature test between the two groups"
+    )
+    log_transform: bool = Field(
+        default=True, description="log1p the feature values before testing (raw counts / UMIs)"
+    )
+    max_features: int = Field(
+        default=2000, ge=10, le=20000, description="Guard on the number of feature columns tested"
+    )
+    min_observations: int = Field(
+        default=3, ge=2, description="Smallest group size the test accepts"
+    )
+    fdr_threshold: float = Field(
+        default=0.05, gt=0, lt=1, description="Significance line on the volcano"
+    )
+    log2fc_threshold: float = Field(
+        default=1.0, ge=0, description="Effect-size lines on the volcano"
+    )
+    top_n_labels: int = Field(
+        default=20, ge=0, le=200, description="Features labelled on the volcano"
+    )
+    default_group_a: str | None = Field(
+        default=None,
+        description=(
+            "Group A picked on open: a saved selection group name, or a value of group_col. "
+            "Unknown names fall back to the first two groups offered"
+        ),
+    )
+    default_group_b: str | None = Field(
+        default=None,
+        description="Group B picked on open, resolved like default_group_a",
+    )
+    auto_run: bool = Field(
+        default=False,
+        description=(
+            "Run the comparison as soon as two groups are picked, once per distinct request; "
+            "the server caches the result so reopening the tab reuses it"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _distinct_default_groups(self) -> "GroupCompareConfig":
+        if self.default_group_a is not None and self.default_group_a == self.default_group_b:
+            raise ValueError("default_group_a and default_group_b must name two different groups")
+        return self
+
+
+class TranscriptStructureConfig(_BaseVizConfig):
+    """Isoforms of one gene on a base-pair axis, one lane per transcript."""
+
+    viz_kind: Literal["transcript_structure"] = "transcript_structure"
+
+    transcript_id_col: str = Field(
+        default="transcript_id", description="Column naming each isoform"
+    )
+    gene_id_col: str = Field(
+        default="gene_id", description="Column naming the gene an isoform belongs to"
+    )
+    chrom_col: str = Field(default="chrom", description="Chromosome / contig of the block")
+    start_col: str = Field(default="start", description="Block start (bp)")
+    end_col: str = Field(default="end", description="Block end (bp)")
+    feature_col: str = Field(default="feature", description="Block type: exon, CDS, UTR")
+    strand_col: str = Field(default="strand", description="Transcript strand: + or -")
+    sample_col: str | None = Field(default=None, description="Optional column selecting a sample")
+    gene_name_col: str | None = Field(default=None, description="Optional readable gene symbol")
+    transcript_class_col: str | None = Field(
+        default=None, description="Optional novelty / class label (known, novel, NIC, NNC)"
+    )
+    expression_col: str | None = Field(
+        default=None, description="Optional per-transcript expression used for lane order or colour"
+    )
+
+    gene: str | None = Field(
+        default=None, description="Gene to draw; null picks the gene with the most transcripts"
+    )
+    max_transcripts: int = Field(default=30, ge=1, le=200, description="Lanes drawn per gene")
+    exon_feature: str = Field(default="exon", description="Feature value drawn as a block")
+    cds_feature: str = Field(default="CDS", description="Feature value drawn as a taller block")
+    colour_by: Literal["transcript_class", "expression", "none"] = Field(
+        default="transcript_class", description="What the lane colour encodes"
+    )
+    colour_scale: ColourScale = Field(default="Viridis")
+
+
+class CnvProfileConfig(_BaseVizConfig):
+    """Copy-number profile: log2 ratio per bin, called segments over it, BAF below."""
+
+    viz_kind: Literal["cnv_profile"] = "cnv_profile"
+
+    sample_col: str = Field(default="sample", description="Column naming each sample")
+    chrom_col: str = Field(default="chrom", description="Chromosome of the bin / segment")
+    start_col: str = Field(default="start", description="Start of the bin / segment (bp)")
+    end_col: str = Field(default="end", description="End of the bin / segment (bp)")
+    log2_col: str = Field(default="log2", description="Log2 copy ratio")
+    baf_col: str | None = Field(
+        default=None, description="Optional B-allele frequency, drawn underneath"
+    )
+    copy_number_col: str | None = Field(
+        default=None, description="Optional integer copy number, colours the segments"
+    )
+    segment_col: str | None = Field(
+        default=None,
+        description="Optional row-type column: rows whose value is ``segment`` draw as segments, the rest as bins",
+    )
+    label_col: str | None = Field(default=None, description="Optional hover label (gene, cytoband)")
+
+    sample: str | None = Field(
+        default=None, description="Sample to draw; null picks the first seen"
+    )
+    chrom: str | None = Field(
+        default=None, description="Chromosome to zoom on; null draws the whole genome"
+    )
+    y_range: float = Field(default=3.0, gt=0, le=10, description="Symmetric log2 axis limit")
+    show_baf: bool = Field(default=True, description="Draw the BAF panel when ``baf_col`` is bound")
+    point_size: int = Field(default=3, ge=1, le=12, description="Bin marker size in pixels")
+    gain_threshold: float = Field(
+        default=0.3, description="Log2 above which a segment reads as a gain"
+    )
+    loss_threshold: float = Field(
+        default=-0.3, description="Log2 below which a segment reads as a loss"
+    )
+    max_bins: int = Field(
+        default=50000, ge=100, le=500000, description="Guard on the number of bin rows requested"
+    )
+
+    # --- Locus view (GenomeSpy, the ASCAT layout) ---------------------------
+    view: Literal["plotly", "locus"] = Field(
+        default="plotly",
+        description=(
+            "``plotly`` draws the genome-wide Plotly profile; ``locus`` draws the zoomable "
+            "GenomeSpy tracks: allele-specific copy number, log2 ratio and mirrored BAF"
+        ),
+    )
+    views: list[Literal["plotly", "locus"]] | None = Field(
+        default=None,
+        description="Views offered in the tile's switch; null offers every view",
+    )
+    minor_copy_number_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional minor-allele copy number (ASCAT nMinor). With ``copy_number_col`` bound, "
+            "the locus view draws nMajor and nMinor as two rules per segment"
+        ),
+    )
+    annotation: GeneLaneAssembly = Field(
+        default="none",
+        description="Locus view: bundled gene lane drawn under the tracks; labels appear on zoom",
+    )
+    facet_by_sample: bool = Field(
+        default=False,
+        description="Locus view: one set of tracks per sample instead of the selected sample only",
+    )
+
+
+class GenomeChordConfig(_BaseVizConfig):
+    """Chromosomes on a ring, one chord per link between two loci."""
+
+    viz_kind: Literal["genome_chord"] = "genome_chord"
+
+    chrom_a_col: str = Field(default="chrom_a", description="Chromosome of the first locus")
+    pos_a_col: str = Field(default="pos_a", description="Position of the first locus (bp)")
+    chrom_b_col: str = Field(default="chrom_b", description="Chromosome of the second locus")
+    pos_b_col: str = Field(default="pos_b", description="Position of the second locus (bp)")
+    label_col: str | None = Field(
+        default=None, description="Optional link label (fusion name, SV id)"
+    )
+    weight_col: str | None = Field(
+        default=None, description="Optional link weight (supporting reads), drives chord width"
+    )
+    category_col: str | None = Field(
+        default=None, description="Optional link class (fusion type, SV type), drives chord colour"
+    )
+    sample_col: str | None = Field(default=None, description="Optional column selecting a sample")
+
+    assembly: str | None = Field(
+        default=None,
+        description="Chromosome sizes to lay the ring out on (hg38, hg19, mm10); null derives them from the data",
+    )
+    max_links: int = Field(
+        default=500, ge=1, le=5000, description="Guard on the number of chords drawn"
+    )
+    min_weight: float | None = Field(default=None, description="Drop links lighter than this")
+    colour_by: Literal["category", "chrom_a", "none"] = Field(
+        default="category", description="What the chord colour encodes"
+    )
+    show_labels: bool = Field(default=True, description="Label the chromosome arcs")
+    intra_chromosomal: bool = Field(
+        default=True, description="Draw links whose two loci share a chromosome"
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig above.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a chord emit a dashboard filter the Analysis panel "
+            "can turn into a group. Falls back to ``label_col`` when "
+            "``selection_column`` is unset; with neither bound the renderer "
+            "stays inert."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. Null uses "
+            "``label_col``, because a chord is one named link (a fusion, a pair "
+            "of breakends) and its label is what the other tiles join on. Name "
+            "the sample column instead to select every link of the samples the "
+            "picked chords belong to."
+        ),
+    )
+
+
+class RecordCardConfig(_BaseVizConfig):
+    """One row of a collection, read as labelled fields rather than as a mark.
+
+    The detail half of a master/detail dashboard: a scatter, a table or a
+    genome view emits a selection, and this tile shows the record behind the
+    picked point. It draws no marks at all, which is the whole point: the
+    columns a reader wants once they have chosen a sample (run identifiers,
+    QC verdicts, links out to a report) are text, and a chart of one row is a
+    worse way to read them.
+
+    With no selection reaching it the tile shows its empty state naming the
+    source it is waiting on, never the first row of the collection: a card
+    that silently shows row 0 reads as the record the reader picked. The one
+    exception is an explicit `default_record`, which the echo line labels as
+    the default so it never passes for a pick.
+    """
+
+    viz_kind: Literal["record_card"] = "record_card"
+
+    id_col: str = Field(
+        default="id",
+        description="Column whose value identifies the record, matched against the incoming selection",
+    )
+    title_col: str | None = Field(
+        default=None,
+        description="Column shown as the card's heading; null uses the id column's value",
+    )
+    sections: dict[str, list[str]] | None = Field(
+        default=None,
+        description=(
+            "Section title to the columns it holds, in order. Null groups the "
+            "columns by the data collection's own `columns_description` groups, "
+            "so a well-described collection needs no layout here."
+        ),
+    )
+    labels: dict[str, str] | None = Field(
+        default=None,
+        description="Display label per column; unlisted columns fall back to a short column description, then the column name",
+    )
+    link_templates: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Column to a URL template containing `{value}`. A column listed "
+            "here renders as a link instead of as text."
+        ),
+    )
+    selection_source: Literal["scatter_selection", "table_selection", "any"] = Field(
+        default="any",
+        description=(
+            "Which selection the card follows. `any` takes whichever arrives, "
+            "which is what a dashboard with one selecting tile wants; name a "
+            "source when several tiles select at once and only one of them "
+            "should drive the card."
+        ),
+    )
+    linked_component: str | None = Field(
+        default=None,
+        description=(
+            "Tag of the component whose selection drives this card. When set, the "
+            "card follows only that component's selection, and a card placed on "
+            "the same row and section directly beside it is laid out as its "
+            "collapsible side panel. The dashboard import resolves the tag to "
+            "the component's index."
+        ),
+    )
+    max_fields: int = Field(
+        default=40,
+        ge=1,
+        description="How many columns to render before the card truncates and says so",
+    )
+    default_record: str | None = Field(
+        default=None,
+        description=(
+            "Value of the id column shown when no selection reaches the tile, "
+            "so the card opens filled. A real selection always wins, and "
+            "clearing it brings this record back."
+        ),
+    )
+
+
+class ParallelCoordinatesConfig(_BaseVizConfig):
+    """One polyline per sample across N metric axes.
+
+    The many-metric view a scatter cannot give: a QC table with a dozen
+    columns is read as a whole here, where a scatter matrix would need
+    N*(N-1)/2 panels. Plotly's `parcoords` also brushes each axis, so the
+    reader narrows the cohort on the picture rather than in the filter panel.
+
+    Axes are normalised by default because raw units put a read count and a
+    duplication rate on the same axis range and flatten one of them.
+    """
+
+    viz_kind: Literal["parallel_coordinates"] = "parallel_coordinates"
+
+    sample_col: str = Field(
+        default="sample", description="Column naming each polyline (sample, library, run)"
+    )
+    metric_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Columns to draw as axes, in order. Null takes every numeric column "
+            "of the bound collection, capped at `max_axes`, which is what a QC "
+            "table wants and needs no per-pipeline list."
+        ),
+    )
+    group_col: str | None = Field(
+        default=None,
+        description="Optional categorical column driving the line colour",
+    )
+    scale: Literal["raw", "zscore", "minmax"] = Field(
+        default="minmax",
+        description=(
+            "How each axis is scaled. `minmax` (default) and `zscore` make "
+            "axes in different units comparable; `raw` keeps the published "
+            "values, which only reads well when every metric shares a unit."
+        ),
+    )
+    max_rows: int = Field(
+        default=2000,
+        ge=1,
+        description=(
+            "How many rows the tile draws. Above a few thousand polylines the "
+            "picture is a solid band, so the server hands over the first "
+            "`max_rows` rather than a sample of them."
+        ),
+    )
+    max_axes: int = Field(
+        default=12,
+        ge=2,
+        le=30,
+        description="Cap on the inferred axis count when `metric_cols` is null",
+    )
+    colour_scale: ColourScale = Field(
+        default="Viridis", description="Continuous colour scale when the colour column is numeric"
+    )
+    line_opacity: float = Field(default=0.6, ge=0.05, le=1.0)
+
+
+# ---------------------------------------------------------------------------
+# Retired kinds, kept alive as views of the kind that survived
+# ---------------------------------------------------------------------------
+
+#: ``old kind -> (surviving kind, config overrides)``.
+#:
+#: Four kinds were the same marks on the same table as a neighbour, told apart
+#: only by which column went on which axis: ``ma`` and ``qq`` are a volcano's
+#: table read two other ways, ``enrichment`` is a dot plot of terms, and
+#: ``roc_pr_curve`` is the threshold sweep the ``pr_benchmark`` point sits on.
+#: Each survivor gained a ``view`` field and the retired kind's bindings, so
+#: the merge costs a stored dashboard nothing: it is rewritten at READ time,
+#: here, and only written back if the user saves.
+#:
+#: The old literals stay in ``AdvancedVizKind`` (and in ``KIND_METADATA``, with
+#: ``legacy: True``) so every snapshot that enumerates kinds keeps validating.
+_KIND_ALIASES: dict[str, tuple[str, dict[str, Any]]] = {
+    "ma": ("volcano", {"view": "ma"}),
+    "qq": ("volcano", {"view": "qq"}),
+    "enrichment": ("dot_plot", {"view": "enrichment"}),
+    "roc_pr_curve": ("pr_benchmark", {"view": "roc"}),
+}
+
+#: ``old kind -> {old field: surviving field}``, applied before the overrides.
+#:
+#: Empty for every alias, and that is the point rather than an oversight: each
+#: survivor took the retired config's field NAMES verbatim when it gained the
+#: view (``VolcanoConfig.avg_log_intensity_col`` is ``MAConfig``'s field,
+#: ``DotPlotConfig.term_col`` is ``EnrichmentConfig``'s, ``PrBenchmarkConfig``
+#: .``fpr_col`` is ``RocPrCurveConfig``'s), so the translation is the identity
+#: and a stored config carries over key for key. A future merge whose names
+#: collide puts its renames here instead of rewriting this function.
+_ALIAS_FIELD_RENAMES: dict[str, dict[str, str]] = {
+    "ma": {},
+    "qq": {},
+    "enrichment": {},
+    "roc_pr_curve": {},
+}
+
+#: Bindings the survivor needs that the retired kind spelled under another
+#: role. ``old kind -> {surviving field: the old field to copy it from}``,
+#: applied only when the surviving field is absent, so an explicit binding
+#: always wins. An MA plot's M axis IS a volcano's effect size and a QQ plot's
+#: p-value IS a volcano's significance, so both views of a migrated tile draw
+#: something rather than falling back to a column name that is not there.
+_ALIAS_FIELD_SEEDS: dict[str, dict[str, str]] = {
+    "ma": {"effect_size_col": "log2_fold_change_col"},
+    "qq": {"significance_col": "p_value_col"},
+    "enrichment": {},
+    "roc_pr_curve": {},
+}
+
+#: Extra overrides applied only when the key is absent from the stored config.
+#: A migrated ``enrichment`` tile offers the enrichment view alone: the marker
+#: dot plot needs a cluster column the enrichment table never had, so offering
+#: it would put an empty panel behind the switch.
+_ALIAS_SOFT_OVERRIDES: dict[str, dict[str, Any]] = {
+    "enrichment": {"views": ["enrichment"]},
+}
+
+
+def _accepts_none(model: type[BaseModel], field: str) -> bool:
+    """Whether ``field`` on ``model`` is declared optional."""
+    info = model.model_fields.get(field)
+    if info is None:
+        return True
+    annotation = info.annotation
+    return annotation is None or type(None) in get_args(annotation)
+
+
+def apply_kind_aliases(data: Any) -> Any:
+    """Rewrite a retired kind's config into the surviving kind's, in place of it.
+
+    Runs as a ``BeforeValidator`` on the ``VizConfig`` union, i.e. everywhere a
+    config is validated: a dashboard read out of Mongo, a shipped YAML, a
+    ``use:`` expansion, the CLI validator and the API's save route. A config
+    that is not a dict or does not name a retired kind is returned untouched,
+    so the common path costs one dict lookup.
+
+    Every other field is carried over unchanged. The one thing dropped is a
+    null the survivor does not accept: ``MAConfig.significance_col`` was
+    optional and ``VolcanoConfig``'s is not, so a stored null becomes "use the
+    default" rather than a validation error on a dashboard that used to load.
+    """
+    if not isinstance(data, dict):
+        return data
+    alias = _KIND_ALIASES.get(data.get("viz_kind"))
+    if alias is None:
+        return data
+    old_kind = data["viz_kind"]
+    survivor, overrides = alias
+
+    renames = _ALIAS_FIELD_RENAMES.get(old_kind, {})
+    cfg: dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "viz_kind":
+            continue
+        cfg[renames.get(key, key)] = value
+
+    for target, source in _ALIAS_FIELD_SEEDS.get(old_kind, {}).items():
+        if cfg.get(target) is None and cfg.get(source) is not None:
+            cfg[target] = cfg[source]
+    for key, value in _ALIAS_SOFT_OVERRIDES.get(old_kind, {}).items():
+        cfg.setdefault(key, value)
+
+    cfg["viz_kind"] = survivor
+    cfg.update(overrides)
+
+    model = _SURVIVOR_MODELS[survivor]
+    return {k: v for k, v in cfg.items() if v is not None or _accepts_none(model, k)}
+
+
+def resolve_viz_kind(viz_kind: str | None) -> str | None:
+    """The kind a stored ``viz_kind`` string resolves to today.
+
+    The top-level ``viz_kind`` on an advanced_viz component mirrors
+    ``config.viz_kind``; this is what keeps the two agreeing once the config
+    has been rewritten under it.
+    """
+    if viz_kind is None:
+        return None
+    alias = _KIND_ALIASES.get(viz_kind)
+    return alias[0] if alias else viz_kind
+
+
+_VizConfigUnion = Annotated[
     ScatterXyConfig
     | VolcanoConfig
     | EmbeddingConfig
@@ -1616,19 +2871,15 @@ VizConfig = Annotated[
     | PhylogeneticConfig
     | RarefactionConfig
     | DaBarplotConfig
-    | EnrichmentConfig
     | ComplexHeatmapConfig
     | UpsetPlotConfig
-    | MAConfig
     | DotPlotConfig
     | LollipopConfig
-    | QQConfig
     | SunburstConfig
     | OncoplotConfig
     | CoverageTrackConfig
     | SankeyConfig
     | PrBenchmarkConfig
-    | RocPrCurveConfig
     | ConfusionMatrixConfig
     | MetricCiBarsConfig
     | ProfileConfig
@@ -1636,6 +2887,28 @@ VizConfig = Annotated[
     | FusionStructureConfig
     | GeneArrowTrackConfig
     | GseaRunningScoreConfig
-    | SashimiConfig,
+    | SashimiConfig
+    | ContactMapConfig
+    | KneePlotConfig
+    | DamageProfileConfig
+    | GenomeViewConfig
+    | GroupCompareConfig
+    | TranscriptStructureConfig
+    | CnvProfileConfig
+    | GenomeChordConfig
+    | RecordCardConfig
+    | ParallelCoordinatesConfig,
     Field(discriminator="viz_kind"),
 ]
+
+#: The models a retired kind can be rewritten into, for the null-dropping above.
+_SURVIVOR_MODELS: dict[str, type[BaseModel]] = {
+    "volcano": VolcanoConfig,
+    "dot_plot": DotPlotConfig,
+    "pr_benchmark": PrBenchmarkConfig,
+}
+
+# The union as everything outside this module validates it: the alias rewrite
+# first, discrimination second. Kept as a separate name above so the rewrite can
+# be read (and tested) on its own.
+VizConfig = Annotated[_VizConfigUnion, BeforeValidator(apply_kind_aliases)]

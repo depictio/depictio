@@ -22,6 +22,8 @@
  *   CATALOG_E2E_SHARD=K
  *   CATALOG_E2E_SHARDS=N       walk only shard K of N (see SHARD below)
  *   CATALOG_E2E_LANES=N        split this shard across N parallel tests
+ *   CATALOG_E2E_CHUNKS=N       split each lane into N tests run one after the
+ *                              other (default 8, see CHUNKS below)
  */
 import { APIRequestContext, Page, expect as pwExpect } from "@playwright/test";
 import { test, expect, apiLogin } from "../../fixtures/auth";
@@ -89,6 +91,51 @@ if (!Number.isInteger(LANES) || LANES < 1) {
 }
 
 /**
+ * How many tests each lane is cut into. They run one after the other on the
+ * lane's worker, so this adds no concurrency against the backend; what it buys
+ * is a budget and a retry sized to a slice instead of to the whole lane.
+ *
+ * A lane used to be a single test with a fixed 30-minute budget. That held
+ * while a shard was around 210 renders; the nf-core lot 2 modules took it to
+ * around 550, which no fixed budget fits without also hiding a hung walk, and
+ * a retry of the whole lane then re-walked an hour of renders that had passed.
+ * Cut into chunks, a flaky render costs one chunk's retry, and the job's own
+ * timeout-minutes still covers a full walk plus that retry.
+ */
+const CHUNKS = Number(process.env.CATALOG_E2E_CHUNKS ?? 8);
+if (!Number.isInteger(CHUNKS) || CHUNKS < 1) {
+  throw new Error(`bad CATALOG_E2E_CHUNKS=${CHUNKS}`);
+}
+
+/**
+ * A chunk's budget is derived from what it walks, not fixed.
+ *
+ * Measured per render on the CI legs (add in the editor, check, then the
+ * viewer pass, with the throwaway dashboard's create and delete amortised
+ * over its batch): 4 to 7 s on a healthy leg, and up to 11 s on a leg where
+ * renders were failing, since every failure waits out its content timeout.
+ * 15 s leaves headroom over the slow end while a chunk that is genuinely stuck
+ * still fails within minutes. The floor covers the fixed cost of a chunk (the
+ * first page load, the login) and one MultiQC render that has to wait out its
+ * whole 300 s build ceiling.
+ */
+const PER_RENDER_BUDGET_MS = 15_000;
+const CHUNK_FLOOR_MS = 6 * 60_000;
+
+/**
+ * Extra budget a chunk is granted for every problem it records.
+ *
+ * A healthy render is quick; a broken one is not, because it is only declared
+ * broken once its waits run out: 30 s for the cell, then up to 60 s for its
+ * content, on the editor and again on the viewer. Three minutes covers that
+ * whole path, so a chunk that finds a few broken renders still finishes and
+ * says which ones, instead of timing out and saying nothing. Capped, so a
+ * stack where everything fails still ends the chunk in bounded time.
+ */
+const FAILURE_ALLOWANCE_MS = 3 * 60_000;
+const MAX_FAILURE_EXTENSION_MS = 30 * 60_000;
+
+/**
  * Where a component of each type is *supposed* to render.
  *
  * `interactive` never takes a grid tile, by design: both apps filter it out of
@@ -129,6 +176,22 @@ const CONTENT_SELECTOR: Record<string, string> = {
   // The panel emits the cell wrapper whether or not the renderer produced
   // anything, so the chrome is the first DOM the component itself owns.
   interactive: CHROME_SELECTOR,
+};
+
+/** Kinds that draw with something other than Plotly, keyed by render kind.
+ *
+ * Checked before CONTENT_SELECTOR, which expects a Plotly plot for every
+ * advanced_viz and would call these renders broken: genome_view paints a
+ * GenomeSpy canvas, genome_chord draws its own SVG, record_card lays out
+ * cards, and group_compare shows what it compares until two groups are
+ * picked. A miss costs a full wait per page, so an unlisted kind here can
+ * push a job past its timeout.
+ */
+const KIND_CONTENT_SELECTOR: Record<string, string> = {
+  genome_view: ".depictio-genome-view canvas",
+  genome_chord: 'svg[role="img"]',
+  record_card: ".mantine-Card-root",
+  group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
 };
 
 /** How long to wait for CONTENT_SELECTOR, per component type.
@@ -231,7 +294,9 @@ async function checkComponent(
         })
       : undefined;
 
-  const selector = CONTENT_SELECTOR[offer.render.component];
+  const selector =
+    (offer.render.kind && KIND_CONTENT_SELECTOR[offer.render.kind]) ??
+    CONTENT_SELECTOR[offer.render.component];
   if (selector) {
     const budget =
       CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS;
@@ -280,6 +345,10 @@ test.describe("catalog modules are usable on a dashboard", () => {
   // Parallel, not serial: the lanes below are independent, and a serial retry
   // re-runs the whole group — which is precisely how one failed attempt cost a
   // full hour on top of the two the walk already needed.
+  //
+  // Only the lanes are parallel. Each lane's chunks sit in a describe of their
+  // own configured "default" below, which Playwright runs in order on a single
+  // worker, so chunking never adds a second walker against the backend.
   test.describe.configure({ mode: "parallel" });
 
   let tokens: Awaited<ReturnType<typeof apiLogin>>;
@@ -316,19 +385,16 @@ test.describe("catalog modules are usable on a dashboard", () => {
     }
   });
 
-  const walkLane = async (lane: number, page: Page, request: APIRequestContext) => {
+  const walkLane = async (
+    lane: number,
+    chunk: number,
+    page: Page,
+    request: APIRequestContext,
+  ) => {
     test.skip(
       projects.length === 0,
       "no ingested tool output on this stack — nothing for the catalog to match",
     );
-    // A shard is a third of the catalog, around 18 minutes of steady walking.
-    // 30 leaves real headroom over that while still failing fast: a walk that
-    // reaches this budget is not slow, it is stuck on something, and the sooner
-    // it says so the sooner the report gets written. Two attempts at 30 plus
-    // the setup also fit inside the job's own timeout-minutes, which matters
-    // more than it looks — a job killed by that cap skips its `if: always()`
-    // upload steps, so an overrun costs the diagnosis as well as the time.
-    test.setTimeout(30 * 60_000);
 
     // Programmatic login only seeds storage — the SPA reads it on first load.
     await page.addInitScript(
@@ -348,12 +414,27 @@ test.describe("catalog modules are usable on a dashboard", () => {
     );
 
     const problems: string[] = [];
+    let budget = 0;
+    // Logged as found, not only in the final assertion: if the chunk does run
+    // out of time, the timeout error is all that reaches the report, and the
+    // problems collected up to that point would otherwise be lost with it.
+    const report = (problem: string) => {
+      problems.push(problem);
+      // eslint-disable-next-line no-console
+      console.log(`  ✗ ${problem}`);
+      if (budget > 0) {
+        test.setTimeout(
+          budget + Math.min(problems.length * FAILURE_ALLOWANCE_MS, MAX_FAILURE_EXTENSION_MS),
+        );
+      }
+    };
     let added = 0;
 
     // Both counters run across projects, not per project, so each project is
     // split evenly rather than by where its boundary happens to fall.
     let seq = 0;
     let laneSeq = 0;
+    let chunkSeq = 0;
 
     const work = projects.map((project) => {
       let offers = flattenOffers(project.modules)
@@ -369,17 +450,29 @@ test.describe("catalog modules are usable on a dashboard", () => {
       offers = offers.filter(() => seq++ % SHARDS === SHARD - 1);
       // And again to split this shard between the lanes. A no-op at 1 lane.
       offers = offers.filter(() => laneSeq++ % LANES === lane);
+      // And once more into this lane's chunks, round-robin for the same reason:
+      // every chunk gets its share of the slow renders. A no-op at 1 chunk.
+      offers = offers.filter(() => chunkSeq++ % CHUNKS === chunk);
       return { project, offers };
     });
-    test.skip(
-      work.every((w) => w.offers.length === 0),
-      "nothing in this shard and lane to walk on this stack",
-    );
+    const total = work.reduce((n, w) => n + w.offers.length, 0);
+    test.skip(total === 0, "nothing in this shard, lane and chunk to walk on this stack");
+    // Sized to this chunk's own renders, so the budget grows with the catalog
+    // instead of being outgrown by it. Reaching it still means stuck, not
+    // slow: see PER_RENDER_BUDGET_MS. Kept well inside the job's own
+    // timeout-minutes, which matters more than it looks: a job killed by that
+    // cap skips its `if: always()` upload steps, so an overrun costs the
+    // diagnosis as well as the time.
+    // A timeout set mid-test is measured from the test's start, so raising it
+    // per problem (see report above) extends this same budget.
+    budget = Math.max(CHUNK_FLOOR_MS, total * PER_RENDER_BUDGET_MS);
+    test.setTimeout(budget);
 
     for (const { project, offers } of work) {
       for (let start = 0; start < offers.length; start += BATCH) {
         const batch = offers.slice(start, start + BATCH);
-        const title = `e2e catalog ${project.id.slice(-6)} s${SHARD} ${start / BATCH + 1}`;
+        const title =
+          `e2e catalog ${project.id.slice(-6)} s${SHARD} c${chunk + 1} ` + `${start / BATCH + 1}`;
         // A full walk outlives an access token, and an expired one turns the
         // cleanup at the end of each batch into a silent 401 that leaves the
         // throwaway dashboards behind. One login per batch is cheap.
@@ -411,9 +504,9 @@ test.describe("catalog modules are usable on a dashboard", () => {
                 // dashboard it had just been saved to.
                 const checked = await checkComponent(page, componentId, offer, "editor");
                 entry.fullWidthInEditor = checked.fullWidth;
-                if (checked.problem) problems.push(checked.problem);
+                if (checked.problem) report(checked.problem);
               })
-              .catch((e: unknown) => problems.push(`${offer.label}: add failed — ${e}`));
+              .catch((e: unknown) => report(`${offer.label}: add failed — ${e}`));
           }
           if (placed.length === 0) continue;
 
@@ -421,7 +514,7 @@ test.describe("catalog modules are usable on a dashboard", () => {
           const stored = await storedComponentIds(request, tokens, dashboardId);
           for (const { componentId, offer } of placed) {
             if (!stored.has(componentId)) {
-              problems.push(`${offer.label}: saved, then vanished from the dashboard`);
+              report(`${offer.label}: saved, then vanished from the dashboard`);
             }
           }
 
@@ -430,13 +523,13 @@ test.describe("catalog modules are usable on a dashboard", () => {
           await page.goto(`/dashboard/${dashboardId}`);
           for (const { componentId, offer, fullWidthInEditor } of placed) {
             const checked = await checkComponent(page, componentId, offer, "viewer");
-            if (checked.problem) problems.push(checked.problem);
+            if (checked.problem) report(checked.problem);
             if (
               checked.fullWidth !== undefined &&
               fullWidthInEditor !== undefined &&
               checked.fullWidth !== fullWidthInEditor
             ) {
-              problems.push(
+              report(
                 `${offer.label}: spans the row in the ` +
                   `${checked.fullWidth ? "viewer" : "editor"} but not in the ` +
                   `${checked.fullWidth ? "editor" : "viewer"}`,
@@ -446,10 +539,10 @@ test.describe("catalog modules are usable on a dashboard", () => {
         } finally {
           await deleteDashboard(request, tokens, dashboardId);
         }
-        // The list reporter writes a line only when a *test* ends, and this
-        // walk is one test that owns its worker for twenty minutes, so the CI
-        // log sat silent the whole time and a run in flight was indistinguish-
-        // able from a hung one. One line per throwaway dashboard is enough to
+        // The list reporter writes a line only when a *test* ends, and a chunk
+        // of this walk owns its worker for several minutes, so the CI log sat
+        // silent the whole time and a run in flight was indistinguishable from
+        // a hung one. One line per throwaway dashboard is enough to
         // tell them apart, and cheap next to the six page loads it follows.
         // eslint-disable-next-line no-console
         console.log(
@@ -461,7 +554,9 @@ test.describe("catalog modules are usable on a dashboard", () => {
 
     // eslint-disable-next-line no-console
     const scope = SHARDS > 1 ? ` (shard ${SHARD} of ${SHARDS})` : "";
-    const laneScope = LANES > 1 ? ` lane ${lane + 1} of ${LANES}` : "";
+    const laneScope =
+      (LANES > 1 ? ` lane ${lane + 1} of ${LANES}` : "") +
+      (CHUNKS > 1 ? ` chunk ${chunk + 1} of ${CHUNKS}` : "");
     console.log(
       `added ${added} catalog renders across ${projects.length} project(s)${scope}${laneScope}`,
     );
@@ -470,9 +565,20 @@ test.describe("catalog modules are usable on a dashboard", () => {
   };
 
   for (let lane = 0; lane < LANES; lane++) {
-    const suffix = LANES > 1 ? ` (lane ${lane + 1} of ${LANES})` : "";
-    test(`every catalog render adds and renders${suffix}`, async ({ page, request }) => {
-      await walkLane(lane, page, request);
+    test.describe(() => {
+      // In order, on one worker: see CHUNKS. A failed chunk retries on its own
+      // and the next one still runs, which "serial" would not allow.
+      test.describe.configure({ mode: "default" });
+      for (let chunk = 0; chunk < CHUNKS; chunk++) {
+        const parts = [
+          ...(LANES > 1 ? [`lane ${lane + 1} of ${LANES}`] : []),
+          ...(CHUNKS > 1 ? [`chunk ${chunk + 1} of ${CHUNKS}`] : []),
+        ];
+        const suffix = parts.length ? ` (${parts.join(", ")})` : "";
+        test(`every catalog render adds and renders${suffix}`, async ({ page, request }) => {
+          await walkLane(lane, chunk, page, request);
+        });
+      }
     });
   }
 });

@@ -1,0 +1,29 @@
+# nf-core/cutandrun's own roll-ups. These are NOT a tool: they are the tables
+# the pipeline assembles itself, in local processes and in `bin/`, out of the
+# outputs of SEACR, MACS2, Bowtie 2 and its own fragment counts. There is no
+# nf-core module to point at, so identity is declared in full here and the
+# provenance link is `source_url`, the same shape as comBGC in funcscan.
+#
+# Three outputs live here:
+#   * `samples`          the sample hub built from the validated samplesheet,
+#                        the key every other collection is linked on;
+#   * `caller_agreement` one row per sample and caller, with how much of each
+#                        caller's peak set the other caller reproduced;
+#   * `frip`             how much of a sample's fragment coverage falls inside
+#                        its own peaks, the CUT&RUN signal-to-noise number.
+#
+# They are cutandrun-shaped rather than generic: `samples` reads the
+# pipeline's `<group>_R<replicate>` naming, and `frip` de-scales the SEACR
+# signal with the spike-in factor the pipeline applied to the bedGraph.
+id: cutandrun
+name: nf-core/cutandrun roll-ups
+description: >-
+  The run-level tables nf-core/cutandrun assembles from its own outputs: the
+  sample hub behind every link, the peak-caller agreement between SEACR and
+  MACS2, and the fraction of fragment coverage that falls inside the called
+  peaks.
+homepage: https://nf-co.re/cutandrun
+source_url: https://github.com/nf-core/cutandrun
+edam_topics:
+  - http://edamontology.org/topic_3179 # ChIP-seq
+  - http://edamontology.org/topic_3169 # Sequencing

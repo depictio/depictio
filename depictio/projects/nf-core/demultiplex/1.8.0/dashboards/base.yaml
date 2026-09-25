@@ -1,0 +1,1396 @@
+version: 1
+# nf-core/demultiplex 1.8.0 reference dashboard: sequencing-facility run QC.
+#
+# Funnel, five tabs, in the order a facility reads a run: what MultiQC and
+# CheckQC flagged -> did the instrument deliver (lanes, reads, cycles) -> how
+# the reads were shared between the libraries -> what went to Undetermined and
+# why -> how each library looks once demultiplexed.
+#
+# EVERY TAB HAS A SCOPE. `Library filters` is pinned and persistent: the
+# library and design pickers read the `libraries` hub, the lane picker reads
+# `lane_summary`, and the template's links fan them out to MultiQC and every
+# per-library and per-lane collection. Each tab adds a tab-local section on its
+# own columns.
+#
+# The four `Run at a glance` cards and the two pinned tables (`Sample sheet`
+# on top, `Lane table` at the bottom) are declared on the main tab, which no
+# route conditional removes, and ride every tab. Neither table is repeated
+# inside a tab. The run-level tiles `use:` the bcl2fastq renders; on the
+# BCL Convert route the same collections carry the same columns, so the same
+# tiles render unchanged.
+main_dashboard:
+  title: nf-core/demultiplex
+  subtitle: "nf-core/demultiplex 1.8.0: run health per lane and read, demultiplexing balance, undetermined reads and index swaps, per-library read QC"
+  project_tag: Sequencing Run Demultiplexing QC
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Libraries, design groups and lanes, on every tab
+    persistent: true
+    pin: top
+  - name: MultiQC scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC panels to libraries inside a read-share band
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The size and headline quality of the run, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: One row per library, the hub every library filter reads
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: CheckQC verdicts
+    icon: mdi:shield-check-outline
+    color: orange
+    description: The run-level checks CheckQC applied to the demultiplexing output
+  - name: Read QC after demultiplexing
+    icon: mdi:chart-box-outline
+    color: blue
+    description: Falco and fastp on the demultiplexed FASTQ files
+  - name: More MultiQC panels
+    icon: mdi:file-document-outline
+    color: gray
+    description: The remaining Falco and fastp panels
+    collapsed: true
+  - name: Lane table
+    icon: mdi:table
+    color: gray
+    description: One row per lane, the numbers behind the run health tiles, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ------------------------------------------------------------ glance strip
+  - component_type: card
+    tag: dm-glance-libraries
+    index: dm-glance-libraries
+    section: Run at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title: Libraries
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: dm-glance-yield
+    index: dm-glance-yield
+    section: Run at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: sum
+    column_name: yield_gb
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 4
+    display: {icon_name: 'mdi:database-outline', title_font_size: xl, value_font_size: xl}
+    title: Total yield (Gb)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: dm-glance-q30
+    index: dm-glance-q30
+    section: Run at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_q30
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Bases at Q30, lowest lane (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: dm-glance-undetermined
+    index: dm-glance-undetermined
+    section: Run at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_undetermined
+    column_type: float64
+    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
+    title: Undetermined, highest lane (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: dm-sheet-intro
+    section: Sample sheet
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    title: Every library of the run
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per library, joining its demultiplexing counts, its fastp read
+      QC and the design columns of the metadata file. Pick rows here or use
+      the library filters to narrow every tab.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: dm-sheet-table
+    section: Sample sheet
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    row_selection_enabled: true
+    row_selection_column: sample
+    page_size: 25
+    title: Libraries
+    description: One row per library; share of the run, share of an even split, base quality, index purity and fastp read QC.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  # --------------------------------------------------------------- lane table
+  - component_type: table
+    tag: dm-lane-table
+    section: Lane table
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    row_selection_enabled: true
+    row_selection_column: lane_label
+    title: Lane summary
+    description: One row per lane; clusters, pass-filter rate, yield, base quality, Undetermined share and library balance.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+
+  # ---------------------------------------------------------- CheckQC verdicts
+  - component_type: text
+    tag: dm-mqc-intro
+    section: CheckQC verdicts
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    title: Start with what the checks flagged
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [CheckQC](https://github.com/Molmed/checkQC) holds the demultiplexing
+      output to instrument-specific limits, and [MultiQC](https://multiqc.info)
+      gathers it with the [Falco](https://github.com/smithlabcode/falco) and
+      [fastp](https://github.com/OpenGene/fastp) reports. Libraries far below
+      an even share of reads fail first here.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: dm-mqc-checkqc-reads
+    section: CheckQC verdicts
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/checkqc
+    selected_module: checkqc
+    selected_plot: Too few reads per sample
+    title: Libraries under the read threshold
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-checkqc-undetermined
+    section: CheckQC verdicts
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/checkqc
+    selected_module: checkqc
+    selected_plot: '% Undetermined indexes'
+    title: Undetermined share against its limit
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-general-stats
+    section: CheckQC verdicts
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per library and per FASTQ file, pooling the bcl2fastq, fastp and Falco headline numbers.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  # ------------------------------------------------- read QC after demux
+  - component_type: multiqc
+    tag: dm-mqc-falco-counts
+    section: Read QC after demultiplexing
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Sequence Counts
+    title: Reads per FASTQ file
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-seq-quality
+    section: Read QC after demultiplexing
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Per Sequence Quality Scores
+    title: Per-read mean quality
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-adapter
+    section: Read QC after demultiplexing
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Adapter Content
+    title: Adapter content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-fastp-insert
+    section: Read QC after demultiplexing
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: Insert Sizes
+    title: Insert sizes
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-status
+    section: Read QC after demultiplexing
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Status Checks
+    title: Falco status checks
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 12, w: 8, h: 6}
+
+  # --------------------------------------------------- more MultiQC panels
+  # The bcl2fastq panels, fastp Filtered Reads and fastp Sequence Quality are
+  # not placed: the Demultiplexing, Undetermined and Library QC tiles read the
+  # same numbers from the reports themselves.
+  - component_type: multiqc
+    tag: dm-mqc-falco-base-quality
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Sequence Quality Histograms
+    title: Per-base quality (Falco)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-gc
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Per Sequence GC Content
+    title: Per-read GC content
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-n
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Per Base N Content
+    title: Per-base N content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-length
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Sequence Length Distribution
+    title: Read length distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-dup
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Sequence Duplication Levels
+    title: Duplication levels
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 12, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-overrep
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Overrepresented sequences by sample
+    title: Overrepresented sequences
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 12, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-falco-top-overrep
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/falco
+    selected_module: falco
+    selected_plot: Top overrepresented sequences
+    title: Top overrepresented sequences
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 18, w: 8, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-fastp-gc
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: GC Content
+    title: GC content along the read (fastp)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 24, w: 4, h: 6}
+  - component_type: multiqc
+    tag: dm-mqc-fastp-n
+    section: More MultiQC panels
+    workflow_tag: demultiplex
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: N content
+    title: N content along the read (fastp)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 24, w: 4, h: 6}
+
+  # ---------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: dm-filter-sample
+    index: dm-filter-sample
+    section: Library filters
+    group: Libraries
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Library
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-filter-group
+    index: dm-filter-group
+    section: Library filters
+    group: Libraries
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-filter-lane
+    index: dm-filter-lane
+    section: Library filters
+    group: Lanes
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    interactive_component_type: MultiSelect
+    column_name: lane_label
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:view-dashboard-outline'}
+    placement: left
+    title: Lane
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-filter-mqc-expected
+    index: dm-filter-mqc-expected
+    section: MultiQC scope
+    group: Read share
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    interactive_component_type: RangeSlider
+    column_name: pct_of_expected
+    column_type: float64
+    display: {title_size: md, icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Reads, % of an even share
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+tabs:
+# ======================================================================
+- title: Run health
+  subtitle: Did the instrument deliver, per lane, per read and per cycle
+  tab_order: 1
+  tab_icon: mdi:stethoscope
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Read and cycle scope
+    icon: mdi:tune
+    color: teal
+    description: Narrow to some reads or a stretch of cycles, on this tab only
+  grid_sections:
+  - name: Lane health
+    icon: mdi:counter
+    color: teal
+    description: Clusters, pass-filter rate and base quality per lane
+  - name: Quality along the run
+    icon: mdi:chart-line
+    color: blue
+    description: Base quality per cycle, and per lane and read
+  - name: Sequencing Analysis Viewer metrics
+    icon: mdi:microscope
+    color: grape
+    description: Error rate, phasing and density per lane and read, when an InterOp summary is present
+  components:
+  - component_type: text
+    tag: dm-run-intro
+    section: Lane health
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    title: A lane that underdelivers shows here first
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Compare lanes on clusters passing filter, base quality and yield, then
+      follow the quality curve along the cycles. A lane or read that drops
+      alone points at the flowcell or the chemistry, not at the libraries.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: dm-run-card-clusters
+    index: dm-run-card-clusters
+    section: Lane health
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: sum
+    column_name: clusters_pf
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 4
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title: Clusters passing filter
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-run-card-pf
+    index: dm-run-card-pf
+    section: Lane health
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_pf
+    column_type: float64
+    display: {icon_name: 'mdi:filter-variant', title_font_size: xl, value_font_size: xl}
+    title: Pass filter, lowest lane (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-run-card-mean-quality
+    index: dm-run-card-mean-quality
+    section: Lane health
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_quality
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Mean quality, lowest lane
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-run-card-read-q30
+    index: dm-run-card-read-q30
+    section: Lane health
+    workflow_tag: demultiplex
+    data_collection_tag: read_quality
+    use: bcl2fastq/read_quality
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_q30
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title: Bases at Q30, weakest read (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: dm-run-lane-health
+    index: dm-run-lane-health
+    section: Lane health
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_health
+    config:
+      controls_placement: header
+      selection_enabled: true
+      selection_column: lane_label
+    title: Lanes by Undetermined share and base quality
+    description: One point per lane, sized by yield; a lane low and to the right lost reads to both quality and unassigned indexes.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: dm-run-cycle-profile
+    index: dm-run-cycle-profile
+    section: Quality along the run
+    workflow_tag: demultiplex
+    data_collection_tag: cycle_quality
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: series
+      x_col: cycle
+      y_col: median_quality
+      lower_col: p10_quality
+      upper_col: p90_quality
+      x_title: Cycle
+      y_title: Mean Phred score
+      controls_placement: header
+    title: Base quality per cycle
+    description: Median over libraries of the fastp mean quality at each cycle, one curve per lane and read, with the 10th to 90th percentile band.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: dm-run-lane-read-dots
+    index: dm-run-lane-read-dots
+    section: Quality along the run
+    workflow_tag: demultiplex
+    data_collection_tag: read_quality
+    use: bcl2fastq/lane_read_dots
+    config:
+      controls_placement: header
+    title: Lane by read quality
+    description: One dot per lane and read, coloured by mean quality and sized by the fraction of bases at Q30 or above.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: text
+    tag: dm-run-sav-intro
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    title: The instrument's own numbers
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      These tiles read the `interop_summary --csv=1` table of the run folder,
+      the numbers the Sequencing Analysis Viewer shows. PhiX error rate and
+      phasing rising together on one lane point at the chemistry.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: dm-run-sav-card-error
+    index: dm-run-sav-card-error
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    use: interop/summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: error_rate
+    column_type: float64
+    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
+    title: PhiX error rate, worst lane and read (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-run-sav-card-pf
+    index: dm-run-sav-card-pf
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    use: interop/summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_cluster_pf
+    column_type: float64
+    display: {icon_name: 'mdi:filter-variant', title_font_size: xl, value_font_size: xl}
+    title: Clusters passing filter, lowest (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-run-sav-card-density
+    index: dm-run-sav-card-density
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    use: interop/summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: density_k_mm2
+    column_type: float64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title: Cluster density, highest (K/mm2)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-run-sav-card-phasing
+    index: dm-run-sav-card-phasing
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    use: interop/summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: phasing
+    column_type: float64
+    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
+    title: Phasing, worst lane and read (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: dm-run-sav-error-dots
+    index: dm-run-sav-error-dots
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    use: interop/lane_read_error
+    config:
+      controls_placement: header
+    title: PhiX error rate per lane and read
+    description: One dot per lane and read, coloured by error rate and sized by the fraction of bases at Q30 or above.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: dm-run-sav-phasing
+    index: dm-run-sav-phasing
+    section: Sequencing Analysis Viewer metrics
+    workflow_tag: demultiplex
+    data_collection_tag: interop_summary
+    use: interop/phasing_scatter
+    config:
+      controls_placement: header
+      selection_enabled: true
+      selection_column: lane_label
+    title: Phasing against prephasing
+    description: One point per lane and read.
+    title_size: h3
+    layout: {x: 4, y: 4, w: 4, h: 7}
+  - component_type: interactive
+    tag: dm-run-filter-read
+    index: dm-run-filter-read
+    section: Read and cycle scope
+    group: Reads
+    workflow_tag: demultiplex
+    data_collection_tag: read_quality
+    interactive_component_type: MultiSelect
+    column_name: read_label
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:ruler'}
+    placement: left
+    title: Read
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-run-filter-cycle
+    index: dm-run-filter-cycle
+    section: Read and cycle scope
+    group: Cycles
+    workflow_tag: demultiplex
+    data_collection_tag: cycle_quality
+    interactive_component_type: RangeSlider
+    column_name: cycle
+    column_type: int64
+    display: {title_size: md, icon_name: 'mdi:chart-line'}
+    placement: left
+    title: Cycle
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ======================================================================
+- title: Demultiplexing
+  subtitle: How evenly the reads of each lane were shared between the libraries
+  tab_order: 2
+  tab_icon: mdi:chart-donut
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Balance scope
+    icon: mdi:tune
+    color: indigo
+    description: Narrow to libraries inside a lane-share or index-purity band, on this tab only
+  grid_sections:
+  - name: Balance at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Reads assigned, share of the lane, base quality and index purity per library
+  - name: Lane composition
+    icon: mdi:chart-donut
+    color: teal
+    description: What each lane was made of, Undetermined included
+  - name: Library balance
+    icon: mdi:scale-balance
+    color: blue
+    description: Share of the lane and index purity per library
+  - name: Per-lane library counts
+    icon: mdi:table
+    color: gray
+    description: One row per library and lane, Undetermined rows included
+    collapsed: true
+  components:
+  - component_type: text
+    tag: dm-dmx-intro
+    section: Balance at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    title: An even pool gives even bars
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each library should hold about its planned share of the lane; a library
+      far below it was under-pooled or lost its index. The cards count
+      libraries only, the composition keeps the Undetermined reads visible.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: dm-dmx-card-reads
+    index: dm-dmx-card-reads
+    section: Balance at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/demux_stats
+    filter_expr: "col('is_undetermined') == False"
+    aggregation: sum
+    column_name: reads
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title: Reads assigned to libraries
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-dmx-card-share
+    index: dm-dmx-card-share
+    section: Balance at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/demux_stats
+    filter_expr: "col('is_undetermined') == False"
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_of_lane
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title: Share of the lane per library (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-dmx-card-q30
+    index: dm-dmx-card-q30
+    section: Balance at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/demux_stats
+    filter_expr: "col('is_undetermined') == False"
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_q30
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Bases at Q30 per library (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-dmx-card-perfect-index
+    index: dm-dmx-card-perfect-index
+    section: Balance at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/demux_stats
+    filter_expr: "col('is_undetermined') == False"
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_perfect_index
+    column_type: float64
+    display: {icon_name: 'mdi:shield-check-outline', title_font_size: xl, value_font_size: xl}
+    title: Perfect index match per library (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: dm-dmx-lane-composition
+    index: dm-dmx-lane-composition
+    section: Lane composition
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/lane_composition
+    config:
+      top_n: 12
+      sort_by: abundance
+      controls_placement: header
+    title: Libraries per lane
+    description: Share of each lane per library, Undetermined included; the twelve largest libraries are named, the rest pooled.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: dm-dmx-lane-sunburst
+    index: dm-dmx-lane-sunburst
+    section: Lane composition
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/lane_sunburst
+    config:
+      controls_placement: header
+    title: Run, lane, library
+    description: Reads per lane, then per library inside the lane.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 7}
+  - component_type: figure
+    tag: dm-dmx-share-bar
+    index: dm-dmx-share-bar
+    section: Library balance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/demux_stats
+    visu_type: bar
+    dict_kwargs: {x: sample, y: pct_of_lane, color: lane_label}
+    title: Share of the lane per library
+    description: One bar per library and lane, Undetermined included.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: dm-dmx-index-purity
+    index: dm-dmx-index-purity
+    section: Library balance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/library_index_purity
+    config:
+      log_x: true
+      controls_placement: header
+      selection_enabled: true
+      selection_column: sample
+    title: Reads against index purity
+    description: One point per library and lane; a library with few reads and a low perfect-match share lost reads to index errors.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: table
+    tag: dm-dmx-table
+    section: Per-lane library counts
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    use: bcl2fastq/demux_stats
+    row_selection_enabled: true
+    row_selection_column: sample
+    page_size: 25
+    title: Reads per library and lane
+    description: Select rows to narrow the library hub and the other tabs to those libraries.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: interactive
+    tag: dm-dmx-filter-share
+    index: dm-dmx-filter-share
+    section: Balance scope
+    group: Balance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    interactive_component_type: RangeSlider
+    column_name: pct_of_lane
+    column_type: float64
+    display: {title_size: md, icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Share of the lane (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-dmx-filter-purity
+    index: dm-dmx-filter-purity
+    section: Balance scope
+    group: Balance
+    workflow_tag: demultiplex
+    data_collection_tag: demux_stats
+    interactive_component_type: RangeSlider
+    column_name: pct_perfect_index
+    column_type: float64
+    display: {title_size: md, icon_name: 'mdi:shield-check-outline'}
+    placement: left
+    title: Perfect index match (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ======================================================================
+- title: Undetermined and index swaps
+  subtitle: What no index matched, and whether it is a swap between indexes in use
+  tab_order: 3
+  tab_icon: mdi:alert-outline
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Barcode scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow to a class of unknown barcode or to the most frequent ones, on this tab only
+  grid_sections:
+  - name: Undetermined at a glance
+    icon: mdi:counter
+    color: orange
+    description: How many reads went unassigned, and what kind of barcode they carried
+  - name: Top unknown barcodes
+    icon: mdi:chart-bar
+    color: red
+    description: The most frequent unassigned index pairs of each lane
+  - name: Barcode and verdict tables
+    icon: mdi:table
+    color: gray
+    description: The unknown barcodes and the CheckQC findings row by row
+    collapsed: true
+  components:
+  - component_type: text
+    tag: dm-und-intro
+    section: Undetermined at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    title: Swap, missing library or wrong sheet
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      An unknown pair whose i7 and i5 both belong to libraries of the lane is
+      an index swap; one with neither points at a library missing from the
+      sample sheet. Poly-G indexes are clusters that read no index at all.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: dm-und-card-undetermined
+    index: dm-und-card-undetermined
+    section: Undetermined at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: sum
+    column_name: undetermined_reads
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: lane_label
+    top_n_count: 4
+    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
+    title: Undetermined reads
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-und-card-classes
+    index: dm-und-card-classes
+    section: Undetermined at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    use: bcl2fastq/unknown_barcodes
+    aggregation: sum
+    column_name: reads
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: swap_class
+    display: {icon_name: 'mdi:set-merge', title_font_size: xl, value_font_size: xl}
+    title: Reads in the top unknown barcodes
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-und-card-top-share
+    index: dm-und-card-top-share
+    section: Undetermined at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    use: bcl2fastq/unknown_barcodes
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_of_undetermined
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bar', title_font_size: xl, value_font_size: xl}
+    title: Largest barcode, share of Undetermined (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-und-card-balance
+    index: dm-und-card-balance
+    section: Undetermined at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: lane_summary
+    use: bcl2fastq/lane_summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: lowest_library_pct_of_mean
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
+    title: Smallest library, % of the lane mean
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: dm-und-bar
+    index: dm-und-bar
+    section: Top unknown barcodes
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    use: bcl2fastq/unknown_barcodes
+    visu_type: bar
+    dict_kwargs: {x: barcode, y: pct_of_lane, color: swap_class}
+    title: Unknown barcodes by share of the lane
+    description: The most frequent unassigned index pairs, coloured by whether their indexes are in use on the lane.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: dm-und-table
+    section: Barcode and verdict tables
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    use: bcl2fastq/unknown_barcodes
+    row_selection_enabled: true
+    row_selection_column: barcode
+    page_size: 25
+    title: Unknown barcodes
+    description: One row per unassigned index pair and lane, with its class.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: dm-und-checkqc-table
+    section: Barcode and verdict tables
+    workflow_tag: demultiplex
+    data_collection_tag: checkqc_verdicts
+    row_selection_enabled: false
+    page_size: 25
+    title: CheckQC findings
+    description: One row per CheckQC finding, and a pass row for every check that reported nothing.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: interactive
+    tag: dm-und-filter-class
+    index: dm-und-filter-class
+    section: Barcode scope
+    group: Barcodes
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    interactive_component_type: MultiSelect
+    column_name: swap_class
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Barcode class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-und-filter-rank
+    index: dm-und-filter-rank
+    section: Barcode scope
+    group: Barcodes
+    workflow_tag: demultiplex
+    data_collection_tag: unknown_barcodes
+    interactive_component_type: RangeSlider
+    column_name: rank
+    column_type: int64
+    display: {title_size: md, icon_name: 'mdi:chart-bar'}
+    placement: left
+    title: Rank in its lane
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ======================================================================
+- title: Library QC
+  subtitle: How each library looks once demultiplexed, and whether the design groups differ
+  tab_order: 4
+  tab_icon: mdi:test-tube
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library QC scope
+    icon: mdi:tune
+    color: grape
+    description: Narrow to libraries inside a duplication or GC band, on this tab only
+  grid_sections:
+  - name: Library QC at a glance
+    icon: mdi:counter
+    color: grape
+    description: The fastp read QC of every library and lane
+  - name: Library QC distributions
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Libraries against each other (lasso a point to read its card beside the scatter), and design groups compared metric by metric
+  - name: fastp table
+    icon: mdi:table
+    color: gray
+    description: One row per library and lane
+    collapsed: true
+  components:
+  - component_type: text
+    tag: dm-lib-intro
+    section: Library QC at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: fastp_library_qc
+    title: A library that looks different from its group
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [fastp](https://github.com/OpenGene/fastp) read each demultiplexed
+      library; look for libraries that leave their design group on
+      duplication, adapter or GC. Pick a point or a row to open its card.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: dm-lib-card-passed
+    index: dm-lib-card-passed
+    section: Library QC at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: fastp_library_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_passed
+    column_type: float64
+    display: {icon_name: 'mdi:filter-variant', title_font_size: xl, value_font_size: xl}
+    title: Reads kept by fastp (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-lib-card-dup
+    index: dm-lib-card-dup
+    section: Library QC at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: fastp_library_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_duplication
+    column_type: float64
+    display: {icon_name: 'mdi:set-merge', title_font_size: xl, value_font_size: xl}
+    title: Duplication (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-lib-card-adapter
+    index: dm-lib-card-adapter
+    section: Library QC at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: fastp_library_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_adapter_trimmed
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title: Reads with adapter (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: dm-lib-card-q30
+    index: dm-lib-card-q30
+    section: Library QC at a glance
+    workflow_tag: demultiplex
+    data_collection_tag: fastp_library_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_q30_after
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Bases at Q30 after fastp (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: dm-lib-scatter
+    index: dm-lib-scatter
+    section: Library QC distributions
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: pct_duplication
+      y_col: pct_q30_after
+      label_col: sample
+      color_col: '{GROUP_COL}'
+      size_col: reads
+      x_title: Duplication (%)
+      y_title: Bases at Q30 after fastp (%)
+      selection_enabled: true
+      selection_column: sample
+      controls_placement: header
+    title: Duplication against base quality
+    description: One point per library, sized by reads and coloured by design group; lasso points to read them in the library card beside it and narrow the other tiles.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: dm-lib-group-compare
+    index: dm-lib-group-compare
+    section: Library QC distributions
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    viz_kind: group_compare
+    config:
+      viz_kind: group_compare
+      index_col: sample
+      group_col: '{GROUP_COL}'
+      test: wilcoxon
+      log_transform: false
+      min_observations: 2
+      controls_placement: header
+    title: Design groups compared metric by metric
+    description: Every numeric library metric compared between two design groups or two saved selections. With a few libraries per group the test is a screen, not a verdict.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: dm-lib-record
+    index: dm-lib-record
+    section: Library QC distributions
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: sample
+      title_col: sample
+      selection_source: any
+      sections:
+        Library: [sample, '{GROUP_COL}', flowcell, lanes, index]
+        Demultiplexing: [reads, pct_of_run, pct_of_expected, yield_mb, pct_q30, mean_quality, pct_perfect_index]
+        Read QC: [reads_after_filter, pct_passed, pct_duplication, pct_adapter_trimmed, gc_pct, pct_q30_after, insert_size_peak]
+      linked_component: dm-lib-scatter
+    title: Library card
+    description: The library lassoed in the scatter beside it (or selected in the fastp table) as a fact panel; it stays empty until a library is picked.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    tag: dm-lib-fastp-table
+    section: fastp table
+    workflow_tag: demultiplex
+    data_collection_tag: fastp_library_qc
+    row_selection_enabled: true
+    row_selection_column: sample
+    page_size: 25
+    title: fastp read QC
+    description: One row per library and lane, before and after filtering.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: interactive
+    tag: dm-lib-filter-dup
+    index: dm-lib-filter-dup
+    section: Library QC scope
+    group: Read QC
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    interactive_component_type: RangeSlider
+    column_name: pct_duplication
+    column_type: float64
+    display: {title_size: md, icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Duplication (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: dm-lib-filter-gc
+    index: dm-lib-filter-gc
+    section: Library QC scope
+    group: Read QC
+    workflow_tag: demultiplex
+    data_collection_tag: libraries
+    interactive_component_type: RangeSlider
+    column_name: gc_pct
+    column_type: float64
+    display: {title_size: md, icon_name: 'mdi:dna'}
+    placement: left
+    title: GC content (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}

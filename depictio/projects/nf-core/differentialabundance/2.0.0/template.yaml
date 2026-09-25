@@ -34,6 +34,9 @@ template:
     - name: "SAMPLESHEET_FILE"
       description: "Path to the pipeline's --input observation sheet. Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted; download_test_data.sh puts the megatest's sheet there."
       required: false
+    - name: "NO_GSEA"
+      description: "Set (--var NO_GSEA=true) for a run that did not run GSEA (no --gsea_run, or no gene-set file). Prunes the two enrichment collections, so the Enrichment tab drops out instead of scanning for tables that were never written."
+      required: false
   # Variables supplied when materialising the bundled reference/demo dataset.
   # The sheet is the run's own --input file, mirrored under input/ by the
   # megatest fetch (see megatest.yaml post_fetch_help).
@@ -91,6 +94,13 @@ template:
       - "contrasts"
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # GSEA is opt-in: it runs only when the run is given a gene-set file. With
+    # no report tables on disk the scan finds nothing, so the two collections
+    # are pruned and the components reading them drop with them.
+    - if_var_present: "NO_GSEA"
+      remove_dc_tags: ["gsea_report_raw", "gsea_report"]
+      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -133,6 +143,12 @@ workflows:
               "sample_id": "Sample identifier, matching the columns of the abundance matrices"
               "group": "The sheet's most factor-like column (fewest levels >= 2), the default grouping"
               "size_factor": "DESeq2 library-size normalisation factor for this sample"
+              "factor_2": "The sheet's second most factor-like column, aliased so a shipped filter can bind to it; null when the sheet has no such factor"
+              "factor_2_name": "Name of the sheet column factor_2 was aliased from"
+              "factor_3": "The sheet's third most factor-like column"
+              "factor_3_name": "Name of the sheet column factor_3 was aliased from"
+              "factor_4": "The sheet's fourth most factor-like column, null when the sheet has no such factor"
+              "factor_4_name": "Name of the sheet column factor_4 was aliased from"
 
       # ----------------------------------------------------------------
       # Raw DESeq2 tables. These two exist so the tidy collections below can
@@ -299,6 +315,92 @@ workflows:
               "sample": "Sample identifier (the heatmap row index)"
               "_col_annotations_json": "Serialised categorical column annotations built from the sample sheet"
 
+      # ----------------------------------------------------------------
+      # The exploratory panel the PCA cannot replace: what each library's
+      # expression distribution looks like. Reduced in the recipe to a density
+      # curve per sample on one shared grid, so 31000 features by 24 samples
+      # become 24 x 60 rows.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_vst_distribution"
+        description: "Per-sample density of the variance-stabilised matrix, on a grid shared by every sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/vst_distribution.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "bin_centre": "Expression value at the middle of the bin"
+              "density": "Share of the sample's expressed features in this bin"
+              "group": "The sheet's most factor-like column, the default colouring"
+              "median": "Median expression of this sample, repeated on each of its rows"
+              "floor_share": "Share of the sample's features sitting at the matrix floor"
+
+      # ----------------------------------------------------------------
+      # GSEA. The pipeline runs it pre-ranked over the DESeq2 statistics and
+      # writes one report per POLE of each contrast, so a two-contrast run
+      # publishes four tables. Neither the contrast nor the pole is a column of
+      # any of them: both live only in the file name, which is why this is a
+      # raw scan feeding a recipe by tag rather than a glob source.
+      #
+      # Optional because GSEA only runs when the run is given a gene-set file
+      # (--gsea_run true --gsea_gene_sets ...).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gsea_report_raw"
+        optional: true
+        description: "Raw GSEA report tables, one per contrast and pole (input of gsea_report)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.gsea_report_for_.*\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+              truncate_ragged_lines: true
+              include_file_paths: "source_path"
+            columns_description:
+              "NAME": "Gene set name, as GSEA writes it"
+              "source_path": "File the row came from; the contrast and the pole are derived from it"
+
+      - data_collection_tag: "gsea_report"
+        optional: true
+        description: "Gene sets enriched at each pole of each contrast, with NES, FDR and leading edge"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "gsea/report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast the report belongs to, read from the file name"
+              "phenotype": "Pole of the contrast this set came up at"
+              "term": "Gene set name"
+              "size": "Genes of the set found in the ranked list"
+              "es": "Enrichment score"
+              "nes": "Enrichment score normalised for set size, the value to compare across sets"
+              "abs_nes": "Magnitude of the normalised enrichment score, whichever pole the set came up at"
+              "nom_pvalue": "Nominal p-value"
+              "fdr_qvalue": "False discovery rate across the sets of this report"
+              "fwer_pvalue": "Family-wise error rate"
+              "neg_log10_fdr": "Minus log10 of the FDR q-value, clipped at the run's own floor"
+              "rank_at_max": "Position in the ranked list where the enrichment score peaked"
+              "leading_edge_percent": "Share of the set sitting in the leading edge"
+              "leading_edge": "The leading-edge string GSEA writes, kept as published"
+
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
 # ============================================================================
@@ -358,4 +460,76 @@ links:
       resolver: "direct"
       target_field: "gene_id"
     description: "Carry a gene selected in the annotated table back to the differential panels"
+    enabled: true
+
+  # The variance-stabilised heatmap is a WIDE matrix: the samples are its column
+  # names, not values in a column. `_narrow_wide_matrix_columns` mirrors the
+  # filter onto the column set by value, and `target_field` therefore has to
+  # name a column the matrix does NOT have. `gene_id` and
+  # `_col_annotations_json` are its real columns; a nominal field leaves the row
+  # filter to be skipped, which is what lets the column mirror do the work.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_vst_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the variance-stabilised heatmap to the samples picked on the hub sheet"
+    enabled: true
+
+  - source_dc_tag: "deseq2_vst_pca"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_vst_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Carry a cluster lassoed on the PCA over to the variance-stabilised heatmap"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_vst_distribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the per-sample distributions by the samples picked on the hub sheet"
+    enabled: true
+
+  - source_dc_tag: "deseq2_vst_pca"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_vst_distribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Carry a cluster lassoed on the PCA over to the per-sample distributions"
+    enabled: true
+
+  # The GSEA reports carry the contrast the pipeline named the directory after,
+  # which is the same string the DESeq2 tables carry, so picking a contrast on
+  # the differential tab narrows the enrichment panels to the same comparison.
+  # The pinned Contrast scope is sourced on `deseq2_results.contrast`; this
+  # link is what carries it onto the annotated table the Expression and Genome
+  # view tabs read (the gene_id links above carry selections, not contrasts).
+  - source_dc_tag: "deseq2_results"
+    source_column: "contrast"
+    target_dc_tag: "deseq2_results_annotated"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contrast"
+    description: "Narrow the annotated statistics to the contrasts picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "deseq2_results"
+    source_column: "contrast"
+    target_dc_tag: "gsea_report"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contrast"
+    description: "Filter the enrichment panels to the contrast picked on the differential tab"
     enabled: true
