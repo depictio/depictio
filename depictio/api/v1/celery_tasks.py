@@ -162,6 +162,7 @@ def build_figure_preview(payload: dict) -> dict:
         apply_column_coloring_kwargs,
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
+        code_group_globals,
         group_annotation_expr,
         group_source_columns,
         sanitize_color_by_column,
@@ -487,10 +488,7 @@ def build_figure_preview(payload: dict) -> dict:
             df,
             theme,
             "viewer",
-            extra_globals={
-                CODE_GROUP_KWARGS: code_group_kwargs,
-                CODE_GROUP_BY: code_group_by,
-            },
+            extra_globals=code_group_globals(code_group_kwargs, code_group_by),
         )
         if not ok:
             # `process_code_mode_figure` returns `(False, error_fig, None)` when

@@ -102,7 +102,13 @@ def _figure_payload(df, render) -> dict[str, Any]:
         import pandas as pd
         import polars as pl
 
+        from depictio.api.v1.services.figure.groups import code_group_globals
+
         ns.update(pd=pd, pl=pl, np=np)
+        # The grouping names a dashboard render binds, at their ungrouped
+        # values: a recipe that spreads them must preview exactly as it renders
+        # before anyone has saved a group.
+        ns.update(code_group_globals())
         try:
             exec(render.code, ns)  # noqa: S102 — trusted, repo-authored catalog snippet
         except Exception as exc:

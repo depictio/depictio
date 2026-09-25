@@ -82,6 +82,30 @@ def test_payload_is_json_serialisable() -> None:
     json.dumps(payload, default=str)  # must not raise
 
 
+def test_code_figures_preview_with_the_grouping_names_bound() -> None:
+    """A code figure may spread the grouping names a dashboard render binds.
+
+    The preview has no saved groups, so it binds them ungrouped, the same
+    values a dashboard render hands over before anyone has made a group. Every
+    bundled code figure that names them must therefore build without error.
+    """
+    from depictio.api.v1.services.figure.groups import CODE_GROUP_BY, CODE_GROUP_KWARGS
+
+    uses_grouping = [
+        o
+        for e in load_catalog_entries()
+        for o in e.outputs
+        if any(
+            r.code and (CODE_GROUP_BY in r.code or CODE_GROUP_KWARGS in r.code)
+            for r in o.renders_as
+        )
+    ]
+    assert uses_grouping, "no bundled code figure names the grouping kwargs"
+    for output in uses_grouping:
+        errors = [r["_error"] for r in build_payload(output, "light")["renders"] if r.get("_error")]
+        assert errors == [], f"{output.id}: {errors}"
+
+
 def test_advanced_viz_client_side_payload() -> None:
     # ivar_variants_long → manhattan / lollipop / oncoplot (fetchAdvancedVizData kinds)
     payload = build_payload(_get_output("ivar_variants_long"), "light")

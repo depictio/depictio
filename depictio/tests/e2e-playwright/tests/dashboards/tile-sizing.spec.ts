@@ -85,24 +85,49 @@ async function findTextTile(
   return null;
 }
 
-/** The `.react-grid-item` box a component renders in, in CSS pixels. */
+/** The `.react-grid-item` box a component renders in, in CSS pixels, once it
+ *  has stopped moving. Autofit measures content that is still loading and the
+ *  grid re-packs around it, so the first height a tile paints with is not the
+ *  one it settles at; reading it too early also means grabbing a resize handle
+ *  that is about to move. */
 async function tileHeight(
   page: import("@playwright/test").Page,
   componentId: string,
 ): Promise<number> {
   const cell = page.locator(`[data-component-id='${componentId}']`).first();
   await expect(cell).toBeVisible({ timeout: 30_000 });
-  return cell.evaluate((node) => {
-    const tile = (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
-    return Math.round(tile.getBoundingClientRect().height);
-  });
+  const read = () =>
+    cell.evaluate((node) => {
+      const tile = (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
+      return Math.round(tile.getBoundingClientRect().height);
+    });
+  let previous = await read();
+  await expect
+    .poll(
+      async () => {
+        const current = await read();
+        const stable = current === previous;
+        previous = current;
+        return stable;
+      },
+      { timeout: 30_000, intervals: [500], message: "the tile should settle at one height" },
+    )
+    .toBe(true);
+  return previous;
 }
 
 test.describe("Tile sizing", () => {
+  // Only the widest grid breakpoint (`lg`, 880px of grid) is ever persisted.
+  // The project default (Desktop Chrome, 1280px) leaves the editor grid ~590px
+  // once the tabs sidebar and the filter panel take their share, so a resize
+  // there is deliberately not saved. Author at a desktop width.
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
   test("a height set by hand survives the reload", async ({ page, request, loginAsAdmin }) => {
     // An editor load, a resize, a save and two viewer loads.
     test.setTimeout(180_000);
-    void loginAsAdmin;
+    // Seed a session: on a multi-user stack the editor cannot save without one.
+    await loginAsAdmin();
 
     const headers = await adminHeaders(request);
     test.skip(!headers, "no admin credentials on this stack");
@@ -115,8 +140,17 @@ test.describe("Tile sizing", () => {
 
     // Drag the south handle down by two grid rows. `.react-resizable-handle-s`
     // is react-resizable's own class, injected into the cell by the grid.
+    // react-grid-layout clones the `[data-component-id]` div itself into the
+    // `.react-grid-item`, so the tile is that node, not an ancestor of it.
     const cell = page.locator(`[data-component-id='${componentId}']`).first();
-    const tile = cell.locator("xpath=ancestor::div[contains(@class,'react-grid-item')][1]");
+    const tile = cell.locator(
+      "xpath=ancestor-or-self::div[contains(@class,'react-grid-item')][1]",
+    );
+    // `boundingBox` does not scroll, and the mouse cannot reach a handle below
+    // the fold. Handles also ignore the pointer until their tile is hovered
+    // (app.css), so hover first.
+    await tile.scrollIntoViewIfNeeded();
+    await tile.hover();
     const handle = tile.locator(".react-resizable-handle-s");
     const box = await handle.boundingBox();
     expect(box, "the resize handle should be reachable in edit mode").not.toBeNull();
