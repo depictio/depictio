@@ -15,14 +15,14 @@ def paths(tmp_path):
 
 
 def test_server_env_points_every_service_at_localhost(paths):
-    ports = {"api": 18058, "mongo": 17018, "redis": 16379, "minio": 19000}
+    ports = {"api": 18058, "mongo": 17018, "redis": 16379, "s3": 19000}
     env = server_env(
-        paths, ports, {"minio_password": "m" * 24, "admin_password": "a" * 24}, "iris", False
+        paths, ports, {"s3_password": "m" * 24, "admin_password": "a" * 24}, "iris", False
     )
 
     for key in (
         "DEPICTIO_MONGODB_SERVICE_NAME",
-        "DEPICTIO_MINIO_SERVICE_NAME",
+        "DEPICTIO_S3_SERVICE_NAME",
         "DEPICTIO_CACHE_REDIS_HOST",
         "DEPICTIO_CELERY_BROKER_HOST",
         "DEPICTIO_FASTAPI_SERVICE_NAME",
@@ -30,7 +30,7 @@ def test_server_env_points_every_service_at_localhost(paths):
     ):
         assert env[key] == "127.0.0.1"
     assert env["DEPICTIO_MONGODB_SERVICE_PORT"] == "17018"
-    assert env["DEPICTIO_MINIO_EXTERNAL_PORT"] == "19000"
+    assert env["DEPICTIO_S3_EXTERNAL_PORT"] == "19000"
     assert env["DEPICTIO_VIEWER_SERVICE_PORT"] == "18058"
     assert env["DEPICTIO_AUTH_SINGLE_USER_MODE"] == "true"
     assert env["DEPICTIO_PERFORMANCE_SCREENSHOTS_ENABLED"] == "false"
@@ -41,8 +41,8 @@ def test_server_env_points_every_service_at_localhost(paths):
 def test_server_env_drops_inherited_depictio_variables(paths, monkeypatch):
     monkeypatch.setenv("DEPICTIO_MONGODB_SERVICE_NAME", "mongo")
     monkeypatch.setenv("DEPICTIO_SEED_PROJECTS", "penguins")
-    ports = {"api": 1, "mongo": 2, "redis": 3, "minio": 4}
-    env = server_env(paths, ports, {"minio_password": "x", "admin_password": "y"}, "none", True)
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, {"s3_password": "x", "admin_password": "y"}, "none", True)
 
     assert env["DEPICTIO_MONGODB_SERVICE_NAME"] == "127.0.0.1"
     assert "DEPICTIO_SEED_PROJECTS" not in env
