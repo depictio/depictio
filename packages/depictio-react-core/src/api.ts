@@ -11,6 +11,13 @@ import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
+import type {
+  Annotation,
+  AnnotationColor,
+  AnnotationKind,
+  AnnotationStyle,
+  Geometry,
+} from './annotations/types';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -4860,4 +4867,268 @@ export async function fetchCatalogPreviewPayload(
   const res = await authFetch(`${API_BASE}/catalog/output/${outputId}/preview-payload`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog preview');
   return (await res.json()) as CatalogPreviewPayload;
+}
+
+// ---------------------------------------------------------------------------
+// Component comments & annotations (/comments). Mirrors the Pydantic contract
+// in depictio/models/models/comments.py. Threads are internal to a project's
+// editors and owners: every endpoint but /published answers 403 to others.
+// ---------------------------------------------------------------------------
+
+export type CommentThreadStatus = 'open' | 'resolved' | 'proposed' | 'rejected';
+
+/** What the author was looking at: the viewer's own filter payloads, plus the
+ *  selection summary. Stored as-is so the viewer can restore it untranslated. */
+export interface CommentViewState {
+  filters: InteractiveFilter[];
+  selection?: CommentSelection | null;
+}
+
+/** Selection attached to a comment: which selection filter(s) were active on
+ *  the anchored component, how many rows they held, and the raw filters. */
+export interface CommentSelection {
+  source?: string;
+  count?: number;
+  filters?: InteractiveFilter[];
+  [key: string]: unknown;
+}
+
+export interface CommentAnchor {
+  dashboard_id: string;
+  /** Null pins the thread to the tab itself. */
+  component_index?: string | null;
+  component_title?: string | null;
+  view_state?: CommentViewState | null;
+  component_hash?: string | null;
+  data_hashes?: Record<string, string>;
+  version_id?: string | null;
+  pins?: Record<string, number>;
+}
+
+export interface CommentAgentInfo {
+  name: string;
+  model?: string | null;
+  run_id?: string | null;
+  /** User id of the person who launched the agent. */
+  on_behalf_of?: string | null;
+}
+
+export interface CommentAuthor {
+  kind: 'human' | 'agent';
+  user_id: string;
+  email?: string | null;
+  agent?: CommentAgentInfo | null;
+}
+
+export interface CommentEvidence {
+  claim: string;
+  query?: string | null;
+  values?: Record<string, unknown> | unknown[] | null;
+  view_state?: CommentViewState | null;
+}
+
+export interface CommentReview {
+  decision: 'accepted' | 'rejected';
+  by: string;
+  at: string;
+  reason?: string | null;
+}
+
+export interface ThreadComment {
+  id: string;
+  author: CommentAuthor;
+  body: string;
+  created_at: string;
+  edited_at?: string | null;
+  deleted?: boolean;
+}
+
+export interface ThreadStaleness {
+  component_missing: boolean;
+  component_changed: boolean;
+  data_changed: boolean;
+}
+
+export interface CommentThread {
+  id: string;
+  project_id: string;
+  parent_dashboard_id: string;
+  anchor: CommentAnchor;
+  annotation?: Annotation | null;
+  number?: number | null;
+  status: CommentThreadStatus;
+  review?: CommentReview | null;
+  evidence?: CommentEvidence[] | null;
+  dedupe_key?: string | null;
+  run_id?: string | null;
+  created_by: CommentAuthor;
+  created_at: string;
+  updated_at: string;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  /** A person edited this agent-created thread (its annotation or text). */
+  human_edited?: boolean;
+  comments: ThreadComment[];
+  staleness: ThreadStaleness;
+}
+
+export interface ThreadCreatePayload {
+  anchor: Pick<CommentAnchor, 'dashboard_id' | 'component_index' | 'component_title' | 'view_state'>;
+  body?: string | null;
+  annotation?: Annotation | null;
+  evidence?: CommentEvidence[] | null;
+  dedupe_key?: string | null;
+  agent?: CommentAgentInfo | null;
+}
+
+export interface AnnotationPatch {
+  geometry?: Geometry | null;
+  label?: string | null;
+  color?: AnnotationColor | null;
+  style?: AnnotationStyle | null;
+  published?: boolean | null;
+}
+
+export interface ThreadUpdatePayload {
+  status?: 'open' | 'resolved';
+  annotation?: AnnotationPatch;
+}
+
+/** Key used in counts for threads pinned to the tab itself. */
+export const TAB_THREAD_KEY = '__tab__';
+
+export interface CommentCounts {
+  /** Open threads per component index (`__tab__` for tab-level threads). */
+  open: Record<string, number>;
+  /** Agent proposals awaiting review, same keys. */
+  proposed: Record<string, number>;
+}
+
+export interface PublishedAnnotation {
+  thread_id: string;
+  dashboard_id: string;
+  component_index: string | null;
+  number: number | null;
+  kind: AnnotationKind;
+  geometry: Geometry;
+  label: string;
+  color: AnnotationColor;
+  style: AnnotationStyle;
+  variant?: string | null;
+}
+
+export interface ListThreadsOptions {
+  /** `tab` (default): this tab only; `family`: every tab of the dashboard. */
+  scope?: 'tab' | 'family';
+  componentIndex?: string;
+  status?: CommentThreadStatus;
+}
+
+const COMMENTS_BASE = `${API_BASE}/comments`;
+const enc = encodeURIComponent;
+
+async function commentsJson<T>(res: Response, prefix: string): Promise<T> {
+  if (!res.ok) await throwHttpDetailError(res, prefix);
+  return (await res.json()) as T;
+}
+
+/** Whether the current user may read and write comments on this dashboard.
+ *  Resolves `{can_comment: false}` rather than throwing on 401/403/404, so a
+ *  viewer simply sees no comments UI. */
+export async function fetchCommentAccess(dashboardId: string): Promise<{ can_comment: boolean }> {
+  const res = await authFetch(`${COMMENTS_BASE}/access/${enc(dashboardId)}`);
+  if (res.status === 401 || res.status === 403 || res.status === 404) return { can_comment: false };
+  return commentsJson(res, 'Failed to check comment access');
+}
+
+export async function fetchCommentThreads(
+  dashboardId: string,
+  opts: ListThreadsOptions = {},
+): Promise<CommentThread[]> {
+  const qs = new URLSearchParams();
+  if (opts.scope) qs.set('scope', opts.scope);
+  if (opts.componentIndex) qs.set('component_index', opts.componentIndex);
+  if (opts.status) qs.set('status', opts.status);
+  const q = qs.toString();
+  const res = await authFetch(`${COMMENTS_BASE}/dashboard/${enc(dashboardId)}${q ? `?${q}` : ''}`);
+  return commentsJson(res, 'Failed to load comments');
+}
+
+export async function fetchCommentCounts(dashboardId: string): Promise<CommentCounts> {
+  const res = await authFetch(`${COMMENTS_BASE}/counts/${enc(dashboardId)}`);
+  return commentsJson(res, 'Failed to load comment counts');
+}
+
+export async function createCommentThread(payload: ThreadCreatePayload): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return commentsJson(res, 'Failed to create comment');
+}
+
+export async function addThreadComment(threadId: string, body: string): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+  return commentsJson(res, 'Failed to post reply');
+}
+
+export async function editThreadComment(
+  threadId: string,
+  commentId: string,
+  body: string,
+): Promise<CommentThread> {
+  const res = await authFetch(
+    `${COMMENTS_BASE}/threads/${enc(threadId)}/comments/${enc(commentId)}`,
+    { method: 'PATCH', body: JSON.stringify({ body }) },
+  );
+  return commentsJson(res, 'Failed to edit comment');
+}
+
+export async function deleteThreadComment(
+  threadId: string,
+  commentId: string,
+): Promise<CommentThread | null> {
+  const res = await authFetch(
+    `${COMMENTS_BASE}/threads/${enc(threadId)}/comments/${enc(commentId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete comment');
+  return res.status === 204 ? null : ((await res.json().catch(() => null)) as CommentThread | null);
+}
+
+export async function updateCommentThread(
+  threadId: string,
+  patch: ThreadUpdatePayload,
+): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return commentsJson(res, 'Failed to update thread');
+}
+
+export async function reviewCommentThread(
+  threadId: string,
+  decision: 'accepted' | 'rejected',
+  reason?: string,
+): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { decision, reason } : { decision }),
+  });
+  return commentsJson(res, 'Failed to review thread');
+}
+
+export async function deleteCommentThread(threadId: string): Promise<void> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete thread');
+}
+
+/** Published annotations of a tab — the only comment data viewers can read. */
+export async function fetchPublishedAnnotations(dashboardId: string): Promise<PublishedAnnotation[]> {
+  const res = await authFetch(`${COMMENTS_BASE}/published/${enc(dashboardId)}`);
+  return commentsJson(res, 'Failed to load annotations');
 }

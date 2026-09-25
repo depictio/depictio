@@ -8,6 +8,11 @@ import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
+import CommentsButton from './CommentsButton';
+import { useCommentsControl } from './CommentsContext';
+import AnnotateButton from './AnnotateButton';
+import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
+import { componentSupportsAnnotation } from '../../annotations/plotDecorate';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
@@ -17,6 +22,8 @@ import './chrome.css';
 
 export type ChromeAction =
   | 'inspect'
+  | 'comments'
+  | 'annotate'
   | 'catalog'
   | 'description'
   | 'metadata'
@@ -159,6 +166,30 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const inspector = useInspectorControl();
   const actions: ChromeAction[] = [];
   if (inspector) actions.push('inspect');
+  // Same again for comments: the viewer only provides a control to users who
+  // may comment (editors and owners), on every component type alike.
+  const comments = useCommentsControl();
+  const commentOpenCount = comments?.openCounts[metadata.index] ?? 0;
+  const commentProposedCount = comments?.proposedCounts[metadata.index] ?? 0;
+  const commentStaleCount = comments?.staleCounts[metadata.index] ?? 0;
+  // A component with threads keeps its comments icon on screen without hover:
+  // the count is the point, and a hover-only badge would hide it.
+  const persistentComments =
+    commentOpenCount > 0 || commentProposedCount > 0 || commentStaleCount > 0;
+  if (comments) actions.push('comments');
+  // Annotate mode: cartesian Plotly figures, the advanced_viz kinds whose
+  // renderer wires the annotation layer, and tables with a row-id column; and
+  // only when the app's annotation layer lets this user create annotations
+  // and the mounted renderer reports it can capture in its current view (not
+  // a 3D embedding, a multi-panel barplot tab...).
+  const annotationLayer = useAnnotationLayer();
+  const canAnnotateHere =
+    Boolean(annotationLayer?.canAnnotate) &&
+    componentSupportsAnnotation(componentType, metadata as Record<string, unknown>) &&
+    Boolean(annotationLayer?.isAnnotatable(String(metadata.index)));
+  const annotateActive =
+    canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
+  if (canAnnotateHere) actions.push('annotate');
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
@@ -211,6 +242,32 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             componentId={metadata.index}
             active={inspector.selectedId === metadata.index}
             onInspect={inspector.select}
+          />
+        );
+      case 'comments':
+        if (!comments) return null;
+        return (
+          <CommentsButton
+            key="comments"
+            componentId={metadata.index}
+            openCount={commentOpenCount}
+            proposedCount={commentProposedCount}
+            staleCount={commentStaleCount}
+            onOpen={comments.openDrawer}
+          />
+        );
+      case 'annotate':
+        if (!canAnnotateHere || !annotationLayer) return null;
+        return (
+          <AnnotateButton
+            key="annotate"
+            active={annotateActive}
+            onToggle={() =>
+              annotationLayer.setAnnotate(
+                annotateActive ? null : String(metadata.index),
+                annotateActive ? null : 'range',
+              )
+            }
           />
         );
       case 'catalog':
@@ -403,10 +460,17 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           const node = renderAction(a);
           if (!node) return null;
           const isActiveReset = a === 'reset' && persistentReset;
+          const isPersistentComments = a === 'comments' && persistentComments;
+          const isActiveAnnotate = a === 'annotate' && annotateActive;
           return (
             <span
               key={a}
-              className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
+              className={
+                'dgl-no-drag' +
+                (isActiveReset ? ' depictio-active-reset' : '') +
+                (isPersistentComments ? ' depictio-comments-persistent' : '') +
+                (isActiveAnnotate ? ' depictio-annotate-active' : '')
+              }
               style={{ display: 'inline-flex', alignItems: 'center' }}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}

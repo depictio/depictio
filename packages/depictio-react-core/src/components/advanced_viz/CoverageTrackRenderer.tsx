@@ -20,6 +20,8 @@ import {
   pollCoverageTrack,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
@@ -832,6 +834,34 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       .filter((c): c is string => Boolean(c));
   }, [data]);
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () =>
+      groupedFigure
+        ? applyLayoutTheme(
+            { ...(groupedFigure.layout as any), width: undefined, height: undefined, autosize: true },
+            isDark,
+            theme,
+          )
+        : null,
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations, on a single coverage panel only: the per-sample view
+  // and the gene strip each add a y axis under the same component. Coverage
+  // bins are not rows, so marked points are stored as coordinates.
+  const singlePanel =
+    !!plotLayout && !Object.keys(plotLayout).some((k) => /^[xy]axis\d+$/.test(k));
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && singlePanel,
+    data: plotData,
+    layout: plotLayout,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Coverage track'}
@@ -841,21 +871,20 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       error={error}
       dataRows={data?.rows ?? undefined}
       dataColumns={dataColumns}
+      badges={annotations.badges}
     >
       {groupedFigure ? (
-        <AdvancedVizPlot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={
-            applyLayoutTheme(
-              { ...(groupedFigure.layout as any), width: undefined, height: undefined, autosize: true },
-              isDark,
-              theme,
-            ) as any
-          }
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <>
+          <AdvancedVizPlot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

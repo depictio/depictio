@@ -12,6 +12,11 @@ import {
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
+
 import {
   AdvancedVizKind,
   fetchAdvancedVizData,
@@ -116,36 +121,25 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const ScatterXyPlot = React.memo<{
-  figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  isDark: boolean;
-  theme: ReturnType<typeof useMantineTheme>;
-  plotConfig: Record<string, unknown>;
-  onSelected?: (event: any) => void;
-  onClick?: (event: any) => void;
-  onDeselect?: () => void;
-}>(({ figure, isDark, theme, plotConfig, onSelected, onClick, onDeselect }) => {
-  const themedData = useMemo(
-    () => applyDataTheme(figure.data, isDark, theme),
-    [figure.data, isDark, theme],
-  );
-  const themedLayout = useMemo(
-    () => applyLayoutTheme(figure.layout as any, isDark, theme),
-    [figure.layout, isDark, theme],
-  );
-  return (
-    <Plot
-      data={themedData as any}
-      layout={themedLayout as any}
-      useResizeHandler
-      style={PLOT_STYLE}
-      config={plotConfig as any}
-      onSelected={onSelected}
-      onClick={onClick}
-      onDeselect={onDeselect}
-    />
-  );
-});
+// Memoised on the (already themed and annotated) figure and on each handler,
+// so a render that changes neither never reaches `Plotly.react`.
+const ScatterXyPlot = React.memo<
+  {
+    data: unknown[];
+    layout: Record<string, unknown>;
+    plotConfig: Record<string, unknown>;
+  } & PlotEventHandlers &
+    PlotGraphHandlers
+>(({ data, layout, plotConfig, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={plotConfig as any}
+    {...handlers}
+  />
+));
 ScatterXyPlot.displayName = 'ScatterXyPlot';
 
 /**
@@ -694,6 +688,26 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   // Whether any point matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. `customdata` holds each point's key: the selection
+  // column's value when the component selects, else the label column's.
+  // Without either, marked points are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 0,
+    pointIdColumn: selectionColumn ?? (config.label_col || undefined),
+  });
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -706,17 +720,22 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       emptyMessage={points && points.length === 0 ? 'No points' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {groupedFigure ? (
-        <ScatterXyPlot
-          figure={groupedFigure}
-          isDark={isDark}
-          theme={theme}
-          plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
-          onSelected={selectionEnabled ? handleSelected : undefined}
-          onClick={selectionEnabled ? handleClick : undefined}
-          onDeselect={selectionEnabled ? handleDeselect : undefined}
-        />
+        <>
+          <ScatterXyPlot
+            data={annotations.data}
+            layout={annotations.layout}
+            plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
+            {...annotations.plotProps({
+              onSelected: selectionEnabled ? handleSelected : undefined,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

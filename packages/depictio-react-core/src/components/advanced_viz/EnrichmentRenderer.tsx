@@ -18,6 +18,8 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 
 interface EnrichmentConfig {
   term_col: string;
@@ -251,7 +253,9 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           mode: 'markers' as const,
           x: top.map((r) => r.nes),
           y: top.map((r) => r.term),
-          customdata: top.map((r) => [r.padj, r.count, r.src]),
+          // Slots 0-2 are quoted by index in the hover; the term goes last and
+          // is what marked points are keyed on.
+          customdata: top.map((r) => [r.padj, r.count, r.src, r.term]),
           hovertemplate:
             `<b>%{y}</b><br>NES: %{x:.2f}<br>padj: %{customdata[0]:.2e}` +
             `<br>genes: %{customdata[1]}` +
@@ -440,6 +444,26 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     </Stack>
   );
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (figure ? applyLayoutTheme(figure.layout as any, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  // Chart annotations. Slot 3 of `customdata` is the term, which is what
+  // marked points are keyed on.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 3,
+    pointIdColumn: config.term_col || undefined,
+  });
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -451,15 +475,20 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {figure ? (
-        <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <>
+          <Plot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

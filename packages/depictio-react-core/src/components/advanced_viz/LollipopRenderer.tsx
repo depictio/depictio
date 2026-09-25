@@ -19,6 +19,8 @@ import {
 } from '../../api';
 import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -551,6 +553,29 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
   // Whether any point matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  const singleGene = useSinglePicker ? selectedGene != null : genesInData.length === 1;
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations, on a single gene only: several genes stack one y
+  // axis per gene under the same component. Slot 3 of `customdata` is the
+  // label when one is bound, which is what marked points are keyed on;
+  // without a label they are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && singleGene,
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 3,
+    pointIdColumn: config.label_col || undefined,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Lollipop plot'}
@@ -561,16 +586,21 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
       estimated={estimated}
     >
       {groupedFigure ? (
-        <AdvancedVizPlot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <>
+          <AdvancedVizPlot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

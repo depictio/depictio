@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { NumberInput, ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
@@ -247,6 +250,20 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   const reportedPanel = drawnPanels.find((p) => p.grouped !== p.panel) ?? drawnPanels[0];
   useReportGroupColouring(groupRender, reportedPanel?.panel, reportedPanel?.grouped);
 
+  // Chart annotations, on the single-contrast view only: the faceted "All"
+  // view draws one plot per contrast under the same component. Bars are keyed
+  // on the feature id, slot 0 of `customdata`.
+  const singlePanel =
+    activeTab && activeTab !== ALL_TAB ? (drawnPanels[0]?.grouped ?? null) : null;
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && singlePanel != null,
+    data: singlePanel ? applyDataTheme(singlePanel.data, isDark, theme) : null,
+    layout: singlePanel ? applyLayoutTheme(singlePanel.layout as any, isDark, theme) : null,
+    pointIdIndex: 0,
+    pointIdColumn: config.feature_id_col || undefined,
+  });
+
   // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on every
   // render — an unmemoised element re-fires the frame's publish effect and loops
   // it against ComponentRenderer's setState ("Maximum update depth exceeded").
@@ -307,17 +324,19 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   );
 
   const renderSinglePanel = () => {
-    if (!activeTab || activeTab === ALL_TAB) return null;
-    const panel = drawnPanels[0]?.grouped;
-    if (!panel) return null;
+    if (!singlePanel) return null;
     return (
-      <Plot
-        data={applyDataTheme(panel.data, isDark, theme) as any}
-        layout={applyLayoutTheme(panel.layout as any, isDark, theme) as any}
-        useResizeHandler
-        style={{ width: '100%', height: '100%' }}
-        config={{ displaylogo: false, responsive: true } as any}
-      />
+      <>
+        <Plot
+          data={annotations.data as any}
+          layout={annotations.layout as any}
+          useResizeHandler
+          style={{ width: '100%', height: '100%' }}
+          config={{ displaylogo: false, responsive: true } as any}
+          {...annotations.plotProps()}
+        />
+        {annotations.toolbar}
+      </>
     );
   };
 
@@ -332,6 +351,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
       estimated={Boolean(reduction?.degraded)}
+      badges={annotations.badges}
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {

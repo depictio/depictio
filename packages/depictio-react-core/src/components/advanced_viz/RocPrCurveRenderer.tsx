@@ -4,6 +4,8 @@ import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 interface RocPrCurveConfig {
@@ -257,6 +259,24 @@ const RocPrCurveRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     [mode, hasFpr, hasThreshold],
   );
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (figure ? applyLayoutTheme(figure.layout as any, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  // Chart annotations. Curve points are thresholds rather than rows, so
+  // marked points are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'ROC / PR curve'}
@@ -267,18 +287,23 @@ const RocPrCurveRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       <Stack gap={4} style={{ width: '100%', height: '100%' }}>
         {caseTabs}
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           {figure ? (
-            <Plot
-              data={applyDataTheme(figure.data, isDark, theme) as any}
-              layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
-              useResizeHandler
-              style={{ width: '100%', height: '100%' }}
-              config={{ displaylogo: false, responsive: true } as any}
-            />
+            <>
+              <Plot
+                data={annotations.data as any}
+                layout={annotations.layout as any}
+                useResizeHandler
+                style={{ width: '100%', height: '100%' }}
+                config={{ displaylogo: false, responsive: true } as any}
+                {...annotations.plotProps()}
+              />
+              {annotations.toolbar}
+            </>
           ) : null}
         </div>
       </Stack>
