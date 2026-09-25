@@ -58,15 +58,16 @@ export default defineConfig({
       ],
     },
     {
-      // The catalog walk: one test, an hour long, adding every render the
-      // catalog offers through the real picker. It gets its own project for two
-      // reasons that the shared settings get wrong.
+      // The catalog walk: adding every render the catalog offers through the
+      // real picker, cut into chunks that run one after the other (see CHUNKS
+      // in the spec). It gets its own project for two reasons that the shared
+      // settings get wrong.
       //
       // retries: a deterministic walk cannot pass on a second attempt, so the
       // suite-wide 2 retries only ever tripled an already long failure — three
       // attempts, two of them guaranteed to fail the same way. One is affordable
-      // now that a lane is a fraction of the old whole-catalog walk, and it
-      // still buys tolerance for a genuinely flaky render.
+      // because it re-walks a single chunk, not the whole shard, and it still
+      // buys tolerance for a genuinely flaky render.
       //
       // video: a 55-minute 1080p screencast, encoded next to a full docker
       // stack on a 4-vCPU runner, that nobody opens. Every failure is already a
