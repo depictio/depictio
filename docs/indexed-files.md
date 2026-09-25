@@ -77,23 +77,15 @@ rejected when a browser uses it, even if the bytes are reachable another way.
 The bytes never pass through the API, so the storage itself has to answer the
 browser. It needs to allow the viewer's origin and to serve range requests.
 
-Dev compose already sets it on the MinIO service:
+The bundled SeaweedFS (`weed mini`, compose service `s3`) already allows every
+origin: its `-s3.allowedOrigins` flag defaults to `*`. To narrow it to the
+viewer's origin, pass the flag explicitly. Equivalent settings elsewhere:
 
-```yaml
-MINIO_API_CORS_ALLOW_ORIGIN: ${DEPICTIO_MINIO_CORS_ALLOW_ORIGIN:-*}
-```
-
-MinIO's own default for `api.cors_allow_origin` is already `*`; the variable is
-spelled out so a deployment can narrow it to the viewer's origin without editing
-compose. Equivalent settings elsewhere:
-
-- MinIO outside compose: `mc admin config set <alias> api
-  cors_allow_origin="https://viewer.example.org"` then `mc admin service restart
-  <alias>`.
-- Helm: the chart's configmap is an allowlist, so a variable that is not listed
-  is dropped. Add `MINIO_API_CORS_ALLOW_ORIGIN` to the MinIO deployment's `env`
-  in `helm-charts/depictio/templates/deployments.yaml` and expose it through
-  `values.yaml` under `minio.env`. Nothing new is needed on the API side.
+- Dev compose: add `-s3.allowedOrigins=https://viewer.example.org` to the `s3`
+  service's `command` list in `docker-compose.dev.yaml`.
+- Helm: the same flag through `s3.extraArgs` in `values.yaml`, e.g.
+  `extraArgs: ["-s3.allowedOrigins=https://viewer.example.org"]`. Nothing new
+  is needed on the API side.
 - AWS S3: a bucket CORS rule allowing `GET` and `HEAD` from the viewer's origin,
   with `Range` in `AllowedHeaders` and `Content-Range`, `Content-Length`,
   `Accept-Ranges` and `ETag` in `ExposeHeaders`.
