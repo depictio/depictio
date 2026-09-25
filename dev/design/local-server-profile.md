@@ -27,7 +27,7 @@ modèles). Seule la configuration change, et uniquement via les variables
 |---|---|---|
 | MongoDB | image `mongo:8.0.14` | `mongodb 8.0.*` de conda-forge (8.0.23) |
 | Redis | image `redis` | `redis-server` de conda-forge |
-| MinIO / S3 | image MinIO | `minio-server` de conda-forge |
+| S3 | SeaweedFS (`weed mini`), image `chrislusf/seaweedfs` | `seaweedfs` de conda-forge (4.47), même `weed mini` |
 | Binaires | images | installés une fois par **py-rattler** (la bibliothèque sur laquelle pixi est construit, wheel PyPI) dans `~/.depictio/local/env` |
 | API | gunicorn, 4 workers | uvicorn, 1 worker, sur 127.0.0.1 |
 | Worker | conteneur Celery | `celery worker --concurrency=2` |
@@ -52,7 +52,7 @@ Les deux schémas sont générés par `dev/diagrams/local_server.py`, avec la bo
 | Prérequis | Docker ou un cluster | `uv` seulement | `uv` seulement |
 | Serveur nécessaire | c'est lui | non, il le démarre | oui (URL + token dans `CLI.yaml`) |
 | Environnement Python | dans les images | ~2 Go, ~30 s à froid | ~0,9 Go, 11 s à froid |
-| Autres téléchargements | images | MongoDB, Redis, MinIO de conda-forge : ~360 Mo, 8 s, une seule fois | aucun |
+| Autres téléchargements | images | MongoDB, Redis, SeaweedFS de conda-forge : ~710 Mo installés, 10 s, une seule fois | aucun |
 | Viewer | nginx | `dist/` du wheel, servi par FastAPI | aucun |
 | Auth | multi-utilisateur, public ou mono-utilisateur | mono-utilisateur | token de l'instance cible |
 | Commandes | — | celles de la CLI + `local up/down/status/wipe` | `run`, `dashboard`, `data`, `config`, `backup`… |
@@ -82,8 +82,12 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 - **Stockage sur disque local (`file://`)** : S3 apparaît à 257 endroits dans
   41 fichiers (boto3, `PolarsStorageOptions` obligatoire, `s3://` construit en
   dur, uploads MultiQC et GeoJSON). delta-rs fonctionne bien en local (essai
-  concluant), mais le chantier est de taille L. MinIO natif coûte 33 Mo et
-  aucune ligne de code métier.
+  concluant), mais le chantier est de taille L. SeaweedFS natif, le même
+  `weed mini` que dans Docker, ne demande aucune ligne de code métier.
+- **MinIO natif** (première version de cette PR) : `main` est passé de MinIO à
+  SeaweedFS après le retrait des images communautaires MinIO. Le mode local
+  suit, pour rester le même serveur que Docker. Au passage, la licence passe
+  d'AGPL à Apache-2.0 et linux-aarch64 est couvert.
 - **Celery sans Redis (threads / `task_always_eager`)** : il faudrait router
   14 sites `.delay` / `apply_async`, et `always_eager` bloquerait
   `GET /dashboards/get` pendant le prerender MultiQC. `redis-server` fait 1 à 12 Mo.
@@ -98,7 +102,7 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 
 | Fichier | Changement |
 |---|---|
-| `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe` : binaires via py-rattler, ports libres, secrets générés (0600), PID et logs dans `~/.depictio/local/`, ingestion via `depictio run`, `--var` transmis tel quel |
+| `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe` : MongoDB, Redis et SeaweedFS via py-rattler, variables `DEPICTIO_S3_*`, ports libres, secrets générés (0600), PID et logs dans `~/.depictio/local/`, ingestion via `depictio run`, `--var` transmis tel quel |
 | `pyproject.toml` | extra `local = ["py-rattler"]` ; `package-data` (viewer `dist/` sans sourcemaps, templates, données de démo, assets). **Le wheel racine ne contenait que le `.py`** : même bug que le wheel CLI 1.9.2 |
 | `depictio/version.py` | repli sur `importlib.metadata` : `VERSION` est hors du package, **l'API plantait à l'import depuis un wheel** |
 | `db_init_reference_datasets.py` | les `project.yaml` de référence codent `/app/depictio/...` en dur ; ce préfixe est réécrit vers la racine réelle du package (aucun effet dans l'image) |
@@ -112,11 +116,11 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 |---|---|
 | Wheel `depictio` | 43,6 Mo (104,6 Mo décompressé) ; viewer 11 Mo sans sourcemaps (46 Mo avec) |
 | Environnement Python `uvx` | ~2 Go. Principaux postes : kaleido 221 Mo, deux runtimes polars de 206 Mo chacun, llvmlite 172 Mo, pyarrow 152 Mo, playwright 137 Mo |
-| Binaires conda (mongodb, redis, minio + deps) | 8 s ; environ 360 Mo installés |
+| Binaires conda (mongodb, redis-server, seaweedfs + deps) | 10 s ; environ 710 Mo installés (`mongod` 209 Mo, `weed` 226 Mo) |
 | Démarrage de mongod | 0,6 s |
-| **Premier lancement** à froid, rnaseq inclus | **41 s** (tout téléchargé) |
-| Lancement suivant avec données vierges (rnaseq) | 20 s |
-| `up` avec exemple iris, caches chauds | 8 s ; table Delta iris prête environ 5 s plus tard |
+| **Premier lancement** à froid, rnaseq inclus | **47 s** (tout téléchargé) |
+| Lancement suivant avec données vierges (rnaseq) | 17 s |
+| `up` avec exemple iris, caches chauds | 8 s ; table Delta iris prête environ 4 s plus tard |
 | Build du viewer | 71 s (à faire dans le job de release) |
 
 Validé avec Playwright (1920×1200) : iris, penguins et le megatest nf-core/rnaseq
@@ -133,12 +137,14 @@ recalculent les cartes (8 → 2 librairies) et se propagent d'un onglet à l'aut
    pourrait déplacer `kaleido`, `umap-learn` et `playwright` dans des extras
    serveur optionnels, et ne garder qu'un seul runtime polars
    (`polars[rtcompat]` ajoute le second).
-3. **Licences** : MongoDB est sous SSPL et Redis sous SSPL/RSAL, MinIO sous AGPL.
+3. **Licences** : MongoDB est sous SSPL et Redis sous SSPL/RSAL ; SeaweedFS est sous Apache-2.0.
    Les binaires sont téléchargés par l'utilisateur depuis conda-forge, pas
    redistribués par nous. Est-ce acceptable ?
-4. **Plateformes** : seul linux-64 a été testé ici. `minio-server` n'a pas de
-   build linux-aarch64 dans sa dernière version, et Windows n'est pas pris en
-   charge (`os.killpg`). Seul Python 3.12 a été testé, d'où le `--python 3.12`
+4. **Plateformes** : seul linux-64 a été testé ici. Les trois paquets conda
+   existent aussi pour linux-aarch64, osx-arm64 et osx-64. Windows n'est pas pris
+   en charge (`os.killpg`). `weed mini` garde ses ports internes par défaut
+   (master 9333, volume 9340, filer 8888, admin 23646, et gRPC à +10000) : si
+   l'un est occupé, `up` s'arrête et cite le log de SeaweedFS. Seul Python 3.12 a été testé, d'où le `--python 3.12`
    dans la commande (`uvx` prendrait sinon le Python le plus récent, avec lequel
    les versions épinglées ne sont pas garanties).
 5. **Samplesheet** : les résultats nf-core ne contiennent pas le samplesheet.
