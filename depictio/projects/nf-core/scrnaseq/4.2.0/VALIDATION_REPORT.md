@@ -382,7 +382,7 @@ uv run python -m depictio.cli dashboard import <base.yaml with project_tag lot2-
 ```
 Data were not re-ingested (no DC changed); every DC of `lot2-scrnaseq` answers
 `/deltatables/shape` with rows (diffexp 6 800, cluster_summary 14, cell_expression 8 767 x 127).
-Live checks (headless Playwright, 1600x1000, `/tmp/claude-502/shots-scrnaseq/`): the record
+Live checks (headless Playwright, 1600x1000, `/tmp/shots-scrnaseq/`): the record
 card opens on FCER1A (graphclust Cluster 8, rank 1, log2fc 7.72), the comparison opens with a
 result (C1 n=1249 vs C2 n=1189, 9 up, 22 down, 90 not significant), the violin and the
 parallel coordinates (14 lines, 6 axes) render, header chips are visible without hover.

@@ -404,7 +404,7 @@ python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root ... --dr
 ```
 Live rows: samtools_read_length_nx 594, dexseq_usage 84, samtools_stats_sections 3 155,
 deseq2_results 208 722, dexseq_results 419, bambu_counts_transcript_long 415 356; the
-optional GTF pair skipped. Screenshots: `/tmp/claude-502/shots-nanoseq/` (7 tabs + tile shots,
+optional GTF pair skipped. Screenshots: `/tmp/shots-nanoseq/` (7 tabs + tile shots,
 volcano MA and QQ views clicked live).
 
 # Wave 3

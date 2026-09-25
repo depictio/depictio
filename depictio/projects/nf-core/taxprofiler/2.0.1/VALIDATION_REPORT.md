@@ -466,7 +466,7 @@ Project `Taxprofiler Metagenomic Profiling`, id `6ab2aa1a15d579800f73d51b`; dash
 | `multiqc_data` | MultiQC report, no Delta table | 1 report |
 
 Screenshots, one per tab, viewport 1600x1000, written to
-`/tmp/claude-502/shots-taxprofiler/{0-multiqc,1-depth-diversity,2-profiles,3-concordance,4-confidence}.png`.
+`/tmp/shots-taxprofiler/{0-multiqc,1-depth-diversity,2-profiles,3-concordance,4-confidence}.png`.
 Only `0-multiqc.png` shows the dashboard. The four other tabs each hold at least one
 advanced visualisation, and on the day of this pass the lot 2 dev viewer could not load the
 advanced visualisation chunk at all, so those four captures show the viewer error card
@@ -597,7 +597,7 @@ Commands and results:
 | `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k taxprofiler` | 10 passed |
 | `depictio.cli run --template nf-core/taxprofiler/2.0.1 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3c9f1ac5a3f0e26e7bf89`, dashboard `6ab3ca0be8b8ace33d32c77e`; 14/14 table DCs have rows (taxpasta_lineage 5,652) |
-| Playwright, 1600x1000 | `/tmp/claude-502/shots-taxprofiler/` (tabs + `verify-profiles-0.png`, Krona with wedges for kaiju, diamond, motus, ...) |
+| Playwright, 1600x1000 | `/tmp/shots-taxprofiler/` (tabs + `verify-profiles-0.png`, Krona with wedges for kaiju, diamond, motus, ...) |
 
 # Wave 3 (family rework, 2026-09-23)
 

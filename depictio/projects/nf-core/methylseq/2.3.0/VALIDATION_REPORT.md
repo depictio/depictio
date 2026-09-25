@@ -523,7 +523,7 @@ shapes as above. Typing chr14:36,200,000-36,800,000 in the navigator's locus fie
 navigator, the lanes (35 rows) and the difference track (5 rows). The parallel_coordinates tile
 (7 lines, 8 axes, header controls) and the faceted M-bias figure (CpG, CHG, CHH by R1 and R2)
 render. A mouse brush was not exercised; the locus field emits the same filter pair.
-Screenshots: /tmp/claude-502/shots-methylseq/.
+Screenshots: /tmp/shots-methylseq/.
 
 ## 2026-09-23 wave 3: genericity, 8 tabs to 6, every eligible window tested
 

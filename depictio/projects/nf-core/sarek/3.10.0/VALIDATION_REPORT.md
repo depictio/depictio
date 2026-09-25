@@ -284,7 +284,7 @@ non-optional collections have rows; the 4 optional ones have no Delta table, as 
 | `vcftools_tstv_qual` | 1,757 x 7 | `multiqc_data` | 1 parquet file |
 
 **Per-tab screenshots** (headless Chromium, 1600x1000): one per tab under
-`/tmp/claude-502/shots-sarek/`, plus a tall variant capturing the whole scroll container.
+`/tmp/shots-sarek/`, plus a tall variant capturing the whole scroll container.
 
 ## Discrepancies found in this pass
 
@@ -485,7 +485,7 @@ template: it takes down every advanced-viz tile in the repo equally.
   presigned URLs that answer range requests (206) with CORS for the viewer origin. All five
   tabs loaded; the navigator echoed the default region and a typed locus
   (`chr1:1,000,000-1,600,000`) updated it; the per-caller calls tile held 329 rows there.
-  Screenshots: `/tmp/claude-502/shots-sarek/tab0.png` to `tab5.png`, `tab1_chr1.png`.
+  Screenshots: `/tmp/shots-sarek/tab0.png` to `tab5.png`, `tab1_chr1.png`.
 - Offline, on the restructured recipes: at the default region there are 4 windows, 1,328
   targets in 4 lanes, and 42 to 83 records per annotated VCF (`tabix`).
 - Re-ingest after the restructure (project `6ab3db839baf4b8c12f0d68f`, main dashboard
@@ -502,7 +502,7 @@ template: it takes down every advanced-viz tile in the repo equally.
   card (one card per callset, DeepVariant PASS at VAF 0.43, FreeBayes at 0.46) all render. The
   three Variant yield tiles that did not scroll into view sit in `Variant tables`, which is
   collapsed by design.
-- Screenshots: `/tmp/claude-502/shots-sarek/tab0.png` to `tab5.png`, `tab1_chr1.png`, and per
+- Screenshots: `/tmp/shots-sarek/tab0.png` to `tab5.png`, `tab1_chr1.png`, and per
   tile `cqc4_*` (default region), `cqc5_*` (chr1), `vy2_*`, `cc2_*`, `cs2_*`.
 
 ### Discrepancies found in this pass
