@@ -138,3 +138,16 @@ Seulement des champs et des règles d'API ; MCP, jetons à portée limitée et r
 - **Retour humain conservé** : accepté / rejeté / modifié + motif optionnel (futur jeu d'évaluation).
 - **Schémas propres dans l'OpenAPI** (modèles Pydantic stricts, géométrie en coordonnées données).
 - Règle à garder en tête : le texte des commentaires est une donnée, jamais une instruction pour un agent (injection de prompt).
+
+## Intégration avec les templates nf-core lot 2 (2026-09-25)
+
+Branche `integ/lot2-comments` : #1109 mergée dans `feat/nfcore-templates-lot2` (#1102). La structure de lot 2 est gardée, les annotations y sont rebranchées.
+
+- **Renderers devenus des wrappers** : MA et QQ ouvrent `VolcanoRenderer` sur leur vue, enrichment ouvre `DotPlotRenderer` (vue `enrichment`), ROC ouvre `PrBenchmarkRenderer` (vue `roc`). La couche d'annotation vit dans le renderer qui dessine la figure ; `supportsAdvancedVizAnnotation` couvre `volcano`, `dot_plot` et `pr_benchmark`.
+- **Annotation par vue** : quand une tuile propose plusieurs vues aux axes différents (volcano / MA / QQ, marker / enrichment, PR / ROC), `variant` vaut la vue active. Une marque posée sur une vue n'apparaît pas sur les autres. Les annotations sans `variant` (créées avant) restent visibles sur toutes les vues.
+- **Identifiant de point par vue** : QQ garde l'id de feature en slot 0 ; volcano et MA gardent le label (`label_col` sinon `feature_id_col`) ; enrichment garde le terme en slot 3.
+- **Sélection croisée** : les handlers de lot 2 protégés par `useGestureGuardedSelection` passent par `annotations.plotProps({...})` (scatter_xy, profile, manhattan). En mode Annoter la couche les débranche, donc un tracé d'annotation ne vide ni ne pose de sélection.
+- **Barre d'actions** : le bouton « Clear selection (N) » de lot 2 remplace l'ancien reset actif ; les états persistants commentaires et annoter de #1109 s'y ajoutent.
+- **Tables** : la colonne épinglée des badges d'annotation (48 px) est exclue de l'auto-fit des colonnes de lot 2 (`suppressAutoSize`, `suppressSizeToFit`).
+- **coverage_track** : le hook est appelé avant le retour anticipé de la vue Locus (ordre des hooks stable) et désactivé dans cette vue, dessinée par GenomeSpy.
+- **Lollipop** : annotations actives seulement quand un seul gène est affiché (règle de #1109 conservée).
