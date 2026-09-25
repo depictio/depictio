@@ -1,0 +1,213 @@
+# Docs page for nf-core/sarek, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Variant calling
+status: draft
+card_blurb: >-
+  Germline and somatic variant calling: alignment QC, variant counts per caller,
+  annotated variants and their genome positions.
+index_summary: Germline and somatic variant calling
+keywords: [sarek, variant, calling, germline, somatic, snv, indel, vcf, vep, snpeff, wgs, wes]
+
+subtitle: >-
+  Germline variant calling compared caller by caller: coverage, bcftools and
+  VCFtools statistics, agreement between callsets, SnpEff consequences and the
+  genes that carry them, next to the pipeline's own MultiQC report.
+
+intro: |
+  The sarek template follows a variant-calling run from the reads to the genes the
+  calls land on, and reads the VCFs themselves, so callers are compared call by
+  call and gene by gene rather than only by how many calls each made:
+intro_after: |
+  A `Run at a glance` strip (SNPs called, indels per callset, samples by status,
+  median Ts/Tv), the collapsed `Sample sheet` and the `Sample filters` (sample,
+  tumour or normal status) are pinned to every tab, with a collapsed `QC
+  thresholds` group (a Ts/Tv floor) pinned to the bottom.
+
+callouts:
+  - kind: info
+    title: Concordance is agreement, not truth
+    position: intro
+    body: |
+      Nothing in this template compares a callset against a benchmark truth set:
+      "concordance" means agreement between callers and samples. For a truth-set
+      benchmark, [nf-core/variantbenchmarking](variantbenchmarking.md) has its own
+      template.
+  - kind: note
+    title: Structural-variant callers call few SNPs
+    position: intro
+    body: |
+      Manta and TIDDIT report a Ts/Tv of 0.0 in bcftools stats, which is the
+      caller doing its job. Every Ts/Tv card and filter keeps only `ts_tv > 0`, so
+      they do not drag the medians down.
+
+quick_start: |
+  `--data-root` is the only thing you have to pass. The sample hub is built
+  from the CSV manifests sarek writes under `csv/` (patient, sex, status and
+  the callers run per sample), so the launch samplesheet is not needed. If the
+  run was aligned to another assembly than hg38, name it so the locus tracks
+  draw the right axis and gene lane:
+
+  ```bash
+  depictio run \
+    --template nf-core/sarek/latest \
+    --data-root /path/to/sarek_results \
+    --var GENOME=hg19
+  ```
+
+  | Variable | Default | Role |
+  |---|---|---|
+  | `GENOME` | `hg38` | UCSC name of the assembly (hg38, hg19, mm10): the axis and gene lane of every locus track |
+
+reference: |
+  The template reads the native MultiQC report, the per-caller bcftools stats and
+  VCFtools summaries, mosdepth's coverage files, the called VCFs, and SnpEff's
+  annotated VCFs, CSV statistics and per-gene tables. The caller and the sample
+  live only in the directory path (`reports/<tool>/<caller>/<sample>/`), so raw
+  scans carry the path into the table and recipes read both off it. sarek runs
+  mosdepth on the duplicate-marked and on the recalibrated CRAM; the coverage
+  recipes keep one pass per sample, so no tile counts a sample twice.
+self_adapting_note: |
+  A run without SnpEff in `--tools` drops the Consequences and Genes tabs instead of failing to ingest.
+
+tabs_intro: |
+  Six tabs, read as a funnel: the report, how deeply the targets were covered, how
+  much each caller called, which callers agree, what the calls do to the
+  transcript, and which genes carry them. Each tab below carries the **same icon
+  and colour the dashboard gives it**.
+
+tabs:
+  - title: MultiQC
+    summary: read quality, alignment and recalibration, the pooled variant-call QC and the annotation summaries
+    question: Are the reads, the alignments and the pooled calls sound, before any caller is compared?
+    description: |
+      The run's native MultiQC report, no reprocess needed: FastQC and fastp on
+      the reads, then mapping, duplication, BQSR calibration, mosdepth coverage
+      and insert size. The variant-call QC section is what bcftools and VCFtools
+      see with every caller pooled, and the annotation section holds the SnpEff
+      and VEP summaries. A tab-local `Glance scope` narrows the pinned strip to
+      one caller.
+  - title: Cohort QC
+    summary: coverage per contig and per capture target, a locus browser, and an X against Y sex check
+    question: Were the targets covered deeply enough for a call to mean anything?
+    description: |
+      Coverage bounds every call, so it comes first: target depth per contig,
+      depth per capture target, targets under 20x and the X to Y ratio. `One
+      locus, three tracks` is a locus browser: a depth navigator binned to 1 Mb
+      windows drives, through its locus field or brush, the per-target depth, the
+      calls over the gene lane and the annotated VCFs range-read from their files.
+      mosdepth's whole-contig and capture-target scopes are then compared per
+      contig, and an X against Y depth scatter gives a heuristic sex check.
+  - title: Variant yield
+    summary: each caller's own statistics side by side, its mutation spectra, what its filters removed
+    question: How much did each caller call, and what did its own filters throw away?
+    description: |
+      Each caller's own bcftools stats and VCFtools reports, caller against
+      caller: SNP and indel counts, the substitution and indel spectra as shares
+      of each callset, and a parallel-coordinates profile that puts eight QC
+      numbers per callset on one plot. The FILTER partitions show what each caller
+      discarded, and Ts/Tv against a rising quality floor shows where its quality
+      score stops separating variants from noise. The remaining bcftools blocks
+      sit behind a block picker.
+  - title: Caller concordance
+    summary: which callsets agree, allele fraction against depth, and where the calls fall
+    question: Which calls do the callers share, and where do they part ways?
+    description: |
+      Two UpSet plots ask the same question twice: exact PASS calls shared between
+      callsets, then genes hit by a coding variant. Allele fraction against depth,
+      as a density and as a histogram per caller, is the plane a germline callset
+      is read on. A rainfall plot of inter-call distances shows where calls
+      cluster along the genome, and selecting a call on it narrows the call table.
+  - title: Consequences
+    summary: SnpEff's composition, recomputed per call with a variant record beside the scatter
+    question: What do the calls do to the transcript?
+    description: |
+      SnpEff's published composition, section by section and caller by caller,
+      next to the same composition recomputed from the annotated calls. The allele
+      fraction against depth scatter, coloured by impact, drives a linked
+      **Variant record** beside it, which folds to a slim rail until a call is
+      picked and then links its gene to Ensembl.
+  - title: Genes
+    summary: the per-gene burden across callsets and the coding variants along the protein
+    question: Which genes carry the variant burden, callset by callset?
+    description: |
+      The per-gene burden SnpEff writes, as a clustered gene by callset heatmap of
+      coding-variant counts, then a protein lollipop of the coding variants at
+      their amino-acid position. A row picked in the per-gene table drives the
+      lollipop. A high burden on long, repetitive genes is a mappability signal
+      before it is a biological one.
+tabs_after: |
+  Tables and point views select on their entity column: the sample sheet on
+  `sample_id`, the per-caller tables on `caller`, the call tables and the rainfall
+  plot on the variant, and the per-gene table on the gene. A pick narrows every
+  tile on the tab that reads the same collection or one linked from it.
+
+running: |
+  Depictio reads the **output** of nf-core/sarek, it does not run the pipeline.
+  Run the pipeline first, with the callers you want to compare and SnpEff among
+  the tools:
+
+  ```bash
+  nextflow run nf-core/sarek -r 3.10.0 \
+    --input samplesheet.csv \
+    --genome GATK.GRCh38 \
+    --tools haplotypecaller,deepvariant,strelka,freebayes,manta,snpeff \
+    --outdir results -profile docker
+  ```
+
+  Then point Depictio at the results. sarek 3.10.0 ships a MultiQC parquet, so no
+  reprocess step is needed:
+
+  ```bash
+  depictio run --template nf-core/sarek/latest --data-root results/
+  ```
+
+  See [nf-co.re/sarek/usage](https://nf-co.re/sarek/3.10.0/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name; the caller and sample directories under
+  `reports/`, `variant_calling/` and `annotation/` are read off the path.
+
+  ```text
+  <DATA_ROOT>/
+  ├── csv/*.csv                                  # the hub: sarek's resume manifests
+  ├── pipeline_info/
+  │   ├── params_*.json
+  │   └── *software*versions*.yml
+  ├── multiqc/multiqc_data/multiqc.parquet       # native, no reprocess
+  ├── reports/
+  │   ├── bcftools/<caller>/<sample>/*.bcftools_stats.txt
+  │   ├── vcftools/<caller>/<sample>/*.{TsTv.qual,FILTER.summary}   # optional
+  │   ├── mosdepth/<sample>/*.{mosdepth.summary.txt,regions.bed.gz}
+  │   └── snpeff/<caller>/<sample>/*_snpEff.{csv,genes.txt}         # optional
+  ├── variant_calling/<caller>/<sample>/*.vcf.gz # one VCF per sample and caller
+  └── annotation/<caller>/<sample>/
+      └── *_snpEff.ann.vcf.gz{,.tbi}             # optional; the index feeds the locus track
+  ```
+
+  gVCFs are not read. The somatic outputs (ASCAT, CNVkit, MSIsensor-pro,
+  NGSCheckMate) are declared optional so a somatic run ingests, but no tile binds
+  them yet.
+
+validation: |
+  The template was validated against the AWS megatest of the 3.10.0 release,
+  `results-8ccac7ad37b05dd792447763bf9671b719824587`, on its
+  `test_full_germline_ncbench_agilent/` profile: one NA12878 exome sequenced at two
+  depths, five germline callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta,
+  Strelka) and both annotators. The screenshots above come from that run.
+  `megatest.yaml` lists the tables-only subset the template needs, plus the
+  per-caller VCFs and their SnpEff twins:
+
+  ```bash
+  bash depictio/projects/nf-core/sarek/3.10.0/download_test_data.sh /tmp/sarek_test
+  depictio run --template nf-core/sarek/latest --data-root /tmp/sarek_test
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+
+authorship:
+  developers: [weber8thomas]
+  maintainers: [weber8thomas]

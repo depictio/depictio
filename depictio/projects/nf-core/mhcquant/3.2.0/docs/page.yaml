@@ -1,0 +1,185 @@
+# Docs page for nf-core/mhcquant, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Immunopeptidomics
+status: draft
+card_blurb: 'Immunopeptidomics: identified MHC peptides, length and anchor-motif signatures, replicate reproducibility and source proteins across runs.'
+index_summary: Immunopeptidomics
+keywords: [mhcquant, immunopeptidomics, mhc, hla, peptides, mass, spectrometry, binding, prediction]
+subtitle: Identification yield and FDR behaviour, the MHC length and anchor-motif signature, replicate reproducibility, shared and private peptides with their source proteins, and retention-time and mass checks, next to the pipeline's own MultiQC report.
+intro: |
+  The mhcquant template follows an nf-core/mhcquant run from the Comet search to
+  the presented peptides, one tab per question:
+intro_after: |
+  A `Run at a glance` strip and the collapsed `Sample sheet` are pinned to the top
+  of every tab, `Reference tables` to the bottom, and the `Sample filters` group
+  (sample, condition, raw file) applies everywhere.
+callouts:
+- kind: info
+  title: The samplesheet is not in the output
+  position: intro
+  body: |
+    mhcquant does not publish the samplesheet it ran on, and the samplesheet is
+    the hub every other collection links to. The template reads the file named by
+    `METADATA_FILE`, which defaults to `input/samplesheet.tsv` under the data
+    root: copy the sheet you passed to `--input` there, or point the variable at
+    it. The CLI's metadata auto-detection picks the first non-id column of the
+    sheet as the grouping column, so pass `--var GROUP_COL=Condition` unless
+    `Condition` already comes second.
+- kind: note
+  title: No binding predictions
+  position: intro
+  body: |
+    mhcquant 3.2.0 no longer runs MHCflurry or any other binding predictor, so
+    the template has no binder-rank view. The MHC signature tab reads the class
+    and the presenting alleles from peptide lengths and positional motifs instead.
+run_vars: [METADATA_FILE=/path/to/samplesheet.tsv, GROUP_COL=Condition]
+quick_start: |
+  `METADATA_FILE` can be left out when the sheet already sits at
+  `input/samplesheet.tsv` under the data root. A run started without
+  `--quantify` has no replicate intensities: add `--var NO_QUANTIFICATION=true`
+  and the Reproducibility collections are dropped. A run without
+  `--annotate_ions` takes `--var NO_ION_ANNOTATION=true`.
+reference: |
+  The template reads the samplesheet, the MultiQC report, the per-sample peptide
+  tables at the output root, the Comet pin files that precede rescoring and the
+  fragment-ion annotations. Every other collection (sample summary, length
+  distribution, composition, motif matrix, replicate pairs and detection, source
+  proteins, condition sharing) is a recipe over the peptide table. {use_count} of its {tile_count}
+  components carry a `use:` catalog reference, so a tile says where its panel
+  comes from.
+tabs_intro: |
+  Six tabs, read as a funnel: is the report healthy, how much did each sample
+  identify, do the peptides look like MHC ligands, do the replicates agree, what is
+  shared between conditions, and do the identifications behave physically like
+  peptides. Each tab below carries the **same icon and colour the dashboard gives
+  it**. The screenshots come from the run described under
+  Validation runs below.
+tabs:
+- title: MultiQC
+  question: Are identification yield and score distributions sound before reading the peptides?
+  description: |
+    The tab is the report mhcquant writes as MultiQC custom content: identification
+    counts, the q-value and Comet Xcorr distributions, then precursor m/z, retention
+    time and peptide intensity. Chromatograms, fragment mass error and the
+    Percolator feature weights sit in a collapsed section, useful when a sample
+    underperforms and the cause is the acquisition or the rescoring model.
+- title: Identification
+  summary: PSMs, peptides and source proteins per sample, and how the raw search behaves as the FDR threshold moves
+  question: How much did each sample identify, and how does the search behave across FDR thresholds?
+  description: |
+    Cards give PSMs, peptides and source proteins per sample and the Comet PSMs
+    accepted at 1% FDR per raw file. The FDR profile draws the accepted PSMs of each
+    raw file as the target-decoy q-value threshold is relaxed, so a file that gains
+    little from a looser cut stands apart. These Comet numbers come from the pin
+    files, before MS2Rescore and Percolator, so they describe the raw search and not
+    the final FDR.
+- title: MHC signature
+  summary: the peptide length profile against the class I and class II windows, and the positional amino-acid preferences behind the anchor motifs
+  question: Which MHC class and which presenting alleles do the peptides point to?
+  description: |
+    The length profile shades the class I (8 to 12 residues) and class II (13 to 25)
+    windows, with cards for the 9-mer share, the share in each window and the median
+    length. The pipeline's own length filter bounds what can appear, so a class
+    share of zero can be structural. The motif heatmap gives the amino-acid
+    frequency at each position, per sample and length, which is where the anchor
+    residues of the presenting alleles show up.
+- title: Reproducibility
+  summary: how consistently the raw replicates of a sample quantify the same peptides
+  question: Are the peptides of a sample quantified consistently across its raw replicates?
+  description: |
+    Cards give the median and weakest replicate correlation and the share of
+    peptides seen in every replicate. The scatter plots one replicate's intensity
+    against another's for every pair, and an UpSet counts the peptides quantified in
+    each combination of replicates. The peptide table does not name the raw file
+    behind each intensity column, so replicate labels follow the samplesheet `ID`
+    order within the sample.
+  after: |
+    !!! tip "Only with `--quantify`"
+        Replicate intensities exist only when the run quantified. Pass
+        `--var NO_QUANTIFICATION=true` for a run without it and the tab is dropped.
+- title: Peptides and proteins
+  summary: peptides common to several conditions or private to one, and the proteins that feed them
+  question: Which presented peptides are common to every condition, which are private, and where do they come from?
+  description: |
+    An UpSet over one peptide set per condition separates shared from private
+    peptides. The source-protein scatter puts the number of peptides a protein
+    feeds into presentation against their intensity. Below, the peptide and protein
+    tables each carry a linked record card beside them: it folds to a slim rail
+    until a row is picked, then shows that peptide or protein in full. Picking a
+    peptide selects its `sequence`, which also narrows the condition-sharing view.
+- title: Physico-chemical checks
+  summary: observed against predicted retention time, hydropathy, precursor charge and m/z, and mass accuracy
+  question: Do the identifications behave like real peptides?
+  description: |
+    Observed retention time is plotted against the DeepLC prediction and against
+    Kyte-Doolittle hydropathy; false identifications drift off both trends. A
+    peptide picked on the retention-time scatter opens in the `Picked peptide`
+    record beside it, which stays a slim rail until then. Precursor m/z over the
+    gradient by charge, and cards for retention-time, precursor and fragment mass
+    error, close the tab.
+running: |
+  Depictio reads the **output** of nf-core/mhcquant, it does not run the pipeline.
+  Run the pipeline first, with quantification and ion annotation if you want the
+  Reproducibility tab and the fragment checks:
+
+  ```bash
+  nextflow run nf-core/mhcquant -r 3.2.0 \
+    --input samplesheet.tsv \
+    --fasta proteome.fasta \
+    --quantify --annotate_ions \
+    --outdir results -profile docker
+  ```
+
+  Then point Depictio at the results, with the samplesheet you started from:
+
+  ```bash
+  depictio run --template nf-core/mhcquant/latest --data-root results/ \
+    --var METADATA_FILE=samplesheet.tsv --var GROUP_COL=Condition
+  ```
+
+  See [nf-co.re/mhcquant/usage](https://nf-co.re/mhcquant/3.2.0/docs/usage) for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/
+  │   └── samplesheet.tsv                        # the hub (METADATA_FILE default): ID, Sample, Condition, ReplicateFileName
+  ├── <Sample>_<Condition>.tsv                   # one FDR-filtered peptide table per sample
+  ├── multiqc/multiqc_data/
+  │   └── multiqc.parquet                        # mhcquant custom-content sections
+  ├── intermediate_results/
+  │   ├── comet/*_pin.tsv                        # Comet PSMs per raw file, before rescoring
+  │   └── ion_annotations/*_matching_ions.tsv    # optional, --annotate_ions
+  └── pipeline_info/
+      ├── params_*.json
+      └── *software*versions*.yml
+  ```
+
+  The replicate intensities are the `intensity_<k>` columns of the peptide tables,
+  present only with `--quantify`. The mzTab exports, the OpenMS XML intermediates
+  and the spectral library are not read.
+validation: |
+  The template was validated against the AWS megatest of the 3.2.0 release
+  (`results-6ec12c97f7889a3e1f09ab89930723045c6bac68`, `test_full` profile: a
+  PRIDE immunopeptidomics dataset of two samples with three raw replicates each,
+  one sample per condition), and the screenshots above come from it. With one
+  sample per condition, the sharing UpSet on that run is dominated by private
+  peptides. `megatest.yaml` lists the tables-only subset the template needs, and
+  the download script also places the vendored samplesheet under `input/`:
+
+  ```bash
+  bash depictio/projects/nf-core/mhcquant/3.2.0/download_test_data.sh /tmp/mhcquant_test
+  depictio run --template nf-core/mhcquant/latest --data-root /tmp/mhcquant_test \
+    --var GROUP_COL=Condition
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

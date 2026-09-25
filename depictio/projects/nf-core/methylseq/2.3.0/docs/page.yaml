@@ -1,0 +1,219 @@
+# Docs page for nf-core/methylseq, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from the dashboard YAML.
+page_title: "Bisulfite Methylation"
+status: "draft"
+card_blurb: |-
+  DNA methylation: bisulfite conversion QC, M-bias, CpG coverage and methylation levels compared across samples and groups.
+index_summary: "Bisulfite and enzymatic methylation sequencing"
+keywords: [methylseq, methylation, bisulfite, bismark, cpg, mbias, em-seq, epigenetics]
+
+subtitle: |-
+  Bismark alignment and conversion QC, coverage, M-bias per context, the binned methylome with its cohort structure, and a window-level comparison between two groups, next to the pipeline's MultiQC report.
+
+intro: |
+  The methylseq template follows the Bismark route of an nf-core/methylseq run from
+  trimmed reads to per-cytosine methylation, one question per tab:
+intro_after: |
+  A `Run at a glance` strip, the `Sample filters` (sample and the design factor) and
+  a collapsed sample sheet are pinned to the top of every tab, and a collapsed
+  `QC thresholds` group (mapping efficiency, duplication, conversion) to the bottom.
+
+callouts:
+  - kind: warning
+    title: "The MultiQC report must be regenerated"
+    position: intro
+    body: |
+      methylseq 2.3.0 ships MultiQC 1.13, which writes no parquet, and Depictio
+      reads only `multiqc.parquet` (MultiQC 1.31 and later). Re-run MultiQC over
+      the run's own tool outputs before ingesting, or the MultiQC tab stays empty:
+
+      ```bash
+      python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>
+      ```
+  - kind: info
+    title: "Bismark route only"
+    position: intro
+    body: |
+      methylseq also publishes `bismark_hisat/` and `bwameth/` routes. This template
+      covers the default `bismark/` route; its file patterns match any
+      `bismark_<aligner>` suffix, so the sample ids parse the same way on the
+      hisat2 route.
+  - kind: note
+    title: "The design is a table beside the run"
+    position: intro
+    body: |
+      The methylseq samplesheet carries no design column, and the template never
+      parses one out of sample names. Pass a design table with `METADATA_FILE`:
+      without it the design filter has nothing to offer and the Group comparison
+      tab is pruned.
+
+run_vars:
+  - "METADATA_FILE=/path/to/design.tsv"
+  - "GENOME=hg38"
+quick_start: |
+  The sample hub reads `input/samplesheet_full.csv` under the data root. The
+  variables:
+
+  | Variable | Default | What it does |
+  |---|---|---|
+  | `METADATA_FILE` | none | Design table (TSV): sample id in a `sample` column or the first column, one column per factor |
+  | `METADATA_ID_COL` | first column | The design table's sample-id column |
+  | `GROUP_COL` | first factor | The factor the dashboards colour and filter by; the comparison tests it when it has two levels, else the first two-level factor |
+  | `GROUP_COL_DISPLAY` | title-cased `GROUP_COL` | Label used in titles |
+  | `GENOME` | `hg38` | UCSC assembly of the locus tracks (contig axis and region search) |
+
+trigger_note: |
+  Without a `METADATA_FILE` the Group comparison is pruned, and the
+  MultiQC tab stays empty until the report is regenerated as above.
+
+reference: |
+  The template reads the samplesheet and the design table, the regenerated MultiQC
+  report, Bismark's alignment, deduplication, splitting and M-bias reports and its
+  per-CpG bedGraphs, and Qualimap BamQC. {use_count} of its {tile_count} tiles carry a `use:` catalog
+  reference (`bismark/*`, `qualimap/*`, `multiqc/*`), and the locus tracks name
+  their `viz_kind` explicitly.
+
+tabs_intro: |
+  Six tabs, read as a funnel: is the report normal, which libraries fail a floor,
+  is depth even enough for a site call, does the extraction need a trim, what does
+  the methylome look like, and where do the two groups differ. Each tab below
+  carries the **same icon and colour the dashboard gives it**. A picked row or
+  point becomes a filter that follows the project links to the tiles it reaches.
+
+tabs:
+  - title: "MultiQC"
+    summary: "FastQC, Cutadapt, Bismark and Qualimap panels from the run's MultiQC report"
+    question: "Read the report from the reads to the methylation calls."
+    description: |
+      Every module the report carries: the general statistics, all ten FastQC
+      panels, what Trim Galore removed, Bismark's five plots and Qualimap BamQC. A
+      bisulfite library legitimately fails the per-base sequence content and GC
+      checks, because converting unmethylated cytosines is the point, so the
+      quality, length and adapter panels are the ones to read.
+  - title: "Run QC"
+    summary: "which libraries fail the alignment, duplication or bisulfite conversion floors"
+    question: "Spot the libraries below the alignment, duplication or conversion floors."
+    description: |
+      The floor cards read the worst library of the selection: mapping efficiency
+      passes at 70 %, since bisulfite alignment searches four converted genomes, and
+      duplication up to 10 %. Conversion is read as `100 - %CHH`, which assumes
+      near-zero non-CpG methylation, as in mammals; on a plant run judge it on an
+      unmethylated spike-in instead. A parallel-coordinates panel draws each library
+      across the QC ratios, coloured by the design factor.
+  - title: "Coverage"
+    summary: "how deep and how evenly the deduplicated alignments cover the reference"
+    question: "Measure how deep and how evenly the reference is covered."
+    description: |
+      Qualimap BamQC on the deduplicated alignments. Mean depth counts the bases at
+      zero, so on a shallow run the genome-fraction curve is the number to judge,
+      and a low GC share is the conversion itself. Windowed depth is mapped back
+      onto its contigs as one lane per library.
+  - title: "Bias and context"
+    summary: "whether the methylation extraction needs a read-position trim"
+    question: "Decide whether a read-position trim is needed."
+    description: |
+      One M-bias explorer over all six tables of Bismark's M-bias file, opening on
+      CpG. A CpG curve that has not flattened by the end of the read is Bismark's
+      own advice to add an `--ignore` or `--ignore_r2` trim and re-extract; a CHH
+      curve that climbs at one end is unconverted cytosine at those positions.
+  - title: "Global methylome"
+    summary: "whether each methylome is bimodal, and whether the libraries group by the design"
+    question: "Check bimodality and whether the libraries group by the design."
+    description: |
+      The per-CpG bedGraphs are streamed into 10 kb windows that hold enough CpGs in
+      every library. A healthy mammalian methylome is bimodal, and a low peak that
+      drifted upward points to incomplete conversion or too little depth. Windows
+      split into CpG-density tertiles stand in for an island annotation, which
+      methylseq does not bundle. The cohort is read as a PCA coloured by the design
+      factor, a library correlation matrix and the windows that vary most.
+  - title: "Group comparison"
+    summary: "where two groups differ, genome-wide and at one locus"
+    question: "Locate the differences between the two groups."
+    description: |
+      methylseq ships no differential-methylation caller, so this is the screen the
+      published files support, labelled as one: every eligible window is tested with
+      a two-sample t-test on arcsine-transformed proportions and Benjamini-Hochberg
+      correction, and called at padj under 0.05 with a difference of at least ten
+      points. A Manhattan and a volcano open the tab; a locus navigator then drives
+      the per-library windows and the group difference on the same region.
+    after: |
+      !!! tip "A window screen, not a DMR caller"
+          The unit is a 10 kb window, not a CpG or a called DMR, and with few
+          libraries a side the screen is low-powered by construction. Without a
+          design table, or without a factor of exactly two levels, the tab is
+          pruned.
+
+running: |
+  Depictio reads the **output** of nf-core/methylseq, it does not run the pipeline.
+  Run the pipeline first on the default Bismark route:
+
+  ```bash
+  nextflow run nf-core/methylseq -r 2.3.0 \
+    --input samplesheet_full.csv \
+    --genome GRCh38 \
+    -profile docker --outdir results
+  ```
+
+  Then place the samplesheet and a design table beside the results, regenerate the
+  MultiQC report and point Depictio at them:
+
+  ```bash
+  mkdir -p results/input && cp samplesheet_full.csv design.tsv results/input/
+  python -m depictio.dev_scripts.multiqc_reprocess --src results/ --dest results/
+  depictio run --template nf-core/methylseq/latest --data-root results/ \
+    --var METADATA_FILE=results/input/design.tsv
+  ```
+
+  See [nf-co.re/methylseq/usage](https://nf-co.re/methylseq/2.3.0/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name, never on the `bismark/` prefix.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/
+  │   ├── samplesheet_full.csv                   # the hub (required)
+  │   └── design.tsv                             # METADATA_FILE (optional)
+  ├── pipeline_info/software_versions.yml
+  ├── multiqc/multiqc_data/multiqc.parquet       # written by multiqc_reprocess
+  ├── fastqc/*.zip                               # raw MultiQC inputs
+  ├── trimgalore/*.{txt,zip}
+  ├── bismark/
+  │   ├── alignments/logs/*_bismark_bt2_PE_report.txt
+  │   ├── deduplicated/logs/*.deduplication_report.txt
+  │   ├── methylation_calls/
+  │   │   ├── splitting_report/*_splitting_report.txt
+  │   │   ├── mbias/*.M-bias.txt
+  │   │   └── bedGraph/*.bedGraph.gz             # the methylome and the comparison
+  │   └── summary/                               # bismark2summary
+  └── qualimap/<sample>/
+      ├── genome_results.txt
+      └── raw_data_qualimapReport/*.txt
+  ```
+
+validation: |
+  The template was validated on the nf-core AWS megatest of the 2.3.0 release,
+  `s3://nf-core-awsmegatests/methylseq/results-93bc5811603c287c766a0ff7e03b5b41f4483895/bismark/`,
+  seven paired-end libraries, and the screenshots above come from that run. Its
+  design table is vendored under the template's `input/`, built once from the
+  samplesheet:
+
+  ```bash
+  DEST=/tmp/methylseq_test
+  bash depictio/projects/nf-core/methylseq/2.3.0/download_test_data.sh "$DEST"
+  mkdir -p "$DEST/input" && cp depictio/projects/nf-core/methylseq/2.3.0/input/sample_metadata.tsv "$DEST/input/"
+  python -m depictio.dev_scripts.multiqc_reprocess --src "$DEST" --dest "$DEST"
+  depictio run --template nf-core/methylseq/latest --data-root "$DEST" \
+    --var METADATA_FILE="$DEST/input/sample_metadata.tsv"
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

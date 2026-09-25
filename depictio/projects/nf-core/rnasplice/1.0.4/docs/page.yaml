@@ -1,0 +1,202 @@
+# Docs page for nf-core/rnasplice, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Alternative Splicing
+status: experimental
+card_blurb: 'Alternative splicing: differential splicing events and transcript usage between conditions, with the supporting expression.'
+index_summary: Alternative splicing analysis
+keywords: [rnasplice, splicing, alternative, splicing, rmats, suppa, dexseq, transcript, usage]
+subtitle: 'RNA-seq QC and sample space, then differential splicing across DEXSeq, edgeR, rMATS and SUPPA2: where the tools agree, exon and transcript usage, and event types, next to the pipeline''s own MultiQC report.'
+intro: |
+  The rnasplice template follows an nf-core/rnasplice run from the reads to the
+  splicing calls of up to five tools, one tab per question:
+intro_after: |
+  The `Run scope` filters (sample, condition, contrast) apply to every tab, and
+  `Run at a glance` and the collapsed `Sample sheet` are pinned to the top. The
+  contrast sheet is linked to every splicing collection, so one contrast pick
+  scopes every tab.
+callouts:
+- kind: warning
+  title: MultiQC 1.18 writes no parquet
+  position: intro
+  body: |
+    rnasplice 1.0.4 pins MultiQC 1.18, and Depictio reads only
+    `multiqc.parquet` (MultiQC 1.31 and later). Rebuild it from the tool outputs
+    before ingesting:
+
+    ```bash
+    python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>/multiqc/multiqc_data
+    ```
+- kind: info
+  title: One sign for every tool, every tool optional
+  position: intro
+  body: |
+    Effects are oriented treatment minus control across all five tools, so a
+    contrast and its mirror give mirrored effects; rnasplice often lists both, so
+    pick one. A run that skips a tool drops its collection: its tiles stay empty
+    and the agreement UpSet shows an empty set.
+quick_start: |
+  `--data-root` is the only thing you have to pass: the validated sample sheet
+  always carries `condition`, which `GROUP_COL` defaults to. Add a design table
+  with more factors, name the assembly the event loci link to in UCSC, or read
+  the pseudo-alignment route:
+
+  ```bash
+  depictio run --template nf-core/rnasplice/latest \
+    --data-root /path/to/rnasplice_results \
+    --var METADATA_FILE=/path/to/design.tsv \
+    --var GENOME=hg38 \
+    --var QUANT_ROUTE=star_salmon
+  ```
+quick_start_after: |
+  The calls are thresholded by variables with generic defaults: `SPLICING_FDR`
+  (0.05) on every tool's adjusted p-value, SUPPA2's empirical p-value included,
+  `MIN_DPSI` (0.1) on the PSI change of rMATS and SUPPA2 events, and
+  `RMATS_MIN_READS` (10) mean junction reads per replicate an rMATS event needs in
+  both conditions.
+reference: |
+  The template reads the MultiQC report, the validated sample and contrast sheets,
+  the merged Salmon gene TPMs and the result tables of the five splicing tools. A
+  pipeline-local `splicing_genes` recipe joins the tools into one row per gene,
+  linked on `gene_id` to every tool collection, so a gene or agreement filter on
+  the overview reaches the per-tool tabs. {use_count} of its {tile_count} components carry a `use:`
+  catalog reference, so a tile says where its panel comes from.
+tabs_intro: |
+  Six tabs, read as a funnel: are the libraries usable, do the samples separate by
+  condition, which genes the tools call together, and then each level of evidence
+  in turn: exons, transcripts, events. Each tab below carries the **same icon and
+  colour the dashboard gives it**. The screenshots come from the run described
+  under Validation runs below.
+tabs:
+- title: MultiQC
+  summary: FastQC, Trim Galore, STAR, samtools, featureCounts and Salmon, read from the report
+  question: Are the libraries usable for splicing tests?
+  description: |
+    The report reads as a funnel of its own: raw read counts and adapters, what
+    Trim Galore removed, how STAR and samtools placed the reads, then featureCounts
+    assignments and the Salmon fragment length distribution. The remaining FastQC,
+    STAR and samtools panels are collapsed at the bottom.
+- title: Sample space
+  summary: whether the samples group by condition on their Salmon expression
+  question: Do the samples group by condition on their gene expression?
+  description: |
+    A PCA on the Salmon TPMs places the samples on the leading components, beside a
+    linked `Sample record` that folds to a slim rail until a point is lassoed. A
+    clustered heatmap of the most variable genes follows. A sample that sits with
+    the other condition here will blur every splicing test downstream.
+- title: Splicing overview
+  summary: which genes each tool calls, and where the tools agree
+  question: Which genes does each splicing tool call, and where do the tools agree?
+  description: |
+    An UpSet counts the genes called by each combination of the five tools, and
+    cards give the genes called by any tool, by two or more, and the largest rMATS
+    PSI shift. The cross-tool table sits beside a linked `Gene record` that stays a
+    slim rail until a gene is picked, then lays out every tool's evidence for it.
+    The gene and agreement filters of this tab reach the per-tool tabs through the
+    gene links.
+- title: Exon usage
+  summary: DEXSeq and edgeR differential exon usage per gene
+  question: Which genes use their exons differently, per DEXSeq and edgeR?
+  description: |
+    One volcano per tool: the DEXSeq per-gene q-value against the fold change of
+    the gene's most significant bin, and the edgeR `diffSpliceDGE` gene F-test FDR
+    against the fold change of its most significant exon. Cards split the tested
+    genes by call and give the absolute fold change of the called ones. The gene
+    tables at the bottom select on `gene_id`.
+- title: Transcript usage
+  summary: DEXSeq DTU, transcripts that change their share of the gene
+  question: Which transcripts switch their share within their gene?
+  description: |
+    DEXSeq DTU tests each transcript's share of its gene on the Salmon counts of the
+    chosen `QUANT_ROUTE`. The volcano puts the transcript adjusted p-value against
+    the usage fold change, and cards count the transcripts called and the genes with
+    a switch. The transcript table selects on `gene_id`.
+- title: Splicing events
+  summary: rMATS and SUPPA2 events by type, direction and inclusion change
+  question: Which event types change, and by how much inclusion, per rMATS and SUPPA2?
+  description: |
+    Stacked bars count the significant events per type (skipped exon, retained
+    intron, alternative 3' and 5' sites, mutually exclusive exons) and direction for
+    each tool, and one volcano per tool plots significance against the PSI change.
+    The rMATS event table sits beside a linked `Event record` that folds to a slim
+    rail until an event is picked, then shows its junction coverage and inclusion
+    per condition with a UCSC link to the locus in the `GENOME` assembly.
+running: |
+  Depictio reads the **output** of nf-core/rnasplice, it does not run the
+  pipeline. Run the pipeline first, with a contrast sheet and the splicing tools
+  you want (each has its own switch: `--dexseq_exon`, `--edger_exon`,
+  `--dexseq_dtu`, `--rmats`, `--suppa`):
+
+  ```bash
+  nextflow run nf-core/rnasplice -r 1.0.4 \
+    --input samplesheet.csv \
+    --contrasts contrastsheet.csv \
+    --genome GRCh38 \
+    --outdir results -profile docker
+  ```
+
+  Then rebuild the MultiQC parquet and point Depictio at the results:
+
+  ```bash
+  python -m depictio.dev_scripts.multiqc_reprocess --src results/ --dest results/multiqc/multiqc_data
+  depictio run --template nf-core/rnasplice/latest --data-root results/ --var GENOME=hg38
+  ```
+
+  See [nf-co.re/rnasplice/usage](https://nf-co.re/rnasplice/1.0.4/docs/usage) for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name. `<route>` is `star_salmon` or `salmon`, the
+  value of `QUANT_ROUTE`.
+
+  ```text
+  <DATA_ROOT>/
+  ├── pipeline_info/
+  │   ├── samplesheet.valid.csv                  # the hub: sample and condition
+  │   └── params_*.json
+  ├── contrastsheet/contrastsheet.valid.csv      # contrast, treatment, control
+  ├── multiqc/multiqc_data/
+  │   └── multiqc.parquet                        # rebuilt with multiqc_reprocess
+  ├── <route>/
+  │   ├── tximport/salmon.merged.gene_tpm.tsv    # sample PCA and heatmap
+  │   ├── dexseq_dtu/results/dexseq/{DEXSeqResults,perGeneQValue}.*.tsv
+  │   └── suppa/diffsplice/per_local_event/*_local_diffsplice.dpsi
+  └── star_salmon/                               # alignment-based tools
+      ├── dexseq_exon/results/{DEXSeqResults,perGeneQValue}.*.csv
+      ├── edger/contrast_*.usage.*.csv
+      └── rmats/*/rmats_post/*.MATS.JCEC.txt
+  ```
+
+  `METADATA_FILE` is optional: a TSV or CSV with the sample id in the first column
+  and one column per design factor, whose first annotation column then becomes
+  `GROUP_COL`. The MultiQC reprocess also needs the FastQC zips, Trim Galore
+  reports, STAR logs, samtools stats, featureCounts summaries and Salmon folders
+  of the run.
+validation: |
+  The AWS megatest prefix for rnasplice is a truncated sync with no splicing
+  output, so the template was validated on an EMBL cluster run of the release's
+  `test_full` profile instead: six samples in two conditions, a contrast and its
+  mirror, both quantification routes and all five splicing tools enabled, aligned
+  to GRCh37 (hence `GENOME=hg19` for the UCSC links). The screenshots above come
+  from that run, with the design table vendored under `input/metadata.tsv`.
+  `megatest.yaml` has no pinned `results_sha` and lists the tables-only subset of
+  a run the template needs, so a usable S3 run can be pinned later without
+  rewriting it. Until then the download script resolves the latest published
+  prefix, which holds no splicing tables: to reproduce the full dashboard, run the
+  `test_full` profile yourself, then rebuild the parquet and ingest with the
+  vendored design table:
+
+  ```bash
+  python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>/multiqc/multiqc_data
+  depictio run --template nf-core/rnasplice/latest --data-root <outdir> \
+    --var METADATA_FILE=depictio/projects/nf-core/rnasplice/1.0.4/input/metadata.tsv \
+    --var GENOME=hg19
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+results_note: AWS test results (truncated for this release)
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

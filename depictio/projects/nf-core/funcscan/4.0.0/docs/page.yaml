@@ -1,0 +1,235 @@
+# Docs page for nf-core/funcscan, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from the dashboard YAML.
+page_title: "Functional Screening"
+status: "experimental"
+card_blurb: |-
+  Functional screening of contigs: AMR genes, antimicrobial peptides, biosynthetic gene clusters and CAZymes.
+index_summary: "Functional screening of assembled contigs"
+keywords: [amr, antimicrobial, resistance, peptides, amp, bgc, biosynthetic, gene, cluster, cazyme, screening, contigs, assembly, hamronization]
+
+subtitle: |-
+  Four independent screens over one set of (meta)genome assemblies: resistance genes, antimicrobial peptides, biosynthetic gene clusters and carbohydrate-active enzymes.
+
+intro: |-
+  The funcscan template covers the four aggregated screening reports of a standard nf-core/funcscan run, plus the annotated contigs they share and the run's own record of what it ran:
+
+callouts:
+  - kind: info
+    title: "Four screens, any subset"
+    position: intro
+    body: |
+      funcscan runs up to four independent screens over the same assemblies and
+      nothing joins them, which is why the dashboard has one cross-screen tab, one
+      locus tab and one tab per screen. Every screen is optional: an arm that did
+      not run leaves no report, so its collections prune themselves. `--var
+      SKIP_ARG=true` (or `SKIP_AMP`, `SKIP_BGC`, `SKIP_CAZYME`) prunes an arm
+      explicitly.
+  - kind: note
+    title: "No MultiQC panels, only versions"
+    position: intro
+    body: |
+      funcscan feeds MultiQC nothing but software versions: the parquet holds one
+      run-metadata row, with no general-statistics table and no module sections.
+      The template turns that row into a table of tools per screen, which the
+      **Run report** tab reads, and the same versions reach the dashboard Settings
+      drawer through the template's provenance block.
+  - kind: tip
+    title: "Vocabularies that do not line up"
+    position: tabs
+    body: |
+      The five ARG tools, the three BGC callers and the three CAZyme annotators
+      each report in their own terms, so every concordance panel is scored on a
+      shared key (the contig for ARGs and BGCs, the gene for CAZymes).
+  - kind: warning
+    title: "Use the run-level comBGC summary"
+    position: data_structure
+    body: |
+      The per-sample `reports/combgc/<sample>/combgc_summary.tsv` files carry the
+      antiSMASH branch alone, which is why the template reads
+      `combgc_complete_summary.tsv`.
+
+quick_start: |
+  `--data-root` is the only thing you have to pass: which screens ran is read
+  from the reports. The samplesheet is auto-detected from `{DATA_ROOT}/input/`;
+  pass `--var SAMPLESHEET_FILE=...` to point elsewhere.
+
+self_adapting_note: |
+  One template covers every combination of arms.
+
+reference: |
+  The template reads one aggregated report per arm: hAMRonization for the
+  resistome, AMPcombi for the peptides, comBGC for the gene clusters and run_dbCAN
+  for the CAZymes. From whichever of them the run produced it derives a per-sample
+  hub collection, joined to every screening collection on `sample`, so one sample
+  selection reaches every tab. A second hub, the per-contig annotation layer,
+  is rebuilt from the four screens and carries a contig selection into each of
+  them.
+
+tabs_intro: |
+  Seven tabs: the cross-screen overview, the contig layer the screens share, one
+  tab per screen, and the run report. Each tab below carries the **same icon and
+  colour the dashboard gives it**, so the page and the app read alike. `Sample
+  scope` is pinned to the top of every tab, together with the *Run at a glance*
+  cards and the collapsed *Sample sheet* section.
+
+tabs:
+  - title: "Screening overview"
+    summary: "per-sample counts for all four screens, and the sample selection every other tab follows"
+    question: "What the four screens found, sample by sample, and which samples to follow."
+    description: |
+      Four cards read the whole run at once, each with the samples that carry
+      most of it: ARG hits, AMP candidates, BGC regions and CAZyme genes. The bar
+      below is grouped and log-scaled, so an empty resistome next to a large
+      CAZyme repertoire stands out. The scatter and the hub table are
+      cross-selecting on `sample`: lasso points or tick rows, and the project
+      links carry that selection into the Resistome, AMPs, BGCs and CAZymes tabs.
+  - title: "Annotation"
+    summary: "the contigs the four screens touch, how long they are and how densely they are annotated"
+    question: "Which contigs carry the findings, and are they long or just dense?"
+    description: |
+      Every screen names the contig its feature sits on, so this tab rebuilds the
+      locus layer from the screens: one row per contig, with what each screen put
+      there. Contig length is read from the contig name when the assembler wrote
+      it there (SPAdes or MEGAHIT headers); other names keep the contig in the
+      table but off the length axis. The scatter puts features against contig
+      length on a log axis, so short, dense loci stand out from merely long
+      contigs. Scatter and table cross-select on `contig`, and the project links
+      carry the contig into the ARG hits, AMP candidates, BGC region map and
+      CAZyme annotations.
+  - title: "Resistome"
+    summary: "five ARG tools harmonised by hAMRonization, the drug-class matrix and a contig-level gene track"
+    question: "Resistance genes across five ARG screens, harmonised into one vocabulary."
+    description: |
+      ABRicate, AMRFinderPlus, DeepARG, fARGene and RGI all report differently, and
+      hAMRonization normalises them into one table of hits. The hierarchy starts at
+      the tool, not the drug class: the five tools share no class vocabulary, so a
+      class-first sunburst collapses into one wedge. Beside it, the drug-class by
+      sample matrix narrows to the samples picked on the overview. The UpSet and
+      the dot plot then show which tools called each gene. In *Gene detail* the
+      hit-quality scatter and the hits table cross-select on the gene symbol, and
+      the contig track binds the `gene_arrow_track` advanced visualization kind,
+      one lane per contig and one arrow per hit, so genes packed head to tail
+      read as a resistance island.
+  - title: "AMPs"
+    summary: "AMPcombi candidates in their physicochemical property space, with a linked candidate record, and the sequence clusters they fall into"
+    question: "Antimicrobial peptide candidates, their physicochemistry and their clusters."
+    description: |
+      AMPcombi merges the ampir, Macrel and AMPlify predictions, keeps the
+      peptides above its probability cut-off and annotates each with its
+      physicochemistry, so the tab reads the best probability across tools and
+      how many predictors agree rather than one tool's score. The property plane
+      is hydrophobicity against isoelectric point: cationic, hydrophobic peptides
+      sit in the upper right. The scatter and the candidates table cross-select
+      on the CDS, and the linked *Candidate record* beside the scatter folds to a
+      slim rail until a point or a row is picked, then shows that peptide's
+      origin, per-tool probabilities and physicochemistry. The PCA embeds the same
+      descriptors, and the cluster panel is the MMseqs2 clustering over the whole
+      run.
+  - title: "BGCs"
+    summary: "comBGC regions from antiSMASH, DeepBGC and GECCO, split by product class and mapped along their contigs"
+    question: "Biosynthetic gene clusters merged from antiSMASH, DeepBGC and GECCO."
+    description: |
+      Metagenome assemblies are fragmented, so a cluster is often cut by a contig
+      edge; that is why the cards read region length and CDS count next to the
+      product classes, and why the completeness split reads low by construction.
+      The sunburst goes caller to product class. *Region maps* shows the same
+      regions as coordinates: brush the genome axis or pick a row and the arrow
+      lanes and the coordinate table narrow to that contig (arrows run left to
+      right, because comBGC reports no strand). The concordance UpSet scores
+      agreement on the contig, not on region coordinates: the callers disagree on
+      boundaries by design, so a coordinate join finds no overlap.
+  - title: "CAZymes"
+    summary: "run_dbCAN family calls and the substrates their gene clusters target"
+    question: "Carbohydrate-active enzymes and the substrates their gene clusters target."
+    description: |
+      run_dbCAN calls every gene three times, with HMMER, dbCAN-sub and DIAMOND,
+      and the *Tools agreeing* filter is the confidence floor for the whole tab.
+      The hierarchy runs CAZy class to family to substrate. The substrate panel
+      reads the CGC predictions, which name the polysaccharide a gene cluster
+      should act on, and the UpSet shows where the three annotators agree.
+  - title: "Run report"
+    summary: "the tools and versions each screen ran, read from the MultiQC report"
+    question: "Which screen ran what, and with which versions?"
+    description: |
+      One row per Nextflow process and tool, read from the versions table in the
+      MultiQC report and assigned to a screen by the process name; processes that
+      belong to no screen are labelled as workflow plumbing rather than dropped.
+      A screen that reports no tool here did not run, so this is the first place
+      to look when a screen tab is empty.
+
+running: |
+  Depictio reads the **output** of nf-core/funcscan, it does not run the pipeline.
+  Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/funcscan -r 4.0.0 \
+    --input samplesheet.csv \
+    --run_arg_screening --run_amp_screening \
+    --run_bgc_screening --run_cazyme_screening \
+    --outdir results -profile docker
+  ```
+
+  Then point Depictio at the results:
+
+  ```bash
+  depictio run --template nf-core/funcscan/latest \
+    --data-root results/
+  ```
+
+  See [nf-co.re/funcscan/usage](https://nf-co.re/funcscan/4.0.0/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name; only the aggregated reports below matter.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/samplesheet_full.csv                     # --var SAMPLESHEET_FILE (auto-detected)
+  ├── pipeline_info/
+  │   ├── params.json                                # carries the four run_*_screening flags
+  │   └── software_versions.yml
+  ├── multiqc/multiqc_data/multiqc.parquet           # versions only, read by the Run report tab
+  ├── reports/
+  │   ├── hamronization_summarize/
+  │   │   └── hamronization_combined_report.tsv      # ARG: one row per hit, five tools
+  │   ├── ampcombi2/
+  │   │   ├── Ampcombi_summary.tsv                   # AMP: candidates + physicochemistry
+  │   │   └── Ampcombi_summary_cluster*.tsv          # AMP: cluster assignments
+  │   └── combgc/
+  │       └── combgc_complete_summary.tsv            # BGC: run-level, every caller
+  └── cazyme/
+      └── dbcan/
+          ├── cazyme_annotation/
+          │   └── <sample>/<sample>_overview.tsv     # CAZyme: per-gene family calls
+          └── substrate/
+              └── <sample>/<sample>_substrate_prediction.tsv
+  ```
+
+validation: |
+  The repository ships
+  [`download_test_data.sh`](https://github.com/depictio/depictio/blob/main/depictio/projects/nf-core/funcscan/4.0.0/download_test_data.sh),
+  which fetches the subset of nf-core's AWS megatest run that the template needs:
+  47 files and 6.5 MB, out of 3769 files and roughly 2.8 GB.
+
+  ```bash
+  bash depictio/projects/nf-core/funcscan/4.0.0/download_test_data.sh \
+    /tmp/funcscan_test
+  ```
+
+  The run is
+  `s3://nf-core-awsmegatests/funcscan/results-aee3dc965eb0c77267435544dda30da858763913/`:
+  19 MGnify metagenome assemblies with all four screening arms enabled. Its outdir
+  publishes no `input/` directory, so `post_fetch_help` in `megatest.yaml` gives
+  the `curl` command that puts the samplesheet under `input/`. Then run Depictio:
+
+  ```bash
+  depictio run \
+    --template nf-core/funcscan/latest \
+    --data-root /tmp/funcscan_test
+  ```
+
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

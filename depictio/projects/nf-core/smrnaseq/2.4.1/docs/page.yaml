@@ -1,0 +1,190 @@
+# Docs page for nf-core/smrnaseq, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Small RNA-seq
+status: draft
+card_blurb: >-
+  Small RNA-seq: adapter trimming, read length profiles, miRNA quantification and
+  the contaminant fractions per sample.
+index_summary: Small RNA sequencing
+keywords: [smrnaseq, small, rna, mirna, microrna, mirtrace, mirdeep, quantification]
+
+subtitle: >-
+  miRTrace library composition, mirtop miRNA expression and isomiRs, a two-group
+  screen on the design, and miRDeep2 novel precursors, next to the pipeline's own
+  MultiQC report.
+
+intro: |
+  The smrnaseq template follows an nf-core/smrnaseq run from trimmed small RNA
+  libraries to novel miRNA candidates, one tab per question:
+intro_after: |
+  A `Run at a glance` strip and the collapsed `Sample sheet` are pinned to the top
+  of every tab, and the `Sample scope` filters (sample, design group, miRNA depth)
+  apply everywhere.
+
+callouts:
+  - kind: info
+    title: Expression is aggregated from the mirtop isomiR table
+    position: intro
+    body: |
+      The template reads miRNA expression from mirtop's joined isomiR table, one
+      row per isomiR with a count column per sample, and aggregates it per miRNA.
+      CPM is therefore over miRNA-assigned reads. miRTrace publishes no statistics
+      table of its own, so its composition, length and complexity views are read
+      back from the plot data MultiQC keeps in its parquet.
+
+run_vars:
+  - METADATA_FILE=/path/to/design.tsv
+  - GENOME=hg38
+quick_start: |
+  The pipeline samplesheet carries no design column, so the design comes from
+  an optional table: `METADATA_FILE`, sample id in the first column (or in a
+  column named `sample`), one column per factor, and `GROUP_COL` defaulting to
+  the first factor. Without it the design filter and card are dropped and the
+  figures fall back to one colour. `GENOME` (default `hg38`) is the UCSC
+  assembly the novel precursors link out to. A run with `--skip_mirdeep` takes
+  `--var SKIP_MIRDEEP=true`, one with `--skip_multiqc` takes
+  `--var SKIP_MULTIQC=true`.
+
+reference: |
+  The template reads the MultiQC report, the mirtop joined isomiR table, the
+  miRDeep2 per-sample results and the optional design table. The sample hub, the
+  per-miRNA summary, the PCA, the heatmap matrix, the isomiR composition and the
+  miRDeep2 precursors are recipes over those files.
+
+tabs_intro: |
+  Six tabs, read as a funnel: are the libraries small RNA libraries, what is each
+  one made of, which miRNAs they carry, which miRNAs separate the design groups,
+  how the reads differ from the reference sequences, and what miRDeep2 proposes
+  beyond miRBase. Each tab below carries the **same icon and colour the dashboard
+  gives it**. Screenshots come from the run described under Validation runs.
+
+tabs:
+  - title: MultiQC
+    question: Did trimming, the miRTrace verdict and the genome mapping go well?
+    description: |
+      The tab is the MultiQC report as the run published it: what fastp kept and the
+      read length after trimming, miRTrace's read QC, the isomiR counts mirtop
+      assigned, and how much of each library Bowtie placed on the genome for
+      miRDeep2. The miRTrace composition, length and complexity panels are not
+      repeated here, Library QC draws them as tiles. The remaining fastp and FastQC
+      panels sit in a collapsed section.
+  - title: Library QC
+    summary: what each library is made of, how long its reads are and whether it was sequenced deep enough
+    question: Is each library a small RNA library, and was it sequenced deep enough?
+    description: |
+      Cards give the miRNA, rRNA and tRNA shares and the share in the main clade. The
+      read length profile shades the miRNA window, the composition bars split each
+      library three ways (RNA type, QC outcome, clade), and the complexity curves
+      show how many distinct miRNAs deeper sequencing still finds. A parallel
+      coordinates profile puts every per-library measure on one line, and the
+      depth-against-share plane carries a linked sample record that stays a slim
+      rail until a library is picked.
+  - title: miRNA expression
+    summary: which miRNAs each sample carries, which vary most and how they split by design group
+    question: Which miRNAs do the samples carry, and which vary most?
+    description: |
+      A clustered heatmap of the most variable miRNAs with design strips, where
+      samples of one group should form a block, then boxes of the top miRNAs split
+      by design group. The mean-variance plane puts well expressed and variable
+      miRNAs top right; picking one opens the miRNA record beside it, linked to
+      miRBase, and the rows below are selectable too.
+  - title: Group comparison
+    summary: how the samples relate on miRNA expression, and which miRNAs separate two groups
+    question: Which miRNAs separate two groups of samples?
+    description: |
+      The sample PCA on miRNA expression is coloured by the design group and takes
+      a lasso, so groups can also be drawn by hand. The two-group test runs a
+      Wilcoxon test on CPM with Benjamini-Hochberg correction and draws it as a
+      volcano. It is a screen, not a model-based differential expression analysis:
+      the pipeline publishes no edgeR or DESeq2 table to read instead.
+  - title: isomiRs
+    summary: how far the reads stray from the reference miRNA sequences, by isomiR class
+    question: How far do the reads stray from the reference miRNA sequences?
+    description: |
+      Cards give the share of reads on the reference sequence, per library and per
+      miRNA, and how many isomiRs a miRNA carries. The composition bars split each
+      library's miRNA reads four ways (3' end, 5' end, non-templated addition,
+      nucleotide change), and a dot plot shows which isomiR classes each of the most
+      expressed miRNAs carries.
+  - title: Novel miRNAs
+    summary: the precursors miRDeep2 proposes beyond miRBase, and where to set its score cutoff
+    question: Which novel precursors are worth following up?
+    description: |
+      miRDeep2's own signal-to-noise and known-recovery curves, by score cutoff,
+      say where to set the threshold. The recurrence plane puts the number of
+      samples reporting a novel precursor against its best score; picking one opens
+      the precursor record beside it, linked to the UCSC browser on `GENOME`.
+      Recurrent, well scored precursors with star-arm reads are the ones to trust.
+    after: |
+      !!! tip "Dropped with `--skip_mirdeep`"
+          A run without miRDeep2 writes no `result_*.csv`. Pass
+          `--var SKIP_MIRDEEP=true` and the four miRDeep2 collections are pruned,
+          which drops this tab.
+
+running: |
+  Depictio reads the **output** of nf-core/smrnaseq, it does not run the pipeline.
+  Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/smrnaseq -r 2.4.1 \
+    --input samplesheet.csv \
+    --genome GRCh38 --mirtrace_species hsa \
+    --three_prime_adapter <adapter> \
+    --outdir results -profile docker
+  ```
+
+  Then point Depictio at the results, with a design table if you have one:
+
+  ```bash
+  depictio run --template nf-core/smrnaseq/latest --data-root results/ \
+    --var METADATA_FILE=design.tsv --var GENOME=hg38
+  ```
+
+  See [nf-co.re/smrnaseq/usage](https://nf-co.re/smrnaseq/2.4.1/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name.
+
+  ```text
+  <DATA_ROOT>/
+  ├── multiqc/multiqc_data/
+  │   └── multiqc.parquet                          # fastp, FastQC, miRTrace, mirtop, samtools
+  ├── mirna_quant/mirtop/
+  │   └── joined_samples_mirtop.tsv                # the source of expression and isomiRs
+  ├── result_*.csv                                 # miRDeep2 per sample (optional, --skip_mirdeep)
+  └── pipeline_info/
+      ├── params_*.json
+      └── *software*versions*.yml
+  ```
+
+  The design table named by `METADATA_FILE` is read from wherever it points; its
+  id column is `METADATA_ID_COL` (default: the first column) and `GROUP_COL` picks
+  the factor the figures group on. The mature and hairpin count matrices and the
+  edgeR QC tables are not read.
+
+validation: |
+  The template was validated against the AWS megatest of the 2.4.1 release
+  (`results-cb0af579b24cb8d5a3accd87b2f14ea93fe04832`, the pipeline's full test
+  profile, a two-factor design), and the screenshots above come from it. That run
+  published the miRDeep2 results at the output root, and no mature or hairpin
+  matrices, which is why the template reads the mirtop joined table. The design
+  table is not part of the published run: it is vendored with the template under
+  `input/`. `megatest.yaml` lists the tables-only subset the template needs:
+
+  ```bash
+  bash depictio/projects/nf-core/smrnaseq/2.4.1/download_test_data.sh /tmp/smrnaseq_test
+  mkdir -p /tmp/smrnaseq_test/input
+  cp depictio/projects/nf-core/smrnaseq/2.4.1/input/sample_metadata.tsv /tmp/smrnaseq_test/input/
+  depictio run --template nf-core/smrnaseq/latest --data-root /tmp/smrnaseq_test \
+    --var METADATA_FILE=/tmp/smrnaseq_test/input/sample_metadata.tsv --var GENOME=hg19
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+
+authorship:
+  developers: [weber8thomas]
+  maintainers: [weber8thomas]

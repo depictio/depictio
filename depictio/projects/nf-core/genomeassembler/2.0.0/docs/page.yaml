@@ -1,0 +1,185 @@
+# Docs page for nf-core/genomeassembler, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from the dashboard YAML.
+page_title: "Genome assembly"
+status: "draft"
+card_blurb: |-
+  De novo genome assembly: contiguity, completeness and assembly QC across assemblers and polishing steps.
+index_summary: "De novo genome assembly"
+keywords: [genomeassembler, genome, assembly, de, novo, contig, n50, busco, quast, merqury, hifi, ont]
+
+subtitle: |-
+  Contiguity, Merqury k-mer accuracy and BUSCO gene completeness of every assembly, polishing and scaffolding stage, compared across assembly strategies, with the GenomeScope read profile as the yardstick.
+
+intro: |
+  The genomeassembler template follows an nf-core/genomeassembler run from its raw
+  assemblies through polishing and scaffolding, one tab per question:
+intro_after: |
+  A `Run at a glance` strip and the collapsed `Sample sheet` are pinned to the top
+  of every tab, and the `Sample filters` group (sample and design group) applies
+  everywhere through the samplesheet links.
+
+callouts:
+  - kind: info
+    title: "No MultiQC report, one row per assessed assembly"
+    position: intro
+    body: |
+      nf-core/genomeassembler writes no MultiQC report, so the landing tab is an
+      Overview built from the QC tools' own files. The unit of every tile is the
+      assessed assembly, which every QC tool names `<sample>_<stage>`: the raw
+      assembly, each polishing step (medaka, dorado, pilon) and each scaffolder
+      (LINKS, LongStitch, RagTag). A sample whose assembly never reached QC stays
+      in the sample sheet as `No assembly QC` and appears in no other tile.
+
+run_vars:
+  - "METADATA_FILE=/path/to/samplesheet.csv"
+  - "GROUP_COL=strategy"
+quick_start: |
+  The pipeline publishes no copy of its samplesheet, and the samplesheet is the
+  design every filter reads. `METADATA_FILE` defaults to `input/samplesheet.csv`
+  under the data root, so copying the sheet there is enough. `GROUP_COL`
+  (default `strategy`) picks the column the design filter and the colours group
+  on: `assembler`, `polish`, `group` or any column you added work too, since
+  every per-assembly table carries the samplesheet columns through.
+
+reference: |
+  The template reads, per assessed assembly, the samtools idxstats of the reads
+  mapped back (every sequence and its length, from which N50, L50, auN and the Nx
+  curve are computed), Merqury's QV, completeness, per-sequence QV and copy-number
+  spectrum, the BUSCO batch summary and QUAST's transposed report; and per read
+  set, the jellyfish histogram and GenomeScope's summary. Every tool collection is
+  optional, so a run that skipped a tool, or an assembly a tool never reached,
+  leaves its tiles empty instead of breaking the import. {use_count} of its {tile_count} components
+  carry a `use:` catalog reference, so a tile says where its panel comes from.
+
+tabs_intro: |
+  Five tabs, read as a funnel: which strategy wins overall, what each stage adds,
+  how the length is distributed, what genome the reads describe, and how accurate
+  and complete each assembly is against it. Each tab below carries the **same icon
+  and colour the dashboard gives it**. Screenshots come from the run described
+  under Validation runs.
+
+tabs_after: |
+  Every per-assembly scatter and table selects on `assembly_id`, so a point picked on a QUAST,
+  Merqury or BUSCO scatter narrows the other tiles of its collection and follows
+  the project links; the stage profiles and route table select on `route`.
+
+tabs:
+  - title: "Overview"
+    summary: "which assembly strategy gives the best contiguity, accuracy and gene completeness"
+    question: "Which assembly strategy gives the best assembly?"
+    description: |
+      Cards give the assemblies assessed, the best Merqury QV, the best BUSCO
+      complete share and GenomeScope's genome size estimate. A parallel coordinates
+      plot lays every assembly across N50, L50, length, sequence count, QV, k-mer
+      completeness and BUSCO, coloured by the design group. The N50 against QV
+      scatter, coloured by assembler, carries a linked assembly record that folds to
+      a slim rail until a point is picked; BUSCO class bars close the tab.
+  - title: "Stages"
+    summary: "what each polishing and scaffolding step adds to a sample's assembly"
+    question: "What do polishing and scaffolding add, step by step?"
+    description: |
+      Each sample's route runs from its raw assembly through polishing to each
+      scaffolder. Two profiles track the QV and the N50 fold change along every
+      route, so a step that costs accuracy or adds no contiguity shows as a flat or
+      falling segment. A group comparison then contrasts raw assemblies with
+      scaffolds metric by metric.
+  - title: "Contiguity"
+    summary: "Nx curves for every assessed assembly, and QUAST's view of the ones it scored"
+    question: "How is the assembled length distributed across sequences?"
+    description: |
+      The Nx curves are computed from the idxstats sequence lengths of every
+      assessed assembly, so they cover assemblies QUAST never scored. QUAST's
+      reference-free N50 against length and the length kept above each contig
+      length follow, and, when the run had a reference, genome fraction against
+      misassemblies.
+  - title: "Genome profile"
+    summary: "the read k-mer spectrum and GenomeScope's genome estimates"
+    question: "What genome do the reads describe, before any assembly?"
+    description: |
+      GenomeScope's heterozygosity, repeat share, model fit and read error rate, next
+      to the jellyfish k-mer spectrum it fits. This is the yardstick for the other
+      tabs: an assembly much larger or smaller than the estimated genome size, or
+      far off the expected heterozygosity, deserves a second look. Both
+      collections are per read set, not per assembly.
+  - title: "Accuracy and genes"
+    summary: "Merqury QV, k-mer completeness and copy number, and BUSCO"
+    question: "How accurate and how complete is each assembly?"
+    description: |
+      Merqury QV against k-mer completeness places each assembly, and the
+      copy-number bars show how the read k-mers are represented in it, where
+      missing or duplicated content shows up. The per-sequence QV scatter against
+      sequence length says which sequences carry the error k-mers. BUSCO complete
+      against duplicated closes the tab.
+
+running: |
+  Depictio reads the **output** of nf-core/genomeassembler, it does not run the
+  pipeline. Run the pipeline first; give it a reference (`use_ref` and
+  `ref_fasta`, see the usage docs) if you want QUAST's reference-based view:
+
+  ```bash
+  nextflow run nf-core/genomeassembler -r 2.0.0 \
+    --input samplesheet.csv \
+    --busco_lineage <lineage>_odb12 \
+    --outdir results -profile docker
+  ```
+
+  Then copy the samplesheet under `input/` and point Depictio at the results:
+
+  ```bash
+  mkdir -p results/input && cp samplesheet.csv results/input/
+  depictio run --template nf-core/genomeassembler/latest --data-root results/
+  ```
+
+  See [nf-co.re/genomeassembler/usage](https://nf-co.re/genomeassembler/2.0.0/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name. The pipeline writes one directory per
+  sample, plus one per read `group` that holds the reads-only outputs.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/
+  │   └── samplesheet.csv                          # the hub (METADATA_FILE default)
+  ├── pipeline_info/
+  │   ├── params_*.json
+  │   └── *software*versions*.yml
+  ├── <sample>/QC/
+  │   ├── alignments/<sample>_<stage>.idxstats      # sequence lengths: N50, L50, Nx
+  │   ├── merqury/*.qv, *.completeness.stats, *.spectra-cn.hist
+  │   ├── BUSCO/*-busco.batch_summary.txt
+  │   └── QUAST/<sample>_<stage>/transposed_report.tsv
+  └── <sample or group>/reads/genomescope/
+      ├── genomescope/*_genomescope.txt
+      └── jellyfish/histo/*_hist.tsv
+  ```
+
+  `METADATA_ID_COL` (default `sample`) is the column every output directory is
+  named after. The assemblies themselves, the BAM files and the BUSCO run
+  directories are not read.
+
+validation: |
+  The template was validated against the AWS megatest of the 2.0.0 release
+  (`results-a72d47d9cdb50f21b97882dfb2abf4af8f4c74ad`, the full test samplesheet
+  without medaka), and the screenshots above come from it. That run is partial:
+  LINKS failed on one sample and the tasks aborted after it, so only half of the
+  samples reached assembly QC, QUAST and BUSCO ran on a few assemblies, and only
+  the raw, LINKS and RagTag stages carry data. The polishing stages and Hi-C
+  scaffolding are wired by name but not yet verified on data. `megatest.yaml`
+  lists the tables-only subset, and the download script also places the vendored
+  samplesheet under `input/`:
+
+  ```bash
+  bash depictio/projects/nf-core/genomeassembler/2.0.0/download_test_data.sh /tmp/genomeassembler_test
+  depictio run --template nf-core/genomeassembler/latest --data-root /tmp/genomeassembler_test
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

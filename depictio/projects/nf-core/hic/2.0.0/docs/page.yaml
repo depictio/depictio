@@ -1,0 +1,197 @@
+# Docs page for nf-core/hic, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from the dashboard YAML.
+page_title: "Hi-C"
+status: "draft"
+card_blurb: |-
+  Hi-C: valid pair statistics, contact maps and compartment and TAD calls, from library QC to 3D genome structure.
+index_summary: "Chromosome conformation capture (Hi-C)"
+keywords: [hic, hi-c, chromatin, conformation, contact, map, pairs, compartments, tad, cooler]
+
+subtitle: |-
+  HiC-Pro's valid-pair funnel as filterable numbers, the contact probability curve, the contact matrix with its insulation, domain and compartment tracks at one locus, and the same calls genome-wide, next to the pipeline's MultiQC report.
+
+intro: |
+  The hic template follows an nf-core/hic run from read pairs to chromatin
+  architecture, each tab reading the output built on the one before:
+intro_after: |
+  A `Run at a glance` strip (pairs sequenced, valid-pair rate, cis share, the
+  cis/trans/duplicate split), the `Sample filters` and a collapsed sample sheet are
+  pinned to the top of every tab, so the question "is this library any good?" is
+  answered wherever you land. A pick in the sample filter reaches the funnel, the
+  matrix, every track and both distance curves through the project links.
+
+callouts:
+  - kind: warning
+    title: "The MultiQC report must be regenerated"
+    position: intro
+    body: |
+      hic 2.0.0 ships MultiQC 1.13, which writes no parquet, and Depictio reads
+      only `multiqc.parquet` (MultiQC 1.31 and later). Re-run MultiQC over the
+      run's own tool outputs before ingesting, or the MultiQC tab stays empty:
+
+      ```bash
+      python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>
+      ```
+  - kind: info
+    title: "HiC-Pro's numbers are read twice, on purpose"
+    position: intro
+    body: |
+      The HiC-Pro panels stay on the MultiQC tab, because that is the report a
+      reader may already know. A MultiQC panel cannot be filtered or joined, so
+      `hicpro/stats/<sample>/*` is also read directly into a funnel row per sample
+      and a weighted row per read-pair fate, which is what feeds the cards, the
+      Sankey and the pinned strip.
+
+run_vars:
+  - "GENOME=mm10"
+quick_start: |
+  `--data-root` is the only required value. `GENOME` (default `hg38`) is the
+  UCSC name of the assembly the run was mapped to, which lays out the Contact
+  maps axis: pass the UCSC spelling (`mm10`, `hg19`), not an iGenomes key such
+  as `GRCm38`. The sample hub is the samplesheet the run validated,
+  `samplesheet/samplesheet.valid.csv`, collapsed to one row per sample.
+
+trigger_note: |
+  The MultiQC tab stays empty until the report is regenerated as
+  above.
+
+reference: |
+  The template reads the validated samplesheet, the regenerated MultiQC report,
+  HiC-Pro's statistics, the balanced `cooler dump` contacts and bins, the cooltools
+  compartment and insulation outputs, and hicexplorer's distance-decay curve. {use_count} of
+  its {tile_count} tiles carry a `use:` catalog reference (`hicpro/*`, `cooler/*`,
+  `cooltools/*`, `hicexplorer/*`, `multiqc/*`), so a tile says where its panel
+  comes from.
+
+tabs_intro: |
+  Five tabs, read as a funnel: is the report normal, where do the read pairs go,
+  what kind of genome does the contact curve describe, what does one locus look
+  like, and how do domains and compartments split the whole genome. Each tab below
+  carries the **same icon and colour the dashboard gives it**. A picked row or
+  point becomes a filter that follows the project links to the tiles it reaches.
+
+tabs:
+  - title: "MultiQC"
+    summary: "FastQC and HiC-Pro mapping, pairing and valid-pair panels from the run's MultiQC report"
+    question: "Check the reads and the HiC-Pro processing as the report shows them."
+    description: |
+      The general statistics open the report, then FastQC on the merged reads and
+      HiC-Pro's signature panels: two-step mapping, read pairing, valid-pair
+      filtering (dangling ends, self circles, re-ligations dropped) and the cis/trans
+      split of what survives. There is no trimming module: HiC-Pro's own mapping
+      step does the trimming.
+  - title: "Run QC"
+    summary: "every read pair followed to the long-range cis contacts a Hi-C library is built for"
+    question: "Follow every read pair to the long-range cis contacts."
+    description: |
+      The Sankey follows HiC-Pro's three decisions, weighted by read pairs: does
+      the pair map uniquely at both ends, could a real ligation have joined its two
+      fragments, and is the surviving contact cis or trans. Losses peel off at the
+      step they stopped at, and the three levels reconcile exactly with the totals
+      HiC-Pro reports. The collapsed table pivots the same funnel to one row per
+      sample.
+  - title: "Library shape"
+    summary: "how contact probability falls off with genomic distance, with its log-log slope"
+    question: "Read how contact probability decays with distance."
+    filters: |
+      **Filters** · `Chromosome` on the P(s) curve. Picking a curve narrows
+      the P(s) table and card to that chromosome.
+    description: |
+      P(s), the probability that two loci a distance s apart touch, is recomputed
+      per chromosome from the balanced contact dump, because nf-core/hic never runs
+      `cooltools expected-cis`. Its denominator counts every bin pair that could have
+      been observed, which keeps the tail from flattening. A derivative panel under
+      the curves draws the local log-log slope: near -1 is the usual interphase
+      range, and a bump or plateau points to trans contamination or a rearrangement.
+  - title: "Contact maps"
+    summary: "the contact triangle, the domain, insulation and compartment tracks on one genomic axis"
+    question: "Examine one locus: domains, the contact triangle, insulation and compartments."
+    filters: |
+      **Filters** · `Domain window`, `Insulation window` and `Compartment
+      resolution` choose which calls the tracks draw. There is no chromosome
+      filter: the locus field is the section's chromosome.
+    description: |
+      The locus tab stacks four collections on one `{GENOME}` axis. The TAD domain
+      track is the navigator: a brush or a typed locus emits a region that `region`
+      links carry to the contact triangle, the insulation score and the phased E1
+      compartment track below it. The triangle reads the finest dumped resolution
+      that fits the span, so zooming re-bins it; the cards read the region in view.
+  - title: "Domains and compartments"
+    summary: "TAD sizes and the A/B split genome-wide, the rows behind the tracks"
+    question: "Read TADs and compartments across the whole genome."
+    description: |
+      cooltools calls boundaries, not domains, and nf-core/hic 2.x emits no
+      interval list, so the domains are derived from runs of boundary bins, with
+      mostly unmappable spans dropped. E1 is phased per chromosome and resolution
+      against bin coverage, so the better-covered side is A and the call does not
+      flip between resolutions. Domain sizes per insulation window and the A and B
+      bins per chromosome sit above the collapsed tables.
+
+running: |
+  Depictio reads the **output** of nf-core/hic, it does not run the pipeline.
+  Run the pipeline first, without `--skip_compartments` or `--skip_tads`:
+
+  ```bash
+  nextflow run nf-core/hic -r 2.0.0 \
+    --input samplesheet.csv \
+    --genome GRCm38 --digestion dpnii \
+    -profile docker --outdir results
+  ```
+
+  Then regenerate the MultiQC report and point Depictio at the results, passing the
+  UCSC name of the same assembly:
+
+  ```bash
+  python -m depictio.dev_scripts.multiqc_reprocess --src results/ --dest results/
+  depictio run --template nf-core/hic/latest --data-root results/ --var GENOME=mm10
+  ```
+
+  See [nf-co.re/hic/usage](https://nf-co.re/hic/2.0.0/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name, so a run with a different `--outdir`
+  layout lands in the same collections.
+
+  ```text
+  <DATA_ROOT>/
+  ├── samplesheet/samplesheet.valid.csv          # the hub: one row per FASTQ pair
+  ├── pipeline_info/software_versions.yml
+  ├── multiqc/multiqc_data/multiqc.parquet       # written by multiqc_reprocess
+  ├── fastqc/*.zip                               # raw MultiQC inputs
+  ├── hicpro/stats/<sample>/
+  │   └── *.{mmapstat,mpairstat,mRSstat,mergestat}
+  ├── contact_maps/
+  │   ├── *_balanced.txt                         # cooler dump, one per resolution
+  │   └── cooler_bins_<resolution>.bed
+  ├── compartments/
+  │   ├── *.cis.vecs.tsv                         # cooltools eigs-cis E1
+  │   └── *.cis.lam.txt                          # eigenvalues
+  ├── tads/*_balanced_insulation.tsv             # cooltools insulation
+  └── distance_decay/*_distcount.txt             # hicPlotDistVsCounts
+  ```
+
+validation: |
+  The template was validated on the nf-core AWS megatest of the 2.0.0 release,
+  `s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d/`,
+  a single mouse ES cell sample merged from three FASTQ pairs, and the screenshots
+  above come from that run with `GENOME=mm10`. With one sample the sample filter
+  has one value, but nothing in the template assumes it: every collection carries a
+  sample column and the links are ready for a cohort.
+
+  ```bash
+  DEST=/tmp/hic_test
+  bash depictio/projects/nf-core/hic/2.0.0/download_test_data.sh "$DEST"
+  python -m depictio.dev_scripts.multiqc_reprocess --src "$DEST" --dest "$DEST"
+  depictio run --template nf-core/hic/latest --data-root "$DEST" --var GENOME=mm10
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

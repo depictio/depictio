@@ -1,0 +1,210 @@
+# Docs page for nf-core/rnaseq, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Bulk RNA-seq
+status: experimental
+card_blurb: 'Bulk RNA-seq quantification: MultiQC funnel, Salmon expression overview and a per-gene explorer.'
+index_summary: Bulk RNA-seq quantification
+keywords: [rnaseq, bulk, expression, salmon, star, quantification, tpm, counts, transcriptome, gene]
+subtitle: 'The STAR + Salmon route of a bulk RNA-seq run: the pipeline''s own MultiQC funnel, then the merged Salmon TPM matrix read three ways, from the sample space down to a single gene.'
+intro: |
+  The rnaseq template covers the default STAR + Salmon route of a standard
+  nf-core/rnaseq run:
+intro_bullets:
+- ':material-table: **Pinned sections**: the run at a glance and the samplesheet on top of every tab, the raw merged count matrix at the bottom'
+callouts:
+- kind: info
+  title: The STAR + Salmon route
+  position: intro
+  body: |
+    This template binds the pipeline default: STAR for alignment, Salmon for
+    quantification, with the merged matrices read from `star_salmon/`. A
+    `--skip_alignment` run writes the same file names under `salmon/`; pass
+    `--var PSEUDOALIGNER_ONLY=true` and the expression collections are repointed
+    there. Nothing else about the dashboard changes.
+- kind: note
+  title: The condition comes from the sample name
+  position: intro
+  body: |
+    The nf-core/rnaseq samplesheet is `sample,fastq_1,fastq_2,strandedness` and
+    has no condition column. A project-local recipe derives `condition` and
+    `replicate` from the `<condition>_REP<n>` names the pipeline's own test data
+    and docs use, because that is an nf-core/rnaseq convention rather than a
+    Salmon one. Names that do not follow it give one condition per sample, which
+    dulls the colouring but breaks nothing.
+- kind: warning
+  title: '`--data-root` is one aligner route, not the run root'
+  position: quick_start
+  body: |
+    A run that publishes more than one aligner (the nf-core megatest publishes
+    `aligner_star_salmon/` and `aligner_star_rsem/` side by side) writes a
+    complete output tree per route, each with its own `multiqc/`, `star_salmon/`
+    and `salmon/`. Point `--data-root` at **one** of those directories: at the
+    prefix root every scan becomes ambiguous between the routes, and the MultiQC
+    scan attaches whichever report the walk reached first. A normal
+    single-aligner run has no such split, so its `results/` is already right.
+data_root: /path/to/rnaseq_results/aligner_star_salmon
+quick_start: |
+  `--data-root` is the only thing you have to pass. The samplesheet is
+  auto-detected from `{DATA_ROOT}/input/`; pass `--var SAMPLESHEET_FILE=...`
+  to point somewhere else.
+reference: |
+  The template reads one MultiQC report and one merged expression matrix. The
+  `salmon` catalog recipes reshape `star_salmon/salmon.merged.gene_tpm.tsv` into
+  one row per library (detection counts, median TPM), the 500 most variable genes
+  wide with the samplesheet annotation, one row per gene and sample, and one row
+  per expressed gene with its mean, spread and peak condition. The pipeline's
+  DESeq2 QC files, the RSeQC read distribution reports and the MultiQC general
+  statistics feed the Expression overview, and all three are optional. The merged
+  count matrix ships as rows only.
+
+  MultiQC 1.33 wrote this pipeline's report one directory deeper and with a
+  different suffix, `multiqc/star_salmon/multiqc_report_data/` rather than
+  `multiqc/multiqc_data/`. The scan pattern is path-qualified but
+  aligner-agnostic: `multiqc/`, then an optional route directory (`star_salmon/`,
+  `salmon/`, or none), then either spelling of the data directory. A
+  `--skip_alignment` run, which writes `multiqc/salmon/`, therefore finds its
+  report too.
+self_adapting_note: |
+  `SKIP_MULTIQC` and
+  `SKIP_QUANTIFICATION_MERGE` prune the QC and the expression side.
+tabs_intro: |
+  Three tabs, read as a funnel: are the libraries usable, how do they relate to
+  each other, and which genes drive that. Each tab below carries the **same icon
+  and colour the dashboard gives it**, so the page and the app read alike. The
+  `Sample scope` and `Reference scope` filter groups are persistent. `Run at a
+  glance` and a collapsed `Sample sheet` are pinned to the top of every tab, and
+  a collapsed `Reference tables` section is pinned to the bottom.
+tabs:
+- title: MultiQC
+  summary: the general statistics, FastQC before and after trimming, STAR, Salmon and strandedness, then transcript QC
+  question: The pipeline in the order it ran, from raw reads to quantified libraries.
+  description: |
+    The general statistics table opens the tab, then FastQC on the raw reads
+    beside Trim Galore's filtered counts and FastQC again after trimming.
+    `Quantification and strandedness` is where the two most common failures
+    show: a library whose inferred strandedness disagrees with the sheet was
+    quantified against the wrong library type, and everything downstream of it
+    is suspect. The collapsed `Transcript QC` section adds gene body coverage,
+    inner distance and dupRadar, which nf-core/rnaseq feeds to MultiQC as custom
+    content rather than as a module of its own.
+- title: Expression overview
+  summary: the pipeline's own DESeq2 QC PCA and sample distances, library composition, and a per-library QC profile across eleven metrics
+  question: Where the libraries sit relative to each other, and which one bends away.
+  description: |
+    The signature panel is the pipeline's own DESeq2 QC PCA, read from
+    `deseq2.pca.vals.txt` rather than from the picture MultiQC embeds, so its
+    points are selectable on `sample_id`. Beside it the sample distance matrix
+    is clustered in the browser and narrows on both axes. Replicates of one
+    condition should sit together in both; a library that lands with the wrong
+    group is the one to take back to the MultiQC tab. The `Library summary`
+    table and the PCA select on the same column, and the linked `Library record`
+    beside the table folds to a slim rail until a row or a point is picked, then
+    reads that library back with its position on the first three components.
+    `Library QC profile` closes the tab with one line per library across eleven
+    MultiQC general statistics: brushing an axis keeps only the libraries inside
+    that range.
+  after: |
+    !!! tip "Optional sections"
+        The DESeq2 QC files, the RSeQC read distribution reports and the MultiQC
+        general statistics are optional collections. A run that skipped one of
+        them ingests without it, and the panels it fed disappear.
+- title: Gene explorer
+  summary: the 500 most variable genes clustered, any gene compared across conditions, and a mean-variance plane that opens a gene record
+  question: The genes that separate the conditions, then any gene across conditions and libraries.
+  description: |
+    The tab absorbs what used to be a heatmap tab of its own: `Top variable
+    genes` clusters the 500 genes with the highest variance on the
+    log2(TPM + 1) scale, row-normalised, with one annotation strip per
+    samplesheet field that varies in the run. The box plot draws one box per
+    gene and condition, the libraries beside it, for the twelve most variable
+    genes left after filtering. In `Gene detail`, every expressed gene sits on a
+    mean-variance plane coloured by the condition it peaks in; clicking a point
+    fills the linked `Gene record` beside it, which folds to a slim rail until a
+    gene is picked, and narrows the box plot and the gene rows to that gene.
+    The pipeline runs no differential test, so spread across libraries is what
+    the tab ranks on.
+running: |
+  Depictio reads the **output** of nf-core/rnaseq, it does not run the pipeline.
+  Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/rnaseq -r 3.26.0 \
+    --input samplesheet.csv \
+    --genome GRCh38 \
+    --outdir results \
+    -profile docker
+  ```
+
+  Then point Depictio at the results:
+
+  ```bash
+  depictio run --template nf-core/rnaseq/latest \
+    --data-root results/
+  ```
+
+  Non-default routes need their flag by hand, since the CLI does not yet read
+  rnaseq's own `params.json` for them: `--var PSEUDOALIGNER_ONLY=true` for
+  `--skip_alignment`, `--var SKIP_MULTIQC=true` for `--skip_multiqc` or
+  `--skip_qc`, `--var SKIP_QUANTIFICATION_MERGE=true` for the merge.
+
+  See [nf-co.re/rnaseq/usage](https://nf-co.re/rnaseq/3.26.0/docs/usage) for full
+  pipeline documentation.
+data_structure: |
+  Point `--data-root` at one aligner route directory. Depictio scans recursively
+  and matches on file name, except for the MultiQC report, whose scan pattern is
+  path-qualified.
+
+  ```text
+  <DATA_ROOT>/                                    # one aligner route, e.g. aligner_star_salmon/
+  ├── input/
+  │   └── samplesheet.csv                         # --var SAMPLESHEET_FILE (auto-detected)
+  ├── pipeline_info/
+  │   ├── params.json
+  │   └── software_versions.yml
+  ├── multiqc/
+  │   └── star_salmon/
+  │       └── multiqc_report_data/
+  │           └── multiqc.parquet                 # or multiqc/multiqc_data/
+  ├── star_salmon/
+  │   ├── salmon.merged.gene_tpm.tsv              # every expression panel
+  │   ├── salmon.merged.gene_counts.tsv           # pinned reference table
+  │   ├── deseq2_qc/                              # *.pca.vals.txt, *.sample.dists.txt (optional)
+  │   ├── rseqc/read_distribution/                # *.read_distribution.txt (optional)
+  │   └── featurecounts/                          # biotype tables MultiQC renders
+  ├── salmon/                                     # read instead with PSEUDOALIGNER_ONLY=true
+  │   ├── salmon.merged.gene_tpm.tsv
+  │   └── salmon.merged.gene_counts.tsv
+  └── trimgalore/
+      └── *_trimming_report.txt
+  ```
+validation: |
+  The repository ships
+  [`download_test_data.sh`](https://github.com/depictio/depictio/blob/main/depictio/projects/nf-core/rnaseq/3.26.0/download_test_data.sh),
+  which fetches the subset of nf-core's AWS megatest run that the template needs:
+
+  ```bash
+  bash depictio/projects/nf-core/rnaseq/3.26.0/download_test_data.sh \
+    /tmp/rnaseq_test
+  ```
+
+  The run is
+  `s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/`:
+  eight libraries from four ENCODE cell lines, two replicates each, human GRCh37,
+  Trim Galore then STAR + Salmon. The manifest fetches only the
+  `aligner_star_salmon/` route and mirrors it below the destination, so the
+  directory the script writes is already the right `--data-root`. The samplesheet
+  is not part of the published run; `post_fetch_help` in `megatest.yaml` next to
+  the script gives the `curl` that puts it under `input/`.
+
+  Then run Depictio against it:
+
+  ```bash
+  depictio run \
+    --template nf-core/rnaseq/latest \
+    --data-root /tmp/rnaseq_test
+  ```
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

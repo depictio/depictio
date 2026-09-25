@@ -1,0 +1,207 @@
+# Docs page for nf-core/differentialabundance, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Differential Abundance
+status: experimental
+card_blurb: 'DESeq2 differential expression: per-contrast statistics, gene annotation and the variance-stabilised sample space.'
+index_summary: DESeq2 differential expression
+keywords: [differential, expression, deseq2, rnaseq, contrast, volcano, ma, plot, gene, annotation, variance, stabilised]
+subtitle: 'DESeq2 differential expression over a count matrix and a contrast sheet: per-contrast statistics, the gene annotation joined onto them, and the variance-stabilised sample space.'
+intro: |
+  The differentialabundance template covers the DESeq2 route of a standard
+  nf-core/differentialabundance run:
+intro_bullets:
+- ':material-table: **Reference tables**: the full result set, pinned to the bottom of every tab, under the sample sheet pinned to the top'
+callouts:
+- kind: info
+  title: The DESeq2 route only
+  body: |
+    This template binds `--differential_method deseq2`, the pipeline default. The
+    limma, propd and dream routes write differently named tables and are not
+    covered.
+  position: intro
+- kind: note
+  title: No MultiQC tab
+  body: |
+    differentialabundance runs no MultiQC: its reporting is an R/shinyngs
+    application, which is not parquet-backed and has nothing Depictio can read.
+    The **Samples** tab carries the run-level quality read instead.
+  position: intro
+- kind: tip
+  title: A contrast that found nothing still has to read as such
+  body: |
+    A contrast with no significant calls keeps its place. Its volcano is a
+    symmetric cloud with no labelled points and its effect-size panel is empty,
+    which is what an honest null result looks like rather than a broken
+    dashboard.
+  position: tabs
+quick_start: |
+  `--data-root` is the only thing you have to pass. The observation sheet is
+  auto-detected from `{DATA_ROOT}/input/`; pass
+  `--var SAMPLESHEET_FILE=...` to point somewhere else.
+
+  GSEA is opt-in in the pipeline. For a run that did not run it, add
+  `--var NO_GSEA=true`: the two enrichment collections are pruned and the
+  Enrichment tab drops out instead of scanning for tables that were never
+  written.
+
+  | Variable | Required | Meaning |
+  |---|---|---|
+  | `DATA_ROOT` | yes | The run's output directory (`tables/`, `other/`, `pipeline_info/`) |
+  | `SAMPLESHEET_FILE` | no | The pipeline's `--input` observation sheet, CSV or TSV; auto-detected from `{DATA_ROOT}/input/` |
+  | `NO_GSEA` | no | Set for a run without GSEA; prunes the Enrichment tab |
+reference: |
+  The template reads the per-contrast DESeq2 tables, the same statistics joined to
+  the GTF annotation, the variance-stabilised matrix and the per-sample size
+  factors. Contrast ids are recovered from the result file names, so no contrast
+  variable is needed.
+tabs_intro: |
+  Four tabs, read as a funnel: is the experiment sound and do the samples separate
+  by design, what changed in a contrast and can the test be trusted, where do the
+  calls sit, and which pathways move. Each tab below carries the **same icon and
+  colour the dashboard gives it**, so the page and the app read alike.
+
+  Two filter scopes are persistent and pinned to the top of every tab. `Sample
+  scope` sits on the hub collection, so a pick there reaches the PCA and the
+  distance matrix. The differential tables carry no sample column, so the sample
+  fan-out stops there by design and `Contrast scope` takes over: it is sourced on
+  `deseq2_results.contrast` and reaches the annotated table and the GSEA report
+  through the template links, so one pick narrows the three analysis tabs at once.
+  The `Run at a glance` cards and the collapsed `Sample sheet` are pinned to the
+  top of every tab, `Reference tables` to the bottom.
+tabs:
+- title: Samples
+  summary: cohort census, DESeq2 size factors, the sample PCA, the distance matrix, per-sample expression densities and the 500 most variable features
+  question: Is the experiment sound, and do the samples separate the way the design says they should?
+  description: |
+    The run size and its design come first, then the sample space read from the
+    variance-stabilised matrix: the PCA, the distances over the 500 most variable
+    features and one density curve per sample, so a library normalised
+    differently from the rest shows as a curve out of the bundle. The PCA is a
+    selection source: lasso a cluster and those samples travel to the linked
+    panels. The tab closes on the 500 most variable features, row z-scored and
+    clustered both ways; that matrix has no contrast column, so the contrast
+    filter does not reach it.
+  filters: |
+    **Filters** · `Sample`, `Condition` and `Second factor` to `Fourth factor`
+    on `samples` in the persistent *Sample scope*, and `Contrast` on
+    `deseq2_results` in the persistent *Contrast scope*, both pinned to the
+    top of every tab; plus a `Size factor` range in *Library scope*. The
+    factor filters bind to the sheet's next factor-like columns under stable
+    names, and the Sample sheet keeps each column's original name.
+- title: Differential expression
+  summary: volcano, MA and QQ in one tile, the test's diagnostics, the effect by biotype and a gene record beside the annotated table
+  question: What changed in this contrast, can the test be trusted, and which feature classes move?
+  description: |
+    One tile carries the volcano, the MA and the QQ views of the same calls,
+    switched from its header and cut at the pipeline's own thresholds (padj 0.05,
+    two-fold change). The diagnostics check the raw p-value histogram per
+    contrast and pair the first two contrasts gene by gene; selecting a point
+    there carries its `gene_id` to the annotated table. The effect by biotype
+    says whether the calls concentrate in one class of feature. `Gene detail`
+    puts a linked gene record beside the annotated table: it folds to a slim
+    rail until a row is picked, then shows one card per contrast the gene was
+    tested in, with an Ensembl link.
+- title: Genome view
+  summary: every annotated call at its coordinate, with a per-gene lollipop one chromosome at a time
+  question: Where do the calls sit on the genome?
+  description: |
+    The Manhattan plot places every annotated feature at its coordinate with
+    `-log10(padj)` as height and a threshold line at padj 0.05; it is a selection
+    source on `gene_id`. Below, the lollipop draws one lane per contrast and one
+    head per gene, coloured by direction and sized by significance, with the
+    strongest calls labelled. Pick a chromosome first, since coordinates from
+    different contigs otherwise stack on the same axis.
+- title: Enrichment
+  summary: the GSEA gene sets at each pole of each contrast, as a dot plot, ranked bars and the report table
+  question: Which pathways move, and at which pole of the contrast?
+  description: |
+    The pipeline runs GSEA pre-ranked over the DESeq2 statistics and publishes
+    one report per pole of each contrast, so every panel splits on the pole as
+    well as on the contrast: a set enriched at one end and a set enriched at the
+    other are the two ends of one comparison, not two findings. The dot plot puts
+    every set on its normalised enrichment score, sized by the genes found and
+    coloured by significance; the ranked bars are the view that compares one
+    contrast against another. A run without GSEA loses this tab (see
+    `NO_GSEA` above).
+running: |
+  Depictio reads the **output** of nf-core/differentialabundance, it does not run
+  the pipeline. Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/differentialabundance -r 2.0.0 \
+    --input samplesheet.csv \
+    --contrasts contrasts.csv \
+    --matrix counts.tsv \
+    --gtf genome.gtf \
+    --functional_method gsea --gene_sets_files gene_sets.gmt \
+    --outdir results -profile docker
+  ```
+
+  Leave out the two GSEA flags to skip enrichment, and pass `--var NO_GSEA=true` to
+  Depictio for that run.
+
+  Then point Depictio at the results:
+
+  ```bash
+  depictio run --template nf-core/differentialabundance/latest \
+    --data-root results/
+  ```
+
+  See [nf-co.re/differentialabundance/usage](https://nf-co.re/differentialabundance/2.0.0/docs/usage)
+  for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name, so a run that nests its tables one level
+  deeper (as the reference megatest does, having been launched with two parameter
+  sets at once) binds identically.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/                                     # --var SAMPLESHEET_FILE (auto-detected)
+  │   └── samplesheet.tsv
+  ├── pipeline_info/
+  │   ├── params.json
+  │   └── software_versions.yml
+  ├── tables/
+  │   ├── differential/
+  │   │   ├── <contrast>.deseq2.results.tsv       # per-contrast statistics
+  │   │   └── <contrast>_deseq2.annotated.tsv     # the same, joined to the GTF
+  │   ├── processed_abundance/
+  │   │   └── all.vst.tsv                         # variance-stabilised matrix
+  │   └── gsea/<contrast>/
+  │       └── *.gsea_report_for_<pole>.tsv        # optional, one per pole
+  └── other/
+      └── deseq2/
+          └── <contrast>.deseq2.sizefactors.tsv   # library-size normalisation
+  ```
+validation: |
+  The repository ships
+  [`download_test_data.sh`](https://github.com/depictio/depictio/blob/main/depictio/projects/nf-core/differentialabundance/2.0.0/download_test_data.sh),
+  which fetches the subset of nf-core's AWS megatest run that the template needs:
+
+  ```bash
+  bash depictio/projects/nf-core/differentialabundance/2.0.0/download_test_data.sh \
+    /tmp/differentialabundance_test
+  ```
+
+  The run is
+  `s3://nf-core-awsmegatests/differentialabundance/results-30ed7741fc392127156c2fb10cfa3d69d216b54b/`:
+  24 mouse RNA-seq samples over two contrasts. The observation sheet and the
+  contrasts file live outside the results prefix; `post_fetch_help` in
+  `megatest.yaml` next to the script gives the two `curl` commands that put them
+  under `input/`. The pinned prefix publishes no `tables/gsea/`, so the GSEA
+  reports behind the Enrichment tab screenshot come from a sibling prefix of the
+  same pipeline; the fetch command is in the `megatest.yaml` header.
+
+  Then run Depictio against it:
+
+  ```bash
+  depictio run \
+    --template nf-core/differentialabundance/latest \
+    --data-root /tmp/differentialabundance_test
+  ```
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

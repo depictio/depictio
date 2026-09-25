@@ -1,0 +1,243 @@
+# Docs page for nf-core/airrflow, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: AIRR Repertoire Analysis
+status: experimental
+card_blurb: 'B and T cell repertoire analysis: sequence processing, repertoire composition and clonal analysis.'
+index_summary: B and T cell receptor repertoire (AIRR)
+keywords: [airr, bcr, tcr, repertoire, immune, receptor, clonal, lineage, immcantation, presto, changeo, vdj]
+subtitle: 'B and T cell receptor repertoire analysis: the pRESTO and Change-O sequence funnel, V gene usage, and the Immcantation enchantR clonal report next to the pipeline''s own MultiQC.'
+intro: |
+  The airrflow template covers the reporting half of a standard nf-core/airrflow run, from the raw reads through to the clones:
+intro_bullets:
+- ':material-chart-box-outline: **Read quality**: fastp trimming and both FastQC runs, read from the pipeline''s own MultiQC parquet'
+- ':material-chart-areaspline: **Sequence funnel**: every read followed to the step it stopped at, across pRESTO and Change-O'
+- ':material-dna: **Repertoire composition**: V gene usage at family and gene resolution, the CDR3 spectratype and V-J pairing per donor'
+- ':material-chart-bell-curve: **Clonal analysis**: clones against depth, Hill diversity profiles and rank abundance with bootstrap bands, clonal homeostasis'
+- ':material-set-all: **Sharing between samples**: the pairwise shared-clone matrix and the higher-order intersections behind it'
+- ':material-table: **Cohort and reference tables**: the cohort cards and the AIRR samplesheet pinned to the top of every tab, the repertoire summary to the bottom'
+callouts:
+- kind: info
+  title: No external metadata file
+  body: |
+    Everything the template reads comes from the run itself: the validated
+    samplesheet the pipeline writes to `pipeline_info/samplesheet.valid.tsv` is
+    the hub data collection, so there is nothing to prepare. The one column to
+    name is the condition, `GROUP_COL`, which defaults to `treatment`, the
+    column airrflow's samplesheet schema documents for it. 5.1.1 has no AWS
+    megatest run, so 5.1.0 is the newest release the template could be validated
+    against; it binds against both.
+  position: intro
+- kind: tip
+  title: Two things that look wrong and are not
+  body: |
+    The overlap heatmap's diagonal is written as 0, since a sample's overlap with
+    itself dwarfs any real sharing and flattens the colour scale; cross-subject
+    cells read zero too, because airrflow defines clones within a subject. And a
+    sample too shallow for enchantR to fit diversity numbers is dropped from
+    `clonal_diversity.tsv`, so its diversity cards are null while its clone counts
+    stand.
+  position: tabs
+quick_start: |
+  `--data-root` is the only thing you have to pass. The samplesheet is picked
+  up from `{DATA_ROOT}/pipeline_info/samplesheet.valid.tsv`; pass
+  `--var SAMPLESHEET_FILE=...` to point somewhere else.
+
+  The condition filter reads the samplesheet column named by `GROUP_COL`
+  (default `treatment`, labelled `Condition`). A samplesheet that keeps the
+  condition in another free column names it, and can relabel it:
+
+  ```bash
+  depictio run \
+    --template nf-core/airrflow/latest \
+    --data-root /path/to/airrflow_results \
+    --var GROUP_COL=intervention \
+    --var GROUP_COL_DISPLAY=Intervention
+  ```
+
+  | Variable | Default | Meaning |
+  |---|---|---|
+  | `DATA_ROOT` | required | Root of the airrflow output directory |
+  | `SAMPLESHEET_FILE` | `{DATA_ROOT}/pipeline_info/samplesheet.valid.tsv` | The validated samplesheet, the hub data collection |
+  | `GROUP_COL` | `treatment` | Samplesheet column holding the condition; must exist in the samplesheet |
+  | `GROUP_COL_DISPLAY` | `Condition` | Reader-facing label of that column in filter titles |
+  | `SKIP_CLONAL_ANALYSIS`, `SKIP_REPORT`, `SKIP_THRESHOLD_REPORT`, `SKIP_MULTIQC`, `ASSEMBLED_MODE` | unset | Mirror the run's route flags; see *Conditional routes* below |
+reference: |
+  The template reads the MultiQC parquet, the two sequence-count logs, the V usage
+  tables from the repertoire comparison report, and the enchantR clonal analysis
+  tables (diversity, clone sizes, pairwise overlap, distance threshold). Most tiles
+  are catalog renders bound to `enchantr`, airrflow's own R package rather than an
+  nf-core module, so the tile chrome names where each panel comes from.
+
+  The route flags in the *Conditional routes* table are not read back from
+  `params.json` yet, so a run started with `--skip_clonal_analysis`,
+  `--skip_report`, `--skip_report_threshold`, `--skip_multiqc` or
+  `--mode assembled` needs the matching `--var SKIP_...=true` (or
+  `--var ASSEMBLED_MODE=true`). Omitting one still
+  ingests: the affected collections are optional and simply come up empty.
+tabs_intro: |
+  Four tabs, read as a funnel: are the reads good, how many survive, what
+  repertoire do the survivors make, and how is that repertoire structured. Each tab
+  below carries the **same icon and colour the dashboard gives it**, so the page and
+  the app read alike. `Sample filters` is persistent and pinned to the top of every
+  tab, and one pick there reaches every other collection through the template's
+  [cross-DC links](#cross-dc-links). `Cohort at a glance` and a collapsed
+  `Sample sheet` are pinned to the top of every tab, `Reference tables` to the
+  bottom, so the cohort a tile is computed from is always in view.
+tabs:
+- title: MultiQC
+  question: fastp and FastQC, straight from the pipeline's MultiQC report.
+  description: |
+    Eleven MultiQC panels in three sections: read yield before and after
+    trimming, per-base and per-read quality, then GC, length, duplication and
+    adapter content, the last collapsed. airrflow runs FastQC twice, on the raw
+    reads and again after assembly, so MultiQC labels the second run `fastqc-1`
+    and its series carry an `_ASSEMBLED` suffix. Amplicon libraries are expected
+    to look duplicated and to sit in a narrow GC and length band, so most FastQC
+    warnings here are normal.
+  filters_after: |
+    Picking rows in either pinned table filters the dashboard by
+    `sample_id`, like the persistent filters do.
+  filters: |
+    **Filters** · `Sample`, `Subject`, `Condition` (the `GROUP_COL` column)
+    and `Sex` on `samplesheet`, persistent and pinned to the top of every tab,
+    plus a `Report sample` selector on `multiqc_data` in a collapsed *Read QC
+    scope* group, needed because the MultiQC sample ids carry the
+    `_ASSEMBLED` suffix.
+- title: Sequence processing
+  question: How many reads survive each pRESTO and Change-O step, and where the rest go.
+  description: |
+    The signature panel is a Sankey following every read of every sample to the
+    step it stopped at. Three of those steps collapse reads rather than discard
+    them, since UMI consensus, deduplication and the representative filter each
+    fold many reads onto one sequence, so a low retention is expected and it is
+    the spread across samples that matters. Below it the funnel is redrawn one
+    line per sample on a log axis: a line that drops away from the rest at one
+    step is the sample to look at.
+- title: Repertoire
+  question: Which V and J genes and which CDR3 lengths build each repertoire.
+  description: |
+    V usage is a stacked composition switchable between family and gene
+    resolution, beside a clustered sample by V gene heatmap, column standardised
+    so rare genes stay visible. The CDR3 spectratype is the classic clonality
+    readout: a polyclonal repertoire draws a smooth bell per sample, and one
+    length towering over its neighbours is an expanded clone. The V-J pairing
+    heatmap closes the tab, one row per donor and V gene and one column per J
+    gene, counted per donor because clones are defined per donor.
+  after: |
+    !!! tip "Spectratype and V-J pairing need the AIRR table"
+        Both read the `*__repertoire-pass.tsv` rearrangement table enchantR's
+        repertoire analysis starts from, keeping only the handful of columns they
+        need. The two collections are optional: a run with
+        `--skip_clonal_analysis`, or a copy of the output without that table,
+        drops the two sections and keeps the rest of the tab.
+- title: Clonal analysis
+  question: How clonal and how diverse each repertoire is, and which clones samples share.
+  description: |
+    The shazam distance threshold and its sensitivity sit on the card row,
+    because clones are called by nearest-neighbour distance and every number on
+    the tab rests on the threshold fitted per subject. Clone counts scale with
+    sequencing depth, so the tab opens on clones against depth: a repertoire that
+    is simply deeper sits along the diagonal, a genuinely more clonal one below
+    it. The Hill profile draws one curve per repertoire against the order q with
+    alakazam's bootstrap band, and the rank-abundance curve carries its band too.
+    The last section pairs the shared-clone heatmap with an UpSet of the
+    intersections a pairwise view cannot show.
+
+    Clones versus depth, Richness against evenness and the rank-abundance curve
+    are selection sources: lasso samples on any of them and the rest of the tab
+    narrows to those samples.
+running: |
+  Depictio reads the **output** of nf-core/airrflow, it does not run the pipeline.
+  Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/airrflow -r 5.1.0 \
+    --input samplesheet.tsv \
+    --mode fastq \
+    --library_generation_method specific_pcr_umi \
+    --cprimers CPrimers.fasta \
+    --vprimers VPrimers.fasta \
+    --umi_length 12 \
+    --outdir results -profile docker
+  ```
+
+  Then point Depictio at the results:
+
+  ```bash
+  depictio run --template nf-core/airrflow/latest \
+    --data-root results/
+  ```
+
+  See [nf-co.re/airrflow/usage](https://nf-co.re/airrflow/5.1.0/docs/usage)
+  for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name, so the layout below only has to be present
+  somewhere under the root. Nothing outside the run is needed.
+
+  ```text
+  <DATA_ROOT>/
+  ├── pipeline_info/
+  │   ├── samplesheet.valid.tsv                       # hub DC, --var SAMPLESHEET_FILE
+  │   ├── params.json
+  │   └── software_versions.yml
+  ├── multiqc/
+  │   └── multiqc_data/
+  │       └── multiqc.parquet                         # fastp + both FastQC runs
+  ├── parsed_logs/
+  │   └── Table_sequences_process.tsv                 # pRESTO half of the funnel
+  ├── repertoire_comparison/
+  │   ├── Sequence_numbers_summary/
+  │   │   └── Table_sequences_assembled.tsv           # Change-O half of the funnel
+  │   └── V_family/
+  │       ├── V_family_distribution_data.tsv
+  │       └── V_gene_distribution_by_sequence_data.tsv
+  └── clonal_analysis/
+      ├── find_threshold/all_reps_dist_report/tables/
+      │   └── all_reps_threshold-summary.tsv          # shazam threshold per subject
+      └── repertoire_analysis/repertoire_analysis_report/
+          ├── repertoires/
+          │   └── *__repertoire-pass.tsv              # AIRR table: spectratype, V-J pairing
+          └── tables/
+              ├── clonal_abundance.tsv                # rank abundance with bootstrap band
+              ├── clonal_diversity.tsv
+              ├── clonal_overlap.tsv
+              ├── clone_sizes_table.tsv
+              └── num_clones_table.tsv
+  ```
+validation: |
+  The repository ships
+  [`download_test_data.sh`](https://github.com/depictio/depictio/blob/main/depictio/projects/nf-core/airrflow/5.1.0/download_test_data.sh),
+  which fetches the subset of nf-core's AWS megatest run that the template needs:
+
+  ```bash
+  bash depictio/projects/nf-core/airrflow/5.1.0/download_test_data.sh \
+    /tmp/airrflow_test
+  ```
+
+  The run is
+  `s3://nf-core-awsmegatests/airrflow/results-e69d49e3f23f11a3391755b5fb7aa4283c0a2471/`
+  (the 5.1.0 release tag): a ten-sample, two-subject multiple sclerosis B cell
+  study of cervical lymph node and brain lesion tissue, run in the default
+  `--mode fastq` UMI route. The manifest fetches fifteen keys, about 330 MB,
+  nearly all of it the AIRR rearrangement table behind the spectratype and the
+  V-J grid;
+  `post_fetch_help` in `megatest.yaml` prints the dry-run and full-run commands
+  once the download finishes.
+
+  Then run Depictio against it:
+
+  ```bash
+  depictio run \
+    --template nf-core/airrflow/latest \
+    --data-root /tmp/airrflow_test
+  ```
+resources:
+- label: Immcantation
+  url: https://immcantation.readthedocs.io
+  note: enchantR, alakazam and shazam, the toolset behind the repertoire panels
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

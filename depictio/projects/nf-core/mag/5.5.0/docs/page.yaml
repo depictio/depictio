@@ -1,0 +1,204 @@
+# Docs page for nf-core/mag, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from the dashboard YAML.
+page_title: "Metagenome Assembly"
+status: "experimental"
+card_blurb: |-
+  Metagenome-assembled genomes: assembly, binning, completeness and contamination, and taxonomy of the recovered bins.
+index_summary: "Metagenome assembly and binning"
+keywords: [mag, metagenome, assembly, binning, bins, checkm, busco, gtdb, taxonomy, quast]
+
+subtitle: |-
+  The bin funnel from reads to metagenome-assembled genomes: assembly contiguity, contig coverage, CheckM2 bin quality, GTDB-Tk taxonomy, Prokka annotation and a per-bin record and locus map, next to the MultiQC report.
+
+intro: |
+  The mag template reads an nf-core/mag run as a funnel from assemblies to
+  genomes, where the unit is the bin rather than the sample:
+intro_after: |
+  Every assembler is crossed with every binner over every sample, so the controls
+  that matter are the assembler, the binner, the phylum and the quality thresholds.
+  The `Sample scope` and `Binning scope` (assembler, binner) filters, a four-card
+  bin strip and a collapsed sample sheet are pinned to the top of every tab, and
+  the per-assembly statistics table to the bottom.
+
+callouts:
+  - kind: warning
+    title: "A MultiQC parquet is required"
+    position: intro
+    body: |
+      Depictio reads only `multiqc.parquet` (MultiQC 1.31 and later). When the run
+      published no parquet, or no `multiqc/` directory at all, regenerate the
+      report from the run's raw tool outputs before ingesting:
+
+      ```bash
+      python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>
+      ```
+  - kind: info
+    title: "The bin summary is rebuilt Depictio side"
+    position: intro
+    body: |
+      QUAST, CheckM2, Prokka and GTDB-Tk each score a different subset of the bins
+      (GTDB-Tk only places the ones that pass its own thresholds). The template
+      joins the four tool outputs into one outer-joined row per bin, with a
+      `sources_present` count, so a gap between tools is a readable number rather
+      than a silent row loss. Contig coverage stays per contig: without the
+      contig-to-bin tables it is never rolled up to a bin.
+
+quick_start: |
+  `--data-root` is the only variable. The sample hub reads the samplesheet at
+  `input/samplesheet.full.v4.csv` under the data root; mag does not publish its
+  `--input`, so copy the sheet the run was launched with to that path.
+
+trigger_note: |
+  The samplesheet copy and the MultiQC parquet above still apply.
+
+reference: |
+  The template reads the samplesheet, the MultiQC report, the QUAST assembly and bin
+  reports, the per-contig depth tables, CheckM2, GTDB-Tk and the Prokka summaries
+  and GFFs. {use_count} of its {tile_count} tiles carry a `use:` catalog reference (`quast/*`, `mag/*`,
+  `checkm2/*`, `gtdbtk/*`, `prokka/*`, `multiqc/*`), so a tile says where its panel
+  comes from. Every scatter keeps its analysis controls in the tile header.
+
+tabs_intro: |
+  Seven tabs, read as a funnel: did the run pass QC, which assemblies are binnable,
+  what signal the binners saw, which bins are genomes, what they are, what they
+  carry, and one bin in detail. Each tab below carries the **same icon and colour
+  the dashboard gives it**. A picked row or point becomes a filter that follows the
+  project links to the tiles it reaches.
+
+tabs:
+  - title: "MultiQC"
+    summary: "fastp, NanoStat, Bowtie2, QUAST, CheckM2 and GTDB-Tk panels from the run's MultiQC report"
+    question: "Check reads, host removal, assemblies and bins as the report shows them."
+    description: |
+      Read QC lives here only: fastp writes JSON and NanoPlot free text, neither of
+      which a table collection reads, so there is no Reads tab. The report covers
+      short- and long-read QC, host and phiX removal, the QUAST assembly statistics,
+      CheckM2 bin quality and the GTDB-Tk taxonomy summary.
+  - title: "Assembly"
+    summary: "what each assembler made of the same samples, size against contiguity and the Nx curve"
+    question: "Compare the assemblers on size and contiguity."
+    filters: |
+      **Filters** · a `Minimum contig length range` that keeps every curve
+      intact inside the window, a `Contig N50` range, and `Nx curves` to pick
+      assemblies.
+    description: |
+      Assembled length against contig N50 separates binnable assemblies, long and
+      in long pieces, from fragmented ones. `Contig length` shows how much of each
+      assembly survives each QUAST minimum contig length, and the Nx curve per
+      assembly, built with QUAST's 500 bp floor so it crosses 50 at the QUAST N50.
+  - title: "Contigs"
+    summary: "the length and coverage signal every binner is fed, and which sample each assembly recruits"
+    question: "See the coverage signal the binners receive."
+    description: |
+      Every contig of at least 1 kbp appears once per sample whose reads were mapped
+      back onto its assembly. Length against depth is the plot a binner sees before
+      it decides anything, drawn from a server-side hash sample. The recruitment
+      heatmap, one row per assembly and one column per read sample, shows which
+      sample's organisms each assembly holds.
+  - title: "Bins"
+    summary: "CheckM2 completeness against contamination, cut at the MIMAG thresholds"
+    question: "Judge which bins are genomes."
+    description: |
+      Completeness against contamination is cut into quadrants at the MIMAG
+      high-quality thresholds (90 % complete, under 5 % contaminated) and coloured
+      by binner, with contiguity against completeness beside it. The QUAST section
+      measures the same bins rather than predicting them, and is linked to CheckM2
+      by bin, so the tab's quality filters reach it too.
+  - title: "Taxonomy"
+    summary: "the GTDB-Tk lineage of the bins that passed, and how each binner recovered the community"
+    question: "Read the GTDB-Tk lineage of the bins that were placed."
+    description: |
+      A sunburst reads the lineage from domain outwards, and stacked bars show the
+      community each binning run recovered, with the rank picker in the tile header.
+      A Sankey traces assembler to binner to phylum, weighted by bins, and identity
+      against alignment fraction to the closest reference says how confidently each
+      bin was named.
+  - title: "Annotation"
+    summary: "Prokka gene density and the ribosomal and transfer RNAs of the MIMAG standard"
+    question: "Check the gene content and the RNA half of the MIMAG standard."
+    description: |
+      Gene density against bin size is the sanity check on a bin's gene content,
+      with the roughly 900 coding sequences per megabase of a prokaryotic genome as
+      a reference. Transfer against ribosomal RNAs covers the criterion a
+      completeness estimate cannot see.
+  - title: "Bin detail"
+    summary: "the four tools joined per bin, a bin record and the locus map of the bin you pick"
+    question: "Read one chosen bin, tool by tool."
+    description: |
+      The locus map draws the genes of the bin picked in the filter or the table
+      along its contigs. `Bin detail` holds the outer join of CheckM2, QUAST,
+      GTDB-Tk and Prokka, one row per bin, beside a linked `Bin record` card that
+      folds to a slim rail until a row is picked, then opens that bin on its
+      quality section.
+
+running: |
+  Depictio reads the **output** of nf-core/mag, it does not run the pipeline.
+  Run the pipeline first, with bin QC, GTDB-Tk and Prokka enabled:
+
+  ```bash
+  nextflow run nf-core/mag -r 5.5.0 \
+    --input samplesheet.full.v4.csv \
+    --run_checkm2 \
+    -profile docker --outdir results
+  ```
+
+  Then copy the samplesheet beside the results, regenerate the MultiQC report if
+  the run wrote no parquet, and point Depictio at them:
+
+  ```bash
+  mkdir -p results/input && cp samplesheet.full.v4.csv results/input/
+  python -m depictio.dev_scripts.multiqc_reprocess --src results/ --dest results/
+  depictio run --template nf-core/mag/latest --data-root results/
+  ```
+
+  See [nf-co.re/mag/usage](https://nf-co.re/mag/5.5.0/docs/usage) for full pipeline documentation.
+
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name. Every tool collection is optional, so a
+  run that skipped a step ingests and the tabs it would feed are dropped.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/samplesheet.full.v4.csv              # the hub (required, copied by hand)
+  ├── pipeline_info/{software_versions.yml,params*.json}
+  ├── multiqc/multiqc_data/multiqc.parquet       # published or regenerated
+  ├── QC_shortreads/{fastp,remove_host,remove_phix}/
+  ├── QC_longreads/NanoPlot/*NanoStats.txt
+  ├── Assembly/<assembler>/QC/<sample>/QUAST/transposed_report.tsv
+  ├── GenomeBinning/
+  │   ├── depths/contigs/*-depth.txt.gz          # per-contig depth per sample
+  │   └── QC/
+  │       ├── CheckM2/*_checkm2_report.tsv
+  │       └── QUAST/*-quast_summary.tsv
+  ├── Taxonomy/GTDB-Tk/<run>/classify/*.{bac120,ar53}.summary.tsv
+  └── Annotation/Prokka/<assembler>/<bin>/
+      ├── *.txt                                  # per-bin feature counts
+      └── *.gff                                  # the locus map
+  ```
+
+validation: |
+  The template was validated on the nf-core AWS megatest of the 5.5.0 release
+  candidate, `s3://nf-core-awsmegatests/mag/results-171cf36971499cea4c9bccac4536cccbfc540e14/`,
+  a hybrid short- and long-read run over three samples with four assemblers and
+  five binners, and the screenshots above come from that run. It publishes no
+  `multiqc/` directory and no samplesheet: the report is regenerated and the
+  template ships the sheet, which the download script copies in. Only a subset of
+  the Prokka GFFs is fetched, so the locus map covers those bins only.
+
+  ```bash
+  DEST=/tmp/mag_test
+  bash depictio/projects/nf-core/mag/5.5.0/download_test_data.sh "$DEST"
+  python -m depictio.dev_scripts.multiqc_reprocess --src "$DEST" --dest "$DEST"
+  depictio run --template nf-core/mag/latest --data-root "$DEST"
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

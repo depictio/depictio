@@ -1,0 +1,212 @@
+# Docs page for nf-core/nanoseq, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Nanopore RNA-seq
+status: experimental
+card_blurb: 'Oxford Nanopore long reads: read length and quality, alignment, and transcript quantification per sample.'
+index_summary: Nanopore long-read sequencing
+keywords: [nanoseq, nanopore, ont, long, read, pycoqc, nanoplot, alignment, quantification]
+subtitle: Nanopore long-read QC, minimap2 alignment and Bambu gene and transcript quantification, with the DESeq2 and DEXSeq results the pipeline computes on top of them.
+intro: |
+  The nanoseq template follows a Nanopore RNA-seq run from the basecalled reads to
+  the differential results, one tab per step:
+intro_after: |
+  A `Run at a glance` strip (libraries by condition, reads basecalled, gigabases
+  sequenced, read length N50), the collapsed `Sample sheet` and the `Sample
+  filters` (sample, condition, library preparation) are pinned to every tab, and
+  the template's links carry a pick to NanoStat, the samtools distributions, the
+  melted Bambu counts and the MultiQC panels alike.
+callouts:
+- kind: warning
+  title: nanoseq 3.0.0 writes no MultiQC parquet
+  position: intro
+  body: |
+    The release ships MultiQC 1.11, which writes `multiqc_data.json` only, and
+    Depictio reads `multiqc.parquet` (MultiQC 1.31 and later). Reprocess the
+    run's own tool outputs once before ingesting; the parquet lands in
+    `multiqc/multiqc_data/`, where the template looks for it:
+
+    ```bash
+    python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>
+    ```
+- kind: info
+  title: The design is a variable
+  position: intro
+  body: |
+    nanoseq names every sample `<group>_R<replicate>`, and the template recovers
+    only those two fields from the name. The condition and the three
+    confounders the dashboard offers beside it (library preparation, source
+    replicate, flow-cell run) come from an optional design table passed as
+    `METADATA_FILE`. Without it, the condition is the samplesheet group and the
+    confounders read `unknown`.
+quick_start: |
+  `--data-root` is the only thing you have to pass. The hub of the dashboard
+  is the samplesheet the run validated, `pipeline_info/samplesheet.valid.csv`,
+  one row per library. To bring your own design, add the table and name the
+  factor the run compares:
+
+  ```bash
+  depictio run \
+    --template nf-core/nanoseq/latest \
+    --data-root /path/to/nanoseq_results \
+    --var METADATA_FILE=/path/to/sample_metadata.tsv \
+    --var GROUP_COL=condition
+  ```
+
+  | Variable | Default | Role |
+  |---|---|---|
+  | `METADATA_FILE` | none | Optional design table (TSV), one row per sample (or samplesheet group), one column per factor |
+  | `METADATA_ID_COL` | first column | The design table's id column |
+  | `GROUP_COL` | first factor column | The factor carried as `condition`; columns named `protocol`, `source_replicate` and `run_id` feed the three confounder filters |
+reference: |
+  The template reads the validated samplesheet, the reprocessed MultiQC report,
+  NanoStat's summaries, the `samtools stats` files of the minimap2 alignments,
+  Bambu's gene and transcript matrices and the DESeq2 and DEXSeq result tables.
+  Bambu publishes feature by sample matrices, so catalog recipes melt them into
+  one row per sample and feature; that is what lets the sample picker reach the
+  counts. When Bambu's row labels are GTF attribute strings, the recipes extract
+  the `ENSG` or `ENST` id and promote the biotype to its own filterable column.
+tabs_intro: |
+  Six tabs, read as a funnel: what the report says, how long and how good the
+  reads are, how they aligned, what Bambu counted and whether the libraries group
+  by condition, which genes moved, and which transcripts changed their share of
+  their gene. Each tab below carries the **same icon and colour the dashboard
+  gives it**.
+tabs:
+- title: MultiQC
+  summary: FastQC and the samtools flagstat and idxstats panels, as the report shows them
+  question: Did every library sequence and align the way the report expects?
+  description: |
+    The general statistics table, the FastQC panels and samtools' flagstat and
+    idxstats, as MultiQC reports them. The panels a data-collection tile already
+    draws are left out: the NanoStat summary and quality ladder live on the Reads
+    tab, and the samtools summary block on the Alignment tab. A tab-local
+    `Run scope` narrows by flow-cell run and source replicate.
+- title: Reads and read length
+  summary: NanoStat's length and quality readings per library, the Nx ladder and the yield above each quality floor
+  question: How long and how good are the reads each library delivered?
+  description: |
+    NanoStat's length readings open the tab, then a length against quality
+    scatter with one point per library and a linked **Library record** beside
+    it, which folds to a slim rail until a library is picked. The Nx ladder,
+    recomputed from the samtools read-length histogram with N50 marked, shows
+    what a single N50 bar hides. The quality ladder follows: the Q10 cards and
+    the yield above each Phred cutoff, one curve per library.
+- title: Alignment and coverage
+  summary: what minimap2 placed, per-base identity, coverage depth and the indel spectrum
+  question: What did minimap2 place, and how evenly does it cover the reference?
+  description: |
+    The placement rate, per-base identity, mapped reads and supplementary
+    alignments come from the `samtools stats` summary block. The coverage depth
+    histogram and the indel length spectrum, with insertions and deletions as
+    separate curves, show the error mode behind the identity number. Both curves
+    select on the library, so a pick narrows the rest of the tab.
+- title: Quantification and sample structure
+  summary: what Bambu counted, and whether the libraries group by condition or by preparation
+  question: Do the libraries group by condition, or by how they were prepared?
+  description: |
+    Library size, genes detected, protein-coding share and top-50 gene share say
+    what Bambu assigned per library. The structure section sets the libraries by
+    preparation and by flow-cell run next to a PCA on log CPM, a depth against
+    complexity scatter and a Spearman correlation heatmap, so a batch effect
+    reads before any differential result. The gene counts close the tab with the
+    per-library log-CPM distribution and the 100 most variable genes as a
+    row-standardised heatmap.
+- title: Gene expression (DESeq2)
+  summary: the genes that moved in the run's contrast
+  question: Which genes moved between the two conditions?
+  description: |
+    DESeq2 on Bambu's gene counts: direction counts, effect size, genes tested
+    and the strongest adjusted p-value, then one tile with three views switched
+    from its header (volcano, MA, QQ) and the twenty largest effects. DESeq2
+    collapses the run into one comparison, so these collections carry no sample
+    column and the sample picker does not narrow them; the per-library counts
+    are on the Quantification tab.
+- title: Isoform usage and expression
+  summary: the transcripts whose share of their gene shifted, and isoform-level counts
+  question: Which transcripts changed their share of their gene?
+  description: |
+    DEXSeq first: whether a transcript is used more or less relative to its
+    siblings, with its volcano and the per-library transcript shares of the top
+    genes, recomputed from Bambu's transcript counts. Isoform expression follows
+    from the melted transcript matrix. The isoform lane view reads
+    `bambu/extended_annotations.gtf` and stays empty on a quantification-only
+    run; nanoseq publishes no splice-junction table, so there is no sashimi view.
+tabs_after: |
+  Every per-library plot and table selects on the sample column, which the sample
+  hub links to every sample-keyed collection, so a pick on one panel narrows the
+  rest of the tab. The long gene and transcript count tables and the DESeq2 table
+  do not select: their feature ids link to nothing else on their tab.
+running: |
+  Depictio reads the **output** of nf-core/nanoseq, it does not run the pipeline.
+  Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/nanoseq -r 3.0.0 \
+    --input samplesheet.csv \
+    --protocol cDNA \
+    --quantification_method bambu \
+    --outdir results -profile docker
+  ```
+
+  Then regenerate the MultiQC report as a parquet and point Depictio at the
+  results:
+
+  ```bash
+  python -m depictio.dev_scripts.multiqc_reprocess --src results/ --dest results/
+  depictio run --template nf-core/nanoseq/latest --data-root results/
+  ```
+
+  DESeq2 and DEXSeq need at least two conditions in the samplesheet; a run with
+  one condition simply leaves the last two tabs empty. See
+  [nf-co.re/nanoseq/usage](https://nf-co.re/nanoseq/3.0.0/docs/usage) for full
+  pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name, so the DESeq2 and DEXSeq tables are found
+  under `bambu/` or `stringtie2/` alike.
+
+  ```text
+  <DATA_ROOT>/
+  ├── pipeline_info/
+  │   ├── samplesheet.valid.csv            # the hub: one row per library
+  │   └── software_versions.yml
+  ├── multiqc/multiqc_data/
+  │   └── multiqc.parquet                  # written by the reprocess step
+  ├── fastqc/*.zip                         # raw MultiQC inputs
+  ├── nanoplot/fastq/<sample>/
+  │   └── *NanoStats.txt                   # length and quality summary
+  ├── minimap2/samtools_stats/
+  │   └── *.bam.{stats,flagstat,idxstats}
+  ├── bambu/
+  │   ├── counts_gene.txt                  # feature x sample matrices
+  │   ├── counts_transcript.txt
+  │   ├── extended_annotations.gtf         # optional: isoform lanes
+  │   ├── deseq2/deseq2.results.txt
+  │   └── dexseq/dexseq.results.txt
+  └── input/sample_metadata.tsv            # optional: METADATA_FILE, anywhere you like
+  ```
+validation: |
+  The template was validated against the AWS megatest of the 3.0.0 release,
+  `results-1e60482a2c4621234393a6eef8e9a104309c20ae`: the SG-NEx A549 and K562
+  cell lines, direct cDNA and cDNA libraries, three replicates each. That run
+  writes no pycoQC, fusion or variant-calling outputs, so the template reads none.
+  Its design table is vendored in the template as `input/sample_metadata.tsv`,
+  and the screenshots above come from that run:
+
+  ```bash
+  bash depictio/projects/nf-core/nanoseq/3.0.0/download_test_data.sh /tmp/nanoseq_test
+  python -m depictio.dev_scripts.multiqc_reprocess --src /tmp/nanoseq_test --dest /tmp/nanoseq_test
+  mkdir -p /tmp/nanoseq_test/input
+  cp depictio/projects/nf-core/nanoseq/3.0.0/input/sample_metadata.tsv /tmp/nanoseq_test/input/
+  depictio run --template nf-core/nanoseq/latest --data-root /tmp/nanoseq_test \
+    --var METADATA_FILE=/tmp/nanoseq_test/input/sample_metadata.tsv
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

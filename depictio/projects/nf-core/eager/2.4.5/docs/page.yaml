@@ -1,0 +1,212 @@
+# Docs page for nf-core/eager, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Ancient DNA
+status: draft
+card_blurb: 'Ancient DNA: read preprocessing, mapping, damage patterns and contamination estimates to judge authenticity per library and sample.'
+index_summary: Ancient DNA authentication and genotyping
+keywords: [eager, ancient, dna, adna, damage, deamination, mapdamage, damageprofiler, contamination, endogenous, authentication]
+logo_branch: dev
+subtitle: Ancient-DNA QC from trimming and collapsing to endogenous content, the deamination and fragment-length signals that authenticate a library, coverage and genotypes, next to the pipeline's MultiQC report.
+intro: |
+  The eager template follows an nf-core/eager run from raw lanes to genotypes, one
+  question per tab:
+intro_after: |
+  A `Run at a glance` strip, the `Sample scope` filters and the collapsed library
+  sheet are pinned to the top of every tab, and a collapsed `QC thresholds` group
+  with the BamQC reference table to the bottom, so a coverage, duplication or
+  endogenous-DNA floor narrows the library hub and, through it, every tab.
+callouts:
+- kind: warning
+  title: The MultiQC report must be regenerated
+  body: |
+    eager 2.4.5 ships MultiQC 1.13, which writes no parquet, and Depictio reads
+    only `multiqc.parquet` (MultiQC 1.31 and later). Re-run MultiQC over the
+    run's own tool outputs before ingesting, or the MultiQC tab stays empty:
+
+    ```bash
+    python -m depictio.dev_scripts.multiqc_reprocess --src <outdir> --dest <outdir>
+    ```
+  position: intro
+- kind: info
+  title: Copy the `--input` TSV under `input/`
+  body: |
+    eager 2.x does not publish the samplesheet it was launched with. The library
+    hub and the per-lane table read any `input/*.tsv` under the data root, so copy
+    the TSV there (several are concatenated, one per batch).
+  position: intro
+- kind: note
+  title: Optional branches appear when the run enabled them
+  body: |
+    Sex.DetERRmine, MTNucRatio, ANGSD nuclear contamination, MaltExtract and
+    Kraken are optional collections, each bound to one table. A run that did not
+    enable the branch ingests without it, and its section keeps only the short
+    note that explains what would be there.
+  position: intro
+quick_start: |
+  `--data-root` is the only thing you have to pass, once the `--input` TSV is
+  copied under `input/` and the MultiQC report regenerated. `SHORT_FRAGMENT_BP`
+  (default `70`) sets the short-fragment cut-off the Authentication tab counts:
+
+  ```bash
+  depictio run --template nf-core/eager/latest \
+    --data-root /path/to/eager_results \
+    --var SHORT_FRAGMENT_BP=50
+  ```
+trigger_note: |
+  The samplesheet copy and the MultiQC regeneration above still apply.
+reference: |
+  The template reads the run's `--input` TSV, the regenerated MultiQC report and the
+  tool tables behind it: AdapterRemoval, samtools flagstat, endorS.py, Picard
+  MarkDuplicates, preseq, DamageProfiler, Qualimap BamQC and bcftools stats. 59 of
+  its 84 tiles carry a `use:` catalog reference, so a tile says where its panel
+  comes from. Every file is matched on its name, never on the per-library directory
+  around it.
+tabs_intro: |
+  Six tabs, read as a funnel: is the report normal, how do the libraries compare,
+  where do the reads go, how much of each extract is the organism, is it ancient,
+  and what does the coverage support. Each tab below carries the **same icon and
+  colour the dashboard gives it**. A picked row or point becomes a filter that
+  follows the project links to the tiles it reaches.
+tabs:
+- title: MultiQC
+  summary: FastQC, AdapterRemoval and bcftools panels from the run's MultiQC report, with its general statistics
+  question: Read the report module by module.
+  description: |
+    The tab holds only the MultiQC panels no other tile redraws from a tool
+    table: the general statistics with endorS.py's endogenous DNA share, FastQC
+    on the raw lanes, the AdapterRemoval collapsed-read length, and the four
+    bcftools variant panels. Every panel with a tile twin elsewhere (flagstat,
+    Picard, preseq, DamageProfiler, Qualimap) was left to that tile.
+- title: Run and library hub
+  summary: every library, the lanes merged into it, and all of its QC numbers on one set of axes
+  question: Compare every library on every tool at once.
+  description: |
+    One row per library pools endorS.py, Picard, Qualimap and DamageProfiler, and
+    a parallel-coordinates panel draws each library as one line across those axes,
+    each rescaled to its own range. Below it the pooled table sits beside a linked
+    `Library record` card, which folds to a slim rail until a row is picked and
+    then opens that library field by field.
+- title: Reads and read fate
+  summary: where each sequenced read stops, from trimming and collapsing to deduplication
+  question: See where every read stops, from trimming to deduplication.
+  description: |
+    A Sankey chains AdapterRemoval, samtools flagstat and Picard into one flow
+    per library, five stages with the reads that fall out at each. The accounting
+    is exact: the reads AdapterRemoval retains over a library's lanes equal the
+    pre-filter flagstat total, so nothing is apportioned. `Lane yield` then shows
+    what each lane returned and how its collapse rate relates to retained length.
+  filters: |
+    **Filters** · `Trimming outcome` and `Final fate` on the read fate, plus
+    `Lane`, which narrows the per-lane tiles only.
+- title: Mapping, endogenous DNA and duplication
+  summary: how much of each extract is the target organism, and how much of it survives filtering
+  question: Measure the endogenous share, the duplication and the remaining complexity.
+  description: |
+    endorS.py gives the endogenous share before and after the mapping-quality
+    filter, and the scatter of one against the other puts the on-target signal
+    lost to filtering below the diagonal. `Duplication and complexity` reads
+    Picard next to the preseq extrapolation, with endogenous DNA against clonality
+    between them, to say whether more sequencing would still buy unique reads.
+    `Off-target screen` holds the MaltExtract and Kraken reports when a screen ran.
+- title: Authentication
+  summary: terminal deamination against fragment length, the signals that say whether the DNA is ancient
+  question: Establish whether the DNA is ancient, and how contaminated.
+  description: |
+    The authenticity plane puts terminal deamination against fragment length, one
+    point per library: short and damaged reads as ancient, long and undamaged as
+    modern contamination, short but undamaged as over-sheared modern DNA. The full
+    DamageProfiler misincorporation profile at both read ends and the fragment
+    length distribution follow. `Contamination` holds the ANGSD and MTNucRatio
+    estimates when the run computed them.
+- title: Coverage, sex and genotyping
+  summary: depth per contig, the depth distribution, a locus navigator and the variants called
+  question: Read depth per contig, the sex signal and the variants called.
+  description: |
+    Depth per contig is normalised by the library's own mean, the quantity a sex
+    call and an organelle ratio are made from, with the Sex.DetERRmine table when
+    it ran. `Depth along the reference` is a locus section: a navigator on
+    Qualimap's windows drives a mapping-quality track on the same axis, so a
+    brush or a typed locus moves both tracks and their cards. bcftools stats close
+    the tab.
+  filters: |
+    **Filters** · `Relative depth` and `Contig length` on the per-contig table,
+    `Window depth (X)` on the windows and a `Depth threshold` on the genome
+    fraction. There is no chromosome filter: the navigator owns the region.
+running: |
+  Depictio reads the **output** of nf-core/eager, it does not run the pipeline.
+  Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/eager -r 2.4.5 \
+    --input libraries.tsv \
+    --fasta reference.fa \
+    -profile docker --outdir results
+  ```
+
+  Then copy the TSV beside the results, regenerate the MultiQC report and point
+  Depictio at them:
+
+  ```bash
+  mkdir -p results/input && cp libraries.tsv results/input/
+  python -m depictio.dev_scripts.multiqc_reprocess --src results/ --dest results/
+  depictio run --template nf-core/eager/latest --data-root results/
+  ```
+
+  See [nf-co.re/eager/usage](https://nf-co.re/eager/2.4.5/docs/usage) for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory holding the pipeline output. Depictio scans
+  recursively and matches on file name, so a run with `--dedupper dedup` or a
+  different directory layout lands in the same collections.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/*.tsv                                # the run's --input TSV (required, copied by hand)
+  ├── pipeline_info/software_versions.csv
+  ├── multiqc/multiqc_data/multiqc.parquet       # written by multiqc_reprocess
+  ├── fastqc/{input_fastq,after_clipping}/zips/*_fastqc.zip
+  ├── adapterremoval/output/*.settings
+  ├── samtools/
+  │   ├── stats/*_flagstat.stats
+  │   └── filtered_stats/*_postfilterflagstat.stats
+  ├── endorspy/*_endogenous_dna_mqc.json
+  ├── deduplication/<library>/*_rmdup.metrics
+  ├── preseq/*.filtered.preseq
+  ├── damageprofiler/<library>_rmdup/
+  │   ├── *_freq_misincorporations.txt
+  │   └── *lgdistribution.txt
+  ├── qualimap/<library>_rmdup_stats/
+  │   ├── genome_results.txt
+  │   └── raw_data_qualimapReport/*.txt          # coverage and mapping quality across the reference
+  ├── bcftools/stats/*.vcf.stats
+  └── (optional branches, anywhere under the root)
+      ├── *SexDet*.tsv                           # Sex.DetERRmine
+      ├── *.mtnucratio                           # MTNucRatio
+      ├── nuclear_contamination.txt              # ANGSD
+      ├── heatmap_overview_Wevid.tsv             # MaltExtract (HOPS)
+      └── *kraken{_parsed,_merged_report}.{csv,tsv}  # Kraken
+  ```
+validation: |
+  The template was validated on the nf-core AWS megatest of the 2.4.5 release,
+  `s3://nf-core-awsmegatests/eager/results-42c9d5f8602e5e88fdcec28f194d2cd4cff61c75/`
+  (every 2.5.x prefix holds `pipeline_info/` only), and the screenshots above come
+  from that run. The megatest did not enable sex determination, contamination
+  estimation or a metagenomic screen, so those sections show their notes only. Its
+  samplesheet is not part of the results; the template ships a reconstructed one
+  under `input/`:
+
+  ```bash
+  DEST=/tmp/eager_test
+  bash depictio/projects/nf-core/eager/2.4.5/download_test_data.sh "$DEST"
+  mkdir -p "$DEST/input" && cp depictio/projects/nf-core/eager/2.4.5/input/*.tsv "$DEST/input/"
+  python -m depictio.dev_scripts.multiqc_reprocess --src "$DEST" --dest "$DEST"
+  depictio run --template nf-core/eager/latest --data-root "$DEST"
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

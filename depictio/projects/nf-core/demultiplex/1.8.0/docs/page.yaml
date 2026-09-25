@@ -1,0 +1,182 @@
+# Docs page for nf-core/demultiplex, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Demultiplexing QC
+status: draft
+card_blurb: 'Run demultiplexing: reads per lane and sample, index balance, undetermined barcodes and per-sample quality.'
+index_summary: Sequencing run demultiplexing
+keywords: [demultiplex, demultiplexing, bcl, bclconvert, bases2fastq, index, barcode, lane, undetermined]
+subtitle: 'Sequencing-facility run sign-off: CheckQC verdicts, run health per lane and read, demultiplexing balance, undetermined reads and index swaps, and per-library read QC, next to the pipeline''s own MultiQC report.'
+intro: |
+  The demultiplex template reads an nf-core/demultiplex run in the order a
+  sequencing facility signs a run off:
+intro_after: |
+  `Run at a glance` (libraries, total yield, lowest-lane Q30, highest-lane
+  Undetermined share) and the collapsed `Sample sheet` are pinned to the top of
+  every tab, the `Lane table` to the bottom, and the `Library filters` group
+  (library, design group, lane) applies everywhere.
+callouts:
+- kind: info
+  title: bcl2fastq by default, BCL Convert on request
+  body: |
+    The two demultiplexers write different reports: bcl2fastq a
+    `Stats/Stats.json`, BCL Convert `Reports/Demultiplex_Stats.csv`,
+    `Quality_Metrics.csv` and `Top_Unknown_Barcodes.csv`. The template reads
+    bcl2fastq by default; `--var IS_BCLCONVERT=true` repoints the same four
+    collections at BCL Convert recipes that write the same columns, so every tile
+    renders unchanged. BCL Convert reports no raw cluster count, so the
+    pass-filter rate stays empty on that route.
+  position: intro
+- kind: note
+  title: Lanes and reads are rows, design comes from a file
+  body: |
+    Every run-level collection is one row per lane (and per read), so a one-lane
+    benchtop run and a multi-lane production flowcell ingest through the same
+    template. Design factors are never parsed out of library names: they come
+    from an optional `METADATA_FILE`, and without it every library falls in a
+    single group and every tile still renders.
+  position: intro
+quick_start: |
+  `--data-root` is the only thing you have to pass. To group libraries by a
+  design factor, add a metadata TSV whose first column is the library name as
+  written in the sample sheet:
+
+  ```bash
+  depictio run --template nf-core/demultiplex/latest \
+    --data-root /path/to/demultiplex_results \
+    --var METADATA_FILE=/path/to/library_metadata.tsv \
+    --var GROUP_COL=organism
+  ```
+reference: |
+  The template reads the MultiQC report, the demultiplexer statistics of every
+  flowcell and lane, the CheckQC report, the fastp JSON of every library and,
+  when present, an Illumina InterOp summary table. A pipeline-local `libraries`
+  recipe joins them into one row per library, the hub of the library filters.
+  48 of its 79 components carry a `use:` catalog reference, so a tile says where
+  its panel comes from.
+tabs_intro: |
+  Five tabs, read as a funnel: what the checks flagged, whether the instrument
+  delivered, how the reads were shared, what went to Undetermined, and how each
+  library looks. Each tab below carries the **same icon and colour the dashboard
+  gives it**. The screenshots come from the run described under Validation runs
+  below.
+tabs:
+- title: MultiQC
+  summary: what CheckQC flagged, then the Falco and fastp read QC of the demultiplexed FASTQ files
+  question: What did CheckQC flag, and how do the demultiplexed FASTQ files look?
+  description: |
+    The tab opens on the CheckQC verdicts: libraries under the read threshold, the
+    Undetermined share against its limit, and the general statistics. Falco and
+    fastp follow with reads per FASTQ file, per-read quality, adapter content and
+    insert sizes. The remaining Falco and fastp panels are collapsed underneath.
+- title: Run health
+  summary: whether the instrument delivered, per lane, per read and per cycle
+  question: Did the instrument deliver, per lane, per read and per cycle?
+  description: |
+    Cards report clusters passing filter, the lowest lane's pass-filter rate and
+    mean quality, and the weakest read's Q30. A scatter places each lane by
+    Undetermined share and base quality, a profile draws base quality per cycle, and
+    a dot plot crosses lanes with reads. Selecting a lane on the lane table or the
+    scatter narrows the tiles linked to it.
+  after: |
+    !!! tip "The SAV section needs an InterOp summary table"
+        Error rate, phasing and cluster density live in the InterOp binaries,
+        which Depictio does not parse. Run `interop_summary --csv=1 <run folder>`
+        and drop the output anywhere under the run (any `.csv` whose name contains
+        `interop_summary`); without it the section is hidden.
+- title: Demultiplexing
+  summary: how evenly the reads of each lane were shared between the libraries
+  question: How evenly were the reads of each lane shared between the libraries?
+  description: |
+    An even pool gives even bars. The stacked composition shows what each lane was
+    made of, Undetermined included, and the sunburst nests run, lane and library.
+    The library balance section puts each library's share of the lane beside a
+    scatter of reads against index purity, where a library with many imperfect
+    index matches stands out; points and table rows select their library.
+- title: Undetermined and index swaps
+  summary: what no index matched, and whether it is a swap between indexes in use
+  question: Is the Undetermined share an index swap, a missing library or a wrong sample sheet?
+  description: |
+    Every unassigned index pair is split into its i7 and i5 and checked against the
+    libraries of the same lane. *Both indexes in use* is the index-hopping or swap
+    signature; *Only i7* or *Only i5 in use* often points to a mistyped index;
+    *Neither index in use* to a library missing from the sheet or a contamination;
+    *Poly-G or N index* to a failed index read. The bar chart ranks the top unknown
+    barcodes by share of the lane, coloured by that class.
+- title: Library QC
+  summary: how each library looks once demultiplexed, and whether the design groups differ
+  question: Which library looks different from its group once demultiplexed?
+  description: |
+    Cards summarise the fastp read QC of every library and lane. A scatter of
+    duplication against base quality sits beside a linked `Library card`, which
+    folds to a slim rail until a point is lassoed and then shows that library in
+    full. The group comparison sets the design groups against each other metric by
+    metric, which needs a `METADATA_FILE` to say anything.
+running: |
+  Depictio reads the **output** of nf-core/demultiplex, it does not run the
+  pipeline. Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/demultiplex -r 1.8.0 \
+    --input samplesheet.csv \
+    --demultiplexer bcl2fastq \
+    --outdir results -profile docker
+  ```
+
+  Then point Depictio at the results, adding `--var IS_BCLCONVERT=true` for a
+  `--demultiplexer bclconvert` run:
+
+  ```bash
+  depictio run --template nf-core/demultiplex/latest --data-root results/
+  ```
+
+  See [nf-co.re/demultiplex/usage](https://nf-co.re/demultiplex/1.8.0/docs/usage) for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the directory of one pipeline run. Depictio scans
+  recursively and matches on file name, so the flowcell and lane folder names can
+  differ from the tree below.
+
+  ```text
+  <DATA_ROOT>/
+  ├── <flowcell>/
+  │   ├── L<lane>/
+  │   │   ├── Stats/Stats.json                   # bcl2fastq statistics (default route)
+  │   │   ├── Reports/                           # or BCL Convert: Demultiplex_Stats.csv, Quality_Metrics.csv,
+  │   │   │                                      #   Top_Unknown_Barcodes.csv (IS_BCLCONVERT)
+  │   │   ├── checkqc_report.json                # CheckQC verdicts (optional)
+  │   │   └── *.fastp.json                       # fastp read QC, one per library (optional)
+  │   └── *interop_summary*.csv                  # optional, from interop_summary --csv=1
+  ├── multiqc/multiqc_data/
+  │   └── multiqc.parquet                        # bcl2fastq, CheckQC, fastp, Falco
+  └── pipeline_info/
+      ├── params_*.json
+      └── *software*versions*.yml
+  ```
+
+  `METADATA_FILE` is optional and can live anywhere: a TSV whose first column is
+  the library name, every other column a design factor. `GROUP_COL` picks the one
+  the tiles group by, the first annotation column otherwise.
+validation: |
+  The template was validated against the AWS megatest of the 1.8.0 release
+  (`results-daade37c4a75a4c1709ccf12434deb3424141319`, `test_full` profile: one
+  MiSeq flowcell, one lane, paired-end dual-index, demultiplexed with bcl2fastq),
+  and the screenshots above come from it, with the vendored
+  `input/library_metadata.tsv` grouping the libraries by organism. That run is a
+  useful stress case: several libraries got almost no reads and a large share of
+  the lane went to Undetermined, mostly swapped combinations of indexes in use.
+  The BCL Convert route and the SAV section were checked on MultiQC test-data
+  reports only. `megatest.yaml` lists the tables-only subset the template needs:
+
+  ```bash
+  bash depictio/projects/nf-core/demultiplex/1.8.0/download_test_data.sh /tmp/demultiplex_test
+  depictio run --template nf-core/demultiplex/latest --data-root /tmp/demultiplex_test \
+    --var METADATA_FILE=depictio/projects/nf-core/demultiplex/1.8.0/input/library_metadata.tsv
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+authorship:
+  developers: [weber8thomas]
+  reviewers: []
+  maintainers: [weber8thomas]

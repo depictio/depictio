@@ -1,0 +1,230 @@
+# Docs page for nf-core/ampliseq, rendered by depictio/dev_scripts/gen_template_pages.py
+# (schema: depictio/models/models/template_docs.py). Tab titles, icons, colours,
+# sections, filters and components come from dashboards/base.yaml.
+page_title: Amplicon Sequencing
+status: reviewed
+card_blurb: 16S · ITS · CO1 · 18S amplicon sequencing across Illumina, PacBio, and IonTorrent.
+index_summary: 16S / ITS / CO1 amplicon sequencing
+keywords: [16S, ITS, CO1, 18S, amplicon, metabarcoding, microbiome, dada2, qiime2, taxonomy, diversity, illumina, pacbio, iontorrent]
+subtitle: 'Amplicon sequencing analysis workflow using DADA2 and QIIME2: 16S, ITS, CO1, 18S and other amplicons across Illumina, PacBio, IonTorrent.'
+intro: |
+  The ampliseq template follows a standard nf-core/ampliseq run from reads to
+  differential taxa, one tab per step:
+intro_after: |
+  A seventh tab, **Reconstructed Community (SIDLE)**, only appears on multi-region
+  runs. `Sample filters`, `Run at a glance` and `Sample sheet` are pinned to the top
+  of every tab, so the sample and group picks and the four run-size cards follow
+  you from tab to tab.
+callouts:
+- kind: tip
+  title: Cross-selection
+  body: |
+    Every table selects rows, and a pick becomes a dashboard filter that narrows
+    the other tiles of the same collection and, through the project links, the
+    collections downstream of it: the pinned sample sheet, the alpha-diversity
+    table, both relative-abundance tables, the ANCOM-BC table, the tip taxonomy
+    table and both SIDLE tables. The bar and box figures do not select.
+  position: tabs
+- kind: tip
+  title: The reference dataset adds two more
+  body: |
+    The Ammer catchment reference dashboard, seeded with the bundled demo data,
+    carries two further tabs on top of these seven:
+    :material-map-marker-outline:{ .mc-blue } **Sampling Campaign** (where and when
+    the catchment was sampled) and :material-waves:{ .mc-cyan } **Environment (CTD)**
+    (sonde readings per sample, and the diversity they go with). Both are bound to
+    metadata columns that only that dataset ships.
+  position: tabs
+quick_start: |
+  `--data-root` is the only thing you have to pass. The samplesheet is picked up
+  from `input/`, and `pipeline_info/params.json` fills in the metadata file the
+  run was given (`--metadata`) and the route flags: multi-region, `--skip_qiime`,
+  `--skip_taxonomy`, `--skip_alpha_rarefaction`, `--skip_ancom`, and the depth of
+  the Phylum rank in the taxonomy database.
+quick_start_tabs:
+- label: Choose the grouping column
+  body: |
+    ```bash
+    depictio run \
+      --template nf-core/ampliseq/latest \
+      --data-root /path/to/ampliseq_results \
+      --var METADATA_FILE=/path/to/Metadata.tsv \
+      --var GROUP_COL=habitat
+    ```
+
+    `GROUP_COL` is the metadata column every grouped tile, the group filter and
+    the ANCOM-BC contrast read. It defaults to the first annotation column of the
+    metadata file, so pass it when the factor you care about is another one.
+    `METADATA_ID_COL` names the sample-ID column (the first column by default),
+    and `SAMPLESHEET_FILE` or `TREE_FILE` override the auto-detected samplesheet
+    and Newick tree.
+reference: |
+  Running without `METADATA_FILE` prunes the metadata-dependent collections
+  (see the *Conditional routes* table); the multi-region, `--skip_qiime`,
+  `--skip_taxonomy`, `--skip_alpha_rarefaction` and `--skip_ancom` routes are
+  auto-detected from the run's `params.json`.
+self_adapting_note: |
+  One template therefore covers 16S/ITS, single- vs. multi-region (SIDLE), and `skip_qiime` runs without edits.
+tabs_intro: |
+  Seven tabs, read as a funnel: are the reads good, how diverse is each sample,
+  what are the communities made of, how do the samples relate, which taxa differ
+  between groups, and where those taxa sit on the tree. Each tab below carries the
+  **same icon and colour the dashboard gives it**, so the page and the app read
+  alike. The persistent `Sample filters` (sample ID and your grouping column, both
+  on the metadata collection) reach every tab through the cross-DC links on the
+  metadata sample column, see [Cross-DC links](#cross-dc-links); the tabs carry no
+  sample or group filter of their own.
+
+  Where a tab names *your grouping column*, that is whichever metadata column the
+  run was resolved against; the dashboard substitutes its real name everywhere.
+tabs:
+- title: MultiQC
+  summary: FastQC read quality and Cutadapt primer trimming, straight from the report
+  question: Are the reads good, and did the primers come off?
+  description: |
+    Thirteen MultiQC panels: Cutadapt filtered reads, the FastQC sequence counts
+    and quality histograms up front, the other FastQC and Cutadapt panels in a
+    collapsed section. There is no per-sequence GC panel, because amplicon reads
+    sit in a narrow GC band and it reads as a flat line.
+  filters: |
+    **Filters** · `Sample ID` and your grouping column on `metadata`,
+    persistent and pinned to the top of every tab, plus a collapsed *MultiQC
+    report* section with a `Sample ID (MultiQC)` list read from the report
+    itself, which keeps the tab filterable on a run without `--metadata`.
+- title: Alpha Diversity
+  summary: rarefaction curves, then observed features, Faith PD, evenness and Shannon per group
+  question: Did sequencing reach saturation, and how rich is each sample?
+  description: |
+    The cards summarise observed features, Faith PD and evenness as a median
+    with their spread, next to the deepest rarefaction depth. The rarefaction
+    curves come next, with the metric switch in the tile header, then the same
+    indices compared between groups.
+  filters: |
+    **Filters** · a `Shannon index` range on `alpha_diversity_multi_canonical`,
+    which carries the surviving samples to the rarefaction curves.
+- title: Community & Diversity
+  summary: what the samples are made of, ranked, stacked per sample, as a sunburst hierarchy, and shared between groups
+  question: What are the samples made of, and which taxa do the groups share?
+  description: |
+    The 15 most abundant phyla by mean relative abundance per group open the tab,
+    followed by the stacked per-sample composition with a rank switch in the
+    header. The sunburst reads the same abundances as a hierarchy, and the UpSet
+    shows which taxa are shared between groups and which are exclusive. The
+    SINTAX tiles only fill on `--skip_qiime` runs.
+- title: Ordination & Clustering
+  summary: a PCoA on Bray-Curtis, the distance matrix behind it and a clustered phylum by sample heatmap
+  question: Do the samples cluster by group, and which phyla drive it?
+  description: |
+    The PCoA embeds each sample in two dimensions from Bray-Curtis distances, and
+    the distance matrix beside it shows the pairs it was computed from, where a
+    sample unlike every other shows up as a bright row. Below, the phylum by
+    sample heatmap clusters both axes. The PCoA takes a lasso, which keeps the
+    picked samples as a selection.
+- title: Differential Abundance
+  summary: ANCOM-BC volcano and ranked effects per contrast, with a record card for the taxon picked
+  question: Which taxa differ between groups, and by how much?
+  description: |
+    Pick a contrast first: every number on the tab is conditional on it. The cards
+    count the taxa tested, those significant at a 5% FDR and those enriched, above
+    the volcano and the ranked differential-abundance bars. `Taxon detail` holds
+    the full ANCOM-BC table with a linked record card beside it, which folds to a
+    slim rail until a row is picked and then opens on that taxon's test and
+    lineage.
+  after: |
+    !!! note "No MA plot"
+        `ancombc_results` carries no mean abundance, and the contrast filter does
+        not reach the MA collection, so an MA tile would ignore the contrast every
+        other number on the tab depends on.
+- title: Phylogeny
+  summary: the QIIME2 tree with each tip coloured by its taxonomy
+  question: Where do the taxa sit on the tree, and how confidently are they classified?
+  description: |
+    The cards count the ASVs, the share classified down to genus, the mean
+    classifier confidence and the unique genera. The tree follows, pruned to the
+    clade picked in the filters and coloured by any rank, with the full lineage of
+    each tip in a collapsed table.
+- title: Reconstructed Community (SIDLE)
+  question: What community did SIDLE rebuild across regions, and on how much evidence?
+  conditional: |
+    !!! info "Multi-region runs only"
+        This tab is bound to `sidle_reconstructed`, which a single-region run never
+        writes. On such a run the self-adapting layout drops the tab entirely.
+  description: |
+    Cards for the reconstructed features, samples, phyla and the mean number of
+    regions per feature, then the per-sample composition by phylum and by the most
+    abundant genera. The QC section plots how many regions and k-mers support each
+    feature: select points on the k-mer scatter to filter both tables below.
+running: |
+  Depictio reads the **output** of nf-core/ampliseq, it does not run the pipeline. Run the pipeline first:
+
+  ```bash
+  nextflow run nf-core/ampliseq -r 2.18.0 \
+    --input samplesheet.tsv \
+    --FW_primer GTGYCAGCMGCCGCGGTAA \
+    --RV_primer GGACTACNVGGGTWTCTAAT \
+    --metadata Metadata.tsv \
+    -profile docker --outdir results
+  ```
+
+  Then point Depictio at the results:
+
+  ```bash
+  depictio run --template nf-core/ampliseq/latest \
+    --data-root results/ \
+    --var GROUP_COL=habitat
+  ```
+
+  See [nf-co.re/ampliseq/usage](https://nf-co.re/ampliseq/2.18.0/docs/usage) for full pipeline documentation.
+data_structure: |
+  Point `--data-root` at the output directory of one run. Not every file is
+  required: the template adapts to what is present and to the route flags read
+  from `params.json`.
+
+  ```text
+  <DATA_ROOT>/
+  ├── input/
+  │   ├── Samplesheet.tsv                            # auto-detected (or --var SAMPLESHEET_FILE)
+  │   └── Metadata.tsv                               # read from params.json (or --var METADATA_FILE)
+  ├── pipeline_info/
+  │   ├── params_<timestamp>.json                    # route flags and the metadata path
+  │   └── software_versions.yml
+  ├── multiqc/multiqc_data/
+  │   └── multiqc.parquet
+  ├── qiime2/
+  │   ├── alpha-rarefaction/*.csv                    # requires --metadata
+  │   ├── diversity/alpha_diversity/
+  │   │   └── <metric>_vector/metadata.tsv           # shannon, observed_features, faith_pd, evenness
+  │   ├── barplot/level-<N>.csv                      # N = Phylum depth of the database
+  │   ├── rel_abundance_tables/rel-table-<N>.tsv     # Phylum down to Genus
+  │   ├── ancombc/differentials/                     # requires --metadata, skipped by --skip_ancom
+  │   │   └── Category-<GROUP_COL>-level-<N>/
+  │   │       └── {lfc,p_val,q_val,se,w}_slice.csv
+  │   └── phylogenetic_tree/tree.nwk                 # or --var TREE_FILE
+  ├── dada2/ASV_table.tsv                            # --skip_qiime route only
+  ├── sintax/ASV_tax_sintax.*.tsv                    # --skip_qiime route only
+  └── sidle/                                         # multi-region route only
+      ├── reconstructed/reconstructed_merged.tsv
+      └── DB/3_reconstructed/reconstruction_summary/metadata.tsv
+  ```
+validation: |
+  The template is validated against the nf-core AWS megatest of the 2.18.0
+  release, a 16S run with sample metadata, and the screenshots above come from
+  the bundled Ammer catchment reference project resolved with
+  `GROUP_COL=habitat`. `megatest.yaml` lists the tables-only subset of that run
+  the template needs:
+
+  ```bash
+  python scripts/nfcore_megatest.py fetch --pipeline ampliseq --version 2.18.0 --dest /tmp/ampliseq_test
+  depictio run --template nf-core/ampliseq/2.18.0 --data-root /tmp/ampliseq_test --var GROUP_COL=habitat
+  ```
+
+  Do not pass `--project-name` when ingesting: the dashboard is attached to the
+  project by name, so renaming it breaks a later `depictio dashboard import`.
+  Re-ingesting accumulates dashboards, so delete the project before repeating a run.
+authorship:
+  developers: [weber8thomas]
+  reviewers:
+  - github: depictio
+    name: Depictio team
+  maintainers: [weber8thomas]
+  reviewer_note: Ran it on real data and signed off on the status above.
