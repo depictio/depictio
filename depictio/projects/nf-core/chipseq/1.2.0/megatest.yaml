@@ -88,7 +88,19 @@ prefix_keys: []
 # template.yaml reference.vars).
 # Megatest-specific names the dashboard texts must never carry (lint:
 # depictio/tests/models/test_template_conventions.py, rule e).
-forbidden_terms: [EZH2, FOXA1, NTKO, TKO, E2, VEH, TFF1, hg19, EZH2_IP, FOXA1_IP, EZH2_INPUT, FOXA1_INPUT]
+forbidden_terms:
+  - EZH2
+  - FOXA1
+  - NTKO
+  - TKO
+  - E2
+  - VEH
+  - TFF1
+  - hg19
+  - EZH2_IP
+  - FOXA1_IP
+  - EZH2_INPUT
+  - FOXA1_INPUT
 renames: {}
 post_fetch_help: |
   === Design table ===

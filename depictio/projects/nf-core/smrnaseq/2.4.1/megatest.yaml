@@ -42,9 +42,47 @@ keys:
 # depictio/tests/models/test_template_conventions.py): the test samples, the
 # test organism and assembly, the design levels of this run, and the miRNAs
 # that dominate it.
-forbidden_terms: [c1, c2, c3, c4, c5, c6, c7, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cpc1, cpc2, cpc3, cpc4, cpc5, cpc6, cpc7, pc1, pc2, pc3, pc4, pc5, pc6, pc7,
-  GRCh37, hg19, Homo sapiens, human, hsa, Primates, clinic, preclinic,
-  let-7a, miR-21, miR-181a, miR-26a]
+forbidden_terms:
+  - c1
+  - c2
+  - c3
+  - c4
+  - c5
+  - c6
+  - c7
+  - cc1
+  - cc2
+  - cc3
+  - cc4
+  - cc5
+  - cc6
+  - cc7
+  - cpc1
+  - cpc2
+  - cpc3
+  - cpc4
+  - cpc5
+  - cpc6
+  - cpc7
+  - pc1
+  - pc2
+  - pc3
+  - pc4
+  - pc5
+  - pc6
+  - pc7
+  - GRCh37
+  - hg19
+  - Homo sapiens
+  - human
+  - hsa
+  - Primates
+  - clinic
+  - preclinic
+  - let-7a
+  - miR-21
+  - miR-181a
+  - miR-26a
 prefix_keys: []
 renames: {}
 post_fetch_help: |
