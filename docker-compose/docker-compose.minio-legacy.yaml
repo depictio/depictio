@@ -1,6 +1,6 @@
 # Depictio — legacy MinIO side-car for one-off data migration.
 #
-# Depictio's bundled object store is now SeaweedFS (compose service `minio`,
+# Depictio's bundled object store is now SeaweedFS (compose service `s3`,
 # volume `seaweedfs_data`). A pre-existing MinIO volume (`minio_data`) uses
 # MinIO's own on-disk layout and cannot be read by SeaweedFS, so the old server
 # is started *next to* the new one, on its untouched data, and the bucket is
@@ -24,9 +24,10 @@ services:
     volumes:
       - ${MINIO_LEGACY_DATA:-minio_data}:/data
     environment:
-      # Same credentials the old `minio` service used.
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
+      # Same credentials the old `minio` service used (DEPICTIO_S3_ROOT_*, or
+      # the legacy DEPICTIO_MINIO_ROOT_* names when those are unset).
+      MINIO_ROOT_USER: ${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}
+      MINIO_ROOT_PASSWORD: ${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}
     command: server /data
     ports:
       # Loopback only: the migration script talks to it from the host.

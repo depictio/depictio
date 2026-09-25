@@ -49,7 +49,7 @@ src = yaml.safe_load(pathlib.Path("depictio/.depictio/admin_config.yaml").read_t
 # whichever worktree last wrote it — every service lives at its docker DNS
 # hostname when the CLI runs via `docker compose exec`.
 src["api_base_url"] = "http://depictio-backend:8058"
-src["s3_storage"]["external_host"] = "minio"
+src["s3_storage"]["external_host"] = "s3"
 src["s3_storage"]["external_port"] = 9000
 src["user"]["token"]["access_token"] = "$TOKEN"
 src["user"]["token"]["logged_in"] = True

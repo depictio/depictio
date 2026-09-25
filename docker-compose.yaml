@@ -38,24 +38,28 @@ services:
       retries: 5
     restart: unless-stopped
 
-  minio:
+  s3:
     # Bundled local object storage = SeaweedFS (`weed mini`), S3 API on :9000.
-    # The service is still named `minio` so the DEPICTIO_MINIO_* config contract,
-    # `http://minio:9000` and generated CLI configs keep working unchanged.
-    # Internal-only, no host port. For external S3, point DEPICTIO_MINIO_* at
-    # your endpoint and `docker compose up -d --scale minio=0`.
+    # The `minio` network alias keeps `http://minio:9000` in existing CLI
+    # configs resolving. Legacy DEPICTIO_MINIO_* variables are still read as a
+    # fallback for DEPICTIO_S3_*. Internal-only, no host port. For external S3,
+    # point DEPICTIO_S3_* at your endpoint and `docker compose up -d --scale s3=0`.
     image: chrislusf/seaweedfs:4.46
-    container_name: minio
+    container_name: s3
+    networks:
+      default:
+        aliases:
+          - minio
     volumes:
       # New volume name: a pre-existing `minio_data` volume holds MinIO's own
       # on-disk layout and cannot be reused — see docs/migrate-minio-to-seaweedfs.md.
       - seaweedfs_data:/data
     environment:
       # Static admin identity re-applied on every start (rotate via .env + restart).
-      AWS_ACCESS_KEY_ID: ${DEPICTIO_MINIO_ROOT_USER:-minio}
-      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
+      AWS_ACCESS_KEY_ID: ${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}
+      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}
       # Bucket is created at boot (idempotent) so the API's create_bucket() is a no-op.
-      S3_BUCKET: ${DEPICTIO_MINIO_BUCKET:-depictio-bucket}
+      S3_BUCKET: ${DEPICTIO_S3_BUCKET:-${DEPICTIO_MINIO_BUCKET:-depictio-bucket}}
     # Admin UI (unauthenticated upstream by default) and WebDAV are switched off.
     command: ["mini", "-dir=/data", "-s3.port=9000", "-admin.ui=false", "-webdav=false"]
     healthcheck:
@@ -81,8 +85,8 @@ services:
         required: false
     environment:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
       DEPICTIO_BOOTSTRAP_ADMIN_EMAIL: "${DEPICTIO_BOOTSTRAP_ADMIN_EMAIL:-}"
       DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD: "${DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD:-}"
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
@@ -129,8 +133,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        # required:false so external-S3 mode (minio scaled to 0) still boots.
+      s3:
+        # required:false so external-S3 mode (s3 scaled to 0) still boots.
         condition: service_healthy
         required: false
 
@@ -164,8 +168,8 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
     command: ["/app/run_celery_worker.sh"]
     healthcheck:
       test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]

@@ -1121,13 +1121,13 @@ async def delete_deltatable(
 
     data_collection_oid = ObjectId(deltatable["data_collection_id"])
     deltatable_location = deltatable["delta_table_location"].lstrip("/")
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
 
     s3_client = boto3.client(
         "s3",
-        endpoint_url=settings.minio.endpoint,  # type: ignore[possibly-unbound-attribute]
-        aws_access_key_id=settings.minio.access_key,  # type: ignore[possibly-unbound-attribute]
-        aws_secret_access_key=settings.minio.secret_key,  # type: ignore[possibly-unbound-attribute]
+        endpoint_url=settings.s3.endpoint,  # type: ignore[possibly-unbound-attribute]
+        aws_access_key_id=settings.s3.access_key,  # type: ignore[possibly-unbound-attribute]
+        aws_secret_access_key=settings.s3.secret_key,  # type: ignore[possibly-unbound-attribute]
         region_name="us-east-1",
     )
 

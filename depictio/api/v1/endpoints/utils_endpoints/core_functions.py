@@ -105,7 +105,7 @@ def create_bucket(current_user: UserBeanie) -> BucketResponse:
         logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.email}")
         raise HTTPException(status_code=403, detail="User is not an admin")
 
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
 
     if check_bucket_exists(s3_client, bucket_name):
         return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
@@ -137,7 +137,7 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         - dry_run: Whether this was a dry run
     """
 
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
     deleted_count = 0
     total_size_bytes = 0
     orphaned_prefixes = []

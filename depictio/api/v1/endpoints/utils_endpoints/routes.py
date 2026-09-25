@@ -59,7 +59,7 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
         )
         raise HTTPException(status_code=403, detail="User is not an admin.")
 
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
 
     # List and delete all objects in the bucket
     objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
@@ -73,7 +73,7 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
 
     # FIXME: remove this - only for testing purposes
     # Delete directory content directly from the file system
-    # shutil.rmtree(settings.minio.data_dir)
+    # shutil.rmtree(settings.s3.data_dir)
 
     return {"message": "S3 bucket content dropped"}
 

@@ -129,25 +129,45 @@ data:
   DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE | default "false" | quote }}
-  # MinIO/S3 configuration.
-  # NOTE: DEPICTIO_MINIO_ROOT_USER and DEPICTIO_MINIO_ROOT_PASSWORD are
+  # S3 storage configuration.
+  # NOTE: DEPICTIO_S3_ROOT_USER and DEPICTIO_S3_ROOT_PASSWORD (and their
+  # legacy DEPICTIO_MINIO_* names) are
   # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
   # anything in-cluster (incl. exec/describe) and ship in etcd unencrypted
   # by default. Both values are injected from the
   # ``{{ printf "%s-depictio-secrets" .Release.Name }}`` Secret via the
-  # backend / celery / minio Deployment ``env`` blocks. Adding them here
+  # backend / celery / S3 store Deployment ``env`` blocks. Adding them here
   # would silently re-introduce the leak.
-  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
-  {{- if not .Values.minio.enabled }}
-  # External MinIO/S3 configuration (when built-in MinIO is disabled)
-  DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}
+  {{- $s3 := include "depictio.s3" . | fromYaml }}
+  {{- $s3Env := $s3.env | default dict }}
+  {{- $s3Bucket := index $s3Env "DEPICTIO_S3_BUCKET" | default "depictio-bucket" }}
+  {{- $s3PublicUrl := index $s3Env "DEPICTIO_S3_PUBLIC_URL" }}
+  {{- $s3ServicePort := index $s3Env "DEPICTIO_S3_SERVICE_PORT" | default "9000" }}
+  DEPICTIO_S3_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  # External S3 configuration (when the bundled store is disabled)
+  DEPICTIO_S3_PUBLIC_URL: {{ $s3PublicUrl | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  # Bundled S3 store (SeaweedFS) service configuration
+  DEPICTIO_S3_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "false"
+  {{- /* Service name keeps the legacy "-minio" suffix (see services.yaml). */}}
+  DEPICTIO_S3_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_S3_SERVICE_PORT: {{ $s3ServicePort | quote }}
+  {{- end }}
+  {{- /* Legacy DEPICTIO_MINIO_* names, same values: keeps an older image
+         pinned via backend/celery image tags working. Remove in a later
+         release once all supported images read DEPICTIO_S3_*. */}}
+  DEPICTIO_MINIO_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ $s3PublicUrl | quote }}
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
   {{- else }}
-  # Built-in MinIO service configuration
-  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.minioUrlWithProtocol" . | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
-  DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ $s3ServicePort | quote }}
   {{- end }}
 
 ---
@@ -219,22 +239,42 @@ data:
   # Viewer Service exposes nginx on port 80.
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.viewer.service.httpPort | quote }}
 
-  # MinIO/S3 configuration.
-  # NOTE: DEPICTIO_MINIO_ROOT_USER and DEPICTIO_MINIO_ROOT_PASSWORD are
+  # S3 storage configuration.
+  # NOTE: DEPICTIO_S3_ROOT_USER and DEPICTIO_S3_ROOT_PASSWORD (and their
+  # legacy DEPICTIO_MINIO_* names) are
   # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
   # anything in-cluster (incl. exec/describe) and ship in etcd unencrypted
   # by default. Both values are injected from the
   # ``{{ printf "%s-depictio-secrets" .Release.Name }}`` Secret via the
-  # backend / celery / minio Deployment ``env`` blocks. Adding them here
+  # backend / celery / S3 store Deployment ``env`` blocks. Adding them here
   # would silently re-introduce the leak.
-  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
-  {{- if not .Values.minio.enabled }}
-  DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}
+  {{- $s3 := include "depictio.s3" . | fromYaml }}
+  {{- $s3Env := $s3.env | default dict }}
+  {{- $s3Bucket := index $s3Env "DEPICTIO_S3_BUCKET" | default "depictio-bucket" }}
+  {{- $s3PublicUrl := index $s3Env "DEPICTIO_S3_PUBLIC_URL" }}
+  {{- $s3ServicePort := index $s3Env "DEPICTIO_S3_SERVICE_PORT" | default "9000" }}
+  DEPICTIO_S3_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  DEPICTIO_S3_PUBLIC_URL: {{ $s3PublicUrl | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  DEPICTIO_S3_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "false"
+  {{- /* Service name keeps the legacy "-minio" suffix (see services.yaml). */}}
+  DEPICTIO_S3_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_S3_SERVICE_PORT: {{ $s3ServicePort | quote }}
+  {{- end }}
+  {{- /* Legacy DEPICTIO_MINIO_* names, same values: keeps an older image
+         pinned via backend/celery image tags working. Remove in a later
+         release once all supported images read DEPICTIO_S3_*. */}}
+  DEPICTIO_MINIO_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ $s3PublicUrl | quote }}
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
   {{- else }}
-  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.minioUrlWithProtocol" . | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
-  DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ $s3ServicePort | quote }}
   {{- end }}
 {{- end }}

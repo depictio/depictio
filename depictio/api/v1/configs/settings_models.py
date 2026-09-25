@@ -5,7 +5,12 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # Import kept to the dependency-free constants module on purpose — this file is
 # the earliest import in every context and must not pull in httpx.
@@ -32,7 +37,7 @@ _WEAK_PASSWORDS: frozenset[str] = frozenset(
 )
 # "changeme" / "change_me" are intentionally NOT in _WEAK_PASSWORDS so they
 # remain usable as a dev/default admin password for quick local starts.
-_WEAK_PASSWORDS_MINIO: frozenset[str] = _WEAK_PASSWORDS | frozenset(
+_WEAK_PASSWORDS_S3: frozenset[str] = _WEAK_PASSWORDS | frozenset(
     {"changeme", "change_me", "seaweedfs", "seaweed", "secret"}
 )
 _MIN_SECRET_LEN = 8
@@ -52,6 +57,31 @@ def _warn(message: str) -> None:
         import warnings
 
         warnings.warn(message, stacklevel=2)
+
+
+# Storage settings were read from ``DEPICTIO_MINIO_*`` before the bundled store
+# moved to SeaweedFS. Those names are still honoured as a fallback so existing
+# ``.env`` files and Helm values keep working; ``DEPICTIO_S3_*`` wins when both
+# are set.
+S3_ENV_PREFIX = "DEPICTIO_S3_"
+LEGACY_S3_ENV_PREFIX = "DEPICTIO_MINIO_"
+_legacy_s3_env_warned = False
+
+
+def _warn_legacy_s3_env() -> None:
+    """Log one deprecation warning per process when legacy S3 env vars are set."""
+    global _legacy_s3_env_warned
+    if _legacy_s3_env_warned:
+        return
+    legacy = sorted(k for k in os.environ if k.upper().startswith(LEGACY_S3_ENV_PREFIX))
+    if not legacy:
+        return
+    _legacy_s3_env_warned = True
+    _warn(
+        f"Deprecated {LEGACY_S3_ENV_PREFIX}* environment variables found: {', '.join(legacy)}. "
+        f"Rename them to {S3_ENV_PREFIX}* (for example {S3_ENV_PREFIX}ROOT_PASSWORD); "
+        f"the {S3_ENV_PREFIX}* value wins when both are set."
+    )
 
 
 # ── Core Services ─────────────────────────────────────────────────────────────
@@ -238,13 +268,13 @@ class MongoDBConfig(ServiceConfig):
 class S3DepictioCLIConfig(ServiceConfig):
     """S3-compatible object storage configuration.
 
-    The bundled store is SeaweedFS (``weed mini``, compose service ``minio``);
-    any S3 endpoint (AWS, NetApp, MinIO, …) works via ``DEPICTIO_MINIO_PUBLIC_URL``
-    + ``DEPICTIO_MINIO_EXTERNAL_SERVICE``. The ``minio`` attribute name and the
-    ``DEPICTIO_MINIO_`` env prefix are kept for configuration compatibility.
+    The bundled store is SeaweedFS (``weed mini``, compose service ``s3``);
+    any S3 endpoint (AWS, NetApp, MinIO, …) works via ``DEPICTIO_S3_PUBLIC_URL``
+    + ``DEPICTIO_S3_EXTERNAL_SERVICE``. Every field also accepts the legacy
+    ``DEPICTIO_MINIO_<FIELD>`` name as a fallback (see ``settings_customise_sources``).
     """
 
-    service_name: str = Field(default="minio")
+    service_name: str = Field(default="s3")
     service_port: int = Field(default=9000)
     external_port: int = Field(default=9000)
     root_user: str = Field(
@@ -255,7 +285,8 @@ class S3DepictioCLIConfig(ServiceConfig):
         default=SecretStr(""),
         description=(
             "S3 secret key. REQUIRED in server context — set via "
-            "DEPICTIO_MINIO_ROOT_PASSWORD. The server refuses to start when this is unset, "
+            "DEPICTIO_S3_ROOT_PASSWORD (legacy DEPICTIO_MINIO_ROOT_PASSWORD is still "
+            "accepted). The server refuses to start when this is unset, "
             "shorter than 8 characters, or matches a well-known default."
         ),
     )
@@ -270,7 +301,23 @@ class S3DepictioCLIConfig(ServiceConfig):
         ),
     )
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
+    model_config = SettingsConfigDict(env_prefix=S3_ENV_PREFIX)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # A second env source on the legacy prefix, ranked just below the
+        # primary one: DEPICTIO_S3_* wins, DEPICTIO_MINIO_* fills the gaps.
+        # Field names are unchanged, so kwargs and YAML dicts keep working.
+        _warn_legacy_s3_env()
+        legacy_env = EnvSettingsSource(settings_cls, env_prefix=LEGACY_S3_ENV_PREFIX)
+        return init_settings, env_settings, legacy_env, dotenv_settings, file_secret_settings
 
     @property
     def endpoint_url(self) -> str:
@@ -860,12 +907,12 @@ class BackupConfig(BaseSettings):
     migration_allowed_s3_endpoints: list[str] | str = Field(
         default_factory=list,
         description=(
-            "Opt-in allowlist of external S3/MinIO endpoint URLs that project migration "
+            "Opt-in allowlist of external S3 endpoint URLs that project migration "
             "(/export-project) is permitted to push data to. Set via "
             "DEPICTIO_BACKUP_MIGRATION_ALLOWED_S3_ENDPOINTS as a comma-separated list "
             "(e.g. 'https://s3.partner.example.com,https://minio.other.example.com:9000'). "
             "Empty by default — when empty, ALL caller-supplied external endpoints are "
-            "rejected and only the deployment's own configured MinIO endpoint is allowed "
+            "rejected and only the deployment's own configured S3 endpoint is allowed "
             "(self-migration). Each entry is matched exactly on normalized scheme+host+port. "
             "This is a server-side SSRF / data-exfiltration guard: only add operator-vetted "
             "endpoints you trust the server to connect to."
@@ -1704,7 +1751,7 @@ class Settings(BaseSettings):
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
-    minio: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
+    s3: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     bootstrap: AuthBootstrapConfig = Field(default_factory=AuthBootstrapConfig)
 
@@ -1802,12 +1849,17 @@ class Settings(BaseSettings):
         """
         return {name.strip() for name in self.seed_extra_projects.split(",") if name.strip()}
 
+    @property
+    def minio(self) -> S3DepictioCLIConfig:
+        """Read-only alias of ``s3``, kept for scripts that still read ``settings.minio``."""
+        return self.s3
+
     @model_validator(mode="after")
     def _enforce_server_secrets(self) -> "Settings":
         """Fail fast at startup if server-context secrets are missing or weak.
 
         Skipped in client (CLI) context — the CLI talks to a remote API and
-        doesn't hold the MinIO root password or seed admins itself.
+        doesn't hold the S3 secret key or seed admins itself.
         """
         if self.context != "server":
             return self
@@ -1818,17 +1870,19 @@ class Settings(BaseSettings):
 
         errors: list[str] = []
 
-        # MinIO root password is consumed by API + worker, so it must always
+        # The S3 secret key is consumed by API + worker, so it must always
         # be set on a server boot regardless of single-user / public mode.
-        minio_pw = self.minio.root_password.get_secret_value()
-        if minio_pw.lower() in _WEAK_PASSWORDS_MINIO:
+        s3_pw = self.s3.root_password.get_secret_value()
+        if s3_pw.lower() in _WEAK_PASSWORDS_S3:
             errors.append(
-                "DEPICTIO_MINIO_ROOT_PASSWORD is unset or matches a known-default value. "
+                "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) is unset "
+                "or matches a known-default value. "
                 "Set it to a strong secret before starting the server."
             )
-        elif len(minio_pw) < _MIN_SECRET_LEN:
+        elif len(s3_pw) < _MIN_SECRET_LEN:
             errors.append(
-                f"DEPICTIO_MINIO_ROOT_PASSWORD must be at least {_MIN_SECRET_LEN} characters."
+                "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) must be "
+                f"at least {_MIN_SECRET_LEN} characters."
             )
 
         # Bootstrap admin credentials. Empty values are allowed at validator

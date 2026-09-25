@@ -235,10 +235,10 @@ async def serve_image(
     ),
 ):
     """
-    Serve images from S3/MinIO via streaming.
+    Serve images from S3 via streaming.
 
     NOTE: Currently PUBLIC to allow HTML <img> tags to load images. Access is
-    bucket-locked to the configured MinIO/S3 bucket and the key is
+    bucket-locked to the configured S3 bucket and the key is
     traversal-hardened, so this endpoint can only stream objects from
     Depictio's own bucket.
     TODO: Presigned, time-limited URLs remain future work for per-object
@@ -254,7 +254,7 @@ async def serve_image(
 
     # SECURITY: lock serving to Depictio's configured bucket. Without this an
     # attacker could point s3_path at any bucket the S3 credentials can read.
-    if bucket != settings.minio.bucket:
+    if bucket != settings.s3.bucket:
         logger.warning(f"Image request for disallowed bucket rejected: {bucket}")
         raise HTTPException(status_code=403, detail="Access to the requested bucket is forbidden")
 

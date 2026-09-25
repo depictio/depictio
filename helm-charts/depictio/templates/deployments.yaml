@@ -1,4 +1,6 @@
 # MongoDB StatefulSet (self-managed, used when mongo.useOperator is false)
+{{- /* Effective S3 store values (new `s3` key, legacy `minio` key merged on top). */}}
+{{- $s3 := include "depictio.s3" . | fromYaml }}
 {{- if not (.Values.mongo.useOperator | default false) }}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -182,7 +184,11 @@ spec:
 ---
 # Bundled S3 object store Deployment: SeaweedFS `weed mini`.
 # Resource names keep the historical `minio` label for compatibility.
-{{- if .Values.minio.enabled }}
+{{- /* The Deployment name, the container name, the volume name and the
+       `app: minio` selector label stay as-is: a Deployment selector is
+       immutable, so renaming them would make `helm upgrade` fail on live
+       releases (and the Service below selects on the same label). */}}
+{{- if $s3.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -211,10 +217,10 @@ spec:
       enableServiceLinks: {{ .Values.enableServiceLinks | default false }}
       containers:
         - name: minio
-          image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
-          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+          image: "{{ $s3.image.repository }}:{{ $s3.image.tag }}"
+          imagePullPolicy: {{ $s3.image.pullPolicy }}
           securityContext:
-            {{- toYaml .Values.minio.securityContext | nindent 12 }}
+            {{- toYaml $s3.securityContext | nindent 12 }}
           env:
             # Static admin S3 identity, re-applied on every start.
             - name: AWS_ACCESS_KEY_ID
@@ -229,47 +235,47 @@ spec:
                   key: MINIO_ROOT_PASSWORD
             # Bucket pre-created at boot (idempotent).
             - name: S3_BUCKET
-              value: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
+              value: {{ index ($s3.env | default dict) "DEPICTIO_S3_BUCKET" | default "depictio-bucket" | quote }}
           args:
             - "mini"
             - "-dir=/data"
-            - "-s3.port={{ .Values.minio.service.httpPort }}"
+            - "-s3.port={{ $s3.service.httpPort }}"
             - "-webdav=false"
-            {{- if .Values.minio.adminUI.enabled }}
-            - "-admin.port={{ .Values.minio.service.adminPort }}"
+            {{- if $s3.adminUI.enabled }}
+            - "-admin.port={{ $s3.service.adminPort }}"
             - "-admin.user=$(AWS_ACCESS_KEY_ID)"
             - "-admin.password=$(AWS_SECRET_ACCESS_KEY)"
             {{- else }}
             - "-admin.ui=false"
             {{- end }}
-            {{- if .Values.minio.s3ExternalUrl }}
-            - "-s3.externalUrl={{ .Values.minio.s3ExternalUrl }}"
+            {{- if $s3.s3ExternalUrl }}
+            - "-s3.externalUrl={{ $s3.s3ExternalUrl }}"
             {{- end }}
-            {{- range .Values.minio.extraArgs }}
+            {{- range $s3.extraArgs }}
             - {{ . | quote }}
             {{- end }}
           ports:
-            - containerPort: {{ .Values.minio.service.httpPort }}
+            - containerPort: {{ $s3.service.httpPort }}
               name: http
-            {{- if .Values.minio.adminUI.enabled }}
-            - containerPort: {{ .Values.minio.service.adminPort }}
+            {{- if $s3.adminUI.enabled }}
+            - containerPort: {{ $s3.service.adminPort }}
               name: admin
             {{- end }}
           readinessProbe:
             httpGet:
               path: /healthz
-              port: {{ .Values.minio.service.httpPort }}
+              port: {{ $s3.service.httpPort }}
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /healthz
-              port: {{ .Values.minio.service.httpPort }}
+              port: {{ $s3.service.httpPort }}
             initialDelaySeconds: 30
             periodSeconds: 30
           resources:
-            {{- toYaml .Values.minio.resources | nindent 12 }}
+            {{- toYaml $s3.resources | nindent 12 }}
           volumeMounts:
             - name: minio-storage
               mountPath: /data
@@ -461,11 +467,11 @@ spec:
           resources:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- end }}
-        {{- if .Values.minio.enabled }}
+        {{- if $s3.enabled }}
         - name: wait-for-minio
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
           imagePullPolicy: {{ .Values.initContainerImage.pullPolicy }}
-          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio {{ .Values.minio.service.httpPort }}; do echo "Waiting for minio..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio {{ $s3.service.httpPort }}; do echo "Waiting for minio..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
           resources:
@@ -517,10 +523,21 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-backend-config
           env:
-            # Always injected (no minio.enabled guard): with the bundled MinIO
+            # Always injected (no s3.enabled guard): with the bundled store
             # the Secret carries the generated creds; with an external S3
-            # (minio.enabled=false, e.g. EMBL) the Secret carries the
-            # operator-supplied minio.env.DEPICTIO_MINIO_ROOT_* values.
+            # (s3.enabled=false, e.g. EMBL) the Secret carries the
+            # operator-supplied s3.env.DEPICTIO_S3_ROOT_* values.
+            - name: DEPICTIO_S3_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_S3_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
+            {{- /* Legacy names for older images; remove in a later release. */}}
             - name: DEPICTIO_MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
@@ -905,6 +922,17 @@ spec:
           env:
             # Always injected — see the backend env block for the rationale
             # (external-S3 deployments need these too).
+            - name: DEPICTIO_S3_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_S3_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
+            {{- /* Legacy names for older images; remove in a later release. */}}
             - name: DEPICTIO_MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:

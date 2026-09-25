@@ -429,7 +429,7 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
                 # Parse S3 location to get bucket and key
                 # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
                 s3_path = report.s3_location.replace("s3://", "")
-                bucket_name = settings.minio.bucket
+                bucket_name = settings.s3.bucket
 
                 # Extract the prefix (everything after bucket name)
                 if "/" in s3_path:
@@ -499,7 +499,7 @@ async def delete_all_multiqc_reports_for_dc(
     deleted_s3_count = 0
 
     if delete_s3_files:
-        bucket_name = settings.minio.bucket
+        bucket_name = settings.s3.bucket
         # Project to s3_location only — report docs carry full plots/sample
         # mappings payloads which can be large; we just need the location.
         cursor = multiqc_collection.find(

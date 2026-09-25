@@ -116,9 +116,9 @@ class S3ProviderBase(ABC):
             logger.info("No adjustments needed.")
 
 
-class MinIOManager(S3ProviderBase):
+class S3Manager(S3ProviderBase):
     """Generic S3 checker (boto3). Works against the bundled SeaweedFS, AWS, NetApp,
-    MinIO, … — the historical name is kept for import compatibility."""
+    MinIO, …"""
 
     def __init__(self, config: S3DepictioCLIConfig):
         logger.info("Initializing S3 manager...")
@@ -127,7 +127,8 @@ class MinIOManager(S3ProviderBase):
         super().__init__(config)
 
 
-S3Manager = MinIOManager
+# Legacy name, kept for import compatibility.
+MinIOManager = S3Manager
 
 
 @validate_call
@@ -142,8 +143,8 @@ def S3_storage_checks(s3_config: S3DepictioCLIConfig, checks: list[str] | None =
     """
     logger.info("Checking S3 accessibility...")
     logger.debug(f"S3 config: {s3_config}")
-    # Looked up by name at call time so tests can patch ``MinIOManager``.
-    s3_manager = MinIOManager(s3_config)
+    # Looked up by name at call time so tests can patch ``S3Manager``.
+    s3_manager = S3Manager(s3_config)
     logger.info("S3 manager initialized.")
     s3_manager.suggest_adjustments(checks)
 

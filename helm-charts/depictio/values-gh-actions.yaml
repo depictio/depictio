@@ -26,7 +26,7 @@ mongo:
       memory: "2Gi"
       cpu: "1"
 
-minio:
+s3:
   resources:
     requests:
       memory: "256Mi"
@@ -70,7 +70,7 @@ viewer:
 persistence:
   mongo:
     size: 1Gi
-  minio:
+  s3:
     size: 1Gi
   screenshots:
     size: 100Mi

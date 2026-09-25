@@ -93,6 +93,14 @@ If git panel is empty:
 1. Check logs in devcontainer build output for git configuration messages
 2. Rebuild container
 
+### `service "minio" has neither an image nor a build context specified`
+
+The storage service is now named `s3`. A worktree set up before the rename has
+a stale generated `docker-compose.override.yaml`: re-run
+`source .devcontainer/scripts/allocate-ports.sh` to regenerate it, then pass
+`--remove-orphans` to the next `docker compose ... up` to drop the old
+`minio` container. See `docs/WORKTREE_WORKFLOW.md`.
+
 ### Services not starting
 
 Check service health:
@@ -122,7 +130,7 @@ docker logs <container-name>  # Check specific service logs
 └─────────────────────────────────────────────────────────┘
 ```
 
-All services communicate via container names (e.g., `mongo:27018`, `minio:9000`).
+All services communicate via container names (e.g., `mongo:27018`, `s3:9000`).
 
 ## 📝 Files
 

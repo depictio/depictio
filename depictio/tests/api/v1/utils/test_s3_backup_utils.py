@@ -216,10 +216,10 @@ class TestCreateBackupWithStrategy:
             mock_manager_class.return_value = mock_manager
 
             with patch("depictio.api.v1.backup_strategy_manager.settings") as mock_settings:
-                mock_settings.minio.bucket = "test-bucket"
-                mock_settings.minio.endpoint_url = "http://localhost:9000"
-                mock_settings.minio.aws_access_key_id = "test_key"
-                mock_settings.minio.aws_secret_access_key = "test_secret"
+                mock_settings.s3.bucket = "test-bucket"
+                mock_settings.s3.endpoint_url = "http://localhost:9000"
+                mock_settings.s3.aws_access_key_id = "test_key"
+                mock_settings.s3.aws_secret_access_key = "test_secret"
                 mock_settings.backup.s3_backup_strategy = "s3_to_s3"
 
                 result = await create_backup_with_strategy(

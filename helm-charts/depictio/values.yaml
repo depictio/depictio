@@ -37,7 +37,9 @@ persistence:
   mongo:
     size: 1Gi
     accessMode: ReadWriteOnce  # Fixed: Use ReadWriteOnce for better performance with single-pod MongoDB
-  minio:
+  # Bundled S3 store PVC (still named "<release>-minio-pvc"). Legacy key:
+  # persistence.minio (still honoured, overrides this block when set).
+  s3:
     size: 1Gi
     accessMode: ReadWriteMany
   screenshots:
@@ -55,10 +57,12 @@ persistence:
 
 # Secrets
 secrets:
-  # Optionally override the generated S3 access key (bundled SeaweedFS)
-  minioRootUser: ""
-  # Optionally override the generated S3 secret key
-  minioRootPassword: ""
+  # Optionally override the generated S3 access key (bundled SeaweedFS).
+  # Legacy key: secrets.minioRootUser (still honoured).
+  s3RootUser: ""
+  # Optionally override the generated S3 secret key.
+  # Legacy key: secrets.minioRootPassword (still honoured).
+  s3RootPassword: ""
   # First-boot admin bootstrap. Replaces the legacy initial_users.yaml file
   # that shipped admin@example.com / changeme. Both REQUIRED for fresh
   # installs — backend pods refuse to start when no admin exists in MongoDB
@@ -177,11 +181,14 @@ redis:
       type: RuntimeDefault
 
 # Bundled S3 object store settings.
-# The store is SeaweedFS (`weed mini`, Apache-2.0); the `minio` key, the
-# `-minio` resource names and the MINIO_ROOT_* Secret keys are kept for
-# compatibility with existing values files and the DEPICTIO_MINIO_* contract.
-# Set `enabled: false` and `env.DEPICTIO_MINIO_PUBLIC_URL` for an external S3.
-minio:
+# The store is SeaweedFS (`weed mini`, Apache-2.0). Set `enabled: false` and
+# `env.DEPICTIO_S3_PUBLIC_URL` for an external S3 endpoint.
+# Backward compatibility: a legacy `minio:` block (and DEPICTIO_MINIO_* env
+# keys) is still read and merged over this one, so older values files render
+# the same manifests. Kubernetes resource names keep the historical `-minio`
+# suffix, the `app: minio` selector and the MINIO_ROOT_* Secret keys, because
+# renaming them would break upgrades of live releases.
+s3:
   enabled: true
   image:
     repository: chrislusf/seaweedfs
@@ -211,7 +218,7 @@ minio:
   # Public S3 URL for signature verification behind a proxy that does NOT set
   # X-Forwarded-Host/Proto (SeaweedFS auto-detects those headers). Leave empty
   # unless clients get SignatureDoesNotMatch through the ingress, then set e.g.
-  # "https://<release>-minio.<domain>".
+  # "https://<release>-minio.<domain>" (the public host keeps its legacy name).
   s3ExternalUrl: ""
   # Extra `weed mini` flags, e.g. ["-volume.index=leveldb"] for very large
   # object counts (the default in-memory index grows with the number of objects).
@@ -233,13 +240,13 @@ minio:
   env:
     # No default credentials. Root user / password come from the
     # ``{{ .Release.Name }}-depictio-secrets`` Kubernetes Secret (set via
-    # secrets.minioRootUser / secrets.minioRootPassword in this values file)
+    # secrets.s3RootUser / secrets.s3RootPassword in this values file)
     # and are injected into the SeaweedFS pod as AWS_ACCESS_KEY_ID /
     # AWS_SECRET_ACCESS_KEY. Shipping `minio` / `minio123` as a baked default
     # was a Critical finding — handing the bucket to anyone who could reach
     # the service on the cluster network.
-    DEPICTIO_MINIO_BUCKET: "depictio-bucket"
-    DEPICTIO_MINIO_SERVICE_PORT: "9000"
+    DEPICTIO_S3_BUCKET: "depictio-bucket"
+    DEPICTIO_S3_SERVICE_PORT: "9000"
   ingress:
     separateRoute: false
     ingressClassName: ""
@@ -278,10 +285,10 @@ backend:
     DEPICTIO_VIEWER_SERVICE_PORT: "80"
     DEPICTIO_MONGODB_WIPE: "false" # Set to true for development to wipe MongoDB on startup
     DEPICTIO_MONGODB_SERVICE_PORT: "27018"
-    # DEPICTIO_MINIO_SERVICE_PORT: "9000"
+    # DEPICTIO_S3_SERVICE_PORT: "9000"
     # DEPICTIO_VIEWER_SERVICE_NAME: "depictio-viewer"
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
-    # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
+    # DEPICTIO_S3_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
 
@@ -471,7 +478,7 @@ viewer:
     # 8080. The Service port stays 80 for callers; only the pod target moved.
     targetPort: 8080
   # Non-root hardening so the viewer pod passes Pod Security Standards
-  # "restricted" — matches backend / celery / mongo / minio. The
+  # "restricted" — matches backend / celery / mongo / s3. The
   # nginx-unprivileged image already runs as uid 101 on an unprivileged
   # port, so no NET_BIND_SERVICE capability is required.
   podSecurityContext:
@@ -501,9 +508,9 @@ podDisruptionBudget:
 # Gateway API (HTTPRoute) configuration.
 # Enable this instead of ingress when the cluster uses a Gateway API controller.
 # gateway.parentRefs points to the Gateway resource(s) the HTTPRoute attaches to.
-# Separate HTTPRoutes are always created for frontend, backend, and minio.
+# Separate HTTPRoutes are always created for frontend, backend, and the S3 store.
 # Auth filters (gateway-implementation-specific) go in gateway.filters (frontend only)
-# or backend.httpRoute.filters / minio.httpRoute.filters.
+# or backend.httpRoute.filters / s3.httpRoute.filters.
 gateway:
   enabled: false
   # parentRefs defines the Gateway this HTTPRoute attaches to.
@@ -512,7 +519,7 @@ gateway:
   labels: {}
   annotations: {}
   # Arbitrary ExtensionRef / RequestRedirect / etc. filters for the frontend HTTPRoute.
-  # Backend and MinIO routes never inherit these.
+  # Backend and S3 routes never inherit these.
   filters: []
   # NGINX Gateway Fabric SnippetsFilter for injecting raw nginx config into the
   # frontend HTTPRoute. Serve populates snippets at deploy time (auth_request for
@@ -591,6 +598,6 @@ global:
       # Frontend service URL pattern
       # Default: "{{ .Release.Name }}.{{ .Values.global.domain }}"
       frontend: ""
-      # MinIO service URL pattern
+      # S3 store URL pattern (legacy key: `minio`, still honoured)
       # Default: "{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
-      minio: ""
+      s3: ""

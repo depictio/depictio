@@ -8,7 +8,7 @@
 #
 # ⚠ REQUIRED in values-embl-secrets.yaml (never commit to git):
 #     secrets:
-#       minioRootPassword: <strong-secret>
+#       s3RootPassword: <strong-secret>
 #       bootstrapAdminEmail:    <chosen-admin-email>
 #       bootstrapAdminPassword: <strong-secret, ≥16 chars>
 #

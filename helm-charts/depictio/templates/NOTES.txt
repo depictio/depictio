@@ -1,7 +1,9 @@
 {{- $viewerSvc := printf "%s-depictio-viewer" .Release.Name -}}
 {{- $backendSvc := printf "%s-depictio-backend" .Release.Name -}}
 {{- $mongoSvc := printf "%s-mongo" .Release.Name -}}
-{{- $minioSvc := printf "%s-minio" .Release.Name -}}
+{{- $s3Svc := printf "%s-minio" .Release.Name -}}
+{{- $s3 := include "depictio.s3" . | fromYaml -}}
+{{- $s3LegacyKeys := include "depictio.s3LegacyKeys" . -}}
 
 Thank you for installing {{ .Chart.Name }}.
 
@@ -33,16 +35,28 @@ Then visit:
   - Backend API: http://localhost:8081
 {{- end }}
 
-{{- if .Values.minio.enabled }}
+{{- if $s3.enabled }}
 The bundled S3 store (SeaweedFS) is deployed and can be accessed at:
-  kubectl port-forward svc/{{ $minioSvc }} 9000:{{ .Values.minio.service.httpPort }}
-{{- if .Values.minio.adminUI.enabled }}
-  kubectl port-forward svc/{{ $minioSvc }} {{ .Values.minio.service.adminPort }}:{{ .Values.minio.service.adminPort }}   # admin UI
+  kubectl port-forward svc/{{ $s3Svc }} 9000:{{ $s3.service.httpPort }}
+{{- if $s3.adminUI.enabled }}
+  kubectl port-forward svc/{{ $s3Svc }} {{ $s3.service.adminPort }}:{{ $s3.service.adminPort }}   # admin UI
 {{- end }}
 
 S3 credentials:
-  Username: {{ default .Release.Name .Values.secrets.minioRootUser }}
-  Password: {{ default "(random)" .Values.secrets.minioRootPassword }}
+  Username: {{ default .Release.Name (include "depictio.s3RootUser" .) }}
+  Password: {{ default "(random)" (include "depictio.s3RootPassword" .) }}
+{{- end }}
+
+{{- if $s3LegacyKeys }}
+
+DEPRECATION WARNING: these values keys use the legacy "minio" naming and are
+still honoured, but will be removed in a future chart release:
+  {{ $s3LegacyKeys }}
+Rename them: minio -> s3, persistence.minio -> persistence.s3,
+secrets.minioRootUser/Password -> secrets.s3RootUser/Password,
+global.urlPattern.templates.minio -> global.urlPattern.templates.s3,
+env DEPICTIO_MINIO_* -> DEPICTIO_S3_*. Kubernetes resource names (the
+"-minio" Deployment, Service and PVC) are unchanged.
 {{- end }}
 
 MongoDB is available at:

@@ -197,8 +197,8 @@ MONGO_PORT=27042
 REDIS_PORT=6042
 FASTAPI_PORT=8042
 DASH_PORT=5042
-MINIO_PORT=9042
-MINIO_CONSOLE_PORT=9043
+S3_PORT=9042
+S3_CONSOLE_PORT=9043
 
 # Data directory
 DATA_DIR=data/depictio-feat-figure-component
@@ -221,14 +221,14 @@ mongo-depictio-main
 redis-depictio-main
 depictio-backend-depictio-main
 depictio-frontend-depictio-main
-minio-depictio-main
+s3-depictio-main
 
 # Feature branch
 mongo-depictio-feat-figure-component
 redis-depictio-feat-figure-component
 depictio-backend-depictio-feat-figure-component
 depictio-frontend-depictio-feat-figure-component
-minio-depictio-feat-figure-component
+s3-depictio-feat-figure-component
 ```
 
 ## Managing Worktrees
@@ -275,6 +275,25 @@ docker compose -f docker-compose.dev.yaml \
 # Or stop specific containers
 docker stop depictio-backend-depictio-feat-figure-component
 ```
+
+### `service "minio" has neither an image nor a build context specified`
+
+The bundled object store's compose service was renamed from `minio` to `s3`.
+A `docker-compose.override.yaml` generated before that rename still has a
+`minio:` entry. Regenerate it, and remove the old container that still holds
+the S3 host ports:
+
+```bash
+source .devcontainer/scripts/allocate-ports.sh
+docker compose -f docker-compose.dev.yaml -f docker-compose.override.yaml \
+    --env-file .env.instance up -d --remove-orphans
+```
+
+Existing `.env.instance` / `docker-compose/.env` files keep working: the legacy
+`MINIO_PORT`, `MINIO_CONSOLE_PORT` and `DEPICTIO_MINIO_*` names are still read
+when the new `S3_PORT`, `S3_CONSOLE_PORT` and `DEPICTIO_S3_*` ones are unset.
+The `s3` service also answers on the `minio` hostname, so `http://minio:9000`
+in existing CLI configs keeps resolving.
 
 ### Instance Configuration Not Found
 

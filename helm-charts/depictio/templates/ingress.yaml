@@ -1,5 +1,6 @@
-{{- $minioIngress := .Values.minio.ingress | default dict }}
-{{- $useSeparateMinioIngress := and .Values.ingress.enabled .Values.minio.enabled (or $minioIngress.separateRoute $minioIngress.annotations $minioIngress.labels $minioIngress.hosts $minioIngress.tls $minioIngress.ingressClassName) }}
+{{- $s3 := include "depictio.s3" . | fromYaml }}
+{{- $s3Ingress := $s3.ingress | default dict }}
+{{- $useSeparateS3Ingress := and .Values.ingress.enabled $s3.enabled (or $s3Ingress.separateRoute $s3Ingress.annotations $s3Ingress.labels $s3Ingress.hosts $s3Ingress.tls $s3Ingress.ingressClassName) }}
 {{- $backendIngress := .Values.backend.ingress | default dict }}
 {{- $useSeparateBackendIngress := and .Values.ingress.enabled (or $backendIngress.separateRoute $backendIngress.annotations $backendIngress.labels $backendIngress.hosts $backendIngress.tls $backendIngress.ingressClassName) }}
 {{- if .Values.ingress.enabled }}
@@ -67,8 +68,8 @@ spec:
                 port:
                   number: {{ .Values.backend.service.httpPort }}
     {{- end }}
-    {{- if and .Values.minio.enabled (not $useSeparateMinioIngress) }}
-    - host: {{ include "depictio.minioUrl" . | quote }}
+    {{- if and $s3.enabled (not $useSeparateS3Ingress) }}
+    - host: {{ include "depictio.s3Url" . | quote }}
       http:
         paths:
           - path: /
@@ -77,7 +78,7 @@ spec:
               service:
                 name: {{ .Release.Name }}-minio
                 port:
-                  number: {{ .Values.minio.service.httpPort }}
+                  number: {{ $s3.service.httpPort }}
     {{- end }}
   {{- end }}
   {{- if .Values.ingress.tls }}
@@ -85,7 +86,9 @@ spec:
     {{- toYaml .Values.ingress.tls | nindent 4 }}
   {{- end }}
 {{- end }}
-{{- if $useSeparateMinioIngress }}
+{{- /* The dedicated S3 Ingress keeps its "-minio-ingress" name and the
+       "-minio" backend Service / host, like the rest of the S3 store. */}}
+{{- if $useSeparateS3Ingress }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -95,24 +98,24 @@ metadata:
   labels:
     app: depictio
     component: minio-ingress
-    {{- if $minioIngress.labels }}
-    {{- toYaml $minioIngress.labels | nindent 4 }}
+    {{- if $s3Ingress.labels }}
+    {{- toYaml $s3Ingress.labels | nindent 4 }}
     {{- else if .Values.ingress.labels }}
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
-    {{- if $minioIngress.annotations }}
-    {{- toYaml $minioIngress.annotations | nindent 4 }}
+    {{- if $s3Ingress.annotations }}
+    {{- toYaml $s3Ingress.annotations | nindent 4 }}
     {{- end }}
 spec:
-  {{- if $minioIngress.ingressClassName }}
-  ingressClassName: {{ $minioIngress.ingressClassName }}
+  {{- if $s3Ingress.ingressClassName }}
+  ingressClassName: {{ $s3Ingress.ingressClassName }}
   {{- else if .Values.ingress.ingressClassName }}
   ingressClassName: {{ .Values.ingress.ingressClassName }}
   {{- end }}
   rules:
-  {{- if $minioIngress.hosts }}
-  {{- range $minioIngress.hosts }}
+  {{- if $s3Ingress.hosts }}
+  {{- range $s3Ingress.hosts }}
     - host: {{ .host | quote }}
       http:
         paths:
@@ -131,7 +134,7 @@ spec:
         {{- end }}
   {{- end }}
   {{- else }}
-    - host: {{ include "depictio.minioUrl" . | quote }}
+    - host: {{ include "depictio.s3Url" . | quote }}
       http:
         paths:
           - path: /
@@ -140,11 +143,11 @@ spec:
               service:
                 name: {{ .Release.Name }}-minio
                 port:
-                  number: {{ .Values.minio.service.httpPort }}
+                  number: {{ $s3.service.httpPort }}
   {{- end }}
-  {{- if $minioIngress.tls }}
+  {{- if $s3Ingress.tls }}
   tls:
-    {{- toYaml $minioIngress.tls | nindent 4 }}
+    {{- toYaml $s3Ingress.tls | nindent 4 }}
   {{- else if .Values.ingress.tls }}
   tls:
     {{- toYaml .Values.ingress.tls | nindent 4 }}

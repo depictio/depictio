@@ -5,12 +5,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+import depictio.api.v1.configs.settings_models as settings_models
 from depictio.api.v1.configs.settings_models import (
     AuthConfig,
     # Collections,
     FastAPIConfig,
     # JBrowseConfig,
     MongoDBConfig,
+    S3CacheConfig,
     S3DepictioCLIConfig,
     Settings,
     ViewerConfig,
@@ -445,7 +447,7 @@ class TestSettings:
             "DEPICTIO_MONGODB_EXTERNAL_PORT": None,
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": None,
             "DEPICTIO_VIEWER_EXTERNAL_PORT": None,
-            "DEPICTIO_MINIO_PUBLIC_URL": None,
+            "DEPICTIO_S3_PUBLIC_URL": None,
             # "DEPICTIO_JBROWSE_ENABLED": None,
             "DEPICTIO_AUTH_INTERNAL_API_KEY": None,
         }
@@ -456,7 +458,7 @@ class TestSettings:
             assert isinstance(settings.mongodb, MongoDBConfig)
             assert isinstance(settings.fastapi, FastAPIConfig)
             assert isinstance(settings.viewer, ViewerConfig)
-            assert isinstance(settings.minio, S3DepictioCLIConfig)
+            assert isinstance(settings.s3, S3DepictioCLIConfig)
             # assert isinstance(settings.jbrowse, JBrowseConfig)
             assert isinstance(settings.auth, AuthConfig)
 
@@ -474,7 +476,7 @@ class TestSettings:
             "DEPICTIO_MONGODB_EXTERNAL_PORT": None,
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": None,
             "DEPICTIO_VIEWER_EXTERNAL_PORT": None,
-            "DEPICTIO_MINIO_PUBLIC_URL": None,
+            "DEPICTIO_S3_PUBLIC_URL": None,
             "DEPICTIO_JBROWSE_ENABLED": None,
             "DEPICTIO_AUTH_INTERNAL_API_KEY": None,
         }
@@ -484,7 +486,7 @@ class TestSettings:
             mongo_config = MongoDBConfig(service_port=12345, external_port=12345)
             fastapi_config = FastAPIConfig(service_port=9000, external_port=9000)
             viewer_config = ViewerConfig(service_port=4000, external_port=4000)
-            minio_config = S3DepictioCLIConfig(public_url="https://custom-s3.example.com")
+            s3_config = S3DepictioCLIConfig(public_url="https://custom-s3.example.com")
             # jbrowse_config = JBrowseConfig(enabled=False)
             auth_config = AuthConfig()
 
@@ -492,7 +494,7 @@ class TestSettings:
                 mongodb=mongo_config,
                 fastapi=fastapi_config,
                 viewer=viewer_config,
-                minio=minio_config,
+                s3=s3_config,
                 # jbrowse=jbrowse_config,
                 auth=auth_config,
             )
@@ -500,7 +502,7 @@ class TestSettings:
             assert settings.mongodb.external_port == 12345
             assert settings.fastapi.external_port == 9000
             assert settings.viewer.external_port == 4000
-            assert settings.minio.public_url == "https://custom-s3.example.com"
+            assert settings.s3.public_url == "https://custom-s3.example.com"
             # assert settings.jbrowse.enabled is False
             assert isinstance(settings.auth, AuthConfig)
 
@@ -511,7 +513,7 @@ class TestSettings:
             "DEPICTIO_MONGODB_EXTERNAL_PORT": "54321",
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": "7000",
             "DEPICTIO_VIEWER_EXTERNAL_PORT": "6000",
-            "DEPICTIO_MINIO_PUBLIC_URL": "https://env-s3.example.com",
+            "DEPICTIO_S3_PUBLIC_URL": "https://env-s3.example.com",
             "DEPICTIO_FASTAPI_PUBLIC_URL": "https://env-fastapi.example.com",
             "DEPICTIO_JBROWSE_ENABLED": "false",
             "DEPICTIO_AUTH_INTERNAL_API_KEY": "env_token",
@@ -523,14 +525,14 @@ class TestSettings:
             mongodb = MongoDBConfig()
             fastapi = FastAPIConfig()
             viewer = ViewerConfig()
-            minio = S3DepictioCLIConfig()
+            s3 = S3DepictioCLIConfig()
             # jbrowse = JBrowseConfig()
             auth = AuthConfig()
 
             assert mongodb.external_port == 54321
             assert fastapi.external_port == 7000
             assert viewer.external_port == 6000
-            assert minio.public_url == "https://env-s3.example.com"
+            assert s3.public_url == "https://env-s3.example.com"
             # assert jbrowse.enabled is False
             assert auth.internal_api_key_env == "env_token"
 
@@ -539,7 +541,7 @@ class TestSettings:
                 mongodb=mongodb,
                 fastapi=fastapi,
                 viewer=viewer,
-                minio=minio,
+                s3=s3,
                 # jbrowse=jbrowse,
                 auth=auth,
             )
@@ -548,7 +550,7 @@ class TestSettings:
             assert settings.mongodb.external_port == 54321
             assert settings.fastapi.external_port == 7000
             assert settings.viewer.external_port == 6000
-            assert settings.minio.public_url == "https://env-s3.example.com"
+            assert settings.s3.public_url == "https://env-s3.example.com"
             assert settings.fastapi.public_url == "https://env-fastapi.example.com"
             # assert settings.jbrowse.enabled is False
             assert settings.auth.internal_api_key_env == "env_token"
@@ -578,3 +580,124 @@ class TestSettings:
 
             assert settings.auth.unauthenticated_mode is False
             assert settings.auth.anonymous_user_email == "anonymous@depict.io"
+
+
+class TestS3ConfigLegacyEnv:
+    """DEPICTIO_S3_* is the canonical prefix; DEPICTIO_MINIO_* stays a fallback."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        for key in list(os.environ):
+            if key.upper().startswith(("DEPICTIO_S3_", "DEPICTIO_MINIO_")):
+                monkeypatch.delenv(key)
+        monkeypatch.setattr(settings_models, "_legacy_s3_env_warned", False)
+
+    def test_new_env_only(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "new-bucket")
+        monkeypatch.setenv("DEPICTIO_S3_ROOT_PASSWORD", "new-secret")
+        cfg = S3DepictioCLIConfig()
+        assert cfg.bucket == "new-bucket"
+        assert cfg.aws_secret_access_key == "new-secret"
+
+    def test_legacy_env_only(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_MINIO_BUCKET", "legacy-bucket")
+        monkeypatch.setenv("DEPICTIO_MINIO_ROOT_USER", "legacy-user")
+        monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "legacy-secret")
+        monkeypatch.setenv("DEPICTIO_MINIO_PUBLIC_URL", "https://legacy.example.com")
+        monkeypatch.setenv("DEPICTIO_MINIO_EXTERNAL_SERVICE", "true")
+        cfg = S3DepictioCLIConfig()
+        assert cfg.bucket == "legacy-bucket"
+        assert cfg.aws_access_key_id == "legacy-user"
+        assert cfg.aws_secret_access_key == "legacy-secret"
+        assert cfg.public_url == "https://legacy.example.com"
+        assert cfg.external_service is True
+
+    def test_new_env_wins_over_legacy(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "new-bucket")
+        monkeypatch.setenv("DEPICTIO_MINIO_BUCKET", "legacy-bucket")
+        monkeypatch.setenv("DEPICTIO_MINIO_SERVICE_NAME", "legacy-host")
+        cfg = S3DepictioCLIConfig()
+        assert cfg.bucket == "new-bucket"
+        # Fields only set under the legacy name still come through.
+        assert cfg.service_name == "legacy-host"
+
+    def test_field_name_kwargs_win_over_env(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "new-bucket")
+        monkeypatch.setenv("DEPICTIO_MINIO_BUCKET", "legacy-bucket")
+        cfg = S3DepictioCLIConfig(bucket="kwarg-bucket", root_password="kwarg-secret")
+        assert cfg.bucket == "kwarg-bucket"
+        assert cfg.aws_secret_access_key == "kwarg-secret"
+
+    def test_default_service_name_is_s3(self):
+        assert S3DepictioCLIConfig().service_name == "s3"
+
+    def test_deprecation_warning_lists_legacy_vars(self, monkeypatch):
+        messages: list[str] = []
+        monkeypatch.setattr(settings_models, "_warn", messages.append)
+        monkeypatch.setenv("DEPICTIO_MINIO_BUCKET", "legacy-bucket")
+        monkeypatch.setenv("DEPICTIO_MINIO_ROOT_USER", "legacy-user")
+        S3DepictioCLIConfig()
+        S3DepictioCLIConfig()
+        assert len(messages) == 1
+        assert "DEPICTIO_MINIO_BUCKET" in messages[0]
+        assert "DEPICTIO_MINIO_ROOT_USER" in messages[0]
+        assert "DEPICTIO_S3_" in messages[0]
+
+    def test_no_warning_without_legacy_vars(self, monkeypatch):
+        messages: list[str] = []
+        monkeypatch.setattr(settings_models, "_warn", messages.append)
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "new-bucket")
+        S3DepictioCLIConfig()
+        assert messages == []
+
+    def test_cache_dir_env_is_independent(self, monkeypatch):
+        """DEPICTIO_S3_CACHE_DIR belongs to S3CacheConfig and must not break storage."""
+        monkeypatch.setenv("DEPICTIO_S3_CACHE_DIR", "/data/s3-cache")
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "new-bucket")
+        assert S3CacheConfig().cache_dir == "/data/s3-cache"
+        cfg = S3DepictioCLIConfig()
+        assert cfg.bucket == "new-bucket"
+        assert not hasattr(cfg, "cache_dir")
+
+    def test_settings_minio_alias_returns_s3(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "new-bucket")
+        settings = Settings(context="client")
+        assert settings.minio is settings.s3
+        assert settings.minio.bucket == "new-bucket"
+
+    def test_yaml_dict_by_field_name(self, monkeypatch):
+        """CLI YAML ``s3_storage`` dicts keep using plain field names."""
+        from depictio.models.models.cli import CLIConfig
+
+        monkeypatch.setenv("DEPICTIO_MINIO_BUCKET", "legacy-bucket")
+        config = CLIConfig.model_validate(
+            {
+                "api_base_url": "http://localhost:8058",
+                "user": {
+                    "email": "user@example.com",
+                    "is_admin": False,
+                    "token": {
+                        "user_id": "507f1f77bcf86cd799439011",
+                        "access_token": "token",
+                        "refresh_token": "refresh",
+                        "token_type": "bearer",
+                        "token_lifetime": "short-lived",
+                        "expire_datetime": "2025-12-31T23:59:59",
+                        "refresh_expire_datetime": "2025-12-31T23:59:59",
+                        "name": "test_token",
+                        "created_at": "2025-06-30T18:00:00",
+                        "logged_in": False,
+                    },
+                },
+                "s3_storage": {
+                    "service_name": "storage",
+                    "external_host": "s3.example.com",
+                    "root_user": "yaml-user",
+                    "root_password": "yaml-secret",
+                    "bucket": "yaml-bucket",
+                },
+            }
+        )
+        assert config.s3_storage.bucket == "yaml-bucket"
+        assert config.s3_storage.service_name == "storage"
+        assert config.s3_storage.aws_secret_access_key == "yaml-secret"

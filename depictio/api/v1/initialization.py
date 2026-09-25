@@ -38,7 +38,7 @@ async def run_initialization(
     logger.info("Starting system initialization...")
 
     if s3_config_input is None:
-        s3_config_input = settings.minio
+        s3_config_input = settings.s3
 
     admin_user = await initialize_db(wipe=bool(settings.mongodb.wipe))
 

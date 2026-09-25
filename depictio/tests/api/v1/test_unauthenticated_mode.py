@@ -555,7 +555,7 @@ class TestInitializationProcess:
         mock_settings.auth.requires_anonymous_user = True  # Triggers anonymous user creation
         mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.is_public_mode = True
-        mock_settings.minio = MagicMock()
+        mock_settings.s3 = MagicMock()
         mock_settings.mongodb = MagicMock()
         mock_settings.mongodb.wipe = False
 
@@ -593,7 +593,7 @@ class TestInitializationProcess:
         mock_settings.auth.requires_anonymous_user = False  # Skips anonymous user creation
         mock_settings.auth.is_single_user_mode = False
         mock_settings.auth.is_public_mode = False
-        mock_settings.minio = MagicMock()
+        mock_settings.s3 = MagicMock()
         mock_settings.mongodb = MagicMock()
         mock_settings.mongodb.wipe = False
 

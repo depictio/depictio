@@ -125,7 +125,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
             token=token,
         ),
         api_base_url=settings.fastapi.url,
-        s3_storage=settings.minio,
+        s3_storage=settings.s3,
     )
 
     logger.debug(f"CLI config: {format_pydantic(cli_config)}")

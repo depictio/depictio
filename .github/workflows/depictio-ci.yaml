@@ -504,7 +504,7 @@ jobs:
           # screenshot task must navigate to nginx, so point it there.
           export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
           export DEPICTIO_VIEWER_SERVICE_PORT=8080
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis s3 depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Logs
         run: sleep 3 && docker compose logs
@@ -1035,7 +1035,7 @@ jobs:
           # viewer the CLI test exercises.
           export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
           export DEPICTIO_VIEWER_SERVICE_PORT=8080
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis s3 depictio-backend depictio-celery-worker depictio-viewer
 
           echo "⏳ Waiting for services to be ready..."
 
@@ -1481,7 +1481,7 @@ jobs:
           IMAGE_COUNT=$(docker compose exec -T depictio-backend python -c "
           from depictio.api.v1.configs.config import settings
           from depictio.api.v1.s3 import s3_client
-          pages = s3_client.get_paginator('list_objects_v2').paginate(Bucket=settings.minio.bucket, Prefix='image_demo/')
+          pages = s3_client.get_paginator('list_objects_v2').paginate(Bucket=settings.s3.bucket, Prefix='image_demo/')
           print(sum(1 for page in pages for o in page.get('Contents', []) if o['Key'].endswith('.png')))
           " 2>/dev/null | tail -1 || true)
           IMAGE_COUNT=${IMAGE_COUNT:-0}
@@ -1883,7 +1883,7 @@ jobs:
           # service on top of the standard set.
           export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
           export DEPICTIO_VIEWER_SERVICE_PORT=8080
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env --profile ci up -d --force-recreate mongo redis minio minio-backup depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env --profile ci up -d --force-recreate mongo redis s3 minio-backup depictio-backend depictio-celery-worker depictio-viewer
 
           echo "⏳ Waiting 30 seconds for services to start..."
           sleep 30
@@ -1895,7 +1895,7 @@ jobs:
           echo "--- Depictio Backend ---"
           docker compose logs --tail=10 depictio-backend || echo "❌ Backend logs not available"
           echo "--- Main S3 (SeaweedFS) ---"
-          docker compose logs --tail=5 minio || echo "❌ S3 logs not available"
+          docker compose logs --tail=5 s3 || echo "❌ S3 logs not available"
           echo "--- Backup S3 (SeaweedFS) ---"
           docker compose logs --tail=5 minio-backup || echo "❌ Backup S3 logs not available"
           echo "--- MongoDB ---"
@@ -2101,8 +2101,8 @@ jobs:
           print(f'Compress Local Backups: {settings.backup.compress_local_backups}');
 
           print('\n=== SOURCE S3 CONFIGURATION ===');
-          print(f'Source MinIO Bucket: {settings.minio.bucket}');
-          print(f'Source MinIO Endpoint: {settings.minio.endpoint_url}');
+          print(f'Source MinIO Bucket: {settings.s3.bucket}');
+          print(f'Source MinIO Endpoint: {settings.s3.endpoint_url}');
 
           # Test connectivity to both MinIO instances
           import boto3;
@@ -2111,16 +2111,16 @@ jobs:
           # Test source MinIO
           try:
               source_client = boto3.client('s3',
-                  endpoint_url=settings.minio.endpoint_url,
-                  aws_access_key_id=settings.minio.aws_access_key_id,
-                  aws_secret_access_key=settings.minio.aws_secret_access_key,
+                  endpoint_url=settings.s3.endpoint_url,
+                  aws_access_key_id=settings.s3.aws_access_key_id,
+                  aws_secret_access_key=settings.s3.aws_secret_access_key,
                   region_name='us-east-1');
               source_buckets = source_client.list_buckets();
               print(f'✅ Source MinIO accessible, buckets: {[b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]}');
 
               # Check if source bucket has any deltatable data
-              if settings.minio.bucket in [b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]:
-                  objects = source_client.list_objects_v2(Bucket=settings.minio.bucket);
+              if settings.s3.bucket in [b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]:
+                  objects = source_client.list_objects_v2(Bucket=settings.s3.bucket);
                   object_count = len(objects.get('Contents', []));
                   print(f'📊 Source bucket objects count: {object_count}');
                   if object_count > 0:
@@ -2128,7 +2128,7 @@ jobs:
                       for obj in objects.get('Contents', [])[:5]:
                           print(f'  - {obj[\"Key\"]} ({obj[\"Size\"]} bytes)');
               else:
-                  print(f'❌ Source bucket {settings.minio.bucket} not found');
+                  print(f'❌ Source bucket {settings.s3.bucket} not found');
           except Exception as e:
               print(f'❌ Source MinIO not accessible: {e}');
               import traceback;
@@ -2792,7 +2792,7 @@ jobs:
           docker pull "${DEPICTIO_VIEWER_VERSION}" &
           wait
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis s3 depictio-backend depictio-celery-worker depictio-viewer
 
       # Node + Playwright setup runs while the docker stack boots; the
       # explicit health gate below is the only wait.

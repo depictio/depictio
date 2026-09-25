@@ -43,7 +43,7 @@ def _delta_location_for(dc_id: str) -> str:
     Mirrors `client_aggregate_data` (cli/utils/deltatables.py): one delta per
     DC at ``s3://{bucket}/{dc_id}``.
     """
-    return f"s3://{settings.minio.bucket}/{dc_id}"
+    return f"s3://{settings.s3.bucket}/{dc_id}"
 
 
 def _load_table_dc(data_collection_id: str, current_user) -> tuple[dict, dict]:
@@ -494,7 +494,7 @@ def clear_table_data(*, data_collection_id: str, current_user) -> dict:
     _load_table_dc(data_collection_id, current_user)
 
     delta_loc = _delta_location_for(data_collection_id)
-    bucket = settings.minio.bucket
+    bucket = settings.s3.bucket
     s3_prefix = data_collection_id  # delta_loc is s3://{bucket}/{dc_id}/...
     deleted_s3_count = 0
     try:

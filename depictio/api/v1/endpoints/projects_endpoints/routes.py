@@ -86,28 +86,28 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
         {r["wf_id"] for r in dc_agg if isinstance(r.get("wf_id"), ObjectId)}
     )
 
-    # S3 cleanup is best-effort — Mongo cascade still runs even if MinIO is down.
+    # S3 cleanup is best-effort — Mongo cascade still runs even if the S3 store is down.
     if dc_ids:
         try:
-            s3_paths = _collect_s3_locations_for_project(dc_ids, settings.minio.bucket)
+            s3_paths = _collect_s3_locations_for_project(dc_ids, settings.s3.bucket)
             if s3_paths:
                 s3_client = boto3.client(
                     "s3",
-                    endpoint_url=settings.minio.endpoint_url,
-                    aws_access_key_id=settings.minio.aws_access_key_id,
-                    aws_secret_access_key=settings.minio.aws_secret_access_key,
+                    endpoint_url=settings.s3.endpoint_url,
+                    aws_access_key_id=settings.s3.aws_access_key_id,
+                    aws_secret_access_key=settings.s3.aws_secret_access_key,
                     region_name="us-east-1",
-                    verify=settings.minio.verify_tls,
+                    verify=settings.s3.verify_tls,
                 )
                 for prefix in s3_paths:
                     paginator = s3_client.get_paginator("list_objects_v2")
                     for page in paginator.paginate(
-                        Bucket=settings.minio.bucket, Prefix=prefix.strip("/")
+                        Bucket=settings.s3.bucket, Prefix=prefix.strip("/")
                     ):
                         keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
                         if keys:
                             s3_client.delete_objects(
-                                Bucket=settings.minio.bucket, Delete={"Objects": keys}
+                                Bucket=settings.s3.bucket, Delete={"Objects": keys}
                             )
                 logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
         except Exception as exc:
@@ -171,7 +171,7 @@ async def get_project_from_id(
 
     Returns:
         dict: Project document. If skip_enrichment=False (default), includes:
-              - delta_location: S3/MinIO path to delta table (per data collection)
+              - delta_location: S3 path to delta table (per data collection)
               - last_aggregation: Most recent aggregation metadata with column specs
               If skip_enrichment=True, returns basic project structure without enrichment.
     """

@@ -48,42 +48,30 @@ helm uninstall depictio
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `storageClass` | Storage class to use for PVCs | `"standard"` |
-| `persistence.src.enabled` | Enable source code persistence | `true` |
-| `persistence.src.size` | Source code PVC size | `1Gi` |
-| `persistence.src.accessMode` | Source code PVC access mode | `ReadWriteOnce` |
-| `persistence.data.enabled` | Enable data persistence | `true` |
-| `persistence.data.size` | Data PVC size | `5Gi` |
-| `persistence.data.accessMode` | Data PVC access mode | `ReadWriteOnce` |
-| `persistence.minioData.enabled` | Enable MinIO data persistence | `true` |
-| `persistence.minioData.size` | MinIO data PVC size | `5Gi` |
-| `persistence.minioData.accessMode` | MinIO data PVC access mode | `ReadWriteOnce` |
-| `persistence.configs.enabled` | Enable configs persistence | `true` |
-| `persistence.configs.size` | Configs PVC size | `1Gi` |
-| `persistence.configs.accessMode` | Configs PVC access mode | `ReadWriteOnce` |
-| `persistence.kubernetes.enabled` | Enable Kubernetes persistence | `true` |
-| `persistence.kubernetes.size` | Kubernetes PVC size | `1Gi` |
-| `persistence.kubernetes.accessMode` | Kubernetes PVC access mode | `ReadWriteOnce` |
-| `persistence.mongo.enabled` | Enable MongoDB persistence | `true` |
-| `persistence.mongo.size` | MongoDB PVC size | `5Gi` |
+| `persistence.mongo.size` | MongoDB PVC size | `1Gi` |
 | `persistence.mongo.accessMode` | MongoDB PVC access mode | `ReadWriteOnce` |
-| `persistence.minio.enabled` | Enable MinIO persistence | `true` |
-| `persistence.minio.size` | MinIO PVC size | `10Gi` |
-| `persistence.minio.accessMode` | MinIO PVC access mode | `ReadWriteOnce` |
-| `persistence.exampleData.enabled` | Enable example data persistence | `true` |
-| `persistence.exampleData.size` | Example data PVC size | `5Gi` |
-| `persistence.exampleData.accessMode` | Example data PVC access mode | `ReadWriteOnce` |
-| `persistence.screenshots.enabled` | Enable screenshots persistence | `true` |
-| `persistence.screenshots.size` | Screenshots PVC size | `5Gi` |
-| `persistence.screenshots.accessMode` | Screenshots PVC access mode | `ReadWriteOnce` |
+| `persistence.s3.size` | Bundled S3 store PVC size (legacy key: `persistence.minio`) | `1Gi` |
+| `persistence.s3.accessMode` | Bundled S3 store PVC access mode | `ReadWriteMany` |
+| `persistence.screenshots.size` | Screenshots PVC size | `100Mi` |
+| `persistence.screenshots.accessMode` | Screenshots PVC access mode | `ReadWriteMany` |
+| `persistence.keys.size` | JWT keys PVC size | `1Mi` |
+| `persistence.keys.accessMode` | JWT keys PVC access mode | `ReadWriteMany` |
+| `persistence.config.size` | Config PVC size | `10Mi` |
+| `persistence.config.accessMode` | Config PVC access mode | `ReadWriteMany` |
+| `persistence.uploads.size` | Uploads PVC size | `5Gi` |
+| `persistence.uploads.accessMode` | Uploads PVC access mode | `ReadWriteMany` |
 
 ### Secrets parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `secrets.minioRootUser` | S3 root access key (bundled store) | `"minio"` |
-| `secrets.minioRootPassword` | S3 root secret key (bundled store) | `"minio123"` |
+| `secrets.s3RootUser` | S3 root access key (legacy key: `secrets.minioRootUser`) | `""` (release name) |
+| `secrets.s3RootPassword` | S3 root secret key (legacy key: `secrets.minioRootPassword`) | `""` (random, kept across upgrades) |
 
-These credentials are also stored in the Kubernetes Secret named `<release-name>-depictio-secrets`. Override them only if custom values are required.
+These credentials are stored in the Kubernetes Secret named `<release-name>-depictio-secrets`
+under the data keys `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` (legacy names kept on purpose:
+the chart reads the generated password back through them on upgrade). Override them only if
+custom values are required.
 
 ### MongoDB parameters
 
@@ -98,31 +86,61 @@ These credentials are also stored in the Kubernetes Secret named `<release-name>
 | `mongo.service.port` | MongoDB service port | `27018` |
 | `mongo.args` | MongoDB container arguments | `["mongod", "--dbpath", "/data/depictioDB", "--port", "27018"]` |
 
-### Bundled S3 store parameters (`minio.*`)
+### Bundled S3 store parameters (`s3.*`)
 
 The bundled object store is [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
-(`weed mini`). The `minio.*` key and the `-minio` resource names are kept for
-compatibility with existing values files; set `minio.enabled: false` plus
-`minio.env.DEPICTIO_MINIO_PUBLIC_URL` to use any external S3 endpoint instead.
+(`weed mini`). Set `s3.enabled: false` plus `s3.env.DEPICTIO_S3_PUBLIC_URL` (and
+`s3.env.DEPICTIO_S3_ROOT_USER` / `DEPICTIO_S3_ROOT_PASSWORD`) to use any external S3
+endpoint instead.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `minio.enabled` | Deploy the bundled S3 store | `true` |
-| `minio.image.repository` | Object store image repository | `chrislusf/seaweedfs` |
-| `minio.image.tag` | Object store image tag | `4.46` |
-| `minio.image.pullPolicy` | Image pull policy | `IfNotPresent` |
-| `minio.resources` | Resource requests and limits | Check `values.yaml` |
-| `minio.service.type` | Service type | `ClusterIP` |
-| `minio.service.httpPort` | S3 API port | `9000` |
-| `minio.service.adminPort` | SeaweedFS admin UI port (only when `adminUI.enabled`) | `23646` |
-| `minio.adminUI.enabled` | Expose the admin UI (guarded by the root credentials) | `false` |
-| `minio.s3ExternalUrl` | Public S3 URL for signature verification behind a proxy without `X-Forwarded-*` headers | `""` |
-| `minio.extraArgs` | Extra `weed mini` flags | `[]` |
-| `minio.ingress.separateRoute` | Split MinIO out of the shared ingress so `/` auth settings do not affect it | `false` |
-| `minio.ingress.annotations` | MinIO-specific ingress annotations; falls back to `ingress.annotations` | `{}` |
-| `minio.ingress.labels` | MinIO-specific ingress labels; falls back to `ingress.labels` | `{}` |
-| `minio.ingress.hosts` | Optional explicit host rules for the dedicated MinIO ingress | `[]` |
-| `minio.ingress.tls` | Optional TLS entries for the dedicated MinIO ingress; falls back to `ingress.tls` | `[]` |
+| `s3.enabled` | Deploy the bundled S3 store | `true` |
+| `s3.image.repository` | Object store image repository | `chrislusf/seaweedfs` |
+| `s3.image.tag` | Object store image tag | `4.46` |
+| `s3.image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `s3.resources` | Resource requests and limits | Check `values.yaml` |
+| `s3.service.type` | Service type | `ClusterIP` |
+| `s3.service.httpPort` | S3 API port | `9000` |
+| `s3.service.adminPort` | SeaweedFS admin UI port (only when `adminUI.enabled`) | `23646` |
+| `s3.adminUI.enabled` | Expose the admin UI (guarded by the root credentials) | `false` |
+| `s3.s3ExternalUrl` | Public S3 URL for signature verification behind a proxy without `X-Forwarded-*` headers | `""` |
+| `s3.extraArgs` | Extra `weed mini` flags | `[]` |
+| `s3.env.DEPICTIO_S3_BUCKET` | Bucket name | `depictio-bucket` |
+| `s3.env.DEPICTIO_S3_SERVICE_PORT` | In-cluster S3 port advertised to the app | `"9000"` |
+| `s3.env.DEPICTIO_S3_PUBLIC_URL` | Public S3 URL (required when `s3.enabled: false`) | unset |
+| `s3.ingress.separateRoute` | Split the S3 store out of the shared ingress so `/` auth settings do not affect it | `false` |
+| `s3.ingress.annotations` | S3-specific ingress annotations; falls back to `ingress.annotations` | `{}` |
+| `s3.ingress.labels` | S3-specific ingress labels; falls back to `ingress.labels` | `{}` |
+| `s3.ingress.hosts` | Optional explicit host rules for the dedicated S3 ingress | `[]` |
+| `s3.ingress.tls` | Optional TLS entries for the dedicated S3 ingress; falls back to `ingress.tls` | `[]` |
+| `s3.httpRoute.annotations` / `s3.httpRoute.filters` | Gateway API HTTPRoute annotations and filters for the S3 route | `{}` / `[]` |
+| `global.urlPattern.templates.s3` | Custom S3 host template when `global.urlPattern.type: custom` (legacy key: `templates.minio`) | `""` |
+
+The ConfigMaps export both `DEPICTIO_S3_*` and the legacy `DEPICTIO_MINIO_*` variables, so an
+older image pinned through `backend.image.tag` keeps working. The legacy copies will be dropped
+in a later release.
+
+#### Legacy `minio` keys
+
+Values files written for earlier chart versions still work unchanged. The legacy keys are
+read and merged over the new ones (legacy wins when both are set), and `helm install/upgrade`
+prints a deprecation warning listing them:
+
+| Legacy key | New key |
+|------------|---------|
+| `minio.*` | `s3.*` |
+| `minio.env.DEPICTIO_MINIO_*` | `s3.env.DEPICTIO_S3_*` |
+| `persistence.minio.*` | `persistence.s3.*` |
+| `secrets.minioRootUser` / `secrets.minioRootPassword` | `secrets.s3RootUser` / `secrets.s3RootPassword` |
+| `global.urlPattern.templates.minio` | `global.urlPattern.templates.s3` |
+
+Kubernetes object names are intentionally unchanged, because renaming them would break
+upgrades of live releases: the `<release>-minio` Deployment and Service (with the immutable
+`app: minio` selector), the `<release>-minio-pvc` PVC (renaming would start the store on an
+empty volume), the `<release>-minio-ingress` / `<release>-minio-httproute` routes, the public
+host `<release>-minio.<domain>` (DNS, TLS and presigned URLs), and the Secret keys
+`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`.
 
 ### Backend parameters
 

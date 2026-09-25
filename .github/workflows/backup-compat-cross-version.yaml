@@ -89,10 +89,14 @@ jobs:
         if: steps.verify.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          # Single-user mode lets us use the weak local minio defaults without the
+          # Single-user mode lets us use the weak local S3 defaults without the
           # >=16-char secret check; we only need an admin to drive the backup API.
+          # Phase 1 boots the previous release, which only reads the legacy
+          # DEPICTIO_MINIO_* names, so both spellings are written.
           {
             echo "DEPICTIO_AUTH_SINGLE_USER_MODE=true"
+            echo "DEPICTIO_S3_ROOT_USER=minio"
+            echo "DEPICTIO_S3_ROOT_PASSWORD=minio123"
             echo "DEPICTIO_MINIO_ROOT_USER=minio"
             echo "DEPICTIO_MINIO_ROOT_PASSWORD=minio123"
             echo "DEPICTIO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com"
@@ -110,7 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "🐳 Booting old stack (DEPICTIO_VERSION=$DEPICTIO_VERSION)..."
-          docker compose -f docker-compose.yaml up -d mongo redis minio depictio-backend depictio-celery-worker
+          docker compose -f docker-compose.yaml up -d mongo redis s3 depictio-backend depictio-celery-worker
 
           echo "⏳ Waiting for backend health..."
           for i in $(seq 1 40); do
@@ -182,8 +186,8 @@ jobs:
           set -euo pipefail
           echo "🐳 Booting current backend on a clean DB (DEPICTIO_VERSION=current)..."
           # Only the backend is needed to drive the restore API (no viewer/worker
-          # built for :current). depends_on still brings up mongo/redis/minio.
-          docker compose -f docker-compose.yaml up -d mongo redis minio depictio-backend
+          # built for :current). depends_on still brings up mongo/redis/s3.
+          docker compose -f docker-compose.yaml up -d mongo redis s3 depictio-backend
 
           echo "⏳ Waiting for backend health..."
           for i in $(seq 1 40); do
