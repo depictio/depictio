@@ -16,9 +16,10 @@ The script only needs ``boto3`` (already a Depictio dependency)::
 
 Defaults: source ``http://127.0.0.1:9100`` (the legacy side-car), target
 ``http://127.0.0.1:9000`` (the new store as published by docker-compose.dev.yaml
-or a ``kubectl port-forward``), credentials from ``DEPICTIO_MINIO_ROOT_USER`` /
-``DEPICTIO_MINIO_ROOT_PASSWORD`` for both sides, bucket ``DEPICTIO_MINIO_BUCKET``
-(``depictio-bucket``).
+or a ``kubectl port-forward``), credentials from ``DEPICTIO_S3_ROOT_USER`` /
+``DEPICTIO_S3_ROOT_PASSWORD`` for both sides, bucket ``DEPICTIO_S3_BUCKET``
+(``depictio-bucket``). The legacy ``DEPICTIO_MINIO_*`` names are read as a
+fallback when the ``DEPICTIO_S3_*`` ones are unset.
 
 Kubernetes (ReadWriteOnce PVC — old and new pods cannot mount the data at the
 same time): run in two hops through a local directory::
@@ -81,6 +82,13 @@ class Obj:
     key: str
     size: int
     etag: str
+
+
+def _s3_env(name: str, default: str | None = None) -> str | None:
+    """``DEPICTIO_S3_<name>``, falling back to the legacy ``DEPICTIO_MINIO_<name>``."""
+    return os.environ.get(f"DEPICTIO_S3_{name}") or os.environ.get(
+        f"DEPICTIO_MINIO_{name}", default
+    )
 
 
 def _default_target_url() -> str:
@@ -221,28 +229,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--source-access-key",
-        default=env.get("MIGRATE_SOURCE_ACCESS_KEY")
-        or env.get("DEPICTIO_MINIO_ROOT_USER", "minio"),
+        default=env.get("MIGRATE_SOURCE_ACCESS_KEY") or _s3_env("ROOT_USER", "minio"),
     )
     parser.add_argument(
         "--source-secret-key",
-        default=env.get("MIGRATE_SOURCE_SECRET_KEY") or env.get("DEPICTIO_MINIO_ROOT_PASSWORD"),
-        help="Defaults to DEPICTIO_MINIO_ROOT_PASSWORD (required)",
+        default=env.get("MIGRATE_SOURCE_SECRET_KEY") or _s3_env("ROOT_PASSWORD"),
+        help="Defaults to DEPICTIO_S3_ROOT_PASSWORD (required)",
     )
     parser.add_argument(
         "--target-endpoint", default=env.get("MIGRATE_TARGET_ENDPOINT") or _default_target_url()
     )
     parser.add_argument(
         "--target-access-key",
-        default=env.get("MIGRATE_TARGET_ACCESS_KEY")
-        or env.get("DEPICTIO_MINIO_ROOT_USER", "minio"),
+        default=env.get("MIGRATE_TARGET_ACCESS_KEY") or _s3_env("ROOT_USER", "minio"),
     )
     parser.add_argument(
         "--target-secret-key",
-        default=env.get("MIGRATE_TARGET_SECRET_KEY") or env.get("DEPICTIO_MINIO_ROOT_PASSWORD"),
-        help="Defaults to DEPICTIO_MINIO_ROOT_PASSWORD (required)",
+        default=env.get("MIGRATE_TARGET_SECRET_KEY") or _s3_env("ROOT_PASSWORD"),
+        help="Defaults to DEPICTIO_S3_ROOT_PASSWORD (required)",
     )
-    parser.add_argument("--bucket", default=env.get("DEPICTIO_MINIO_BUCKET", "depictio-bucket"))
+    parser.add_argument("--bucket", default=_s3_env("BUCKET", "depictio-bucket"))
     parser.add_argument("--target-bucket", default=None, help="Defaults to --bucket")
     parser.add_argument("--prefix", default="", help="Only copy keys under this prefix")
     parser.add_argument("--workers", type=int, default=8)
@@ -268,9 +274,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.export_dir and args.import_dir:
         parser.error("--export-dir and --import-dir are mutually exclusive")
     if not args.import_dir and not args.source_secret_key:
-        parser.error("--source-secret-key (or DEPICTIO_MINIO_ROOT_PASSWORD) is required")
+        parser.error("--source-secret-key (or DEPICTIO_S3_ROOT_PASSWORD) is required")
     if not args.export_dir and not args.target_secret_key:
-        parser.error("--target-secret-key (or DEPICTIO_MINIO_ROOT_PASSWORD) is required")
+        parser.error("--target-secret-key (or DEPICTIO_S3_ROOT_PASSWORD) is required")
     target_bucket = args.target_bucket or args.bucket
 
     src_ep = Endpoint(args.source_endpoint, args.source_access_key, args.source_secret_key)

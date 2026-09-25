@@ -2,7 +2,7 @@
 
 Sets safe defaults for the security-hardening env vars introduced in PR1
 so existing tests that import ``depictio.api.v1.configs.config`` keep
-working without each test having to wire ``DEPICTIO_MINIO_ROOT_PASSWORD``
+working without each test having to wire ``DEPICTIO_S3_ROOT_PASSWORD``
 and ``DEPICTIO_BOOTSTRAP_*`` itself.
 
 Production deployments set these via their .env / Helm Secret; tests
@@ -20,7 +20,7 @@ _PYTEST_DEFAULTS = {
     "DEPICTIO_CONTEXT": "server",
     # 32-char dev-only password — passes the >=16 length check and isn't on
     # the well-known weak list. Never reuse outside the test suite.
-    "DEPICTIO_MINIO_ROOT_PASSWORD": "pytest_minio_password_aaaaaaaaaa",
+    "DEPICTIO_S3_ROOT_PASSWORD": "pytest_s3_password_aaaaaaaaaaaaa",
     "DEPICTIO_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",
     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD": "pytest_admin_password_aaaaaaaaaa",
     "DEPICTIO_BOOTSTRAP_SEED_TEST_USER": "true",

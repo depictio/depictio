@@ -39,15 +39,31 @@ class TestS3DepictioCLIConfig:
 
     def test_environment_variable_override(self):
         env = {
-            "DEPICTIO_MINIO_SERVICE_NAME": "env",
-            "DEPICTIO_MINIO_EXTERNAL_HOST": "envhost",
-            "DEPICTIO_MINIO_EXTERNAL_PORT": "1111",
+            "DEPICTIO_S3_SERVICE_NAME": "env",
+            "DEPICTIO_S3_EXTERNAL_HOST": "envhost",
+            "DEPICTIO_S3_EXTERNAL_PORT": "1111",
         }
         with patch.dict(os.environ, env):
             cfg = S3DepictioCLIConfig()
             assert cfg.service_name == "env"
             assert cfg.external_host == "envhost"
             assert cfg.external_port == 1111
+
+    def test_legacy_environment_variable_override(self):
+        env = {
+            "DEPICTIO_MINIO_SERVICE_NAME": "legacy",
+            "DEPICTIO_MINIO_EXTERNAL_HOST": "legacyhost",
+            "DEPICTIO_MINIO_EXTERNAL_PORT": "2222",
+        }
+        with patch.dict(os.environ, env):
+            cfg = S3DepictioCLIConfig()
+            assert cfg.service_name == "legacy"
+            assert cfg.external_host == "legacyhost"
+            assert cfg.external_port == 2222
+
+    def test_default_service_name(self):
+        with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "server"}):
+            assert S3DepictioCLIConfig().url == "http://s3:9000"
 
 
 class TestS3Utils:
@@ -70,51 +86,51 @@ class TestS3Utils:
         def test_all_checks_pass(self, sample_s3_config):
             """Test when all S3 checks pass"""
 
-            # Create a mock MinIOManager where all checks return True
-            mock_minio_manager = MagicMock()
+            # Create a mock S3Manager where all checks return True
+            mock_s3_manager = MagicMock()
 
-            # Patch the MinIOManager constructor to return our mock
+            # Patch the S3Manager constructor to return our mock
             with (
                 patch(
-                    "depictio.models.s3_utils.MinIOManager",
-                    return_value=mock_minio_manager,
+                    "depictio.models.s3_utils.S3Manager",
+                    return_value=mock_s3_manager,
                 ),
             ):
                 # Call the function
                 S3_storage_checks(sample_s3_config)
 
                 # Verify that suggest_adjustments was called once
-                mock_minio_manager.suggest_adjustments.assert_called_once()
+                mock_s3_manager.suggest_adjustments.assert_called_once()
 
         def test_specific_checks(self, sample_s3_config):
             """Test with specific checks provided"""
 
-            # Create a mock MinIOManager
-            mock_minio_manager = MagicMock()
+            # Create a mock S3Manager
+            mock_s3_manager = MagicMock()
 
             # List of specific checks to perform
             checks = ["s3", "bucket"]
 
-            # Patch the MinIOManager constructor to return our mock
+            # Patch the S3Manager constructor to return our mock
             with (
                 patch(
-                    "depictio.models.s3_utils.MinIOManager",
-                    return_value=mock_minio_manager,
+                    "depictio.models.s3_utils.S3Manager",
+                    return_value=mock_s3_manager,
                 ),
             ):
                 # Call the function with specific checks
                 S3_storage_checks(sample_s3_config, checks=checks)
 
                 # Verify suggest_adjustments was called with the right checks
-                mock_minio_manager.suggest_adjustments.assert_called_once_with(checks)
+                mock_s3_manager.suggest_adjustments.assert_called_once_with(checks)
 
-        def test_minio_manager_exception(self, sample_s3_config):
-            """Test when MinIOManager initialization raises an exception"""
+        def test_s3_manager_exception(self, sample_s3_config):
+            """Test when S3Manager initialization raises an exception"""
 
-            # Patch MinIOManager to raise an exception
+            # Patch S3Manager to raise an exception
             with (
                 patch(
-                    "depictio.models.s3_utils.MinIOManager",
+                    "depictio.models.s3_utils.S3Manager",
                     side_effect=Exception("Connection error"),
                 ),
             ):
@@ -125,17 +141,17 @@ class TestS3Utils:
         def test_suggest_adjustments_exception(self, sample_s3_config):
             """Test when suggest_adjustments raises an exception"""
 
-            # Create a mock MinIOManager where suggest_adjustments raises an exception
-            mock_minio_manager = MagicMock()
-            mock_minio_manager.suggest_adjustments.side_effect = Exception(
+            # Create a mock S3Manager where suggest_adjustments raises an exception
+            mock_s3_manager = MagicMock()
+            mock_s3_manager.suggest_adjustments.side_effect = Exception(
                 "S3 storage is not correctly configured"
             )
 
-            # Patch the MinIOManager constructor to return our mock
+            # Patch the S3Manager constructor to return our mock
             with (
                 patch(
-                    "depictio.models.s3_utils.MinIOManager",
-                    return_value=mock_minio_manager,
+                    "depictio.models.s3_utils.S3Manager",
+                    return_value=mock_s3_manager,
                 ),
             ):
                 # Call should raise the exception
@@ -171,7 +187,7 @@ class TestS3Utils:
                 assert isinstance(result, PolarsStorageOptions)
 
                 # Verify the values were correctly transferred
-                assert result.endpoint_url == "http://minio:9000"
+                assert result.endpoint_url == "http://s3:9000"
                 assert result.aws_access_key_id == "minio"
                 assert result.aws_secret_access_key == "minio123"
 
@@ -251,7 +267,7 @@ class TestS3Utils:
                 assert result.aws_secret_access_key == "custom-password"
 
                 # Verify endpoint
-                assert result.endpoint_url == "http://minio:9000"
+                assert result.endpoint_url == "http://s3:9000"
 
         def test_validation(self):
             """Test that validation is applied to the input"""

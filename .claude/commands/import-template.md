@@ -203,7 +203,7 @@ This skill auto-routes around that. When `--cli-config` is **not** passed:
 2. Parse the relevant worktree env vars:
    - `INSTANCE_ID` (for the per-worktree config filename)
    - `FASTAPI_PORT` (for `api_base_url`)
-   - `DEPICTIO_MINIO_EXTERNAL_PORT` (for `s3_storage.external_port`)
+   - `DEPICTIO_S3_EXTERNAL_PORT` (for `s3_storage.external_port`)
    - `MONGO_PORT` (for the worktree's MongoDB, where we fetch the token)
 3. Read the user's default config at `~/.depictio/CLI.yaml`. If all three
    override targets already match the worktree (`api_base_url` port,
@@ -213,7 +213,7 @@ This skill auto-routes around that. When `--cli-config` is **not** passed:
    snippet in "Implementing the worktree config in Python" below. This
    clones the default config and overrides:
    - `api_base_url` → `http://localhost:<FASTAPI_PORT>`
-   - `s3_storage.external_port` → `<DEPICTIO_MINIO_EXTERNAL_PORT>`
+   - `s3_storage.external_port` → `<DEPICTIO_S3_EXTERNAL_PORT>`
    - `user.token` (full block) → fetched from
      `mongodb://localhost:<MONGO_PORT>/depictioDB` (admin user's
      `default_token`)
@@ -236,7 +236,7 @@ schema). Tell the user to either:
 - pass `--cli-config <path>` explicitly to point at an existing config.
 
 If `.env.instance` exists but is missing `FASTAPI_PORT`,
-`DEPICTIO_MINIO_EXTERNAL_PORT`, or `MONGO_PORT`, **stop and ask** — we don't
+`DEPICTIO_S3_EXTERNAL_PORT`, or `MONGO_PORT`, **stop and ask** — we don't
 guess.
 
 If `mongosh` is not on PATH, **stop and tell the user to install it**
@@ -249,7 +249,7 @@ runs its own MongoDB + MinIO with its own auth token, so three things have
 to be overridden in the cloned config:
 
 1. `api_base_url` → `http://localhost:<FASTAPI_PORT>`
-2. `s3_storage.external_port` → the worktree's `DEPICTIO_MINIO_EXTERNAL_PORT`
+2. `s3_storage.external_port` → the worktree's `DEPICTIO_S3_EXTERNAL_PORT`
 3. `user.token` (and `user.id`, `user.email`) → fetched from the worktree's
    MongoDB at `localhost:<MONGO_PORT>` for the admin user's `default_token`
 
@@ -273,7 +273,8 @@ for line in Path('.env.instance').read_text().splitlines():
 
 instance_id  = env['INSTANCE_ID']
 api_port     = env['FASTAPI_PORT']
-minio_port   = env['DEPICTIO_MINIO_EXTERNAL_PORT']
+# .env.instance files written before the S3 rename use the DEPICTIO_MINIO_ name.
+s3_port      = env.get('DEPICTIO_S3_EXTERNAL_PORT') or env['DEPICTIO_MINIO_EXTERNAL_PORT']
 mongo_port   = env['MONGO_PORT']
 
 # Pull the worktree admin token from its MongoDB
@@ -297,7 +298,7 @@ tok = json.loads(out)
 
 cfg = yaml.safe_load(open(os.path.expanduser('~/.depictio/CLI.yaml')))
 cfg['api_base_url'] = f'http://localhost:{api_port}'
-cfg['s3_storage']['external_port'] = int(minio_port)
+cfg['s3_storage']['external_port'] = int(s3_port)
 cfg['user']['id'] = tok['user_id']
 cfg['user']['email'] = tok['email']
 def _iso_to_space(s): return s.replace('T', ' ').split('.')[0] if s else None

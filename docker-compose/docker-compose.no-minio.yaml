@@ -1,17 +1,18 @@
 # Depictio — external S3 / no bundled object store (SeaweedFS).
-# Same stack as the root docker-compose.yaml but the `minio` service is dropped;
+# Same stack as the root docker-compose.yaml but the `s3` service is dropped;
 # point Depictio at your own S3-compatible endpoint (AWS, NetApp, MinIO, …) via the .env vars below.
 #
 # Run:  docker compose -f docker-compose/docker-compose.no-minio.yaml up -d
 #
-# Required .env (all prefixed DEPICTIO_MINIO_ — see S3DepictioCLIConfig):
-#   DEPICTIO_MINIO_EXTERNAL_SERVICE=true          # S3 lives outside this compose network (required)
-#   DEPICTIO_MINIO_PUBLIC_URL=https://s3.example.com   # full endpoint URL (host[:port])
-#   DEPICTIO_MINIO_ROOT_USER=<access-key>         # S3 access key
-#   DEPICTIO_MINIO_ROOT_PASSWORD=<secret-key>     # S3 secret key (>= 8 chars, not a default)
+# Required .env (all prefixed DEPICTIO_S3_ — see S3DepictioCLIConfig):
+#   DEPICTIO_S3_EXTERNAL_SERVICE=true          # S3 lives outside this compose network (required)
+#   DEPICTIO_S3_PUBLIC_URL=https://s3.example.com   # full endpoint URL (host[:port])
+#   DEPICTIO_S3_ROOT_USER=<access-key>         # S3 access key
+#   DEPICTIO_S3_ROOT_PASSWORD=<secret-key>     # S3 secret key (>= 8 chars, not a default)
 # Optional:
-#   DEPICTIO_MINIO_BUCKET=depictio-bucket         # target bucket (default shown)
-#   DEPICTIO_MINIO_VERIFY_TLS=true                # set false only for self-signed dev certs
+#   DEPICTIO_S3_BUCKET=depictio-bucket         # target bucket (default shown)
+#   DEPICTIO_S3_VERIFY_TLS=true                # set false only for self-signed dev certs
+# Legacy DEPICTIO_MINIO_* names are still read when the DEPICTIO_S3_* one is unset.
 
 services:
   mongo:
@@ -42,7 +43,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # No `minio` service here — external S3 is supplied via the DEPICTIO_MINIO_* vars above.
+  # No `s3` service here — external S3 is supplied via the DEPICTIO_S3_* vars above.
 
   depictio-backend:
     image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.1.4}
@@ -59,8 +60,8 @@ services:
         required: false
     environment:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
       DEPICTIO_BOOTSTRAP_ADMIN_EMAIL: "${DEPICTIO_BOOTSTRAP_ADMIN_EMAIL:-}"
       DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD: "${DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD:-}"
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
@@ -74,7 +75,7 @@ services:
       retries: 5
       start_period: 60s
     restart: unless-stopped
-    # No minio dependency — S3 is external and reached over the network.
+    # No s3 dependency — S3 is external and reached over the network.
     depends_on:
       mongo:
         condition: service_healthy
@@ -111,8 +112,8 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
     command: ["/app/run_celery_worker.sh"]
     healthcheck:
       test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]

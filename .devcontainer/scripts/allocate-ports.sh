@@ -50,6 +50,10 @@ COMPOSE_PROJECT_NAME="depictio-${SANITIZED_BRANCH}"
 # (Space-padded strings, not associative arrays: macOS ships bash 3.2.)
 OWN_RESERVED_PORTS=" "
 OTHER_RESERVED_PORTS=" "
+# Set when this project still has a container from before the `minio` -> `s3`
+# service rename. Compose treats it as an orphan and leaves it holding the S3
+# host ports, so the new `s3` container fails with "port is already allocated".
+STALE_MINIO_CONTAINER=""
 collect_docker_reserved_ports() {
   command -v docker >/dev/null 2>&1 || return 0
   local cid line name ports
@@ -58,6 +62,7 @@ collect_docker_reserved_ports() {
     line=$(docker inspect -f '{{.Name}}|{{range $p, $conf := .HostConfig.PortBindings}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null) || continue
     name=${line%%|*}; name=${name#/}
     ports=${line#*|}
+    [ "$name" = "${COMPOSE_PROJECT_NAME}-minio" ] && STALE_MINIO_CONTAINER="$name"
     case "$name" in
       "${COMPOSE_PROJECT_NAME}-"*) OWN_RESERVED_PORTS="${OWN_RESERVED_PORTS}${ports} " ;;
       *)                           OTHER_RESERVED_PORTS="${OTHER_RESERVED_PORTS}${ports} " ;;
@@ -128,8 +133,8 @@ echo "🎯 Branch: $BRANCH_NAME (allocated offset: $PORT_OFFSET)"
 MONGO_PORT=$((27000 + PORT_OFFSET))
 REDIS_PORT=$((6000 + PORT_OFFSET))
 FASTAPI_PORT=$((8000 + PORT_OFFSET))
-MINIO_PORT=$((9000 + PORT_OFFSET))
-MINIO_CONSOLE_PORT=$((9500 + PORT_OFFSET))
+S3_PORT=$((9000 + PORT_OFFSET))
+S3_CONSOLE_PORT=$((9500 + PORT_OFFSET))
 # Vite dev server (depictio-viewer-dev) — the dev stack's only viewer (live HMR).
 VIEWER_DEV_PORT=$((5500 + PORT_OFFSET))
 FLOWER_PORT=$((7000 + PORT_OFFSET))
@@ -145,8 +150,8 @@ echo "🔌 Port Assignments:"
 echo "   MongoDB:      ${MONGO_PORT}"
 echo "   Redis:        ${REDIS_PORT}"
 echo "   FastAPI:      ${FASTAPI_PORT}"
-echo "   S3 API:       ${MINIO_PORT}"
-echo "   S3 admin UI:  ${MINIO_CONSOLE_PORT}"
+echo "   S3 API:       ${S3_PORT}"
+echo "   S3 admin UI:  ${S3_CONSOLE_PORT}"
 echo "   Viewer (Vite HMR): ${VIEWER_DEV_PORT}"
 echo "   Flower:       ${FLOWER_PORT}"
 echo ""
@@ -166,18 +171,24 @@ DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}
 
 # S3 credentials: single source of truth is docker-compose/.env (committed).
 # Read them here so the generated .env.instance — which feeds docker compose
-# ${VAR} interpolation for the `minio` container — matches what the backend
+# ${VAR} interpolation for the `s3` container — matches what the backend
 # loads via `env_file: docker-compose/.env`. Hardcoding minio/minio123 here had
-# drifted from docker-compose/.env (depictio_dev), so the minio container booted
+# drifted from docker-compose/.env (depictio_dev), so the S3 container booted
 # with one credential while the backend authenticated with another → S3
 # `InvalidAccessKeyId` and a failed startup.
 _DC_ENV="docker-compose/.env"
-DEPICTIO_MINIO_ROOT_USER="$(sed -n 's/^DEPICTIO_MINIO_ROOT_USER=//p' "$_DC_ENV" 2>/dev/null | tail -1)"
-DEPICTIO_MINIO_ROOT_PASSWORD="$(sed -n 's/^DEPICTIO_MINIO_ROOT_PASSWORD=//p' "$_DC_ENV" 2>/dev/null | tail -1)"
+# Reads the last `NAME=value` line for NAME from docker-compose/.env.
+_read_dc_env() { sed -n "s/^$1=//p" "$_DC_ENV" 2>/dev/null | tail -1; }
+# DEPICTIO_S3_ROOT_* wins; the legacy DEPICTIO_MINIO_ROOT_* names are still read
+# so an older docker-compose/.env keeps working.
+DEPICTIO_S3_ROOT_USER="$(_read_dc_env DEPICTIO_S3_ROOT_USER)"
+DEPICTIO_S3_ROOT_USER="${DEPICTIO_S3_ROOT_USER:-$(_read_dc_env DEPICTIO_MINIO_ROOT_USER)}"
+DEPICTIO_S3_ROOT_PASSWORD="$(_read_dc_env DEPICTIO_S3_ROOT_PASSWORD)"
+DEPICTIO_S3_ROOT_PASSWORD="${DEPICTIO_S3_ROOT_PASSWORD:-$(_read_dc_env DEPICTIO_MINIO_ROOT_PASSWORD)}"
 # Fallbacks mirror the defaults pre_create_setup.sh writes when docker-compose/.env
 # is absent, so a bare checkout still gets a usable (matching) pair.
-DEPICTIO_MINIO_ROOT_USER="${DEPICTIO_MINIO_ROOT_USER:-minio}"
-DEPICTIO_MINIO_ROOT_PASSWORD="${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+DEPICTIO_S3_ROOT_USER="${DEPICTIO_S3_ROOT_USER:-minio}"
+DEPICTIO_S3_ROOT_PASSWORD="${DEPICTIO_S3_ROOT_PASSWORD:-minio123}"
 
 # Save configuration to .env.instance for persistence
 cat > .env.instance <<EOF
@@ -194,8 +205,8 @@ PORT_OFFSET=${PORT_OFFSET}
 MONGO_PORT=${MONGO_PORT}
 REDIS_PORT=${REDIS_PORT}
 FASTAPI_PORT=${FASTAPI_PORT}
-MINIO_PORT=${MINIO_PORT}
-MINIO_CONSOLE_PORT=${MINIO_CONSOLE_PORT}
+S3_PORT=${S3_PORT}
+S3_CONSOLE_PORT=${S3_CONSOLE_PORT}
 VIEWER_DEV_PORT=${VIEWER_DEV_PORT}
 FLOWER_PORT=${FLOWER_PORT}
 
@@ -203,21 +214,19 @@ FLOWER_PORT=${FLOWER_PORT}
 DEPICTIO_MONGODB_PORT=${MONGO_PORT}
 DEPICTIO_REDIS_PORT=${REDIS_PORT}
 DEPICTIO_FASTAPI_PORT=${FASTAPI_PORT}
-DEPICTIO_MINIO_PORT=${MINIO_PORT}
-DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
 
 # External ports (for browser-to-service communication from host)
 DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
 # Dev viewer is Vite (only viewer in the dev stack) — point external URLs at it.
 DEPICTIO_VIEWER_EXTERNAL_PORT=${VIEWER_DEV_PORT}
-DEPICTIO_MINIO_EXTERNAL_PORT=${MINIO_PORT}
-DEPICTIO_MINIO_EXTERNAL_HOST=localhost
+DEPICTIO_S3_EXTERNAL_PORT=${S3_PORT}
+DEPICTIO_S3_EXTERNAL_HOST=localhost
 DEPICTIO_FASTAPI_EXTERNAL_HOST=localhost
 
 # S3 credentials — single source of truth: docker-compose/.env (read above).
 # These MUST equal what the backend loads via env_file: docker-compose/.env.
-DEPICTIO_MINIO_ROOT_USER=${DEPICTIO_MINIO_ROOT_USER}
-DEPICTIO_MINIO_ROOT_PASSWORD=${DEPICTIO_MINIO_ROOT_PASSWORD}
+DEPICTIO_S3_ROOT_USER=${DEPICTIO_S3_ROOT_USER}
+DEPICTIO_S3_ROOT_PASSWORD=${DEPICTIO_S3_ROOT_PASSWORD}
 
 # Development settings
 DEPICTIO_DEV_MODE=true
@@ -231,7 +240,10 @@ EOF
 echo "✅ Configuration saved to .env.instance"
 echo ""
 
-# Generate docker-compose.override.yaml for multi-instance container naming
+# Generate docker-compose.override.yaml for multi-instance container naming.
+# Always rewritten: an override generated before the `minio` -> `s3` service
+# rename still carries a `minio:` entry, which compose would now read as a
+# service with no image and refuse to start. Re-running this script fixes it.
 cat > docker-compose.override.yaml <<EOF
 # Auto-generated override for multi-instance devcontainer
 # Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
@@ -245,8 +257,8 @@ services:
   redis:
     container_name: ${COMPOSE_PROJECT_NAME}-redis
 
-  minio:
-    container_name: ${COMPOSE_PROJECT_NAME}-minio
+  s3:
+    container_name: ${COMPOSE_PROJECT_NAME}-s3
 
   depictio-backend:
     container_name: ${COMPOSE_PROJECT_NAME}-depictio-backend
@@ -274,6 +286,14 @@ EOF
 echo "✅ Generated docker-compose.override.yaml for multi-instance setup"
 echo ""
 
+if [ -n "$STALE_MINIO_CONTAINER" ]; then
+  echo "⚠️  Found container '${STALE_MINIO_CONTAINER}' from before the minio -> s3 rename."
+  echo "   It still holds the S3 host ports. Remove it once, e.g. by adding"
+  echo "   --remove-orphans to your next 'docker compose ... up', or:"
+  echo "   docker rm -f ${STALE_MINIO_CONTAINER}"
+  echo ""
+fi
+
 # Export variables for immediate use in current shell
 export COMPOSE_PROJECT_NAME
 export INSTANCE_ID
@@ -282,8 +302,8 @@ export PORT_OFFSET
 export MONGO_PORT
 export REDIS_PORT
 export FASTAPI_PORT
-export MINIO_PORT
-export MINIO_CONSOLE_PORT
+export S3_PORT
+export S3_CONSOLE_PORT
 export VIEWER_DEV_PORT
 export FLOWER_PORT
 export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
@@ -296,9 +316,9 @@ export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
 export DEPICTIO_DEV_MODE=true
 export DEPICTIO_AUTH_SINGLE_USER_MODE
 export DEPICTIO_MONGODB_WIPE="${MONGODB_WIPE}"
-# S3 creds (sourced from docker-compose/.env above) — export so the `minio`
-# container's ${DEPICTIO_MINIO_ROOT_USER} interpolation resolves to the same
+# S3 creds (sourced from docker-compose/.env above) — export so the `s3`
+# container's ${DEPICTIO_S3_ROOT_USER} interpolation resolves to the same
 # value the backend loads via env_file, regardless of whether compose reads the
 # sourced shell or .env.instance for interpolation.
-export DEPICTIO_MINIO_ROOT_USER
-export DEPICTIO_MINIO_ROOT_PASSWORD
+export DEPICTIO_S3_ROOT_USER
+export DEPICTIO_S3_ROOT_PASSWORD

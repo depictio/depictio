@@ -5,7 +5,7 @@ What it does:
 
 1. Adds the two new data collections (coverage_track_demo + categorical_flow_demo)
    to the showcase project document in Mongo (workflows.0.data_collections).
-2. Writes the two TSVs as Delta tables to MinIO at
+2. Writes the two TSVs as Delta tables to the S3 store at
    ``s3://depictio-bucket/<dc_id>``.
 3. Inserts ``deltatables`` records pointing at those locations with column
    specs so ``load_deltatable_lite`` can resolve them.
@@ -70,13 +70,32 @@ def _die_missing(name: str) -> str:
 # Connection settings — overridden by the worktree's .env.instance when present.
 _env = _read_env_instance()
 MONGO_PORT = int(_env.get("MONGO_PORT", _env.get("DEPICTIO_MONGODB_PORT", "27018")))
-MINIO_PORT = int(_env.get("MINIO_PORT", _env.get("DEPICTIO_MINIO_EXTERNAL_PORT", "9000")))
-MONGO_URI = f"mongodb://localhost:{MONGO_PORT}/depictioDB"
-S3_ENDPOINT = f"http://localhost:{MINIO_PORT}"
-S3_USER = _env.get("DEPICTIO_MINIO_ROOT_USER") or _die_missing("DEPICTIO_MINIO_ROOT_USER")
-S3_PASSWORD = _env.get("DEPICTIO_MINIO_ROOT_PASSWORD") or _die_missing(
-    "DEPICTIO_MINIO_ROOT_PASSWORD"
+
+
+def _env_first(*names: str) -> str | None:
+    """First non-empty value among ``names``, each looked up in .env.instance
+    then the shell. Callers list the ``S3_*`` names before the legacy
+    MinIO-era ones, so a new name always wins and older files keep working.
+    """
+    for name in names:
+        for source in (_env, os.environ):
+            if source.get(name):
+                return source[name]
+    return None
+
+
+S3_PORT = int(
+    _env_first("S3_PORT", "DEPICTIO_S3_EXTERNAL_PORT", "MINIO_PORT", "DEPICTIO_MINIO_EXTERNAL_PORT")
+    or "9000"
 )
+MONGO_URI = f"mongodb://localhost:{MONGO_PORT}/depictioDB"
+S3_ENDPOINT = f"http://localhost:{S3_PORT}"
+S3_USER = _env_first("DEPICTIO_S3_ROOT_USER", "DEPICTIO_MINIO_ROOT_USER") or _die_missing(
+    "DEPICTIO_S3_ROOT_USER"
+)
+S3_PASSWORD = _env_first(
+    "DEPICTIO_S3_ROOT_PASSWORD", "DEPICTIO_MINIO_ROOT_PASSWORD"
+) or _die_missing("DEPICTIO_S3_ROOT_PASSWORD")
 
 # Each new DC: (Mongo id, tag, TSV filename, description, columns_description, container_path).
 NEW_DCS: list[dict[str, Any]] = [
@@ -180,7 +199,7 @@ def _storage_options() -> dict[str, str]:
 
 
 def _ensure_bucket() -> None:
-    """Make sure the depictio-bucket exists in the local MinIO. Boto3 is in
+    """Make sure the depictio-bucket exists in the local S3 store. Boto3 is in
     the worktree venv already — depictio depends on it transitively."""
     import boto3
     from botocore.exceptions import ClientError
@@ -333,7 +352,7 @@ if __name__ == "__main__":
     if not (WORKTREE / ".env.instance").exists():
         print(
             f"[warn] no .env.instance at {WORKTREE!r}; falling back to defaults "
-            f"(mongo:{MONGO_PORT}, minio:{MINIO_PORT})"
+            f"(mongo:{MONGO_PORT}, s3:{S3_PORT})"
         )
     os.chdir(WORKTREE)
     main()

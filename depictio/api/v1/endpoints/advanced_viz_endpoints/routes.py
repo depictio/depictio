@@ -1514,10 +1514,10 @@ def _phylogeny_s3_client():
 
     return boto3.client(
         "s3",
-        endpoint_url=settings.minio.endpoint_url,
-        aws_access_key_id=settings.minio.aws_access_key_id,
-        aws_secret_access_key=settings.minio.aws_secret_access_key,
-        verify=settings.minio.verify_tls,
+        endpoint_url=settings.s3.endpoint_url,
+        aws_access_key_id=settings.s3.aws_access_key_id,
+        aws_secret_access_key=settings.s3.aws_secret_access_key,
+        verify=settings.s3.verify_tls,
         config=Config(connect_timeout=3, retries={"total_max_attempts": 2}),
     )
 
@@ -1566,12 +1566,12 @@ def get_phylogeny_newick(
 
     s3_key = phylogeny_s3_key(str(dc_oid))
     try:
-        obj = _phylogeny_s3_client().get_object(Bucket=settings.minio.bucket, Key=s3_key)
+        obj = _phylogeny_s3_client().get_object(Bucket=settings.s3.bucket, Key=s3_key)
         return obj["Body"].read().decode("utf-8")
     except Exception as exc:
         logger.debug(
             "phylogeny newick not read from s3://%s/%s (%s); trying stored paths",
-            settings.minio.bucket,
+            settings.s3.bucket,
             s3_key,
             exc,
         )

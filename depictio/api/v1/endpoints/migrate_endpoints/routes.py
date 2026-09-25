@@ -193,7 +193,7 @@ def _validate_target_s3_endpoint(target_config: dict) -> None:
     to an attacker-controlled bucket.
 
     Policy (safe-by-default / opt-in):
-      * Always allow the deployment's own configured MinIO endpoint (self-migration).
+      * Always allow the deployment's own configured S3 endpoint (self-migration).
       * Otherwise require an exact normalized (scheme+host+port) match against the
         operator-vetted allowlist ``settings.backup.migration_allowed_s3_endpoints``.
       * The allowlist is empty by default, so all external endpoints are rejected
@@ -216,9 +216,9 @@ def _validate_target_s3_endpoint(target_config: dict) -> None:
             status_code=400, detail="target_s3_config.endpoint_url is not a valid URL"
         )
 
-    own_endpoint = _normalize_endpoint(settings.minio.endpoint_url)
+    own_endpoint = _normalize_endpoint(settings.s3.endpoint_url)
     if own_endpoint is not None and candidate == own_endpoint:
-        return  # self-migration to this deployment's own MinIO
+        return  # self-migration to this deployment's own S3 store
 
     allowlist = {
         normalized
@@ -235,7 +235,7 @@ def _validate_target_s3_endpoint(target_config: dict) -> None:
     raise HTTPException(
         status_code=403,
         detail=(
-            "Target S3 endpoint is not permitted. Only this deployment's own MinIO "
+            "Target S3 endpoint is not permitted. Only this deployment's own S3 "
             "endpoint or an operator-allowlisted endpoint "
             "(DEPICTIO_BACKUP_MIGRATION_ALLOWED_S3_ENDPOINTS) may be used for migration."
         ),
@@ -248,14 +248,14 @@ def _copy_s3_locations(
     target_config: dict,
     dry_run: bool = False,
 ) -> dict:
-    """Copy S3 objects from source to target MinIO, preserving paths."""
+    """Copy S3 objects from source to target S3 store, preserving paths."""
     source_client = boto3.client(
         "s3",
         endpoint_url=source_config["endpoint_url"],
         aws_access_key_id=source_config["aws_access_key_id"],
         aws_secret_access_key=source_config["aws_secret_access_key"],
         region_name=source_config.get("region_name", "us-east-1"),
-        verify=source_config.get("verify", settings.minio.verify_tls),
+        verify=source_config.get("verify", settings.s3.verify_tls),
     )
     target_client = boto3.client(
         "s3",
@@ -263,7 +263,7 @@ def _copy_s3_locations(
         aws_access_key_id=target_config["aws_access_key_id"],
         aws_secret_access_key=target_config["aws_secret_access_key"],
         region_name=target_config.get("region_name", "us-east-1"),
-        verify=target_config.get("verify", settings.minio.verify_tls),
+        verify=target_config.get("verify", settings.s3.verify_tls),
     )
 
     source_bucket = source_config["bucket"]
@@ -338,7 +338,7 @@ async def export_project(
 
     Scoped to one project: cascades through workflows → data_collections →
     files / deltatables / runs → dashboards.  Optionally copies S3 data to
-    a target MinIO (modes all / files).
+    a target S3 store (modes all / files).
 
     Access rules:
     - Admins can export any project, in every mode.
@@ -485,7 +485,7 @@ async def export_project(
     s3_metadata: dict[str, Any] = {}
     s3_paths: list[str] = []
     if mode in ("all", "files"):
-        s3_paths = _collect_s3_locations_for_project(dc_ids, settings.minio.bucket)
+        s3_paths = _collect_s3_locations_for_project(dc_ids, settings.s3.bucket)
         logger.info("Migrate: found %d S3 locations for project", len(s3_paths))
 
         if request.target_s3_config:
@@ -497,10 +497,10 @@ async def export_project(
 
             # CLI path: copy between two S3 instances
             source_config = {
-                "bucket": settings.minio.bucket,
-                "endpoint_url": settings.minio.endpoint_url,
-                "aws_access_key_id": settings.minio.aws_access_key_id,
-                "aws_secret_access_key": settings.minio.aws_secret_access_key,
+                "bucket": settings.s3.bucket,
+                "endpoint_url": settings.s3.endpoint_url,
+                "aws_access_key_id": settings.s3.aws_access_key_id,
+                "aws_secret_access_key": settings.s3.aws_secret_access_key,
                 "region_name": "us-east-1",
             }
             logger.info("Migrate: copying %d S3 locations to target", len(s3_paths))
@@ -556,22 +556,22 @@ async def export_project(
         ):
             s3_client = boto3.client(
                 "s3",
-                endpoint_url=settings.minio.endpoint_url,
-                aws_access_key_id=settings.minio.aws_access_key_id,
-                aws_secret_access_key=settings.minio.aws_secret_access_key,
+                endpoint_url=settings.s3.endpoint_url,
+                aws_access_key_id=settings.s3.aws_access_key_id,
+                aws_secret_access_key=settings.s3.aws_secret_access_key,
                 region_name="us-east-1",
-                verify=settings.minio.verify_tls,
+                verify=settings.s3.verify_tls,
             )
             bundled_files = 0
             for path in s3_paths:
                 path_key = path.strip("/")
                 try:
                     paginator = s3_client.get_paginator("list_objects_v2")
-                    for page in paginator.paginate(Bucket=settings.minio.bucket, Prefix=path_key):
+                    for page in paginator.paginate(Bucket=settings.s3.bucket, Prefix=path_key):
                         for obj in page.get("Contents", []):
                             key = obj["Key"]
                             try:
-                                resp = s3_client.get_object(Bucket=settings.minio.bucket, Key=key)
+                                resp = s3_client.get_object(Bucket=settings.s3.bucket, Key=key)
                                 zf.writestr(f"s3_data/{key}", resp["Body"].read())
                                 bundled_files += 1
                                 logger.debug("Bundled S3 object into ZIP: %s", key)
@@ -762,16 +762,16 @@ async def import_project_zip(
         raise HTTPException(status_code=400, detail="Invalid ZIP bundle")
 
     with zf:
-        # Restore S3 data files bundled in the ZIP back to MinIO at original paths
+        # Restore S3 data files bundled in the ZIP back to the S3 store at original paths
         s3_keys = [n for n in zf.namelist() if n.startswith("s3_data/")]
         if s3_keys and not dry_run:
             s3_client = boto3.client(
                 "s3",
-                endpoint_url=settings.minio.endpoint_url,
-                aws_access_key_id=settings.minio.aws_access_key_id,
-                aws_secret_access_key=settings.minio.aws_secret_access_key,
+                endpoint_url=settings.s3.endpoint_url,
+                aws_access_key_id=settings.s3.aws_access_key_id,
+                aws_secret_access_key=settings.s3.aws_secret_access_key,
                 region_name="us-east-1",
-                verify=settings.minio.verify_tls,
+                verify=settings.s3.verify_tls,
             )
             uploaded = 0
             failures: list[str] = []
@@ -792,7 +792,7 @@ async def import_project_zip(
                     continue
                 try:
                     s3_client.put_object(
-                        Bucket=settings.minio.bucket,
+                        Bucket=settings.s3.bucket,
                         Key=s3_key,
                         Body=zf.read(zip_path),
                     )
@@ -809,7 +809,7 @@ async def import_project_zip(
                     logger.error("Aborting S3 restore, endpoint unusable: %s", e)
                     failures.append(f"{s3_key}: {e}")
                     break
-            logger.info("Migrate import: restored %d S3 objects to MinIO", uploaded)
+            logger.info("Migrate import: restored %d S3 objects to the S3 store", uploaded)
 
             # Abort before touching Mongo. Importing the metadata of a project
             # whose data files never landed would leave a project that lists
@@ -820,7 +820,7 @@ async def import_project_zip(
                     detail=(
                         f"ZIP bundle is valid, but only {uploaded} of {len(s3_keys)} data "
                         f"files could be written to object storage at "
-                        f"{settings.minio.endpoint_url}. Nothing was imported. "
+                        f"{settings.s3.endpoint_url}. Nothing was imported. "
                         f"First error: {failures[0]}"
                     ),
                 )

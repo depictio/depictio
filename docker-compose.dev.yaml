@@ -28,22 +28,27 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
+  s3:
     # Bundled local object storage = SeaweedFS (`weed mini`), S3 API on :9000.
-    # The service is still named `minio` so the DEPICTIO_MINIO_* config contract,
-    # `http://minio:9000` and generated CLI configs keep working unchanged.
+    # The `minio` network alias keeps `http://minio:9000` in existing CLI
+    # configs resolving. Legacy DEPICTIO_MINIO_* variables are still read as a
+    # fallback for DEPICTIO_S3_*.
     image: chrislusf/seaweedfs:4.46
-    container_name: minio
+    container_name: s3
+    networks:
+      default:
+        aliases:
+          - minio
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
       # New dir name: a pre-existing `minio_data` dir holds MinIO's own on-disk
       # layout and cannot be reused — see docs/migrate-minio-to-seaweedfs.md.
       - ./${DATA_DIR:-data}/seaweedfs_data:/data
     environment:
-      AWS_ACCESS_KEY_ID: ${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in docker-compose/.env}
-      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in docker-compose/.env (>=16 chars, not a known default)}
+      AWS_ACCESS_KEY_ID: ${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_S3_ROOT_USER must be set in docker-compose/.env}}
+      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set in docker-compose/.env (>=16 chars, not a known default)}}
       # Bucket is created at boot (idempotent) so the API's create_bucket() is a no-op.
-      S3_BUCKET: ${DEPICTIO_MINIO_BUCKET:-depictio-bucket}
+      S3_BUCKET: ${DEPICTIO_S3_BUCKET:-${DEPICTIO_MINIO_BUCKET:-depictio-bucket}}
     # Dev only: the SeaweedFS admin UI is served on :9001 (the old MinIO console
     # port, loopback-published below) and guarded with the root credentials.
     # WebDAV is switched off.
@@ -53,13 +58,13 @@ services:
       - -s3.port=9000
       - -webdav=false
       - -admin.port=9001
-      - -admin.user=${DEPICTIO_MINIO_ROOT_USER}
-      - -admin.password=${DEPICTIO_MINIO_ROOT_PASSWORD}
+      - -admin.user=${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER}}
+      - -admin.password=${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD}}
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     ports:
-      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${S3_PORT:-${MINIO_PORT:-9000}}:9000"
+      - "127.0.0.1:${S3_CONSOLE_PORT:-${MINIO_CONSOLE_PORT:-9001}}:9001"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/healthz || exit 1"]
       interval: 30s
@@ -119,8 +124,8 @@ services:
         # bundle; locally it stays on Vite (service name + in-container port 5173).
         DEPICTIO_VIEWER_SERVICE_NAME: "${DEPICTIO_VIEWER_SERVICE_NAME:-depictio-viewer-dev}"
         DEPICTIO_VIEWER_SERVICE_PORT: "${DEPICTIO_VIEWER_SERVICE_PORT:-5173}"
-        DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
-        DEPICTIO_MINIO_EXTERNAL_HOST: "${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}"
+        DEPICTIO_S3_EXTERNAL_PORT: "${DEPICTIO_S3_EXTERNAL_PORT:-${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}}"
+        DEPICTIO_S3_EXTERNAL_HOST: "${DEPICTIO_S3_EXTERNAL_HOST:-${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}}"
         # Point the prerender store at the in-container mount instead of the
         # host-friendly `~/.depictio/multiqc_prerender` default. Backend +
         # worker must agree on this path or they'd write to different dirs.
@@ -162,7 +167,7 @@ services:
     depends_on:
       - mongo
       - redis
-      - minio
+      - s3
 
   # ─────────────────────────────────────────────────────────────────────
   # Dev viewer: Vite dev server with hot-module reload — the default viewer in
@@ -295,7 +300,7 @@ services:
       - mongo
       - redis
       - depictio-backend
-      - minio
+      - s3
 
   # Optional Celery monitoring UI. Enable with `docker compose --profile monitoring up`.
   # Bound to 127.0.0.1 only — do not expose without auth.

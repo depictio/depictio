@@ -1,7 +1,12 @@
 # MongoDB PVC is now handled by StatefulSet volumeClaimTemplates
 # No manual PVC needed for StatefulSet
 
-{{- if .Values.minio.enabled }}
+{{- $s3 := include "depictio.s3" . | fromYaml }}
+{{- $s3Persistence := include "depictio.s3Persistence" . | fromYaml }}
+{{- /* The PVC keeps its historical "-minio-pvc" name and `app: minio` label:
+       renaming it would orphan the existing claim and start the bundled S3
+       store on an empty volume after an upgrade. */}}
+{{- if $s3.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -12,10 +17,10 @@ metadata:
 spec:
   storageClassName: {{ .Values.storageClass }}
   accessModes:
-    - {{ .Values.persistence.minio.accessMode }}
+    - {{ $s3Persistence.accessMode }}
   resources:
     requests:
-      storage: {{ .Values.persistence.minio.size }}
+      storage: {{ $s3Persistence.size }}
 {{- end }}
 ---
 apiVersion: v1

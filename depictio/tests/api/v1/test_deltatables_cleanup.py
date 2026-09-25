@@ -45,7 +45,7 @@ class TestDeltaTableCleanupWithS3Models:
     async def test_cleanup_s3_delta_table_success_with_models(self, mock_settings):
         """Test successful S3 Delta table cleanup using actual S3 models."""
         # Arrange - use actual S3 configuration model
-        mock_settings.minio = self.s3_config
+        mock_settings.s3 = self.s3_config
 
         with patch("boto3.client") as mock_boto3:
             mock_s3_client = MagicMock()
@@ -79,7 +79,7 @@ class TestDeltaTableCleanupWithS3Models:
     async def test_cleanup_s3_delta_table_empty_bucket_with_models(self, mock_settings):
         """Test cleanup when no objects exist using actual S3 models."""
         # Arrange
-        mock_settings.minio = self.s3_config
+        mock_settings.s3 = self.s3_config
 
         with patch("boto3.client") as mock_boto3:
             mock_s3_client = MagicMock()
@@ -98,7 +98,7 @@ class TestDeltaTableCleanupWithS3Models:
     async def test_cleanup_s3_delta_table_client_error_with_models(self, mock_settings):
         """Test error handling during S3 cleanup using actual S3 models."""
         # Arrange
-        mock_settings.minio = self.s3_config
+        mock_settings.s3 = self.s3_config
 
         with patch("boto3.client") as mock_boto3:
             mock_s3_client = MagicMock()

@@ -21,7 +21,9 @@ if [ -f /workspace/.env.instance ]; then
 fi
 
 FASTAPI_PORT=${FASTAPI_PORT:-8058}
-MINIO_CONSOLE_PORT=${MINIO_CONSOLE_PORT:-9001}
+# MINIO_CONSOLE_PORT: legacy name in a .env.instance generated before the
+# minio -> s3 rename.
+S3_CONSOLE_PORT=${S3_CONSOLE_PORT:-${MINIO_CONSOLE_PORT:-9001}}
 VIEWER_DEV_PORT=${VIEWER_DEV_PORT:-5173}
 
 LOG_DIR=/tmp/depictio-port-forward
@@ -30,7 +32,7 @@ mkdir -p "$LOG_DIR"
 echo "🔌 Starting port forwarding..."
 echo "   Viewer (Vite HMR): $VIEWER_DEV_PORT -> depictio-viewer-dev:5173"
 echo "   FastAPI:           $FASTAPI_PORT -> depictio-backend:8058"
-echo "   S3 admin UI:       $MINIO_CONSOLE_PORT -> minio:9001"
+echo "   S3 admin UI:       $S3_CONSOLE_PORT -> s3:9001"
 
 # Check if socat is installed
 if ! command -v socat &> /dev/null; then
@@ -60,7 +62,7 @@ start_forward() {
 
 start_forward "$VIEWER_DEV_PORT" depictio-viewer-dev 5173
 start_forward "$FASTAPI_PORT" depictio-backend 8058
-start_forward "$MINIO_CONSOLE_PORT" minio 9001
+start_forward "$S3_CONSOLE_PORT" s3 9001
 
 # Give the listeners a moment to bind so Codespaces detects them on this pass.
 sleep 1
@@ -69,4 +71,4 @@ echo "✅ Port forwarding started (logs in ${LOG_DIR})."
 echo ""
 echo "Ports should now appear in the VS Code / Codespaces PORTS panel."
 echo "If not, run 'ports' to list them and add them manually:"
-echo "   $VIEWER_DEV_PORT, $FASTAPI_PORT, $MINIO_CONSOLE_PORT"
+echo "   $VIEWER_DEV_PORT, $FASTAPI_PORT, $S3_CONSOLE_PORT"

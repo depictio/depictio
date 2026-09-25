@@ -185,11 +185,14 @@ else
     fail "JWT signature verification in _async_fetch_user_from_token" "jwt.decode with pinned algorithms missing"
 fi
 
-# 1.10 — compose refuses to start without MinIO password (`:?` form)
-if grep -q 'DEPICTIO_MINIO_ROOT_PASSWORD:?.*must be set' docker-compose.yaml; then
-    pass "docker-compose.yaml fails fast on missing MINIO_ROOT_PASSWORD"
+# 1.10 — compose refuses to start without an S3 password (`:?` form). The new
+# DEPICTIO_S3_ROOT_PASSWORD falls back to the legacy DEPICTIO_MINIO_ROOT_PASSWORD,
+# and the `:?` guard sits on that innermost fallback. The literal `${` is intended.
+# shellcheck disable=SC2016
+if grep -qF 'DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set' docker-compose.yaml; then
+    pass "docker-compose.yaml fails fast on missing S3_ROOT_PASSWORD"
 else
-    fail "docker-compose.yaml fails fast on missing MINIO_ROOT_PASSWORD" "':?REQUIRED' form not used"
+    fail "docker-compose.yaml fails fast on missing S3_ROOT_PASSWORD" "':?REQUIRED' form not used"
 fi
 
 # =============================================================================
@@ -214,36 +217,43 @@ else
         fi
     }
 
-    # 2.1 — weak MinIO password rejected in server context
-    run_validator_case "weak MinIO password rejected (server)" "raises" \
+    # 2.1 — weak S3 password rejected in server context
+    run_validator_case "weak S3 password rejected (server)" "raises" \
+        "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
+        DEPICTIO_CONTEXT=server \
+        DEPICTIO_S3_ROOT_PASSWORD=minio123 \
+        DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="strong_admin_password_aaaa"
+
+    # 2.2 — short S3 password rejected
+    run_validator_case "short S3 password rejected (server)" "raises" \
+        "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
+        DEPICTIO_CONTEXT=server \
+        DEPICTIO_S3_ROOT_PASSWORD=short \
+        DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="strong_admin_password_aaaa"
+
+    # 2.3 — strong S3 password accepted
+    run_validator_case "strong S3 password accepted (server)" "ok" \
+        "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
+        DEPICTIO_CONTEXT=server \
+        DEPICTIO_S3_ROOT_PASSWORD="aVeryStrongMinioPasswordXyZ123" \
+        DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="aVeryStrongAdminPasswordXyZ123"
+
+    # 2.3b — the legacy DEPICTIO_MINIO_ROOT_PASSWORD name is still validated
+    run_validator_case "weak legacy MINIO password rejected (server)" "raises" \
         "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
         DEPICTIO_CONTEXT=server \
         DEPICTIO_MINIO_ROOT_PASSWORD=minio123 \
-        DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="strong_admin_password_aaaa"
-
-    # 2.2 — short MinIO password rejected
-    run_validator_case "short MinIO password rejected (server)" "raises" \
-        "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
-        DEPICTIO_CONTEXT=server \
-        DEPICTIO_MINIO_ROOT_PASSWORD=short \
-        DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="strong_admin_password_aaaa"
-
-    # 2.3 — strong MinIO password accepted
-    run_validator_case "strong MinIO password accepted (server)" "ok" \
-        "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
-        DEPICTIO_CONTEXT=server \
-        DEPICTIO_MINIO_ROOT_PASSWORD="aVeryStrongMinioPasswordXyZ123" \
         DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="aVeryStrongAdminPasswordXyZ123"
 
     # 2.4 — weak bootstrap admin password rejected
     run_validator_case "weak bootstrap admin password rejected" "raises" \
         "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
         DEPICTIO_CONTEXT=server \
-        DEPICTIO_MINIO_ROOT_PASSWORD="aVeryStrongMinioPasswordXyZ123" \
+        DEPICTIO_S3_ROOT_PASSWORD="aVeryStrongMinioPasswordXyZ123" \
         DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD=changeme
 
     # 2.5 — client context skips the checks
-    run_validator_case "client context skips MinIO check" "ok" \
+    run_validator_case "client context skips S3 check" "ok" \
         "from depictio.api.v1.configs.settings_models import Settings; Settings()" \
         DEPICTIO_CONTEXT=client
 fi
@@ -263,31 +273,33 @@ section "Live compose stack"
 if [ "$MODE" = "full" ]; then
     # Prepare a temporary .env so the secrets fail-fast lights up correctly
     # and the bootstrap admin gets a strong password we know.
-    GEN_MINIO="$(gen_password)"
+    GEN_S3="$(gen_password)"
     GEN_ADMIN_PW="$(gen_password)"
     ADMIN_EMAIL="audit-admin@depict.io"
 
     cat >"$TMPDIR/.env" <<EOF
 DEPICTIO_VERSION=latest
-DEPICTIO_MINIO_ROOT_USER=depictio_audit
-DEPICTIO_MINIO_ROOT_PASSWORD=$GEN_MINIO
+DEPICTIO_S3_ROOT_USER=depictio_audit
+DEPICTIO_S3_ROOT_PASSWORD=$GEN_S3
 DEPICTIO_BOOTSTRAP_ADMIN_EMAIL=$ADMIN_EMAIL
 DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD=$GEN_ADMIN_PW
 DEPICTIO_BOOTSTRAP_SEED_TEST_USER=false
 DEPICTIO_AUTH_SINGLE_USER_MODE=false
 EOF
 
-    # 3.1 — compose REFUSES to start when MinIO password is empty (`:?REQUIRED`)
-    if env DEPICTIO_MINIO_ROOT_PASSWORD= \
-           DEPICTIO_MINIO_ROOT_USER=depictio_audit \
+    # 3.1 — compose REFUSES to start when the S3 password is empty (`:?REQUIRED`).
+    # Both the new and the legacy name are blanked: either one alone would satisfy it.
+    if env DEPICTIO_S3_ROOT_PASSWORD= \
+           DEPICTIO_MINIO_ROOT_PASSWORD= \
+           DEPICTIO_S3_ROOT_USER=depictio_audit \
            DEPICTIO_BOOTSTRAP_ADMIN_EMAIL="$ADMIN_EMAIL" \
            DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD="$GEN_ADMIN_PW" \
            docker compose -f "$COMPOSE_FILE" --env-file /dev/null config >/dev/null 2>"$TMPDIR/compose_err"; then
-        fail "compose fails fast with empty MINIO_ROOT_PASSWORD" "compose accepted an empty password"
+        fail "compose fails fast with empty S3_ROOT_PASSWORD" "compose accepted an empty password"
     elif grep -q 'must be set' "$TMPDIR/compose_err"; then
-        pass "compose fails fast with empty MINIO_ROOT_PASSWORD"
+        pass "compose fails fast with empty S3_ROOT_PASSWORD"
     else
-        skip "compose fails fast with empty MINIO_ROOT_PASSWORD" "compose errored but for a different reason — check $TMPDIR/compose_err"
+        skip "compose fails fast with empty S3_ROOT_PASSWORD" "compose errored but for a different reason — check $TMPDIR/compose_err"
     fi
 
     # 3.2 — bring the stack up cleanly with valid creds

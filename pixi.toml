@@ -26,16 +26,19 @@ stop-mongo = "mongosh --port 27018 --eval 'db.adminCommand({shutdown: 1})' || tr
 start-redis = { cmd = "redis-server --daemonize yes --port 6379 --dir .pixi-data/redis --logfile redis.log", depends-on = ["init-data-dirs"] }
 stop-redis = "redis-cli -p 6379 shutdown || true"
 
-# Bundled S3 store = SeaweedFS `weed mini`, S3 API on port 9000 (task names kept
-# as start-minio/stop-minio for compatibility). Admin UI and WebDAV are off.
-# Credentials/bucket default to the docker-compose ones; override with
-# DEPICTIO_MINIO_ROOT_USER / DEPICTIO_MINIO_ROOT_PASSWORD / DEPICTIO_MINIO_BUCKET.
-start-minio = { cmd = "bash -c 'AWS_ACCESS_KEY_ID=\"${DEPICTIO_MINIO_ROOT_USER:-minio}\" AWS_SECRET_ACCESS_KEY=\"${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}\" S3_BUCKET=\"${DEPICTIO_MINIO_BUCKET:-depictio-bucket}\" nohup weed mini -dir=.pixi-data/seaweedfs -ip.bind=127.0.0.1 -s3.port=9000 -admin.ui=false -webdav=false > .pixi-data/seaweedfs/weed.log 2>&1 &'", depends-on = ["init-data-dirs"] }
-stop-minio = "pkill -f 'weed mini' || true"
+# Bundled S3 store = SeaweedFS `weed mini`, S3 API on port 9000. Admin UI and
+# WebDAV are off. Credentials/bucket default to the docker-compose ones; override
+# with DEPICTIO_S3_ROOT_USER / DEPICTIO_S3_ROOT_PASSWORD / DEPICTIO_S3_BUCKET
+# (the legacy DEPICTIO_MINIO_* names are still read when those are unset).
+start-s3 = { cmd = "bash -c 'AWS_ACCESS_KEY_ID=\"${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}\" AWS_SECRET_ACCESS_KEY=\"${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}\" S3_BUCKET=\"${DEPICTIO_S3_BUCKET:-${DEPICTIO_MINIO_BUCKET:-depictio-bucket}}\" nohup weed mini -dir=.pixi-data/seaweedfs -ip.bind=127.0.0.1 -s3.port=9000 -admin.ui=false -webdav=false > .pixi-data/seaweedfs/weed.log 2>&1 &'", depends-on = ["init-data-dirs"] }
+stop-s3 = "pkill -f 'weed mini' || true"
+# Legacy aliases, kept so existing scripts and muscle memory keep working.
+start-minio = { depends-on = ["start-s3"] }
+stop-minio = { depends-on = ["stop-s3"] }
 
 # Start all infrastructure services
-start-infra = { depends-on = ["start-mongo", "start-redis", "start-minio"] }
-stop-infra = { depends-on = ["stop-mongo", "stop-redis", "stop-minio"] }
+start-infra = { depends-on = ["start-mongo", "start-redis", "start-s3"] }
+stop-infra = { depends-on = ["stop-mongo", "stop-redis", "stop-s3"] }
 
 # Check infrastructure status
 status-infra = """

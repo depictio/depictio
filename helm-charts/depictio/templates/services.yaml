@@ -56,7 +56,11 @@ spec:
     type: app
 {{- end }}
 ---
-{{- if .Values.minio.enabled }}
+{{- $s3 := include "depictio.s3" . | fromYaml }}
+{{- /* The bundled S3 store Service keeps its "-minio" name and `app: minio`
+       selector: clients, the configmaps (DEPICTIO_S3_SERVICE_NAME) and the
+       Deployment's immutable selector all depend on them. */}}
+{{- if $s3.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -65,15 +69,15 @@ metadata:
   # labels:
   #   app: minio
 spec:
-  type: {{ .Values.minio.service.type }}
+  type: {{ $s3.service.type }}
   ports:
-    - port: {{ .Values.minio.service.httpPort }}
+    - port: {{ $s3.service.httpPort }}
       name: http
-      targetPort: {{ .Values.minio.service.httpPort }}
-    {{- if .Values.minio.adminUI.enabled }}
-    - port: {{ .Values.minio.service.adminPort }}
+      targetPort: {{ $s3.service.httpPort }}
+    {{- if $s3.adminUI.enabled }}
+    - port: {{ $s3.service.adminPort }}
       name: admin
-      targetPort: {{ .Values.minio.service.adminPort }}
+      targetPort: {{ $s3.service.adminPort }}
     {{- end }}
   selector:
     release: {{ .Release.Name }}

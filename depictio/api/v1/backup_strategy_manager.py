@@ -49,7 +49,7 @@ class S3BackupStrategyManager:
             aws_access_key_id=source_s3_config["aws_access_key_id"],
             aws_secret_access_key=source_s3_config["aws_secret_access_key"],
             region_name=source_s3_config.get("region_name", "us-east-1"),
-            verify=source_s3_config.get("verify", settings.minio.verify_tls),
+            verify=source_s3_config.get("verify", settings.s3.verify_tls),
         )
 
         # Initialize backup S3 client if configured
@@ -458,10 +458,10 @@ async def create_backup_with_strategy(
     """
     # Get source S3 config from settings
     source_s3_config = {
-        "bucket": settings.minio.bucket,
-        "endpoint_url": settings.minio.endpoint_url,
-        "aws_access_key_id": settings.minio.aws_access_key_id,
-        "aws_secret_access_key": settings.minio.aws_secret_access_key,
+        "bucket": settings.s3.bucket,
+        "endpoint_url": settings.s3.endpoint_url,
+        "aws_access_key_id": settings.s3.aws_access_key_id,
+        "aws_secret_access_key": settings.s3.aws_secret_access_key,
         "region_name": "us-east-1",
     }
 

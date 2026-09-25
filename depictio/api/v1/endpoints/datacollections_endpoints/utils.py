@@ -416,18 +416,18 @@ async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
         import boto3
         from botocore.exceptions import ClientError
 
-        # Initialize S3 client for MinIO
+        # Initialize S3 client for the configured store
         s3_client = boto3.client(
             "s3",
-            endpoint_url=settings.minio.endpoint_url,
-            aws_access_key_id=settings.minio.aws_access_key_id,
-            aws_secret_access_key=settings.minio.aws_secret_access_key,
+            endpoint_url=settings.s3.endpoint_url,
+            aws_access_key_id=settings.s3.aws_access_key_id,
+            aws_secret_access_key=settings.s3.aws_secret_access_key,
             region_name="us-east-1",
         )
 
         # Delta table is stored with data_collection_id as the key
         delta_table_prefix = data_collection_id
-        bucket_name = settings.minio.bucket
+        bucket_name = settings.s3.bucket
 
         # Delete all objects in the Delta table directory
         logger.info(f"Deleting Delta table for data collection: {data_collection_id}")
@@ -713,7 +713,7 @@ def _create_dc_from_upload(
                     token=full_token,
                 ),
                 api_base_url=settings.fastapi.url,
-                s3_storage=settings.minio,
+                s3_storage=settings.s3,
             )
 
             scan_result = process_data_collection_helper(
@@ -942,7 +942,7 @@ def _build_cli_config_for_user(current_user):
             token=full_token,
         ),
         api_base_url=settings.fastapi.url,
-        s3_storage=settings.minio,
+        s3_storage=settings.s3,
     )
 
 

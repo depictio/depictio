@@ -3,7 +3,7 @@
 Each test pins one of the previously-found CRITICAL/HIGH issues so a future
 edit can't silently reopen it:
 
-* MinIO password validator (settings_models.Settings)
+* S3 secret key validator (settings_models.Settings)
 * Bootstrap admin password validator
 * CORS config — '*' + credentials must raise
 * /register must not honour client-supplied is_admin
@@ -32,28 +32,40 @@ def _reload_settings_module():
     "weak_pw",
     ["", "minio", "minio123", "changeme", "admin", "test_pwd", "short"],
 )
-def test_server_context_rejects_weak_minio_password(monkeypatch, weak_pw):
+def test_server_context_rejects_weak_s3_password(monkeypatch, weak_pw):
     monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
-    monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", weak_pw)
+    monkeypatch.setenv("DEPICTIO_S3_ROOT_PASSWORD", weak_pw)
+    monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", "x" * 32)
+    mod = _reload_settings_module()
+    with pytest.raises(Exception, match="DEPICTIO_S3_ROOT_PASSWORD"):
+        mod.Settings()
+
+
+def test_server_context_rejects_weak_legacy_minio_password(monkeypatch):
+    """The legacy DEPICTIO_MINIO_ROOT_PASSWORD is still read and still validated."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.delenv("DEPICTIO_S3_ROOT_PASSWORD", raising=False)
+    monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "minio123")
     monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", "x" * 32)
     mod = _reload_settings_module()
     with pytest.raises(Exception, match="DEPICTIO_MINIO_ROOT_PASSWORD"):
         mod.Settings()
 
 
-def test_server_context_accepts_strong_minio_password(monkeypatch):
+def test_server_context_accepts_strong_s3_password(monkeypatch):
     monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
-    monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "a" * 32)
+    monkeypatch.setenv("DEPICTIO_S3_ROOT_PASSWORD", "a" * 32)
     monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", "")
     mod = _reload_settings_module()
     s = mod.Settings()
     # SecretStr keeps the real value out of repr/dump output
-    assert "a" * 32 not in repr(s.minio)
-    assert s.minio.aws_secret_access_key == "a" * 32
+    assert "a" * 32 not in repr(s.s3)
+    assert s.s3.aws_secret_access_key == "a" * 32
 
 
-def test_client_context_skips_minio_check(monkeypatch):
+def test_client_context_skips_s3_check(monkeypatch):
     monkeypatch.setenv("DEPICTIO_CONTEXT", "client")
+    monkeypatch.delenv("DEPICTIO_S3_ROOT_PASSWORD", raising=False)
     monkeypatch.delenv("DEPICTIO_MINIO_ROOT_PASSWORD", raising=False)
     mod = _reload_settings_module()
     mod.Settings()  # no raise
@@ -64,7 +76,7 @@ def test_server_context_rejects_weak_bootstrap_admin_password(monkeypatch, weak_
     """minio123 is in _WEAK_PASSWORDS; passwords < 8 chars are rejected."""
     monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
     monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "false")
-    monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "a" * 32)
+    monkeypatch.setenv("DEPICTIO_S3_ROOT_PASSWORD", "a" * 32)
     monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", weak_pw)
     mod = _reload_settings_module()
     with pytest.raises(Exception, match="DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD"):
@@ -75,7 +87,7 @@ def test_server_context_allows_changeme_for_admin(monkeypatch):
     """changeme is intentionally allowed for the bootstrap admin (local dev default)."""
     monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
     monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "false")
-    monkeypatch.setenv("DEPICTIO_MINIO_ROOT_PASSWORD", "a" * 32)
+    monkeypatch.setenv("DEPICTIO_S3_ROOT_PASSWORD", "a" * 32)
     monkeypatch.setenv("DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD", "changeme")
     mod = _reload_settings_module()
     mod.Settings()  # must not raise
@@ -239,7 +251,7 @@ async def test_serve_image_rejects_cross_bucket():
     from depictio.api.v1.endpoints.files_endpoints import routes as files_routes
 
     mock_settings = MagicMock()
-    mock_settings.minio.bucket = "depictio-bucket"
+    mock_settings.s3.bucket = "depictio-bucket"
     with patch.object(files_routes, "settings", mock_settings):
         with pytest.raises(HTTPException) as exc_info:
             await files_routes.serve_image(s3_path="s3://other-bucket/some/image.png")
@@ -525,7 +537,7 @@ def test_backup_id_canonical_format_accepted(tmp_path):
 
 def test_export_project_rejects_unlisted_s3_endpoint():
     """Caller-supplied S3 endpoints are rejected unless they match the
-    deployment's own MinIO endpoint or the operator allowlist (default empty)."""
+    deployment's own S3 endpoint or the operator allowlist (default empty)."""
     from unittest.mock import MagicMock, patch
 
     from fastapi import HTTPException
@@ -533,7 +545,7 @@ def test_export_project_rejects_unlisted_s3_endpoint():
     from depictio.api.v1.endpoints.migrate_endpoints import routes as migrate_routes
 
     mock_settings = MagicMock()
-    mock_settings.minio.endpoint_url = "http://minio:9000"
+    mock_settings.s3.endpoint_url = "http://s3:9000"
     mock_settings.backup.migration_allowed_s3_endpoints = ["https://allowed.example.com"]
 
     with patch.object(migrate_routes, "settings", mock_settings):
@@ -544,8 +556,8 @@ def test_export_project_rejects_unlisted_s3_endpoint():
             )
         assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
 
-        # Own MinIO endpoint → allowed (self-migration).
-        migrate_routes._validate_target_s3_endpoint({"endpoint_url": "http://minio:9000"})
+        # Own S3 endpoint → allowed (self-migration).
+        migrate_routes._validate_target_s3_endpoint({"endpoint_url": "http://s3:9000"})
 
         # Allowlisted endpoint → allowed; near-miss port → 403.
         migrate_routes._validate_target_s3_endpoint({"endpoint_url": "https://allowed.example.com"})

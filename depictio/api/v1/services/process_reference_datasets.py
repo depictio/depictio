@@ -319,8 +319,8 @@ async def process_all_reference_datasets() -> None:
                 },
             },
             "api_base_url": settings.fastapi.url,
-            # Convert settings.minio to dict for CLIConfig
-            "s3_storage": settings.minio.model_dump(),
+            # Convert settings.s3 to dict for CLIConfig
+            "s3_storage": settings.s3.model_dump(),
         }
 
         # Convert dict to CLIConfig instance (some functions don't have @validate_call)

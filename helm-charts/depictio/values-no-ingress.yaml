@@ -8,7 +8,7 @@ storageClass: "standard"
 #   mongo:
 #     size: 1Gi
 #     accessMode: ReadWriteOnce
-#   minio:
+#   s3:
 #     size: 1Gi
 #     accessMode: ReadWriteOnce
 #   screenshots:
@@ -64,7 +64,7 @@ local_development:
 #       memory: "512Mi"
 #       cpu: "0.5"
 
-# minio:
+# s3:
 #   resources:
 #     requests:
 #       memory: "256Mi"

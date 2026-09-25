@@ -6,7 +6,7 @@ this after editing template.yaml, canonical recipes, or .db_seeds JSON for
 one of the bundled reference datasets (iris, penguins, ampliseq,
 advanced_viz_showcase, …).
 
-Runs INSIDE the API container so it has MongoDB + MinIO + the depictio
+Runs INSIDE the API container so it has MongoDB + S3 + the depictio
 module path.
 
 Usage:
@@ -30,7 +30,7 @@ What it does:
        (via ReferenceDatasetRegistry.STATIC_IDS).
     2. Cascade-delete the project document, its DC docs, Delta-table docs,
        files docs, and the matching dashboards from MongoDB. Also wipes the
-       project's S3 objects from MinIO.
+       project's S3 objects.
     3. Re-create the project + DCs by calling create_reference_project().
     4. Re-create the project's dashboards by calling create_initial_dashboards()
        (scoped to dashboards whose project_id matches).
@@ -236,7 +236,7 @@ async def _trigger_data_materialisation(dataset_names: Iterable[str]) -> None:
                 },
             },
             "api_base_url": settings.fastapi.url,
-            "s3_storage": settings.minio.model_dump(),
+            "s3_storage": settings.s3.model_dump(),
         }
     )
     processor = ReferenceDatasetProcessor(cli_config)

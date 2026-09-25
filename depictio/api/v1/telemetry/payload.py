@@ -141,8 +141,8 @@ def _feature_flags() -> FeatureFlags:
         dashboard_yaml_enabled=settings.dashboard_yaml.enabled,
         jbrowse_enabled=settings.jbrowse.enabled,
         # ``external_service`` is the existing flag for "this service lives outside
-        # the compose network", which is exactly the bundled-MinIO-or-not question.
-        external_s3=settings.minio.external_service,
+        # the compose network", which is exactly the bundled-S3-store-or-not question.
+        external_s3=settings.s3.external_service,
     )
 
 

@@ -102,13 +102,17 @@ find_blocks_kind() {
         }' "$MANIFESTS"
 }
 
-# 1.1 — MinIO root password never lands in a ConfigMap
-HITS_CM_MINIO_PW=$(find_blocks_kind 'MINIO_ROOT_PASSWORD' | grep -c '^ConfigMap$' || true)
-if [ "$HITS_CM_MINIO_PW" -eq 0 ]; then
-    pass "MINIO_ROOT_PASSWORD not in any ConfigMap"
-else
-    fail "MINIO_ROOT_PASSWORD not in any ConfigMap" "$HITS_CM_MINIO_PW ConfigMap(s) still contain it"
-fi
+# 1.1 — S3 root password never lands in a ConfigMap. Covers the Secret data
+# key (MINIO_ROOT_PASSWORD, legacy name kept by the chart), the app setting
+# DEPICTIO_S3_ROOT_PASSWORD and its legacy alias DEPICTIO_MINIO_ROOT_PASSWORD.
+for S3_PW_KEY in MINIO_ROOT_PASSWORD DEPICTIO_S3_ROOT_PASSWORD DEPICTIO_MINIO_ROOT_PASSWORD; do
+    HITS_CM_S3_PW=$(find_blocks_kind "$S3_PW_KEY" | grep -c '^ConfigMap$' || true)
+    if [ "$HITS_CM_S3_PW" -eq 0 ]; then
+        pass "$S3_PW_KEY not in any ConfigMap"
+    else
+        fail "$S3_PW_KEY not in any ConfigMap" "$HITS_CM_S3_PW ConfigMap(s) still contain it"
+    fi
+done
 
 # 1.2 — Bootstrap admin password never lands in a ConfigMap
 HITS_CM_BOOT_PW=$(find_blocks_kind 'DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD' | grep -c '^ConfigMap$' || true)
@@ -118,12 +122,14 @@ else
     fail "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD not in any ConfigMap" "$HITS_CM_BOOT_PW hit(s)"
 fi
 
-# 1.3 — MinIO root creds DO appear in a Secret
+# 1.3 — S3 root creds DO appear in a Secret. The chart keeps the legacy
+# MINIO_ROOT_PASSWORD data key on purpose (its lookup keeps the generated
+# password stable across upgrades), so that is the key to look for.
 HITS_SECRET=$(find_blocks_kind 'MINIO_ROOT_PASSWORD' | grep -c '^Secret$' || true)
 if [ "$HITS_SECRET" -ge 1 ]; then
     pass "MINIO_ROOT_PASSWORD lives in a Secret"
 else
-    fail "MINIO_ROOT_PASSWORD lives in a Secret" "no Secret carries the MinIO root password — wiring missing"
+    fail "MINIO_ROOT_PASSWORD lives in a Secret" "no Secret carries the S3 root password: wiring missing"
 fi
 
 # 1.4 — Bootstrap admin creds DO appear in a Secret
@@ -175,7 +181,7 @@ check_image_pin() {
 }
 
 check_image_pin "mongo"  "mongo"
-check_image_pin "minio (SeaweedFS)"  "chrislusf/seaweedfs"
+check_image_pin "S3 store (SeaweedFS)"  "chrislusf/seaweedfs"
 check_image_pin "redis"  "redis"
 
 # Backend / viewer / worker — usually pinned by the chart's Chart.yaml version,
@@ -197,6 +203,7 @@ if [ "$HAS_YQ" -eq 1 ]; then
     while IFS='|' read -r name nonroot caps; do
         [ -z "$name" ] && continue
         case "$name" in
+            # The S3 store container is still named "minio" (kept for compatibility).
             *mongo*|*minio*|*backend*|*viewer*|*celery*)
                 if [ "$nonroot" = "true" ]; then
                     pass "$name runs as non-root"

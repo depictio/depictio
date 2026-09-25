@@ -1,6 +1,6 @@
 # Serve-specific values for Depictio deployment.
 # Uses Gateway API (HTTPRoute) for routing. Three HTTPRoutes are always
-# created: frontend (viewer), backend, and minio. Auth filters on the
+# created: frontend (viewer), backend, and the S3 store. Auth filters on the
 # frontend route are injected per-app by Serve at deploy time via
 # gateway.filters in the app's k8s_values.
 gateway:
