@@ -1,0 +1,11 @@
+# Docs metadata for nf-core/variantbenchmarking (schema: depictio/models/models/template_docs.py).
+# The page covers four category templates and stays hand-written; the catalog
+# card and the index row are generated from this file.
+generate_page: false
+page_title: Variant Benchmarking
+status: experimental
+card_blurb: >-
+  Benchmark variant callers against truth sets: precision, recall and F1 for
+  germline small variants, somatic indels and structural variants.
+index_summary: Variant caller benchmarking against truth sets
+keywords: [benchmark, variant, caller, truth, set, precision, recall, f1, germline, somatic, indel, structural, variant, sv, giab]
