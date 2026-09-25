@@ -4,7 +4,7 @@ Note du 2026-09-24. Réunit :
 
 - **#915** (open) : ingestion automatisée + versioning Delta des datasets (provenance dans chaque commit Delta, `/deltatables/history/{dc_id}`, `depictio data versions/vacuum`). +16k, 109 fichiers.
 - **#919** (open) : historique de versions des dashboards (ledger par famille d'onglets, pins, preview `?version=`, restore non destructif). +5.7k, 38 fichiers. Closes #95.
-- **#924** (open) : time travel des données, deux axes (layout x données), picker de version par collection, historique et compare par composant, preview qui épingle les données. +30k, 200 fichiers, porte #915 + #919. Une branche parallèle (`claude/dashboard-versioning-stages-3-5-lk3xh2`, 41 commits) reste à réconcilier.
+- **#924** (open) : time travel des données, deux axes (layout x données), picker de version par collection, historique et compare par composant, preview qui épingle les données. +30k, 200 fichiers, porte #915 + #919. Une branche parallèle des stages 3-5 (41 commits) reste à réconcilier.
 - **#936** : vue partageable (filtres appliqués).
 - **#931** : provenance pipeline (params, filtres pré/pendant pipeline) affichée dans les dashboards.
 - **#1106** (Datawrapper) : item 4 **annotation layer** (notes, lignes de référence, plages surlignées), item 16 **commentaires / @mentions**, item 1 **source / notes / "get the data"**, item 12 historique (= #919).
