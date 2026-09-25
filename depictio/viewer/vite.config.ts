@@ -104,27 +104,14 @@ export default defineConfig({
           if (id.includes('cytoscape')) {
             return 'vendor-cytoscape';
           }
-          // GenomeSpy is `import()`ed by its adapter hook only, so this chunk is
-          // async and only a dashboard with a genome_view tile fetches it.
-          //
-          // Two chunks, not one: `useGenomeSpy` loads `@genome-spy/core/minimal`
-          // for table-backed tiles and the fat `@genome-spy/core` only for
-          // file-backed ones (`source: 'file'`). The file parsers and their
-          // @gmod readers are what makes the fat entry heavy, so they get their
-          // own chunk and a dashboard without an indexed_file track never
-          // downloads them.
-          if (
-            id.includes('@genome-spy') &&
-            (id.includes('/data/sources/lazy/') || id.includes('/data/formats/'))
-          ) {
-            return 'vendor-genomespy-lazy';
-          }
-          if (id.includes('@gmod/') || id.includes('generic-filehandle')) {
-            return 'vendor-genomespy-lazy';
-          }
-          if (id.includes('@genome-spy')) {
-            return 'vendor-genomespy';
-          }
+          // GenomeSpy (and its @gmod / generic-filehandle file readers) is left
+          // to Rollup. It is only reachable through the `import()`s in
+          // `useGenomeSpy`, so Rollup already emits it as async chunks split
+          // along those two imports (the minimal build for table-backed tiles,
+          // the full one for file-backed tracks). Forcing it into two manual
+          // chunks made them import each other and pulled both into the entry,
+          // where the cycle threw "Cannot access ... before initialization" at
+          // boot and left every page blank.
           if (id.includes('@mantine')) {
             return 'vendor-mantine';
           }
