@@ -126,6 +126,8 @@ interface AdvancedVizFrameProps {
    * with no Load-All toggle to hang it off.
    */
   estimated?: boolean;
+  /** Extra header badges, e.g. the annotation layer's "N/M points found". */
+  badges?: React.ReactNode[];
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -177,6 +179,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   counts,
   reduction,
   estimated,
+  badges,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
   // "not grouped", when the dispatch found the analysis groups cannot reach
@@ -412,7 +415,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         (counts && Object.keys(counts).length > 0) ||
         showReduction ||
         estimated ||
-        groupBadge ? (
+        groupBadge ||
+        (badges && badges.length > 0) ? (
           <Stack gap={2} mb="xs">
             {title ? (
               <Text fw={600} size="sm" lineClamp={1}>
@@ -492,6 +496,11 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             {groupBadge ? (
               <Group gap={4} wrap="nowrap" mt={2}>
                 {groupBadge}
+              </Group>
+            ) : null}
+            {badges && badges.length > 0 ? (
+              <Group gap={4} wrap="nowrap" mt={2}>
+                {badges}
               </Group>
             ) : null}
             {inlineLayout === 'header' ? (

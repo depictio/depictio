@@ -5,6 +5,8 @@ import Plot from 'react-plotly.js';
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
@@ -227,6 +229,26 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     [showLabels, colorscale, pointSize],
   );
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. Slot 2 of `customdata` is the label, which is what
+  // marked points are keyed on.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 2,
+    pointIdColumn: config.label_col || undefined,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || `${metricName} with 95% CI`}
@@ -239,15 +261,20 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {groupedFigure ? (
-        <Plot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <>
+          <Plot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

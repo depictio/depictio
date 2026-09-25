@@ -241,6 +241,18 @@ def start_monitoring_storage(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
 
 
+def start_comment_indexes(should_initialize: bool) -> None:
+    """Create the comment-thread indexes on the initializing worker. Never fails boot."""
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.endpoints.comments_endpoints.indexes import ensure_comment_indexes
+
+        ensure_comment_indexes()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Comment index setup failed: {exc}")
+
+
 def start_installation_telemetry() -> None:
     """Start the anonymous installation-telemetry heartbeat. Never fails boot.
 
@@ -353,6 +365,7 @@ async def lifespan(_app: FastAPI):
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
     start_monitoring_storage(should_initialize)
+    start_comment_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)
     start_installation_telemetry()
 
