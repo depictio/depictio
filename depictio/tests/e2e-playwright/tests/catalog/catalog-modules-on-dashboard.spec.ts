@@ -178,6 +178,16 @@ const CONTENT_SELECTOR: Record<string, string> = {
   interactive: CHROME_SELECTOR,
 };
 
+/** Kinds that draw with something other than Plotly, keyed by render kind.
+ *
+ * Checked before CONTENT_SELECTOR: genome_view hands its box to GenomeSpy,
+ * which paints a canvas, so a Plotly selector would call every genome_view
+ * render broken.
+ */
+const KIND_CONTENT_SELECTOR: Record<string, string> = {
+  genome_view: ".depictio-genome-view canvas",
+};
+
 /** How long to wait for CONTENT_SELECTOR, per component type.
  *
  * A MultiQC tile does not own its figure: the backend builds every figure of a
@@ -278,7 +288,9 @@ async function checkComponent(
         })
       : undefined;
 
-  const selector = CONTENT_SELECTOR[offer.render.component];
+  const selector =
+    (offer.render.kind && KIND_CONTENT_SELECTOR[offer.render.kind]) ??
+    CONTENT_SELECTOR[offer.render.component];
   if (selector) {
     const budget =
       CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS;
