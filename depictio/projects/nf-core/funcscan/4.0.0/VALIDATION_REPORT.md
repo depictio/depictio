@@ -398,7 +398,7 @@ Commands and results:
 | `uv run pytest -q depictio/tests/models/test_catalog.py` | 99 passed |
 | `depictio.cli run --template nf-core/funcscan/4.0.0 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3c9f17129744458ef4194`, dashboard `6ab3ca0ee8b8ace33d32c787`; 18/18 table DCs have rows (combgc_region_track 155) |
-| Playwright, 1600x1000 | `/tmp/claude-502/shots-funcscan/` (one per tab + BGC region maps) |
+| Playwright, 1600x1000 | `/tmp/shots-funcscan/` (one per tab + BGC region maps) |
 
 Live check (2026-09-23, after the stack restart): picking
 `ERZ1664511.16-NODE-16-length-49668-cov-9.810473` in the genome track's chromosome picker

@@ -320,7 +320,7 @@ Commands and results:
 | `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k airrflow` | 10 passed |
 | `depictio.cli run --template nf-core/airrflow/5.1.0 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3cc7c81d2d7032d3ff302`, dashboard `6ab3ccdce8b8ace33d32c9f6`; cdr3_spectratype 259 rows, vj_usage_matrix 103 rows |
-| Playwright, 1600x1000 | `/tmp/claude-502/shots-airrflow/` (tabs + `verify-repertoire-*.png`, `verify-rep2-*`, `verify-clonal-*`) |
+| Playwright, 1600x1000 | `/tmp/shots-airrflow/` (tabs + `verify-repertoire-*.png`, `verify-rep2-*`, `verify-clonal-*`) |
 
 ## Wave 3 (sc-immune family rework)
 
