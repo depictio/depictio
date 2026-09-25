@@ -42,7 +42,7 @@ app = typer.Typer(add_completion=False)
 # Stronger fills for the pictograms, still in Excalidraw's pastel family.
 MONGO = "#b2f2bb"
 REDIS = "#ffc9c9"
-MINIO = "#ffd8a8"
+S3 = "#ffd8a8"
 BAR_BLUE = "#a5d8ff"
 BAR_VIOLET = "#d0bfff"
 SCREEN = "#f8f9fa"
@@ -206,7 +206,7 @@ def build_same_code() -> Sketch:
         46,
         52,
         "One server, two ways to run it",
-        "the same wheel everywhere; only where MongoDB, Redis and MinIO come from changes",
+        "the same wheel everywhere; only where MongoDB, Redis and the S3 store come from changes",
     )
 
     code = Box(520, 105, 460, 215, YELLOW, "")
@@ -225,8 +225,8 @@ def build_same_code() -> Sketch:
 
     s.text(360, 405, "Docker  /  Kubernetes", size=24, weight="bold")
     s.rect(Box(60, 425, 600, 330, BLUE, ""), dashed=True, colour=DIM)
-    fills = (MONGO, REDIS, MINIO, YELLOW, YELLOW, YELLOW)
-    for i, label in enumerate(("mongo", "redis", "minio", "api", "worker", "viewer")):
+    fills = (MONGO, REDIS, S3, YELLOW, YELLOW, YELLOW)
+    for i, label in enumerate(("mongo", "redis", "seaweedfs", "api", "worker", "viewer")):
         col, row = i % 2, i // 2
         container(s, 90 + col * 290, 450 + row * 98, 250, 78, fills[i], label)
     s.text(360, 790, "one container per service, images from a registry", size=15, colour=DIM)
@@ -235,18 +235,18 @@ def build_same_code() -> Sketch:
     screen = laptop(s, 860, 440, 510, 280)
     cylinder(s, screen.x + 85, screen.y + 40, 90, 105, MONGO)
     stack(s, screen.x + 255, screen.y + 45, 100, 100, REDIS)
-    bucket(s, screen.x + 425, screen.y + 48, 104, 100, MINIO)
+    bucket(s, screen.x + 425, screen.y + 48, 104, 100, S3)
     for x, label in (
         (screen.x + 85, "mongod"),
         (screen.x + 255, "redis-server"),
-        (screen.x + 425, "minio"),
+        (screen.x + 425, "weed mini"),
     ):
         s.text(x, screen.y + 175, label, size=15)
     pill(s, screen.x + 165, screen.y + 225, "uvicorn", YELLOW)
     pill(s, screen.x + 345, screen.y + 225, "celery", YELLOW)
     s.text(1115, 800, "plain processes on 127.0.0.1, state in `~/.depictio/local`", size=15, colour=DIM)
 
-    cube(s, 1400, 185, 72, MINIO)
+    cube(s, 1400, 185, 72, S3)
     s.text(1400, 258, "conda-forge", size=16, weight="bold")
     s.curve([(1395, 275), (1385, 330), (1350, 395)], colour=INK)
     s.arrow(1350, 395, 1335, 432)
@@ -292,16 +292,16 @@ def build_up_flow() -> Sketch:
 
     cube(s, 520, 175, 64, BAR_BLUE)
     s.text(520, 238, "PyPI", size=15, weight="bold")
-    cube(s, 625, 175, 64, MINIO)
+    cube(s, 625, 175, 64, S3)
     s.text(625, 238, "conda-forge", size=15, weight="bold")
     s.text(572, 270, "Python env · MongoDB,", size=14, colour=DIM)
-    s.text(572, 289, "Redis, MinIO binaries", size=14, colour=DIM)
+    s.text(572, 289, "Redis, SeaweedFS binaries", size=14, colour=DIM)
     s.text(572, 380, "2 · first run only", size=19, weight="bold")
 
     screen = laptop(s, 745, 120, 330, 190)
     cylinder(s, screen.x + 60, screen.y + 24, 62, 76, MONGO)
     stack(s, screen.x + 165, screen.y + 28, 70, 68, REDIS)
-    bucket(s, screen.x + 270, screen.y + 34, 70, 66, MINIO)
+    bucket(s, screen.x + 270, screen.y + 34, 70, 66, S3)
     gear(s, screen.x + 115, screen.y + 148, 24, STEEL)
     gear(s, screen.x + 215, screen.y + 148, 24, STEEL)
     s.text(910, 380, "3 · services start", size=19, weight="bold")
@@ -313,10 +313,10 @@ def build_up_flow() -> Sketch:
         s.arrow(x1, 215, x2, 215)
 
     s.text(46, 440, "measured wall time, drawn to scale", size=20, weight="bold", anchor="start")
-    scale = 26
+    scale = 22
     bars = (
-        ("first run, empty caches, rnaseq megatest", 41, BAR_BLUE),
-        ("next run, fresh data, rnaseq megatest", 20, BAR_VIOLET),
+        ("first run, empty caches, rnaseq megatest", 47, BAR_BLUE),
+        ("next run, fresh data, rnaseq megatest", 17, BAR_VIOLET),
         ("iris example, warm caches", 8, MONGO),
     )
     for i, (label, seconds, fill) in enumerate(bars):
@@ -324,7 +324,7 @@ def build_up_flow() -> Sketch:
         s.rect(Box(46, y, seconds * scale, 44, fill, ""))
         s.text(46 + seconds * scale + 16, y + 31, f"{seconds} s", size=22, weight="bold", anchor="start")
         s.text(56, y + 66, label, size=14, colour=DIM, anchor="start")
-    for sec in (0, 10, 20, 30, 40):
+    for sec in (0, 10, 20, 30, 40, 50):
         x = 46 + sec * scale
         s.line(x, 728, x, 738, width=1.2, colour=DIM, passes=1)
         s.text(x, 758, f"{sec} s", size=12, colour=DIM)

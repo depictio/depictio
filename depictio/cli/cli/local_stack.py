@@ -1,5 +1,5 @@
 """Container-free Depictio stack: the same API, worker and viewer as the Docker
-deployment, with MongoDB, Redis and MinIO run as plain processes.
+deployment, with MongoDB, Redis and SeaweedFS (the S3 store) run as plain processes.
 
 The native binaries come from conda-forge, installed once into
 ``<home>/env`` with py-rattler (the library pixi is built on), so nothing has to
@@ -24,13 +24,14 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-CONDA_SPECS = ["mongodb 8.0.*", "redis-server", "minio-server"]
+CONDA_SPECS = ["mongodb 8.0.*", "redis-server", "seaweedfs"]
 ADMIN_EMAIL = "admin@example.com"
-MINIO_USER = "depictio"
+S3_USER = "depictio"
+S3_BUCKET = "depictio-bucket"
 
-DEFAULT_PORTS = {"api": 8058, "mongo": 27018, "redis": 6379, "minio": 9000}
+DEFAULT_PORTS = {"api": 8058, "mongo": 27018, "redis": 6379, "s3": 9000}
 # Start order; stopped in reverse.
-PROCESS_ORDER = ["mongo", "redis", "minio", "api", "worker"]
+PROCESS_ORDER = ["mongo", "redis", "s3", "api", "worker"]
 
 
 class LocalStackError(RuntimeError):
@@ -75,7 +76,7 @@ class Paths:
             "logs",
             "mongo",
             "redis",
-            "minio",
+            "s3",
             "keys",
             "cli",
             "cache",
@@ -102,7 +103,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
         from rattler import VirtualPackage, install, solve
     except ImportError as exc:
         raise LocalStackError(
-            "py-rattler is required to fetch MongoDB/Redis/MinIO. "
+            "py-rattler is required to fetch MongoDB, Redis and SeaweedFS. "
             "Install the local extra: uvx --python 3.12 --from 'depictio[local]' depictio local up"
         ) from exc
 
@@ -126,6 +127,9 @@ def ensure_binaries(paths: Paths, log=print) -> None:
 # ---------------------------------------------------------------------------
 
 
+_PROXY_VARS = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
+
+
 def load_state(paths: Paths) -> dict:
     if not paths.state.exists():
         return {}
@@ -140,7 +144,7 @@ def load_secrets(paths: Paths) -> dict:
     if paths.secrets.exists():
         return json.loads(paths.secrets.read_text())
     values = {
-        "minio_password": secrets.token_urlsafe(24),
+        "s3_password": secrets.token_urlsafe(24),
         "admin_password": secrets.token_urlsafe(24),
     }
     paths.secrets.write_text(json.dumps(values))
@@ -203,12 +207,13 @@ def server_env(
             "DEPICTIO_MONGODB_SERVICE_NAME": host,
             "DEPICTIO_MONGODB_SERVICE_PORT": str(ports["mongo"]),
             "DEPICTIO_MONGODB_EXTERNAL_PORT": str(ports["mongo"]),
-            "DEPICTIO_MINIO_SERVICE_NAME": host,
-            "DEPICTIO_MINIO_SERVICE_PORT": str(ports["minio"]),
-            "DEPICTIO_MINIO_EXTERNAL_HOST": host,
-            "DEPICTIO_MINIO_EXTERNAL_PORT": str(ports["minio"]),
-            "DEPICTIO_MINIO_ROOT_USER": MINIO_USER,
-            "DEPICTIO_MINIO_ROOT_PASSWORD": secret_values["minio_password"],
+            "DEPICTIO_S3_SERVICE_NAME": host,
+            "DEPICTIO_S3_SERVICE_PORT": str(ports["s3"]),
+            "DEPICTIO_S3_EXTERNAL_HOST": host,
+            "DEPICTIO_S3_EXTERNAL_PORT": str(ports["s3"]),
+            "DEPICTIO_S3_ROOT_USER": S3_USER,
+            "DEPICTIO_S3_ROOT_PASSWORD": secret_values["s3_password"],
+            "DEPICTIO_S3_BUCKET": S3_BUCKET,
             "DEPICTIO_CACHE_REDIS_HOST": host,
             "DEPICTIO_CACHE_REDIS_PORT": str(ports["redis"]),
             "DEPICTIO_CELERY_BROKER_HOST": host,
@@ -365,26 +370,34 @@ def _start_services(
             "",
         ],
     )
-    minio_env = dict(os.environ)
-    minio_env.update(
+    # Same `weed mini` as the Docker and pixi stacks. Its master, volume and filer
+    # talk to each other over HTTP: pin them to loopback and keep them away from any
+    # proxy in the environment, or they announce and dial the host's public address.
+    s3_env = {k: v for k, v in os.environ.items() if k.lower() not in _PROXY_VARS}
+    s3_env.update(
         {
-            "MINIO_ROOT_USER": MINIO_USER,
-            "MINIO_ROOT_PASSWORD": secret_values["minio_password"],
-            "MINIO_BROWSER": "off",
+            "NO_PROXY": "127.0.0.1,localhost",
+            "AWS_ACCESS_KEY_ID": S3_USER,
+            "AWS_SECRET_ACCESS_KEY": secret_values["s3_password"],
+            "S3_BUCKET": S3_BUCKET,
         }
     )
-    procs["minio"] = spawn(
+    procs["s3"] = spawn(
         paths,
-        "minio",
+        "s3",
         [
-            str(paths.bin("minio")),
-            "server",
-            str(paths.home / "minio"),
-            "--address",
-            f"127.0.0.1:{ports['minio']}",
-            "--quiet",
+            str(paths.bin("weed")),
+            "mini",
+            f"-dir={paths.home / 's3'}",
+            "-ip=127.0.0.1",
+            "-ip.bind=127.0.0.1",
+            f"-s3.port={ports['s3']}",
+            "-s3.port.iceberg=0",
+            "-s3.port.lance=0",
+            "-admin.ui=false",
+            "-webdav=false",
         ],
-        env=minio_env,
+        env=s3_env,
     )
 
     wait_until(
@@ -394,11 +407,11 @@ def _start_services(
         lambda: tcp_ready(ports["redis"]), "Redis", 30, procs["redis"], paths.logs / "redis.log"
     )
     wait_until(
-        lambda: http_ready(f"http://127.0.0.1:{ports['minio']}/minio/health/live"),
-        "MinIO",
+        lambda: http_ready(f"http://127.0.0.1:{ports['s3']}/healthz"),
+        "SeaweedFS",
         60,
-        procs["minio"],
-        paths.logs / "minio.log",
+        procs["s3"],
+        paths.logs / "s3.log",
     )
 
     procs["api"] = spawn(
@@ -563,7 +576,7 @@ def reset(paths: Paths) -> None:
     for sub in (
         "mongo",
         "redis",
-        "minio",
+        "s3",
         "keys",
         "cli",
         "cache",

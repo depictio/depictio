@@ -96,7 +96,7 @@ def up(
         ),
     ] = None,
 ):
-    """Start MongoDB, Redis, MinIO, the API and the worker locally, then ingest a template."""
+    """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
     if (template is None) != (data_root is None):
         _fail("--template and --data-root go together")
     if data_root is not None and not data_root.is_dir():
