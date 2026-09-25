@@ -91,3 +91,28 @@ def test_load_secrets_is_stable_and_private(paths):
 def test_stop_all_without_state_is_a_no_op(paths):
     local_stack.stop_all(paths, log=lambda _msg: None)
     assert not paths.state.exists()
+
+
+def test_port_is_free_sees_a_wildcard_listener():
+    # macOS lets a 127.0.0.1 bind succeed next to a 0.0.0.0 listener (Docker-published ports).
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+        busy.bind(("0.0.0.0", 0))
+        busy.listen()
+        assert not port_is_free(busy.getsockname()[1])
+
+
+@pytest.mark.parametrize(
+    ("platform", "pool"),
+    [("linux", "--pool=prefork"), ("darwin", "--pool=threads")],
+)
+def test_worker_pool_forks_only_on_linux(monkeypatch, platform, pool):
+    monkeypatch.setattr(local_stack.sys, "platform", platform)
+    args = local_stack.worker_pool_args()
+    assert pool in args
+    assert ("--max-tasks-per-child=50" in args) == (platform == "linux")
+
+
+def test_windows_is_rejected_with_a_clear_message(monkeypatch):
+    monkeypatch.setattr(local_stack.sys, "platform", "win32")
+    with pytest.raises(local_stack.LocalStackError, match="WSL2"):
+        local_stack.check_platform_supported()

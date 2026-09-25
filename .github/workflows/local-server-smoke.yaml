@@ -17,7 +17,12 @@ on:
 
 jobs:
   local-up:
-    runs-on: ubuntu-24.04
+    # One runner per conda platform we have hosted runners for (osx-64 has none).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -72,6 +77,16 @@ jobs:
           done
           echo "iris delta table never appeared"; exit 1
 
+      # The preview is offloaded to the Celery worker, which then opens the Delta
+      # table: the path where a forked worker dies on macOS.
+      - name: Check the worker reads the iris table
+        run: |
+          curl -fsS -o /dev/null \
+            http://127.0.0.1:8058/depictio/api/v1/deltatables/preview/646b0f3c1e4a2d7f8e5b8c9c
+          if grep -E "exited with 'signal|WorkerLostError" ~/.depictio/local/logs/worker.log; then
+            echo "a worker process crashed"; exit 1
+          fi
+
       - name: depictio local down
         if: always()
         working-directory: ${{ runner.temp }}
@@ -86,6 +101,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: depictio-local-logs
+          name: depictio-local-logs-${{ matrix.os }}
           path: ~/.depictio/local/logs
           retention-days: 7
