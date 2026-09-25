@@ -110,7 +110,22 @@ prefix_keys: []
 # template.yaml reference.vars).
 # Megatest-specific names the dashboard texts must never carry (lint:
 # depictio/tests/models/test_template_conventions.py, rule e).
-forbidden_terms: [GM12878, FAST, OMNI, STD, HIST1, GAPDH, hg19, GM12878_FAST_R1, GM12878_FAST_R2, GM12878_OMNI_R1, GM12878_OMNI_R2, GM12878_STD_R1, GM12878_STD_R2, protocol, protocols]
+forbidden_terms:
+  - GM12878
+  - FAST
+  - OMNI
+  - STD
+  - HIST1
+  - GAPDH
+  - hg19
+  - GM12878_FAST_R1
+  - GM12878_FAST_R2
+  - GM12878_OMNI_R1
+  - GM12878_OMNI_R2
+  - GM12878_STD_R1
+  - GM12878_STD_R2
+  - protocol
+  - protocols
 renames: {}
 post_fetch_help: |
   === Reprocess MultiQC (the run wrote MultiQC 1.9, Depictio reads >= 1.31 parquet) ===

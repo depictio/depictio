@@ -106,7 +106,22 @@ keys:
 prefix_keys: []
 # Megatest-specific names the dashboard texts must never carry (lint:
 # depictio/tests/models/test_template_conventions.py, rule e).
-forbidden_terms: [H3K4me3, H3K27me3, h3k4me3_R1, h3k4me3_R2, h3k27me3_R1, h3k27me3_R2, igg_ctrl_R1, igg_ctrl_R2, ABL1, PLPP7, NUP214, FAM78A, LAMC3, FIBCD1, E. coli]
+forbidden_terms:
+  - H3K4me3
+  - H3K27me3
+  - h3k4me3_R1
+  - h3k4me3_R2
+  - h3k27me3_R1
+  - h3k27me3_R2
+  - igg_ctrl_R1
+  - igg_ctrl_R2
+  - ABL1
+  - PLPP7
+  - NUP214
+  - FAM78A
+  - LAMC3
+  - FIBCD1
+  - E. coli
 renames: {}
 post_fetch_help: |
   === Drop the zero-byte peak files ===
