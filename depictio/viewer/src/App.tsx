@@ -69,6 +69,7 @@ import type {
   RealtimeJournalEntry,
   IngestionSummary,
   StoredMetadata,
+  CommentViewState,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
 
@@ -97,6 +98,7 @@ import GroupingHeaderControl, {
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
+import { CommentsHeaderButton, CommentsProvider } from './components/comments';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
@@ -523,6 +525,32 @@ const App: React.FC = () => {
     [summaryMetadata],
   );
 
+  /**
+   * Restore the view a comment was written against: its filters replace the
+   * current ones, each through the same dc_id enrichment and (index, source)
+   * dedupe as a live filter change. The attached selection's raw filters are
+   * merged too, so a thread that only kept its selection still restores it.
+   */
+  const handleApplyViewState = useCallback(
+    (viewState: CommentViewState) => {
+      const incoming = [
+        ...(viewState.filters ?? []),
+        ...((viewState.selection?.filters as InteractiveFilter[] | undefined) ?? []),
+      ];
+      setFilters(
+        incoming.reduce<InteractiveFilter[]>(
+          (acc, f) => mergeFiltersBySource(acc, enrichFilterWithDcId(f, summaryMetadata)),
+          [],
+        ),
+      );
+      // Group filters narrow the dashboard outside the filter list, and a
+      // thread's view does not record them: release them, as "Reset all"
+      // does, so the restored view matches what the author saw.
+      groupsApi.deactivateAllGroupFilters();
+    },
+    [summaryMetadata, groupsApi.deactivateAllGroupFilters],
+  );
+
   const handleResetAllFilters = useCallback(() => {
     // "Reset all" returns to the author's initial view: declared defaults
     // come back, everything else is cleared.
@@ -908,6 +936,15 @@ const App: React.FC = () => {
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
       <BrandScope theme={dashboard?.brand_theme}>
+      {/* Editors and owners only: for anyone else the provider renders its
+          children alone, so no comment badge, button or drawer appears. */}
+      <CommentsProvider
+        dashboardId={dashboardId}
+        metadata={summaryMetadata}
+        filters={filters}
+        onApplyViewState={handleApplyViewState}
+        currentUser={currentUser}
+      >
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -946,6 +983,7 @@ const App: React.FC = () => {
           rightExtras={
             dashboard || realtimeEnabled ? (
             <>
+              {dashboard && <CommentsHeaderButton />}
               {dashboard && (
                 <GroupingHeaderControl
                   groupCount={groupsApi.groups.length}
@@ -1381,6 +1419,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </CommentsProvider>
       </BrandScope>
       </SaveGroupContext.Provider>
       </AdvancedVizPlacementDefaultProvider>

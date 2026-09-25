@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Badge, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 
 import {
   dispatchComputeEmbedding,
@@ -871,6 +873,28 @@ const EmbeddingRenderer: React.FC<Props> = ({
   // Whether any point matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations, 2D only: a 3D scene has no x/y plane to draw on.
+  // Marked points are keyed on the sample id, customdata slot 0 of every
+  // point whatever the selection column is.
+  const is3D = (plotData ?? []).some((t) => (t as { type?: unknown })?.type === 'scatter3d');
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && !is3D,
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 0,
+    pointIdColumn: config.sample_id_col || undefined,
+  });
+
   // Colour-by candidates: every column of the DC, not only the two configured
   // roles. A computed cluster column, any annotation column and any numeric
   // column all belong in the same menu, which is what "pas uniquement legende
@@ -1216,18 +1240,24 @@ const EmbeddingRenderer: React.FC<Props> = ({
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {groupedFigure ? (
-        <AdvancedVizPlot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-          onSelected={selectionEnabled ? handleSelected : undefined}
-          onClick={selectionEnabled ? handleClick : undefined}
-          onDeselect={selectionEnabled ? handleDeselect : undefined}
-        />
+        <>
+          <AdvancedVizPlot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps({
+              onSelected: selectionEnabled ? handleSelected : undefined,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

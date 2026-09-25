@@ -17,6 +17,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     branding_assets_collection,
+    comment_threads_collection,
     dashboards_collection,
     data_collections_collection,
     deltatables_collection,
@@ -554,6 +555,9 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
         # themes inherit from.
         "instance_settings": {"collection": instance_settings_collection, "exclude_filter": {}},
         "branding_assets": {"collection": branding_assets_collection, "exclude_filter": {}},
+        # Comment threads and annotations live apart from `dashboards`, so a
+        # dashboard restore alone would bring the tiles back without them.
+        "comment_threads": {"collection": comment_threads_collection, "exclude_filter": {}},
     }
 
     # First, get list of temporary user IDs to exclude their resources
@@ -561,6 +565,20 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
     temp_user_ids = [user["_id"] for user in temp_users]
 
     logger.info(f"Found {len(temp_user_ids)} temporary users to exclude")
+
+    # Their dashboards are left out below, so the comment threads anchored on
+    # them go too (threads store tab ids as strings).
+    temp_dashboard_ids = (
+        [
+            str(d["dashboard_id"])
+            for d in dashboards_collection.find(
+                {"permissions.owners._id": {"$in": temp_user_ids}}, {"dashboard_id": 1}
+            )
+            if d.get("dashboard_id") is not None
+        ]
+        if temp_user_ids
+        else []
+    )
 
     for collection_name, config in collections_config.items():
         # Extract collection with proper type for type checker
@@ -573,7 +591,11 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
             base_filter["permissions.owners._id"] = {"$nin": temp_user_ids}
 
         # Get all documents (applying exclusions)
-        if base_filter:
+        if collection_name == "comment_threads" and temp_dashboard_ids:
+            thread_filter = {"anchor.dashboard_id": {"$in": temp_dashboard_ids}}
+            excluded_documents += collection.count_documents(thread_filter)
+            documents = list(collection.find({"$nor": [thread_filter]}))
+        elif base_filter:
             # Count excluded documents
             excluded_count = collection.count_documents(
                 {
@@ -1263,6 +1285,55 @@ def _restore_complex_objects(obj):
     return obj
 
 
+# Collections that store their cross-references (project, dashboard, user ids)
+# as plain strings: only their own ``_id`` is an ObjectId, and re-hydrating
+# every 24-hex string would break the string matches their queries rely on.
+_STRING_ID_COLLECTIONS = frozenset({"comment_threads"})
+
+
+def _parse_backup_datetime(value: Any) -> Any:
+    """A datetime the backup wrote with ``default=str``, back as a UTC datetime."""
+    if not isinstance(value, str):
+        return value
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _restore_comment_thread(doc: dict) -> dict:
+    """Re-hydrate a comment thread: its top-level ``_id`` and its datetimes.
+
+    Every other id in a thread is a string on purpose (see
+    ``comments_endpoints/routes.py``), so the generic ObjectId re-hydration
+    must not touch it.
+    """
+    restored = dict(doc)
+    for key in ("_id", "id"):
+        value = restored.get(key)
+        if isinstance(value, str) and ObjectId.is_valid(value):
+            restored[key] = ObjectId(value)
+    for key in ("created_at", "updated_at", "resolved_at"):
+        restored[key] = _parse_backup_datetime(restored.get(key))
+    if isinstance(restored.get("review"), dict):
+        review = dict(restored["review"])
+        review["at"] = _parse_backup_datetime(review.get("at"))
+        restored["review"] = review
+    if isinstance(restored.get("comments"), list):
+        restored["comments"] = [
+            {
+                **c,
+                "created_at": _parse_backup_datetime(c.get("created_at")),
+                "edited_at": _parse_backup_datetime(c.get("edited_at")),
+            }
+            if isinstance(c, dict)
+            else c
+            for c in restored["comments"]
+        ]
+    return restored
+
+
 @backup_endpoint_router.post("/restore", response_model=BackupRestoreResponse)
 async def restore_backup(
     request: BackupRestoreRequest,
@@ -1332,6 +1403,7 @@ async def restore_backup(
             "groups": groups_collection,
             "instance_settings": instance_settings_collection,
             "branding_assets": branding_assets_collection,
+            "comment_threads": comment_threads_collection,
         }
 
         collections_to_restore = request.collections or list(data_section.keys())
@@ -1403,7 +1475,12 @@ async def restore_backup(
 
             try:
                 collection = collection_map[collection_name]
-                documents = [_restore_complex_objects(doc) for doc in data_section[collection_name]]
+                documents = [
+                    _restore_comment_thread(doc)
+                    if collection_name in _STRING_ID_COLLECTIONS
+                    else _restore_complex_objects(doc)
+                    for doc in data_section[collection_name]
+                ]
 
                 for doc in documents:
                     # Backups written from Mongo carry ``_id``; documents dumped

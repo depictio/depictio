@@ -233,6 +233,41 @@ body.panel-transitioning .react-grid-layout {
   border-radius: 6px;
 }
 
+/* A component focused from a comment thread. Drawn on an overlay above the
+ * tile's content (an inset shadow on the grid item is hidden under the card
+ * background), in the theme's primary colour, pulsing twice so it is still
+ * visible once the smooth scroll lands. Applied and removed by
+ * `lib/focusComponent.ts`. */
+@keyframes depictio-comment-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  15%,
+  45%,
+  75% {
+    opacity: 1;
+  }
+  30%,
+  60% {
+    opacity: 0.35;
+  }
+}
+.depictio-comment-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  border-radius: 8px;
+  border: 3px solid var(--mantine-primary-color-filled);
+  box-shadow:
+    0 0 0 4px var(--mantine-primary-color-light),
+    0 0 24px 4px var(--mantine-primary-color-light);
+  background: var(--mantine-primary-color-light);
+  animation: depictio-comment-flash 2.8s ease-in-out forwards;
+}
+
 /* ── Boot splash ───────────────────────────────────────────────────────────
  * Shown while the route chunk downloads and while the dashboard document is in
  * flight: phases with no panel list yet, so nothing can report a fraction.
