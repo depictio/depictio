@@ -16,7 +16,7 @@
 # and `Top_Unknown_Barcodes.csv` instead: the template scans both, and every
 # collection is optional so either layout ingests.
 #
-# MultiQC: the run writes MultiQC 1.3x parquets. `multiqc/` is the per-library
+# MultiQC: the run writes MultiQC 1.35 parquets. `multiqc/` is the per-library
 # report (bcl2fastq, fastp, falco, checkqc); `multiqcsav/` is the run-level
 # report fed with the InterOp directory. For this run the SAV report only
 # holds the bcl2fastq sections (the MultiQC `sav` module found no RunInfo.xml
@@ -31,7 +31,7 @@ version: "1.8.0"
 results_sha: "daade37c4a75a4c1709ccf12434deb3424141319"
 run_root: ""
 multiqc:
-  version: "1.3x"
+  version: "1.35"
   parquet: multiqc/multiqc_data/multiqc.parquet
   reprocess: false
 keys:
@@ -101,7 +101,7 @@ forbidden_terms:
   - Escherichia
   - Bacillus
   - Rhodobacter
-  - 35147139
+  - "35147139"
   - 000000000-BDNBC
   - BDNBC
   - lane1_no_adapters
