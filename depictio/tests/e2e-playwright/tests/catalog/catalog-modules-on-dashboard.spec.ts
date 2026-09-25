@@ -180,12 +180,18 @@ const CONTENT_SELECTOR: Record<string, string> = {
 
 /** Kinds that draw with something other than Plotly, keyed by render kind.
  *
- * Checked before CONTENT_SELECTOR: genome_view hands its box to GenomeSpy,
- * which paints a canvas, so a Plotly selector would call every genome_view
- * render broken.
+ * Checked before CONTENT_SELECTOR, which expects a Plotly plot for every
+ * advanced_viz and would call these renders broken: genome_view paints a
+ * GenomeSpy canvas, genome_chord draws its own SVG, record_card lays out
+ * cards, and group_compare shows what it compares until two groups are
+ * picked. A miss costs a full wait per page, so an unlisted kind here can
+ * push a job past its timeout.
  */
 const KIND_CONTENT_SELECTOR: Record<string, string> = {
   genome_view: ".depictio-genome-view canvas",
+  genome_chord: 'svg[role="img"]',
+  record_card: ".mantine-Card-root",
+  group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
 };
 
 /** How long to wait for CONTENT_SELECTOR, per component type.
