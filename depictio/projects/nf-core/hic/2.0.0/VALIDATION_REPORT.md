@@ -376,9 +376,9 @@ TADs and boundaries, Compare samples. 39 components become 92.
 
 ```bash
 # recipes on the real files, through the scan the CLI builds
-uv run python /tmp/claude-502/test_hicpro.py     # pair_stats 1x29, pair_flow 10x5, totals reconcile
-uv run python /tmp/claude-502/test_ps.py         # distance_profile 670x8, 22 series, <=33 pts/series
-uv run python /tmp/claude-502/test_domains.py    # domains 43,775x13
+uv run python /tmp/test_hicpro.py     # pair_stats 1x29, pair_flow 10x5, totals reconcile
+uv run python /tmp/test_ps.py         # distance_profile 670x8, 22 series, <=33 pts/series
+uv run python /tmp/test_domains.py    # domains 43,775x13
 
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k hic
 # 8 passed, 2 failed -- both failures are the shared catalog being all-or-nothing
@@ -572,7 +572,7 @@ insulation at all 5 windows, compartments A and B, matrix at both resolutions. L
 navigator emits `chr2` + `65000000-85000000` on open; the tiles echo 8,842 domain rows,
 4,506 insulation rows and 122 E1 rows at that region, and the insulation and E1 tracks'
 x axes are clamped to 65 to 85 Mb. No console error on any of the seven tabs after the
-HC-D16 workaround. Screenshots in `/tmp/claude-502/shots-hic/`.
+HC-D16 workaround. Screenshots in `/tmp/shots-hic/`.
 
 ### Live follow-up (same day, after the stack came back)
 

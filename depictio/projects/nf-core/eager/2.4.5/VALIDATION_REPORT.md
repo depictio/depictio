@@ -368,7 +368,7 @@ nohup uv run python -m depictio.cli run \
   --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
   --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest \
-  --project-name lot2-eager > /tmp/claude-502/ingest-eager2.log 2>&1 &
+  --project-name lot2-eager > /tmp/ingest-eager2.log 2>&1 &
 # ✅ Depictio-CLI run completed successfully! (8/8 steps)
 # 31 data collections processed, 5 optional skipped (sexdeterrmine, mtnucratio,
 # nuclear_contamination, maltextract_heatmap, kraken_report)

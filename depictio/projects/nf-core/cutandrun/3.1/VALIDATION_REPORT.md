@@ -361,7 +361,7 @@ fails because catalog loading is all or nothing (see CR-D18). All three tools he
 cleanly through `load_catalog_entries()`.
 
 Screenshots (1600 x 1000, dev viewer), four of five: `1-multiqc.png`, `2-signal.png`,
-`3-peak-calls.png` and `4-caller-agreement.png` under `/tmp/claude-502/shots-cutandrun/`.
+`3-peak-calls.png` and `4-caller-agreement.png` under `/tmp/shots-cutandrun/`.
 The fifth tab is CR-D16.
 
 ## Discrepancies (2026-09-22)

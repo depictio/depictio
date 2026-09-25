@@ -677,11 +677,11 @@ simply predates that install and has not re-resolved it. A second Vite dev serve
 tab correctly, which is where the five shipped screenshots come from:
 
 ```
-/tmp/claude-502/shots-atacseq/tab1-multiqc.png
-/tmp/claude-502/shots-atacseq/tab2-atac-signal.png
-/tmp/claude-502/shots-atacseq/tab3-peaks.png
-/tmp/claude-502/shots-atacseq/tab4-consensus.png
-/tmp/claude-502/shots-atacseq/tab5-differential.png
+/tmp/shots-atacseq/tab1-multiqc.png
+/tmp/shots-atacseq/tab2-atac-signal.png
+/tmp/shots-atacseq/tab3-peaks.png
+/tmp/shots-atacseq/tab4-consensus.png
+/tmp/shots-atacseq/tab5-differential.png
 ```
 
 The fix for the 5612 viewer is a restart of `depictio-viewer-dev` (or `vite --force` to drop
@@ -806,7 +806,7 @@ the HOMER tables. Platform fix wanted in `depictio/api/v1/filter_links.py` (skip
 filters, or filters not on the link's source column, when walking value links); then
 re-enable the link.
 
-Screenshots (1600x1000, /tmp/claude-502/shots-atacseq/): w2b-locus-nav.png and
+Screenshots (1600x1000, /tmp/shots-atacseq/): w2b-locus-nav.png and
 w2b-locus-tracks.png (default region), w2b-locus-typed-nav.png and
 w2b-locus-typed-tracks.png (chr12 locus typed), w2b-tab5-consensus.png, w2b-0e-0.png (PCA
 header), w2b-tab6-differential.png, w2b-0f-0.png (volcano header), w2b-0b-0.png and
