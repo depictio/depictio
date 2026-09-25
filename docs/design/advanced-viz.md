@@ -647,8 +647,8 @@ config.
 bigBed, GFF3, FASTA, tabix; one object plus its index per sample, stored under
 `indexed_files/<dc_id>/<sample>/`, outside the prefix the orphan cleanup garbage-collects)
 through GenomeSpy's lazy sources over HTTP range requests. The API hands out presigned URLs
-signed against the external MinIO URL, so the bucket must answer CORS preflights from the
-viewer origin (`MINIO_API_CORS_ALLOW_ORIGIN` on the dev compose and the helm chart). The
+signed against the external S3 URL, so the bucket must answer CORS preflights from the
+viewer origin (SeaweedFS `-s3.allowedOrigins`, `*` by default; see docs/indexed-files.md). The
 full GenomeSpy bundle loads behind a dynamic import only for file tiles; table tiles keep the
 minimal bundle. `@gmod/vcf` returns every INFO value as an array, which the spec builder
 unwraps before an ordinal colour scale sees it. Sashimi and cnv_profile file views are not
