@@ -38,6 +38,17 @@ class LocalStackError(RuntimeError):
     pass
 
 
+def check_platform_supported() -> None:
+    """Linux and macOS, x86_64 or arm64: the platforms conda-forge builds all three
+    services for, and the ones where the process-group handling below works."""
+    if sys.platform == "win32":
+        raise LocalStackError(
+            "depictio local is not supported on Windows: conda-forge has no redis-server "
+            "build for it and the services are managed as POSIX process groups. "
+            "Use WSL2, or the Docker compose stack."
+        )
+
+
 def local_home() -> Path:
     return Path(os.environ.get("DEPICTIO_LOCAL_HOME", "~/.depictio/local")).expanduser()
 
@@ -67,8 +78,6 @@ class Paths:
         return self.home / "cli" / f"{ADMIN_EMAIL.split('@')[0]}_config.yaml"
 
     def bin(self, name: str) -> Path:
-        if sys.platform == "win32":
-            return self.env / "Library" / "bin" / f"{name}.exe"
         return self.env / "bin" / name
 
     def ensure_dirs(self) -> None:
@@ -96,16 +105,23 @@ def _env_marker(paths: Paths) -> Path:
 
 
 def ensure_binaries(paths: Paths, log=print) -> None:
-    marker = _env_marker(paths)
-    if marker.exists() and json.loads(marker.read_text()) == CONDA_SPECS:
-        return
     try:
-        from rattler import VirtualPackage, install, solve
+        from rattler import Platform, VirtualPackage, install, solve
     except ImportError as exc:
         raise LocalStackError(
             "py-rattler is required to fetch MongoDB, Redis and SeaweedFS. "
             "Install the local extra: uvx --python 3.12 --from 'depictio[local]' depictio local up"
         ) from exc
+
+    # The platform is part of the marker: a $HOME shared between linux-64 and
+    # linux-aarch64 hosts, or a Python switched between Rosetta and native on a
+    # Mac, must not reuse binaries built for the other architecture.
+    wanted = {"specs": CONDA_SPECS, "platform": str(Platform.current())}
+    marker = _env_marker(paths)
+    if marker.exists() and json.loads(marker.read_text()) == wanted:
+        return
+    if paths.env.exists():
+        shutil.rmtree(paths.env)
 
     async def _install() -> None:
         records = await solve(
@@ -115,10 +131,13 @@ def ensure_binaries(paths: Paths, log=print) -> None:
         )
         await install(records=records, target_prefix=str(paths.env), show_progress=False)
 
-    log(f"Installing {', '.join(CONDA_SPECS)} from conda-forge into {paths.env} (first run only)")
+    log(
+        f"Installing {', '.join(CONDA_SPECS)} for {wanted['platform']} from conda-forge "
+        f"into {paths.env} (first run only)"
+    )
     start = time.monotonic()
     asyncio.run(_install())
-    marker.write_text(json.dumps(CONDA_SPECS))
+    marker.write_text(json.dumps(wanted))
     log(f"Native services installed in {time.monotonic() - start:.0f}s")
 
 
@@ -147,12 +166,18 @@ def load_secrets(paths: Paths) -> dict:
         "s3_password": secrets.token_urlsafe(24),
         "admin_password": secrets.token_urlsafe(24),
     }
-    paths.secrets.write_text(json.dumps(values))
-    paths.secrets.chmod(0o600)
+    # Created owner-only rather than chmod-ed afterwards, so it is never readable by others.
+    fd = os.open(paths.secrets, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(values))
     return values
 
 
 def port_is_free(port: int) -> bool:
+    # On macOS/BSD the bind below succeeds next to a listener on 0.0.0.0 (e.g. a
+    # port published by the Docker dev stack), so check for a listener first.
+    if tcp_ready(port):
+        return False
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         # Same option the servers set, so a port left in TIME_WAIT by the previous
         # run still counts as free.
@@ -289,6 +314,11 @@ def wait_until(
         # poll() rather than kill(pid, 0): an unreaped child stays visible as a zombie.
         if proc is not None and proc.poll() is not None:
             hint = f" See {log_path}" if log_path else ""
+            if proc.returncode == -signal.SIGILL:
+                hint += (
+                    " It was killed by an illegal instruction: MongoDB 5+ needs AVX on "
+                    "x86_64 and ARMv8.2-A on arm64 (not available on e.g. a Raspberry Pi 4)."
+                )
             raise LocalStackError(f"{what} exited during startup.{hint}")
         time.sleep(0.5)
     hint = f" See {log_path}" if log_path else ""
@@ -442,11 +472,25 @@ def _start_services(
             "depictio.api.celery_worker:celery_app",
             "worker",
             "--loglevel=info",
-            "--concurrency=2",
-            "--max-tasks-per-child=50",
+            *worker_pool_args(),
         ],
         env=env,
     )
+
+
+def worker_pool_args() -> list[str]:
+    """Celery pool for this OS.
+
+    prefork forks without exec, which only Linux tolerates here. On macOS the
+    children load libarrow, deltalake and the TLS trust store, all of which call
+    into CoreFoundation / SystemConfiguration, and a forked child that does so
+    dies with SIGABRT or SIGSEGV; OBJC_DISABLE_INITIALIZE_FORK_SAFETY does not
+    prevent it. Threads avoid the fork (the API already runs these tasks in
+    threads), at the cost of Celery time limits and max-tasks-per-child.
+    """
+    if sys.platform.startswith("linux"):
+        return ["--pool=prefork", "--concurrency=2", "--max-tasks-per-child=50"]
+    return ["--pool=threads", "--concurrency=2"]
 
 
 def wait_for_api(
