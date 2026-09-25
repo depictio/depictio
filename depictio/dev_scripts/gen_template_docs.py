@@ -331,8 +331,14 @@ def _render_data_collections(dcs: list[dict[str, Any]], pipeline_version: str) -
 
 
 def _html(text: str) -> str:
-    """Escape text for embedding in raw HTML."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    """Escape text for embedding in raw HTML.
+
+    Pipes become ``&#124;`` too: regex scan patterns land in Markdown table
+    cells, where a bare ``|`` would split the cell.
+    """
+    return (
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("|", "&#124;")
+    )
 
 
 def _condition_parts(cond: TemplateConditional) -> tuple[str, str]:
