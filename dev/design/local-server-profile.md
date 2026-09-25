@@ -65,15 +65,15 @@ nf-core/rnaseq 3.26.0, sous-ensemble du megatest, avec les panneaux ouverts puis
 
 | sidebar et filtres ouverts | sidebar et filtres repliés |
 |---|---|
-| ![](../../docs/images/v1.4/local/screenshots/rnaseq_multiqc_panels_open.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_multiqc_panels_closed.png) |
-| ![](../../docs/images/v1.4/local/screenshots/rnaseq_heatmap.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_gene_explorer.png) |
+| ![](../../docs/images/v1.4/local/screenshots/rnaseq_01.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_02.png) |
+| ![](../../docs/images/v1.4/local/screenshots/rnaseq_03.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_04.png) |
 
 Filtre `Condition = GM12878` : les cartes sont recalculées (8 → 2 librairies),
 puis le filtre suit sur l'onglet MultiQC.
 
 | sans filtre | avec filtre | onglet MultiQC filtré |
 |---|---|---|
-| ![](../../docs/images/v1.4/local/screenshots/rnaseq_overview_no_filter.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_overview_filter_gm12878.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_multiqc_filter_gm12878.png) |
+| ![](../../docs/images/v1.4/local/screenshots/rnaseq_05.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_06.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_07.png) |
 
 ## Approches écartées
 
