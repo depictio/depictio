@@ -668,10 +668,14 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
 
   /** A height the user dragged to outranks anything the content asks for, so
    *  the tile leaves autofit. A drag moves the tile without resizing it and is
-   *  deliberately not a gesture here. */
+   *  deliberately not a gesture here. Neither is a resize below the widest
+   *  breakpoint: `handleSectionLayoutChange` never persists that layout, so
+   *  pinning the tile there would save `fit: fixed` without the height that
+   *  justified it, and the tile would lose autofit at its old stored height. */
   const handleResizeStop = useCallback(
     (_layout: Layout[], oldItem: Layout, newItem: Layout) => {
       if (!onTileFixed || newItem.h === oldItem.h) return;
+      if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
       resizedByHand.current.add(newItem.i);
       onTileFixed(newItem.i, newItem.h);
     },
