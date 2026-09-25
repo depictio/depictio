@@ -418,7 +418,14 @@ workflows:
               "Kingdom": "Kingdom level"
               "Phylum": "Phylum level"
 
+      # QIIME2 addresses its collapsed tables by DEPTH, and the depth the path below
+      # pins depends on two run parameters: the rank count of the reference database
+      # and tax_agglom_max. A run that caps agglomeration below the pinned level
+      # writes no such file. That is a documented caveat and not a broken run, and
+      # six collections reach this one through dc_ref, so required it took the whole
+      # ingest down with it rather than degrading the tiles that depend on it.
       - data_collection_tag: "taxonomy_rel_abundance"
+        optional: true
         description: "Taxonomic relative abundance at Phylum level (from raw abundance table)"
         config:
           type: "Table"
@@ -457,6 +464,7 @@ workflows:
               "Phylum": "Phylum level"
 
       - data_collection_tag: "taxonomy_heatmap"
+        optional: true  # derives from taxonomy_rel_abundance through dc_ref
         description: "Taxonomic relative abundance matrix in wide format (Phylum × sample) for heatmap visualisation"
         config:
           type: "Table"
@@ -549,6 +557,7 @@ workflows:
               "lineage": "Full taxonomy string"
 
       - data_collection_tag: "embedding_pcoa"
+        optional: true  # derives from taxonomy_rel_abundance through dc_ref
         description: "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding"
         config:
           type: "Table"
@@ -601,6 +610,7 @@ workflows:
               "evenness": "Pielou's evenness"
 
       - data_collection_tag: "complex_heatmap_canonical"
+        optional: true  # derives from taxonomy_rel_abundance through dc_ref
         description: "ComplexHeatmap-ready taxonomy matrix (Phylum × sample)"
         config:
           type: "Table"
@@ -649,6 +659,7 @@ workflows:
 
       # Tier 2 derivations — UpSet (presence/absence) + Q-Q diagnostic + MA plot.
       - data_collection_tag: "upset_canonical"
+        optional: true  # derives from taxonomy_rel_abundance through dc_ref
         description: "UpSet-ready taxon × habitat binary presence matrix"
         config:
           type: "Table"
@@ -661,6 +672,7 @@ workflows:
               "taxon": "Taxon identifier"
 
       - data_collection_tag: "ma_canonical"
+        optional: true  # derives from taxonomy_rel_abundance through dc_ref
         description: "MA-plot-ready (mean log abundance vs lfc) for ANCOM-BC"
         config:
           type: "Table"
@@ -677,6 +689,7 @@ workflows:
               "label": "Display label (Phylum)"
 
       - data_collection_tag: "bray_curtis_canonical"
+        optional: true  # derives from taxonomy_rel_abundance through dc_ref
         description: "Sample × sample Bray-Curtis distance matrix (Beta diversity)"
         config:
           type: "Table"
