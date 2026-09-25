@@ -18,7 +18,10 @@ The config names are now store-neutral, and the old ones keep working:
   `http://minio:9000` in existing CLI configs still resolves;
 - the env prefix is `DEPICTIO_S3_*`; the legacy `DEPICTIO_MINIO_*` variables are
   still read as a fallback when the new one is unset (the new name wins when
-  both are set);
+  both are set). One exception: the dev stack (`docker-compose.dev.yaml`)
+  requires `DEPICTIO_S3_ROOT_USER` / `DEPICTIO_S3_ROOT_PASSWORD` under their new
+  names in `docker-compose/.env`, because Compose cannot combine a fallback
+  with a required variable;
 - the Helm values key is `s3:`; a legacy `minio:` block (and
   `persistence.minio`, `secrets.minioRoot*`, `global.urlPattern.templates.minio`)
   is still merged in and renders the same manifests, with a deprecation warning
