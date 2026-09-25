@@ -29,6 +29,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import html
+import json
 import re
 import textwrap
 from dataclasses import dataclass, field
@@ -41,6 +43,7 @@ from depictio.models.models.template_docs import (
     CalloutPosition,
     DocsCallout,
     DocsDashboardTab,
+    DocsPerson,
     TemplateDocs,
     TemplateStatus,
 )
@@ -275,17 +278,18 @@ def _render_callout(callout: DocsCallout) -> str:
     return f'!!! {callout.kind} "{callout.title}"\n{_indent(callout.body)}'
 
 
-def _person(handle: str) -> str:
+def _person(person: str | DocsPerson) -> str:
+    handle, name = (person, person) if isinstance(person, str) else (person.github, person.name)
     return (
         f'    <a class="tpl-person" href="https://github.com/{handle}" target="_blank" '
         f'rel="noopener">\n'
         f'      <img src="https://github.com/{handle}.png?size=80" alt="" loading="lazy"> '
-        f"{handle}\n    </a>"
+        f"{html.escape(name)}\n    </a>"
     )
 
 
-def _logo_imgs(pipeline: str, indent: str) -> str:
-    base = f"https://raw.githubusercontent.com/nf-core/{pipeline}/master/docs/images"
+def _logo_imgs(pipeline: str, indent: str, branch: str = "master") -> str:
+    base = f"https://raw.githubusercontent.com/nf-core/{pipeline}/{branch}/docs/images"
     return (
         f'{indent}<img class="nf-core-dark" src="{base}/nf-core-{pipeline}_logo_dark.png" '
         f'alt="nf-core/{pipeline}">\n'
@@ -299,10 +303,24 @@ def _logo_imgs(pipeline: str, indent: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+_VAR_RE = re.compile(r"\{([A-Z0-9_]+?)(?:_DISPLAY)?\}")
+
+
+def _vars_as_code(text: str) -> str:
+    """``Per-{GROUP_COL_DISPLAY} view`` -> ``Per-`GROUP_COL` view`` (outside code spans)."""
+    return _VAR_RE.sub(r"`\1`", text)
+
+
 def _component_label(component: dict[str, Any]) -> str:
     title = component.get("title") or component.get("selected_plot")
-    title = title or component.get("selected_module") or component.get("component_type", "")
-    return f"*{title}*"
+    title = title or component.get("selected_module")
+    if not title:
+        kind = component.get("visu_type") or component.get("viz_kind") or "untitled"
+        return f"a {kind} {component.get('component_type', 'tile')}"
+    return f"*{_vars_as_code(str(title))}*"
+
+
+_MAX_LISTED = 6
 
 
 def _section_cell(components: list[dict[str, Any]]) -> str:
@@ -313,7 +331,10 @@ def _section_cell(components: list[dict[str, Any]]) -> str:
         parts.append(_component_label(cards[0]))
     elif cards:
         parts.append(f"{len(cards)} cards")
-    parts += [_component_label(c) for c in others]
+    labels = [_component_label(c) for c in others]
+    if len(labels) > _MAX_LISTED:  # a long MultiQC section reads better as a count
+        labels = [*labels[:3], f"and {len(labels) - 3} more"]
+    parts += labels
     return ", ".join(parts)
 
 
@@ -338,7 +359,8 @@ def render_components_table(tab: DashboardTab) -> list[str]:
         components = by_section.pop(section["name"], [])
         if components:
             rows.append(
-                f"| {section['name']} | {_section_cell(components)}{_section_flags(section)} |"
+                f"| {_vars_as_code(section['name'])} | "
+                f"{_section_cell(components)}{_section_flags(section)} |"
             )
     for name, components in by_section.items():  # components outside a declared section
         rows.append(f"| {name or 'Ungrouped'} | {_section_cell(components)} |")
@@ -362,7 +384,7 @@ def _article(word: str) -> str:
 def _filter_name(component: dict[str, Any]) -> str:
     """Filter label in code, with ``{GROUP_COL_DISPLAY}`` shown as ``<GROUP_COL>``."""
     title = str(component.get("title") or component.get("column_name") or "")
-    title = re.sub(r"\{([A-Z0-9_]+?)(?:_DISPLAY)?\}", r"<\1>", title)
+    title = _VAR_RE.sub(r"<\1>", title)
     name = f"`{title}`"
     if component.get("interactive_component_type") in _RANGE_TYPES:
         name = f"{name} range"
@@ -386,7 +408,7 @@ def render_filters_line(tab: DashboardTab) -> str:
         if section.get("persistent"):
             pin = section.get("pin")
             where = f", on every tab{', pinned to the ' + pin if pin else ''}"
-        group = section["name"]
+        group = _vars_as_code(section["name"])
         parts.append(f"{_join(names)} in {_article(group)} *{group}* group{where}")
     parts += [_join(names) for names in by_section.values()]
     if not parts:
@@ -430,28 +452,61 @@ def _render_tab(p: PipelineDocs, tab: DashboardTab, images_dir: Path) -> list[st
     body += _screenshot_lines(p, prose, images_dir)
     body += _block(prose.description)
     inner = [prose.filters.strip() if prose.filters else render_filters_line(tab), ""]
-    inner += render_components_table(tab)
+    inner += [*render_components_table(tab), ""]
+    inner += _block(prose.filters_after)
     body += ['??? abstract ":material-tune-variant: Filters and components"', ""]
     body += [_indent("\n".join(inner)), ""]
     body += _block(prose.after)
     return [f'=== "{_tab_header(tab)}"', "", _indent("\n".join(body)), ""]
 
 
-def _use_count_line(p: PipelineDocs) -> list[str]:
-    components = [
+def _use_counts(p: PipelineDocs) -> tuple[int, int]:
+    """(tiles with a ``use:`` catalog reference, tiles); text and filters are not tiles."""
+    tiles = [
         c
         for tab in p.tabs
         for c in tab.raw.get("components") or []
-        if c.get("component_type") != "text"
+        if c.get("component_type") not in ("text", "interactive")
     ]
-    with_use = sum(1 for c in components if c.get("use"))
-    if not with_use:
-        return []
-    return [
-        f"{with_use} of its {len(components)} components carry a `use:` catalog reference, "
-        "so a tile says where its panel comes from.",
-        "",
-    ]
+    return sum(1 for c in tiles if c.get("use")), len(tiles)
+
+
+def _reference_lines(p: PipelineDocs) -> list[str]:
+    """The reference prose, with the ``use:`` count filled in or appended."""
+    with_use, tiles = _use_counts(p)
+    prose = p.docs.reference or ""
+    if "{use_count}" in prose or "{tile_count}" in prose:
+        prose = prose.replace("{use_count}", str(with_use)).replace("{tile_count}", str(tiles))
+        return _block(prose)
+    lines = _block(prose)
+    if with_use:
+        lines += [
+            f"{with_use} of its {tiles} tiles carry a `use:` catalog reference, "
+            "so a tile says where its panel comes from.",
+            "",
+        ]
+    return lines
+
+
+def _version_blocks(p: PipelineDocs) -> list[str]:
+    """One generated reference include per template version, for the version picker."""
+    lines = []
+    for version in p.versions:
+        slug = "latest" if version == p.version else version
+        lines += [
+            f'<div class="tpl-version-block" data-version="{version}" markdown>',
+            "",
+            f'--8<-- "pipeline-templates/nf-core/_generated/{p.pipeline}-{slug}.md"',
+            "",
+            "</div>",
+            "",
+        ]
+    return lines
+
+
+def _front_matter_title(title: str) -> str:
+    """Quote the title when bare YAML would misread it (``&``, ``:``, ``#``...)."""
+    return json.dumps(title) if re.search(r"[&:#*!|>'\"%@`{}\[\],?]", title) else title
 
 
 def render_page(p: PipelineDocs, docs_dir: Path) -> str:
@@ -466,7 +521,7 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
     )
     lines = [
         "---",
-        f"title: {d.page_title}",
+        f"title: {_front_matter_title(d.page_title)}",
         "hide:",
         "  - navigation",
         "---",
@@ -476,10 +531,10 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
         '<div class="template-banner">',
         f'  <a class="template-banner-logo" href="https://nf-co.re/{p.pipeline}" '
         f'target="_blank" title="nf-core/{p.pipeline} on nf-co.re">',
-        _logo_imgs(p.pipeline, "    "),
+        _logo_imgs(p.pipeline, "    ", d.logo_branch),
         "  </a>",
         '  <div class="template-banner-body">',
-        f'    <h1 class="template-title">{d.page_title}</h1>',
+        f'    <h1 class="template-title">{html.escape(d.page_title)}</h1>',
         f'    <p class="template-subtitle">{(d.subtitle or "").strip()}</p>',
         '    <p class="template-links">',
         f'      <a href="https://nf-co.re/{p.pipeline}" target="_blank">'
@@ -510,13 +565,15 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
         for prose in d.tabs
         if prose.title == tab.title and prose.summary
     ]
+    bullets += [f"- {bullet.strip()}" for bullet in d.intro_bullets]
     lines += [*bullets, "", *_block(d.intro_after), *_callouts(d, CalloutPosition.INTRO)]
 
     # Quick start
     run_cmd = [
         "depictio run \\",
         f"  --template nf-core/{p.pipeline}/latest \\",
-        f"  --data-root /path/to/{p.pipeline}_results" + (" \\" if d.run_vars else ""),
+        f"  --data-root {d.data_root or f'/path/to/{p.pipeline}_results'}"
+        + (" \\" if d.run_vars else ""),
     ]
     run_cmd += [
         f"  --var {var}" + (" \\" if i < len(d.run_vars) - 1 else "")
@@ -544,12 +601,15 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
         "No `depictio run`, and no template named: the pipeline ingests its own",
         "output directory when it finishes and resolves this template from its own",
         "manifest. See [Nextflow trigger](../../depictio-cli/nextflow-trigger.md).",
+        "",
+        *_block(d.trigger_note),
     ]
     lines += [
         '=== "From the pipeline itself (v1.10.0+)"',
         "",
-        _indent("\n".join(trigger)),
+        _indent(d.trigger_body if d.trigger_body else "\n".join(trigger)),
         "",
+        *_block(d.quick_start_after),
         *_callouts(d, CalloutPosition.QUICK_START),
     ]
 
@@ -559,17 +619,12 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
         "",
         "## :material-book-open-variant: Reference",
         "",
-        *_block(d.reference),
-        *_use_count_line(p),
+        *_reference_lines(p),
         _SELF_ADAPTING,
+        *([_indent(d.self_adapting_note)] if d.self_adapting_note else []),
         "",
         *_callouts(d, CalloutPosition.REFERENCE),
-        f'<div class="tpl-version-block" data-version="{p.version}" markdown>',
-        "",
-        f'--8<-- "pipeline-templates/nf-core/_generated/{p.pipeline}-latest.md"',
-        "",
-        "</div>",
-        "",
+        *_version_blocks(p),
     ]
 
     # Dashboard tabs
@@ -582,6 +637,7 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
     ]
     for tab in p.tabs:
         lines += _render_tab(p, tab, images_dir)
+    lines += _block(d.tabs_after)
     lines += _callouts(d, CalloutPosition.TABS)
 
     # Running, data structure, validation
@@ -608,7 +664,7 @@ def render_page(p: PipelineDocs, docs_dir: Path) -> str:
         (
             f"nf-co.re/{p.pipeline}/{p.version}/results",
             f"https://nf-co.re/{p.pipeline}/{p.version}/results",
-            "AWS test results",
+            d.results_note,
         ),
         (
             "Template System Reference",
@@ -644,7 +700,8 @@ def _render_authorship(p: PipelineDocs) -> list[str]:
     roles = [
         ("mdi-code-braces", "Developers", "Wrote the template, its recipes and its dashboards.",
          a.developers),
-        ("mdi-eye-check-outline", "Reviewers", _REVIEWER_NOTE[p.docs.status], a.reviewers),
+        ("mdi-eye-check-outline", "Reviewers", a.reviewer_note or _REVIEWER_NOTE[p.docs.status],
+         a.reviewers),
         ("mdi-wrench-outline", "Maintainers", f"Keep it working as nf-core/{p.pipeline} releases.",
          a.maintainers),
     ]  # fmt: skip
@@ -681,7 +738,7 @@ def render_card(p: PipelineDocs) -> str:
             f'data-tpl-name="nf-core/{p.pipeline}" data-tpl-status="{status.value}" '
             f'data-tpl-version="{p.version}" data-tpl-keywords="{keywords}">',
             '    <div class="template-card-logo">',
-            _logo_imgs(p.pipeline, "      "),
+            _logo_imgs(p.pipeline, "      ", d.logo_branch),
             "    </div>",
             '    <div class="template-card-body">',
             f'      <p class="template-card-desc">{d.card_blurb.strip()}</p>',

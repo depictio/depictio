@@ -93,6 +93,9 @@ class DocsDashboardTab(_Strict):
         default=None,
         description="Markdown for a tab that only some runs produce; it has no screenshot",
     )
+    filters_after: str | None = Field(
+        default=None, description="Markdown after the components table, inside the collapsible"
+    )
     after: str | None = Field(
         default=None, description="Markdown closing the tab block, e.g. a tip on when it appears"
     )
@@ -107,12 +110,22 @@ class DocsResource(_Strict):
     note: str
 
 
+class DocsPerson(_Strict):
+    """A GitHub account shown under another name, e.g. an organisation."""
+
+    github: str
+    name: str
+
+
 class DocsAuthorship(_Strict):
     """GitHub handles for each role; an empty reviewer list shows an open slot."""
 
-    developers: list[str] = Field(default_factory=list)
-    reviewers: list[str] = Field(default_factory=list)
-    maintainers: list[str] = Field(default_factory=list)
+    developers: list[str | DocsPerson] = Field(default_factory=list)
+    reviewers: list[str | DocsPerson] = Field(default_factory=list)
+    maintainers: list[str | DocsPerson] = Field(default_factory=list)
+    reviewer_note: str | None = Field(
+        default=None, description="Replaces the status-derived note under Reviewers"
+    )
 
 
 class TemplateDocs(_Strict):
@@ -127,9 +140,15 @@ class TemplateDocs(_Strict):
     card_blurb: str = Field(..., description="One sentence on the catalog card")
     index_summary: str = Field(..., description="Short label in the nf-core index table")
     keywords: list[str] = Field(default_factory=list, description="Catalog search keywords")
+    logo_branch: str = Field(
+        default="master", description="nf-core repository branch the logo images are read from"
+    )
     # Page prose: required only when the page is generated (see _page_fields).
     subtitle: str | None = Field(default=None, description="Banner subtitle, one sentence")
     intro: str | None = Field(default=None, description="Markdown lead-in, then the tab list")
+    intro_bullets: list[str] = Field(
+        default_factory=list, description="Markdown bullets listed after the tab bullets"
+    )
     intro_after: str | None = Field(
         default=None, description="Markdown after the tab list (pinned sections, shared filters)"
     )
@@ -139,17 +158,39 @@ class TemplateDocs(_Strict):
     run_vars: list[str] = Field(
         default_factory=list, description="--var NAME=value pairs shown in the quick start"
     )
+    data_root: str | None = Field(
+        default=None, description="--data-root shown in the quick start (default: a results dir)"
+    )
     quick_start_tabs: list[DocsQuickStartTab] = Field(default_factory=list)
+    trigger_body: str | None = Field(
+        default=None,
+        description="Markdown replacing the standard 'From the pipeline itself' tab body",
+    )
+    trigger_note: str | None = Field(
+        default=None, description="Markdown closing the 'From the pipeline itself' tab"
+    )
+    quick_start_after: str | None = Field(
+        default=None, description="Markdown after the quick start tabs"
+    )
     reference: str | None = Field(
-        default=None, description="Markdown before the generated reference tables"
+        default=None,
+        description="Markdown before the generated reference tables; {use_count} and "
+        "{tile_count} are replaced, and the standard use: sentence is then left out",
+    )
+    self_adapting_note: str | None = Field(
+        default=None, description="Sentence appended to the standard 'Self-adapting layout' box"
     )
     tabs_intro: str | None = Field(default=None, description="Markdown before the dashboard tabs")
     tabs: list[DocsDashboardTab] = Field(default_factory=list)
+    tabs_after: str | None = Field(default=None, description="Markdown after the tab blocks")
     running: str | None = Field(default=None, description="Markdown for 'Running the pipeline'")
     data_structure: str | None = Field(
         default=None, description="Markdown for 'Required data structure'"
     )
     validation: str | None = Field(default=None, description="Markdown for 'Validation runs'")
+    results_note: str = Field(
+        default="AWS test results", description="Note on the standard nf-co.re results link"
+    )
     resources: list[DocsResource] = Field(
         default_factory=list, description="Links added after the standard ones"
     )

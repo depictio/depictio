@@ -40,7 +40,9 @@ def _page(**overrides):
         "running": "Run it.",
         "data_structure": "A tree.",
         "validation": "A megatest.",
-        "callouts": [{"kind": "warning", "title": "Mind", "body": "Careful.", "position": "running"}],
+        "callouts": [
+            {"kind": "warning", "title": "Mind", "body": "Careful.", "position": "running"}
+        ],
     }
     data.update(overrides)
     return data
@@ -175,6 +177,10 @@ class TestRendering:
             "| Reads | *fastqc* (collapsed) |",
         ]
 
+    def test_long_section_is_summarised(self):
+        tiles = [{"component_type": "multiqc", "title": f"p{i}"} for i in range(8)]
+        assert gen._section_cell(tiles) == "*p0*, *p1*, *p2*, and 5 more"
+
     def test_page(self, tmp_path):
         p = _pipeline(tmp_path, _page())
         docs_dir = tmp_path / "docs"
@@ -195,10 +201,26 @@ class TestRendering:
         # only tabs with a summary are listed in the intro
         assert "- :material-bullseye-arrow: **Counts**: how many" in page
         assert "**MultiQC**:" not in page
-        assert "1 of its 7 components carry a `use:`" in page
+        assert "1 of its 4 tiles carry a `use:`" in page
+        # one reference include per version, the latest through its alias
+        assert '_generated/toy-latest.md"' in page
+        assert '_generated/toy-0.9.0.md"' in page
         assert page.index('!!! warning "Mind"') > page.index("Run it.")
         assert "which is what keeps it a Draft." in page
         assert "\n\n\n" not in page
+
+    def test_use_count_tokens_replace_the_standard_sentence(self, tmp_path):
+        p = _pipeline(tmp_path, _page(reference="{use_count} of {tile_count} tiles, see `x/*`."))
+        page = gen.render_page(p, tmp_path / "docs")
+        assert "1 of 4 tiles, see `x/*`." in page
+        assert "carry a `use:`" not in page
+
+    def test_title_and_placeholders_are_escaped(self, tmp_path):
+        p = _pipeline(tmp_path, _page(page_title="CUT&RUN"))
+        page = gen.render_page(p, tmp_path / "docs")
+        assert 'title: "CUT&RUN"' in page
+        assert "CUT&amp;RUN</h1>" in page
+        assert gen._vars_as_code("Per-{GROUP_COL_DISPLAY} view") == "Per-`GROUP_COL` view"
 
 
 class TestRegistries:
