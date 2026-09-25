@@ -30,10 +30,10 @@ modèles). Seule la configuration change, et uniquement via les variables
 | S3 | SeaweedFS (`weed mini`), image `chrislusf/seaweedfs` | `seaweedfs` de conda-forge (4.47), même `weed mini` |
 | Binaires | images | installés une fois par **py-rattler** (la bibliothèque sur laquelle pixi est construit, wheel PyPI) dans `~/.depictio/local/env` |
 | API | gunicorn, 4 workers | uvicorn, 1 worker, sur 127.0.0.1 |
-| Worker | conteneur Celery | `celery worker --concurrency=2` |
+| Worker | conteneur Celery | `celery worker --concurrency=2` : `prefork` sous Linux, `threads` sous macOS |
 | Viewer | nginx ou Vite | `dist/` inclus dans le wheel, servi par FastAPI |
 | Auth | au choix | mono-utilisateur (`DEPICTIO_AUTH_SINGLE_USER_MODE`) |
-| Miniatures | Playwright dans le worker | désactivées, sauf si Chromium est présent ou avec `--screenshots` |
+| Miniatures | Playwright dans le worker | désactivées, sauf avec `--screenshots` |
 
 ![un seul serveur, deux façons de le lancer](../../docs/images/v1.4/local/schema_same_code.png)
 
@@ -140,9 +140,24 @@ recalculent les cartes (8 → 2 librairies) et se propagent d'un onglet à l'aut
 3. **Licences** : MongoDB est sous SSPL et Redis sous SSPL/RSAL ; SeaweedFS est sous Apache-2.0.
    Les binaires sont téléchargés par l'utilisateur depuis conda-forge, pas
    redistribués par nous. Est-ce acceptable ?
-4. **Plateformes** : seul linux-64 a été testé ici. Les trois paquets conda
-   existent aussi pour linux-aarch64, osx-arm64 et osx-64. Windows n'est pas pris
-   en charge (`os.killpg`). `weed mini` garde ses ports internes par défaut
+4. **Plateformes** : Linux et macOS, x86_64 et arm64. Le job de smoke-test tourne
+   sur linux-64, linux-aarch64 et osx-arm64 ; osx-64 n'a pas de runner.
+   - **macOS** : le worker Celery tourne en `--pool=threads`. En `prefork`, les
+     processus fils chargent libarrow, deltalake et le trousseau TLS, qui appellent
+     CoreFoundation et SystemConfiguration après un `fork()` sans `exec` : ils
+     meurent en SIGABRT ou SIGSEGV, et `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` n'y
+     change rien. Le prix : les `time_limit` Celery et `--max-tasks-per-child` ne
+     s'appliquent pas.
+   - **Windows** : refusé dès le départ avec un message qui renvoie vers WSL2 ou
+     Docker. conda-forge n'a pas de `redis-server` pour win-64, et les services
+     sont gérés comme des groupes de processus POSIX (`os.killpg`).
+   - **Binaires** : la plateforme conda (`osx-arm64`, `linux-aarch64`…) est
+     enregistrée avec les specs, donc un `$HOME` partagé entre deux architectures
+     réinstalle au lieu de lancer un binaire de la mauvaise architecture.
+   - **CPU** : MongoDB 5+ demande AVX sur x86_64 et ARMv8.2-A sur arm64 (pas de
+     Raspberry Pi 4). Un `mongod` tué par SIGILL est signalé comme tel.
+
+   `weed mini` garde ses ports internes par défaut
    (master 9333, volume 9340, filer 8888, admin 23646, et gRPC à +10000) : si
    l'un est occupé, `up` s'arrête et cite le log de SeaweedFS. Seul Python 3.12 a été testé, d'où le `--python 3.12`
    dans la commande (`uvx` prendrait sinon le Python le plus récent, avec lequel

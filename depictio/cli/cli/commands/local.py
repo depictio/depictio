@@ -9,6 +9,7 @@ import typer
 from depictio.cli.cli.local_stack import (
     LocalStackError,
     Paths,
+    check_platform_supported,
     check_server_installed,
     chromium_installed,
     ensure_binaries,
@@ -88,13 +89,12 @@ def up(
         bool, typer.Option("--open/--no-open", help="Open the dashboards page in a browser")
     ] = True,
     screenshots: Annotated[
-        bool | None,
+        bool,
         typer.Option(
             "--screenshots/--no-screenshots",
-            help="Dashboard thumbnails via Playwright. --screenshots installs Chromium "
-            "(~150 MB) if needed; by default they are on only when Chromium is already there.",
+            help="Dashboard thumbnails via Playwright; installs Chromium (~150 MB) if needed.",
         ),
-    ] = None,
+    ] = False,
 ):
     """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
     if (template is None) != (data_root is None):
@@ -105,6 +105,7 @@ def up(
     paths = Paths(local_home())
     paths.ensure_dirs()
     try:
+        check_platform_supported()
         check_server_installed()
         if not viewer_built():
             rich_print_checked_statement(
@@ -125,10 +126,9 @@ def up(
             if screenshots and not chromium_installed():
                 _info("Installing Chromium for dashboard thumbnails")
                 install_chromium()
-            thumbnails = chromium_installed() if screenshots is None else screenshots
             seed = examples or ("none" if template else "iris,penguins")
             secret_values = load_secrets(paths)
-            env = server_env(paths, ports, secret_values, seed, thumbnails)
+            env = server_env(paths, ports, secret_values, seed, screenshots)
             url = f"http://127.0.0.1:{ports['api']}"
             state = {"pids": {}, "ports": ports, "url": url, "home": str(paths.home)}
             save_state(paths, state)
