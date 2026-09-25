@@ -45,8 +45,10 @@ services:
       # layout and cannot be reused — see docs/migrate-minio-to-seaweedfs.md.
       - ./${DATA_DIR:-data}/seaweedfs_data:/data
     environment:
-      AWS_ACCESS_KEY_ID: ${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_S3_ROOT_USER must be set in docker-compose/.env}}
-      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set in docker-compose/.env (>=16 chars, not a known default)}}
+      # Required on the new name only: Compose resolves a nested `:?` even when
+      # the outer variable is set, so `${NEW:-${LEGACY:?msg}}` always fails.
+      AWS_ACCESS_KEY_ID: ${DEPICTIO_S3_ROOT_USER:?DEPICTIO_S3_ROOT_USER must be set in docker-compose/.env (formerly DEPICTIO_MINIO_ROOT_USER)}
+      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_S3_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set in docker-compose/.env (formerly DEPICTIO_MINIO_ROOT_PASSWORD; >=16 chars, not a known default)}
       # Bucket is created at boot (idempotent) so the API's create_bucket() is a no-op.
       S3_BUCKET: ${DEPICTIO_S3_BUCKET:-${DEPICTIO_MINIO_BUCKET:-depictio-bucket}}
     # Dev only: the SeaweedFS admin UI is served on :9001 (the old MinIO console
@@ -58,8 +60,8 @@ services:
       - -s3.port=9000
       - -webdav=false
       - -admin.port=9001
-      - -admin.user=${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER}}
-      - -admin.password=${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD}}
+      - -admin.user=${DEPICTIO_S3_ROOT_USER}
+      - -admin.password=${DEPICTIO_S3_ROOT_PASSWORD}
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     ports:

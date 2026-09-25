@@ -189,7 +189,7 @@ fi
 # DEPICTIO_S3_ROOT_PASSWORD falls back to the legacy DEPICTIO_MINIO_ROOT_PASSWORD,
 # and the `:?` guard sits on that innermost fallback. The literal `${` is intended.
 # shellcheck disable=SC2016
-if grep -qF 'DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set' docker-compose.yaml; then
+if grep -qF 'DEPICTIO_S3_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set' docker-compose.yaml; then
     pass "docker-compose.yaml fails fast on missing S3_ROOT_PASSWORD"
 else
     fail "docker-compose.yaml fails fast on missing S3_ROOT_PASSWORD" "':?REQUIRED' form not used"
