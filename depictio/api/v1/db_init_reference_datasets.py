@@ -22,6 +22,22 @@ from depictio.models.utils import get_config
 
 _UNRESOLVED_VAR_RE = _re.compile(r"\{[A-Z0-9_]+\}")
 
+# The bundled project.yaml files hardcode the container install path. Rewriting it
+# to the real package root is a no-op in the image (where both are /app/depictio)
+# and lets the same seeds load from a pip/uv install.
+_CONTAINER_PACKAGE_ROOT = "/app/depictio/"
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _relocate_container_paths(obj: Any) -> Any:
+    if isinstance(obj, str) and obj.startswith(_CONTAINER_PACKAGE_ROOT):
+        return str(_PACKAGE_ROOT / obj[len(_CONTAINER_PACKAGE_ROOT) :])
+    if isinstance(obj, dict):
+        return {k: _relocate_container_paths(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_relocate_container_paths(item) for item in obj]
+    return obj
+
 
 def _has_unresolved_vars(obj: Any) -> bool:
     """Return True if any string in obj still contains a {VAR} placeholder."""
@@ -636,11 +652,10 @@ class ReferenceDatasetRegistry:
 
         if os.path.exists(template_path):
             raw_config = get_config(template_path)
-            # Resolve for Docker init: /app/depictio/projects/<rel_path>
-            data_root = f"/app/depictio/projects/{rel_path}"
+            data_root = str(_PACKAGE_ROOT / "projects" / rel_path)
             project_config = cls.resolve_template_for_init(raw_config, data_root)
         elif os.path.exists(project_yaml_path):
-            project_config = get_config(project_yaml_path)
+            project_config = _relocate_container_paths(get_config(project_yaml_path))
         else:
             raise FileNotFoundError(
                 f"No template.yaml or project.yaml found for dataset '{dataset_name}' in {project_dir}"

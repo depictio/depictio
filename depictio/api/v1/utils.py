@@ -5,7 +5,6 @@ from pathlib import PosixPath
 
 import numpy as np
 
-from depictio import BASE_PATH
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowConfig, WorkflowRun
@@ -20,7 +19,9 @@ async def clean_screenshots() -> dict[str, bool | str]:
     Returns:
         Dictionary with success status and message.
     """
-    screenshots_dir = os.path.join(BASE_PATH, "api", "static", "screenshots")
+    from depictio.api.v1.configs.config import settings
+
+    screenshots_dir = str(settings.performance.screenshots_path)
 
     if not os.path.exists(screenshots_dir):
         return {"success": False, "message": "Screenshots directory does not exist"}

@@ -128,6 +128,8 @@ dev = [
   "types-bleach==6.4.0.20260728",
   "types-boto3==1.43.62",
 ]
+# `depictio local up`: fetches MongoDB, Redis and MinIO from conda-forge.
+local = ["py-rattler==0.26.0"]
 
 
 [project.scripts]
@@ -146,6 +148,25 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["depictio*"]
+exclude = ["depictio.viewer.node_modules*"]
+
+# Files the server reads at runtime. Without them the wheel is an API with no viewer,
+# templates or reference datasets; only the Docker image (which copies the source tree)
+# had them. The viewer bundle must be built first: cd depictio/viewer && pnpm run build.
+[tool.setuptools.package-data]
+"depictio" = [
+  "viewer/dist/**/*",
+  "api/static/**/*",
+  "api/static_assets/**/*",
+  "projects/**/*",
+  # Globs skip dot-directories: the dashboard seeds need their own pattern.
+  "projects/**/.db_seeds/*",
+  "catalog/**/*",
+  "cli/configs/**/*",
+]
+
+[tool.setuptools.exclude-package-data]
+"depictio" = ["viewer/dist/**/*.map", "**/__pycache__/*", "**/*.pyc"]
 
 # [tool.mypy]
 # exclude = ["build/", "depictio/api/"]
