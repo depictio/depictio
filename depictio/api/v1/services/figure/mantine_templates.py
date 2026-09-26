@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import json
+import threading
 from typing import Any, Optional
 
 import plotly.io as pio
@@ -35,6 +36,10 @@ _TEMPLATE_SCHEMES = {"mantine_light": "surfaces_light", "mantine_dark": "surface
 _UNSET = object()
 _applied_key: Any = _UNSET
 _vanilla: dict[str, Any] = {}
+# Figures render inline in worker threads (`offload_or_run`), so the first
+# renders of a cold process land here concurrently: without the lock, a thread
+# could find `_vanilla` half filled and raise KeyError on the second template.
+_lock = threading.Lock()
 
 
 def _effective_theme() -> BrandTheme:
@@ -111,15 +116,18 @@ def apply_brand_theme() -> None:
     if key == _applied_key:
         return
 
-    if not _vanilla:
-        for name in _TEMPLATE_SCHEMES:
-            _vanilla[name] = copy.deepcopy(pio.templates[name])
+    with _lock:
+        if key == _applied_key:
+            return
+        if not _vanilla:
+            for name in _TEMPLATE_SCHEMES:
+                _vanilla[name] = copy.deepcopy(pio.templates[name])
 
-    for name, surfaces_field in _TEMPLATE_SCHEMES.items():
-        pio.templates[name] = _apply_to_template(
-            _vanilla[name], theme, getattr(theme, surfaces_field)
-        )
-    _applied_key = key
+        for name, surfaces_field in _TEMPLATE_SCHEMES.items():
+            pio.templates[name] = _apply_to_template(
+                _vanilla[name], theme, getattr(theme, surfaces_field)
+            )
+        _applied_key = key
 
 
 def ensure_mantine_templates() -> None:

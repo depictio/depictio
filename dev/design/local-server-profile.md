@@ -125,7 +125,11 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 
 Le job e2e a trouvé un bug que les `curl` laissaient passer : sans les seeds
 `.db_seeds`, le wheel démarrait avec la table iris mais sans aucun dashboard
-(404 sur `/dashboards/get`, liste vide).
+(404 sur `/dashboards/get`, liste vide). Il en a trouvé un second, présent aussi
+dans Docker : sur un processus froid, deux premiers rendus de figures simultanés
+pouvaient lire le cache des templates Plotly à moitié rempli (`KeyError:
+'mantine_dark'`, 500 sur `render_figure`). Il est corrigé par un verrou dans
+`mantine_templates.py`.
 
 Validé avec Playwright (1920×1200) : iris, penguins et le megatest nf-core/rnaseq
 3.26.0 (22 Mo). Les 4 onglets et les 12 figures MultiQC s'affichent. Les filtres
