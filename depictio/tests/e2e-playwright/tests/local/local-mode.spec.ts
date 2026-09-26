@@ -21,6 +21,19 @@ const IRIS_DC_ID = "646b0f3c1e4a2d7f8e5b8c9c";
 test.describe("Local mode (depictio local up)", () => {
   test.skip(!process.env.LOCAL_MODE_E2E, "Only runs against `depictio local up`.");
 
+  // `up` returns once the API answers; the worker writes the iris Delta table a
+  // few seconds later, and until then its cards and figures have nothing to read.
+  test.beforeAll(async () => {
+    test.setTimeout(150_000);
+    await expect
+      .poll(
+        async () =>
+          (await fetch(`${API_URL}${API_PREFIX}/deltatables/specs/${IRIS_DC_ID}`)).status,
+        { timeout: 120_000, intervals: [2_000] },
+      )
+      .toBe(200);
+  });
+
   // Fail on any server error the page runs into, not only on what it shows.
   let serverErrors: string[] = [];
   test.beforeEach(async ({ page }) => {
