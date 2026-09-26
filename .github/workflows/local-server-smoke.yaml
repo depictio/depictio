@@ -1,8 +1,8 @@
 name: Local server smoke test (no Docker)
 
-# Builds the wheel the way a release would (viewer bundle included) and boots it with
-# `depictio local up` from outside the checkout, so the container-free profile cannot
-# silently drift from the Docker one.
+# Builds the wheel the way a release would (viewer bundle included), boots it with
+# `depictio local up` from outside the checkout, then drives it with Playwright, so the
+# container-free profile cannot silently drift from the Docker one.
 
 on:
   pull_request:
@@ -67,7 +67,7 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8058/health
           curl -fsS -o /dev/null http://127.0.0.1:8058/dashboards
-          # The iris Delta table is written to the local MinIO in the background.
+          # The iris Delta table is written to the local SeaweedFS in the background.
           for i in $(seq 1 60); do
             if curl -fsS -o /dev/null \
               http://127.0.0.1:8058/depictio/api/v1/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c; then
@@ -86,6 +86,68 @@ jobs:
           if grep -E "exited with 'signal|WorkerLostError" ~/.depictio/local/logs/worker.log; then
             echo "a worker process crashed"; exit 1
           fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: depictio/tests/e2e-playwright/package-lock.json
+
+      - name: Install Playwright
+        id: playwright
+        working-directory: depictio/tests/e2e-playwright
+        run: |
+          npm ci
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          # One browser location on Linux and macOS, so the cache path below holds.
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/ms-playwright" >> "$GITHUB_ENV"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        working-directory: depictio/tests/e2e-playwright
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
+
+      # FastAPI serves the viewer bundle, so the UI and the API share one port.
+      # Only the specs that hold in single-user mode on the iris example: the local
+      # ones, plus the existing single-user and about specs. theme-toggle is left
+      # out because the onboarding tour covers the page on a fresh local stack.
+      - name: Playwright against the local server
+        working-directory: depictio/tests/e2e-playwright
+        run: |
+          LOCAL_MODE_E2E=1 \
+          PLAYWRIGHT_ADMIN_PASSWORD="$(jq -r .admin_password ~/.depictio/local/secrets.json)" \
+          PLAYWRIGHT_BASE_URL=http://127.0.0.1:8058 \
+          PLAYWRIGHT_API_URL=http://127.0.0.1:8058 \
+          npx playwright test --project=chromium \
+            tests/local tests/auth/single-user-mode.spec.ts tests/pages/about.spec.ts
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: local-playwright-report-${{ matrix.os }}
+          path: depictio/tests/e2e-playwright/playwright-report
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: local-playwright-results-${{ matrix.os }}
+          path: depictio/tests/e2e-playwright/test-results
+          retention-days: 7
 
       - name: depictio local down
         if: always()
