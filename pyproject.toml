@@ -159,6 +159,8 @@ exclude = ["depictio.viewer.node_modules*"]
   "api/static/**/*",
   "api/static_assets/**/*",
   "projects/**/*",
+  # Globs skip dot-directories: the dashboard seeds need their own pattern.
+  "projects/**/.db_seeds/*",
   "catalog/**/*",
   "cli/configs/**/*",
 ]
