@@ -103,12 +103,12 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 | Fichier | Changement |
 |---|---|
 | `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe` : MongoDB, Redis et SeaweedFS via py-rattler, variables `DEPICTIO_S3_*`, ports libres, secrets générés (0600), PID et logs dans `~/.depictio/local/`, ingestion via `depictio run`, `--var` transmis tel quel |
-| `pyproject.toml` | extra `local = ["py-rattler"]` ; `package-data` (viewer `dist/` sans sourcemaps, templates, données de démo, assets). **Le wheel racine ne contenait que le `.py`** : même bug que le wheel CLI 1.9.2 |
+| `pyproject.toml` | extra `local = ["py-rattler"]` ; `package-data` (viewer `dist/` sans sourcemaps, templates, données de démo, assets, et les seeds `projects/**/.db_seeds/*`, qu'un glob `**/*` ignore parce que le dossier est caché). **Le wheel racine ne contenait que le `.py`** : même bug que le wheel CLI 1.9.2 |
 | `depictio/version.py` | repli sur `importlib.metadata` : `VERSION` est hors du package, **l'API plantait à l'import depuis un wheel** |
 | `db_init_reference_datasets.py` | les `project.yaml` de référence codent `/app/depictio/...` en dur ; ce préfixe est réécrit vers la racine réelle du package (aucun effet dans l'image) |
 | `settings_models.py` + 4 sites | `DEPICTIO_PERFORMANCE_SCREENSHOTS_ENABLED` et `_SCREENSHOTS_DIR`. Au démarrage, `clean_screenshots()` supprime les PNG sans dashboard en base, et **il effaçait les miniatures versionnées du repo** quand le serveur tournait depuis un checkout avec une partie des exemples. En local, les miniatures vont dans `~/.depictio/local/screenshots` |
 | `dev/diagrams/local_server.py`, `docs/images/v1.4/local/` | les deux schémas (SVG + PNG) et les captures ci-dessus |
-| `.github/workflows/local-server-smoke.yaml` | construit le wheel (viewer compris), lance `uvx … depictio local up --examples iris` hors du checkout, puis vérifie `/health`, `/dashboards` et la table Delta iris |
+| `.github/workflows/local-server-smoke.yaml` | sur ubuntu x86_64, ubuntu arm64 et macOS : construit le wheel (viewer compris), lance `uvx … depictio local up --examples iris` hors du checkout, vérifie `/health`, `/dashboards` et la table Delta iris, puis lance Playwright sur cette pile : `tests/local/local-mode.spec.ts` (dashboard iris affiché, filtre `Variety = Setosa` qui fait passer la carte de 150 à 50 fleurs, aucune réponse 5xx), plus les specs existantes `single-user-mode` et `about` |
 
 ## Mesures (Linux x86_64, réseau datacenter)
 
@@ -122,6 +122,10 @@ Les approches suivantes ont été écartées pendant l'implémentation :
 | Lancement suivant avec données vierges (rnaseq) | 17 s |
 | `up` avec exemple iris, caches chauds | 8 s ; table Delta iris prête environ 4 s plus tard |
 | Build du viewer | 71 s (à faire dans le job de release) |
+
+Le job e2e a trouvé un bug que les `curl` laissaient passer : sans les seeds
+`.db_seeds`, le wheel démarrait avec la table iris mais sans aucun dashboard
+(404 sur `/dashboards/get`, liste vide).
 
 Validé avec Playwright (1920×1200) : iris, penguins et le megatest nf-core/rnaseq
 3.26.0 (22 Mo). Les 4 onglets et les 12 figures MultiQC s'affichent. Les filtres
