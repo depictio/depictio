@@ -115,6 +115,16 @@ def infer_index_uri(uri: str, fmt: str) -> str | None:
     return None
 
 
+def genomic_tracks_s3_prefix(dc_id: str) -> str:
+    """Bucket-relative folder a DC's local track files are uploaded to by default.
+
+    Kept out of the ``<dc_id>/`` prefix delta tables use (orphan cleanup deletes
+    ObjectId-shaped top-level prefixes). Shared by the CLI upload, the API
+    track proxy and the project cascade delete / migration.
+    """
+    return f"genomic_tracks/{dc_id}/"
+
+
 class CustomAssembly(BaseModel):
     """A reference assembly that is not one of the built-in presets.
 
@@ -219,6 +229,11 @@ class DCGenomicTracksConfig(BaseModel):
         default=None,
         description="S3 folder relative track URIs live under (set at ingestion)",
     )
+    remote_base_uri: str | None = Field(
+        default=None,
+        description="s3:// or https:// prefix relative track URIs are read in place under "
+        "(e.g. a pipeline's results folder), instead of being uploaded at ingestion",
+    )
     direct_access: bool = Field(
         default=False,
         description="Let the browser fetch https:// tracks directly instead of through "
@@ -264,6 +279,16 @@ class DCGenomicTracksConfig(BaseModel):
         if unknown:
             raise ValueError(f"display_defaults keys must be track formats, got {unknown}")
         return {k.lower(): val for k, val in v.items()}
+
+    @field_validator("remote_base_uri")
+    @classmethod
+    def validate_remote_base_uri(cls, v: str | None) -> str | None:
+        if not v or not v.strip():
+            return None
+        v = v.strip()
+        if not v.lower().startswith(("s3://", "https://")):
+            raise ValueError("remote_base_uri must start with 's3://' or 'https://'")
+        return v if v.endswith("/") else f"{v}/"
 
     @field_validator("s3_base_folder")
     @classmethod

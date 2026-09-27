@@ -106,10 +106,26 @@ def resolve_location(uri: str, base_folder: str) -> ByteSource:
     scheme = urlparse(uri).scheme.lower()
     own_bucket = settings.s3.bucket
 
+    if scheme in ("", "file") and "://" not in uri and base_folder.lower().startswith("https://"):
+        # Relative location under an https results folder: read in place like
+        # an absolute https:// URI (same allow-list).
+        return resolve_location(base_folder.rstrip("/") + "/" + _safe_relative(uri), base_folder)
+
     if scheme in ("", "file") and "://" not in uri:
         base_bucket, base_prefix = _split_s3(base_folder.rstrip("/") + "/_")
         base_prefix = base_prefix[: -len("_")]
-        return ByteSource("depictio_s3", bucket=base_bucket, key=base_prefix + _safe_relative(uri))
+        key = base_prefix + _safe_relative(uri)
+        if base_bucket == own_bucket:
+            return ByteSource("depictio_s3", bucket=base_bucket, key=key)
+        # A base folder in another bucket is read like an s3:// URI into it:
+        # allow-listed, with the remote client, never Depictio's credentials.
+        if base_bucket not in settings.jbrowse.s3_buckets:
+            raise RemoteReadError(
+                403,
+                f"S3 bucket '{base_bucket}' is not allow-listed "
+                "(DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS)",
+            )
+        return ByteSource("remote_s3", bucket=base_bucket, key=key)
 
     if scheme == "s3":
         bucket, key = _split_s3(uri)
