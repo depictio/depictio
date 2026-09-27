@@ -573,6 +573,12 @@ spec:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: DEPICTIO_AUTH_PUBLIC_ACCESS_CODE
                   optional: true
+            - name: DEPICTIO_JBROWSE_REMOTE_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_JBROWSE_REMOTE_S3_SECRET_KEY
+                  optional: true
             - name: DEPICTIO_BOOTSTRAP_SEED_TEST_USER
               valueFrom:
                 secretKeyRef:

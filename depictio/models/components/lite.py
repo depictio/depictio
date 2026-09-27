@@ -802,8 +802,9 @@ class JBrowseLiteComponent(BaseLiteComponent):
     )
     config_overrides: dict[str, Any] = Field(
         default_factory=dict,
-        description="Raw JBrowse config deep-merged last: keys 'tracks' (by trackId), "
-        "'assembly', 'configuration', 'defaultSession', 'displays' (by format)",
+        description="Raw JBrowse config deep-merged last: keys 'formats' (per track "
+        "format), 'tracks' (by trackId), 'extra_tracks' (full track configs), "
+        "'assembly', 'view' and 'configuration'",
     )
 
 

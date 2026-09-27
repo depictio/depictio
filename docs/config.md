@@ -76,8 +76,8 @@ The configuration to retrieve workflow data.
 ##### `workflows.data_collections.config`
 ###### `workflows.data_collections.config.type`
 - **Type**: String
-- **Description**: Type of data collection (e.g., Table, JBrowse2).
-- **Possible Values**: "Table", "JBrowse2"
+- **Description**: Type of data collection (e.g., Table, genomic_tracks).
+- **Possible Values**: "Table", "genomic_tracks" (plus "Image", "Phylogeny", "MultiQC", …; "JBrowse2" is legacy)
 - **Required**: Yes
 
 ##### `workflows.data_collections.config.format`
@@ -135,7 +135,47 @@ If you are defining a `Table` type data collection, you need to provide the foll
 
 
 
-### JBrowse2 Type Data Collection
+### `genomic_tracks` Type Data Collection
+
+A table of track files (the *manifest*: one row per track) that the `jbrowse`
+genome-browser component draws. The manifest is ingested like a table DC; the
+files it points at are either uploaded to Depictio's bucket at ingestion
+(relative paths found under the data location) or read in place from a remote
+`s3://` / `https://` location. Full reference and examples:
+[`docs/design/jbrowse-genome-tracks.md`](design/jbrowse-genome-tracks.md).
+
+```yaml
+- data_collection_tag: tracks
+  config:
+    type: genomic_tracks
+    metatype: Metadata
+    scan: {mode: single, scan_parameters: {filename: tracks.tsv}}
+    dc_specific_properties:
+      format: TSV
+      polars_kwargs: {separator: "\t"}
+      uri_column: uri            # file path / s3:// / https:// URL
+      sample_column: sample      # links the tracks to the rest of the dashboard
+      format_column: format      # bigwig, bed, vcf, bam, … (inferred if absent)
+      assembly: hg38             # a preset name, or a custom assembly block
+      remote_base_uri: s3://bucket/results/   # read relative rows in place
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `uri_column` | `uri` | Track file: relative path, `s3://…` or `https://…` |
+| `track_id_column` | – | Stable track id (defaults to a hash of the uri) |
+| `sample_column` | – | Column the tracks are filtered / emitted on |
+| `format_column` / `default_format` | `format` / – | Track format; inferred from the extension otherwise |
+| `index_column` | `index_uri` | Index file; `.tbi`/`.csi`/`.bai`/`.crai` inferred otherwise |
+| `name_column`, `color_column`, `category_column` | – | Label, colour and track-selector folder |
+| `order_column` | – | Row order the browser opens with |
+| `assembly` | `hg38` | Preset (`hg38`, `hg19`, `hs1`, `mm10`, `mm39`, `wuhCor1`, `sacCer3`, `dm6`, `ce11`, `danRer11`, `TAIR10`) or a custom assembly (`name`, `twobit_uri` or `fasta_uri`+`fai_uri`, `chrom_sizes_uri`, `refname_aliases_uri`, `aliases`) |
+| `remote_base_uri` | – | `s3://` or `https://` folder the relative rows are read under |
+| `direct_access` | `false` | Let the browser fetch `https://` tracks directly (the host must send CORS headers) |
+| `display_defaults` | `{}` | JBrowse track config merged into every track of a format |
+| `presets` | `{}` | Named config fragments the component can pick |
+
+### JBrowse2 Type Data Collection (legacy)
 
 If you are defining a `JBrowse2` type data collection, you need to provide the following additional configuration options.
 

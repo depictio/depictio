@@ -309,13 +309,6 @@ seaweedfs_backup_data/
 delta_dev/
 
 # Software Specific
-## JBrowse2
-jbrowse2/
-depictio/jbrowse2_configs/
-jbrowse-watcher-plugin/jbrowse2_sessions/
-jbrowse2_sessions/
-jbrowse2_configs/
-jbrowse-watcher-plugin/
 
 ## PyBuilder
 .pybuilder/

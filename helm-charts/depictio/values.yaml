@@ -87,6 +87,9 @@ secrets:
   # in etcd by default. Everyone who enters it still gets their own throwaway
   # user, so it is a door code, not an account.
   publicAccessCode: ""
+  # Secret key for private remote s3:// genome tracks (the access key goes in
+  # backend.env.DEPICTIO_JBROWSE_REMOTE_S3_ACCESS_KEY). Empty = anonymous reads.
+  jbrowseRemoteS3SecretKey: ""
 
 local_development: false # Set to true for local development
 
@@ -363,6 +366,14 @@ backend:
     DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "1440"
     DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "900"
     DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "2.0"
+
+    # Genome browser (jbrowse component). Remote track sources are refused
+    # unless their host / bucket is listed (comma-separated). Tracks and the
+    # built-in assemblies' UCSC files are range-proxied through the API.
+    DEPICTIO_JBROWSE_ENABLED: "true"
+    DEPICTIO_JBROWSE_REMOTE_HTTPS_HOSTS: "nf-core-awsmegatests.s3-eu-west-1.amazonaws.com"
+    DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS: "nf-core-awsmegatests"
+    DEPICTIO_JBROWSE_PRESET_ACCESS: "proxy"
 
     # Google Analytics configuration (GA4)
     # Enable to track page views, user interactions, and engagement metrics
