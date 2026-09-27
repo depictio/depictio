@@ -287,7 +287,6 @@ async def strandseq_click(page, base: str) -> Shot:
         [(221, 221, 119), (119, 119, 17), (170, 170, 68)],
     )
     assert point, "no SV call drawn under the first track label"
-    status = tile.locator('[data-testid="jbrowse-status"]')
     await page.mouse.click(*point)
     await page.wait_for_timeout(1500)
     click_y = point[1]
@@ -364,7 +363,11 @@ async def sarscov2_variant(page, base: str) -> Shot:
     await _open(page, base, SARSCOV2)
     tile = await _tile(page, "Variants and reads")
     await _settle(page)
-    table = page.locator(".react-grid-item").filter(has_text="Variant calls").first
+    table = (
+        page.locator(".react-grid-item")
+        .filter(has=page.get_by_text("Variant calls", exact=True))
+        .first
+    )
     await table.scroll_into_view_if_needed()
     await page.wait_for_timeout(3000)  # the table fetches once in view
     # The spike's D614G (A23403G) when it is on the first page, else the first row.
@@ -414,11 +417,16 @@ async def nfcore_tab(
     subtitle: str,
     texts: list[tuple[str, str, str]],
     pick: tuple[str, str] | None = None,
+    locus: str | None = None,
 ) -> Shot:
     await _open(page, base, dashboard_id)  # the template's Genome tracks tab
     if pick:
         await _pick_multiselect(page, *pick)
     tile = await _tile(page, title)
+    if locus:
+        search = tile.locator("input").first
+        await search.fill(locus)
+        await search.press("Enter")
     await _settle(page, 12000)
     png, origin = await _clip_capture(page, [tile])
     callouts = []
@@ -446,11 +454,18 @@ async def builder_jbrowse(page, base: str) -> Shot:
     form = page.get_by_text("Genome Browser Configuration", exact=True).first
     summary = page.get_by_text("Draft summary", exact=True).first
     overrides = page.get_by_text("Config overrides", exact=True).first
-    png, origin = await _clip_capture(
-        page,
-        [form, summary, overrides.locator("xpath=../..")],
-        pad=24,
-    )
+    # The two columns side by side (form + summary), down to the overrides editor.
+    fb = await form.bounding_box()
+    ob = await overrides.locator("xpath=../..").bounding_box()
+    assert fb and ob
+    x0, y0 = fb["x"] - 24, fb["y"] - 24
+    clip = {
+        "x": x0,
+        "y": y0,
+        "width": 1680 - 2 * x0,
+        "height": ob["y"] + ob["height"] + 24 - y0,
+    }
+    png, origin = await page.screenshot(clip=clip), (x0, y0)
     assembly = page.get_by_text("Assembly", exact=True).first.locator("xpath=..")
     display = page.get_by_text("Display", exact=True).first.locator("xpath=..")
     cross = page.get_by_text("Cross-filtering", exact=True).first.locator("xpath=../../..")
@@ -663,7 +678,7 @@ def main() -> None:
 NFCORE = {
     "cutandrun": (
         "Genome browser",
-        "nf-core/cutandrun: H3K4me3 signal, peak calls and reads",
+        "nf-core/cutandrun: H3K4me3 at the ACTB promoter",
         "Target = h3k4me3 in the left panel; bigWig, SEACR / MACS2 peaks and BAM of the "
         "megatest, read in place (TRACKS_URI)",
         [
@@ -680,7 +695,7 @@ NFCORE = {
             (
                 "text=h3k4me3_R1 alignments",
                 "Alignments",
-                "The deduplicated BAM, range-read through the API proxy (zoom in for reads).",
+                "The deduplicated BAM, range-read through the API proxy.",
             ),
             (
                 '[data-testid="jbrowse-status"]',
@@ -689,6 +704,7 @@ NFCORE = {
             ),
         ],
         ("Select target…", "h3k4me3"),
+        "chr7:5,525,000-5,545,000",
     ),
     "chipseq": (
         "Genome browser",
@@ -727,10 +743,11 @@ NFCORE = {
 def _nfcore_scenario(name: str, dashboard_id: str) -> Callable[..., Awaitable[Shot]]:
     title, heading, subtitle, texts, *rest = NFCORE[name]
     pick = rest[0] if rest else None
+    locus = rest[1] if len(rest) > 1 else None
 
     async def scenario(page, base: str) -> Shot:
         return await nfcore_tab(
-            page, base, dashboard_id, title, f"nfcore_{name}", heading, subtitle, texts, pick
+            page, base, dashboard_id, title, f"nfcore_{name}", heading, subtitle, texts, pick, locus
         )
 
     return scenario
