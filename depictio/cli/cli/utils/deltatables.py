@@ -26,6 +26,7 @@ from depictio.models.models.data_collections_types.bioimage import (
     remote_store_name,
 )
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+from depictio.models.models.data_collections_types.table import SpatialDataTableSource
 from depictio.models.models.files import File
 from depictio.models.models.s3 import PolarsStorageOptions
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
@@ -144,7 +145,12 @@ def convert_to_file_objects(files_data: list) -> list:
     return files
 
 
-def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
+def read_single_file_lazy(
+    file_info: File,
+    file_format: str,
+    polars_kwargs: dict,
+    spatialdata: SpatialDataTableSource | dict | None = None,
+) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
 
@@ -152,6 +158,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
         file_info (File): A validated File object.
         file_format (str): The file format (e.g. csv, parquet).
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
+        spatialdata: format "spatialdata" only: which table to read from the store.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -191,6 +198,13 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
             # In this case, read eagerly and convert to lazy.
             df = pl.read_excel(file_path, **polars_kwargs)
             lf = df.lazy()
+        elif file_format == "spatialdata":
+            # The File is a SpatialData store; its AnnData table is extracted eagerly.
+            from depictio.cli.cli.utils.spatialdata_table import read_spatialdata_table
+
+            if spatialdata is None:
+                raise ValueError("format 'spatialdata' needs a spatialdata block")
+            lf = read_spatialdata_table(file_path, spatialdata).lazy()
         else:
             error_msg = f"Unsupported file format: {file_format}"
             logger.error(error_msg)
@@ -207,7 +221,12 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
         raise Exception(error_msg)
 
 
-def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
+def read_files_lazy(
+    files: list,
+    file_format: str,
+    polars_kwargs: dict,
+    spatialdata: SpatialDataTableSource | dict | None = None,
+) -> list:
     """
     Lazily read all files into Polars LazyFrames.
 
@@ -215,13 +234,14 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
         files (list): List of validated File objects.
         file_format (str): Format of the files.
         polars_kwargs (dict): Additional keyword arguments for the Polars scanners.
+        spatialdata: format "spatialdata" only: which table to read from each store.
 
     Returns:
         list: List of Polars LazyFrames.
     """
     lazy_frames = []
     for file_info in files:
-        lf = read_single_file_lazy(file_info, file_format, polars_kwargs)
+        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, spatialdata)
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
@@ -696,7 +716,9 @@ def client_aggregate_data(
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
     with timed("parse"):
-        lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
+        lazy_frames = read_files_lazy(
+            files, file_format, polars_kwargs, dc_props.get("spatialdata")
+        )
     record("n_files", len(files) if files else 0)
 
     # 4/5. Aggregate + write to Delta Lake.

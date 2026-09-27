@@ -85,6 +85,13 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     elif data_collection_config["format"].lower() in ["xls", "xlsx"]:
         df = pl.read_excel(file_path, **dict(data_collection_config["polars_kwargs"]))
 
+    else:
+        # e.g. "spatialdata": extracted from a *.zarr store by the CLI only.
+        raise ValueError(
+            f"Unsupported table format {data_collection_config['format']!r} "
+            "(SpatialData tables are ingested with the CLI)"
+        )
+
     raw_cols = df.columns
     no_run_id = False
 

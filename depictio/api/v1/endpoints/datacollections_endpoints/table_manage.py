@@ -23,7 +23,10 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
-from depictio.api.v1.endpoints.datacollections_endpoints.utils import _user_can_edit_project
+from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+    SPATIALDATA_CLI_ONLY_DETAIL,
+    _user_can_edit_project,
+)
 from depictio.api.v1.s3 import polars_s3_config, s3_client
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
@@ -298,6 +301,11 @@ def _process_table_uploads(
         )
 
     _, dc_dict = _load_table_dc(data_collection_id, current_user)
+    dc_props = (dc_dict.get("config") or {}).get("dc_specific_properties") or {}
+    if (dc_props.get("format") or "").lower() == "spatialdata":
+        # Rows come from a SpatialData store, re-extracted by the CLI; an
+        # uploaded file cannot be appended to or replace them.
+        raise HTTPException(status_code=400, detail=SPATIALDATA_CLI_ONLY_DETAIL)
 
     # Best-effort ingestion-run ledger so UI uploads show in the admin
     # "Ingestion" pane next to CLI runs. Monitoring failures never block upload.
