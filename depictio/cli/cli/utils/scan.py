@@ -3,6 +3,7 @@ import hashlib
 import os
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import urlparse
@@ -60,10 +61,12 @@ from depictio.cli.cli_logging import logger
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.bioimage import OME_ZARR_STORE_SUFFIX
 from depictio.models.models.files import (
     NOT_UPLOADED_SCAN_REASONS,
     File,
     FileScanResult,
+    is_zarr_store_dir,
 )
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import (
@@ -186,6 +189,61 @@ def _warn_enforced_scan_bounds(data_collections: list[DataCollection]) -> None:
     )
 
 
+def _is_bioimage_dc(data_collection: "DataCollection") -> bool:
+    return data_collection.config.type.lower() == "bioimage"
+
+
+def iter_zarr_stores(path: str) -> list[str]:
+    """OME-Zarr store directories at or under ``path``, sorted.
+
+    ``path`` itself is returned when it is a store. Otherwise the tree is walked
+    and every directory named ``*.zarr`` is collected without descending into
+    it: a store holds thousands of chunk files that are never scanned one by one.
+    """
+    if is_zarr_store_dir(path):
+        return [path]
+    stores: list[str] = []
+    for root, dirs, _ in os.walk(path):
+        kept = []
+        for d in sorted(dirs):
+            if d.endswith(OME_ZARR_STORE_SUFFIX):
+                stores.append(os.path.join(root, d))
+            else:
+                kept.append(d)
+        dirs[:] = kept
+    return sorted(stores)
+
+
+def zarr_store_stats(store_path: str) -> tuple[int, float, bytes]:
+    """Total byte size, newest mtime and root ``.zattrs`` content of a store."""
+    total_size = 0
+    max_mtime = os.path.getmtime(store_path)
+    for root, _, files in os.walk(store_path):
+        for name in files:
+            st = os.stat(os.path.join(root, name))
+            total_size += st.st_size
+            max_mtime = max(max_mtime, st.st_mtime)
+    zattrs_path = os.path.join(store_path, ".zattrs")
+    zattrs = b""
+    if os.path.isfile(zattrs_path):
+        with open(zattrs_path, "rb") as fh:
+            zattrs = fh.read()
+    return total_size, max_mtime, zattrs
+
+
+def generate_zarr_store_hash(
+    store_name: str, total_size: int, max_mtime_iso: str, zattrs: bytes
+) -> str:
+    """Change-detection hash of a store: name, ``.zattrs``, total size and newest mtime.
+
+    Walking the store once is enough to notice a rewritten chunk (size or mtime
+    moves) or edited metadata, without hashing gigabytes of pixel data.
+    """
+    digest = hashlib.sha256(f"{store_name}{total_size}{max_mtime_iso}".encode())
+    digest.update(zattrs)
+    return digest.hexdigest()
+
+
 def scan_single_file(
     file_location: str,
     run: WorkflowRun,
@@ -236,7 +294,11 @@ def scan_single_file(
         # should be the original target, not the transient symlink. file_hash is
         # derived from basename + size + mtime (not the path), so this does not affect
         # change detection or hash-based dedup.
-        file_location = os.path.realpath(file_location)
+        resolved_location = os.path.realpath(file_location)
+        # A store reached through a symlink whose target is not named *.zarr keeps
+        # the scanned path, so the File still validates as a store directory.
+        if not is_zarr_store_dir(file_location) or is_zarr_store_dir(resolved_location):
+            file_location = resolved_location
         file_name = os.path.basename(file_location)
 
     if not skip_regex:
@@ -258,10 +320,17 @@ def scan_single_file(
 
     # Get file details. Kept after the regex check so a non-matching file still
     # costs nothing on the legacy (non-``scanned``) path.
+    zattrs = b""
+    is_store = scanned is None and is_zarr_store_dir(file_location)
     if scanned is not None:
         creation_time_iso = format_timestamp(scanned.ctime)
         modification_time_iso = format_timestamp(scanned.mtime)
         filesize = scanned.size
+    elif is_store:
+        # An OME-Zarr store is one File: size and mtime aggregate its whole tree.
+        creation_time_iso = format_timestamp(os.path.getctime(file_location))
+        filesize, store_mtime, zattrs = zarr_store_stats(file_location)
+        modification_time_iso = format_timestamp(store_mtime)
     else:
         creation_time_iso = format_timestamp(os.path.getctime(file_location))
         modification_time_iso = format_timestamp(os.path.getmtime(file_location))
@@ -275,7 +344,12 @@ def scan_single_file(
         )
         return None
 
-    file_hash = generate_file_hash(file_name, filesize, creation_time_iso, modification_time_iso)
+    if is_store:
+        file_hash = generate_zarr_store_hash(file_name, filesize, modification_time_iso, zattrs)
+    else:
+        file_hash = generate_file_hash(
+            file_name, filesize, creation_time_iso, modification_time_iso
+        )
     logger.debug(f"File Hash for {file_name}: {file_hash}")
 
     scan_result = None
@@ -388,7 +462,23 @@ def process_files(
         )
         logger.debug(f"Full Regex: {full_regex}")
 
-    if os.path.isdir(path):
+    if _is_bioimage_dc(data_collection) and os.path.isdir(path):
+        # Each *.zarr directory is one File; never walk into a store.
+        logger.debug(f"Scanning OME-Zarr stores under: {path}")
+        for store_location in iter_zarr_stores(path):
+            file_instance = scan_single_file(
+                file_location=store_location,
+                run=run,
+                data_collection=data_collection,
+                permissions=permissions,
+                existing_files=existing_files,
+                update_files=update_files,
+                full_regex=full_regex,
+                skip_regex=skip_regex,
+            )
+            if file_instance:
+                file_list.append(file_instance)
+    elif os.path.isdir(path):
         logger.debug(f"Scanning directory: {path}")
         bounds = _dc_scan_bounds(data_collection) if honor_scan_bounds else _ScanBounds(None, ())
         for scanned in iter_run_files(path, max_depth=bounds.max_depth, ignore=list(bounds.ignore)):
@@ -498,6 +588,14 @@ def scan_run_for_multiple_data_collections(
             )
         )
 
+    # Bioimage DCs match store directories instead of files (collected once,
+    # only when one of the DCs needs them).
+    all_zarr_stores_in_run: list[str] = (
+        iter_zarr_stores(run_location)
+        if any(_is_bioimage_dc(dc) for dc in data_collections)
+        else []
+    )
+
     # Process files for each data collection
     all_processed_files = []
     dc_stats = {}  # This will store per-data-collection stats
@@ -549,19 +647,27 @@ def scan_run_for_multiple_data_collections(
             dc_bounds = None
 
         dc_file_scan_results = []
-        for scanned in all_files_in_run:
-            if dc_bounds is not None and not dc_bounds.allows(scanned):
+        if _is_bioimage_dc(dc):
+            # A store is a directory: matched on its path and scanned on the
+            # non-``scanned`` path, which stats the whole tree.
+            candidates: Iterable[tuple[ScannedPath | None, str, str]] = (
+                (None, store, store) for store in all_zarr_stores_in_run
+            )
+        else:
+            candidates = ((s, s.path, s.walk_path) for s in all_files_in_run)
+        for scanned, scan_location, walk_path in candidates:
+            if scanned is not None and dc_bounds is not None and not dc_bounds.allows(scanned):
                 continue
             # Matched on the walked path rather than the symlink-resolved one,
             # which is what this loop has always compared.
-            if not file_matches_data_collection(scanned.walk_path, run_location, full_regex):
+            if not file_matches_data_collection(walk_path, run_location, full_regex):
                 continue
 
-            logger.debug(f"File {scanned.match_name} matches DC {dc.data_collection_tag}")
+            logger.debug(f"File {walk_path} matches DC {dc.data_collection_tag}")
 
             # skip_regex=True because we already matched in the loop above
             file_scan_result = scan_single_file(
-                file_location=scanned.path,
+                file_location=scan_location,
                 run=temp_run,
                 data_collection=dc,
                 permissions=permissions,
@@ -2189,6 +2295,22 @@ def scan_manifest_for_data_collection(
     return {"result": "success", "added": len(to_add), "updated": len(to_update)}
 
 
+def _is_current_single_location(
+    data_collection: DataCollection, location: str, current_path: str
+) -> bool:
+    """Whether a registered File still belongs to a single-mode DC's scan path.
+
+    An OME-Zarr single-mode ``filename`` may point at one store or at a folder of
+    stores, so any store at or under that path is current.
+    """
+    if location == current_path:
+        return True
+    if not _is_bioimage_dc(data_collection):
+        return False
+    root = os.path.realpath(current_path)
+    return location == root or location.startswith(root.rstrip("/") + "/")
+
+
 def scan_files_for_data_collection(
     workflow: Workflow,
     data_collection_id: str,
@@ -2278,7 +2400,9 @@ def scan_files_for_data_collection(
         current_file_path = data_collection.config.scan.scan_parameters.filename
         if existing_files_reformated:
             stale_files = [
-                f for loc, f in existing_files_reformated.items() if loc != current_file_path
+                f
+                for loc, f in existing_files_reformated.items()
+                if not _is_current_single_location(data_collection, loc, current_file_path)
             ]
             for stale_file in stale_files:
                 stale_id = stale_file.get("_id") or stale_file.get("id")
