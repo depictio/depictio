@@ -40,6 +40,7 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_o
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
+from depictio.models.models.data_collections_types.bioimage import bioimage_s3_prefix
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.users import User
 
@@ -148,8 +149,10 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
             if uri.startswith("s3://"):
                 add(_normalize_s3_path(uri, source_bucket))
 
-    # Phylogeny trees: no document records where the CLI uploaded them, the key
-    # is derived from the DC id, so tell the phylogenies apart by their config.
+    # Phylogeny trees and OME-Zarr stores: no document records where the CLI
+    # uploaded them, the key (phylogeny) or prefix (OME-Zarr, one object per
+    # zarr key) is derived from the DC id, so tell them apart by their config.
+    # Consumers list every entry as a prefix, so one prefix covers all stores.
     wanted = set(dc_ids)
     for project in projects_collection.find(
         {"workflows.data_collections._id": {"$in": dc_ids}},
@@ -157,8 +160,13 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
     ):
         for wf in project.get("workflows") or []:
             for dc in wf.get("data_collections") or []:
-                if dc.get("_id") in wanted and (dc.get("config") or {}).get("type") == "phylogeny":
+                if dc.get("_id") not in wanted:
+                    continue
+                dc_type = (dc.get("config") or {}).get("type")
+                if dc_type == "phylogeny":
                     add(phylogeny_s3_key(str(dc["_id"])))
+                elif dc_type == "bioimage":
+                    add(bioimage_s3_prefix(str(dc["_id"])))
 
     return locations
 
