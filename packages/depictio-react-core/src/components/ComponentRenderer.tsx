@@ -300,24 +300,16 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'jbrowse' && dashboardId) {
-    // JBrowse fetches its session on mount and pulls a heavy chunk, so gate the
-    // whole thing on the viewport — off-screen tracks neither fetch nor load
-    // their code until scrolled near. Chrome stays *outside* the gate (as for
-    // multiqc) so a deferred panel still shows its card border and title rather
-    // than a bare unframed shimmer.
-    return wrapWithChrome(
-      'jbrowse',
-      metadata,
-      undefined,
-      <LazyMount>
-        <JBrowseRenderer
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          refreshTick={refreshTick}
-        />
-      </LazyMount>,
-      { extraActions, showDragHandle },
+    return (
+      <JBrowseBlock
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        extraActions={chromeExtras}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -535,6 +527,73 @@ const MapBlock: React.FC<{
     {
       onResetFilter: onResetSelection,
       extraActions: mapExtras,
+      showDragHandle,
+      sourceFilterActive,
+    },
+  );
+};
+
+const JBrowseBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  // The header / overview / status toggles live in the renderer (they drive
+  // the JBrowse view model) and are handed up here for the chrome action row,
+  // the same hand-off MapBlock uses for its settings popover. The renderer
+  // keys its node so ComponentChrome's positional re-keying never remounts it.
+  const [toolbarNode, setToolbarNode] = React.useState<React.ReactNode>(null);
+  const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () =>
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'jbrowse_selection',
+          })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'jbrowse_selection');
+  const jbrowseExtras = (
+    <>
+      {extraActions}
+      {toolbarNode}
+    </>
+  );
+  // JBrowse pulls a heavy chunk and fetches its config on mount, so gate the
+  // whole thing on the viewport. Chrome stays *outside* the gate (as for
+  // multiqc) so a deferred panel still shows its frame and title.
+  return wrapWithChrome(
+    'jbrowse',
+    metadata,
+    undefined,
+    <LazyMount>
+      <Suspense fallback={<CellPlaceholder />}>
+        <JBrowseRenderer
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          onFilterChange={onFilterChange}
+          refreshTick={refreshTick}
+          onToolbarNode={setToolbarNode}
+        />
+      </Suspense>
+    </LazyMount>,
+    {
+      onResetFilter: onResetSelection,
+      extraActions: jbrowseExtras,
       showDragHandle,
       sourceFilterActive,
     },

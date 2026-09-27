@@ -360,6 +360,8 @@ export function supportsSelectionGrouping(
       return Boolean(metadata.image_column);
     case 'advanced_viz':
       return advancedVizSelectionColumn(metadata) !== undefined;
+    case 'jbrowse':
+      return Boolean(metadata.selection_enabled);
     default:
       return false;
   }

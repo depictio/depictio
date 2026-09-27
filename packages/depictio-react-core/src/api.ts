@@ -802,6 +802,8 @@ export type InteractiveFilterSource =
   | 'map_selection'
   | 'image_selection'
   | 'tree_selection'
+  /** Tracks picked in the genome browser (feature click / visible tracks). */
+  | 'jbrowse_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
@@ -1623,25 +1625,49 @@ export async function fetchMapData(
  *  narrow the visible tracks via existing /jbrowse/* internal endpoints. If
  *  any of those services are unreachable, the backend returns 503.
  */
+/** One track of the render payload, as the viewer needs it to map a click
+ *  back to a dashboard filter. */
+export interface JBrowseTrackRow {
+  track_id: string;
+  name: string;
+  format: string;
+  sample: string | null;
+  /** Value of the component's selection column for this track. */
+  selection_value: string | null;
+}
+
+/** `POST /dashboards/render_jbrowse` — everything the embedded linear genome
+ *  view is built from. File locations are signed, short-lived API URLs (or the
+ *  raw https URL for `direct_access` collections). */
 export interface JBrowseSessionResponse {
-  iframe_url: string;
-  assembly: string;
-  location: string;
-  tracks?: string[];
-  metadata?: { filter_applied?: boolean };
+  assembly: Record<string, unknown>;
+  tracks: Array<Record<string, unknown> & { trackId: string }>;
+  shown_track_ids: string[];
+  location: string | null;
+  view: { hideHeader?: boolean; hideHeaderOverview?: boolean; trackLabels?: string } & Record<
+    string,
+    unknown
+  >;
+  configuration: Record<string, unknown>;
+  track_rows: JBrowseTrackRow[];
+  selection_column: string | null;
+  tracks_dc_id: string;
+  filter_applied: boolean;
+  total_tracks: number;
+  matched_tracks: number;
+  truncated: boolean;
 }
 
 export async function fetchJBrowseSession(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
-  theme: 'light' | 'dark' = 'light',
 ): Promise<JBrowseSessionResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters }),
     },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to render JBrowse');

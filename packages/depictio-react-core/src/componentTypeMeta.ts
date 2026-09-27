@@ -41,6 +41,7 @@ export const COMPONENT_TYPE_VISUALS: Record<string, ComponentTypeVisual> = {
   multiqc:      { label: 'MultiQC',      icon: 'mdi:chart-line',                color: brandColors.orange },
   image:        { label: 'Image',        icon: 'mdi:image-area',                color: brandColors.pink },
   map:          { label: 'Map',          icon: 'mdi:map-marker-multiple',       color: brandColors.violet },
+  jbrowse:      { label: 'Genome browser', icon: 'mdi:dna',                     color: brandColors.yellow },
   text:         { label: 'Text',         icon: 'mdi:text-box-edit',             color: TEXT_ACCENT },
   advanced_viz: { label: 'Advanced viz', icon: 'mdi:chart-scatter-plot-hexbin', color: ADVANCED_VIZ_ACCENT },
 };

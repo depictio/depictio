@@ -537,6 +537,7 @@ export type {
   FigureResponse,
   TableResponse,
   JBrowseSessionResponse,
+  JBrowseTrackRow,
   ServerStatusResponse,
   PublicConfigResponse,
   CurrentUser,

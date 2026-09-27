@@ -67,7 +67,7 @@ importers:
         version: link:../../packages/depictio-components
       depictio-react-core:
         specifier: file:../../packages/depictio-react-core
-        version: link:../../packages/depictio-react-core
+        version: file:packages/depictio-react-core(f4b51fe7b812d2cb251b84fc8d8ccb24)
       embla-carousel:
         specifier: ^8.0.0
         version: 8.6.0
@@ -237,9 +237,30 @@ importers:
 
   packages/depictio-react-core:
     dependencies:
+      '@jbrowse/core':
+        specifier: 4.3.0
+        version: 4.3.0(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@jbrowse/embedded-core':
+        specifier: 4.3.0
+        version: 4.3.0(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@jbrowse/mobx-state-tree':
+        specifier: 5.13.0
+        version: 5.13.0(mobx@6.16.1)
+      '@jbrowse/plugin-gtf':
+        specifier: 4.3.0
+        version: 4.3.0(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@jbrowse/react-linear-genome-view2':
         specifier: 4.3.0
         version: 4.3.0(@mui/system@7.3.11(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mui/material':
+        specifier: 7.3.11
+        version: 7.3.11(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      mobx:
+        specifier: 6.16.1
+        version: 6.16.1
+      mobx-react:
+        specifier: 9.2.2
+        version: 9.2.2(mobx@6.16.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     devDependencies:
       '@iconify/react':
         specifier: ^5.0.2
@@ -342,7 +363,7 @@ importers:
         version: link:../depictio-components
       depictio-react-core:
         specifier: file:../depictio-react-core
-        version: link:../depictio-react-core
+        version: file:packages/depictio-react-core(f4b51fe7b812d2cb251b84fc8d8ccb24)
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.1
@@ -1599,6 +1620,11 @@ packages:
 
   '@jbrowse/plugin-gff3@4.3.0':
     resolution: {integrity: sha512-0v1XQac34BPSQ536F4zNw8DVhZ/aVoQ6M5E8Afh6+ZJnqFyQHfHo/B5AOglYjVBgt0iAKKrAhD6gqb72wrqgvQ==}
+
+  '@jbrowse/plugin-gtf@4.3.0':
+    resolution: {integrity: sha512-hM5EviIytEtjZnul+w/C0ics/TSJVFysNuKI5Ih5d4bJQl+GHySOPA6g2rkpIG77sinsf+bo1H8mPOwkeoDSKg==}
+    peerDependencies:
+      react: '>=18.0.0'
 
   '@jbrowse/plugin-legacy-jbrowse@4.3.0':
     resolution: {integrity: sha512-x8Aw1aHNB2lsB6GXagx3Pi2ktlGx2Hjx+7b7XnmlhZ/a/M2iiEut9y73EUbleXxzTfWJSl36yblTlwWOeLCl9Q==}
@@ -3004,6 +3030,33 @@ packages:
     resolution: {integrity: sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==}
     engines: {node: '>=0.4.0'}
 
+  depictio-components@file:packages/depictio-components:
+    resolution: {directory: packages/depictio-components, type: directory}
+    peerDependencies:
+      '@iconify/react': ^5.0.2
+      '@mantine/core': ^7.14.0
+      '@mantine/hooks': ^7.14.0
+      react: ^18.0.0
+      react-dom: ^18.0.0
+
+  depictio-react-core@file:packages/depictio-react-core:
+    resolution: {directory: packages/depictio-react-core, type: directory}
+    peerDependencies:
+      '@iconify/react': ^5.0.2
+      '@mantine/colors-generator': ^7.17.8
+      '@mantine/core': ^7.14.0
+      '@mantine/dates': ^7.14.0
+      '@mantine/hooks': ^7.14.0
+      ag-grid-community: ^32.3.0
+      ag-grid-react: ^32.3.0
+      depictio-components: '*'
+      plotly.js: ^2.35.0
+      react: ^18.0.0
+      react-dom: ^18.0.0
+      react-grid-layout: ^1.4.4
+      react-plotly.js: ^2.6.0
+      react-resizable: ^3.0.5
+
   detect-kerning@2.1.2:
     resolution: {integrity: sha512-I3JIbrnKPAntNLl1I6TpSQQdQ4AutYzv/sKMFKbepawV/hlH0GmYKhUoOEMd4xqaUHT+Bm0f4127lh5qs1m1tw==}
 
@@ -3403,6 +3456,9 @@ packages:
 
   grid-index@1.1.0:
     resolution: {integrity: sha512-HZRwumpOGUrHyxO5bqKZL0B0GlUpwtCAzZ42sgxUPniu33R1LSFH5yrIcBCHjkctCAh3mtWKcKd9J4vDDdeVHA==}
+
+  gtf-nostream@1.3.4:
+    resolution: {integrity: sha512-o1Aw0PiyDC18fGoPBk523FCpLHCFfCDl+fLWevYgAjULH9jj2sPSr2A4L138jjHzSEgfUl0v8bWEBN8+EdbgrQ==}
 
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
@@ -6005,7 +6061,7 @@ snapshots:
 
   '@floating-ui/core@1.7.5':
     dependencies:
-      '@floating-ui/utils': 0.2.11
+      '@floating-ui/utils': 0.2.12
 
   '@floating-ui/core@1.8.0':
     dependencies:
@@ -6471,6 +6527,28 @@ snapshots:
       - '@mui/material-pigment-css'
       - '@types/react'
       - react
+      - react-dom
+      - react-native
+      - supports-color
+
+  '@jbrowse/plugin-gtf@4.3.0(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@flatten-js/interval-tree': 2.0.3
+      '@gmod/bgzf-filehandle': 6.7.0
+      '@jbrowse/core': 4.3.0(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@jbrowse/mobx-state-tree': 5.13.0(mobx@6.16.1)
+      '@jbrowse/plugin-linear-genome-view': 4.3.0(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mui/material': 7.3.11(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      gtf-nostream: 1.3.4
+      mobx: 6.16.1
+      mobx-react: 9.2.2(mobx@6.16.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@emotion/react'
+      - '@emotion/styled'
+      - '@mui/material-pigment-css'
+      - '@types/react'
       - react-dom
       - react-native
       - supports-color
@@ -8100,6 +8178,39 @@ snapshots:
 
   delayed-stream@1.0.0: {}
 
+  depictio-components@file:packages/depictio-components(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+    dependencies:
+      '@iconify/react': 5.2.1(react@18.3.1)
+      '@mantine/core': 7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mantine/hooks': 7.17.8(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+
+  depictio-react-core@file:packages/depictio-react-core(f4b51fe7b812d2cb251b84fc8d8ccb24):
+    dependencies:
+      '@iconify/react': 5.2.1(react@18.3.1)
+      '@jbrowse/react-linear-genome-view2': 4.3.0(@mui/system@7.3.11(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mantine/colors-generator': 7.17.8(chroma-js@3.2.0)
+      '@mantine/core': 7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mantine/dates': 7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(dayjs@1.11.20)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mantine/hooks': 7.17.8(react@18.3.1)
+      ag-grid-community: 32.3.9
+      ag-grid-react: 32.3.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      depictio-components: file:packages/depictio-components(@iconify/react@5.2.1(react@18.3.1))(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      plotly.js: 2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      react-grid-layout: 1.5.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-plotly.js: 2.6.0(plotly.js@2.35.3(mapbox-gl@1.13.3)(webpack@5.106.2))(react@18.3.1)
+      react-resizable: 3.1.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    transitivePeerDependencies:
+      - '@mui/material-pigment-css'
+      - '@mui/system'
+      - '@types/react'
+      - buffer
+      - react-native
+      - supports-color
+
   detect-kerning@2.1.2: {}
 
   detect-node-es@1.1.0: {}
@@ -8596,6 +8707,8 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   grid-index@1.1.0: {}
+
+  gtf-nostream@1.3.4: {}
 
   has-flag@4.0.0: {}
 

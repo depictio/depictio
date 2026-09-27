@@ -65,6 +65,13 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
-    "@jbrowse/react-linear-genome-view2": "4.3.0"
+    "@jbrowse/core": "4.3.0",
+    "@jbrowse/embedded-core": "4.3.0",
+    "@jbrowse/mobx-state-tree": "5.13.0",
+    "@jbrowse/plugin-gtf": "4.3.0",
+    "@jbrowse/react-linear-genome-view2": "4.3.0",
+    "@mui/material": "7.3.11",
+    "mobx": "6.16.1",
+    "mobx-react": "9.2.2"
   }
 }
