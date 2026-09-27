@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -524,21 +525,51 @@ def validate_schema(
 _UNRESOLVED_PLACEHOLDER = re.compile(r"^\{[A-Z0-9_]+\}$")
 
 
-def call_transform(module: Any, sources: dict, params: dict[str, str] | None = None) -> Any:
-    """Call ``module.transform``, passing template ``params`` when the recipe takes them.
+@dataclass(frozen=True)
+class RecipeContext:
+    """What a two-argument ``transform(sources, context)`` receives.
 
-    A recipe opts in by declaring a ``params`` keyword. Values that are still an
-    unresolved ``{VAR}`` placeholder (the template variable was not set) are dropped,
-    so the recipe sees the parameter as absent and uses its own fallback.
+    Recipes that describe files rather than read them (a genome-track manifest
+    lists which track files the run published) ask the run folder what it holds
+    through this, local or remote alike.
     """
-    if params is not None and "params" in inspect.signature(module.transform).parameters:
+
+    root: DataRoot
+
+    def exists(self, rel_path: str) -> bool:
+        """Whether the run folder holds ``rel_path``."""
+        return self.root.exists(rel_path)
+
+    def glob(self, pattern: str) -> list[str]:
+        """Run-relative paths matching ``pattern`` (sorted)."""
+        return self.root.glob(pattern)
+
+
+def call_transform(
+    module: Any,
+    sources: dict,
+    params: dict[str, str] | None = None,
+    context: RecipeContext | None = None,
+) -> Any:
+    """Call ``module.transform``, passing template ``params`` and the run context when it takes them.
+
+    A recipe opts in to ``params`` by declaring a ``params`` keyword. Values that are
+    still an unresolved ``{VAR}`` placeholder (the template variable was not set) are
+    dropped, so the recipe sees the parameter as absent and uses its own fallback.
+    A recipe opts in to the context with a second positional argument.
+    """
+    declared = inspect.signature(module.transform).parameters
+    args: list[Any] = [sources]
+    if context is not None and len([n for n in declared if n != "params"]) >= 2:
+        args.append(context)
+    if params is not None and "params" in declared:
         clean = {
             k: v
             for k, v in params.items()
             if v is not None and not _UNRESOLVED_PLACEHOLDER.match(str(v).strip())
         }
-        return module.transform(sources, params=clean)
-    return module.transform(sources)
+        return module.transform(*args, params=clean)
+    return module.transform(*args)
 
 
 def execute_recipe(
@@ -588,8 +619,13 @@ def execute_recipe(
     # Checkpoint 3: input schema
     validate_sources(module, sources, recipe_name)
 
-    # Checkpoint 4: transform
-    result = call_transform(module, sources, params)
+    # Checkpoint 4: transform. A recipe whose transform() takes a second
+    # argument also receives the run folder, for recipes that describe files
+    # rather than read them (a genome-track manifest lists which track files
+    # the run published).
+    result = call_transform(
+        module, sources, params, RecipeContext(root=_as_data_root(data_dir))
+    )
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "
