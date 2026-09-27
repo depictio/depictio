@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "An H&E skin section (epidermis over dermis) saved as a SpatialData store, which also holds spot shapes, nucleus points and an AnnData table. The viewer shows the store's image element; the spot table is exported to a CSV that the cards, filters and table read. Clusters group spots by stain and nuclear density, so C1 is the most hematoxylin-rich. The four gene counts are synthetic. Lasso spots to filter.\n",
+      "body": "An H&E skin section (epidermis over dermis) saved as a SpatialData store, which also holds spot shapes, nucleus points and an AnnData table. The viewer shows the store's image element, and the cards, filters and table read the store's AnnData table directly (no CSV export). Clusters group spots by stain and nuclear density, so C1 is the most hematoxylin-rich. The four gene counts are synthetic. Lasso spots to filter.\n",
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -48,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -96,7 +96,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -144,7 +144,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -192,7 +192,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -300,7 +300,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -347,7 +347,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -388,7 +388,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {
@@ -429,7 +429,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "description": "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts",
         "data_collection_tag": "skin_spatialdata_spots",
         "dc_specific_properties": null,
         "_id": {

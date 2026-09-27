@@ -56,6 +56,10 @@ dependencies = [
   # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
   # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
   "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.43.2",
+  # Reads AnnData tables out of SpatialData stores (zarr v2 and v3, sharded).
+  # zarr 3.2+ needs Python 3.12; 3.1.6 is the last release for 3.11.
+  "zarr==3.4.0; python_version >= '3.12'",
+  "zarr==3.1.6; python_version < '3.12'",
   # API and web
   "devtools==0.12.2",
   "diskcache==5.6.3",

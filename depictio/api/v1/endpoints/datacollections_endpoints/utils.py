@@ -461,6 +461,10 @@ async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
+# A SpatialData table is extracted from a *.zarr store directory by the CLI;
+# it cannot come in as one uploaded file.
+SPATIALDATA_CLI_ONLY_DETAIL = "SpatialData tables are ingested with the CLI"
+
 
 def _build_polars_kwargs(
     file_format: str,
@@ -578,6 +582,8 @@ def _create_dc_from_upload(
     on the event loop would deadlock — the loop would be parked awaiting its own
     response. Callers must dispatch via `asyncio.to_thread`.
     """
+    if (file_format or "").lower() == "spatialdata":
+        raise HTTPException(status_code=400, detail=SPATIALDATA_CLI_ONLY_DETAIL)
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Empty file upload.")
     if len(file_bytes) > _MAX_UPLOAD_BYTES:
