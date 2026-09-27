@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
@@ -268,6 +270,23 @@ def validate_schema(
                     )
 
 
+@dataclass(frozen=True)
+class RecipeContext:
+    """What a two-argument ``transform(sources, context)`` receives."""
+
+    data_dir: Path
+
+    def exists(self, rel_path: str) -> bool:
+        """Whether the run folder holds ``rel_path``."""
+        return (self.data_dir / rel_path).is_file()
+
+    def glob(self, pattern: str) -> list[str]:
+        """Run-relative paths matching ``pattern`` (sorted)."""
+        return sorted(
+            str(p.relative_to(self.data_dir)) for p in self.data_dir.glob(pattern) if p.is_file()
+        )
+
+
 def execute_recipe(
     recipe_name: str,
     data_dir: str | Path,
@@ -308,8 +327,14 @@ def execute_recipe(
                     f"If it uses dc_ref, provide it via extra_sources."
                 )
 
-    # Checkpoint 3: transform
-    result = module.transform(sources)
+    # Checkpoint 3: transform. A recipe whose transform() takes a second
+    # argument also receives the run folder, for recipes that describe files
+    # rather than read them (a genome-track manifest lists which track files
+    # the run published).
+    if len(inspect.signature(module.transform).parameters) >= 2:
+        result = module.transform(sources, RecipeContext(data_dir=Path(data_dir)))
+    else:
+        result = module.transform(sources)
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "

@@ -37,9 +37,16 @@ def _is_https(uri: str | None) -> bool:
     return uri is not None and uri.lower().startswith("https://")
 
 
+def _absolute(uri: str | None, props: Any) -> str | None:
+    """A relative location made absolute against an https ``remote_base_uri``."""
+    if uri and "://" not in uri and _is_https(props.remote_base_uri):
+        return props.remote_base_uri.rstrip("/") + "/" + uri.lstrip("/")
+    return uri
+
+
 def _url_factory(tdc: TracksDC, uid: str):
     def track_url(track: TrackRow, role: str) -> str:
-        target = track.uri if role == "data" else track.index_uri
+        target = _absolute(track.uri if role == "data" else track.index_uri, tdc.props)
         if tdc.props.direct_access and _is_https(target):
             assert target
             return target
@@ -47,8 +54,10 @@ def _url_factory(tdc: TracksDC, uid: str):
         return f"{API_PREFIX}/jbrowse/tracks/{tdc.dc_id}/{track.key}/{role}?{query}"
 
     def assembly_url(uri: str, role: str) -> str:
-        if tdc.props.direct_access and _is_https(uri):
-            return uri
+        absolute = _absolute(uri, tdc.props)
+        if tdc.props.direct_access and _is_https(absolute):
+            assert absolute
+            return absolute
         query = signing.signed_query("assembly", tdc.dc_id, "assembly", role, uid)
         return f"{API_PREFIX}/jbrowse/assembly/{tdc.dc_id}/{role}?{query}"
 
@@ -118,6 +127,7 @@ def build_jbrowse_payload(
         matched = all_tracks[: int(component.get("initial_tracks", 5) or 0)]
     shown = [by_id[i] for i in default_ids if i in by_id]
     shown += [t for t in matched if t.track_id not in default_ids]
+    shown = [t for t in shown if t.fmt != "fasta"]
     truncated = len(shown) > max_tracks
     shown = shown[:max_tracks]
 
@@ -154,7 +164,8 @@ def build_jbrowse_payload(
             conf = deep_merge(conf, per_track[track.track_id])
         tracks_conf.append(conf)
 
-    shown_ids = [t.track_id for t in shown if any(c["trackId"] == t.track_id for c in tracks_conf)]
+    built = {c["trackId"] for c in tracks_conf}
+    shown_ids = [t.track_id for t in shown if t.track_id in built]
     if annotation and component.get("show_annotation", True):
         tracks_conf.insert(0, annotation)
         shown_ids.insert(0, annotation["trackId"])

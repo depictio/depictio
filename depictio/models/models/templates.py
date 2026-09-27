@@ -84,6 +84,11 @@ class DCOverride(BaseModel):
         default=None,
         description="Recipe source overrides: ref -> {path: ...} or {glob_pattern: ...}",
     )
+    dc_properties: dict[str, Any] | None = Field(
+        default=None,
+        description="Keys merged into dc_specific_properties (e.g. a genomic_tracks "
+        "collection's remote_base_uri when the run is read in place)",
+    )
 
 
 class TemplateConditional(BaseModel):

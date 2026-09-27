@@ -658,6 +658,8 @@ def _apply_conditionals(
                 if ov.source_overrides is not None:
                     so = cfg.setdefault("transform", {}).setdefault("source_overrides", {})
                     so.update(ov.source_overrides)
+                if ov.dc_properties:
+                    cfg.setdefault("dc_specific_properties", {}).update(ov.dc_properties)
                 logger.info(f"Repointed DC '{dc.get('data_collection_tag')}' for route")
 
     return config, active_dashboards, removal_reasons

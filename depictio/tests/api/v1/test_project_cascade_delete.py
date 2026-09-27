@@ -107,3 +107,40 @@ def test_phylogeny_trees_are_collected_for_deletion():
         locations = _collect_s3_locations_for_project([tree_dc, table_dc], "bucket")
 
     assert locations == [phylogeny_s3_key(str(tree_dc))]
+
+
+def test_genomic_track_folders_are_collected():
+    """Track files are uploaded under ``genomic_tracks/<dc_id>/`` with no document
+    recording them, so the cascade and migration find them by DC type."""
+    from depictio.api.v1.endpoints.migrate_endpoints.routes import (
+        _collect_s3_locations_for_project,
+    )
+
+    tracks_dc, table_dc = ObjectId(), ObjectId()
+    projects = MagicMock()
+    projects.find.return_value = [
+        {
+            "workflows": [
+                {
+                    "data_collections": [
+                        {"_id": tracks_dc, "config": {"type": "genomic_tracks"}},
+                        {"_id": table_dc, "config": {"type": "table"}},
+                    ]
+                }
+            ]
+        }
+    ]
+    empty = MagicMock()
+    empty.find.return_value = []
+    migrate = "depictio.api.v1.endpoints.migrate_endpoints.routes"
+
+    with (
+        patch(f"{migrate}.projects_collection", projects),
+        patch(f"{migrate}.deltatables_collection", empty),
+        patch(f"{migrate}.data_collections_collection", empty),
+        patch(f"{migrate}.multiqc_collection", empty),
+        patch(f"{migrate}.jbrowse_collection", empty),
+    ):
+        locations = _collect_s3_locations_for_project([tracks_dc, table_dc], "bucket")
+
+    assert locations == [f"genomic_tracks/{tracks_dc}/"]

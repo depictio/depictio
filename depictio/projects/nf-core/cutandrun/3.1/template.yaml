@@ -53,10 +53,22 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing cutandrun output (01_prealign/, 02_alignment/, 03_peak_calling/, 04_reporting/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results, to read the genome-browser tracks (bigWig, peaks, BAM) in place instead of uploading them from DATA_ROOT. For the megatest: s3://nf-core-awsmegatests/cutandrun/results-42502fb44975e930eec865353c5481f472bcf766"
+      required: false
   # The bundled reference dataset needs no variable beyond DATA_ROOT: the
   # samplesheet is part of the run's own pipeline_info/ output.
   reference:
     vars: {}
+  # Genome tracks: read in place when TRACKS_URI names the results folder,
+  # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the files
+  # it finds there).
+  conditional:
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -126,6 +138,51 @@ workflows:
               "n_libraries": "Sequencing libraries merged into the sample"
               "library_ids": "Those libraries' samplesheet ids"
               "single_end": "True when the libraries are single-end"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (bigWig signal,
+      # SEACR / MACS2 peaks, BAM) that the genome browser reads by range,
+      # through the API. One row per file, keyed on sample_id like the hub.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: bigWig signal, SEACR and MACS2 peaks and the deduplicated BAM, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/cutandrun/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            assembly: "hg38"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 60
+                    autoscale: "local"
+              bed:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+              narrowpeak:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+            columns_description:
+              "track_id": "<sample_id>.<kind>, unique per file"
+              "sample_id": "Sample the file belongs to"
+              "target": "Histone mark or IgG control"
+              "kind": "signal, peaks_seacr, peaks_macs2 or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
 
       - data_collection_tag: "samplesheet"
         description: "The samplesheet the pipeline validated, one row per sequencing library with its FASTQ pair and its control"
@@ -486,6 +543,27 @@ workflows:
               "n_peaks_other": "Peaks that other caller called for the same sample"
 
 links:
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # peak or a signal track in the browser picks its sample back.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
   # Hub -> everything keyed on the sample name.
   - source_dc_tag: "samples"
     source_column: "sample_id"

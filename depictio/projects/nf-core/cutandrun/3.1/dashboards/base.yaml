@@ -1668,3 +1668,72 @@ tabs:
     placement: left
     title: Interval width
     layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Genome tracks
+# ============================================================================
+# The run's own files in a genome browser: bigWig signal per sample, the SEACR
+# and MACS2 calls of the targets and the BAMs. The sample filter of the left
+# panel (persistent across tabs) picks which tracks are open; clicking a peak
+# or a signal track picks its sample back for every other tab.
+- title: Genome tracks
+  subtitle: Signal, peak calls and alignments of the selected samples, read by range from the run's results
+  tab_order: 6
+  tab_icon: mdi:dna
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Genome browser
+    icon: mdi:dna
+    color: teal
+    description: The tracks of the samples in scope, around the HOXA cluster
+  - name: Samples
+    icon: mdi:table
+    color: gray
+    description: Pick rows to open their tracks
+  components:
+  - component_type: text
+    tag: cr-tracks-intro
+    section: Genome browser
+    title: Signal next to the calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      H3K27me3 paints broad repressed domains, H3K4me3 sharp promoter peaks and
+      the IgG control stays flat. The browser opens on the HOXA cluster, where
+      both marks meet. Pick samples in the left panel or in the table below to
+      open their tracks; click a peak to filter every tab on its sample.
+    workflow_tag: cutandrun
+    data_collection_tag: tracks
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: jbrowse
+    tag: cr-tracks-browser
+    index: cr-tracks-browser
+    section: Genome browser
+    workflow_tag: cutandrun
+    data_collection_tag: tracks
+    title: Genome browser
+    location: chr7:27,090,000-27,220,000
+    max_tracks: 16
+    initial_tracks: 6
+    selection_enabled: true
+    selection_column: sample_id
+    show_overview: false
+    layout: {x: 0, y: 1, w: 8, h: 9}
+  - component_type: table
+    tag: cr-tracks-samples
+    index: cr-tracks-samples
+    section: Samples
+    workflow_tag: cutandrun
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Samples
+    description: Select rows to open their tracks in the browser above.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 3}
