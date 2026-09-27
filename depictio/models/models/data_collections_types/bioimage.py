@@ -2,11 +2,12 @@
 
 A `bioimage` DC is file-backed, and its ``format`` says what each store is:
 
-* ``ome-zarr``: a directory named ``*.zarr`` holding one NGFF 0.4 image. Keys
-  (``.zattrs``, ``0/.zarray``, chunks) are served as they are on disk.
+* ``ome-zarr``: a directory named ``*.zarr`` holding one NGFF image. Keys
+  (``.zattrs`` / ``zarr.json``, chunks, shards) are served as they are on
+  disk, with HTTP Range for sharded (zarr v3) arrays.
 * ``spatialdata``: a SpatialData store (a ``*.zarr`` directory). Only the
   image element at ``image_path`` (e.g. ``images/he``) is shown, and it is an
-  NGFF 0.4 image itself, so it is served like an OME-Zarr store rooted at
+  NGFF image itself, so it is served like an OME-Zarr store rooted at
   ``<store>/<image_path>``. The CLI uploads that subtree only.
 * ``ome-tiff``: one pyramidal ``*.ome.tif`` / ``*.ome.tiff`` file, read by the
   viewer with HTTP Range requests.
@@ -23,8 +24,9 @@ Where a store lives:
   the operator allow-lists the bucket or host (``settings.bioimage``); the API
   proxies every read, so the browser only ever talks to Depictio.
 
-For OME-Zarr and SpatialData images, only NGFF 0.4 (zarr v2 layout) is
-supported for now.
+OME-Zarr and SpatialData images may be NGFF 0.4 (zarr v2: ``.zattrs``,
+``.zarray``) or NGFF 0.5 (zarr v3: ``zarr.json`` with the metadata under
+``attributes.ome``, chunks possibly sharded).
 """
 
 from __future__ import annotations
@@ -111,8 +113,9 @@ class DCBioimageConfig(BaseModel):
     """Config for a bioimage data collection."""
 
     format: BioimageFormat = "ome-zarr"
-    # OME-Zarr and SpatialData images: the NGFF version of the image.
-    ngff_version: Literal["0.4"] = "0.4"
+    # OME-Zarr and SpatialData images: the NGFF version the stores must have
+    # ("0.4" = zarr v2, "0.5" = zarr v3). None accepts either, per store.
+    ngff_version: Literal["0.4", "0.5"] | None = None
     # False = reference-only: the CLI validates the stores but skips the S3
     # upload, and the API serves them from the registered path on disk.
     upload: bool = True

@@ -30,7 +30,8 @@
       96,
       96
     ],
-    "z_step": 2
+    "z_step": 2,
+    "zarr3_version": "3.4.0"
   },
   "generator": "dev/bioimage/make_examples.py",
   "stores": [
@@ -70,12 +71,24 @@
       "store": "lily_stem.ome.tif"
     },
     {
-      "bytes": 2019579,
+      "bytes": 2054017,
       "image_path": "images/he",
+      "ngff_version": "0.5-dev-spatialdata",
       "nuclei": 1220,
       "rows": 618,
       "spatialdata_version": "0.8.0",
       "store": "skin_spatialdata.zarr",
+      "zarr_version": "3.4.0"
+    },
+    {
+      "bytes": 1486063,
+      "chunk": 128,
+      "largest_file_bytes": 102740,
+      "ngff_version": "0.5",
+      "rows": 1103,
+      "shard": 256,
+      "shard_files": 18,
+      "store": "lily_sharded.zarr",
       "zarr_version": "3.4.0"
     }
   ]

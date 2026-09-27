@@ -1,5 +1,5 @@
 /**
- * NGFF 0.4 metadata to viewer state: axis sizes, per-channel defaults and the
+ * NGFF metadata (0.4, or 0.5 with its attributes under `ome`) to viewer state: axis sizes, per-channel defaults and the
  * physical pixel size. Pure (no viv / deck import) so it runs in vitest and
  * stays off the renderer's eager path.
  */
@@ -205,16 +205,44 @@ function scaleOf(transforms: NgffMultiscale['coordinateTransformations']): numbe
   return t?.scale ?? null;
 }
 
+/** The OME attributes of an image group: `multiscales` and the `omero`
+ *  rendering settings. NGFF 0.4 keeps them at the top of `.zattrs`; NGFF 0.5
+ *  nests them under `ome` in `zarr.json` (`attributes.ome`). */
+export interface NgffRootAttrs {
+  multiscales?: NgffMultiscale[];
+  omero?: {
+    channels?: object[];
+    rdefs?: { defaultZ?: number; defaultT?: number };
+  };
+  version?: string;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 /**
- * Size of one level-0 pixel along x, with its unit, from the NGFF 0.4
- * multiscale: the x axis' `unit` and the first dataset's `scale` (times the
- * multiscale-level `scale`, when there is one). Null when x has no unit,
- * because a bar labelled in pixels says nothing the image does not.
+ * The OME attributes of an image group, whichever NGFF version wrote them:
+ * the `ome` block when there is one (0.5), else the attributes themselves
+ * (0.4). viv already unwraps `ome` in the metadata it returns, so this is a
+ * no-op on its output and only matters for raw group attributes.
+ */
+export function ngffRootAttrs(attrs: unknown): NgffRootAttrs {
+  if (!isRecord(attrs)) return {};
+  return (isRecord(attrs.ome) ? attrs.ome : attrs) as NgffRootAttrs;
+}
+
+/**
+ * Size of one level-0 pixel along x, with its unit, from the NGFF multiscale
+ * (0.4 or 0.5, which spell it the same way): the x axis' `unit` and the first
+ * dataset's `scale` (times the multiscale-level `scale`, when there is one).
+ * Null when x has no unit, because a bar labelled in pixels says nothing the
+ * image does not.
  */
 export function physicalPixelSize(
-  rootAttrs: { multiscales?: NgffMultiscale[] } | null | undefined,
+  attrs: NgffRootAttrs | { ome?: NgffRootAttrs } | null | undefined,
 ): { value: number; unit: string } | null {
-  const ms = rootAttrs?.multiscales?.[0];
+  const ms = ngffRootAttrs(attrs).multiscales?.[0];
   if (!ms?.axes) return null;
   const xIndex = ms.axes.findIndex((a) => (typeof a === 'string' ? a : a?.name) === 'x');
   if (xIndex < 0) return null;

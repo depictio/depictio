@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { bioimageAuthHeaders, createBioimageSource } from './api';
+import {
+  BioimageHttpError,
+  bioimageAuthHeaders,
+  bioimageRangeHeader,
+  createBioimageSource,
+  createBioimageZarrStore,
+} from './api';
 
 const SESSION_KEY = 'local-store';
 
@@ -59,5 +65,64 @@ describe('createBioimageSource', () => {
   it('opens OME-Zarr and SpatialData as zarr key trees', () => {
     expect(createBioimageSource('dc1', { name: 's.zarr', format: 'ome-zarr' }).kind).toBe('zarr');
     expect(createBioimageSource('dc1', { name: 's.zarr', format: 'spatialdata' }).kind).toBe('zarr');
+  });
+});
+
+describe('createBioimageZarrStore.getRange', () => {
+  let calls: Array<{ url: string; range: string | null }>;
+
+  function respond(status: number, body: number[]) {
+    calls = [];
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url, range: new Headers(init.headers).get('Range') });
+        return new Response(status === 404 ? null : new Uint8Array(body), { status });
+      }),
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('spells offset ranges inclusively and suffix ranges as bytes=-n', () => {
+    expect(bioimageRangeHeader({ offset: 100, length: 50 })).toBe('bytes=100-149');
+    expect(bioimageRangeHeader({ offset: 0, length: 1 })).toBe('bytes=0-0');
+    expect(bioimageRangeHeader({ suffixLength: 20 })).toBe('bytes=-20');
+  });
+
+  it('sends one Range header for a shard key and returns the 206 body', async () => {
+    respond(206, [7, 8, 9]);
+    const store = createBioimageZarrStore('dc1', 's.zarr');
+    const bytes = await store.getRange('/0/c/0/0/0', { offset: 16, length: 3 });
+    expect(Array.from(bytes ?? [])).toEqual([7, 8, 9]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toMatch(/\/advanced_viz\/bioimage\/dc1\/s\.zarr\/0\/c\/0\/0\/0$/);
+    expect(calls[0].range).toBe('bytes=16-18');
+  });
+
+  it('slices a plain 200 from a server that ignored the Range', async () => {
+    respond(200, [0, 1, 2, 3, 4, 5]);
+    const store = createBioimageZarrStore('dc1', 's.zarr');
+    expect(Array.from((await store.getRange('0/c/0', { offset: 2, length: 2 })) ?? [])).toEqual([
+      2, 3,
+    ]);
+    expect(Array.from((await store.getRange('0/c/0', { suffixLength: 2 })) ?? [])).toEqual([4, 5]);
+  });
+
+  it('reads a missing shard as absent and throws on other failures', async () => {
+    respond(404, []);
+    const store = createBioimageZarrStore('dc1', 's.zarr');
+    expect(await store.getRange('0/c/9', { suffixLength: 20 })).toBeUndefined();
+    respond(416, []);
+    await expect(store.getRange('0/c/0', { offset: 1e9, length: 4 })).rejects.toBeInstanceOf(
+      BioimageHttpError,
+    );
   });
 });
