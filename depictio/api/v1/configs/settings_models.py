@@ -867,6 +867,12 @@ class JBrowseConfig(BaseSettings):
     remote_s3_secret_key: SecretStr | None = Field(
         default=None, description="Secret key for remote s3:// buckets"
     )
+    preset_access: Literal["proxy", "direct"] = Field(
+        default="proxy",
+        description="How the browser reads the built-in assemblies' UCSC files: 'proxy' "
+        "through the API (one origin, works behind browser-side firewalls, small files "
+        "cached), or 'direct' from hgdownload.soe.ucsc.edu (CORS + Range, no API load)",
+    )
     remote_timeout_s: float = Field(default=30.0, gt=0, description="Remote read timeout")
     max_range_mb: int = Field(
         default=64,

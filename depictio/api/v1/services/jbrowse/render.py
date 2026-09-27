@@ -11,6 +11,7 @@ from typing import Any
 
 from bson import ObjectId
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.jbrowse import signing
 from depictio.api.v1.services.jbrowse.config_builder import (
@@ -62,6 +63,11 @@ def _url_factory(tdc: TracksDC, uid: str):
         return f"{API_PREFIX}/jbrowse/assembly/{tdc.dc_id}/{role}?{query}"
 
     return track_url, assembly_url
+
+
+def _preset_url(preset: Any, role: str) -> str:
+    """Preset files through the API: one origin for the browser, cached small files."""
+    return f"{API_PREFIX}/jbrowse/preset/{preset.name}/{role}"
 
 
 def _selection_column(component: dict[str, Any], tdc: TracksDC) -> str | None:
@@ -141,7 +147,11 @@ def build_jbrowse_payload(
 
     # Assembly (component override wins over the DC's)
     assembly_spec: str | CustomAssembly = component.get("assembly") or props.assembly
-    assembly_conf, annotation, preset_location = build_assembly_config(assembly_spec, assembly_url)
+    assembly_conf, annotation, preset_location = build_assembly_config(
+        assembly_spec,
+        assembly_url,
+        _preset_url if settings.jbrowse.preset_access == "proxy" else None,
+    )
     assembly_name = assembly_conf["name"]
 
     overrides: dict[str, Any] = component.get("config_overrides") or {}

@@ -23,7 +23,12 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 )
 from depictio.api.v1.services import remote_read
 from depictio.api.v1.services.jbrowse import signing
-from depictio.api.v1.services.jbrowse.assemblies import list_assembly_presets
+from depictio.api.v1.services.jbrowse.assemblies import (
+    PRESET_ROLES,
+    get_assembly_preset,
+    list_assembly_presets,
+    preset_file_uri,
+)
 from depictio.api.v1.services.jbrowse.config_builder import list_builtin_presets
 from depictio.api.v1.services.jbrowse.tracks import (
     ASSEMBLY_ROLES,
@@ -219,4 +224,67 @@ def proxy_assembly_file(
         src = remote_read.resolve_location(uri, s3_base_folder(dc_id, tdc.props))
     except remote_read.RemoteReadError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    return _serve(request, src, uri)
+
+
+# Small preset files (chrom.sizes, alias tables) are read whole by the browser
+# on every view: keep them in memory rather than re-fetching them from UCSC.
+_SMALL_FILE_BYTES = 2 * 1024 * 1024
+_small_files: dict[str, bytes] = {}
+
+
+def _serve_bytes(request: Request, data: bytes, uri: str) -> Response:
+    size = len(data)
+    base_headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=86400",
+        "Content-Type": _content_type(uri),
+    }
+    if request.method == "HEAD":
+        return Response(status_code=200, headers={**base_headers, "Content-Length": str(size)})
+    try:
+        rng = remote_read.parse_range(request.headers.get("range"), size)
+    except remote_read.RemoteReadError as exc:
+        raise HTTPException(
+            status_code=exc.status, detail=exc.detail, headers={"Content-Range": f"bytes */{size}"}
+        ) from exc
+    if rng is None:
+        return Response(content=data, status_code=200, headers=base_headers)
+    return Response(
+        content=data[rng.start : rng.end + 1],
+        status_code=206,
+        headers={**base_headers, "Content-Range": f"bytes {rng.start}-{rng.end}/{size}"},
+    )
+
+
+@jbrowse_endpoints_router.api_route("/preset/{name}/{role}", methods=["GET", "HEAD"])
+def proxy_preset_file(name: str, role: str, request: Request) -> Response:
+    """Serve (a byte range of) a built-in assembly's public UCSC file.
+
+    Public: the files are public reference data. Only the URLs hardcoded in the
+    presets can be read, so the route cannot be pointed anywhere else.
+    """
+    preset = get_assembly_preset(name)
+    if preset is None or role not in PRESET_ROLES:
+        raise HTTPException(status_code=404, detail="Unknown assembly preset file")
+    uri = preset_file_uri(preset, role)
+    if not uri:
+        raise HTTPException(status_code=404, detail="This preset has no such file")
+    src = remote_read.ByteSource("https", url=uri)
+    cached = _small_files.get(uri)
+    if cached is not None:
+        return _serve_bytes(request, cached, uri)
+    try:
+        size = remote_read.source_size(src)
+    except remote_read.RemoteReadError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    if size <= _SMALL_FILE_BYTES:
+        try:
+            data = remote_read.read_all(src, _SMALL_FILE_BYTES)
+        except remote_read.RemoteReadError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+        if len(_small_files) > 256:
+            _small_files.clear()
+        _small_files[uri] = data
+        return _serve_bytes(request, data, uri)
     return _serve(request, src, uri)

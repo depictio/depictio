@@ -306,6 +306,7 @@ workflows:
             name_column: "name"
             color_column: "color"
             category_column: "category"
+            order_column: "order"
             assembly: "hg19"
             display_defaults:
               bigwig:

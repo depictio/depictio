@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 from depictio.api.v1.services.jbrowse.assemblies import (
+    PresetUrlFor,
     get_assembly_preset,
     preset_annotation_track,
     preset_assembly_config,
@@ -321,17 +322,29 @@ def build_track_config(
 
 
 def build_assembly_config(
-    assembly: str | CustomAssembly, assembly_url_for: AssemblyUrlFor
+    assembly: str | CustomAssembly,
+    assembly_url_for: AssemblyUrlFor,
+    preset_url_for: PresetUrlFor | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None, str | None]:
-    """Return (assembly config, annotation track or None, default location)."""
+    """Return (assembly config, annotation track or None, default location).
+
+    ``preset_url_for`` maps a preset file to the URL the browser reads (the API's
+    preset proxy); left out, the browser reads UCSC directly.
+    """
     if isinstance(assembly, str):
         preset = get_assembly_preset(assembly)
         if preset is None:
             raise ValueError(f"Unknown assembly preset '{assembly}'")
+        if preset_url_for is None:
+            return (
+                preset_assembly_config(preset),
+                preset_annotation_track(preset),
+                preset.default_location,
+            )
         return (
-            preset_assembly_config(preset),
-            preset_annotation_track(preset),
-            (preset.default_location),
+            preset_assembly_config(preset, preset_url_for),
+            preset_annotation_track(preset, preset_url_for),
+            preset.default_location,
         )
 
     sequence: dict[str, Any]

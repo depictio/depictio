@@ -189,6 +189,8 @@ workflows:
             format_column: "format"
             name_column: "name"
             category_column: "category"
+            # Best-covered samples first: the view opens on the first rows.
+            order_column: "order"
             # Relative rows are read in place under the megatest's results.
             remote_base_uri: "s3://nf-core-awsmegatests/viralrecon/results-3731dd3a32a67a2648ea22c2bd980c224abdaee2/platform_illumina/"
             # A custom assembly: the UCSC SARS-CoV-2 sequence, whose alias file

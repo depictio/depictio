@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 
@@ -275,6 +275,14 @@ class RecipeContext:
     """What a two-argument ``transform(sources, context)`` receives."""
 
     data_dir: Path
+    # The collection's dc_specific_properties (e.g. a genomic_tracks manifest's
+    # ``remote_base_uri``, set when the run is read in place).
+    properties: dict = field(default_factory=dict)
+
+    @property
+    def reads_in_place(self) -> bool:
+        """The run's files are read from a remote folder, not from ``data_dir``."""
+        return bool(self.properties.get("remote_base_uri"))
 
     def exists(self, rel_path: str) -> bool:
         """Whether the run folder holds ``rel_path``."""
@@ -293,6 +301,7 @@ def execute_recipe(
     overrides: dict[str, str] | None = None,
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
+    properties: dict | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -332,7 +341,9 @@ def execute_recipe(
     # rather than read them (a genome-track manifest lists which track files
     # the run published).
     if len(inspect.signature(module.transform).parameters) >= 2:
-        result = module.transform(sources, RecipeContext(data_dir=Path(data_dir)))
+        result = module.transform(
+            sources, RecipeContext(data_dir=Path(data_dir), properties=dict(properties or {}))
+        )
     else:
         result = module.transform(sources)
     if not isinstance(result, pl.DataFrame):
