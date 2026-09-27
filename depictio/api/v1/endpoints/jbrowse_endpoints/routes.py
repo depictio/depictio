@@ -1,365 +1,222 @@
-import collections
-import hashlib
-import json
-import os
-from pathlib import Path
+"""Genome browser endpoints: assembly/preset catalogues and the track proxy.
 
-from botocore.exceptions import NoCredentialsError
-from bson import ObjectId
-from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException
+The embedded JBrowse view reads every track, index and custom-assembly file
+through ``/jbrowse/tracks/…`` and ``/jbrowse/assembly/…``. Those URLs are
+minted by ``POST /dashboards/render_jbrowse`` with a short-lived signature
+(see ``services/jbrowse/signing.py``); the location they read is looked up
+server-side in the data collection, so the browser can never make the API
+fetch an arbitrary URL.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import files_collection, workflows_collection
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
-from depictio.api.v1.s3 import s3_client
-from depictio.models.models.files import File
-from depictio.models.models.users import User
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_user_or_anonymous,
+    oauth2_scheme_optional,
+)
+from depictio.api.v1.services import remote_read
+from depictio.api.v1.services.jbrowse import signing
+from depictio.api.v1.services.jbrowse.assemblies import list_assembly_presets
+from depictio.api.v1.services.jbrowse.config_builder import list_builtin_presets
+from depictio.api.v1.services.jbrowse.tracks import (
+    ASSEMBLY_ROLES,
+    TRACK_ROLES,
+    TracksDC,
+    find_tracks_dc,
+    s3_base_folder,
+    tracks_by_key,
+    user_can_read_project,
+)
+from depictio.models.models.data_collections_types.genomic_tracks import CustomAssembly
 
 jbrowse_endpoints_router = APIRouter()
 
-
-def generate_track_config(track_type, track_details, data_collection_config):
-    """Generate JBrowse track configuration from track details and data collection config."""
-    category = data_collection_config.get("jbrowse_params", {}).get("category", "Uncategorized")
-    assemblyName = data_collection_config.get("jbrowse_params", {}).get("assemblyName", "hg38")
-
-    track_config = {
-        "trackId": track_details.get("uri"),
-        "name": track_details.get("name", "Unnamed Track"),
-        "assemblyNames": [assemblyName],
-        "category": category.split(",") + [track_details["run_id"]],
-    }
-    track_details.pop("run_id", None)
-
-    # Configure adapter based on track type and data collection config
-    if track_type == "FeatureTrack":
-        adapter_type = (
-            "BedTabixAdapter" if data_collection_config.get("format") == "BED" else "UnknownAdapter"
-        )
-        uri = track_details.get("uri")
-        index_uri = f"{uri}.{data_collection_config.get('index_extension', 'tbi')}"
-
-        track_config.update(
-            {
-                "type": "FeatureTrack",
-                "adapter": {
-                    "type": adapter_type,
-                    ("bedGzLocation" if adapter_type == "BedTabixAdapter" else "location"): {
-                        "locationType": "UriLocation",
-                        "uri": uri,
-                    },
-                    "index": {"location": {"locationType": "UriLocation", "uri": index_uri}},
-                },
-            }
-        )
-
-    return track_config
+_MIME = {
+    ".bam": "application/octet-stream",
+    ".bai": "application/octet-stream",
+    ".cram": "application/octet-stream",
+    ".crai": "application/octet-stream",
+    ".bw": "application/octet-stream",
+    ".bigwig": "application/octet-stream",
+    ".bb": "application/octet-stream",
+    ".bigbed": "application/octet-stream",
+    ".2bit": "application/octet-stream",
+    ".gz": "application/gzip",
+    ".tbi": "application/octet-stream",
+    ".csi": "application/octet-stream",
+}
 
 
-def populate_template_recursive(template, values):
-    """
-    Recursively populate a template with values.
-
-    Args:
-        template: The template to populate (dict, list, or str).
-        values: The values to populate the template with.
-
-    Returns:
-        The populated template.
-    """
-    if isinstance(template, dict):
-        return {k: populate_template_recursive(v, values) for k, v in template.items()}
-    if isinstance(template, list):
-        return [populate_template_recursive(item, values) for item in template]
-    if isinstance(template, str):
-        result = template
-        for key, value in values.items():
-            placeholder = f"{{{key}}}"
-            if placeholder in result:
-                result = result.replace(placeholder, str(value))
-        return result
-    return template
+def _content_type(uri: str) -> str:
+    path = uri.split("?", 1)[0].lower()
+    for ext, mime in _MIME.items():
+        if path.endswith(ext):
+            return mime
+    return "text/plain; charset=utf-8"
 
 
-def update_jbrowse_config(config_path, new_tracks=[]):
-    """Update JBrowse configuration with new tracks."""
+@jbrowse_endpoints_router.get("/assemblies")
+def get_assembly_presets() -> list[dict]:
+    """Built-in reference assemblies (name, display name, organism, annotation)."""
+    return list_assembly_presets()
+
+
+@jbrowse_endpoints_router.get("/presets")
+def get_config_presets() -> list[dict]:
+    """Built-in named config presets a component can pick with ``preset:``."""
+    return list_builtin_presets()
+
+
+async def _optional_user(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """The caller when a bearer token (or public/single-user mode) identifies one."""
     try:
-        with open(config_path) as file:
-            config = json.load(file)
-    except FileNotFoundError:
-        default_jbrowse_config_path = "/app/data/jbrowse2/config.json"
-        config = json.load(open(default_jbrowse_config_path))
-    except json.JSONDecodeError:
-        logger.warning(f"Error decoding JSON from {config_path}.")
-
-    if "tracks" not in config:
-        config["tracks"] = []
-
-    config["tracks"] = list()
-    config["tracks"] = [
-        track
-        for track in config["tracks"]
-        if f"{settings.s3.endpoint_url}{settings.s3.port}:/{settings.s3.bucket_name}"  # type: ignore[possibly-unbound-attribute]
-        not in track["trackId"]
-    ]
-
-    config["tracks"].extend(new_tracks)
-
-    try:
-        with open(config_path, "w") as file:
-            json.dump(config, file, indent=4)
-
-        lite_config = config.copy()
-        lite_config["tracks"] = lite_config["tracks"][:5]
-        with open(config_path.replace(".json", "_lite.json"), "w") as file:
-            json.dump(lite_config, file, indent=4)
-
-        return {"message": "JBrowse config updated successfully.", "type": "success"}
-    except Exception as e:
-        logger.error(f"Failed to save JBrowse config: {e}")
-        return {"message": f"Failed to save JBrowse config: {e}", "type": "error"}
-
-
-def upload_file_to_s3(bucket_name, file_location, s3_key):
-    """Upload a file to S3 if it doesn't already exist."""
-    if not os.path.exists(file_location):
-        return {"error": f"File {file_location} does not exist."}
-
-    if s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key).get("Contents"):
+        return await get_user_or_anonymous(token)
+    except HTTPException:
         return None
 
+
+def _authorize(
+    request: Request,
+    scope: str,
+    dc_id: str,
+    item: str,
+    role: str,
+    user,
+) -> TracksDC:
+    """Resolve the DC and check the signed URL (or a bearer token) grants ``role``."""
+    tdc = find_tracks_dc(dc_id)
+    if tdc is None:
+        raise HTTPException(status_code=404, detail="Track collection not found")
+
+    q = request.query_params
+    uid = q.get("uid")
+    if signing.verify(scope, dc_id, item, role, uid, q.get("exp"), q.get("sig")):
+        assert uid is not None
+        if user_can_read_project(tdc.project_id, uid):
+            return tdc
+        raise HTTPException(status_code=404, detail="Track collection not found")
+
+    if user is not None and user_can_read_project(tdc.project_id, str(user.id)):
+        return tdc
+    raise HTTPException(status_code=401, detail="Missing or expired track URL signature")
+
+
+def _serve(request: Request, src: remote_read.ByteSource, uri: str) -> Response:
     try:
-        with open(file_location, "rb") as data:
-            s3_client.upload_fileobj(data, bucket_name, s3_key)
-    except NoCredentialsError:
-        return {"error": "S3 credentials not available"}
-    except Exception as e:
-        logger.error(f"Error uploading {file_location}: {e}")
-        return {"error": f"Failed to upload {file_location}"}
-
-
-def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
-    """Handle JBrowse track creation for a file."""
-    if not isinstance(file, dict):
-        file = file.mongo()
-
-    endpoint_url = settings.s3.external_endpoint  # type: ignore[possibly-unbound-attribute]
-    port = settings.s3.port
-    bucket_name = settings.s3.bucket
-
-    file_location = file["file_location"]
-    run_id = file["run_id"]
-
-    # Extract the path suffix from the file location
-    path_suffix = file_location.split(f"{run_id}/")[1]
-
-    # Get workflow tag from workflow_id
-    wf_tag = workflows_collection.find_one({"_id": ObjectId(workflow_id)})["workflow_tag"]  # type: ignore[non-subscriptable]
-
-    # Construct the S3 key respecting the structure
-    s3_key = f"{user_id}/{workflow_id}/{data_collection.id}/{run_id}/{path_suffix}"
-    trackid = f"{endpoint_url}:{port}/{bucket_name}/{s3_key}"
-
-    # NOTE: trial using hash instead of path to avoid long path - 16 characters using sha256
-    s3_key_hash = hashlib.sha256(s3_key.encode("utf-8")).hexdigest()[:16]
-
-    # Design categories
-    categories = [
-        f"{wf_tag} - {workflow_id}",
-        f"{data_collection.data_collection_tag} - {data_collection.id}",
-    ]
-
-    # Prepare the track details
-    track_details = {
-        "trackId": s3_key_hash,
-        "name": file["filename"],
-        "uri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}",
-        "indexUri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}.tbi",
-        "run_id": run_id,
-        "category": categories,
-    }
-
-    file_index = data_collection.config.dc_specific_properties.index_extension
-
-    file["S3_location"] = trackid
-    file["trackId"] = s3_key_hash
-    files_collection.update_one({"_id": file["_id"]}, {"$set": file})
-
-    # Check if the file is an index and skip if it is
-    if not file_location.endswith(file_index):
-        # Generate the track configuration
-        track_config = generate_track_config(
-            "FeatureTrack",
-            track_details,
-            data_collection.mongo()["config"],
-        )
-
-        # Prepare the JBrowse template
-        jbrowse_template_location = (
-            data_collection.config.dc_specific_properties.jbrowse_template_location
-        )
-        jbrowse_template_json = json.load(open(jbrowse_template_location))
-
-        track_config = populate_template_recursive(jbrowse_template_json, track_details)
-        # Ensure category is a list before appending
-        category = track_details["category"]
-        if isinstance(category, list):
-            track_config["category"] = category + [run_id]
-        else:
-            track_config["category"] = [str(category), run_id] if category else [run_id]
-        return track_config
-
-    return None
-
-
-def construct_jbrowse_url(block, tracks):
-    """Construct a JBrowse URL from block and track information."""
-    track_list = ",".join(tracks)
-    return f"assembly={block.assemblyName}&loc={block.refName}:{int(block.start)}..{int(block.end)}&tracks={track_list}"
-
-
-@jbrowse_endpoints_router.post("/create_trackset/{workflow_id}/{data_collection_id}")
-async def create_trackset(
-    workflow_id: str,
-    data_collection_id: str,
-    current_user: str = Depends(get_current_user),
-):
-    workflow_oid = ObjectId(workflow_id)
-    data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.id)  # type: ignore[possibly-unbound-attribute]
-    assert isinstance(workflow_oid, ObjectId)
-    assert isinstance(data_collection_oid, ObjectId)
-    assert isinstance(user_oid, ObjectId)
-
-    (
-        workflow_oid,
-        data_collection_oid,
-        workflow,
-        data_collection,
-        user_oid,
-    ) = validate_workflow_and_collection(
-        workflows_collection,
-        current_user.id,  # type: ignore[possibly-unbound-attribute]
-        workflow_id,
-        data_collection_id,
-    )
-
-    files = list(files_collection.find({"data_collection._id": data_collection_oid}))
-
-    new_tracks = list()
-
-    for file in files:
-        file = File(**file)  # type: ignore[missing-argument]
-
-        track_config = handle_jbrowse_tracks(file, current_user.id, workflow_id, data_collection)  # type: ignore[possibly-unbound-attribute]
-        if track_config:
-            new_tracks.append(track_config)
-
-    jbrowse_config_dir = settings.jbrowse.config_dir  # type: ignore[possibly-unbound-attribute]
-    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")  # type: ignore[possibly-unbound-attribute]
-
-    payload = update_jbrowse_config(config_path, new_tracks)
-    if payload["type"] == "error":
-        raise HTTPException(status_code=404, detail=f"{payload['message']}")
-    return {"message": "JBrowse configuration updated."}
-
-
-# NOTE: the legacy unauthenticated /log and /last_status prototype routes were
-# removed in the security sweep — they wrote/read a hardcoded dashboard_id "1"
-# document with no auth and had no remaining callers in the repo.
-
-
-@jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
-async def map_tracks_using_wildcards(
-    workflow_id: str,
-    data_collection_id: str,
-    current_user: str = Depends(get_current_user),
-):
-    """Map tracks using wildcards for filtering."""
-    data_collection_oid = ObjectId(data_collection_id)
-    nested_dict = collections.defaultdict(lambda: collections.defaultdict(dict))
-
-    files = files_collection.find({"data_collection._id": data_collection_oid})
-    for file in files:
-        if file["filename"].endswith(
-            file["data_collection"]["config"]["dc_specific_properties"]["index_extension"]
-        ):
-            continue
-        for wildcard in file["wildcards"]:
-            nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file["trackId"]
-
-    return nested_dict
-
-
-@jbrowse_endpoints_router.post("/filter_config")
-async def filter_config(
-    filter_params: dict,
-    current_user: User = Depends(get_current_user),
-):
-    """Filter JBrowse config to include only specified tracks."""
-    tracks = filter_params.get("tracks", [])
-    jbrowse_config_dir = settings.jbrowse.config_dir  # type: ignore[possibly-unbound-attribute]
-    data_collection_oid = filter_params.get("data_collection_id")
-    dashboard_id = filter_params.get("dashboard_id")
-
-    if not tracks:
-        return {"message": "No tracks provided.", "session": None}
-    if not data_collection_oid:
-        return {"message": "No data collection ID provided.", "session": None}
-    if not dashboard_id:
-        return {"message": "No dashboard ID provided."}
-
-    # ``data_collection_oid`` and ``dashboard_id`` are user-controlled and are
-    # concatenated into filesystem paths below. Validate them as strict
-    # ObjectIds so a value like ``../../`` can't escape the config dir, then
-    # assert the resolved paths stay inside ``jbrowse_config_dir``.
+        size = remote_read.source_size(src)
+    except remote_read.RemoteReadError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
     try:
-        data_collection_oid = str(ObjectId(data_collection_oid))
-        dashboard_id = str(ObjectId(dashboard_id))
-    except (InvalidId, TypeError):
+        rng = remote_read.parse_range(request.headers.get("range"), size)
+    except remote_read.RemoteReadError as exc:
         raise HTTPException(
-            status_code=422,
-            detail="data_collection_id and dashboard_id must be valid ObjectIds.",
-        )
+            status_code=exc.status,
+            detail=exc.detail,
+            headers={"Content-Range": f"bytes */{size}"},
+        ) from exc
 
-    config_base = Path(jbrowse_config_dir).resolve()
-    default_config_path = str(config_base / f"{current_user.id}_{data_collection_oid}.json")
+    base_headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=3600",
+        "Content-Type": _content_type(uri),
+    }
+    if request.method == "HEAD":
+        return Response(status_code=200, headers={**base_headers, "Content-Length": str(size)})
 
-    config = json.load(open(default_config_path))
+    max_range = settings.jbrowse.max_range_mb * 1024 * 1024
+    if rng is None:
+        if size > settings.jbrowse.max_full_read_mb * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="File too large to serve whole; index it (bgzip + tabix) "
+                "so the browser reads it by range",
+            )
+        if size == 0:
+            return Response(status_code=200, headers={**base_headers, "Content-Length": "0"})
+        rng = remote_read.ByteRange(0, size - 1)
+        status = 200
+    else:
+        if rng.length > max_range:
+            rng = remote_read.ByteRange(rng.start, rng.start + max_range - 1)
+        status = 206
 
-    filtered_track_ids = set()
-    filtered_tracks = []
-    for track in config["tracks"]:
-        if track["trackId"] in tracks and track["trackId"] not in filtered_track_ids:
-            filtered_track_ids.add(track["trackId"])
-            filtered_tracks.append(track)
+    try:
+        chunks = remote_read.open_range(src, rng)
+    except remote_read.RemoteReadError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
-    config["tracks"] = filtered_tracks
-
-    output_path_resolved = (
-        config_base / f"{current_user.id}_{data_collection_oid}_filtered_{dashboard_id}.json"
-    ).resolve()
-    # Defence in depth: even with ObjectId validation above, refuse to write
-    # outside the configured jbrowse config directory.
-    if not output_path_resolved.is_relative_to(config_base):
-        raise HTTPException(status_code=400, detail="Resolved config path escapes config dir.")
-
-    output_path = str(output_path_resolved)
-    output_return_path = output_path_resolved.name
-
-    with open(output_path, "w") as file:
-        json.dump(config, file, indent=4)
-
-    return {"message": "Filtered config saved successfully.", "session": output_return_path}
+    headers = {**base_headers, "Content-Length": str(rng.length)}
+    if status == 206:
+        headers["Content-Range"] = f"bytes {rng.start}-{rng.end}/{size}"
+    return StreamingResponse(chunks, status_code=status, headers=headers)
 
 
-@jbrowse_endpoints_router.post("/dynamic_mapping_dict")
-async def dynamic_mapping_dict(
-    mapping_dict: dict,
-    current_user: str = Depends(get_current_user),
-):
-    """Receive a dynamic mapping dictionary."""
-    return {"message": "Mapping dictionary received."}
+@jbrowse_endpoints_router.api_route("/tracks/{dc_id}/{track_key}/{role}", methods=["GET", "HEAD"])
+def proxy_track_file(
+    dc_id: str,
+    track_key: str,
+    role: str,
+    request: Request,
+    user=Depends(_optional_user),
+) -> Response:
+    """Serve (a byte range of) one track's data or index file."""
+    if role not in TRACK_ROLES:
+        raise HTTPException(status_code=404, detail="Unknown track file role")
+    tdc = _authorize(request, "track", dc_id, track_key, role, user)
+    track = tracks_by_key(tdc).get(track_key)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Track not found")
+    uri = track.uri if role == "data" else track.index_uri
+    if not uri:
+        raise HTTPException(status_code=404, detail="Track has no index")
+    try:
+        src = remote_read.resolve_location(uri, s3_base_folder(dc_id, tdc.props))
+    except remote_read.RemoteReadError as exc:
+        logger.info(f"jbrowse proxy refused {dc_id}/{track_key}/{role}: {exc.detail}")
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    return _serve(request, src, uri)
+
+
+def _assembly_uri(assembly: CustomAssembly, role: str) -> str | None:
+    fasta = assembly.fasta_uri
+    return {
+        "fasta": fasta,
+        "fai": assembly.fai_uri or (f"{fasta}.fai" if fasta else None),
+        "gzi": assembly.gzi_uri or (f"{fasta}.gzi" if fasta else None),
+        "twobit": assembly.twobit_uri,
+        "chrom_sizes": assembly.chrom_sizes_uri,
+        "aliases": assembly.refname_aliases_uri,
+    }.get(role)
+
+
+@jbrowse_endpoints_router.api_route("/assembly/{dc_id}/{role}", methods=["GET", "HEAD"])
+def proxy_assembly_file(
+    dc_id: str,
+    role: str,
+    request: Request,
+    user=Depends(_optional_user),
+) -> Response:
+    """Serve (a byte range of) a custom assembly file of a track collection."""
+    if role not in ASSEMBLY_ROLES:
+        raise HTTPException(status_code=404, detail="Unknown assembly file role")
+    tdc = _authorize(request, "assembly", dc_id, "assembly", role, user)
+    assembly = tdc.props.assembly
+    if not isinstance(assembly, CustomAssembly):
+        raise HTTPException(status_code=404, detail="Collection uses a preset assembly")
+    uri = _assembly_uri(assembly, role)
+    if not uri:
+        raise HTTPException(status_code=404, detail="Assembly file not configured")
+    try:
+        src = remote_read.resolve_location(uri, s3_base_folder(dc_id, tdc.props))
+    except remote_read.RemoteReadError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    return _serve(request, src, uri)

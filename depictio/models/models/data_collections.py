@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.indexed_file import DCIndexedFileConfig
@@ -382,6 +383,7 @@ class DataCollectionConfig(MongoModel):
         | DCGeoJSONConfig
         | DCPhylogenyConfig
         | DCIndexedFileConfig
+        | DCGenomicTracksConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
@@ -424,6 +426,7 @@ class DataCollectionConfig(MongoModel):
         allowed_values = [
             "table",
             "jbrowse2",
+            "genomic_tracks",
             "multiqc",
             "image",
             "geojson",
@@ -498,6 +501,13 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCGeoJSONConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCGeoJSONConfig()
+        elif type_value == "genomic_tracks":
+            # Manifest table of genome-browser tracks (jbrowse component).
+            if not isinstance(dc_specific_properties, DCGenomicTracksConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCGenomicTracksConfig(
+                        **dc_specific_properties
+                    )
         elif type_value == "phylogeny":
             if not isinstance(dc_specific_properties, DCPhylogenyConfig):
                 if isinstance(dc_specific_properties, dict):
