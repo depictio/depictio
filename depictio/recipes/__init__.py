@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -535,6 +535,19 @@ class RecipeContext:
     """
 
     root: DataRoot
+    # The collection's dc_specific_properties (e.g. a genomic_tracks manifest's
+    # ``remote_base_uri``, set when the run is read in place).
+    properties: dict = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, data_dir: str | Path | DataRoot, properties: dict | None = None) -> RecipeContext:
+        """The context for whatever data root the caller passed."""
+        return cls(root=_as_data_root(data_dir), properties=dict(properties or {}))
+
+    @property
+    def reads_in_place(self) -> bool:
+        """The run's files are read from a remote folder, not from ``root``."""
+        return bool(self.properties.get("remote_base_uri"))
 
     def exists(self, rel_path: str) -> bool:
         """Whether the run folder holds ``rel_path``."""
@@ -579,6 +592,7 @@ def execute_recipe(
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
     params: dict[str, str] | None = None,
+    properties: dict | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -623,9 +637,7 @@ def execute_recipe(
     # argument also receives the run folder, for recipes that describe files
     # rather than read them (a genome-track manifest lists which track files
     # the run published).
-    result = call_transform(
-        module, sources, params, RecipeContext(root=_as_data_root(data_dir))
-    )
+    result = call_transform(module, sources, params, RecipeContext.of(data_dir, properties))
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "

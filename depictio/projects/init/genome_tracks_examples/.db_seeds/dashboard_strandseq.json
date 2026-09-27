@@ -269,7 +269,8 @@
         "hover_data": [
           "cell",
           "n_sv_calls"
-        ]
+        ],
+        "color_discrete_map": "{\"selected\": \"#2f9e44\", \"excluded\": \"#adb5bd\"}"
       },
       "mode": "ui",
       "code_content": null,
@@ -326,7 +327,7 @@
       "max_tracks": 24,
       "initial_tracks": 10,
       "default_tracks": [],
-      "show_annotation": true,
+      "show_annotation": false,
       "selection_enabled": true,
       "selection_column": "cell",
       "selection_mode": "feature_click",

@@ -6,12 +6,12 @@ the validated samplesheet rather than globbed: the bigWig signal, the SEACR
 stringent and MACS2 narrowPeak calls (targets only; peak calling never runs on
 an IgG control) and the deduplicated BAM.
 
-Two ways the files are read, decided by what the run folder holds:
-- the track files are present under DATA_ROOT: only those rows are kept, and
-  the CLI uploads them next to the manifest at ingestion;
-- none is present (the tables-only megatest subset): every expected row is kept
-  and the collection reads them in place under ``TRACKS_URI`` (the template sets
-  ``remote_base_uri`` from it).
+Two ways the files are read:
+- ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
+  expected row is kept and read in place under that results folder;
+- otherwise the rows whose file is present under DATA_ROOT are kept and the CLI
+  uploads them at ingestion (all rows are kept when none is present, so a
+  tables-only run still lists what the pipeline publishes).
 
 Output schema:
     track_id : Utf8     `<sample_id>.<kind>`, unique per file
@@ -23,6 +23,7 @@ Output schema:
     name : Utf8         track label shown in the browser
     color : Utf8        per-target colour (the run's own IGV session colours)
     category : Utf8     track-selector folder
+    order : Int64       row order the browser opens with (``order_column``)
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "name": pl.Utf8,
     "color": pl.Utf8,
     "category": pl.Utf8,
+    "order": pl.Int64,
 }
 
 # kind -> (format, path template, category, targets only)
@@ -129,6 +131,14 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
                 }
             )
 
-    if context is not None and any(context.exists(r["uri"]) for r in rows):
+    if (
+        context is not None
+        and not context.reads_in_place
+        and any(context.exists(r["uri"]) for r in rows)
+    ):
         rows = [r for r in rows if context.exists(r["uri"])]
+    # Ingestion reorders rows (clustering on link columns): keep the intended
+    # order explicit, the browser opens on the first `initial_tracks`.
+    for i, row in enumerate(rows, start=1):
+        row["order"] = i
     return pl.DataFrame(rows, schema=EXPECTED_SCHEMA)

@@ -206,6 +206,11 @@ class DCGenomicTracksConfig(BaseModel):
         default="index_uri",
         description="Column holding the index location (optional; inferred otherwise)",
     )
+    order_column: str | None = Field(
+        default=None,
+        description="Column the tracks are ordered by (ascending) when the view opens "
+        "and fills its first `initial_tracks`; ingestion may reorder the rows otherwise",
+    )
     name_column: str | None = Field(default=None, description="Track label column")
     color_column: str | None = Field(default=None, description="Track colour column")
     category_column: str | None = Field(

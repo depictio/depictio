@@ -631,3 +631,34 @@ class TestLocusFromRows:
     )
     def test_unusable(self, rows):
         assert render.locus_from_rows(rows, self.SPEC) is None
+
+
+def test_manifest_rows_follow_order_column():
+    """Ingestion clusters rows by link columns: `order_column` restores the intent."""
+    import polars as pl
+
+    from depictio.api.v1.services.jbrowse.tracks import manifest_rows
+    from depictio.models.models.data_collections_types.genomic_tracks import (
+        DCGenomicTracksConfig,
+    )
+
+    df = pl.DataFrame(
+        {"uri": ["b.bw", "a.bw", "c.bw"], "sample": ["s2", "s1", "s3"], "order": [2, 3, 1]}
+    )
+    props = DCGenomicTracksConfig(format="tsv", sample_column="sample", order_column="order")
+    assert [t.uri for t in manifest_rows(df, props)] == ["c.bw", "b.bw", "a.bw"]
+    unordered = DCGenomicTracksConfig(format="tsv", sample_column="sample")
+    assert [t.uri for t in manifest_rows(df, unordered)] == ["b.bw", "a.bw", "c.bw"]
+
+
+def test_preset_files_go_through_the_api_in_proxy_mode(monkeypatch):
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.services.jbrowse import render
+
+    monkeypatch.setattr(settings.jbrowse, "preset_access", "proxy")
+    conf, annotation, _ = build_assembly_config("hg38", lambda u, r: u, render._preset_url)
+    assert conf["sequence"]["adapter"]["twoBitLocation"]["uri"] == (
+        "/depictio/api/v1/jbrowse/preset/hg38/twobit"
+    )
+    assert annotation is not None
+    assert annotation["adapter"]["bigBedLocation"]["uri"].endswith("/preset/hg38/annotation")

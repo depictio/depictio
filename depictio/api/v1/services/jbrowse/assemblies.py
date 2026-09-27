@@ -10,6 +10,7 @@ and one gene annotation bigBed where UCSC publishes one.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -201,7 +202,33 @@ def _uri(uri: str) -> dict[str, str]:
     return {"uri": uri, "locationType": "UriLocation"}
 
 
-def preset_assembly_config(preset: AssemblyPreset) -> dict[str, Any]:
+PRESET_ROLES = ("twobit", "chrom_sizes", "aliases", "annotation")
+
+
+def preset_file_uri(preset: AssemblyPreset, role: str) -> str | None:
+    """The public URL of one file of a preset (the only URLs the preset proxy reads)."""
+    return {
+        "twobit": preset.twobit_uri,
+        "chrom_sizes": preset.chrom_sizes_uri,
+        "aliases": preset.chrom_alias_uri,
+        "annotation": preset.annotation_uri,
+    }.get(role)
+
+
+def _direct(preset: AssemblyPreset, role: str) -> str:
+    uri = preset_file_uri(preset, role)
+    assert uri is not None
+    return uri
+
+
+# role → URL the browser should read: the upstream URL itself, or the API's
+# preset proxy (see ``jbrowse_endpoints.proxy_preset_file``).
+PresetUrlFor = Callable[[AssemblyPreset, str], str]
+
+
+def preset_assembly_config(
+    preset: AssemblyPreset, url_for: PresetUrlFor = _direct
+) -> dict[str, Any]:
     """JBrowse ``assembly`` block for a preset."""
     return {
         "name": preset.name,
@@ -212,20 +239,22 @@ def preset_assembly_config(preset: AssemblyPreset) -> dict[str, Any]:
             "trackId": f"{preset.name}-ReferenceSequenceTrack",
             "adapter": {
                 "type": "TwoBitAdapter",
-                "twoBitLocation": _uri(preset.twobit_uri),
-                "chromSizesLocation": _uri(preset.chrom_sizes_uri),
+                "twoBitLocation": _uri(url_for(preset, "twobit")),
+                "chromSizesLocation": _uri(url_for(preset, "chrom_sizes")),
             },
         },
         "refNameAliases": {
             "adapter": {
                 "type": "RefNameAliasAdapter",
-                "location": _uri(preset.chrom_alias_uri),
+                "location": _uri(url_for(preset, "aliases")),
             }
         },
     }
 
 
-def preset_annotation_track(preset: AssemblyPreset) -> dict[str, Any] | None:
+def preset_annotation_track(
+    preset: AssemblyPreset, url_for: PresetUrlFor = _direct
+) -> dict[str, Any] | None:
     """Gene annotation track of a preset, or None when UCSC publishes none."""
     if not preset.annotation_uri:
         return None
@@ -235,5 +264,8 @@ def preset_annotation_track(preset: AssemblyPreset) -> dict[str, Any] | None:
         "name": preset.annotation_name,
         "category": ["Annotation"],
         "assemblyNames": [preset.name],
-        "adapter": {"type": "BigBedAdapter", "bigBedLocation": _uri(preset.annotation_uri)},
+        "adapter": {
+            "type": "BigBedAdapter",
+            "bigBedLocation": _uri(url_for(preset, "annotation")),
+        },
     }
