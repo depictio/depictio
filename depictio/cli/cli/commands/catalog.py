@@ -617,8 +617,11 @@ def catalog_schema(
 
 # advanced_viz kinds whose renderer computes server-side (Celery / heavy libs),
 # so a purely client-side tool (e.g. tool-studio) cannot preview them — it
-# must show a "verify in depictio" badge instead of a live plot.
-_HEAVY_KINDS = frozenset({"embedding", "complex_heatmap", "upset_plot", "sankey", "oncoplot"})
+# must show a "verify in depictio" badge instead of a live plot. bioimage_viewer
+# computes nothing, but its pixels only exist behind the API's store endpoint.
+_HEAVY_KINDS = frozenset(
+    {"embedding", "complex_heatmap", "upset_plot", "sankey", "oncoplot", "bioimage_viewer"}
+)
 
 
 @dev_app.command("kinds")

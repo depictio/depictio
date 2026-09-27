@@ -19,6 +19,7 @@
 export * from '../../../../packages/depictio-react-core/src/api';
 
 import type {
+  BioimageStoreInfo,
   InteractiveFilter,
 } from '../../../../packages/depictio-react-core/src/api';
 
@@ -176,6 +177,13 @@ export async function fetchAdvancedVizData(req: { dcId: string }) {
 
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   return need(DATA().advancedVizData, `${dcId}::newick`, 'newick') as unknown as string;
+}
+
+// OME-Zarr pyramids are streamed tile by tile from the API and are not
+// embedded in the offline bundle: no stores, so the viewer shows its empty
+// state rather than reaching for the network.
+export async function fetchBioimageStores(_dcId: string): Promise<BioimageStoreInfo[]> {
+  return [];
 }
 
 // dispatch/poll kinds: results are precomputed, so dispatch returns a finished

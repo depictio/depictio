@@ -64,6 +64,9 @@ AdvancedVizKind = Literal[
     # nf-core templates draw a scatter by hand, every one of them for a size
     # column, a selection key or a reference line rather than for the shape.
     "scatter_xy",
+    # Multiscale OME-Zarr image (NGFF 0.4) from a `bioimage` DC, with an
+    # optional cell-points overlay from a table DC.
+    "bioimage_viewer",
 ]
 
 # Map visualization types
