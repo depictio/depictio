@@ -8,6 +8,7 @@ from pydantic import ValidationError
 import depictio.api.v1.configs.settings_models as settings_models
 from depictio.api.v1.configs.settings_models import (
     AuthConfig,
+    BioimageConfig,
     # Collections,
     FastAPIConfig,
     # JBrowseConfig,
@@ -701,3 +702,42 @@ class TestS3ConfigLegacyEnv:
         assert config.s3_storage.bucket == "yaml-bucket"
         assert config.s3_storage.service_name == "storage"
         assert config.s3_storage.aws_secret_access_key == "yaml-secret"
+
+
+class TestBioimageConfig:
+    """Remote bioimage allow-lists: off by default, comma-separated in env."""
+
+    def test_defaults_keep_remote_reading_off(self, monkeypatch):
+        for var in ("REMOTE_HTTPS_HOSTS", "REMOTE_S3_BUCKETS"):
+            monkeypatch.delenv(f"DEPICTIO_BIOIMAGE_{var}", raising=False)
+        config = BioimageConfig()
+        assert config.remote_https_hosts == []
+        assert config.remote_s3_buckets == []
+        assert config.remote_timeout_s == 20.0
+        assert config.remote_max_object_mb == 64
+
+    def test_comma_separated_env(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS", " Images.Example.org, ,b.org ")
+        monkeypatch.setenv("DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS", "shared-images,12345")
+        monkeypatch.setenv("DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S", "5")
+        config = BioimageConfig()
+        assert config.remote_https_hosts == ["images.example.org", "b.org"]
+        # A numeric bucket name stays a string (the env value is not JSON-decoded).
+        assert config.remote_s3_buckets == ["shared-images", "12345"]
+        assert config.remote_timeout_s == 5.0
+
+    def test_json_list_env_and_empty_env(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS", '["a", "b"]')
+        monkeypatch.setenv("DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS", "")
+        config = BioimageConfig()
+        assert config.remote_s3_buckets == ["a", "b"]
+        assert config.remote_https_hosts == []
+
+    def test_limits_must_be_positive(self):
+        with pytest.raises(ValidationError):
+            BioimageConfig(remote_max_object_mb=0)
+        with pytest.raises(ValidationError):
+            BioimageConfig(remote_timeout_s=0)
+
+    def test_wired_on_settings(self):
+        assert isinstance(Settings(context="client").bioimage, BioimageConfig)

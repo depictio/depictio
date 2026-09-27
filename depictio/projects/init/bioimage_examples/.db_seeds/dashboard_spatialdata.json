@@ -1,0 +1,650 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f14"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f14"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-sd-text",
+      "component_type": "text",
+      "title": "A SpatialData store",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section spots",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "An H&E skin section (epidermis over dermis) saved as a SpatialData store, which also holds spot shapes, nucleus points and an AnnData table. The viewer shows the store's image element; the spot table is exported to a CSV that the cards, filters and table read. Clusters group spots by stain and nuclear density, so C1 is the most hematoxylin-rich. The four gene counts are synthetic. Lasso spots to filter.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-card-count",
+      "component_type": "card",
+      "title": "Spots under tissue",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section spots",
+      "aggregation": "count",
+      "column_name": "spot_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-card-clusters",
+      "component_type": "card",
+      "title": "Clusters",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section spots",
+      "aggregation": "nunique",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "cluster",
+      "top_n_count": 4,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-card-nuclei",
+      "component_type": "card",
+      "title": "Nuclei per spot",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section spots",
+      "aggregation": "median",
+      "column_name": "n_nuclei",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-card-counts",
+      "component_type": "card",
+      "title": "Total counts",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section spots",
+      "aggregation": "median",
+      "column_name": "total_counts",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-viewer",
+      "component_type": "advanced_viz",
+      "title": "Skin section, H&E",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Skin section, H&E (RGB, 640 x 896), the image element of a SpatialData store",
+        "data_collection_tag": "skin_spatialdata_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The images/he element of a SpatialData store (RGB). Points are spots, coloured by cluster.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f0d",
+        "image_dc_tag": "skin_spatialdata_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [],
+        "show_scalebar": false,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f0e",
+        "points_dc_tag": "skin_spatialdata_spots",
+        "cell_id_col": "spot_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "cluster",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 5.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-table",
+      "component_type": "table",
+      "title": "Spots",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per spot. A lasso on the section narrows it to the spots inside.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Section",
+      "columns": [
+        "spot_id",
+        "cluster",
+        "n_nuclei",
+        "total_counts",
+        "gene_A",
+        "gene_B",
+        "gene_C",
+        "gene_D"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-f-cluster",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Spots",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Spot filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-f-nuclei",
+      "component_type": "interactive",
+      "title": "Nuclei per spot",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Spots",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "n_nuclei",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Spot filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sd-f-gene-d",
+      "component_type": "interactive",
+      "title": "gene_D counts",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "skin_spatialdata_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts",
+        "data_collection_tag": "skin_spatialdata_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Spots",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "gene_D",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Spot filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-sd-f-cluster",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-sd-f-nuclei",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-sd-f-gene-d",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-sd-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-sd-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sd-card-clusters",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sd-card-nuclei",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sd-card-counts",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sd-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-sd-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "SpatialData",
+  "subtitle": "The H&E image of a SpatialData store, with its spots",
+  "icon": "mdi:layers-outline",
+  "icon_color": "pink",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 5,
+  "main_tab_name": null,
+  "tab_icon": "mdi:layers-outline",
+  "tab_icon_color": "pink",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Spots",
+      "icon": "mdi:filter-variant",
+      "color": "pink",
+      "description": "Narrows the spots drawn over the section, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Section spots",
+      "icon": "mdi:counter",
+      "color": "pink",
+      "description": "The spots under the tissue in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Section",
+      "icon": "mdi:map-marker-outline",
+      "color": "pink",
+      "description": "The stained section with one point per spot; lasso spots to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

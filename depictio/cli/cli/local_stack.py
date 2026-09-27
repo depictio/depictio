@@ -28,6 +28,8 @@ CONDA_SPECS = ["mongodb 8.0.*", "redis-server", "seaweedfs"]
 ADMIN_EMAIL = "admin@example.com"
 S3_USER = "depictio"
 S3_BUCKET = "depictio-bucket"
+# Inherited DEPICTIO_* settings the local stack keeps (see ``server_env``).
+PASSTHROUGH_ENV_PREFIXES = ("DEPICTIO_BIOIMAGE_",)
 
 DEFAULT_PORTS = {"api": 8058, "mongo": 27018, "redis": 6379, "s3": 9000}
 # Start order; stopped in reverse.
@@ -218,7 +220,14 @@ def server_env(
     paths: Paths, ports: dict[str, int], secret_values: dict, seed: str, screenshots: bool
 ) -> dict:
     host = "127.0.0.1"
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_")}
+    # A stray DEPICTIO_* from the shell would point the stack elsewhere, so they
+    # are dropped, except the bioimage settings (the remote allow-lists), which
+    # only ever widen what a local user opts into.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("DEPICTIO_") or k.startswith(PASSTHROUGH_ENV_PREFIXES)
+    }
     env.update(
         {
             "DEPICTIO_CONTEXT": "server",

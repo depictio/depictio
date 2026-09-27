@@ -106,6 +106,31 @@ jobs:
           curl -fsS -o /dev/null "$API/$DC/sample_A.zarr/0/.zarray"
           curl -fsS -o /dev/null "$API/$DC/sample_A.zarr/0/0/0/0"
 
+      # The OME-TIFF is one file read with HTTP Range requests (the viewer asks
+      # for a few KB at a time), and the SpatialData store is served from its
+      # image element (images/he) as if it were an OME-Zarr store.
+      - name: Check the OME-TIFF and SpatialData examples
+        run: |
+          API=http://127.0.0.1:8058/depictio/api/v1/advanced_viz/bioimage
+          TIFF_DC=646b0f3c1e4a2d7f8e5b8f0b  # lily_stem_image
+          SD_DC=646b0f3c1e4a2d7f8e5b8f0d    # skin_spatialdata_image
+          for dc in "$TIFF_DC" "$SD_DC"; do
+            n=0
+            for i in $(seq 1 60); do
+              n=$(curl -fsS "$API/$dc/stores" 2>/dev/null | jq length 2>/dev/null || echo 0)
+              [ "$n" = "1" ] && break
+              sleep 5
+            done
+            [ "$n" = "1" ] || { echo "expected 1 store for $dc, got $n"; exit 1; }
+          done
+          code=$(curl -sS -o "$RUNNER_TEMP/range.bin" -w '%{http_code}' -H 'Range: bytes=0-1023' \
+            "$API/$TIFF_DC/lily_stem.ome.tif")
+          [ "$code" = "206" ] || { echo "Range read returned $code, expected 206"; exit 1; }
+          [ "$(wc -c < "$RUNNER_TEMP/range.bin" | tr -d ' ')" = "1024" ] || { echo "Range read size mismatch"; exit 1; }
+          curl -fsS "$API/$SD_DC/skin_spatialdata.zarr/.zattrs" \
+            | jq -e '.multiscales[0].version == "0.4" and (.multiscales[0].datasets | length == 3)'
+          curl -fsS -o /dev/null "$API/$SD_DC/skin_spatialdata.zarr/s0/.zarray"
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:

@@ -118,6 +118,12 @@ data:
   DEPICTIO_FEEDBACK_ENABLED: {{ .Values.backend.env.DEPICTIO_FEEDBACK_ENABLED | default "false" | quote }}
   DEPICTIO_FEEDBACK_URL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_URL | default "" | quote }}
   DEPICTIO_FEEDBACK_LABEL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_LABEL | default "Feedback" | quote }}
+  # Remote bioimage stores are read only from allow-listed buckets / hosts
+  # (comma-separated). Empty keeps remote reading off.
+  DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS: {{ .Values.backend.env.DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS | default "" | quote }}
+  DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS | default "" | quote }}
+  DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S | default "20" | quote }}
+  DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB: {{ .Values.backend.env.DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB | default "64" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
   {{- if .Values.googleAnalytics }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}

@@ -1477,13 +1477,21 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   return res.text();
 }
 
-/** One OME-Zarr store registered under a `bioimage` DC. `sample` is the
- *  store name without its `.zarr` suffix, the value an upstream sample filter
- *  selects on. */
+/** What a `bioimage` DC's stores are (`DCBioimageConfig.format`). A
+ *  `spatialdata` store is served rooted at its image element, so it reads as
+ *  plain OME-Zarr here. */
+export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata';
+
+/** One image store registered under a `bioimage` DC. `sample` is the store
+ *  name without its suffix (`.zarr`, `.ome.tif`), the value an upstream sample
+ *  filter selects on. `remote` stores are read in place from an allow-listed
+ *  host or bucket, proxied by the API. */
 export interface BioimageStoreInfo {
   name: string;
   sample: string;
   file_id: string | null;
+  format: BioimageFormat;
+  remote: boolean;
 }
 
 /** The stores of a `bioimage` DC, sorted by name. */
@@ -1491,14 +1499,27 @@ export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreIn
   const res = await authFetch(
     `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/stores`,
   );
-  if (!res.ok) throw new Error(`Failed to fetch OME-Zarr stores: ${res.status}`);
+  if (!res.ok) throw new Error(`Failed to fetch image stores: ${res.status}`);
   return res.json();
 }
 
-/** Root URL of one store; zarr keys (`.zattrs`, `0/.zarray`, `0/0.0.0.0.0`)
- *  resolve under it. No trailing slash. */
+/** Root URL of one store. Zarr keys (`.zattrs`, `0/.zarray`, `0/0.0.0.0.0`)
+ *  resolve under it; a single-file store (OME-TIFF) is the file itself. No
+ *  trailing slash. */
 export function bioimageStoreUrl(dcId: string, store: string): string {
   return `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}`;
+}
+
+/** An image request the API answered with an error status. `status` lets the
+ *  viewer say why (a 403 on a remote store: host not allow-listed). */
+export class BioimageHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BioimageHttpError';
+    this.status = status;
+  }
 }
 
 /** The subset of zarrita's `AsyncReadable` store interface the OME-Zarr
@@ -1517,7 +1538,7 @@ export interface BioimageZarrStore {
  * than a URL, so nothing forces the credential into the URL.
  *
  * A 404 is a missing key, which zarr readers treat as a fill-value chunk, so
- * it resolves to `undefined`; any other failure throws.
+ * it resolves to `undefined`; any other failure throws a `BioimageHttpError`.
  */
 export function createBioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
   const root = bioimageStoreUrl(dcId, store);
@@ -1526,10 +1547,76 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
       const path = key.startsWith('/') ? key : `/${key}`;
       const res = await authFetch(`${root}${path}`, { signal: opts?.signal });
       if (res.status === 404) return undefined;
-      if (!res.ok) throw new Error(`OME-Zarr ${store}${path}: ${res.status}`);
+      if (!res.ok) throw new BioimageHttpError(`OME-Zarr ${store}${path}: ${res.status}`, res.status);
       return new Uint8Array(await res.arrayBuffer());
     },
   };
+}
+
+function storedAccessToken(): string | null {
+  const token = readStoredSession()?.access_token;
+  return typeof token === 'string' ? token : null;
+}
+
+/**
+ * Request headers carrying the bearer, for a loader that fetches by itself
+ * instead of through `authFetch`: viv's OME-TIFF loader hands them to geotiff,
+ * which issues its own byte-range requests. The token is refreshed first, as
+ * `authFetch` does.
+ *
+ * `Authorization` is a getter that reads storage each time it is read. geotiff
+ * spreads these headers into every range request, so tiles fetched an hour
+ * into the session carry the token the keep-alive has since minted, not the
+ * one current when the image opened. Anonymous sessions get no header.
+ */
+export async function bioimageAuthHeaders(): Promise<Record<string, string>> {
+  const initial = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (!initial) return headers;
+  Object.defineProperty(headers, 'Authorization', {
+    enumerable: true,
+    get: () => `Bearer ${storedAccessToken() ?? initial}`,
+  });
+  return headers;
+}
+
+/** One single-file store (OME-TIFF), as viv's `loadOmeTiff` wants it. */
+export interface BioimageTiffSource {
+  /** Absolute URL of the file: viv parses it with `new URL()`. */
+  url: string;
+  headers(): Promise<Record<string, string>>;
+  /** HEAD the file through `authFetch`, throwing a `BioimageHttpError` when
+   *  it is not readable. geotiff reports every HTTP failure as the same bare
+   *  "Error fetching data.", so a failed open asks this for the status. */
+  check(): Promise<void>;
+}
+
+export function createBioimageTiffSource(dcId: string, store: string): BioimageTiffSource {
+  const path = bioimageStoreUrl(dcId, store);
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  return {
+    url: new URL(path, origin).href,
+    headers: bioimageAuthHeaders,
+    async check() {
+      const res = await authFetch(path, { method: 'HEAD' });
+      if (!res.ok) throw new BioimageHttpError(`OME-TIFF ${store}: ${res.status}`, res.status);
+    },
+  };
+}
+
+/** What the viewer opens: a zarr key tree (OME-Zarr, and SpatialData served
+ *  rooted at its image) or a single OME-TIFF file. */
+export type BioimageSource =
+  | { kind: 'zarr'; store: BioimageZarrStore }
+  | { kind: 'tiff'; tiff: BioimageTiffSource };
+
+export function createBioimageSource(
+  dcId: string,
+  store: Pick<BioimageStoreInfo, 'name' | 'format'>,
+): BioimageSource {
+  return store.format === 'ome-tiff'
+    ? { kind: 'tiff', tiff: createBioimageTiffSource(dcId, store.name) }
+    : { kind: 'zarr', store: createBioimageZarrStore(dcId, store.name) };
 }
 
 

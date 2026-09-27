@@ -1,0 +1,208 @@
+# OME-TIFF: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'OME-TIFF'
+subtitle: 'A pyramidal OME-TIFF of a plant stem, read tile by tile'
+icon: 'mdi:leaf'
+icon_color: 'lime'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f13'
+is_main_tab: false
+tab_order: 4
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:leaf'
+tab_icon_color: 'lime'
+
+filter_sections:
+  - name: 'Cells'
+    icon: 'mdi:filter-variant'
+    color: 'lime'
+    description: 'Narrows the cells drawn over the image, the table and the cards'
+
+grid_sections:
+  - name: 'Stem cells'
+    icon: 'mdi:counter'
+    color: 'lime'
+    description: 'The segmented plant cells in numbers'
+  - name: 'Image'
+    icon: 'mdi:microscope'
+    color: 'lime'
+    description: 'The two channels, with one point per cell; lasso points to filter the table'
+
+components:
+  - tag: text-ome-tiff
+    index: omz-tif-text
+    component_type: text
+    title: 'Pyramidal OME-TIFF'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Stem cells'
+    body: >
+      A cross-section of a lily of the valley stem in two fluorescence channels, stored as
+      one OME-TIFF file whose smaller levels are SubIFDs. The viewer fetches only the tiles
+      it draws, with HTTP Range requests. Each point is a cell found between the walls;
+      cells with bright Ch2 walls (the sheaths around the vascular bundles) are called
+      thick-walled. Lasso cells to filter the table and the cards.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-ome-tiff-cells
+    index: omz-tif-card-count
+    component_type: card
+    section: 'Stem cells'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    aggregation: count
+    column_name: cell_id
+    column_type: object
+    icon_name: mdi:counter
+    title_font_size: md
+    value_font_size: xl
+    title: 'Cells'
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+
+  - tag: card-ome-tiff-area
+    index: omz-tif-card-area
+    component_type: card
+    section: 'Stem cells'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    aggregation: median
+    secondary_layout: histogram
+    column_name: area_um2
+    column_type: float64
+    icon_name: mdi:chart-histogram
+    title_font_size: md
+    value_font_size: xl
+    title: 'Lumen area (um2)'
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+
+  - tag: card-ome-tiff-wall-type
+    index: omz-tif-card-wall-type
+    component_type: card
+    section: 'Stem cells'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    aggregation: nunique
+    column_name: wall_type
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: wall_type
+    top_n_count: 2
+    icon_name: mdi:chart-donut
+    title_font_size: md
+    value_font_size: xl
+    title: 'Wall type'
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+
+  - tag: card-ome-tiff-ch2
+    index: omz-tif-card-ch2
+    component_type: card
+    section: 'Stem cells'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_ch2
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Ch2 intensity'
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  - tag: viz-ome-tiff
+    index: omz-tif-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_image
+    title: 'Lily of the valley stem, 2 channels'
+    description: 'Confocal section (1.24 um pixels) in one pyramidal OME-TIFF. Points are cells, coloured by wall type.'
+    section: 'Image'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: lily_stem_image
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f0b'
+      points_dc_tag: lily_stem_cells
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f0c'
+      cell_id_col: cell_id
+      x_col: x
+      y_col: y
+      color_col: wall_type
+      points_sample_col: sample
+      point_radius: 3
+      show_scalebar: true
+      selection_enabled: true
+    layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  - tag: table-ome-tiff-cells
+    index: omz-tif-table
+    component_type: table
+    section: 'Image'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    title: 'Cells'
+    description: 'One row per cell. A lasso on the image narrows it to the cells inside.'
+    columns: [cell_id, area_um2, mean_ch1, mean_ch2, wall_type]
+    page_size: 50
+    layout: { x: 0, y: 9, w: 8, h: 5 }
+
+  - tag: filter-ome-tiff-wall-type
+    index: omz-tif-f-wall-type
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    interactive_component_type: MultiSelect
+    column_name: wall_type
+    column_type: object
+    title: 'Wall type'
+    placement: left
+    section: 'Cells'
+    group: 'Cell filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-ome-tiff-area
+    index: omz-tif-f-area
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    interactive_component_type: RangeSlider
+    column_name: area_um2
+    column_type: float64
+    title: 'Lumen area (um2)'
+    placement: left
+    section: 'Cells'
+    group: 'Cell filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-ome-tiff-ch1
+    index: omz-tif-f-ch1
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: lily_stem_cells
+    interactive_component_type: RangeSlider
+    column_name: mean_ch1
+    column_type: float64
+    title: 'Ch1 intensity'
+    placement: left
+    section: 'Cells'
+    group: 'Cell filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:gauge'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

@@ -20,7 +20,10 @@ from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.data_collections_types.bioimage import (
     DCBioimageConfig,
+    bioimage_s3_object_key,
     bioimage_s3_prefix,
+    is_single_file_format,
+    remote_store_name,
 )
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.files import File
@@ -1052,6 +1055,7 @@ def validate_ome_zarr_store(store_path: str) -> None:
     """
     zattrs_path = os.path.join(store_path, ".zattrs")
     if not os.path.isfile(zattrs_path):
+        _raise_if_zarr_v3(store_path)
         raise ValueError(
             f"{store_path} is not an OME-Zarr store: no root .zattrs "
             "(only NGFF 0.4 / zarr v2 stores are supported)"
@@ -1069,6 +1073,99 @@ def validate_ome_zarr_store(store_path: str) -> None:
         )
 
 
+def _raise_if_zarr_v3(path: str) -> None:
+    """Clear error for a zarr v3 group (``zarr.json`` and no ``.zattrs``)."""
+    if os.path.isfile(os.path.join(path, "zarr.json")) and not os.path.isfile(
+        os.path.join(path, ".zattrs")
+    ):
+        raise ValueError(
+            f"{path} is a zarr v3 store (zarr.json): NGFF 0.5 / zarr v3 is not "
+            "supported yet, only NGFF 0.4 / zarr v2"
+        )
+
+
+def validate_spatialdata_store(store_path: str, image_path: str) -> None:
+    """Raise ValueError unless ``store_path`` is a SpatialData store whose
+    ``image_path`` element is an NGFF 0.4 multiscales image."""
+    has_zattrs = os.path.isfile(os.path.join(store_path, ".zattrs"))
+    has_zgroup = os.path.isfile(os.path.join(store_path, ".zgroup"))
+    if not (has_zattrs or has_zgroup):
+        _raise_if_zarr_v3(store_path)
+        raise ValueError(
+            f"{store_path} is not a SpatialData store: no root .zgroup or .zattrs "
+            "(only zarr v2 stores are supported)"
+        )
+    _raise_if_zarr_v3(store_path)
+    image_dir = os.path.join(store_path, *image_path.split("/"))
+    if not os.path.isdir(image_dir):
+        raise ValueError(f"{store_path} has no image element at image_path {image_path!r}")
+    validate_ome_zarr_store(image_dir)
+
+
+# TIFF ImageDescription tag, which holds the OME-XML in an OME-TIFF's first IFD.
+_TIFF_IMAGE_DESCRIPTION = 270
+# Only the head of the description is read: the <OME root element opens it.
+_OME_XML_PROBE_BYTES = 1 << 20
+
+
+def _read_exact(fh, offset: int, size: int, path: str) -> bytes:
+    fh.seek(offset)
+    data = fh.read(size)
+    if len(data) != size:
+        raise ValueError(f"{path} is a truncated TIFF file")
+    return data
+
+
+def validate_ome_tiff(path: str) -> None:
+    """Raise ValueError unless ``path`` is a TIFF / BigTIFF whose first IFD's
+    ImageDescription (tag 270) carries OME-XML.
+
+    Only the header and the first IFD are parsed; pixel data is never read.
+    """
+    import struct
+
+    with open(path, "rb") as fh:
+        head = fh.read(16)
+        order = {b"II": "<", b"MM": ">"}.get(head[:2])
+        if order is None or len(head) < 8:
+            raise ValueError(f"{path} is not a TIFF file (bad byte-order mark)")
+        (magic,) = struct.unpack(order + "H", head[2:4])
+        if magic == 42:
+            (ifd_offset,) = struct.unpack(order + "I", head[4:8])
+            count_fmt, entry_size, entry_fmt, inline_size = "H", 12, "HHI4s", 4
+        elif magic == 43 and len(head) == 16:
+            (ifd_offset,) = struct.unpack(order + "Q", head[8:16])
+            count_fmt, entry_size, entry_fmt, inline_size = "Q", 20, "HHQ8s", 8
+        else:
+            raise ValueError(f"{path} is not a TIFF or BigTIFF file (magic {magic})")
+
+        count_size = struct.calcsize(count_fmt)
+        (n_entries,) = struct.unpack(
+            order + count_fmt, _read_exact(fh, ifd_offset, count_size, path)
+        )
+        entries = _read_exact(fh, ifd_offset + count_size, n_entries * entry_size, path)
+        description = None
+        for i in range(n_entries):
+            tag, _type, count, value = struct.unpack(
+                order + entry_fmt, entries[i * entry_size : (i + 1) * entry_size]
+            )
+            if tag != _TIFF_IMAGE_DESCRIPTION:
+                continue
+            # ASCII / BYTE / UNDEFINED: one byte per value.
+            if count <= inline_size:
+                description = value[:count]
+            else:
+                (offset,) = struct.unpack(order + ("I" if inline_size == 4 else "Q"), value)
+                size = min(count, _OME_XML_PROBE_BYTES)
+                description = _read_exact(fh, offset, size, path)
+            break
+
+    if description is None:
+        raise ValueError(f"{path} has no ImageDescription in its first IFD: not an OME-TIFF")
+    if b"<OME" not in description:
+        raise ValueError(f"{path} ImageDescription carries no OME-XML: not an OME-TIFF")
+
+
 # Parallel uploads per store: a store is thousands of small chunk files, so a
 # serial loop is bound by per-request latency, not bandwidth.
 BIOIMAGE_UPLOAD_WORKERS_DEFAULT = 16
@@ -1077,12 +1174,12 @@ _S3_DELETE_BATCH = 1000
 
 
 def bioimage_upload_workers() -> int:
-    """Upload threads per store: ``DEPICTIO_BIOIMAGE_UPLOAD_WORKERS`` or 16."""
-    raw = os.getenv("DEPICTIO_BIOIMAGE_UPLOAD_WORKERS", "").strip()
+    """Upload threads per store: ``DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS`` or 16."""
+    raw = os.getenv("DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS", "").strip()
     try:
         workers = int(raw) if raw else BIOIMAGE_UPLOAD_WORKERS_DEFAULT
     except ValueError:
-        logger.warning(f"Ignoring non-integer DEPICTIO_BIOIMAGE_UPLOAD_WORKERS={raw!r}")
+        logger.warning(f"Ignoring non-integer DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS={raw!r}")
         workers = BIOIMAGE_UPLOAD_WORKERS_DEFAULT
     return max(1, workers)
 
@@ -1097,14 +1194,31 @@ def bioimage_upload_marker_key(dc_id: str, store_name: str) -> str:
     return f"{bioimage_s3_prefix(dc_id)}.uploads/{store_name}.json"
 
 
-def zarr_store_hash(store_path: str) -> str:
-    """Change-detection hash of a local store, computed like the scan's File hash."""
+def zarr_store_hash(store_path: str, image_path: str | None = None) -> str:
+    """Change-detection hash of a local store, computed like the scan's File hash.
+
+    With ``image_path`` (SpatialData) only that subtree is hashed, and the path
+    joins the name, so pointing the DC at another element re-uploads.
+    """
     from depictio.cli.cli.utils.common import format_timestamp
     from depictio.cli.cli.utils.scan import generate_zarr_store_hash, zarr_store_stats
 
     store_name = os.path.basename(store_path.rstrip("/"))
-    total_size, max_mtime, zattrs = zarr_store_stats(store_path)
-    return generate_zarr_store_hash(store_name, total_size, format_timestamp(max_mtime), zattrs)
+    source = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
+    name = f"{store_name}/{image_path}" if image_path else store_name
+    total_size, max_mtime, zattrs = zarr_store_stats(source)
+    return generate_zarr_store_hash(name, total_size, format_timestamp(max_mtime), zattrs)
+
+
+def single_file_store_hash(path: str) -> str:
+    """Change-detection hash of a single-file store (OME-TIFF): name, size, mtime."""
+    import hashlib
+
+    from depictio.cli.cli.utils.common import format_timestamp
+
+    st = os.stat(path)
+    name = os.path.basename(path)
+    return hashlib.sha256(f"{name}{st.st_size}{format_timestamp(st.st_mtime)}".encode()).hexdigest()
 
 
 def _read_bioimage_upload_marker(s3_client, bucket: str, key: str) -> dict | None:
@@ -1154,11 +1268,14 @@ def upload_zarr_store(
     *,
     workers: int | None = None,
     force: bool = False,
+    image_path: str | None = None,
 ) -> int:
     """Mirror a local store under ``bioimage_s3_prefix(dc_id, store_name)``.
 
     Keys keep the store-relative path with ``/`` separators, so chunk keys like
-    ``0/0.0.0.0.0`` (or nested ``0/0/0/0/0/0``) resolve unchanged. Files are
+    ``0/0.0.0.0.0`` (or nested ``0/0/0/0/0/0``) resolve unchanged. With
+    ``image_path`` (SpatialData) only ``<store>/<image_path>`` is uploaded, with
+    keys relative to it, so the prefix reads like a plain OME-Zarr store. Files are
     uploaded in parallel over the shared ``s3_client`` (boto3 clients are
     thread-safe). Objects left under the prefix by an earlier upload that the
     local store no longer holds are then deleted, so a re-chunked store never
@@ -1177,20 +1294,21 @@ def upload_zarr_store(
     store_name = os.path.basename(store_path.rstrip("/"))
     prefix = bioimage_s3_prefix(dc_id, store_name)
     marker_key = bioimage_upload_marker_key(dc_id, store_name)
-    store_hash = zarr_store_hash(store_path)
+    store_hash = zarr_store_hash(store_path, image_path)
+    source = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
 
     marker = _read_bioimage_upload_marker(s3_client, bucket, marker_key)
     if not force and marker is not None and marker.get("hash") == store_hash:
-        logger.info(f"OME-Zarr store unchanged since last upload, skipping: {store_path}")
+        logger.info(f"Bioimage store unchanged since last upload, skipping: {store_path}")
         return 0
     if marker is not None:
         s3_client.delete_object(Bucket=bucket, Key=marker_key)
 
     uploads: list[tuple[str, str]] = []
-    for root, _, names in os.walk(store_path):
+    for root, _, names in os.walk(source):
         for name in sorted(names):
             local = os.path.join(root, name)
-            rel = os.path.relpath(local, store_path).replace(os.sep, "/")
+            rel = os.path.relpath(local, source).replace(os.sep, "/")
             uploads.append((local, prefix + rel))
 
     n_workers = workers or bioimage_upload_workers()
@@ -1213,12 +1331,64 @@ def upload_zarr_store(
     return len(uploads)
 
 
+def upload_ome_tiff(
+    s3_client,
+    bucket: str,
+    dc_id: str,
+    file_path: str,
+    *,
+    force: bool = False,
+) -> int:
+    """Copy one OME-TIFF to ``bioimage_s3_object_key(dc_id, name)``.
+
+    boto3's managed transfer splits a large file into a multipart upload. The
+    marker scheme matches ``upload_zarr_store``: skipped when the marker's
+    hash matches, marker removed before a re-upload and written last.
+
+    Returns:
+        Number of objects uploaded (0 when the marker matched, else 1).
+    """
+    name = os.path.basename(file_path)
+    key = bioimage_s3_object_key(dc_id, name)
+    marker_key = bioimage_upload_marker_key(dc_id, name)
+    file_hash = single_file_store_hash(file_path)
+
+    marker = _read_bioimage_upload_marker(s3_client, bucket, marker_key)
+    if not force and marker is not None and marker.get("hash") == file_hash:
+        logger.info(f"OME-TIFF unchanged since last upload, skipping: {file_path}")
+        return 0
+    if marker is not None:
+        s3_client.delete_object(Bucket=bucket, Key=marker_key)
+
+    s3_client.upload_file(file_path, bucket, key)
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=marker_key,
+        Body=json.dumps({"hash": file_hash, "objects": [key]}).encode(),
+        ContentType="application/json",
+    )
+    return 1
+
+
 def _duplicate_store_names(store_paths: Iterable[str]) -> dict[str, list[str]]:
-    """Store basenames shared by more than one path, with the clashing paths."""
+    """Store names shared by more than one path or remote URL, with the clashes."""
     by_name: dict[str, list[str]] = {}
     for path in store_paths:
-        by_name.setdefault(os.path.basename(path.rstrip("/")), []).append(path)
+        name = remote_store_name(path) if "://" in path else os.path.basename(path.rstrip("/"))
+        by_name.setdefault(name, []).append(path)
     return {name: paths for name, paths in by_name.items() if len(paths) > 1}
+
+
+_FORMAT_LABELS = {"ome-zarr": "OME-Zarr", "spatialdata": "SpatialData", "ome-tiff": "OME-TIFF"}
+
+
+def _validate_bioimage_store(store_path: str, props: DCBioimageConfig) -> None:
+    if props.format == "ome-tiff":
+        validate_ome_tiff(store_path)
+    elif props.format == "spatialdata":
+        validate_spatialdata_store(store_path, props.image_path or "")
+    else:
+        validate_ome_zarr_store(store_path)
 
 
 def process_bioimage_data_collection(
@@ -1226,15 +1396,18 @@ def process_bioimage_data_collection(
     CLI_config: CLIConfig,
     overwrite: bool = False,
 ) -> dict[str, str]:
-    """Validate a bioimage DC's stores and upload them to S3.
+    """Validate a bioimage DC's local stores and upload them to S3.
 
-    Every registered File is one ``*.zarr`` store directory. Stores are keyed
-    by their directory name (S3 prefix, stores listing, viewer), so two paths
-    sharing a basename are rejected before anything is uploaded. Each store
-    must carry NGFF ``multiscales`` metadata; unless the DC is reference-only
-    (``upload: false``), it is then mirrored under
-    ``bioimage_s3_prefix(dc_id, store_name)``, where the chunk endpoint looks
-    first. No delta table is registered.
+    Every registered File is one store of the DC's ``format``: a ``*.zarr``
+    directory (OME-Zarr, SpatialData) or an ``*.ome.tif(f)`` file (OME-TIFF).
+    Stores are keyed by their name (S3 prefix, stores listing, viewer), so two
+    stores sharing a name, local or remote, are rejected before anything is
+    uploaded. Each store is validated for its format; unless the DC is
+    reference-only (``upload: false``), a key-tree store is then mirrored under
+    ``bioimage_s3_prefix(dc_id, store_name)`` (a SpatialData store: its
+    ``image_path`` subtree only) and an OME-TIFF copied to
+    ``bioimage_s3_object_key(dc_id, store_name)``. ``remote_stores`` are read in
+    place by the API and never touched here. No delta table is registered.
 
     Args:
         data_collection: Bioimage DataCollection object.
@@ -1249,18 +1422,30 @@ def process_bioimage_data_collection(
 
     dc_id = str(data_collection.id)
     props = getattr(data_collection.config, "dc_specific_properties", None)
-    upload = not (isinstance(props, DCBioimageConfig) and props.upload is False)
+    if not isinstance(props, DCBioimageConfig):
+        props = DCBioimageConfig()
+    label = _FORMAT_LABELS.get(props.format, props.format)
+    remote = list(props.remote_stores)
+    remote_note = f"{len(remote)} remote store(s), read in place"
+
+    if remote and not getattr(data_collection.config, "scan", None):
+        # Remote-only DC: nothing was scanned, so there is nothing to validate or upload.
+        return _bioimage_success(data_collection, len(remote), remote_note)
 
     try:
         files = fetch_file_data(dc_id, CLI_config)
     except Exception as e:
+        if remote:
+            return _bioimage_success(data_collection, len(remote), remote_note)
         return {"result": "error", "message": f"No stores found for bioimage DC: {e}"}
 
     if not files:
+        if remote:
+            return _bioimage_success(data_collection, len(remote), remote_note)
         return {"result": "error", "message": "No stores found for bioimage data collection"}
 
     store_paths = sorted({f.file_location for f in files})
-    duplicates = _duplicate_store_names(store_paths)
+    duplicates = _duplicate_store_names([*store_paths, *remote])
     if duplicates:
         clashes = "; ".join(
             f"{name}: {', '.join(paths)}" for name, paths in sorted(duplicates.items())
@@ -1268,47 +1453,61 @@ def process_bioimage_data_collection(
         return {
             "result": "error",
             "message": (
-                "OME-Zarr store names must be unique within a data collection "
-                f"(stores are addressed by directory name): {clashes}"
+                f"{label} store names must be unique within a data collection "
+                f"(stores are addressed by name): {clashes}"
             ),
         }
 
     for store_path in store_paths:
         try:
-            validate_ome_zarr_store(store_path)
+            _validate_bioimage_store(store_path, props)
         except ValueError as e:
-            return {"result": "error", "message": f"Invalid OME-Zarr store: {e}"}
+            return {"result": "error", "message": f"Invalid {label} store: {e}"}
 
-    if upload:
+    if props.upload:
         bucket = CLI_config.s3_storage.bucket
         workers = bioimage_upload_workers()
         s3_client = _s3_client(CLI_config, max_pool_connections=workers)
         for store_path in store_paths:
             try:
-                logger.info(f"Uploading OME-Zarr store to S3: {store_path}")
-                count = upload_zarr_store(
-                    s3_client, bucket, dc_id, store_path, workers=workers, force=overwrite
-                )
+                logger.info(f"Uploading {label} store to S3: {store_path}")
+                if is_single_file_format(props.format):
+                    count = upload_ome_tiff(s3_client, bucket, dc_id, store_path, force=overwrite)
+                else:
+                    count = upload_zarr_store(
+                        s3_client,
+                        bucket,
+                        dc_id,
+                        store_path,
+                        workers=workers,
+                        force=overwrite,
+                        image_path=props.image_path,
+                    )
             except Exception as e:
                 return {
                     "result": "error",
-                    "message": f"Failed to upload OME-Zarr store {store_path} to S3: {e}",
+                    "message": f"Failed to upload {label} store {store_path} to S3: {e}",
                 }
             logger.info(f"Uploaded {count} object(s) from {store_path}")
         location = f"s3://{bucket}/{bioimage_s3_prefix(dc_id)}"
     else:
         location = "the registered paths on disk (upload disabled)"
 
+    message = f"{len(store_paths)} {label} store(s) available at {location}"
+    if remote:
+        message += f"; {remote_note}"
+    return _bioimage_success(data_collection, len(store_paths) + len(remote), message)
+
+
+def _bioimage_success(
+    data_collection: DataCollection, n_stores: int, message: str
+) -> dict[str, str]:
     rich_print_checked_statement(
         f"Bioimage data collection processed: {data_collection.data_collection_tag} "
-        f"({len(store_paths)} store(s))",
+        f"({n_stores} store(s))",
         "success",
     )
-
-    return {
-        "result": "success",
-        "message": f"{len(store_paths)} OME-Zarr store(s) available at {location}",
-    }
+    return {"result": "success", "message": message}
 
 
 def _print_recipe_preview(
