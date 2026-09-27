@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Iterable
 from datetime import datetime
@@ -17,6 +18,10 @@ from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.bioimage import (
+    DCBioimageConfig,
+    bioimage_s3_prefix,
+)
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.files import File
 from depictio.models.models.s3 import PolarsStorageOptions
@@ -600,6 +605,10 @@ def client_aggregate_data(
     if data_collection.config.type.lower() == "phylogeny":
         return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
 
+    # Bioimage DCs have no delta table; each store is copied to S3 for the chunk endpoint.
+    if data_collection.config.type.lower() == "bioimage":
+        return process_bioimage_data_collection(data_collection, CLI_config, overwrite)
+
     # Handle transformed (recipe-based) data collections. A `materialized`
     # transform keeps the recipe for lineage but ships a pre-computed seed file,
     # so it falls through to the file-scan path instead of re-running the recipe.
@@ -956,9 +965,14 @@ def process_geojson_data_collection(
     }
 
 
-def _s3_client(CLI_config: CLIConfig):
-    """boto3 S3 client for the CLI's configured storage (GeoJSON and phylogeny uploads)."""
+def _s3_client(CLI_config: CLIConfig, max_pool_connections: int | None = None):
+    """boto3 S3 client for the CLI's configured storage (GeoJSON, phylogeny, OME-Zarr uploads).
+
+    ``max_pool_connections`` raises botocore's HTTP pool (10 by default) for a
+    client shared across upload threads, so workers do not queue on a socket.
+    """
     import boto3
+    from botocore.config import Config
 
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
     return boto3.client(
@@ -967,6 +981,7 @@ def _s3_client(CLI_config: CLIConfig):
         aws_access_key_id=storage_options.aws_access_key_id,
         aws_secret_access_key=storage_options.aws_secret_access_key,
         region_name=storage_options.region,
+        config=Config(max_pool_connections=max_pool_connections) if max_pool_connections else None,
     )
 
 
@@ -1026,6 +1041,273 @@ def process_phylogeny_data_collection(
     return {
         "result": "success",
         "message": f"Phylogeny tree available at {s3_location}",
+    }
+
+
+def validate_ome_zarr_store(store_path: str) -> None:
+    """Raise ValueError unless ``store_path`` is an NGFF 0.4 image store.
+
+    Only the root ``.zattrs`` is checked: it must be a JSON object carrying a
+    non-empty ``multiscales`` list, which is what the viewer reads first.
+    """
+    zattrs_path = os.path.join(store_path, ".zattrs")
+    if not os.path.isfile(zattrs_path):
+        raise ValueError(
+            f"{store_path} is not an OME-Zarr store: no root .zattrs "
+            "(only NGFF 0.4 / zarr v2 stores are supported)"
+        )
+    try:
+        with open(zattrs_path, encoding="utf-8") as fh:
+            attrs = json.load(fh)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"{zattrs_path} is not valid JSON: {e}") from e
+    multiscales = attrs.get("multiscales") if isinstance(attrs, dict) else None
+    if not isinstance(multiscales, list) or not multiscales:
+        raise ValueError(
+            f"{zattrs_path} has no 'multiscales' entry: not an OME-NGFF image "
+            "(plates and label-only stores are not supported)"
+        )
+
+
+# Parallel uploads per store: a store is thousands of small chunk files, so a
+# serial loop is bound by per-request latency, not bandwidth.
+BIOIMAGE_UPLOAD_WORKERS_DEFAULT = 16
+# S3 DeleteObjects accepts at most 1000 keys per request.
+_S3_DELETE_BATCH = 1000
+
+
+def bioimage_upload_workers() -> int:
+    """Upload threads per store: ``DEPICTIO_BIOIMAGE_UPLOAD_WORKERS`` or 16."""
+    raw = os.getenv("DEPICTIO_BIOIMAGE_UPLOAD_WORKERS", "").strip()
+    try:
+        workers = int(raw) if raw else BIOIMAGE_UPLOAD_WORKERS_DEFAULT
+    except ValueError:
+        logger.warning(f"Ignoring non-integer DEPICTIO_BIOIMAGE_UPLOAD_WORKERS={raw!r}")
+        workers = BIOIMAGE_UPLOAD_WORKERS_DEFAULT
+    return max(1, workers)
+
+
+def bioimage_upload_marker_key(dc_id: str, store_name: str) -> str:
+    """S3 key of the marker recording the last complete upload of a store.
+
+    It sits under ``bioimage/{dc_id}/.uploads/``, outside every store prefix,
+    so the chunk endpoint can never serve it as a zarr key and the backend's
+    store listing (which keeps only ``*.zarr`` prefixes) never reports it.
+    """
+    return f"{bioimage_s3_prefix(dc_id)}.uploads/{store_name}.json"
+
+
+def zarr_store_hash(store_path: str) -> str:
+    """Change-detection hash of a local store, computed like the scan's File hash."""
+    from depictio.cli.cli.utils.common import format_timestamp
+    from depictio.cli.cli.utils.scan import generate_zarr_store_hash, zarr_store_stats
+
+    store_name = os.path.basename(store_path.rstrip("/"))
+    total_size, max_mtime, zattrs = zarr_store_stats(store_path)
+    return generate_zarr_store_hash(store_name, total_size, format_timestamp(max_mtime), zattrs)
+
+
+def _read_bioimage_upload_marker(s3_client, bucket: str, key: str) -> dict | None:
+    """The marker's JSON content, or None when absent or unreadable."""
+    try:
+        body = s3_client.get_object(Bucket=bucket, Key=key)["Body"]
+        try:
+            data = json.loads(body.read())
+        finally:
+            body.close()
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _list_s3_keys(s3_client, bucket: str, prefix: str) -> set[str]:
+    keys: set[str] = set()
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []) or []:
+            keys.add(obj["Key"])
+    return keys
+
+
+def _delete_s3_keys(s3_client, bucket: str, keys: list[str]) -> None:
+    """Batch-delete ``keys``, raising if S3 reports any per-key error."""
+    for i in range(0, len(keys), _S3_DELETE_BATCH):
+        batch = keys[i : i + _S3_DELETE_BATCH]
+        resp = s3_client.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+        )
+        errors = (resp or {}).get("Errors") or []
+        if errors:
+            first = errors[0]
+            raise RuntimeError(
+                f"Failed to delete {len(errors)} stale object(s), e.g. "
+                f"{first.get('Key')}: {first.get('Code')} {first.get('Message')}"
+            )
+
+
+def upload_zarr_store(
+    s3_client,
+    bucket: str,
+    dc_id: str,
+    store_path: str,
+    *,
+    workers: int | None = None,
+    force: bool = False,
+) -> int:
+    """Mirror a local store under ``bioimage_s3_prefix(dc_id, store_name)``.
+
+    Keys keep the store-relative path with ``/`` separators, so chunk keys like
+    ``0/0.0.0.0.0`` (or nested ``0/0/0/0/0/0``) resolve unchanged. Files are
+    uploaded in parallel over the shared ``s3_client`` (boto3 clients are
+    thread-safe). Objects left under the prefix by an earlier upload that the
+    local store no longer holds are then deleted, so a re-chunked store never
+    serves stale chunks.
+
+    The store's change-detection hash is written last to
+    ``bioimage_upload_marker_key``. When that marker already matches the local
+    store (and ``force`` is False) nothing is uploaded. The marker is removed
+    before a re-upload starts, so an interrupted upload never looks complete.
+
+    Returns:
+        Number of objects uploaded (0 when the marker matched).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    store_name = os.path.basename(store_path.rstrip("/"))
+    prefix = bioimage_s3_prefix(dc_id, store_name)
+    marker_key = bioimage_upload_marker_key(dc_id, store_name)
+    store_hash = zarr_store_hash(store_path)
+
+    marker = _read_bioimage_upload_marker(s3_client, bucket, marker_key)
+    if not force and marker is not None and marker.get("hash") == store_hash:
+        logger.info(f"OME-Zarr store unchanged since last upload, skipping: {store_path}")
+        return 0
+    if marker is not None:
+        s3_client.delete_object(Bucket=bucket, Key=marker_key)
+
+    uploads: list[tuple[str, str]] = []
+    for root, _, names in os.walk(store_path):
+        for name in sorted(names):
+            local = os.path.join(root, name)
+            rel = os.path.relpath(local, store_path).replace(os.sep, "/")
+            uploads.append((local, prefix + rel))
+
+    n_workers = workers or bioimage_upload_workers()
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        # list() drains the iterator so the first failed upload re-raises here.
+        list(pool.map(lambda item: s3_client.upload_file(item[0], bucket, item[1]), uploads))
+
+    local_keys = {key for _, key in uploads}
+    stale = sorted(_list_s3_keys(s3_client, bucket, prefix) - local_keys)
+    if stale:
+        logger.info(f"Deleting {len(stale)} stale object(s) under {prefix}")
+        _delete_s3_keys(s3_client, bucket, stale)
+
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=marker_key,
+        Body=json.dumps({"hash": store_hash, "objects": len(uploads)}).encode(),
+        ContentType="application/json",
+    )
+    return len(uploads)
+
+
+def _duplicate_store_names(store_paths: Iterable[str]) -> dict[str, list[str]]:
+    """Store basenames shared by more than one path, with the clashing paths."""
+    by_name: dict[str, list[str]] = {}
+    for path in store_paths:
+        by_name.setdefault(os.path.basename(path.rstrip("/")), []).append(path)
+    return {name: paths for name, paths in by_name.items() if len(paths) > 1}
+
+
+def process_bioimage_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Validate a bioimage DC's stores and upload them to S3.
+
+    Every registered File is one ``*.zarr`` store directory. Stores are keyed
+    by their directory name (S3 prefix, stores listing, viewer), so two paths
+    sharing a basename are rejected before anything is uploaded. Each store
+    must carry NGFF ``multiscales`` metadata; unless the DC is reference-only
+    (``upload: false``), it is then mirrored under
+    ``bioimage_s3_prefix(dc_id, store_name)``, where the chunk endpoint looks
+    first. No delta table is registered.
+
+    Args:
+        data_collection: Bioimage DataCollection object.
+        CLI_config: CLI configuration with API URL, credentials and S3 storage.
+        overwrite: Re-upload every store even when its upload marker matches
+            the local content.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    logger.info(f"Processing bioimage data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    upload = not (isinstance(props, DCBioimageConfig) and props.upload is False)
+
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        return {"result": "error", "message": f"No stores found for bioimage DC: {e}"}
+
+    if not files:
+        return {"result": "error", "message": "No stores found for bioimage data collection"}
+
+    store_paths = sorted({f.file_location for f in files})
+    duplicates = _duplicate_store_names(store_paths)
+    if duplicates:
+        clashes = "; ".join(
+            f"{name}: {', '.join(paths)}" for name, paths in sorted(duplicates.items())
+        )
+        return {
+            "result": "error",
+            "message": (
+                "OME-Zarr store names must be unique within a data collection "
+                f"(stores are addressed by directory name): {clashes}"
+            ),
+        }
+
+    for store_path in store_paths:
+        try:
+            validate_ome_zarr_store(store_path)
+        except ValueError as e:
+            return {"result": "error", "message": f"Invalid OME-Zarr store: {e}"}
+
+    if upload:
+        bucket = CLI_config.s3_storage.bucket
+        workers = bioimage_upload_workers()
+        s3_client = _s3_client(CLI_config, max_pool_connections=workers)
+        for store_path in store_paths:
+            try:
+                logger.info(f"Uploading OME-Zarr store to S3: {store_path}")
+                count = upload_zarr_store(
+                    s3_client, bucket, dc_id, store_path, workers=workers, force=overwrite
+                )
+            except Exception as e:
+                return {
+                    "result": "error",
+                    "message": f"Failed to upload OME-Zarr store {store_path} to S3: {e}",
+                }
+            logger.info(f"Uploaded {count} object(s) from {store_path}")
+        location = f"s3://{bucket}/{bioimage_s3_prefix(dc_id)}"
+    else:
+        location = "the registered paths on disk (upload disabled)"
+
+    rich_print_checked_statement(
+        f"Bioimage data collection processed: {data_collection.data_collection_tag} "
+        f"({len(store_paths)} store(s))",
+        "success",
+    )
+
+    return {
+        "result": "success",
+        "message": f"{len(store_paths)} OME-Zarr store(s) available at {location}",
     }
 
 

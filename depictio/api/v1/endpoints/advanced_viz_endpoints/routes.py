@@ -16,6 +16,7 @@ Thin endpoints:
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from typing import Any
@@ -1667,3 +1668,337 @@ def get_phylogeny_newick(
     except Exception as exc:
         logger.warning("phylogeny newick read failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to read phylogeny") from exc
+
+
+# ---------------------------------------------------------------------------
+# Bioimage store serving (OME-Zarr / NGFF 0.4, the only format so far)
+# ---------------------------------------------------------------------------
+#
+# A zarr reader in the browser fetches one small object per request (``.zattrs``,
+# ``.zarray``, then many chunks), so both the access check and the per-DC store
+# lookup are cached briefly instead of hitting Mongo on every chunk.
+
+_BIOIMAGE_CACHE_TTL_S = 60.0
+_BIOIMAGE_CACHE_MAX = 2048
+_ZARR_JSON_KEYS = frozenset({".zattrs", ".zgroup", ".zarray", ".zmetadata"})
+# Metadata is revalidated on every read (a re-upload may change it); chunks are
+# addressed by the metadata that lists them, so they cache for an hour.
+_ZARR_JSON_HEADERS = {"Cache-Control": "no-cache"}
+_ZARR_CHUNK_HEADERS = {"Cache-Control": "private, max-age=3600"}
+# Grants only (a deny re-checks, so a freshly shared project opens at once).
+_bioimage_access_cache: dict[tuple[str, str], float] = {}
+_bioimage_store_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _bioimage_cache_put(cache: dict, key, value) -> None:
+    if len(cache) >= _BIOIMAGE_CACHE_MAX:
+        cache.clear()
+    cache[key] = value
+
+
+def _assert_dc_access_cached(dc_oid: ObjectId, current_user) -> None:
+    """``_assert_dc_access`` behind a short TTL cache keyed by (user, dc)."""
+    import time
+
+    user_id = getattr(current_user, "id", None)
+    key = (str(user_id) if user_id is not None else "anon", str(dc_oid))
+    now = time.monotonic()
+    expiry = _bioimage_access_cache.get(key)
+    if expiry is not None and expiry > now:
+        return
+    _assert_dc_access(dc_oid, current_user)
+    _bioimage_cache_put(_bioimage_access_cache, key, now + _BIOIMAGE_CACHE_TTL_S)
+
+
+def _bioimage_parse_dc_id(data_collection_id: str) -> ObjectId:
+    try:
+        return ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid dc_id") from exc
+
+
+def _valid_zarr_store_name(store: str) -> bool:
+    """A single path segment named ``*.zarr`` (no separators, no dot-dot)."""
+    return (
+        bool(store)
+        and store.endswith(".zarr")
+        and store != ".zarr"
+        and "/" not in store
+        and "\\" not in store
+        and "\x00" not in store
+        and ".." not in store
+    )
+
+
+def _normalize_zarr_key(key: str) -> str | None:
+    """Traversal-safe, store-relative zarr key, or None when it must be rejected.
+
+    Same checks as ``files_endpoints._validate_image_path`` (raw ``..`` / leading
+    slash rejected, then re-asserted on the ``posixpath.normpath`` form) minus
+    the image-extension filter: zarr keys are ``.zattrs`` or bare chunk names.
+    """
+    import posixpath
+
+    if not key or ".." in key or key.startswith("/") or "\\" in key or "\x00" in key:
+        return None
+    normalized = posixpath.normpath(key)
+    if (
+        normalized in (".", "..")
+        or normalized.startswith("/")
+        or normalized.startswith("../")
+        or "/../" in normalized
+        or normalized != key.rstrip("/")
+    ):
+        return None
+    return normalized
+
+
+def _zarr_is_metadata(key: str) -> bool:
+    return key.rsplit("/", 1)[-1] in _ZARR_JSON_KEYS
+
+
+def _zarr_media_type(key: str) -> str:
+    return "application/json" if _zarr_is_metadata(key) else "application/octet-stream"
+
+
+def _zarr_headers(key: str) -> dict[str, str]:
+    return dict(_ZARR_JSON_HEADERS if _zarr_is_metadata(key) else _ZARR_CHUNK_HEADERS)
+
+
+def _same_bioimage_store(a: str, b: str) -> bool:
+    """Whether two registered paths name one store (symlink or container twin)."""
+    if a == b or _container_repo_path(a) == b or _container_repo_path(b) == a:
+        return True
+    try:
+        return os.path.realpath(a) == os.path.realpath(b)
+    except (OSError, ValueError):
+        return False
+
+
+def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
+    """Registered stores of a bioimage DC plus its ``upload`` flag, cached briefly.
+
+    Returns ``{"upload": bool, "stores": {name: {"file_id": str | None,
+    "roots": [dir, ...]}}}``. Stores come from the CLI scan (``files_collection``,
+    one File per store) and, for DCs never CLI-scanned, from the project's
+    ``scan_parameters.filename`` (a store, or a folder of stores). Each root also
+    gets its ``/app`` container twin (see ``_container_repo_path``).
+
+    Stores are keyed by directory name, so two registered paths sharing one
+    name would alias each other. The CLI refuses to ingest such a DC; here the
+    first path in sorted order wins (deterministic across calls) and the
+    others are logged and dropped rather than merged into one store's roots.
+    """
+    import time
+
+    from depictio.api.v1.db import files_collection, projects_collection
+
+    now = time.monotonic()
+    cached = _bioimage_store_cache.get(str(dc_oid))
+    if cached is not None and cached[0] > now:
+        return cached[1]
+
+    stores: dict[str, dict[str, Any]] = {}
+    # The path each store name is bound to; a second path with that name is a clash.
+    store_paths: dict[str, str] = {}
+
+    def add_root(path: str, file_id: str | None = None) -> None:
+        path = path.rstrip("/")
+        name = os.path.basename(path)
+        if not _valid_zarr_store_name(name):
+            return
+        bound = store_paths.setdefault(name, path)
+        if not _same_bioimage_store(bound, path):
+            logger.warning(
+                "Bioimage DC %s: store name %s is registered twice (%s, %s); serving %s",
+                dc_oid,
+                name,
+                bound,
+                path,
+                bound,
+            )
+            return
+        entry = stores.setdefault(name, {"file_id": None, "roots": []})
+        if file_id and not entry["file_id"]:
+            entry["file_id"] = file_id
+        for candidate in (path, _container_repo_path(path)):
+            if candidate and candidate not in entry["roots"]:
+                entry["roots"].append(candidate)
+
+    file_docs = [
+        doc
+        for doc in files_collection.find(
+            {"data_collection_id": {"$in": [dc_oid, str(dc_oid)]}},
+            {"_id": 1, "file_location": 1},
+        )
+        if doc.get("file_location") and not str(doc["file_location"]).startswith("s3://")
+    ]
+    for doc in sorted(file_docs, key=lambda d: str(d["file_location"]).rstrip("/")):
+        add_root(str(doc["file_location"]), str(doc["_id"]))
+
+    upload = True
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+        {"workflows.data_collections": 1},
+    )
+    for wf in (project_doc or {}).get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if (dc.get("_id") or dc.get("id")) != dc_oid:
+                continue
+            config = dc.get("config") or {}
+            props = config.get("dc_specific_properties") or {}
+            if isinstance(props, dict) and props.get("upload") is False:
+                upload = False
+            fname = ((config.get("scan") or {}).get("scan_parameters") or {}).get("filename")
+            if not fname or str(fname).startswith("s3://"):
+                continue
+            fname = str(fname).rstrip("/")
+            if fname.endswith(".zarr"):
+                add_root(fname)
+                continue
+            # A folder of stores: register its direct *.zarr children.
+            for folder in (fname, _container_repo_path(fname)):
+                if not folder or not os.path.isdir(folder):
+                    continue
+                try:
+                    children = sorted(os.scandir(folder), key=lambda e: e.name)
+                    for entry in children:
+                        if entry.is_dir() and entry.name.endswith(".zarr"):
+                            add_root(entry.path)
+                except OSError:
+                    continue
+
+    info = {"upload": upload, "stores": stores}
+    _bioimage_cache_put(_bioimage_store_cache, str(dc_oid), (now + _BIOIMAGE_CACHE_TTL_S, info))
+    return info
+
+
+@functools.cache
+def _bioimage_s3_client():
+    """Fast-fail boto3 client, built once: a viewer fetches hundreds of chunks."""
+    return _phylogeny_s3_client()
+
+
+def _bioimage_s3_store_names(dc_oid: ObjectId) -> list[str]:
+    """Store names uploaded under the DC's S3 prefix (for DCs with no registered path).
+
+    Only ``*.zarr`` prefixes count, which also skips the CLI's ``.uploads/``
+    marker folder.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import bioimage_s3_prefix
+
+    prefix = bioimage_s3_prefix(str(dc_oid))
+    names: list[str] = []
+    try:
+        paginator = _bioimage_s3_client().get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=settings.s3.bucket, Prefix=prefix, Delimiter="/"):
+            for cp in page.get("CommonPrefixes", []) or []:
+                name = cp.get("Prefix", "")[len(prefix) :].rstrip("/")
+                if _valid_zarr_store_name(name):
+                    names.append(name)
+    except Exception as exc:
+        logger.debug("bioimage store listing on s3 failed for %s: %s", dc_oid, exc)
+    return names
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/stores")
+def list_bioimage_stores(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> list[dict[str, str | None]]:
+    """List the image stores of a bioimage DC: ``[{name, sample, file_id}]`` sorted by name.
+
+    ``sample`` is the store name without ``.zarr``; the viewer matches it against
+    upstream filter values. ``file_id`` is None for a store only found on S3.
+    """
+    from depictio.models.models.data_collections_types.bioimage import bioimage_sample_name
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+
+    stores = _bioimage_store_info(dc_oid)["stores"]
+    names: dict[str, str | None] = {name: entry["file_id"] for name, entry in stores.items()}
+    if not names:
+        names = {name: None for name in _bioimage_s3_store_names(dc_oid)}
+    return [
+        {"name": name, "sample": bioimage_sample_name(name), "file_id": names[name]}
+        for name in sorted(names)
+    ]
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/{store}/{key:path}")
+def get_bioimage_key(
+    data_collection_id: str,
+    store: str,
+    key: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Serve one zarr key (metadata JSON or raw chunk bytes) of an OME-Zarr store.
+
+    Tries the CLI upload at ``bioimage_s3_prefix(dc_id, store) + key`` first
+    (skipped for ``upload: false`` DCs), then the registered store directory on
+    disk. A missing key is a 404, which zarr readers treat as an empty chunk, so
+    only a genuine miss may produce one: an S3 error with no disk copy is a 502.
+    """
+    from botocore.exceptions import ClientError
+    from fastapi.responses import FileResponse
+
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import bioimage_s3_prefix
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    # Gate before any read, and before validating the key, so an unauthorised
+    # caller learns nothing about which stores or keys exist.
+    _assert_dc_access_cached(dc_oid, current_user)
+
+    normalized = _normalize_zarr_key(key)
+    if not _valid_zarr_store_name(store) or normalized is None:
+        raise HTTPException(status_code=400, detail="Invalid store or key")
+
+    media_type = _zarr_media_type(normalized)
+    headers = _zarr_headers(normalized)
+    info = _bioimage_store_info(dc_oid)
+    s3_failed = False
+
+    if info["upload"]:
+        s3_key = bioimage_s3_prefix(str(dc_oid), store) + normalized
+        try:
+            # Keys are small (metadata JSON or one chunk), so the body is read
+            # whole: a mid-read S3 failure then maps to 502 instead of a
+            # truncated 200 the reader would decode as garbage.
+            obj = _bioimage_s3_client().get_object(Bucket=settings.s3.bucket, Key=s3_key)
+            body = obj["Body"]
+            try:
+                content = body.read()
+            finally:
+                body.close()
+            return Response(content=content, media_type=media_type, headers=headers)
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code not in ("NoSuchKey", "404", "NotFound"):
+                s3_failed = True
+                logger.warning("bioimage s3 read failed for %s: %s", s3_key, exc)
+        except Exception as exc:
+            s3_failed = True
+            logger.warning("bioimage s3 read failed for %s: %s", s3_key, exc)
+
+    # Disk fallback: only under a registered root, and the resolved path must
+    # stay inside it (symlinks included).
+    entry = info["stores"].get(store)
+    for root in entry["roots"] if entry else []:
+        try:
+            real_root = os.path.realpath(root)
+            if not os.path.isdir(real_root):
+                continue
+            candidate = os.path.realpath(os.path.join(real_root, normalized))
+            if os.path.commonpath([real_root, candidate]) != real_root:
+                continue
+            if os.path.isfile(candidate):
+                return FileResponse(candidate, media_type=media_type, headers=headers)
+        except (OSError, ValueError):
+            continue
+
+    if s3_failed:
+        raise HTTPException(status_code=502, detail="Image storage unavailable")
+    raise HTTPException(status_code=404, detail="Key not found")
