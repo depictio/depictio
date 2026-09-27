@@ -71,7 +71,7 @@
       "store": "lily_stem.ome.tif"
     },
     {
-      "bytes": 2054017,
+      "bytes": 2057678,
       "image_path": "images/he",
       "ngff_version": "0.5-dev-spatialdata",
       "nuclei": 1220,

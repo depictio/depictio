@@ -4,7 +4,8 @@
       "region",
       "spot_id",
       "cluster",
-      "n_nuclei"
+      "n_nuclei",
+      "total_counts"
     ],
     "_index": "_index",
     "encoding-type": "dataframe",
