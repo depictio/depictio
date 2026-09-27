@@ -3340,6 +3340,10 @@ export function defaultLayoutForType(
       return { x: 0, y, w: 4, h: 4 };
     case 'map':
       return { x: 0, y, w: 4, h: 4 };
+    case 'jbrowse':
+      // A genome browser needs the width for the locus and the height for a
+      // few stacked tracks.
+      return { x: 0, y, w: 8, h: 8 };
     case 'text':
       // Section heading / banner — wide and short.
       return { x: 0, y, w: 8, h: 3 };
@@ -6919,7 +6923,7 @@ export interface DCLinkConfig {
   case_sensitive?: boolean;
 }
 
-export type LinkTargetType = 'table' | 'multiqc' | 'image';
+export type LinkTargetType = 'table' | 'multiqc' | 'image' | 'genomic_tracks';
 
 export interface DCLink {
   id: string;
