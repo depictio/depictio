@@ -1,0 +1,91 @@
+track_id	sample	kind	format	uri	name	category
+SAMPLE_01.variants	SAMPLE_01	variants	vcf	variants/ivar/SAMPLE_01.vcf.gz	SAMPLE_01 iVar variants	Variants (iVar)
+SAMPLE_02.variants	SAMPLE_02	variants	vcf	variants/ivar/SAMPLE_02.vcf.gz	SAMPLE_02 iVar variants	Variants (iVar)
+SAMPLE_03.variants	SAMPLE_03	variants	vcf	variants/ivar/SAMPLE_03.vcf.gz	SAMPLE_03 iVar variants	Variants (iVar)
+SAMPLE_04.variants	SAMPLE_04	variants	vcf	variants/ivar/SAMPLE_04.vcf.gz	SAMPLE_04 iVar variants	Variants (iVar)
+SAMPLE_05.variants	SAMPLE_05	variants	vcf	variants/ivar/SAMPLE_05.vcf.gz	SAMPLE_05 iVar variants	Variants (iVar)
+SAMPLE_06.variants	SAMPLE_06	variants	vcf	variants/ivar/SAMPLE_06.vcf.gz	SAMPLE_06 iVar variants	Variants (iVar)
+SAMPLE_07.variants	SAMPLE_07	variants	vcf	variants/ivar/SAMPLE_07.vcf.gz	SAMPLE_07 iVar variants	Variants (iVar)
+SAMPLE_08.variants	SAMPLE_08	variants	vcf	variants/ivar/SAMPLE_08.vcf.gz	SAMPLE_08 iVar variants	Variants (iVar)
+SAMPLE_09.variants	SAMPLE_09	variants	vcf	variants/ivar/SAMPLE_09.vcf.gz	SAMPLE_09 iVar variants	Variants (iVar)
+SAMPLE_10.variants	SAMPLE_10	variants	vcf	variants/ivar/SAMPLE_10.vcf.gz	SAMPLE_10 iVar variants	Variants (iVar)
+SAMPLE_11.variants	SAMPLE_11	variants	vcf	variants/ivar/SAMPLE_11.vcf.gz	SAMPLE_11 iVar variants	Variants (iVar)
+SAMPLE_12.variants	SAMPLE_12	variants	vcf	variants/ivar/SAMPLE_12.vcf.gz	SAMPLE_12 iVar variants	Variants (iVar)
+SAMPLE_13.variants	SAMPLE_13	variants	vcf	variants/ivar/SAMPLE_13.vcf.gz	SAMPLE_13 iVar variants	Variants (iVar)
+SAMPLE_14.variants	SAMPLE_14	variants	vcf	variants/ivar/SAMPLE_14.vcf.gz	SAMPLE_14 iVar variants	Variants (iVar)
+SAMPLE_15.variants	SAMPLE_15	variants	vcf	variants/ivar/SAMPLE_15.vcf.gz	SAMPLE_15 iVar variants	Variants (iVar)
+SAMPLE_16.variants	SAMPLE_16	variants	vcf	variants/ivar/SAMPLE_16.vcf.gz	SAMPLE_16 iVar variants	Variants (iVar)
+SAMPLE_17.variants	SAMPLE_17	variants	vcf	variants/ivar/SAMPLE_17.vcf.gz	SAMPLE_17 iVar variants	Variants (iVar)
+SAMPLE_18.variants	SAMPLE_18	variants	vcf	variants/ivar/SAMPLE_18.vcf.gz	SAMPLE_18 iVar variants	Variants (iVar)
+SAMPLE_19.variants	SAMPLE_19	variants	vcf	variants/ivar/SAMPLE_19.vcf.gz	SAMPLE_19 iVar variants	Variants (iVar)
+SAMPLE_20.variants	SAMPLE_20	variants	vcf	variants/ivar/SAMPLE_20.vcf.gz	SAMPLE_20 iVar variants	Variants (iVar)
+SAMPLE_21.variants	SAMPLE_21	variants	vcf	variants/ivar/SAMPLE_21.vcf.gz	SAMPLE_21 iVar variants	Variants (iVar)
+SAMPLE_24.variants	SAMPLE_24	variants	vcf	variants/ivar/SAMPLE_24.vcf.gz	SAMPLE_24 iVar variants	Variants (iVar)
+SAMPLE_25.variants	SAMPLE_25	variants	vcf	variants/ivar/SAMPLE_25.vcf.gz	SAMPLE_25 iVar variants	Variants (iVar)
+SAMPLE_27.variants	SAMPLE_27	variants	vcf	variants/ivar/SAMPLE_27.vcf.gz	SAMPLE_27 iVar variants	Variants (iVar)
+SAMPLE_28.variants	SAMPLE_28	variants	vcf	variants/ivar/SAMPLE_28.vcf.gz	SAMPLE_28 iVar variants	Variants (iVar)
+SAMPLE_29.variants	SAMPLE_29	variants	vcf	variants/ivar/SAMPLE_29.vcf.gz	SAMPLE_29 iVar variants	Variants (iVar)
+SAMPLE_30.variants	SAMPLE_30	variants	vcf	variants/ivar/SAMPLE_30.vcf.gz	SAMPLE_30 iVar variants	Variants (iVar)
+SAMPLE_31.variants	SAMPLE_31	variants	vcf	variants/ivar/SAMPLE_31.vcf.gz	SAMPLE_31 iVar variants	Variants (iVar)
+SAMPLE_32.variants	SAMPLE_32	variants	vcf	variants/ivar/SAMPLE_32.vcf.gz	SAMPLE_32 iVar variants	Variants (iVar)
+SAMPLE_33.variants	SAMPLE_33	variants	vcf	variants/ivar/SAMPLE_33.vcf.gz	SAMPLE_33 iVar variants	Variants (iVar)
+SAMPLE_34.variants	SAMPLE_34	variants	vcf	variants/ivar/SAMPLE_34.vcf.gz	SAMPLE_34 iVar variants	Variants (iVar)
+SAMPLE_35.variants	SAMPLE_35	variants	vcf	variants/ivar/SAMPLE_35.vcf.gz	SAMPLE_35 iVar variants	Variants (iVar)
+SAMPLE_36.variants	SAMPLE_36	variants	vcf	variants/ivar/SAMPLE_36.vcf.gz	SAMPLE_36 iVar variants	Variants (iVar)
+SAMPLE_37.variants	SAMPLE_37	variants	vcf	variants/ivar/SAMPLE_37.vcf.gz	SAMPLE_37 iVar variants	Variants (iVar)
+SAMPLE_38.variants	SAMPLE_38	variants	vcf	variants/ivar/SAMPLE_38.vcf.gz	SAMPLE_38 iVar variants	Variants (iVar)
+SAMPLE_40.variants	SAMPLE_40	variants	vcf	variants/ivar/SAMPLE_40.vcf.gz	SAMPLE_40 iVar variants	Variants (iVar)
+SAMPLE_41.variants	SAMPLE_41	variants	vcf	variants/ivar/SAMPLE_41.vcf.gz	SAMPLE_41 iVar variants	Variants (iVar)
+SAMPLE_42.variants	SAMPLE_42	variants	vcf	variants/ivar/SAMPLE_42.vcf.gz	SAMPLE_42 iVar variants	Variants (iVar)
+SAMPLE_43.variants	SAMPLE_43	variants	vcf	variants/ivar/SAMPLE_43.vcf.gz	SAMPLE_43 iVar variants	Variants (iVar)
+SAMPLE_44.variants	SAMPLE_44	variants	vcf	variants/ivar/SAMPLE_44.vcf.gz	SAMPLE_44 iVar variants	Variants (iVar)
+SAMPLE_45.variants	SAMPLE_45	variants	vcf	variants/ivar/SAMPLE_45.vcf.gz	SAMPLE_45 iVar variants	Variants (iVar)
+SAMPLE_46.variants	SAMPLE_46	variants	vcf	variants/ivar/SAMPLE_46.vcf.gz	SAMPLE_46 iVar variants	Variants (iVar)
+SAMPLE_47.variants	SAMPLE_47	variants	vcf	variants/ivar/SAMPLE_47.vcf.gz	SAMPLE_47 iVar variants	Variants (iVar)
+SAMPLE_48.variants	SAMPLE_48	variants	vcf	variants/ivar/SAMPLE_48.vcf.gz	SAMPLE_48 iVar variants	Variants (iVar)
+SAMPLE_01.alignments	SAMPLE_01	alignments	bam	variants/bowtie2/SAMPLE_01.ivar_trim.sorted.bam	SAMPLE_01 primer-trimmed reads	Alignments
+SAMPLE_02.alignments	SAMPLE_02	alignments	bam	variants/bowtie2/SAMPLE_02.ivar_trim.sorted.bam	SAMPLE_02 primer-trimmed reads	Alignments
+SAMPLE_03.alignments	SAMPLE_03	alignments	bam	variants/bowtie2/SAMPLE_03.ivar_trim.sorted.bam	SAMPLE_03 primer-trimmed reads	Alignments
+SAMPLE_04.alignments	SAMPLE_04	alignments	bam	variants/bowtie2/SAMPLE_04.ivar_trim.sorted.bam	SAMPLE_04 primer-trimmed reads	Alignments
+SAMPLE_05.alignments	SAMPLE_05	alignments	bam	variants/bowtie2/SAMPLE_05.ivar_trim.sorted.bam	SAMPLE_05 primer-trimmed reads	Alignments
+SAMPLE_06.alignments	SAMPLE_06	alignments	bam	variants/bowtie2/SAMPLE_06.ivar_trim.sorted.bam	SAMPLE_06 primer-trimmed reads	Alignments
+SAMPLE_07.alignments	SAMPLE_07	alignments	bam	variants/bowtie2/SAMPLE_07.ivar_trim.sorted.bam	SAMPLE_07 primer-trimmed reads	Alignments
+SAMPLE_08.alignments	SAMPLE_08	alignments	bam	variants/bowtie2/SAMPLE_08.ivar_trim.sorted.bam	SAMPLE_08 primer-trimmed reads	Alignments
+SAMPLE_09.alignments	SAMPLE_09	alignments	bam	variants/bowtie2/SAMPLE_09.ivar_trim.sorted.bam	SAMPLE_09 primer-trimmed reads	Alignments
+SAMPLE_10.alignments	SAMPLE_10	alignments	bam	variants/bowtie2/SAMPLE_10.ivar_trim.sorted.bam	SAMPLE_10 primer-trimmed reads	Alignments
+SAMPLE_11.alignments	SAMPLE_11	alignments	bam	variants/bowtie2/SAMPLE_11.ivar_trim.sorted.bam	SAMPLE_11 primer-trimmed reads	Alignments
+SAMPLE_12.alignments	SAMPLE_12	alignments	bam	variants/bowtie2/SAMPLE_12.ivar_trim.sorted.bam	SAMPLE_12 primer-trimmed reads	Alignments
+SAMPLE_13.alignments	SAMPLE_13	alignments	bam	variants/bowtie2/SAMPLE_13.ivar_trim.sorted.bam	SAMPLE_13 primer-trimmed reads	Alignments
+SAMPLE_14.alignments	SAMPLE_14	alignments	bam	variants/bowtie2/SAMPLE_14.ivar_trim.sorted.bam	SAMPLE_14 primer-trimmed reads	Alignments
+SAMPLE_15.alignments	SAMPLE_15	alignments	bam	variants/bowtie2/SAMPLE_15.ivar_trim.sorted.bam	SAMPLE_15 primer-trimmed reads	Alignments
+SAMPLE_16.alignments	SAMPLE_16	alignments	bam	variants/bowtie2/SAMPLE_16.ivar_trim.sorted.bam	SAMPLE_16 primer-trimmed reads	Alignments
+SAMPLE_17.alignments	SAMPLE_17	alignments	bam	variants/bowtie2/SAMPLE_17.ivar_trim.sorted.bam	SAMPLE_17 primer-trimmed reads	Alignments
+SAMPLE_18.alignments	SAMPLE_18	alignments	bam	variants/bowtie2/SAMPLE_18.ivar_trim.sorted.bam	SAMPLE_18 primer-trimmed reads	Alignments
+SAMPLE_19.alignments	SAMPLE_19	alignments	bam	variants/bowtie2/SAMPLE_19.ivar_trim.sorted.bam	SAMPLE_19 primer-trimmed reads	Alignments
+SAMPLE_20.alignments	SAMPLE_20	alignments	bam	variants/bowtie2/SAMPLE_20.ivar_trim.sorted.bam	SAMPLE_20 primer-trimmed reads	Alignments
+SAMPLE_21.alignments	SAMPLE_21	alignments	bam	variants/bowtie2/SAMPLE_21.ivar_trim.sorted.bam	SAMPLE_21 primer-trimmed reads	Alignments
+SAMPLE_22.alignments	SAMPLE_22	alignments	bam	variants/bowtie2/SAMPLE_22.ivar_trim.sorted.bam	SAMPLE_22 primer-trimmed reads	Alignments
+SAMPLE_24.alignments	SAMPLE_24	alignments	bam	variants/bowtie2/SAMPLE_24.ivar_trim.sorted.bam	SAMPLE_24 primer-trimmed reads	Alignments
+SAMPLE_25.alignments	SAMPLE_25	alignments	bam	variants/bowtie2/SAMPLE_25.ivar_trim.sorted.bam	SAMPLE_25 primer-trimmed reads	Alignments
+SAMPLE_26.alignments	SAMPLE_26	alignments	bam	variants/bowtie2/SAMPLE_26.ivar_trim.sorted.bam	SAMPLE_26 primer-trimmed reads	Alignments
+SAMPLE_27.alignments	SAMPLE_27	alignments	bam	variants/bowtie2/SAMPLE_27.ivar_trim.sorted.bam	SAMPLE_27 primer-trimmed reads	Alignments
+SAMPLE_28.alignments	SAMPLE_28	alignments	bam	variants/bowtie2/SAMPLE_28.ivar_trim.sorted.bam	SAMPLE_28 primer-trimmed reads	Alignments
+SAMPLE_29.alignments	SAMPLE_29	alignments	bam	variants/bowtie2/SAMPLE_29.ivar_trim.sorted.bam	SAMPLE_29 primer-trimmed reads	Alignments
+SAMPLE_30.alignments	SAMPLE_30	alignments	bam	variants/bowtie2/SAMPLE_30.ivar_trim.sorted.bam	SAMPLE_30 primer-trimmed reads	Alignments
+SAMPLE_31.alignments	SAMPLE_31	alignments	bam	variants/bowtie2/SAMPLE_31.ivar_trim.sorted.bam	SAMPLE_31 primer-trimmed reads	Alignments
+SAMPLE_32.alignments	SAMPLE_32	alignments	bam	variants/bowtie2/SAMPLE_32.ivar_trim.sorted.bam	SAMPLE_32 primer-trimmed reads	Alignments
+SAMPLE_33.alignments	SAMPLE_33	alignments	bam	variants/bowtie2/SAMPLE_33.ivar_trim.sorted.bam	SAMPLE_33 primer-trimmed reads	Alignments
+SAMPLE_34.alignments	SAMPLE_34	alignments	bam	variants/bowtie2/SAMPLE_34.ivar_trim.sorted.bam	SAMPLE_34 primer-trimmed reads	Alignments
+SAMPLE_35.alignments	SAMPLE_35	alignments	bam	variants/bowtie2/SAMPLE_35.ivar_trim.sorted.bam	SAMPLE_35 primer-trimmed reads	Alignments
+SAMPLE_36.alignments	SAMPLE_36	alignments	bam	variants/bowtie2/SAMPLE_36.ivar_trim.sorted.bam	SAMPLE_36 primer-trimmed reads	Alignments
+SAMPLE_37.alignments	SAMPLE_37	alignments	bam	variants/bowtie2/SAMPLE_37.ivar_trim.sorted.bam	SAMPLE_37 primer-trimmed reads	Alignments
+SAMPLE_38.alignments	SAMPLE_38	alignments	bam	variants/bowtie2/SAMPLE_38.ivar_trim.sorted.bam	SAMPLE_38 primer-trimmed reads	Alignments
+SAMPLE_40.alignments	SAMPLE_40	alignments	bam	variants/bowtie2/SAMPLE_40.ivar_trim.sorted.bam	SAMPLE_40 primer-trimmed reads	Alignments
+SAMPLE_41.alignments	SAMPLE_41	alignments	bam	variants/bowtie2/SAMPLE_41.ivar_trim.sorted.bam	SAMPLE_41 primer-trimmed reads	Alignments
+SAMPLE_42.alignments	SAMPLE_42	alignments	bam	variants/bowtie2/SAMPLE_42.ivar_trim.sorted.bam	SAMPLE_42 primer-trimmed reads	Alignments
+SAMPLE_43.alignments	SAMPLE_43	alignments	bam	variants/bowtie2/SAMPLE_43.ivar_trim.sorted.bam	SAMPLE_43 primer-trimmed reads	Alignments
+SAMPLE_44.alignments	SAMPLE_44	alignments	bam	variants/bowtie2/SAMPLE_44.ivar_trim.sorted.bam	SAMPLE_44 primer-trimmed reads	Alignments
+SAMPLE_45.alignments	SAMPLE_45	alignments	bam	variants/bowtie2/SAMPLE_45.ivar_trim.sorted.bam	SAMPLE_45 primer-trimmed reads	Alignments
+SAMPLE_46.alignments	SAMPLE_46	alignments	bam	variants/bowtie2/SAMPLE_46.ivar_trim.sorted.bam	SAMPLE_46 primer-trimmed reads	Alignments
+SAMPLE_47.alignments	SAMPLE_47	alignments	bam	variants/bowtie2/SAMPLE_47.ivar_trim.sorted.bam	SAMPLE_47 primer-trimmed reads	Alignments
+SAMPLE_48.alignments	SAMPLE_48	alignments	bam	variants/bowtie2/SAMPLE_48.ivar_trim.sorted.bam	SAMPLE_48 primer-trimmed reads	Alignments
