@@ -1,0 +1,96 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.65,
+                                0.65
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.3,
+                                1.3
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                2.6,
+                                2.6
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "2"
+                }
+            ],
+            "metadata": {
+                "description": "2x mean downsampling of y and x per level",
+                "method": "skimage.transform.downscale_local_mean"
+            },
+            "name": "sample_B",
+            "type": "local_mean",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "FFFFFF",
+                "family": "linear",
+                "inverted": false,
+                "label": "DNA",
+                "window": {
+                    "end": 109.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 8.0
+                }
+            }
+        ],
+        "id": 1,
+        "name": "sample_B",
+        "rdefs": {
+            "defaultT": 0,
+            "defaultZ": 0,
+            "model": "color"
+        },
+        "version": "0.4"
+    }
+}

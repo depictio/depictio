@@ -1,0 +1,239 @@
+# Multichannel fluorescence: main tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+#
+# The viewer config names its data collections twice: by tag, which the CLI
+# import resolves against whatever project it lands in, and by the static ids
+# of this project, which the offline seed generator copies as they are.
+title: 'Bioimage Examples'
+subtitle: 'Multiscale NGFF images with cell and spot overlays, from scikit-image sample data'
+icon: 'mdi:microscope'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f00'
+is_main_tab: true
+tab_order: 0
+main_tab_name: 'Fluorescence'
+tab_icon: 'mdi:microscope'
+tab_icon_color: 'grape'
+
+# Tab-local, not `persistent`: every tab of this family reads its own cell or
+# spot table, so a control fanned out from here would bite on nothing there.
+filter_sections:
+  - name: 'Nuclei'
+    icon: 'mdi:filter-variant'
+    color: 'grape'
+    description: 'Narrows the nuclei drawn over the image, the table and the cards'
+
+grid_sections:
+  - name: 'Kidney nuclei'
+    icon: 'mdi:counter'
+    color: 'grape'
+    description: 'The segmented nuclei in numbers'
+  - name: 'Image'
+    icon: 'mdi:microscope'
+    color: 'grape'
+    description: 'The three channels, with one point per nucleus; lasso points to filter the table'
+  # A single text tile and no data binding, which is what makes it safe to fan
+  # out to every tab.
+  - name: 'About these examples'
+    icon: 'mdi:information-outline'
+    color: gray
+    description: 'Where the images come from, and what is synthetic'
+    collapsed: true
+    persistent: true
+    pin: bottom
+
+components:
+  - tag: text-fluorescence
+    index: omz-fl-text
+    component_type: text
+    title: 'Multichannel fluorescence'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Kidney nuclei'
+    body: >
+      A mouse kidney section imaged in three fluorescence channels, projected along z and
+      stored as a three-level pyramid. Each point is a nucleus segmented on the 450 nm
+      channel. Toggle channels and adjust their contrast in the viewer, then draw a lasso
+      around some nuclei: the table and the cards follow the selection.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-fluorescence-nuclei
+    index: omz-fl-card-count
+    component_type: card
+    section: 'Kidney nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    aggregation: count
+    column_name: cell_id
+    column_type: object
+    icon_name: mdi:counter
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nuclei'
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+
+  - tag: card-fluorescence-area
+    index: omz-fl-card-area
+    component_type: card
+    section: 'Kidney nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    aggregation: median
+    secondary_layout: histogram
+    column_name: area_um2
+    column_type: float64
+    icon_name: mdi:chart-histogram
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nucleus area (um2)'
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+
+  - tag: card-fluorescence-dominant
+    index: omz-fl-card-dominant
+    component_type: card
+    section: 'Kidney nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    aggregation: nunique
+    column_name: dominant_channel
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: dominant_channel
+    top_n_count: 3
+    icon_name: mdi:chart-donut
+    title_font_size: md
+    value_font_size: xl
+    title: 'Dominant channel'
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+
+  - tag: card-fluorescence-em605
+    index: omz-fl-card-em605
+    component_type: card
+    section: 'Kidney nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_em605
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    title_font_size: md
+    value_font_size: xl
+    title: '605 nm intensity'
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  - tag: viz-fluorescence
+    index: omz-fl-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_image
+    title: 'Mouse kidney, 3 channels'
+    description: 'Maximum projection of a confocal stack (1.24 um pixels). Points are segmented nuclei, coloured by their dominant channel.'
+    section: 'Image'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: kidney_2d_image
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f02'
+      points_dc_tag: kidney_2d_cells
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f03'
+      cell_id_col: cell_id
+      x_col: x
+      y_col: y
+      color_col: dominant_channel
+      points_sample_col: sample
+      point_radius: 3
+      show_scalebar: true
+      selection_enabled: true
+    layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  - tag: table-fluorescence-nuclei
+    index: omz-fl-table
+    component_type: table
+    section: 'Image'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    title: 'Nuclei'
+    description: 'One row per nucleus. A lasso on the image narrows it to the nuclei inside.'
+    columns: [cell_id, area_um2, mean_em450, mean_em515, mean_em605, dominant_channel]
+    page_size: 50
+    layout: { x: 0, y: 9, w: 8, h: 5 }
+
+  - tag: filter-fluorescence-dominant
+    index: omz-fl-f-dominant
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    interactive_component_type: MultiSelect
+    column_name: dominant_channel
+    column_type: object
+    title: 'Dominant channel'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:palette'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-fluorescence-area
+    index: omz-fl-f-area
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    interactive_component_type: RangeSlider
+    column_name: area_um2
+    column_type: float64
+    title: 'Nucleus area (um2)'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-fluorescence-em515
+    index: omz-fl-f-em515
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_2d_cells
+    interactive_component_type: RangeSlider
+    column_name: mean_em515
+    column_type: float64
+    title: '515 nm intensity'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:gauge'
+    layout: { x: 0, y: 6, w: 1, h: 3 }
+
+  - tag: text-about-ome-zarr
+    index: omz-about
+    component_type: text
+    title: 'About these examples'
+    order: 4
+    alignment: left
+    vertical_alignment: top
+    section: 'About these examples'
+    body: >
+      Each tab shows one kind of OME-Zarr image: several fluorescence channels, a stained
+      tissue section with spatial spots, a 3D stack over time, and one store per sample.
+      The images are scikit-image sample datasets (CC0 or without known restrictions)
+      converted to NGFF 0.4. The cells and spots are computed from the pixels, and the
+      time course, spot counts and sample conditions are synthetic. Nothing here is a
+      result.
+    layout: { x: 0, y: 0, w: 8, h: 2 }

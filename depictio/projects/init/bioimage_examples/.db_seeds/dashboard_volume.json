@@ -1,0 +1,662 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f11"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f11"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-vol-text",
+      "component_type": "text",
+      "title": "3D stack over time",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume nuclei",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Eight planes of a kidney volume (2.5 um apart) in two channels, over five timepoints. The time course is synthetic: each frame is the same volume seen through a window that drifts a few pixels and loses 8 % of its signal, as a bleaching acquisition would. Use the z and t sliders of the viewer. The points are the nuclei of the first timepoint, segmented in 3D; the depth filter keeps the upper, middle or lower third.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-card-count",
+      "component_type": "card",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume nuclei",
+      "aggregation": "count",
+      "column_name": "cell_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-card-depth",
+      "component_type": "card",
+      "title": "Depth bands",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume nuclei",
+      "aggregation": "nunique",
+      "column_name": "depth_band",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "depth_band",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-card-size",
+      "component_type": "card",
+      "title": "Nucleus volume (um3)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume nuclei",
+      "aggregation": "median",
+      "column_name": "volume_um3",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-card-intensity",
+      "component_type": "card",
+      "title": "Nuclear intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume nuclei",
+      "aggregation": "median",
+      "column_name": "mean_intensity",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-viewer",
+      "component_type": "advanced_viz",
+      "title": "Kidney volume, 5 timepoints",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f06"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Kidney volume, 2 channels x 8 planes x 5 timepoints (synthetic drift and bleaching)",
+        "data_collection_tag": "kidney_3d_timelapse_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f06"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "192 x 192 x 8 voxels (1.24 x 1.24 x 2.5 um) per frame, 60 s apart. Points are nuclei of the first frame, coloured by depth band.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f06",
+        "image_dc_tag": "kidney_3d_timelapse_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [
+          {
+            "index": 0,
+            "name": "Nuclei (450 nm)",
+            "visible": true,
+            "color": "#00bfff",
+            "contrast_limits": null
+          },
+          {
+            "index": 1,
+            "name": "605 nm",
+            "visible": true,
+            "color": "#ffb000",
+            "contrast_limits": null
+          }
+        ],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f07",
+        "points_dc_tag": "kidney_3d_timelapse_nuclei",
+        "cell_id_col": "cell_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "depth_band",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 3.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-table",
+      "component_type": "table",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per nucleus of the first timepoint. A lasso on the image narrows it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volume",
+      "columns": [
+        "cell_id",
+        "z",
+        "depth_band",
+        "volume_um3",
+        "mean_intensity"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-f-depth",
+      "component_type": "interactive",
+      "title": "Depth band",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "depth_band",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-f-z",
+      "component_type": "interactive",
+      "title": "Plane (z)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "z",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-vol-f-size",
+      "component_type": "interactive",
+      "title": "Nucleus volume (um3)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_3d_timelapse_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the first timepoint, segmented in 3D",
+        "data_collection_tag": "kidney_3d_timelapse_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f07"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "volume_um3",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:gauge",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-vol-f-depth",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-vol-f-z",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-vol-f-size",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-vol-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-vol-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-vol-card-depth",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-vol-card-size",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-vol-card-intensity",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-vol-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-vol-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "3D + time",
+  "subtitle": "A kidney volume with a z axis and five timepoints",
+  "icon": "mdi:cube-outline",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:cube-outline",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Nuclei",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Narrows the nuclei drawn over the volume, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Volume nuclei",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "The nuclei of the first timepoint in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Volume",
+      "icon": "mdi:microscope",
+      "color": "teal",
+      "description": "Step through z and t; lasso nuclei to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

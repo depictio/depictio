@@ -1,0 +1,768 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f12"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f12"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-ms-text",
+      "component_type": "text",
+      "title": "One image per sample",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample nuclei",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Three crops of a human cell screen image (DNA stain), each its own OME-Zarr store, named after the sample in the sheet below. Pick a sample on the left: the viewer opens that store, and the cards and the table narrow to its nuclei. The condition labels are for the demo, and \"mitotic\" marks bright, compact nuclei: a heuristic, not a classifier.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-card-count",
+      "component_type": "card",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample nuclei",
+      "aggregation": "count",
+      "column_name": "cell_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-card-phase",
+      "component_type": "card",
+      "title": "Phase",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample nuclei",
+      "aggregation": "nunique",
+      "column_name": "phase",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "phase",
+      "top_n_count": 2,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-card-area",
+      "component_type": "card",
+      "title": "Nucleus area (px)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample nuclei",
+      "aggregation": "median",
+      "column_name": "area_px",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-card-intensity",
+      "component_type": "card",
+      "title": "DNA intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample nuclei",
+      "aggregation": "median",
+      "column_name": "mean_intensity",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-viewer",
+      "component_type": "advanced_viz",
+      "title": "Selected sample",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_images",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f08"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Three crops of a human cell mitosis screen image, one store per sample",
+        "data_collection_tag": "multi_sample_images",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f08"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One 256 x 256 store per sample (nominal 0.65 um pixels). Points are nuclei of the store on screen, coloured by phase.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f08",
+        "image_dc_tag": "multi_sample_images",
+        "store": "sample_A.zarr",
+        "sample_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "sample_dc_id": "646b0f3c1e4a2d7f8e5b8f0a",
+        "sample_dc_tag": "multi_sample_samples",
+        "sample_column": "sample",
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f09",
+        "points_dc_tag": "multi_sample_cells",
+        "cell_id_col": "cell_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "phase",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 5.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-table",
+      "component_type": "table",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per nucleus of the selected samples. A lasso on the image narrows it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "columns": [
+        "cell_id",
+        "sample",
+        "area_px",
+        "mean_intensity",
+        "eccentricity",
+        "phase"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-sheet",
+      "component_type": "table",
+      "title": "Samples",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_samples",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample sheet: one row per store",
+        "data_collection_tag": "multi_sample_samples",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The sample sheet. `sample` is the store name without .zarr.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample sheet",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_samples",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample sheet: one row per store",
+        "data_collection_tag": "multi_sample_samples",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Samples",
+      "interactive_component_type": "Select",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-f-condition",
+      "component_type": "interactive",
+      "title": "Condition",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_samples",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample sheet: one row per store",
+        "data_collection_tag": "multi_sample_samples",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Samples",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "condition",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-f-phase",
+      "component_type": "interactive",
+      "title": "Phase",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "phase",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-ms-f-area",
+      "component_type": "interactive",
+      "title": "Nucleus area (px)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "multi_sample_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of the three samples, with a heuristic mitotic call",
+        "data_collection_tag": "multi_sample_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f09"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "area_px",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-ms-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-ms-f-condition",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-ms-f-phase",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-ms-f-area",
+      "x": 0,
+      "y": 9,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-ms-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-ms-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-ms-card-phase",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-ms-card-area",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-ms-card-intensity",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-ms-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-ms-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-ms-sheet",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Multi-sample",
+  "subtitle": "One store per sample, picked from the sample sheet",
+  "icon": "mdi:image-multiple",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 3,
+  "main_tab_name": null,
+  "tab_icon": "mdi:image-multiple",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Samples",
+      "icon": "mdi:test-tube",
+      "color": "blue",
+      "description": "The sample picked here is the image the viewer opens",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Nuclei",
+      "icon": "mdi:filter-variant",
+      "color": "cyan",
+      "description": "Narrows the nuclei drawn over the image, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Sample nuclei",
+      "icon": "mdi:counter",
+      "color": "blue",
+      "description": "The nuclei of the selected samples in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Image",
+      "icon": "mdi:microscope",
+      "color": "blue",
+      "description": "The selected sample, with one point per nucleus; lasso nuclei to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Sample sheet",
+      "icon": "mdi:table-account",
+      "color": "blue",
+      "description": "One row per store",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

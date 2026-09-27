@@ -1,0 +1,647 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f10"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f10"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-sp-text",
+      "component_type": "text",
+      "title": "Spatial spots over tissue",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue spots",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Colonic glands stained for FHL2 (brown, DAB) with a hematoxylin counterstain (blue), overlaid with spots laid out like a Visium slide. Clusters group spots by their stain intensities, so C1 sits on the most DAB-positive tissue. The three gene counts are synthetic: gene_A follows DAB, gene_B follows hematoxylin, gene_C a left-to-right gradient. Pick clusters on the left, or lasso a region of the tissue.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-card-count",
+      "component_type": "card",
+      "title": "Spots under tissue",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue spots",
+      "aggregation": "count",
+      "column_name": "spot_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-card-clusters",
+      "component_type": "card",
+      "title": "Clusters",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue spots",
+      "aggregation": "nunique",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "cluster",
+      "top_n_count": 4,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-card-gene-a",
+      "component_type": "card",
+      "title": "gene_A counts",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue spots",
+      "aggregation": "median",
+      "column_name": "gene_A",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-card-gene-b",
+      "component_type": "card",
+      "title": "gene_B counts",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue spots",
+      "aggregation": "median",
+      "column_name": "gene_B",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-viewer",
+      "component_type": "advanced_viz",
+      "title": "Colonic glands, IHC",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Colonic glands, DAB immunohistochemistry with hematoxylin (RGB, 512 x 512)",
+        "data_collection_tag": "ihc_spatial_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "RGB brightfield section (nominal 0.5 um pixels). Points are spots, coloured by cluster.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f04",
+        "image_dc_tag": "ihc_spatial_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f05",
+        "points_dc_tag": "ihc_spatial_spots",
+        "cell_id_col": "spot_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "cluster",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 5.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-table",
+      "component_type": "table",
+      "title": "Spots",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per spot. A lasso on the tissue narrows it to the spots inside.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tissue",
+      "columns": [
+        "spot_id",
+        "cluster",
+        "gene_A",
+        "gene_B",
+        "gene_C"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-f-cluster",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Spots",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Spot filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-f-gene-a",
+      "component_type": "interactive",
+      "title": "gene_A counts",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Spots",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "gene_A",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Spot filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sp-f-gene-c",
+      "component_type": "interactive",
+      "title": "gene_C counts",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "ihc_spatial_spots",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts",
+        "data_collection_tag": "ihc_spatial_spots",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Spots",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "gene_C",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Spot filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-sp-f-cluster",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-sp-f-gene-a",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-sp-f-gene-c",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-sp-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-sp-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sp-card-clusters",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sp-card-gene-a",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sp-card-gene-b",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sp-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-sp-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Spatial spots",
+  "subtitle": "Visium-like spots over an immunohistochemistry section",
+  "icon": "mdi:map-marker-outline",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": "mdi:map-marker-outline",
+  "tab_icon_color": "orange",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Spots",
+      "icon": "mdi:filter-variant",
+      "color": "orange",
+      "description": "Narrows the spots drawn over the tissue, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Tissue spots",
+      "icon": "mdi:counter",
+      "color": "orange",
+      "description": "The spots under the tissue in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Tissue",
+      "icon": "mdi:map-marker-outline",
+      "color": "orange",
+      "description": "The stained section with one point per spot; lasso spots to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}
