@@ -519,6 +519,18 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
         minHeight: 0,
       }}
     >
+      {metadata.title && (
+        <Group gap="xs" px="xs" pt={6} pb={4} wrap="nowrap" style={{ flexShrink: 0, minWidth: 0 }}>
+          <Text fw={600} size="sm" truncate style={{ minWidth: 0 }}>
+            {metadata.title as string}
+          </Text>
+          {typeof metadata.description === 'string' && metadata.description && (
+            <Text c="dimmed" size="xs" truncate style={{ minWidth: 0 }}>
+              {metadata.description as string}
+            </Text>
+          )}
+        </Group>
+      )}
       {payload === null && loading && <ComponentSkeleton variant="block" />}
       {error && !payload && (
         <Text size="sm" c="red" p="md" className="dashboard-error">

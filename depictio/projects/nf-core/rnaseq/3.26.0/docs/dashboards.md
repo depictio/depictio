@@ -137,6 +137,28 @@ the library record reads the library summary table, the gene record reads the pl
 Advanced visualisation controls dock by width: to the right of a full-width tile, on top
 of a narrower one. Nothing is set per tab or per tile.
 
+## Genome tracks
+
+A JBrowse genome browser over the `tracks` collection, a manifest the project-local recipe
+`depictio/projects/nf-core/rnaseq/recipes/tracks.py` spells out from the samplesheet: per
+sample the forward and reverse strand bigWig coverage and the duplicate-marked STAR BAM under
+`star_salmon/` (24 rows on the megatest), coloured by condition with the reverse strand a
+lighter shade. The megatest was aligned to Ensembl GRCh37, whose bare chromosome names
+(`1`, `2`, ...) the `hg19` preset maps through UCSC's chromAlias. The browser opens on the
+beta-globin cluster (`chr11:5,240,000-5,300,000`), where HBG1, HBG2 and HBE1 reach thousands
+of TPM in K562 and stay near zero in the three other lines; the first six rows are the
+replicate-1 coverage pairs of GM12878, H1 and K562.
+
+The samplesheet links to the manifest both ways on `sample`: the sample scope of the left
+panel and the `Samples` table under the browser (row selection) pick which tracks are open,
+and clicking a feature in the browser filters every other tab on its sample. A
+`PSEUDOALIGNER_ONLY` run has no BAM and no bigWig, so that route drops the collection.
+
+The tables-only megatest subset holds none of the track files. Pass
+`--var TRACKS_URI=s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon`
+and the collection reads them in place, by range; without it the recipe keeps only the files
+DATA_ROOT holds and the CLI uploads them at ingestion.
+
 ## Catalog module
 
 The recipes ship as three catalog modules. `depictio/catalog/salmon/` holds `module.yaml` plus

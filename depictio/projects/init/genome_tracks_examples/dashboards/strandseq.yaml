@@ -1,0 +1,215 @@
+# Strand-seq — main tab of the genome tracks showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds genome_tracks_examples
+#
+# Every component `index` is pinned so a regenerated seed is byte-identical.
+title: 'Genome Tracks Showcase'
+subtitle: 'Strand-seq single cells (HGSVC): cell quality next to each cell''s structural-variant calls'
+icon: 'mdi:dna'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '946b0f3c1e4a2d7f8e5bca00'
+is_main_tab: true
+tab_order: 0
+main_tab_name: 'Strand-seq'
+tab_icon: 'mdi:dna'
+tab_icon_color: 'teal'
+
+filter_sections:
+  - name: 'Cells'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Which single cells to look at'
+  - name: 'SV calls'
+    icon: 'mdi:dna'
+    color: 'grape'
+    description: 'Show the cells carrying a class of structural variant'
+
+grid_sections:
+  - name: 'Cells'
+    icon: 'mdi:counter'
+    color: 'teal'
+    description: 'Cell quality: ASHLEYS keeps the good Strand-seq libraries for SV calling'
+  - name: 'Genome browser'
+    icon: 'mdi:dna'
+    color: 'grape'
+    description: 'Pick cells on the left, see their SV calls on the right (8p23.1 inversion)'
+  - name: 'Tables'
+    icon: 'mdi:table'
+    color: 'gray'
+    description: 'Pick a cell or an SV call to open it in the browser'
+
+components:
+  - tag: sseq-intro
+    index: sseq-intro
+    component_type: text
+    section: 'Cells'
+    title: 'Strand-seq in a genome browser'
+    order: 3
+    alignment: left
+    body: >
+      384 single cells from four HGSVC samples. Lasso cells in the scatter, pick
+      rows in the cell table or choose an SV class in the left panel: the genome
+      browser opens the SV calls of those cells. Click an SV call in the browser
+      to filter the whole dashboard on its cell; click a row of the SV call table
+      to jump to that call.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: sseq-card-cells
+    index: sseq-card-cells
+    component_type: card
+    section: 'Cells'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    aggregation: count
+    column_name: cell
+    column_type: object
+    title: 'Cells'
+    display: { icon_name: 'mdi:counter', icon_color: 'teal', title_font_size: xl, value_font_size: xl }
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+  - tag: sseq-card-prob
+    index: sseq-card-prob
+    component_type: card
+    section: 'Cells'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    aggregation: median
+    column_name: ashleys_probability
+    column_type: float64
+    title: 'ASHLEYS probability'
+    display: { icon_name: 'mdi:check-decagram', icon_color: 'green', title_font_size: xl, value_font_size: xl }
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+  - tag: sseq-card-svs
+    index: sseq-card-svs
+    component_type: card
+    section: 'Cells'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    aggregation: sum
+    column_name: n_sv_calls
+    column_type: int64
+    title: 'SV calls'
+    display: { icon_name: 'mdi:dna', icon_color: 'grape', title_font_size: xl, value_font_size: xl }
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+  - tag: sseq-card-reads
+    index: sseq-card-reads
+    component_type: card
+    section: 'Cells'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    aggregation: median
+    column_name: good
+    column_type: int64
+    title: 'Good reads per cell'
+    display: { icon_name: 'mdi:chart-bar', icon_color: 'blue', title_font_size: xl, value_font_size: xl }
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  - tag: sseq-scatter
+    index: sseq-scatter
+    component_type: figure
+    section: 'Genome browser'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    visu_type: scatter
+    title: 'Cell quality'
+    description: 'Good reads against the ASHLEYS probability. Lasso cells to open their SV tracks.'
+    title_size: h3
+    dict_kwargs:
+      x: good
+      y: ashleys_probability
+      color: ashleys_call
+      symbol: sample
+      log_x: true
+      opacity: 0.85
+      hover_data: ['cell', 'n_sv_calls']
+    selection_enabled: true
+    selection_column: cell
+    layout: { x: 0, y: 0, w: 3, h: 8 }
+
+  - tag: sseq-browser
+    index: sseq-browser
+    component_type: jbrowse
+    section: 'Genome browser'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: sv_tracks
+    title: 'SV calls per cell'
+    description: 'One track per cell, calls coloured by class (inversions yellow, deletions blue, duplications purple)'
+    location: 'chr8:6,000,000-14,000,000'
+    max_tracks: 24
+    initial_tracks: 10
+    selection_enabled: true
+    selection_column: cell
+    show_overview: false
+    locus_from:
+      data_collection_tag: sv_calls
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 1000000
+      max_rows: 3
+    layout: { x: 3, y: 0, w: 5, h: 8 }
+
+  - tag: sseq-table-cells
+    index: sseq-table-cells
+    component_type: table
+    section: 'Tables'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    title: 'Cells'
+    description: 'Select rows to open the SV tracks of those cells.'
+    row_selection_enabled: true
+    row_selection_column: cell
+    layout: { x: 0, y: 0, w: 8, h: 5 }
+  - tag: sseq-table-svs
+    index: sseq-table-svs
+    component_type: table
+    section: 'Tables'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: sv_calls
+    title: 'SV calls'
+    description: 'Select a call to jump to it and open its cell.'
+    row_selection_enabled: true
+    row_selection_column: call_id
+    layout: { x: 0, y: 5, w: 8, h: 5 }
+
+  - tag: sseq-filter-sample
+    index: sseq-filter-sample
+    component_type: interactive
+    section: 'Cells'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    title: 'Sample'
+    placement: left
+    display: { title_size: md, icon_name: 'mdi:account-multiple' }
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+  - tag: sseq-filter-call
+    index: sseq-filter-call
+    component_type: interactive
+    section: 'Cells'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: cells
+    interactive_component_type: SegmentedControl
+    column_name: ashleys_call
+    column_type: object
+    title: 'ASHLEYS call'
+    placement: left
+    display: { title_size: md, icon_name: 'mdi:check-decagram' }
+    layout: { x: 0, y: 3, w: 1, h: 2 }
+  - tag: sseq-filter-svtype
+    index: sseq-filter-svtype
+    component_type: interactive
+    section: 'SV calls'
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: sv_calls
+    interactive_component_type: MultiSelect
+    column_name: sv_call
+    column_type: object
+    title: 'SV class'
+    placement: left
+    display: { title_size: md, icon_name: 'mdi:dna' }
+    layout: { x: 0, y: 5, w: 1, h: 3 }
