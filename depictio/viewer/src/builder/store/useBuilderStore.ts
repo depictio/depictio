@@ -7,7 +7,8 @@
  * unmount so revisiting the page starts fresh.
  *
  * Persisted shape on commit() matches the canonical metadata schemas in
- * depictio/models/components/{card,figure,interactive,table,multiqc,image,map}.py.
+ * depictio/models/components/{card,figure,interactive,table,multiqc,image,map}.py
+ * (jbrowse: JBrowseLiteComponent in lite.py).
  */
 import { create } from 'zustand';
 import { readEditorFilters } from 'depictio-react-core';
@@ -26,6 +27,7 @@ export type ComponentType =
   | 'multiqc'
   | 'image'
   | 'map'
+  | 'jbrowse'
   | 'text'
   | 'advanced_viz';
 

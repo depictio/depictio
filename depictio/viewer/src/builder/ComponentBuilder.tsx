@@ -13,6 +13,7 @@ import TableBuilder from './table/TableBuilder';
 import MultiQCBuilder from './multiqc/MultiQCBuilder';
 import ImageBuilder from './image/ImageBuilder';
 import MapBuilder from './map/MapBuilder';
+import JBrowseBuilder from './jbrowse/JBrowseBuilder';
 import TextBuilder from './text/TextBuilder';
 import AdvancedVizBuilder from './advanced_viz/AdvancedVizBuilder';
 
@@ -34,6 +35,8 @@ const ComponentBuilder: React.FC = () => {
       return <ImageBuilder />;
     case 'map':
       return <MapBuilder />;
+    case 'jbrowse':
+      return <JBrowseBuilder />;
     case 'text':
       return <TextBuilder />;
     case 'advanced_viz':

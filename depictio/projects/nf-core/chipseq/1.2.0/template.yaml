@@ -36,7 +36,13 @@
 # LAYOUT NOTE. Data collection scans and recipe globs match on file NAME, so the
 # `bwa/mergedLibrary/macs/narrowPeak/...` prefix is never spelled out: a run
 # aligned with a different aligner (`bowtie2/`, `star/`) lands in the same
-# collections.
+# collections. The one exception is the `tracks` manifest, which names the files
+# the genome browser reads by path (1.2.0 aligns with BWA only).
+#
+# GENOME TRACKS. The run's bigWig, narrowPeak and BAM files are not part of the
+# tables-only megatest subset. Pass `--var TRACKS_URI=<results folder>` to read
+# them in place (see the variable below); without it the `tracks` collection
+# uploads whichever of them DATA_ROOT holds.
 template:
   template_id: "nf-core/chipseq/1.2.0"
   description: "nf-core/chipseq template: MACS2 peak calls, HOMER peak annotation, consensus peak sets per antibody and DESeq2 differential binding, on top of the reprocessed MultiQC report."
@@ -45,10 +51,22 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing chipseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results, to read the genome-browser tracks (bigWig, narrowPeak, BAM) in place instead of uploading them from DATA_ROOT. For the megatest: s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea"
+      required: false
   # The bundled reference dataset needs no variable beyond DATA_ROOT: the design
   # sheets are part of the run's own pipeline_info/ output.
   reference:
     vars: {}
+  # Genome tracks: read in place when TRACKS_URI names the results folder,
+  # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the files
+  # it finds there).
+  conditional:
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
   # How this run's provenance is collected at ingest, surfaced in the ingestion
   # report and the dashboard Settings drawer. Keys matched by no group rule land
   # in 'Other'.
@@ -111,6 +129,49 @@ workflows:
               "antibody": "Antibody the ChIP was raised against; the consensus peak sets are built per antibody"
               "replicatesExist": "1 when the antibody has more than one replicate"
               "multipleGroups": "1 when the antibody was assayed in more than one condition"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (bigWig signal of
+      # every ChIP and input, MACS2 narrowPeak calls, filtered BAM) that the
+      # genome browser reads by range, through the API. One row per file,
+      # keyed on sample_id like the hub; an input row carries its control id.
+      # The megatest was aligned to hg19 (UCSC chromosome names).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: bigWig signal of every ChIP and input, MACS2 narrowPeak calls and the filtered BAM, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/chipseq/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            assembly: "hg19"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 60
+                    autoscale: "local"
+              narrowpeak:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+            columns_description:
+              "track_id": "<sample_id>.<kind>, unique per file"
+              "sample_id": "ChIP sample the file belongs to, or the input control's own id"
+              "antibody": "Antibody of the ChIP (of the ChIP it controls, on an input row)"
+              "kind": "signal, input, peaks or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
 
       - data_collection_tag: "design_reads"
         description: "Library-level design: one row per sequencing library and its FASTQ files"
@@ -527,6 +588,27 @@ workflows:
               "direction": "up / down / not significant"
 
 links:
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # peak or a signal track in the browser picks its sample back.
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Show the genome tracks of the samples picked on the design sheet"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "design"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
   # Hub -> everything keyed on the ChIP sample name.
   - source_dc_tag: "design"
     source_column: "sample_id"

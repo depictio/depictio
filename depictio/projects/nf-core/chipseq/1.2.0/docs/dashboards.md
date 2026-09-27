@@ -1,7 +1,7 @@
 # nf-core/chipseq 1.2.0: Depictio dashboards
 
 This template turns the output of [nf-core/chipseq](https://nf-co.re/chipseq) 1.2.0 into a
-single five-tab Depictio dashboard. chipseq aligns ChIP and input libraries, filters and
+single six-tab Depictio dashboard. chipseq aligns ChIP and input libraries, filters and
 deduplicates them, calls peaks per sample with MACS2, annotates those peaks with HOMER, merges
 them into one consensus peak set per antibody and finally tests each consensus interval for
 differential binding with DESeq2. The dashboard follows that chain from left to right.
@@ -25,8 +25,9 @@ replicates each, every ChIP against its own input control.
 
 ## How the dashboard is built
 
-- **One funnel, five tabs.** MultiQC, then Signal, then Peaks, then Consensus, then
-  Differential binding. Each tab answers the question the previous one raises: are the
+- **One funnel, five tabs, then the tracks.** MultiQC, then Signal, then Peaks, then
+  Consensus, then Differential binding; a sixth tab, Genome tracks, opens the run's own
+  bigWig, peak and BAM files in a genome browser. Each tab answers the question the previous one raises: are the
   libraries good, is each ChIP enriched over its own input, what did MACS2 call in each
   sample, which of those calls the replicates agree on, and which of the agreed intervals
   change between conditions.
@@ -51,7 +52,8 @@ replicates each, every ChIP against its own input control.
   panels and `multiqc/<module>` for the tool-module QC panels.
 - **Everything matches on file name.** No data collection or recipe glob spells out the
   `bwa/mergedLibrary/macs/narrowPeak/` prefix, so a run aligned with a different aligner lands
-  in the same collections.
+  in the same collections. The `tracks` manifest is the exception: it names the files the
+  genome browser reads, under `bwa/mergedLibrary/` (1.2.0 aligns with BWA only).
 
 ---
 
@@ -183,6 +185,27 @@ filter is a single-choice `Select` for that reason.
 ---
 
 ![Differential binding](screenshots/differential-binding.png)
+
+## Genome tracks
+
+A JBrowse genome browser over the `tracks` collection, a manifest the project-local recipe
+`depictio/projects/nf-core/chipseq/recipes/tracks.py` spells out from
+`pipeline_info/design_controls.csv`: per ChIP sample the bigWig signal, the MACS2 narrowPeak
+calls and the filtered BAM (`*.mLb.clN.sorted.bam`), and per input control its bigWig, as a
+row of its own keyed on the control id (32 rows on the megatest). The assembly is the `hg19`
+preset (the megatest was aligned to UCSC hg19). The browser opens on GREB1
+(`chr2:11,640,000-11,720,000`) with the four FOXA1 bigWigs and two of their peak sets, the
+first rows of the manifest: FOXA1 yields three to four times as many peaks there after E2
+as in the vehicle control, and EZH2 none.
+
+The design sheet links to the manifest both ways on `sample_id`: the sample filter of the
+left panel and the `ChIP samples` table under the browser (row selection) pick which tracks
+are open, and clicking a feature in the browser filters every other tab on its sample.
+
+The tables-only megatest subset holds none of the track files. Pass
+`--var TRACKS_URI=s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea`
+and the collection reads them in place, by range; without it the recipe keeps only the files
+DATA_ROOT holds and the CLI uploads them at ingestion.
 
 ## Catalog modules
 

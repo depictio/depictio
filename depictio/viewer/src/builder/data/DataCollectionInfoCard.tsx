@@ -3,11 +3,14 @@
  * depictio/dash/layouts/stepper_parts/part_one.py:_render_data_collection_info.
  *
  * 9-row definition table: workflow id, dc id, type, metatype, name, description,
- * delta version, rows, columns. Type renders the MultiQC SVG inline when type=multiqc.
+ * delta version, rows, columns. Type renders the MultiQC SVG inline when type=multiqc,
+ * and the project pages' icon + label otherwise (e.g. genomic_tracks → "Genomic
+ * tracks", the manifest a genome browser component binds to).
  */
 import React from 'react';
 import { Badge, Card, Group, Stack, Table, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { DcTypeIcon, dcTypeMeta } from '../../projects/dcTypeIcon';
 
 /** Join definition surfaced for "joined" DCs — mirrors the project-level
  *  `joins[]` entry minus the workflow plumbing. Used to render Left / Right /
@@ -23,7 +26,7 @@ export interface JoinDetails {
 export interface DataCollectionInfo {
   workflowId: string;
   dataCollectionId: string;
-  type: string; // table | multiqc | jbrowse | ...
+  type: string; // table | multiqc | image | genomic_tracks | jbrowse2 | ...
   metaType: string; // Regular | Joined
   name: string;
   description: string;
@@ -49,6 +52,10 @@ interface Props {
 
 const DataCollectionInfoCard: React.FC<Props> = ({ info }) => {
   const isMultiQC = info.type?.toLowerCase() === 'multiqc';
+  // Known types read as the project pages name them ("Genomic tracks",
+  // "JBrowse2 (legacy)"); anything else falls back to the raw type.
+  const typeMeta = dcTypeMeta(info.type);
+  const typeLabel = typeMeta.label === info.type ? cap(info.type) : typeMeta.label;
   const isJoined = info.source?.toLowerCase() === 'joined';
 
   return (
@@ -74,7 +81,10 @@ const DataCollectionInfoCard: React.FC<Props> = ({ info }) => {
                   <Text size="sm">{cap(info.type)}</Text>
                 </Stack>
               ) : (
-                <Text size="sm">{cap(info.type)}</Text>
+                <Group gap={6} wrap="nowrap">
+                  <DcTypeIcon type={info.type} size={16} withTooltip={false} />
+                  <Text size="sm">{typeLabel}</Text>
+                </Group>
               )
             }
           />

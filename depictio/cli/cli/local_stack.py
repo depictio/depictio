@@ -218,7 +218,14 @@ def server_env(
     paths: Paths, ports: dict[str, int], secret_values: dict, seed: str, screenshots: bool
 ) -> dict:
     host = "127.0.0.1"
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_")}
+    # Inherited DEPICTIO_* are dropped (they would point the stack at another
+    # deployment), except the genome browser's read-in-place allow-lists, which
+    # only widen what the local API may read.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("DEPICTIO_") or k.startswith("DEPICTIO_JBROWSE_")
+    }
     env.update(
         {
             "DEPICTIO_CONTEXT": "server",

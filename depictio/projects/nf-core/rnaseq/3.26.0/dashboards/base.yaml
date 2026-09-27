@@ -1120,3 +1120,74 @@ tabs:
     placement: left
     title: log2(TPM + 1)
     layout: {x: 0, y: 6, w: 1, h: 3}
+
+# ============================================================================
+# Genome tracks
+# ============================================================================
+# The run's own files in a genome browser: forward and reverse strand bigWig
+# coverage of every sample and the duplicate-marked STAR BAMs, read by range
+# from the results folder (TRACKS_URI) or from the files uploaded at ingestion.
+# The sample scope of the left panel (persistent across tabs) picks which
+# tracks are open; clicking a coverage track picks its sample back for every
+# other tab. A --skip_alignment run (PSEUDOALIGNER_ONLY) has no tracks, and the
+# route conditional drops the collection together with its panels.
+- title: Genome tracks
+  subtitle: Strand-specific coverage and alignments of the selected samples, read by range from the run's results
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  workflow_system: nf-core
+  grid_sections:
+  - name: Genome browser
+    icon: mdi:dna
+    color: teal
+    description: The coverage of the samples in scope, around the beta-globin locus
+  - name: Samples
+    icon: mdi:table
+    color: gray
+    description: Pick rows to open their tracks
+  components:
+  - component_type: text
+    tag: rna-tracks-intro
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: tracks
+    title: Coverage where expression differs
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One coverage track per strand and sample, coloured by condition (reverse
+      strand lighter). The view opens on the beta-globin cluster: HBG1, HBG2
+      and HBE1 reach thousands of TPM in K562 only. Pick samples on the left or
+      below to open tracks; click a track to filter every tab.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: jbrowse
+    tag: rna-tracks-browser
+    index: rna-tracks-browser
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: tracks
+    title: Genome browser
+    location: chr11:5,240,000-5,300,000
+    max_tracks: 16
+    initial_tracks: 6
+    selection_enabled: true
+    selection_column: sample
+    show_overview: false
+    layout: {x: 0, y: 1, w: 8, h: 9}
+  - component_type: table
+    tag: rna-tracks-samples
+    index: rna-tracks-samples
+    section: Samples
+    workflow_tag: rnaseq
+    data_collection_tag: samplesheet
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Samples
+    description: Select rows to open their tracks in the browser above.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 4}

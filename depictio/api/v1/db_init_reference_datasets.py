@@ -256,6 +256,26 @@ STATIC_IDS = {
             "advanced_viz_scatter_xy": "646b0f3c1e4a2d7f8e5b8d76",
         },
     },
+    # Genome tracks showcase (projects/init/genome_tracks_examples): the
+    # `jbrowse` component on Strand-seq SV calls (uploaded at ingestion) and on
+    # the viralrecon megatest's VCF/BAM files (read in place from S3).
+    "genome_tracks_examples": {
+        "project": "946b0f3c1e4a2d7f8e5bca00",
+        "workflows": {"genome_tracks_demo": "946b0f3c1e4a2d7f8e5bca01"},
+        "data_collections": {
+            "cells": "946b0f3c1e4a2d7f8e5bca10",
+            "sv_calls": "946b0f3c1e4a2d7f8e5bca11",
+            "sv_tracks": "946b0f3c1e4a2d7f8e5bca12",
+            "samples": "946b0f3c1e4a2d7f8e5bca13",
+            "variants": "946b0f3c1e4a2d7f8e5bca14",
+            "tracks": "946b0f3c1e4a2d7f8e5bca15",
+        },
+        "dashboards": {
+            # Main tab id equals project_id (same convention as ampliseq).
+            "genome_tracks_strandseq": "946b0f3c1e4a2d7f8e5bca00",
+            "genome_tracks_sarscov2": "946b0f3c1e4a2d7f8e5bca20",
+        },
+    },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab
     # dashboard (MultiQC + Coverage & Depth + Lineage & Clustering + Sample
     # QC + Variants). Static IDs align with the dashboard_ids hardcoded in
@@ -528,6 +548,7 @@ class ReferenceDatasetRegistry:
         "penguins": os.path.join("init", "penguins"),
         "ampliseq": os.path.join("nf-core", "ampliseq"),
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
+        "genome_tracks_examples": os.path.join("init", "genome_tracks_examples"),
         "viralrecon": os.path.join("nf-core", "viralrecon"),
         "catalog_conformance": os.path.join("init", "catalog_conformance"),
         # Reserved (not yet in all_datasets — see STATIC_IDS["variantbenchmarking"] note).
@@ -888,6 +909,7 @@ async def create_reference_datasets(
         "ampliseq",
         "advanced_viz_showcase",
         "viralrecon",
+        "genome_tracks_examples",
     ]
 
     if only is not None:

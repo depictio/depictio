@@ -68,6 +68,12 @@ PROJECTS: dict[str, dict[str, Any]] = {
         "static_ids_key": "advanced_viz_showcase",
         "is_public": True,
     },
+    "genome_tracks_examples": {
+        "dir": "depictio/projects/init/genome_tracks_examples",
+        "config": "project.yaml",
+        "static_ids_key": "genome_tracks_examples",
+        "is_public": True,
+    },
     "nfcore_megatests_showcase": {
         "dir": "depictio/projects/init/nfcore_megatests_showcase",
         "config": "project.yaml",

@@ -38,15 +38,22 @@ SECURITY_HEADERS: dict[str, str] = {
     #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
     #   open-street-map → tile.openstreetmap.org
     # The bare apex is listed separately: a `*.` wildcard does not match it.
+    #
+    # The genome browser (jbrowse component) reads its reference sequences and
+    # gene annotations straight from UCSC's download server (public, CORS +
+    # Range), everything else through the API's track proxy ('self'). Its BGZF
+    # decoder runs in Blob-URL workers that load their wasm from a data: URL,
+    # hence `worker-src blob:` and `data:` in connect-src.
     "Content-Security-Policy": (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "font-src 'self' data:; "
-        "connect-src 'self' ws: wss: "
+        "connect-src 'self' ws: wss: data: "
         "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
-        "https://tile.openstreetmap.org; "
+        "https://tile.openstreetmap.org https://hgdownload.soe.ucsc.edu; "
+        "worker-src 'self' blob:; "
         "frame-ancestors 'self'; "
         "object-src 'none'; "
         "base-uri 'self'; "

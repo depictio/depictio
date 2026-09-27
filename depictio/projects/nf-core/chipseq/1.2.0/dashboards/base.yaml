@@ -1793,3 +1793,75 @@ tabs:
     placement: left
     title: -log10 padj
     layout: {x: 0, y: 8, w: 1, h: 3}
+
+# ============================================================================
+# Genome tracks
+# ============================================================================
+# The run's own files in a genome browser: bigWig signal of every ChIP and
+# input, the MACS2 narrowPeak calls and the filtered BAMs, read by range from
+# the results folder (TRACKS_URI) or from the files uploaded at ingestion. The
+# sample filter of the left panel (persistent across tabs) picks which tracks
+# are open; clicking a peak or a signal track picks its sample back for every
+# other tab.
+- title: Genome tracks
+  subtitle: Signal, peak calls and alignments of the selected samples, read by range from the run's results
+  tab_order: 6
+  tab_icon: mdi:dna
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Genome browser
+    icon: mdi:dna
+    color: teal
+    description: The tracks of the samples in scope, around GREB1
+  - name: ChIP samples
+    icon: mdi:table
+    color: gray
+    description: Pick rows to open their tracks
+  components:
+  - component_type: text
+    tag: cs-tracks-intro
+    section: Genome browser
+    title: Signal next to the calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each ChIP's bigWig sits next to its MACS2 peaks; the grey tracks are the
+      inputs, listed under their own ids. The view opens on GREB1, where FOXA1
+      calls three to four times more peaks after E2 than in vehicle. Pick
+      samples on the left or below to open tracks; click a peak to filter
+      every tab.
+    workflow_tag: chipseq
+    data_collection_tag: tracks
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: jbrowse
+    tag: cs-tracks-browser
+    index: cs-tracks-browser
+    section: Genome browser
+    workflow_tag: chipseq
+    data_collection_tag: tracks
+    title: Genome browser
+    location: chr2:11,640,000-11,720,000
+    max_tracks: 16
+    initial_tracks: 6
+    selection_enabled: true
+    selection_column: sample_id
+    show_overview: false
+    layout: {x: 0, y: 1, w: 8, h: 9}
+  - component_type: table
+    tag: cs-tracks-samples
+    index: cs-tracks-samples
+    section: ChIP samples
+    workflow_tag: chipseq
+    data_collection_tag: design
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: ChIP samples
+    description: Select rows to open their tracks in the browser above.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 4}

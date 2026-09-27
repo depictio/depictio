@@ -82,9 +82,12 @@ const StepData: React.FC = () => {
     switch (componentType) {
       case 'figure':
       case 'card':
+        return ['table'];
       case 'interactive':
       case 'table':
-        return ['table'];
+        // A genomic_tracks manifest is a Delta table too, so it can be listed
+        // and filtered next to the genome browser.
+        return ['table', 'genomic_tracks'];
       case 'map':
         // Map binds to a table DC; the further coord requirement is enforced
         // by `dcHasCoordinates` below, since a "table with lat/lon" is still
@@ -94,6 +97,9 @@ const StepData: React.FC = () => {
         return ['multiqc'];
       case 'image':
         return ['image'];
+      case 'jbrowse':
+        // The track manifest; `jbrowse2` is the legacy session-backed DC.
+        return ['genomic_tracks', 'jbrowse2'];
       case 'advanced_viz':
         // Advanced viz consumes tabular DCs whose schema matches one of the
         // canonical viz schemas (volcano / embedding / manhattan / stacked

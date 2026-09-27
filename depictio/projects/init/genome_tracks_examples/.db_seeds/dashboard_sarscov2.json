@@ -1,0 +1,457 @@
+{
+  "_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca20"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca20"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "cov-intro",
+      "component_type": "text",
+      "title": "Amplicon sequencing, read by range",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "About",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The VCFs and BAMs stay in the public nf-core megatest bucket: the genome browser reads them by byte range through Depictio's API. The reference is a custom assembly (UCSC wuhCor1, aliased to MN908947.3). Pick samples in the scatter or the left panel to open their tracks; select a variant row to jump to it.\n",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "cov-scatter",
+      "component_type": "figure",
+      "title": "Coverage against variant load",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "samples",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca13"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample: mapping, coverage, variant counts and Pangolin lineage",
+        "data_collection_tag": "samples",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca13"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Lasso samples to open their tracks.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Genome browser",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "x": "coverage_median",
+        "y": "num_variants_total",
+        "color": "lineage",
+        "log_x": true,
+        "opacity": 0.85,
+        "hover_data": [
+          "sample",
+          "pct_genome_covered_10x"
+        ]
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "cov-browser",
+      "component_type": "jbrowse",
+      "title": "Variants and reads",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "tracks",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Genome tracks read in place from the viralrecon megatest: iVar VCFs and primer-trimmed BAMs",
+        "data_collection_tag": "tracks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "iVar variant calls and primer-trimmed alignments, per sample",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genome browser",
+      "assembly": null,
+      "location": "MN908947.3:21,500-25,400",
+      "locus_from": {
+        "data_collection_tag": "variants",
+        "chrom_column": "CHROM",
+        "start_column": "POS",
+        "end_column": "END",
+        "padding": 150,
+        "max_rows": 3
+      },
+      "track_mode": "filtered",
+      "max_tracks": 12,
+      "initial_tracks": 4,
+      "default_tracks": [],
+      "show_annotation": true,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "selection_mode": "feature_click",
+      "show_header": true,
+      "show_overview": true,
+      "track_labels": "offset",
+      "preset": "compact_amplicons",
+      "config_overrides": {
+        "extra_tracks": [
+          {
+            "type": "FeatureTrack",
+            "trackId": "wuhCor1-genes",
+            "name": "NCBI genes",
+            "category": [
+              "Annotation"
+            ],
+            "adapter": {
+              "type": "BigBedAdapter",
+              "bigBedLocation": {
+                "uri": "https://hgdownload.soe.ucsc.edu/gbdb/wuhCor1/ncbiGene.bb",
+                "locationType": "UriLocation"
+              }
+            }
+          }
+        ]
+      },
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "cov-table-variants",
+      "component_type": "table",
+      "title": "Variant calls",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "variants",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca14"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per variant call (iVar): position, change, gene and effect",
+        "data_collection_tag": "variants",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca14"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Select a variant to jump to it and open the samples carrying it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variants",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "mutation_label",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "cov-filter-lineage",
+      "component_type": "interactive",
+      "title": "Pangolin lineage",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "samples",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca13"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample: mapping, coverage, variant counts and Pangolin lineage",
+        "data_collection_tag": "samples",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca13"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Samples",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "lineage",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "cov-filter-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "samples",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca13"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample: mapping, coverage, variant counts and Pangolin lineage",
+        "data_collection_tag": "samples",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca13"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Samples",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/genome_tracks_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-cov-filter-lineage",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cov-filter-sample",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-cov-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cov-scatter",
+      "x": 0,
+      "y": 0,
+      "w": 3,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cov-browser",
+      "x": 3,
+      "y": 0,
+      "w": 5,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cov-table-variants",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "SARS-CoV-2 variants",
+  "subtitle": "nf-core/viralrecon megatest: iVar calls and primer-trimmed reads, read in place from S3 on a custom assembly",
+  "icon": "mdi:virus",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca00"
+  },
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": "mdi:virus",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Samples",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Which samples to look at",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "About",
+      "icon": "mdi:information-outline",
+      "color": "gray",
+      "description": "Where the tracks come from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Genome browser",
+      "icon": "mdi:dna",
+      "color": "orange",
+      "description": "Pick samples on the left, see their variants and reads on the right",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Variants",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Pick a variant to jump to it",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

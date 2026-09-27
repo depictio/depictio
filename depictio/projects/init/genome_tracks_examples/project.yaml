@@ -1,0 +1,294 @@
+# Genome tracks showcase — the `jbrowse` component on two small, real datasets.
+#
+# Strand-seq (HGSVC, hg38): four samples from depictio/depictio-example-data,
+# 384 single cells with their ASHLEYS quality call and MosaiCatcher read counts,
+# and the per-cell structural-variant calls (213 bgzipped BED + tabix). The BED
+# files ship here and are UPLOADED to Depictio's bucket at ingestion.
+#
+# SARS-CoV-2 (nf-core/viralrecon megatest, MN908947.3): 48 samples with their
+# iVar variant calls (VCF + tabix) and primer-trimmed alignments (BAM + BAI),
+# READ IN PLACE from the public nf-core-awsmegatests bucket through the track
+# proxy, on a custom assembly (UCSC wuhCor1 2bit, aliased to MN908947.3).
+#
+# Every track reaches the browser through the API's range proxy with a signed,
+# expiring URL; the browser never talks to S3 itself.
+
+id: "946b0f3c1e4a2d7f8e5bca00"
+name: "Genome Tracks Showcase"
+project_type: "advanced"
+is_public: true
+workflows:
+  # One workflow for both datasets: the Strand-seq collections come from
+  # MosaiCatcher + ASHLEYS, the SARS-CoV-2 ones from nf-core/viralrecon.
+  - id: "946b0f3c1e4a2d7f8e5bca01"
+    name: "genome_tracks_demo"
+    engine:
+      name: "python"
+    description: "Strand-seq single-cell SV calls (HGSVC) and SARS-CoV-2 amplicon sequencing (nf-core/viralrecon megatest)"
+    data_location:
+      structure: "flat"
+      locations:
+        - /app/depictio/projects/init/genome_tracks_examples/data
+    data_collections:
+      - id: "946b0f3c1e4a2d7f8e5bca10"
+        data_collection_tag: "cells"
+        description: "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/genome_tracks_examples/data/strandseq/cells.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              cell: "Single-cell library id (<sample>PE<number>)"
+              sample: "HGSVC sample the cell comes from"
+              run: "Sequencing run"
+              ashleys_call: "ASHLEYS quality call: selected (kept for SV calling) or excluded"
+              ashleys_prediction: "ASHLEYS prediction (1 = good-quality Strand-seq library)"
+              ashleys_probability: "ASHLEYS probability of being a good library"
+              mapped: "Reads mapped"
+              good: "Reads kept after filtering (MosaiCatcher)"
+              dupl: "Duplicate reads"
+              mapq: "Reads below the MAPQ threshold"
+              medbin: "Median reads per 200 kb bin"
+              pass1: "Passed MosaiCatcher's first QC"
+              sv_track: "The cell has an SV call track"
+              n_sv_calls: "Structural-variant calls in the cell"
+
+      - id: "946b0f3c1e4a2d7f8e5bca11"
+        data_collection_tag: "sv_calls"
+        description: "One row per structural-variant call (cell, locus, class, haplotype)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/genome_tracks_examples/data/strandseq/sv_calls.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              call_id: "<cell>:<chrom>:<start>-<end>, unique per call"
+              cell: "Cell the call was made in"
+              chrom: "Chromosome"
+              start: "Start (0-based)"
+              end: "End"
+              sv_call: "MosaiCatcher call (e.g. inv_h1, del_hom, idup_h2)"
+              sv_type: "del, dup, inv, idup or complex"
+              haplotype: "h1, h2 or hom"
+              color: "MosaiCatcher colour of the call class"
+              llr_to_ref: "Log-likelihood ratio against the reference state"
+              af: "Fraction of cells carrying the call"
+              length_kb: "Call length in kb"
+
+      - id: "946b0f3c1e4a2d7f8e5bca12"
+        data_collection_tag: "sv_tracks"
+        description: "Genome tracks: one bgzipped BED of SV calls per selected cell, coloured by call class"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/genome_tracks_examples/data/strandseq/sv_tracks.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "cell"
+            name_column: "name"
+            category_column: "category"
+            assembly: "hg38"
+            display_defaults:
+              # MosaiCatcher BEDs carry the call colour in column 5, where BED
+              # puts the score: name the columns so the colour callback finds it.
+              bed:
+                adapter:
+                  columnNames:
+                    - chrom
+                    - chromStart
+                    - chromEnd
+                    - name
+                    - color
+                    - haplotype_state
+                    - llr_to_ref
+                    - af
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+                    renderer:
+                      type: "CanvasFeatureRenderer"
+                      height: 12
+                      showLabels: false
+                      showDescriptions: false
+                      displayMode: "compact"
+            columns_description:
+              track_id: "Track id (the cell)"
+              cell: "Cell the SV calls belong to"
+              sample: "HGSVC sample"
+              uri: "BED file, relative to this manifest"
+              n_sv_calls: "Calls in the file"
+              sv_classes: "Call classes present"
+
+      - id: "946b0f3c1e4a2d7f8e5bca13"
+        data_collection_tag: "samples"
+        description: "One row per sample: mapping, coverage, variant counts and Pangolin lineage"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/genome_tracks_examples/data/sarscov2/samples.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+
+      - id: "946b0f3c1e4a2d7f8e5bca14"
+        data_collection_tag: "variants"
+        description: "One row per variant call (iVar): position, change, gene and effect"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/genome_tracks_examples/data/sarscov2/variants.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+
+      - id: "946b0f3c1e4a2d7f8e5bca15"
+        data_collection_tag: "tracks"
+        description: "Genome tracks read in place from the viralrecon megatest: iVar VCFs and primer-trimmed BAMs"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/genome_tracks_examples/data/sarscov2/tracks.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            # Relative rows are read in place under the megatest's results.
+            remote_base_uri: "s3://nf-core-awsmegatests/viralrecon/results-3731dd3a32a67a2648ea22c2bd980c224abdaee2/platform_illumina/"
+            # A custom assembly: the UCSC SARS-CoV-2 sequence, whose alias file
+            # maps its NC_045512v2 name to the MN908947.3 the VCFs use. UCSC
+            # sends CORS headers, so the browser reads these files directly.
+            direct_access: true
+            assembly:
+              name: "MN908947.3"
+              display_name: "SARS-CoV-2 Wuhan-Hu-1 (MN908947.3)"
+              aliases: ["wuhCor1", "NC_045512.2"]
+              twobit_uri: "https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/bigZips/wuhCor1.2bit"
+              chrom_sizes_uri: "https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/bigZips/wuhCor1.chrom.sizes"
+              refname_aliases_uri: "https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/bigZips/wuhCor1.chromAlias.txt"
+            display_defaults:
+              bam:
+                displays:
+                  - type: "LinearAlignmentsDisplay"
+                    height: 160
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 36
+            presets:
+              # A custom named preset: small alignment panes, bare variants.
+              compact_amplicons:
+                formats:
+                  bam:
+                    displays:
+                      - type: "LinearAlignmentsDisplay"
+                        height: 90
+                  vcf:
+                    displays:
+                      - type: "LinearVariantDisplay"
+                        height: 24
+
+links:
+  # Strand-seq: cells <-> tracks (the SV tracks of the picked cells; a clicked
+  # SV call picks its cell back), cells -> SV call table.
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca10"
+    source_column: "cell"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca12"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "cell"
+    description: "Show the SV tracks of the picked cells"
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca12"
+    source_column: "cell"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca10"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cell"
+    description: "Pick the cells whose SV track is clicked in the browser"
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca10"
+    source_column: "cell"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca11"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cell"
+    description: "Filter the SV call table by the picked cells"
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca11"
+    source_column: "cell"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca12"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "cell"
+    description: "Show the tracks of the cells a picked SV call was made in"
+  # SARS-CoV-2: samples <-> tracks, variants -> tracks / samples.
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca13"
+    source_column: "sample"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca15"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the variant and alignment tracks of the picked samples"
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca15"
+    source_column: "sample"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca13"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Pick the samples whose track is clicked in the browser"
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca13"
+    source_column: "sample"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca14"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the variant table by the picked samples"
+  - source_dc_id: "946b0f3c1e4a2d7f8e5bca14"
+    source_column: "sample"
+    target_dc_id: "946b0f3c1e4a2d7f8e5bca15"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the tracks of the samples carrying the picked variants"

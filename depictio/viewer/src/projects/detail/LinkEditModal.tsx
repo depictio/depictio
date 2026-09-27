@@ -77,10 +77,16 @@ const RESOLVER_FALLBACK: ResolverInfo[] = [
   },
 ];
 
-const inferTargetType = (dc: DataCollectionOption | undefined): LinkTargetType => {
+/** `LinkTargetType` from depictio-react-core predates the genomic_tracks
+ *  target (DCLink.target_type in depictio/models/models/links.py accepts it). */
+type TargetType = LinkTargetType | 'genomic_tracks';
+
+const inferTargetType = (dc: DataCollectionOption | undefined): TargetType => {
   if (!dc) return 'table';
   if (dc.type === 'multiqc') return 'multiqc';
   if (dc.type === 'image') return 'image';
+  // Filters the track manifest; the genome browser then shows the matching tracks.
+  if (dc.type === 'genomic_tracks') return 'genomic_tracks';
   return 'table';
 };
 
@@ -328,7 +334,8 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       source_dc_id: sourceDcId,
       source_column: sourceColumn.trim(),
       target_dc_id: targetDcId,
-      target_type: targetType,
+      // Widened locally (see TargetType); the backend validates the literal.
+      target_type: targetType as LinkTargetType,
       link_config,
       description: description.trim() || undefined,
       enabled,
@@ -555,7 +562,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
 };
 
 interface SampleMappingEditorProps {
-  targetType: LinkTargetType;
+  targetType: TargetType;
   autoMappings: Record<string, string[]> | null;
   autoMappingsLoading: boolean;
   mappingsJson: string;

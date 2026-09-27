@@ -842,13 +842,15 @@ class JBrowseConfig(BaseSettings):
     """
 
     enabled: bool = Field(default=True, description="Enable the genome browser component")
+    # The nf-core AWS megatest bucket is public, anonymous and read-only: the
+    # shipped examples and the nf-core templates' TRACKS_URI read it in place.
     remote_https_hosts: str = Field(
-        default="",
+        default="nf-core-awsmegatests.s3-eu-west-1.amazonaws.com",
         description="Comma-separated hostnames the track proxy may read https:// tracks "
         "from (exact match, e.g. 'nf-core-awsmegatests.s3-eu-west-1.amazonaws.com')",
     )
     remote_s3_buckets: str = Field(
-        default="",
+        default="nf-core-awsmegatests",
         description="Comma-separated S3 buckets the track proxy may read s3:// tracks from "
         "with the server's credentials. Any user who can open a DC pointing at a listed "
         "bucket can read it; Depictio's own data bucket is never readable by URL.",
