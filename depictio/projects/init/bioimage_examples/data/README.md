@@ -25,7 +25,6 @@ experimental result.
 | `lily_stem.ome.tif` | 2-channel fluorescence, 480 x 480, uint8, pyramidal OME-TIFF | `skimage.data.lily`, channels 1 and 2, cropped |
 | `lily_stem_cells.csv` | One row per plant cell: centroid, lumen area, mean intensity per channel, wall type | derived |
 | `skin_spatialdata.zarr` | SpatialData store: H&E image (640 x 896, uint8 RGB), spot circles, nucleus points, an AnnData table | `skimage.data.skin`, cropped |
-| `skin_spatialdata_spots.csv` | The store's spot table as CSV: cluster, nuclei under the spot, four synthetic gene counts | derived |
 | `lily_sharded.zarr` | 3-channel fluorescence, 512 x 512, uint16 (12-bit), `c,y,x`, NGFF 0.5 with sharded arrays | `skimage.data.lily`, channels 1, 2 and 4, lower left crop |
 | `lily_sharded_cells.csv` | One row per plant cell: centroid, lumen area, mean intensity per channel, wall type | derived |
 | `manifest.json` | Generator arguments and store sizes | derived |
@@ -99,7 +98,11 @@ to `images/he` (red, green, blue, 0 to 255) and then consolidates the metadata
 (into the root `zarr.json`), so the image renders as RGB.
 
 Depictio shows the `images/he` element (the DC's `image_path`) and uploads only
-that subtree; the spot table it filters on is the CSV export.
+that subtree. The spot table it filters on is read from the same store: a
+`format: spatialdata` table DC takes the `obs` columns of `tables/table`, the
+spot centres from `obsm["spatial"]` converted to `images/he` pixels, and the
+four genes from `X`. Nothing is exported by hand, and re-running the CLI after
+the AnnData changes re-extracts the table.
 
 ## NGFF 0.5 store (sharded)
 
