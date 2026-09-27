@@ -322,12 +322,39 @@ STATIC_IDS = {
             "variantbenchmarking_sv_cnv": "846b0f3c1e4a2d7f8e5bba22",
         },
     },
+    # Bioimage viewer examples (optional, see OPTIONAL_DATASETS): four image
+    # cases, each with the table its points overlay reads. The image DCs have no
+    # delta table; their stores are uploaded under `bioimage/{dc_id}/`. See
+    # projects/init/bioimage_examples/.
+    "bioimage_examples": {
+        "project": "646b0f3c1e4a2d7f8e5b8f00",
+        "workflows": {"bioimage_demo": "646b0f3c1e4a2d7f8e5b8f01"},
+        "data_collections": {
+            "kidney_2d_image": "646b0f3c1e4a2d7f8e5b8f02",
+            "kidney_2d_cells": "646b0f3c1e4a2d7f8e5b8f03",
+            "ihc_spatial_image": "646b0f3c1e4a2d7f8e5b8f04",
+            "ihc_spatial_spots": "646b0f3c1e4a2d7f8e5b8f05",
+            "kidney_3d_timelapse_image": "646b0f3c1e4a2d7f8e5b8f06",
+            "kidney_3d_timelapse_nuclei": "646b0f3c1e4a2d7f8e5b8f07",
+            "multi_sample_images": "646b0f3c1e4a2d7f8e5b8f08",
+            "multi_sample_cells": "646b0f3c1e4a2d7f8e5b8f09",
+            "multi_sample_samples": "646b0f3c1e4a2d7f8e5b8f0a",
+        },
+        "dashboards": {
+            # Main tab id equals project_id (same convention as the showcase).
+            "bioimage_fluorescence": "646b0f3c1e4a2d7f8e5b8f00",
+            "bioimage_spatial": "646b0f3c1e4a2d7f8e5b8f10",
+            "bioimage_volume": "646b0f3c1e4a2d7f8e5b8f11",
+            "bioimage_multi_sample": "646b0f3c1e4a2d7f8e5b8f12",
+        },
+    },
 }
 
-# Reference projects that are NOT seeded by default. They exist for the test
-# suite, so they stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS
-# names one.
-OPTIONAL_DATASETS = ("catalog_conformance",)
+# Reference projects that are NOT seeded by default: the conformance fixture of
+# the test suite, and the bioimage examples (images, so bigger than a table demo).
+# They stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS names
+# one, or DEPICTIO_SEED_PROJECTS lists one explicitly.
+OPTIONAL_DATASETS = ("catalog_conformance", "bioimage_examples")
 
 
 def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
@@ -351,6 +378,8 @@ def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
 
 
 for _optional in OPTIONAL_DATASETS:
+    if _optional in STATIC_IDS:
+        continue
     _ids = _load_generated_static_ids(_optional)
     if _ids:
         STATIC_IDS[_optional] = _ids
@@ -530,6 +559,7 @@ class ReferenceDatasetRegistry:
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
         "viralrecon": os.path.join("nf-core", "viralrecon"),
         "catalog_conformance": os.path.join("init", "catalog_conformance"),
+        "bioimage_examples": os.path.join("init", "bioimage_examples"),
         # Reserved (not yet in all_datasets — see STATIC_IDS["variantbenchmarking"] note).
         "variantbenchmarking": os.path.join("nf-core", "variantbenchmarking"),
     }
@@ -868,7 +898,8 @@ async def create_reference_datasets(
             ``DEPICTIO_SEED_PROJECTS``). ``None`` seeds all of them.
         extra: Optional dataset names to seed *in addition* (from
             ``DEPICTIO_SEED_EXTRA_PROJECTS``). Only names in
-            ``OPTIONAL_DATASETS`` are honoured.
+            ``OPTIONAL_DATASETS`` are honoured. An optional name listed in
+            ``only`` is seeded too, so an allowlist can hold nothing but one.
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
     Data files are included under depictio/projects/nf-core/ampliseq/<latest version>/.
@@ -890,14 +921,19 @@ async def create_reference_datasets(
         "viralrecon",
     ]
 
+    # An optional dataset is asked for either way: added on top of the default
+    # set (`extra`), or named in the allowlist (`only`), which is how
+    # `depictio local up --examples bioimage_examples` seeds it and nothing else.
+    requested_optional = (extra or set()) | (only or set())
+
     if only is not None:
-        unknown = only - set(all_datasets)
+        unknown = only - set(all_datasets) - set(OPTIONAL_DATASETS)
         if unknown:
             logger.warning(
                 "DEPICTIO_SEED_PROJECTS lists unknown project(s) %s — ignoring them. "
                 "Valid names: %s",
                 sorted(unknown),
-                ", ".join(all_datasets),
+                ", ".join([*all_datasets, *OPTIONAL_DATASETS]),
             )
         datasets_to_create = [name for name in all_datasets if name in only]
         logger.info(
@@ -911,9 +947,9 @@ async def create_reference_datasets(
     # after the allowlist is applied is deliberate: asking for the conformance
     # project must not also mean giving up iris and the rest.
     for name in OPTIONAL_DATASETS:
-        if name in (extra or set()) and name in STATIC_IDS:
+        if name in requested_optional and name in STATIC_IDS:
             datasets_to_create.append(name)
-            logger.info("DEPICTIO_SEED_EXTRA_PROJECTS — also seeding: %s", name)
+            logger.info("Optional reference project requested, also seeding: %s", name)
 
     for dataset_name in datasets_to_create:
         logger.info(f"Creating reference dataset: {dataset_name}")

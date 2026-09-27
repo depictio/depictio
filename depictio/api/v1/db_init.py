@@ -197,6 +197,8 @@ def _dataset_of_dashboard(name: str) -> str:
         return "viralrecon"
     if name.startswith("catalog_conformance"):
         return "catalog_conformance"
+    if name.startswith("bioimage"):
+        return "bioimage_examples"
     return name
 
 
@@ -229,6 +231,7 @@ async def create_initial_dashboards(
             "advanced_viz_showcase",
             "viralrecon",
             "catalog_conformance",
+            "bioimage_examples",
         )
     }
 
@@ -455,18 +458,37 @@ async def create_initial_dashboards(
             ),
             "static_dc_id": None,
         },
+        # Optional (see OPTIONAL_DATASETS): the four bioimage viewer tabs, main
+        # tab first. Multi-DC (image + points + samples), so DC ids come from
+        # the JSON.
+        *(
+            {
+                "name": f"bioimage_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    rel_paths["bioimage_examples"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in ("fluorescence", "spatial", "volume", "multi_sample")
+        ),
     ]
 
     # Optional datasets are opt-in in both directions: their dashboards are
     # skipped unless the project itself was seeded, or they would be created
     # pointing at a project that does not exist.
+    # An optional dataset counts as requested when it is named in `extra` or in
+    # the `only` allowlist, the same rule create_reference_datasets applies.
     from depictio.api.v1.db_init_reference_datasets import OPTIONAL_DATASETS
 
+    requested_optional = (extra or set()) | (only or set())
     dashboards_config = [
         cfg
         for cfg in dashboards_config
         if _dataset_of_dashboard(str(cfg["name"])) not in OPTIONAL_DATASETS
-        or _dataset_of_dashboard(str(cfg["name"])) in (extra or set())
+        or _dataset_of_dashboard(str(cfg["name"])) in requested_optional
     ]
 
     if only is not None:

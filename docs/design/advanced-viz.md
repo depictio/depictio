@@ -13,7 +13,7 @@ Add a family of *advanced* visualisation components to the React viewer (`depict
 
 A "simple" component renders one chart. An advanced component renders **chart + controls + reactive bindings** as one cohesive unit. Volcano plot is the canonical example; the catalogue below covers 10 patterns spanning bulk omics, single-cell, metagenomics, variants/clinical, and lightweight spatial/imaging.
 
-Out of scope for v1: heavy image processing (pyramidal WSI, Vitessce/Viv), large-scale 3D molecular viewers.
+Out of scope for v1: heavy image processing (pyramidal WSI, Vitessce/Viv), large-scale 3D molecular viewers. Pyramidal OME-Zarr images have since landed as the `bioimage_viewer` kind (viv, see `docs/adr/0001-bioimage-viewer-complements-dedicated-viewers.md`).
 
 ---
 
@@ -38,7 +38,7 @@ Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps,
 | 9 | Spatial scatter + simple image overlay | spatial transcriptomics, IF imaging (small images) | image opacity, colour-by, ROI lasso | gene set, cell-type filter | ROI cells (sample IDs) | plotly.js image annotation, or deck.gl BitmapLayer + ScatterplotLayer |
 | 10 | Pathway / network (STRING/KEGG) | enrichment, sc, multi-omic | layout algo, edge-confidence slider, colour-by logFC, expand neighbours | gene-set from #1/#3 | selected node → drill-back | cytoscape.js |
 
-**Note on #9:** kept deliberately lightweight. Single image (PNG/JPG) as background, scatter overlay, lasso ROI. No pyramid / no zarr / no Vitessce. If imaging requirements grow later, swap the renderer for deck.gl + viv without touching the coordination contract.
+**Note on #9:** kept deliberately lightweight. Single image (PNG/JPG) as background, scatter overlay, lasso ROI. No pyramid / no zarr / no Vitessce. If imaging requirements grow later, swap the renderer for deck.gl + viv without touching the coordination contract. That path now exists: the `bioimage_viewer` kind draws a pyramidal OME-Zarr image with viv, an optional points overlay, and a lasso that emits a regular `scatter_selection` (ADR 0001, which keeps deep inspection with Vitessce, MoBIE or napari).
 
 ### 2.1 Input schema per viz (required vs optional roles)
 

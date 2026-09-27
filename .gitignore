@@ -189,6 +189,9 @@ dump.rdb
 !depictio/projects/nf-core/atacseq/*/pipeline_info/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Allow the bioimage examples' cell / spot / sample tables (dev/bioimage/make_examples.py)
+!depictio/projects/init/bioimage_examples/data/*.csv
+!depictio/projects/init/bioimage_examples/data/multi_sample/*.csv
 # Allow the catalog conformance project's generated data. Every file here is a
 # copy of a catalog fixture, staged either as a recipe seed at the project root
 # or inside the fake run tree — see scripts/generate_project.py.

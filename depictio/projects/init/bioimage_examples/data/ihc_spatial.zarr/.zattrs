@@ -1,0 +1,124 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.5,
+                                0.5
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                2.0,
+                                2.0
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "2"
+                }
+            ],
+            "metadata": {
+                "description": "2x mean downsampling of y and x per level",
+                "method": "skimage.transform.downscale_local_mean"
+            },
+            "name": "ihc_spatial",
+            "type": "local_mean",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "FF0000",
+                "family": "linear",
+                "inverted": false,
+                "label": "Red",
+                "window": {
+                    "end": 255.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "00FF00",
+                "family": "linear",
+                "inverted": false,
+                "label": "Green",
+                "window": {
+                    "end": 255.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "0000FF",
+                "family": "linear",
+                "inverted": false,
+                "label": "Blue",
+                "window": {
+                    "end": 255.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            }
+        ],
+        "id": 1,
+        "name": "ihc_spatial",
+        "rdefs": {
+            "defaultT": 0,
+            "defaultZ": 0,
+            "model": "color"
+        },
+        "version": "0.4"
+    }
+}
