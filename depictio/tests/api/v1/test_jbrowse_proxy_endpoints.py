@@ -293,3 +293,66 @@ class TestCatalogues:
         assert {"hg38", "hg19", "mm10", "wuhCor1"} <= names
         presets = {p["name"] for p in client.get("/jbrowse/presets").json()}
         assert {"signal", "sv-calls", "compact", "peaks"} <= presets
+
+
+# ---------------------------------------------------------------------------
+# Built-in assembly files (/jbrowse/preset/{name}/{role})
+# ---------------------------------------------------------------------------
+
+
+class TestPresetProxy:
+    """Public reference files, read from the preset's hardcoded UCSC URLs only."""
+
+    @pytest.fixture
+    def preset_client(self, monkeypatch):
+        reads: list[str] = []
+        blobs = {
+            "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.chrom.sizes": b"chr1\t10\n",
+        }
+
+        def size(src):
+            reads.append(src.url)
+            return len(blobs.get(src.url, b"x" * (5 * 1024 * 1024)))
+
+        def read_all(src, max_bytes):
+            return blobs[src.url]
+
+        def open_range(src, rng):
+            return iter([b"y" * rng.length])
+
+        monkeypatch.setattr(remote_read, "source_size", size)
+        monkeypatch.setattr(remote_read, "read_all", read_all)
+        monkeypatch.setattr(remote_read, "open_range", open_range)
+        routes._small_files.clear()
+        app = FastAPI()
+        app.include_router(routes.jbrowse_endpoints_router, prefix="/jbrowse")
+        return TestClient(app), reads
+
+    def test_small_file_served_whole_and_cached(self, preset_client):
+        client, reads = preset_client
+        first = client.get("/jbrowse/preset/hg38/chrom_sizes")
+        assert first.status_code == 200
+        assert first.content == b"chr1\t10\n"
+        again = client.get("/jbrowse/preset/hg38/chrom_sizes", headers={"Range": "bytes=0-3"})
+        assert again.status_code == 206
+        assert again.content == b"chr1"
+        assert again.headers["content-range"] == "bytes 0-3/8"
+        assert len(reads) == 1  # the second answer came from memory
+
+    def test_large_file_is_range_proxied(self, preset_client):
+        client, _ = preset_client
+        resp = client.get("/jbrowse/preset/hg38/twobit", headers={"Range": "bytes=10-19"})
+        assert resp.status_code == 206
+        assert resp.content == b"y" * 10
+
+    def test_alias_names_resolve(self, preset_client):
+        client, _ = preset_client
+        assert client.head("/jbrowse/preset/GRCh38/chrom_sizes").status_code == 200
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/jbrowse/preset/hg00/twobit", "/jbrowse/preset/hg38/secret", "/jbrowse/preset/sacCer3/x"],
+    )
+    def test_unknown_preset_or_role_is_404(self, preset_client, path):
+        client, _ = preset_client
+        assert client.get(path).status_code == 404

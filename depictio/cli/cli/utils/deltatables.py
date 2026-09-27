@@ -2025,6 +2025,12 @@ def process_recipe_data_collection(
         }
 
     recipe_name = transform_config.recipe
+    # Two-argument recipes see the collection's properties (e.g. whether a
+    # genomic_tracks manifest reads its run in place).
+    _props = data_collection.config.dc_specific_properties
+    _recipe_properties = (
+        _props.model_dump() if hasattr(_props, "model_dump") else dict(_props or {})
+    )
     pipeline_version: str | None = getattr(workflow, "version", None)
     rich_print_checked_statement(f"Running recipe: {escape(recipe_name)}", "info")
 
@@ -2134,10 +2140,15 @@ def process_recipe_data_collection(
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
-            from depictio.recipes import call_transform
+            from depictio.recipes import RecipeContext, call_transform
 
             _validate_sources(recipe_module, sources, recipe_name)
-            result_df = call_transform(recipe_module, sources, transform_config.params)
+            result_df = call_transform(
+                recipe_module,
+                sources,
+                transform_config.params,
+                RecipeContext.of(data_dir, _recipe_properties),
+            )
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
             _validate_schema(
@@ -2164,6 +2175,7 @@ def process_recipe_data_collection(
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,
                         params=transform_config.params,
+                        properties=_recipe_properties,
                     )
                     run_df = run_df.with_columns(pl.lit(run_tag).alias("depictio_run_id"))
                     all_dfs.append(run_df)
@@ -2180,6 +2192,7 @@ def process_recipe_data_collection(
                 extra_sources=extra_sources,
                 pipeline_version=pipeline_version,
                 params=transform_config.params,
+                properties=_recipe_properties,
             )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}

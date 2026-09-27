@@ -124,6 +124,7 @@ components:
       log_x: true
       opacity: 0.85
       hover_data: ['cell', 'n_sv_calls']
+      color_discrete_map: '{"selected": "#2f9e44", "excluded": "#adb5bd"}'
     selection_enabled: true
     selection_column: cell
     layout: { x: 0, y: 0, w: 3, h: 8 }
@@ -139,6 +140,8 @@ components:
     location: 'chr8:6,000,000-14,000,000'
     max_tracks: 24
     initial_tracks: 10
+    # Mb-scale SV calls: a gene track would only say "zoom in" here.
+    show_annotation: false
     selection_enabled: true
     selection_column: cell
     show_overview: false

@@ -92,6 +92,8 @@ def manifest_rows(df: pl.DataFrame, props: DCGenomicTracksConfig) -> list[TrackR
     """Turn manifest rows into tracks; rows without a usable location are skipped."""
     if props.uri_column not in df.columns:
         return []
+    if props.order_column and props.order_column in df.columns:
+        df = df.sort(props.order_column, nulls_last=True, maintain_order=True)
     tracks: list[TrackRow] = []
     seen: set[str] = set()
     for row in df.to_dicts():
