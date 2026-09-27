@@ -10,6 +10,10 @@ chunk, and treats a 404 as "empty chunk". So the chunk route must:
 * let metadata revalidate (``no-cache``) while chunks cache for an hour;
 * keep one root per store name when two registered paths share it.
 
+A zarr v3 (NGFF 0.5) store has ``zarr.json`` metadata and may shard its
+chunks, which a reader fetches by byte range: the key route honours one Range,
+like the OME-TIFF file route.
+
 Per format: a SpatialData store is served from ``<store>/<image_path>`` on disk
 (the upload holds that subtree only), and an OME-TIFF store is one file served
 with HTTP Range. Remote stores are proxied only from allow-listed S3 buckets
@@ -283,7 +287,9 @@ class TestServing:
         )
         assert meta_body.closed and chunk_body.closed
 
-    @pytest.mark.parametrize("key", [".zattrs", ".zgroup", "0/.zarray", ".zmetadata"])
+    @pytest.mark.parametrize(
+        "key", [".zattrs", ".zgroup", "0/.zarray", ".zmetadata", "zarr.json", "0/zarr.json"]
+    )
     def test_metadata_is_revalidated(self, tmp_path, key):
         env = Env(tmp_path)
         env.s3.get_object.side_effect = None
@@ -525,7 +531,9 @@ class TestTiffOnDisk:
         assert resp.headers["accept-ranges"] == "bytes"
         assert resp.content == b""
 
-    @pytest.mark.parametrize("spec", ["bytes=0-1,4-5", "bytes=5-2", "bytes=-0", "bytes=x-y"])
+    @pytest.mark.parametrize(
+        "spec", ["bytes=0-1,4-5", "bytes=5-2", "bytes=-0", "bytes=x-y", "bytes=" + "9" * 5000 + "-"]
+    )
     def test_multi_or_malformed_range_is_416(self, tmp_path, spec):
         with disk_tiff_env(tmp_path) as client:
             resp = client.get(file_url(), headers={**AUTH, "Range": spec})
@@ -998,3 +1006,313 @@ class TestRemoteS3:
             resp = client.get(key_url("sample_S.zarr", "0/9.9.9"), headers=AUTH)
 
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# zarr v3 / NGFF 0.5: zarr.json metadata, sharded chunks read by byte range
+# ---------------------------------------------------------------------------
+
+V3_STORE = "sample_V.zarr"
+SHARD_KEY = "0/c/0/0/0"
+SHARD_BYTES = bytes(range(256)) * 2  # 512 bytes: chunks, then the shard index
+
+
+def make_v3_store(parent: Path) -> Path:
+    """A hand-built NGFF 0.5 store: the shard bytes are opaque to the API."""
+    store = parent / V3_STORE
+    (store / "0" / "c" / "0" / "0").mkdir(parents=True)
+    root = {
+        "zarr_format": 3,
+        "node_type": "group",
+        "attributes": {"ome": {"version": "0.5", "multiscales": [{"datasets": [{"path": "0"}]}]}},
+    }
+    (store / "zarr.json").write_text(json.dumps(root))
+    array = {
+        "zarr_format": 3,
+        "node_type": "array",
+        "codecs": [{"name": "sharding_indexed", "configuration": {"chunk_shape": [1, 8, 8]}}],
+    }
+    (store / "0" / "zarr.json").write_text(json.dumps(array))
+    (store / SHARD_KEY).write_bytes(SHARD_BYTES)
+    return store
+
+
+def v3_disk_env(tmp_path: Path, **kwargs) -> Env:
+    env = Env(tmp_path, upload=False, **kwargs)
+    env.register(make_v3_store(tmp_path))
+    return env
+
+
+def shard_url(key: str = SHARD_KEY) -> str:
+    return key_url(V3_STORE, key)
+
+
+class TestZarrV3OnDisk:
+    def test_zarr_json_is_served_as_revalidated_metadata(self, tmp_path):
+        with v3_disk_env(tmp_path) as client:
+            root = client.get(shard_url("zarr.json"), headers=AUTH)
+            array = client.get(shard_url("0/zarr.json"), headers=AUTH)
+
+        assert root.status_code == 200
+        assert root.headers["content-type"] == "application/json"
+        assert root.headers["cache-control"] == "no-cache"
+        assert root.json()["attributes"]["ome"]["version"] == "0.5"
+        assert array.json()["codecs"][0]["name"] == "sharding_indexed"
+
+    def test_whole_shard_without_range_is_unchanged(self, tmp_path):
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url(), headers=AUTH)
+
+        assert resp.status_code == 200
+        assert resp.content == SHARD_BYTES
+        assert resp.headers["content-type"] == "application/octet-stream"
+        assert resp.headers["cache-control"] == "private, max-age=3600"
+        assert "content-range" not in resp.headers
+
+    @pytest.mark.parametrize(
+        ("spec", "start", "end"),
+        [("bytes=16-31", 16, 31), ("bytes=500-", 500, 511), ("bytes=-16", 496, 511)],
+    )
+    def test_one_range_is_a_206(self, tmp_path, spec, start, end):
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": spec})
+
+        assert resp.status_code == 206
+        assert resp.content == SHARD_BYTES[start : end + 1]
+        assert resp.headers["content-range"] == f"bytes {start}-{end}/512"
+        assert resp.headers["content-length"] == str(end - start + 1)
+        assert resp.headers["accept-ranges"] == "bytes"
+        assert resp.headers["cache-control"] == "private, max-age=3600"
+
+    def test_range_end_past_the_shard_is_clamped(self, tmp_path):
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=500-9999"})
+
+        assert resp.status_code == 206
+        assert resp.headers["content-range"] == "bytes 500-511/512"
+
+    @pytest.mark.parametrize(
+        "spec", ["bytes=0-1,4-5", "bytes=5-2", "bytes=-0", "bytes=x-y", "bytes=" + "9" * 5000 + "-"]
+    )
+    def test_multi_or_malformed_range_is_416(self, tmp_path, spec):
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": spec})
+
+        assert resp.status_code == 416
+
+    def test_range_past_the_end_is_416_with_the_size(self, tmp_path):
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=512-"})
+
+        assert resp.status_code == 416
+        assert resp.headers["content-range"] == "bytes */512"
+
+    def test_ranged_read_of_a_missing_shard_is_404(self, tmp_path):
+        """zarr reads a missing shard as empty, so it must stay a 404, not a 416."""
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url("0/c/9/9/9"), headers={**AUTH, "Range": "bytes=-16"})
+
+        assert resp.status_code == 404
+
+    def test_other_range_unit_is_ignored(self, tmp_path):
+        with v3_disk_env(tmp_path) as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "items=0-1"})
+
+        assert resp.status_code == 200
+        assert resp.content == SHARD_BYTES
+
+    def test_denied_before_any_read(self, tmp_path):
+        env = v3_disk_env(tmp_path, permitted=False)
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-1,4-5"})
+
+        assert resp.status_code == 404
+        env.files.find.assert_not_called()
+
+    def test_spatialdata_v3_image_is_read_by_range(self, tmp_path):
+        sd = tmp_path / SD_STORE
+        (sd / "images").mkdir(parents=True)
+        (sd / "zarr.json").write_text(json.dumps({"zarr_format": 3, "node_type": "group"}))
+        make_v3_store(sd / "images").rename(sd / "images" / "he")
+        env = Env(tmp_path, upload=False, props=SD_PROPS)
+        env.register(sd)
+        with env as client:
+            meta = client.get(key_url(SD_STORE, "zarr.json"), headers=AUTH)
+            part = client.get(key_url(SD_STORE, SHARD_KEY), headers={**AUTH, "Range": "bytes=0-3"})
+
+        assert meta.json()["attributes"]["ome"]["version"] == "0.5"
+        assert part.status_code == 206
+        assert part.content == SHARD_BYTES[:4]
+
+
+class TestZarrV3OnS3:
+    def test_range_is_forwarded_to_s3(self, tmp_path):
+        env = Env(tmp_path)
+        body = Body(SHARD_BYTES[16:32])
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {
+            "Body": body,
+            "ContentLength": 16,
+            "ContentRange": "bytes 16-31/512",
+        }
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=16-31"})
+
+        assert resp.status_code == 206
+        assert resp.content == SHARD_BYTES[16:32]
+        assert resp.headers["content-range"] == "bytes 16-31/512"
+        assert resp.headers["accept-ranges"] == "bytes"
+        kwargs = env.s3.get_object.call_args.kwargs
+        assert kwargs["Key"] == f"bioimage/{DC_ID}/{V3_STORE}/{SHARD_KEY}"
+        assert kwargs["Range"] == "bytes=16-31"
+        assert body.closed
+
+    def test_suffix_range_is_forwarded_as_is(self, tmp_path):
+        env = Env(tmp_path)
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {
+            "Body": Body(SHARD_BYTES[-16:]),
+            "ContentLength": 16,
+            "ContentRange": "bytes 496-511/512",
+        }
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=-16"})
+
+        assert resp.status_code == 206
+        assert env.s3.get_object.call_args.kwargs["Range"] == "bytes=-16"
+
+    def test_whole_key_is_not_capped_nor_ranged(self, tmp_path):
+        """A whole read of the DC's own upload is served as before the Range support."""
+        env = Env(tmp_path, bioimage=BioimageConfig(remote_max_object_mb=1))
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {
+            "Body": Body(b"x" * (1024 * 1024 + 1)),
+            "ContentLength": 1024 * 1024 + 1,
+        }
+        with env as client:
+            resp = client.get(shard_url(), headers=AUTH)
+
+        assert resp.status_code == 200
+        assert "Range" not in env.s3.get_object.call_args.kwargs
+
+    def test_range_over_the_cap_is_refused(self, tmp_path):
+        env = Env(tmp_path, bioimage=BioimageConfig(remote_max_object_mb=1))
+        body = Body(b"")
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {"Body": body, "ContentLength": 2 * 1024 * 1024}
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-"})
+
+        assert resp.status_code == 413
+        assert body.closed
+
+    def test_s3_miss_falls_back_to_disk_by_range(self, tmp_path):
+        env = Env(tmp_path)
+        env.register(make_v3_store(tmp_path))
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-3"})
+
+        assert resp.status_code == 206
+        assert resp.content == SHARD_BYTES[:4]
+
+    def test_ranged_miss_is_404_and_outage_is_502(self, tmp_path):
+        with Env(tmp_path) as client:
+            missing = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-3"})
+        env = Env(tmp_path)
+        env.s3.get_object.side_effect = ClientError(
+            {"Error": {"Code": "SlowDown", "Message": "busy"}}, "GetObject"
+        )
+        with env as client:
+            outage = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-3"})
+
+        assert missing.status_code == 404
+        assert outage.status_code == 502
+
+    def test_s3_invalid_range_is_416(self, tmp_path):
+        env = Env(tmp_path)
+        env.s3.get_object.side_effect = ClientError(
+            {"Error": {"Code": "InvalidRange", "Message": "nope"}}, "GetObject"
+        )
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=5000-"})
+
+        assert resp.status_code == 416
+
+
+class TestZarrV3Remote:
+    URL = f"https://{HOST}/idr/{V3_STORE}"
+
+    def test_https_range_is_forwarded(self, tmp_path):
+        def serve(req):
+            assert req.headers["range"] == "bytes=-16"
+            return httpx.Response(
+                206, content=SHARD_BYTES[-16:], headers={"Content-Range": "bytes 496-511/512"}
+            )
+
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [self.URL]},
+            bioimage=ALLOW_HTTPS,
+            http_handler=serve,
+        )
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=-16"})
+
+        assert resp.status_code == 206
+        assert resp.content == SHARD_BYTES[-16:]
+        assert resp.headers["content-range"] == "bytes 496-511/512"
+        assert str(env.http_requests[0].url) == f"{self.URL}/{SHARD_KEY}"
+
+    def test_https_range_ignored_upstream_is_sliced_here(self, tmp_path):
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [self.URL]},
+            bioimage=ALLOW_HTTPS,
+            http_handler=lambda req: httpx.Response(200, content=SHARD_BYTES),
+        )
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=16-31"})
+
+        assert resp.status_code == 206
+        assert resp.content == SHARD_BYTES[16:32]
+        assert resp.headers["content-range"] == "bytes 16-31/512"
+
+    def test_https_ranged_miss_is_404_and_zarr_json_is_metadata(self, tmp_path):
+        def serve(req):
+            if req.url.path.endswith("zarr.json"):
+                return httpx.Response(200, content=b'{"zarr_format": 3}')
+            return httpx.Response(404)
+
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [self.URL]},
+            bioimage=ALLOW_HTTPS,
+            http_handler=serve,
+        )
+        with env as client:
+            meta = client.get(shard_url("zarr.json"), headers=AUTH)
+            missing = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-3"})
+
+        assert meta.headers["content-type"] == "application/json"
+        assert meta.headers["cache-control"] == "no-cache"
+        assert missing.status_code == 404
+
+    def test_remote_s3_range_is_forwarded(self, tmp_path):
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [f"s3://shared-images/project/{V3_STORE}"]},
+            bioimage=BioimageConfig(remote_s3_buckets=["shared-images"]),
+        )
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {
+            "Body": Body(SHARD_BYTES[:4]),
+            "ContentLength": 4,
+            "ContentRange": "bytes 0-3/512",
+        }
+        with env as client:
+            resp = client.get(shard_url(), headers={**AUTH, "Range": "bytes=0-3"})
+
+        assert resp.status_code == 206
+        kwargs = env.s3.get_object.call_args.kwargs
+        assert kwargs["Key"] == f"project/{V3_STORE}/{SHARD_KEY}"
+        assert kwargs["Range"] == "bytes=0-3"

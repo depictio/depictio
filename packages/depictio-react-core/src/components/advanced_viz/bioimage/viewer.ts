@@ -1,5 +1,6 @@
-// Pyramidal bioimage viewer behind a strict interface: OME-Zarr (NGFF 0.4,
-// which is also how a SpatialData image is served) and OME-TIFF.
+// Pyramidal bioimage viewer behind a strict interface: OME-Zarr (NGFF 0.4 on
+// zarr v2, or NGFF 0.5 on zarr v3, sharded or not; also how a SpatialData
+// image is served) and OME-TIFF.
 //
 // Dynamically imported by BioimageViewerRenderer (deck.gl + viv are heavy and
 // WebGL-only), so the main viewer bundle and cold start are untouched. deck
@@ -24,6 +25,7 @@ import type { BioimageSource, BioimageTiffSource, BioimageZarrStore } from '../.
 import {
   axisSizes,
   hexToRgb,
+  ngffRootAttrs,
   physicalPixelSize,
   renderedChannels,
   resolveChannels,
@@ -139,14 +141,12 @@ interface OpenedImage {
 
 async function openOmeZarr(store: BioimageZarrStore): Promise<OpenedImage> {
   const loaded = await loadOmeZarrFromStore(store as never);
-  const rootAttrs = loaded.metadata as unknown as {
-    omero?: OpenedImage['omero'];
-    multiscales?: never[];
-  };
+  // NGFF 0.4 (`.zattrs`) or 0.5 (`zarr.json`, attributes under `ome`).
+  const rootAttrs = ngffRootAttrs(loaded.metadata);
   return {
     pyramid: loaded.data as unknown as PixelSource[],
     omero: rootAttrs.omero ?? null,
-    physicalSize: physicalPixelSize(rootAttrs as never),
+    physicalSize: physicalPixelSize(rootAttrs),
   };
 }
 

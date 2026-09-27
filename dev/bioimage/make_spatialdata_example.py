@@ -20,11 +20,13 @@ The store holds:
 * ``tables/table``: an AnnData annotating ``spots`` (synthetic counts of four
   genes, a cluster, the number of nuclei under each spot).
 
-Everything is written in the SpatialData 0.1 on-disk formats: zarr v2 and an
-NGFF 0.4 image under ``images/he``. spatialdata 0.8 writes zarr v3 / NGFF 0.5
-by default, which Depictio does not read yet, so the formats are passed
-explicitly. The spot table is also exported to ``<store>_spots.csv``: that is
-what Depictio reads, the AnnData stays in the store for SpatialData users.
+Everything is written in spatialdata's default on-disk formats: zarr v3 (a
+``zarr.json`` per node) with the image under ``images/he`` as NGFF 0.5 (its
+metadata under ``attributes.ome``). spatialdata 0.8 records the image's NGFF
+version as ``0.5-dev-spatialdata``, not ``0.5``: its coordinate systems go
+beyond the 0.5 specification. The spot table is also exported to
+``<store>_spots.csv``: that is what Depictio reads, the AnnData stays in the
+store for SpatialData users.
 """
 
 from __future__ import annotations
@@ -33,7 +35,6 @@ import argparse
 import json
 import shutil
 import sys
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -55,7 +56,6 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
     import geopandas as gpd
     import pandas as pd
     import spatialdata as sd
-    import spatialdata._io.format as sdf
     import zarr
     from shapely.geometry import Point
     from skimage import color, data, feature, filters
@@ -181,21 +181,13 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
     store = out / f"{STORE}.zarr"
     if store.exists():
         shutil.rmtree(store)
-    sdata.write(
-        store,
-        consolidate_metadata=False,
-        sdata_formats=[
-            sdf.SpatialDataContainerFormatV01(),
-            sdf.RasterFormatV01(),
-            sdf.PointsFormatV01(),
-            sdf.ShapesFormatV02(),
-            sdf.TablesFormatV01(),
-        ],
-    )
+    sdata.write(store, consolidate_metadata=False)
     # spatialdata writes channel labels only. Colours and contrast windows are
-    # standard NGFF 0.4 `omero` fields a viewer reads to draw RGB as RGB.
+    # standard NGFF `omero` fields a viewer reads to draw RGB as RGB; in NGFF
+    # 0.5 they sit next to `multiscales`, under the group's `ome` attributes.
     group = zarr.open_group(store / "images" / IMAGE, mode="r+")
-    group.attrs["omero"] = {
+    ome = dict(group.attrs["ome"])
+    ome["omero"] = {
         "channels": [
             {
                 "active": True,
@@ -210,11 +202,12 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
         ],
         "rdefs": {"model": "color"},
     }
+    group.attrs["ome"] = ome
     sdata.write_consolidated_metadata()
     # zarr writes its JSON metadata without a final newline, which the repo's
     # end-of-file-fixer hook would add on commit; adding it here keeps a
     # regenerated store identical to the committed one.
-    for meta in store.rglob(".z*"):
+    for meta in store.rglob("zarr.json"):
         text = meta.read_text()
         if not text.endswith("\n"):
             meta.write_text(text + "\n")
@@ -252,6 +245,7 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
     return {
         "store": f"{STORE}.zarr",
         "image_path": f"images/{IMAGE}",
+        "ngff_version": ome["version"],
         "bytes": size,
         "rows": len(arr),
         "nuclei": len(nuclei_xy),
@@ -261,20 +255,26 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
 
 
 def _check_store(store: Path, levels: int) -> None:
-    """Zarr v2 + NGFF 0.4 under images/he, and readable back by spatialdata."""
+    """Zarr v3 + NGFF 0.5 under images/he, and readable back by spatialdata."""
     import spatialdata as sd
 
-    if any(store.rglob("zarr.json")):
-        raise RuntimeError(f"{store}: zarr v3 metadata written (zarr.json)")
-    attrs = json.loads((store / "images" / IMAGE / ".zattrs").read_text())
-    ms = attrs["multiscales"][0]
-    if ms["version"] != "0.4" or len(ms["datasets"]) != levels:
-        raise RuntimeError(f"{store}: expected NGFF 0.4 with {levels} levels, got {ms}")
-    with warnings.catch_warnings():
-        # Reading a 0.1-format store warns that it is not the current format:
-        # that is the point here.
-        warnings.filterwarnings("ignore", message="SpatialData is not stored in the most current")
-        back = sd.read_zarr(store)
+    v2 = [
+        p for p in store.rglob(".z*") if p.name in {".zattrs", ".zgroup", ".zarray", ".zmetadata"}
+    ]
+    if v2:
+        raise RuntimeError(f"{store}: zarr v2 metadata written ({v2[0].name})")
+    meta = json.loads((store / "images" / IMAGE / "zarr.json").read_text())
+    ome = meta["attributes"]["ome"]
+    datasets = ome["multiscales"][0]["datasets"]
+    if meta["zarr_format"] != 3 or not ome["version"].startswith("0.5"):
+        raise RuntimeError(f"{store}: expected zarr v3 / NGFF 0.5, got {ome['version']!r}")
+    if len(datasets) != levels or "omero" not in ome:
+        raise RuntimeError(f"{store}: expected {levels} levels and an omero block, got {ome}")
+    for ds in datasets:
+        array = json.loads((store / "images" / IMAGE / ds["path"] / "zarr.json").read_text())
+        if array["zarr_format"] != 3 or array["node_type"] != "array":
+            raise RuntimeError(f"{store}: images/{IMAGE}/{ds['path']} is not a zarr v3 array")
+    back = sd.read_zarr(store)
     if set(back.images) != {IMAGE} or "spots" not in back.shapes or "table" not in back.tables:
         raise RuntimeError(f"{store}: unexpected elements after read-back: {back}")
 

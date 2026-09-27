@@ -38,6 +38,7 @@ from depictio.cli.cli.utils.scan import (
     process_files,
     scan_project_files,
     scan_run_for_multiple_data_collections,
+    zarr_store_stats,
 )
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.data_collections import DataCollection
@@ -132,6 +133,81 @@ def make_spatialdata(parent: Path, name: str, images: tuple[str, ...] = ("img",)
     table.mkdir(parents=True)
     (table / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
     (table / "X").write_bytes(b"\x00" * 8)
+    return root
+
+
+SHARDED_CODECS = [
+    {
+        "name": "sharding_indexed",
+        "configuration": {
+            "chunk_shape": [1, 2, 2],
+            "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}],
+            "index_codecs": [{"name": "bytes", "configuration": {"endian": "little"}}],
+            "index_location": "end",
+        },
+    }
+]
+
+
+def make_store_v3(
+    parent: Path, name: str, ome: dict | None = None, levels: tuple[str, ...] = ("0", "1")
+) -> Path:
+    """Minimal NGFF 0.5 layout: a zarr v3 group and one sharded array per level.
+
+    Shards are fake bytes: the CLI never decodes chunks.
+    """
+    store = parent / name
+    store.mkdir(parents=True)
+    if ome is None:
+        ome = {
+            "version": "0.5",
+            "multiscales": [
+                {
+                    "axes": [{"name": "c", "type": "channel"}, {"name": "y"}, {"name": "x"}],
+                    "datasets": [{"path": level} for level in levels],
+                }
+            ],
+        }
+    group = {"zarr_format": 3, "node_type": "group", "attributes": {"ome": ome}}
+    (store / "zarr.json").write_text(json.dumps(group))
+    for level in levels:
+        (store / level / "c" / "0" / "0").mkdir(parents=True)
+        array = {
+            "zarr_format": 3,
+            "node_type": "array",
+            "shape": [1, 4, 4],
+            "data_type": "uint8",
+            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [1, 4, 4]}},
+            "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+            "fill_value": 0,
+            "codecs": SHARDED_CODECS,
+        }
+        (store / level / "zarr.json").write_text(json.dumps(array))
+        (store / level / "c" / "0" / "0" / "0").write_bytes(b"\x07" * 48)
+    return store
+
+
+def make_spatialdata_v3(parent: Path, name: str, image: str = "img") -> Path:
+    """A SpatialData root in zarr v3 (spatialdata >= 0.5 defaults) with an NGFF 0.5 image."""
+    root = parent / name
+    root.mkdir(parents=True)
+    (root / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {"spatialdata_attrs": {"version": "0.2"}},
+            }
+        )
+    )
+    (root / "images").mkdir()
+    (root / "images" / "zarr.json").write_text(
+        json.dumps({"zarr_format": 3, "node_type": "group", "attributes": {}})
+    )
+    make_store_v3(root / "images", image)
+    table = root / "tables" / "table"
+    table.mkdir(parents=True)
+    (table / "zarr.json").write_text(json.dumps({"zarr_format": 3, "node_type": "group"}))
     return root
 
 
@@ -712,17 +788,144 @@ def fake_s3(monkeypatch) -> FakeS3:
     return s3
 
 
+V3_KEYS = (
+    "zarr.json",
+    "0/zarr.json",
+    "0/c/0/0/0",
+    "1/zarr.json",
+    "1/c/0/0/0",
+)
+
+
 class TestZarrV3:
-    def test_ome_zarr_v3_is_a_clear_error(self, tmp_path, monkeypatch, cli_config, fake_s3):
-        store = tmp_path / "sample_A.zarr"
-        store.mkdir()
-        (store / "zarr.json").write_text(json.dumps({"zarr_format": 3, "node_type": "group"}))
+    def test_sharded_ngff_05_store_is_uploaded_whole(
+        self, tmp_path, monkeypatch, cli_config, fake_s3
+    ):
+        _registered(monkeypatch, make_store_v3(tmp_path, "sample_A.zarr"))
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success"
+        assert sorted(k for k in fake_s3.objects if k != MARKER_A) == sorted(
+            PREFIX_A + rel for rel in V3_KEYS
+        )
+        assert fake_s3.objects[PREFIX_A + "0/c/0/0/0"] == b"\x07" * 48
+
+    def test_v2_and_v3_stores_mix_when_no_version_is_pinned(
+        self, tmp_path, monkeypatch, cli_config, fake_s3
+    ):
+        _registered(
+            monkeypatch, make_store(tmp_path, "v2.zarr"), make_store_v3(tmp_path, "v3.zarr")
+        )
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success"
+
+    @pytest.mark.parametrize(
+        ("maker", "pinned", "found"),
+        [(make_store_v3, "0.4", "NGFF 0.5"), (make_store, "0.5", "NGFF 0.4")],
+    )
+    def test_pinned_ngff_version_rejects_the_other(
+        self, tmp_path, monkeypatch, cli_config, fake_s3, maker, pinned, found
+    ):
+        _registered(monkeypatch, maker(tmp_path, "sample_A.zarr"))
+
+        result = process_bioimage_data_collection(
+            _ingest_dc(ngff_version=pinned),  # type: ignore[arg-type]
+            cli_config,
+        )
+
+        assert result["result"] == "error"
+        assert found in result["message"]
+        assert f"requires ngff_version {pinned}" in result["message"]
+        assert fake_s3.uploaded == []
+
+    @pytest.mark.parametrize(("maker", "pinned"), [(make_store_v3, "0.5"), (make_store, "0.4")])
+    def test_pinned_ngff_version_accepts_its_own(self, tmp_path, maker, pinned):
+        store = maker(tmp_path, "sample_A.zarr")
+        assert deltatables.validate_ome_zarr_store(str(store), pinned) == pinned
+
+    @pytest.mark.parametrize(
+        ("mutate", "expected"),
+        [
+            (
+                lambda s: (s / "zarr.json").write_text(
+                    json.dumps({"zarr_format": 3, "node_type": "group", "attributes": MULTISCALES})
+                ),
+                "no 'attributes.ome' entry",
+            ),
+            (
+                lambda s: (s / "zarr.json").write_text(
+                    json.dumps(
+                        {
+                            "zarr_format": 3,
+                            "node_type": "group",
+                            "attributes": {"ome": {"version": "0.5", "plate": {}}},
+                        }
+                    )
+                ),
+                "no 'multiscales' entry",
+            ),
+            (
+                lambda s: (s / "zarr.json").write_text(
+                    json.dumps({"zarr_format": 3, "node_type": "array"})
+                ),
+                "not a zarr v3 group",
+            ),
+            (lambda s: (s / "1" / "zarr.json").unlink(), "no array at dataset path '1'"),
+            (
+                lambda s: (s / "1" / "zarr.json").write_text(
+                    json.dumps({"zarr_format": 3, "node_type": "group"})
+                ),
+                "is not a zarr v3 array",
+            ),
+            (lambda s: (s / "zarr.json").write_text("{not json"), "is not valid JSON"),
+            (lambda s: (s / "zarr.json").unlink(), "no root .zattrs (NGFF 0.4) or zarr.json"),
+        ],
+    )
+    def test_invalid_v3_stores_are_clear_errors(
+        self, tmp_path, monkeypatch, cli_config, fake_s3, mutate, expected
+    ):
+        store = make_store_v3(tmp_path, "sample_A.zarr")
+        mutate(store)
         _registered(monkeypatch, store)
 
         result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
 
         assert result["result"] == "error"
-        assert "NGFF 0.5 / zarr v3 is not supported yet" in result["message"]
+        assert expected in result["message"]
+        assert fake_s3.uploaded == []
+
+    def test_dataset_path_cannot_escape_the_store(self, tmp_path):
+        store = make_store_v3(
+            tmp_path,
+            "sample_A.zarr",
+            ome={"multiscales": [{"datasets": [{"path": "../other"}]}]},
+            levels=(),
+        )
+        with pytest.raises(ValueError, match="invalid dataset path"):
+            deltatables.validate_ome_zarr_store(str(store))
+
+    def test_hash_follows_zarr_json_content(self, tmp_path):
+        store = make_store_v3(tmp_path, "sample_A.zarr")
+        before = zarr_store_hash(str(store))
+        meta = json.loads((store / "zarr.json").read_text())
+        meta["attributes"]["ome"]["multiscales"][0]["name"] = "renamed"
+        text = json.dumps(meta)
+        (store / "zarr.json").write_text(text)
+
+        assert zarr_store_stats(str(store))[2] == text.encode()
+        assert zarr_store_hash(str(store)) != before
+
+    def test_rewritten_shard_reuploads(self, tmp_path):
+        store = make_store_v3(tmp_path, "sample_A.zarr")
+        s3 = FakeS3()
+        assert upload_zarr_store(s3, BUCKET, DC_ID, str(store), workers=2) == len(V3_KEYS)
+        (store / "0" / "c" / "0" / "0" / "0").write_bytes(b"\x08" * 96)
+
+        assert upload_zarr_store(s3, BUCKET, DC_ID, str(store), workers=2) == len(V3_KEYS)
+        assert s3.objects[PREFIX_A + "0/c/0/0/0"] == b"\x08" * 96
 
 
 class TestSpatialData:
@@ -775,14 +978,6 @@ class TestSpatialData:
                 lambda root: (root / ".zattrs").unlink() or (root / ".zgroup").unlink(),
                 "not a SpatialData store",
             ),
-            (
-                lambda root: (
-                    (root / ".zattrs").unlink()
-                    or (root / ".zgroup").unlink()
-                    or (root / "zarr.json").write_text("{}")
-                ),
-                "NGFF 0.5 / zarr v3 is not supported yet",
-            ),
         ],
     )
     def test_invalid_stores_are_clear_errors(
@@ -810,6 +1005,40 @@ class TestSpatialData:
 
         assert result["result"] == "error"
         assert "multiscales" in result["message"]
+
+
+class TestSpatialDataV3:
+    def _dc(self, **kw) -> SimpleNamespace:
+        return _ingest_dc(format="spatialdata", image_path="images/img", **kw)
+
+    def test_v3_root_uploads_only_the_image_subtree(
+        self, tmp_path, monkeypatch, cli_config, fake_s3
+    ):
+        _registered(monkeypatch, make_spatialdata_v3(tmp_path, "slide.zarr"))
+
+        result = process_bioimage_data_collection(self._dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success"
+        assert sorted(k for k in fake_s3.objects if k != SD_MARKER) == sorted(
+            SD_PREFIX + rel for rel in V3_KEYS
+        )
+
+    def test_pinned_version_is_checked_on_the_image(
+        self, tmp_path, monkeypatch, cli_config, fake_s3
+    ):
+        _registered(monkeypatch, make_spatialdata_v3(tmp_path, "slide.zarr"))
+
+        result = process_bioimage_data_collection(self._dc(ngff_version="0.4"), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "error"
+        assert "requires ngff_version 0.4" in result["message"]
+        assert fake_s3.uploaded == []
+
+    def test_v2_root_with_v3_image_is_accepted(self, tmp_path):
+        root = make_spatialdata(tmp_path, "slide.zarr", images=())
+        make_store_v3(root / "images", "img")
+
+        assert deltatables.validate_spatialdata_store(str(root), "images/img") == "0.5"
 
 
 class TestOmeTiffValidation:

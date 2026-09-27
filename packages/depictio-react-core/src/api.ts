@@ -1503,8 +1503,8 @@ export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreIn
   return res.json();
 }
 
-/** Root URL of one store. Zarr keys (`.zattrs`, `0/.zarray`, `0/0.0.0.0.0`)
- *  resolve under it; a single-file store (OME-TIFF) is the file itself. No
+/** Root URL of one store. Zarr keys (`.zattrs` or `zarr.json`, `0/.zarray`,
+ *  chunks and shards) resolve under it; a single-file store (OME-TIFF) is the file itself. No
  *  trailing slash. */
 export function bioimageStoreUrl(dcId: string, store: string): string {
   return `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}`;
@@ -1522,11 +1522,36 @@ export class BioimageHttpError extends Error {
   }
 }
 
+/** A byte range of one key, as zarrita's `RangeQuery` spells it: `length`
+ *  bytes from `offset`, or the last `suffixLength` bytes. */
+export type BioimageRangeQuery = { offset: number; length: number } | { suffixLength: number };
+
 /** The subset of zarrita's `AsyncReadable` store interface the OME-Zarr
  *  loader calls: `get` resolves a key to its bytes, or `undefined` when the key
- *  does not exist (a sparse chunk, an absent `.zattrs`). */
+ *  does not exist (a sparse chunk, an absent `.zattrs` or `zarr.json`). `getRange` reads part
+ *  of a key: zarr v3 sharded arrays fetch a shard's index (a suffix) and then
+ *  each inner chunk (an offset and length) this way. */
 export interface BioimageZarrStore {
   get(key: string, opts?: { signal?: AbortSignal }): Promise<Uint8Array | undefined>;
+  getRange(
+    key: string,
+    range: BioimageRangeQuery,
+    opts?: { signal?: AbortSignal },
+  ): Promise<Uint8Array | undefined>;
+}
+
+/** The `Range` header value for one range query: `bytes=<first>-<last>`
+ *  (inclusive) or the suffix form `bytes=-<n>`. */
+export function bioimageRangeHeader(range: BioimageRangeQuery): string {
+  if ('suffixLength' in range) return `bytes=-${range.suffixLength}`;
+  return `bytes=${range.offset}-${range.offset + range.length - 1}`;
+}
+
+/** The requested slice of a full body, for a server that answered a range
+ *  request with a plain 200 (HTTP lets it ignore `Range`). */
+function sliceRange(body: Uint8Array, range: BioimageRangeQuery): Uint8Array {
+  if ('suffixLength' in range) return body.subarray(Math.max(0, body.length - range.suffixLength));
+  return body.subarray(range.offset, range.offset + range.length);
 }
 
 /**
@@ -1539,16 +1564,40 @@ export interface BioimageZarrStore {
  *
  * A 404 is a missing key, which zarr readers treat as a fill-value chunk, so
  * it resolves to `undefined`; any other failure throws a `BioimageHttpError`.
+ * A ranged read sends one `Range` header (see `bioimageRangeHeader`) and takes
+ * the 206 body; a 200 (a server that ignored the header) is sliced here.
  */
 export function createBioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
   const root = bioimageStoreUrl(dcId, store);
+  const read = async (
+    key: string,
+    init: RequestInit,
+  ): Promise<{ res: Response; path: string } | undefined> => {
+    const path = key.startsWith('/') ? key : `/${key}`;
+    const res = await authFetch(`${root}${path}`, init);
+    if (res.status === 404) return undefined;
+    if (!res.ok) throw new BioimageHttpError(`OME-Zarr ${store}${path}: ${res.status}`, res.status);
+    return { res, path };
+  };
   return {
     async get(key, opts) {
-      const path = key.startsWith('/') ? key : `/${key}`;
-      const res = await authFetch(`${root}${path}`, { signal: opts?.signal });
-      if (res.status === 404) return undefined;
-      if (!res.ok) throw new BioimageHttpError(`OME-Zarr ${store}${path}: ${res.status}`, res.status);
-      return new Uint8Array(await res.arrayBuffer());
+      const hit = await read(key, { signal: opts?.signal });
+      return hit && new Uint8Array(await hit.res.arrayBuffer());
+    },
+    async getRange(key, range, opts) {
+      if ('length' in range && range.length <= 0) return new Uint8Array(0);
+      const hit = await read(key, {
+        signal: opts?.signal,
+        headers: { Range: bioimageRangeHeader(range) },
+      });
+      if (!hit) return undefined;
+      const body = new Uint8Array(await hit.res.arrayBuffer());
+      if (hit.res.status === 206) return body;
+      if (hit.res.status === 200) return sliceRange(body, range);
+      throw new BioimageHttpError(
+        `OME-Zarr ${store}${hit.path} (range): ${hit.res.status}`,
+        hit.res.status,
+      );
     },
   };
 }

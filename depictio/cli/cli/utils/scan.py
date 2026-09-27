@@ -179,7 +179,11 @@ def iter_zarr_stores(path: str) -> list[str]:
 
 
 def zarr_store_stats(store_path: str) -> tuple[int, float, bytes]:
-    """Total byte size, newest mtime and root ``.zattrs`` content of a store."""
+    """Total byte size, newest mtime and root metadata of a store.
+
+    The root metadata is ``.zattrs`` (NGFF 0.4 / zarr v2) or ``zarr.json``
+    (NGFF 0.5 / zarr v3), empty when the store has neither.
+    """
     total_size = 0
     max_mtime = os.path.getmtime(store_path)
     for root, _, files in os.walk(store_path):
@@ -187,24 +191,25 @@ def zarr_store_stats(store_path: str) -> tuple[int, float, bytes]:
             st = os.stat(os.path.join(root, name))
             total_size += st.st_size
             max_mtime = max(max_mtime, st.st_mtime)
-    zattrs_path = os.path.join(store_path, ".zattrs")
-    zattrs = b""
-    if os.path.isfile(zattrs_path):
-        with open(zattrs_path, "rb") as fh:
-            zattrs = fh.read()
-    return total_size, max_mtime, zattrs
+    for meta_name in (".zattrs", "zarr.json"):
+        meta_path = os.path.join(store_path, meta_name)
+        if os.path.isfile(meta_path):
+            with open(meta_path, "rb") as fh:
+                return total_size, max_mtime, fh.read()
+    return total_size, max_mtime, b""
 
 
 def generate_zarr_store_hash(
-    store_name: str, total_size: int, max_mtime_iso: str, zattrs: bytes
+    store_name: str, total_size: int, max_mtime_iso: str, root_meta: bytes
 ) -> str:
-    """Change-detection hash of a store: name, ``.zattrs``, total size and newest mtime.
+    """Change-detection hash of a store: name, root metadata (``.zattrs`` or
+    ``zarr.json``), total size and newest mtime.
 
-    Walking the store once is enough to notice a rewritten chunk (size or mtime
-    moves) or edited metadata, without hashing gigabytes of pixel data.
+    Walking the store once is enough to notice a rewritten chunk or shard (size
+    or mtime moves) or edited metadata, without hashing gigabytes of pixel data.
     """
     digest = hashlib.sha256(f"{store_name}{total_size}{max_mtime_iso}".encode())
-    digest.update(zattrs)
+    digest.update(root_meta)
     return digest.hexdigest()
 
 
@@ -269,12 +274,12 @@ def scan_single_file(
     creation_time_iso = format_timestamp(os.path.getctime(file_location))
     if is_zarr_store_dir(file_location):
         # An OME-Zarr store is one File: size and mtime aggregate its whole tree.
-        filesize, modification_time_float, zattrs = zarr_store_stats(file_location)
+        filesize, modification_time_float, root_meta = zarr_store_stats(file_location)
         if filesize == 0:
             logger.warning(f"Skipping empty OME-Zarr store {file_location}")
             return None
         modification_time_iso = format_timestamp(modification_time_float)
-        file_hash = generate_zarr_store_hash(file_name, filesize, modification_time_iso, zattrs)
+        file_hash = generate_zarr_store_hash(file_name, filesize, modification_time_iso, root_meta)
     else:
         modification_time_iso = format_timestamp(os.path.getmtime(file_location))
         filesize = os.path.getsize(file_location)

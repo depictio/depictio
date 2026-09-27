@@ -809,11 +809,13 @@ class BioimageChannel(BaseModel):
 
 
 class BioimageViewerConfig(_BaseVizConfig):
-    """Multiscale OME-Zarr image (NGFF 0.4) with an optional cell-points overlay.
+    """Multiscale image (OME-Zarr NGFF 0.4/0.5, OME-TIFF, SpatialData) with an
+    optional cell-points overlay.
 
-    The pixels come from a *separate* DC with ``type: "bioimage"`` (format
-    ``ome-zarr``) holding one or more ``.zarr`` stores, served key by key through
-    ``/advanced_viz/bioimage/{dc_id}/{store}/{key}``. The image has no tabular
+    The pixels come from a *separate* DC with ``type: "bioimage"`` holding one
+    or more stores: ``.zarr`` key trees served key by key through
+    ``/advanced_viz/bioimage/{dc_id}/{store}/{key}``, or ``.ome.tif`` files
+    read with Range through ``/advanced_viz/bioimage/{dc_id}/{store}``. The image has no tabular
     payload, so the CANONICAL_SCHEMAS entry is empty.
 
     Two optional table DCs plug into it. A *sample* DC lets an upstream filter

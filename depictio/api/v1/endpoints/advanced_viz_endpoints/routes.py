@@ -1675,8 +1675,8 @@ def get_phylogeny_newick(
 # ---------------------------------------------------------------------------
 #
 # A zarr reader in the browser fetches one small object per request (``.zattrs``,
-# ``.zarray``, then many chunks), and an OME-TIFF reader one byte range per tile,
-# so both the access check and the per-DC store lookup are cached briefly
+# ``.zarray`` or a v3 ``zarr.json``, then many chunks, or byte ranges of a v3
+# shard), and an OME-TIFF reader one byte range per tile, so both the access check and the per-DC store lookup are cached briefly
 # instead of hitting Mongo on every read.
 #
 # Where a store is read from (see ``data_collections_types.bioimage``):
@@ -1690,7 +1690,8 @@ def get_phylogeny_newick(
 _BIOIMAGE_CACHE_TTL_S = 60.0
 _BIOIMAGE_CACHE_MAX = 2048
 _BIOIMAGE_FORMATS = ("ome-zarr", "ome-tiff", "spatialdata")
-_ZARR_JSON_KEYS = frozenset({".zattrs", ".zgroup", ".zarray", ".zmetadata"})
+# zarr v2 (NGFF 0.4) and v3 (NGFF 0.5) metadata documents.
+_ZARR_JSON_KEYS = frozenset({".zattrs", ".zgroup", ".zarray", ".zmetadata", "zarr.json"})
 # Metadata is revalidated on every read (a re-upload may change it); chunks are
 # addressed by the metadata that lists them, so they cache for an hour.
 _ZARR_JSON_HEADERS = {"Cache-Control": "no-cache"}
@@ -1736,7 +1737,8 @@ def _normalize_zarr_key(key: str) -> str | None:
 
     Same checks as ``files_endpoints._validate_image_path`` (raw ``..`` / leading
     slash rejected, then re-asserted on the ``posixpath.normpath`` form) minus
-    the image-extension filter: zarr keys are ``.zattrs`` or bare chunk names.
+    the image-extension filter: zarr keys are ``.zattrs`` / ``zarr.json`` or
+    bare chunk and shard names.
     """
     import posixpath
 
@@ -2017,8 +2019,14 @@ def _range_not_satisfiable(size: int | None = None) -> HTTPException:
     return HTTPException(status_code=416, detail="Requested range not satisfiable", headers=headers)
 
 
-def _bioimage_s3_read(bucket: str, key: str, byte_range: str | None = None) -> _Blob:
-    """One object (or byte range of it), whole-read and capped at the relay limit."""
+def _bioimage_s3_read(
+    bucket: str, key: str, byte_range: str | None = None, *, capped: bool = True
+) -> _Blob:
+    """One object (or byte range of it), whole-read and capped at the relay limit.
+
+    ``capped=False`` lifts the cap for a whole read of the DC's own upload (a
+    zarr chunk, read as before); a ranged read is always capped by its span.
+    """
     from botocore.exceptions import ClientError
 
     kwargs: dict[str, Any] = {"Bucket": bucket, "Key": key}
@@ -2037,9 +2045,10 @@ def _bioimage_s3_read(bucket: str, key: str, byte_range: str | None = None) -> _
         raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
 
     body = obj["Body"]
+    capped = capped or bool(byte_range)
     try:
         length = obj.get("ContentLength")
-        if isinstance(length, int) and length > _bioimage_max_bytes():
+        if capped and isinstance(length, int) and length > _bioimage_max_bytes():
             raise _bioimage_too_large()
         # Read whole: a mid-read failure is then a 502, not a truncated 200.
         content = body.read()
@@ -2049,7 +2058,7 @@ def _bioimage_s3_read(bucket: str, key: str, byte_range: str | None = None) -> _
         raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
     finally:
         body.close()
-    if len(content) > _bioimage_max_bytes():
+    if capped and len(content) > _bioimage_max_bytes():
         raise _bioimage_too_large()
     return _Blob(content, obj.get("ContentRange") if byte_range else None)
 
@@ -2175,7 +2184,7 @@ def _bioimage_remote_size(url: str) -> int:
     return _bioimage_https_size(target.url)
 
 
-# ---- Byte ranges (single-file stores) --------------------------------------
+# ---- Byte ranges (OME-TIFF files, zarr v3 shards) --------------------------
 
 _ByteRange = tuple[int | None, int | None]
 
@@ -2185,7 +2194,8 @@ def _parse_byte_range(header: str | None) -> _ByteRange | None:
 
     ``(start, end)``, ``(start, None)`` for ``a-`` and ``(None, n)`` for the
     suffix ``-n``. A header in another unit is ignored (RFC 9110 allows it).
-    Several ranges, or a malformed one, are a 416: viv only ever asks for one.
+    Several ranges, or a malformed one, are a 416: viv (OME-TIFF) and zarrita
+    (zarr v3 shards) only ever ask for one.
     """
     import re
 
@@ -2194,7 +2204,8 @@ def _parse_byte_range(header: str | None) -> _ByteRange | None:
     unit, sep, spec = header.strip().partition("=")
     if not sep or unit.strip().lower() != "bytes":
         return None
-    match = re.fullmatch(r"(\d*)-(\d*)", spec.strip())
+    # 19 digits covers any real offset and keeps int() clear of its digit limit.
+    match = re.fullmatch(r"(\d{0,19})-(\d{0,19})", spec.strip())
     if match is None or not (match[1] or match[2]):
         raise _range_not_satisfiable()
     start = int(match[1]) if match[1] else None
@@ -2230,14 +2241,18 @@ def _tiff_head_response(size: int) -> Response:
     return Response(status_code=200, media_type=_TIFF_MEDIA_TYPE, headers=headers)
 
 
-def _tiff_blob_response(blob: _Blob, requested: _ByteRange | None) -> Response:
-    headers = dict(_TIFF_HEADERS)
+def _blob_response(
+    blob: _Blob, requested: _ByteRange | None, media_type: str, headers: dict[str, str]
+) -> Response:
+    """The whole blob (200), or the ``requested`` range of it (206)."""
+    headers = dict(headers)
     if requested is None:
-        return Response(content=blob.content, media_type=_TIFF_MEDIA_TYPE, headers=headers)
+        return Response(content=blob.content, media_type=media_type, headers=headers)
+    headers["Accept-Ranges"] = "bytes"
     if blob.content_range:
         headers["Content-Range"] = blob.content_range
         return Response(
-            content=blob.content, status_code=206, media_type=_TIFF_MEDIA_TYPE, headers=headers
+            content=blob.content, status_code=206, media_type=media_type, headers=headers
         )
     # The upstream ignored the Range and sent the whole object: slice it here.
     size = len(blob.content)
@@ -2246,25 +2261,33 @@ def _tiff_blob_response(blob: _Blob, requested: _ByteRange | None) -> Response:
     return Response(
         content=blob.content[start : end + 1],
         status_code=206,
-        media_type=_TIFF_MEDIA_TYPE,
+        media_type=media_type,
         headers=headers,
     )
 
 
-def _tiff_disk_response(path: str, requested: _ByteRange | None, head: bool) -> Response:
+def _disk_response(
+    path: str,
+    requested: _ByteRange | None,
+    media_type: str,
+    headers: dict[str, str],
+    head: bool = False,
+) -> Response:
     """Stream the file, or one range of it. Not a FileResponse: that would apply
     the request's Range header itself (multi-range included) behind our back."""
     from fastapi.responses import StreamingResponse
 
     size = os.path.getsize(path)
+    headers = dict(headers)
     if head:
-        return _tiff_head_response(size)
-    headers = dict(_TIFF_HEADERS)
+        headers["Content-Length"] = str(size)
+        return Response(status_code=200, media_type=media_type, headers=headers)
     if requested is None:
         start, end, status = 0, size - 1, 200
     else:
         start, end = _resolve_byte_range(requested, size)
         status = 206
+        headers["Accept-Ranges"] = "bytes"
         headers["Content-Range"] = f"bytes {start}-{end}/{size}"
     length = end - start + 1
     headers["Content-Length"] = str(length)
@@ -2280,9 +2303,7 @@ def _tiff_disk_response(path: str, requested: _ByteRange | None, head: bool) -> 
                 remaining -= len(data)
                 yield data
 
-    return StreamingResponse(
-        chunks(), status_code=status, media_type=_TIFF_MEDIA_TYPE, headers=headers
-    )
+    return StreamingResponse(chunks(), status_code=status, media_type=media_type, headers=headers)
 
 
 # ---- Routes ------------------------------------------------------------------
@@ -2333,9 +2354,17 @@ def get_bioimage_key(
     data_collection_id: str,
     store: str,
     key: str,
+    request: Request,
     current_user=Depends(get_user_or_anonymous),
 ):
-    """Serve one zarr key (metadata JSON or raw chunk bytes) of a key-tree store.
+    """Serve one zarr key (metadata JSON or raw chunk / shard bytes) of a key-tree store.
+
+    Metadata is ``.zattrs`` / ``.zarray`` (zarr v2, NGFF 0.4) or ``zarr.json``
+    (zarr v3, NGFF 0.5). A zarr v3 reader fetches a sharded array by byte
+    range (the shard index, then each chunk), so one ``Range: bytes=a-b`` /
+    ``a-`` / ``-n`` gets a 206 with ``Content-Range``, several ranges or one
+    past the end a 416, exactly as for an OME-TIFF file. Without a Range the
+    key is served whole, as before.
 
     OME-Zarr stores are read as they are; a SpatialData store at its
     ``image_path``. A remote store is proxied from its URL. A local one is read
@@ -2343,12 +2372,11 @@ def get_bioimage_key(
     (skipped for ``upload: false`` DCs; a SpatialData upload holds the image
     subtree only, so no ``image_path`` join), then from the registered store
     directory on disk. A missing key is a 404, which zarr readers treat as an
-    empty chunk, so only a genuine miss may produce one: a storage error with no
-    disk copy is a 502.
+    empty chunk, so only a genuine miss may produce one (ranged or not): a
+    storage error with no disk copy is a 502.
     """
     import posixpath
 
-    from botocore.exceptions import ClientError
     from fastapi.responses import FileResponse
 
     from depictio.api.v1.configs.config import settings
@@ -2378,42 +2406,38 @@ def get_bioimage_key(
     # The key relative to the store root (a SpatialData store's image lives below it).
     rel_key = posixpath.join(image_path, normalized) if image_path else normalized
 
+    range_header = request.headers.get("range")
+    requested = _parse_byte_range(range_header)
+    byte_range = _byte_range_header(requested)
     media_type = _zarr_media_type(normalized)
     headers = _zarr_headers(normalized)
 
     remote_url = info["remote"].get(store)
     if remote_url:
         try:
-            blob = _bioimage_remote_read(remote_url, rel_key)
+            blob = _bioimage_remote_read(remote_url, rel_key, byte_range)
         except _BioimageMiss as exc:
             raise HTTPException(status_code=404, detail="Key not found") from exc
         except _BioimageUpstreamError as exc:
             logger.warning("bioimage remote read failed: %s", exc)
             raise HTTPException(status_code=502, detail="Remote image store unavailable") from exc
-        return Response(content=blob.content, media_type=media_type, headers=headers)
+        return _blob_response(blob, requested, media_type, headers)
 
     s3_failed = False
     if info["upload"]:
         s3_key = bioimage_s3_prefix(str(dc_oid), store) + normalized
         try:
-            # Keys are small (metadata JSON or one chunk), so the body is read
-            # whole: a mid-read S3 failure then maps to 502 instead of a
-            # truncated 200 the reader would decode as garbage.
-            obj = _bioimage_s3_client().get_object(Bucket=settings.s3.bucket, Key=s3_key)
-            body = obj["Body"]
-            try:
-                content = body.read()
-            finally:
-                body.close()
-            return Response(content=content, media_type=media_type, headers=headers)
-        except ClientError as exc:
-            code = str(exc.response.get("Error", {}).get("Code", ""))
-            if code not in _S3_MISS_CODES:
-                s3_failed = True
-                logger.warning("bioimage s3 read failed for %s: %s", s3_key, exc)
-        except Exception as exc:
+            # Read whole (a key, or one range of a shard): a mid-read S3
+            # failure then maps to 502 instead of a truncated 200 the reader
+            # would decode as garbage. A whole key of the DC's own upload is
+            # not capped, as before; a range is capped by its span.
+            blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range, capped=False)
+            return _blob_response(blob, requested, media_type, headers)
+        except _BioimageMiss:
+            pass
+        except _BioimageUpstreamError as exc:
             s3_failed = True
-            logger.warning("bioimage s3 read failed for %s: %s", s3_key, exc)
+            logger.warning("bioimage s3 read failed: %s", exc)
 
     # Disk fallback: only under a registered root, and the resolved path must
     # stay inside it (symlinks included).
@@ -2427,6 +2451,10 @@ def get_bioimage_key(
             if os.path.commonpath([real_root, candidate]) != real_root:
                 continue
             if os.path.isfile(candidate):
+                if range_header:
+                    # Any Range header (even one in another unit, ignored as
+                    # for OME-TIFF): never let FileResponse interpret it.
+                    return _disk_response(candidate, requested, media_type, headers)
                 return FileResponse(candidate, media_type=media_type, headers=headers)
         except (OSError, ValueError):
             continue
@@ -2482,8 +2510,11 @@ def get_bioimage_file(
         try:
             if head:
                 return _tiff_head_response(_bioimage_remote_size(remote_url))
-            return _tiff_blob_response(
-                _bioimage_remote_read(remote_url, None, byte_range), requested
+            return _blob_response(
+                _bioimage_remote_read(remote_url, None, byte_range),
+                requested,
+                _TIFF_MEDIA_TYPE,
+                _TIFF_HEADERS,
             )
         except _BioimageMiss as exc:
             raise HTTPException(status_code=404, detail="Image not found") from exc
@@ -2498,7 +2529,7 @@ def get_bioimage_file(
             if head:
                 return _tiff_head_response(_bioimage_s3_size(settings.s3.bucket, s3_key))
             blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range)
-            return _tiff_blob_response(blob, requested)
+            return _blob_response(blob, requested, _TIFF_MEDIA_TYPE, _TIFF_HEADERS)
         except _BioimageMiss:
             pass
         except _BioimageUpstreamError as exc:
@@ -2510,7 +2541,7 @@ def get_bioimage_file(
         try:
             path = os.path.realpath(root)
             if os.path.isfile(path):
-                return _tiff_disk_response(path, requested, head)
+                return _disk_response(path, requested, _TIFF_MEDIA_TYPE, _TIFF_HEADERS, head)
         except (OSError, ValueError):
             continue
 

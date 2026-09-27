@@ -1196,7 +1196,8 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
     "bioimage_viewer": {
         "label": "Bioimage viewer",
         "description": (
-            "Multiscale microscopy image from a bioimage DC (OME-Zarr / NGFF 0.4) with "
+            "Multiscale microscopy image from a bioimage DC (OME-Zarr NGFF 0.4/0.5, "
+            "OME-TIFF or SpatialData) with "
             "per-channel colour and contrast, and an optional cell-points overlay that "
             "cross-filters by lasso."
         ),
