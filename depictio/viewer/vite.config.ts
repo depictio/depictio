@@ -68,6 +68,15 @@ const HMR_CLIENT_PORT = process.env.VITE_HMR_CLIENT_PORT
   ? Number(process.env.VITE_HMR_CLIENT_PORT)
   : undefined;
 
+// Packages bundled into the async `vendor-viv` chunk. Matched on the
+// `node_modules/<name>/` segment, which pnpm's nested store paths keep.
+// Codecs are deliberately left out: zarrita imports each numcodecs codec (and
+// geotiff its decoders) dynamically, so unlisted they stay separate chunks
+// fetched only for the compression a store actually uses. Listed, all of them
+// (about 1.4 MB of inlined wasm) would ride along with every image.
+const VIV_VENDOR_RE =
+  /[\\/]node_modules[\\/](@deck\.gl|@luma\.gl|@math\.gl|@loaders\.gl|@probe\.gl|@vivjs|@hms-dbmi|@zarrita|zarrita|mjolnir\.js)[\\/]/;
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), authDevFallback()],
@@ -92,6 +101,15 @@ export default defineConfig({
         // `manualChunks` only consolidates each vendor into a single shared
         // chunk instead of duplicating it per lazy renderer.
         manualChunks(id) {
+          // Rollup pulls a manual chunk's unassigned dependencies into it.
+          // zarrita loads its codecs with dynamic imports, so vendor-viv needs
+          // Vite's preload helper, and would otherwise become the helper's
+          // home: every chunk (the entry included) then imports vendor-viv
+          // statically and the whole stack loads at boot. Pinning the helper
+          // to a chunk of its own keeps vendor-viv async.
+          if (id.includes('vite/preload-helper') || id.includes('commonjsHelpers')) {
+            return 'vite-helpers';
+          }
           if (!id.includes('node_modules')) return undefined;
           // `plotly.js` matches the aliased `plotly.js/dist/plotly` too, and
           // react-plotly.js pulls the same instance — keep them together.
@@ -106,6 +124,12 @@ export default defineConfig({
           }
           if (id.includes('@mantine')) {
             return 'vendor-mantine';
+          }
+          // The bioimage viewer stack (deck.gl, luma.gl, viv, zarrita and its
+          // codecs). Only reached through the viewer adapter's dynamic import
+          // in BioimageViewerRenderer, so this stays an async chunk too.
+          if (VIV_VENDOR_RE.test(id)) {
+            return 'vendor-viv';
           }
           return undefined;
         },
@@ -197,6 +221,23 @@ export default defineConfig({
       'ag-grid-react',
       'react-grid-layout',
       'cytoscape',
+      // deck.gl / luma.gl refuse to run with two copies registered, and pnpm
+      // resolves them separately for depictio-react-core and the viewer.
+      '@hms-dbmi/viv',
+      '@deck.gl/core',
+      '@deck.gl/layers',
+      '@deck.gl/geo-layers',
+      '@luma.gl/core',
+      '@luma.gl/engine',
+      '@luma.gl/webgl',
+      '@luma.gl/shadertools',
+      '@luma.gl/constants',
     ],
+  },
+  optimizeDeps: {
+    // Pre-bundled up front: the dev server only discovers them behind the
+    // viewer adapter's dynamic import, and would otherwise re-optimise and
+    // reload the page the first time a bioimage tile mounts.
+    include: ['@hms-dbmi/viv', '@deck.gl/core', '@deck.gl/layers'],
   },
 });

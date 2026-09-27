@@ -2,6 +2,17 @@
   "kinds": [
     {
       "category": "plot",
+      "description": "Multiscale microscopy image from a bioimage DC (OME-Zarr / NGFF 0.4) with per-channel colour and contrast, and an optional cell-points overlay that cross-filters by lasso.",
+      "heavy": true,
+      "icon": "tabler:microscope",
+      "label": "Bioimage viewer",
+      "required_roles": [],
+      "role_names": {},
+      "roles": {},
+      "viz_kind": "bioimage_viewer"
+    },
+    {
+      "category": "plot",
       "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
       "heavy": true,
       "icon": "tabler:grid-pattern",

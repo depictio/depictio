@@ -133,6 +133,18 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
         typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
       return named ?? labelCol;
     }
+    case 'bioimage_viewer': {
+      // The cell id of the points overlay: a lasso over the image catches
+      // cells, and the overlay only exists when its table and coordinates are
+      // bound, so without them there is nothing to select.
+      const hasPoints = [config.points_dc_id, config.x_col, config.y_col].every(
+        (value) => typeof value === 'string' && value !== '',
+      );
+      if (!hasPoints) return undefined;
+      return typeof config.cell_id_col === 'string' && config.cell_id_col
+        ? config.cell_id_col
+        : undefined;
+    }
     default:
       return undefined;
   }

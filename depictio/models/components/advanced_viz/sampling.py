@@ -63,6 +63,9 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "complex_heatmap": "none",
     "sankey": "none",
     "phylogenetic": "none",
+    # The points overlay is matched to cells by id and selected by lasso; a
+    # sample would drop cells from the image rather than lower its resolution.
+    "bioimage_viewer": "none",
     # Benchmark summaries — small per-tool aggregate tables; the renderer reads
     # specific rows (precision/recall/F1, TP/FP/FN, CIs, threshold sweeps), so a
     # sample is a wrong answer rather than a lower-resolution one.

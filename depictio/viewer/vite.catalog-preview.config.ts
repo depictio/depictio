@@ -41,6 +41,13 @@ export default defineConfig({
         replacement: path.resolve(__dirname, '../../packages/depictio-react-core/src'),
       },
       { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
+      // The OME-Zarr renderer's lazily imported deck.gl/viv adapter: inlined,
+      // it would add several MB to every preview for an image the offline
+      // preview cannot stream. See the stub for details.
+      {
+        find: /^\.\/bioimage\/viewer$/,
+        replacement: path.resolve(__dirname, 'src/catalog-preview/bioimageViewerStub.ts'),
+      },
     ],
     dedupe: [
       'react',
