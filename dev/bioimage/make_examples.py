@@ -1,4 +1,4 @@
-"""Generate the OME-Zarr example stores and tables of ``projects/init/bioimage_examples``.
+"""Generate the example images and tables of ``projects/init/bioimage_examples``.
 
 Every image comes from a scikit-image sample dataset with a permissive licence
 (see the README this script writes next to the data). The tables are derived
@@ -14,10 +14,21 @@ throwaway dependencies:
         python dev/bioimage/make_examples.py \\
         --out depictio/projects/init/bioimage_examples/data
 
-``pooch`` downloads the two datasets scikit-image does not bundle (``kidney``,
-``human_mitosis``) into its cache on first use.
+``pooch`` downloads the datasets scikit-image does not bundle (``kidney``,
+``human_mitosis``, ``lily``, ``skin``) into its cache on first use.
 
-Stores are NGFF 0.4: zarr v2, ``/`` dimension separator, a ``multiscales``
+The SpatialData example needs the ``spatialdata`` library, which requires zarr 3,
+so it lives in ``make_spatialdata_example.py`` and this script runs it through
+``uv run --with spatialdata==<--spatialdata-version>`` in a second throwaway
+environment (``uv`` must be on PATH; ``--no-spatialdata`` skips that step and
+keeps the store and manifest entry already there).
+
+The OME-TIFF example is written with ``tifffile``, which scikit-image depends
+on: a tiled, zlib-compressed pyramid whose reduced levels are SubIFDs of the
+full-resolution planes, with channel names, colours and the physical pixel
+size in the OME-XML.
+
+OME-Zarr stores are NGFF 0.4: zarr v2, ``/`` dimension separator, a ``multiscales``
 block with physical ``scale`` transforms and an ``omero`` block with channel
 names, colours and contrast windows. Output is deterministic for a given
 ``--seed`` and library versions.
@@ -29,7 +40,9 @@ import argparse
 import csv
 import json
 import shutil
+import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -48,12 +61,26 @@ KIDNEY_XY_UM = 1.24
 KIDNEY_Z_UM = 1.25
 IHC_XY_UM_NOMINAL = 0.5
 MITOSIS_XY_UM_NOMINAL = 0.65
+# skimage.data.lily documents 1.24 um pixels.
+LILY_XY_UM = 1.24
+
+# The SpatialData store is written by this pinned version (see the README).
+# 0.8.0 writes zarr v3 by default; make_spatialdata_example.py passes its 0.1
+# format classes to get zarr v2, and a newer release may rename them.
+SPATIALDATA_VERSION = "0.8.0"
 
 KIDNEY_CHANNELS = [
     # scikit-image: emission wavelengths 450, 515 and 605 nm.
     {"label": "Em 450 nm (nuclei)", "color": "0000FF"},
     {"label": "Em 515 nm", "color": "00FF00"},
     {"label": "Em 605 nm", "color": "FF00FF"},
+]
+# lily's four channels carry no documented stain; the labels say what each
+# channel shows. Two are kept: Ch3 is a dimmer copy of Ch2 and Ch4 looks much
+# like Ch1, and every extra channel costs file size (see example_ome_tiff).
+LILY_CHANNELS = [
+    {"index": 0, "label": "Ch1 (cell walls)", "short": "ch1", "color": "FF00FF"},
+    {"index": 1, "label": "Ch2 (thick walls)", "short": "ch2", "color": "00FF00"},
 ]
 RGB_CHANNELS = [
     {"label": "Red", "color": "FF0000"},
@@ -632,6 +659,176 @@ def example_multi_sample(out: Path, args, comp) -> list[dict]:
     return results
 
 
+def ome_color(hex_rgb: str) -> int:
+    """OME-XML ``Color``: RGBA packed in a signed 32-bit integer."""
+    value = int(hex_rgb + "FF", 16)
+    return value - (1 << 32) if value >= 1 << 31 else value
+
+
+def example_ome_tiff(out: Path, args) -> dict:
+    """A crop of scikit-image ``lily`` as a pyramidal OME-TIFF, plus a cells table."""
+    import tifffile
+
+    name = "lily_stem"
+    crop = args.tiff_crop
+    y0, x0 = args.tiff_origin
+    lily = data.lily()  # (y, x, 4) uint16, 12-bit
+    if y0 + crop > lily.shape[0] or x0 + crop > lily.shape[1]:
+        raise SystemExit("--tiff-origin + --tiff-crop leaves the lily image")
+    window = lily[y0 : y0 + crop, x0 : x0 + crop, [c["index"] for c in LILY_CHANNELS]]
+    # 12-bit -> 8-bit per channel. A single file cannot be chunked across git
+    # objects like a zarr store, and the repo's check-added-large-files hook
+    # caps one file at 500 kB: 8 bits, two channels and a 480 px crop fit.
+    image = np.stack(
+        [
+            to_uint8(window[..., i], *np.percentile(window[..., i], [0.5, 99.8]))
+            for i in range(len(LILY_CHANNELS))
+        ]
+    )  # (c, y, x) uint8
+
+    path = out / f"{name}.ome.tif"
+    pyramid = build_pyramid(image, args.levels)
+    options = {
+        "photometric": "minisblack",
+        "tile": (args.chunk, args.chunk),
+        "compression": "zlib",
+        # Level 9, not --clevel: this file has to stay under the 500 kB hook.
+        "compressionargs": {"level": 9},
+        "resolutionunit": "CENTIMETER",
+    }
+    with tifffile.TiffWriter(path, bigtiff=False) as tif:
+        for level, arr in enumerate(pyramid):
+            px_cm = LILY_XY_UM * (2**level) * 1e-4
+            extra = (
+                {
+                    "subifds": len(pyramid) - 1,
+                    "metadata": {
+                        "axes": "CYX",
+                        "Name": name,
+                        # A fixed UUID: tifffile draws a random one otherwise,
+                        # and the file would change on every run.
+                        "UUID": str(uuid.uuid5(uuid.NAMESPACE_URL, f"depictio/{name}")),
+                        "Creator": "dev/bioimage/make_examples.py",
+                        "PhysicalSizeX": LILY_XY_UM,
+                        "PhysicalSizeXUnit": "\N{MICRO SIGN}m",
+                        "PhysicalSizeY": LILY_XY_UM,
+                        "PhysicalSizeYUnit": "\N{MICRO SIGN}m",
+                        "Channel": {
+                            "Name": [c["label"] for c in LILY_CHANNELS],
+                            "Color": [ome_color(c["color"]) for c in LILY_CHANNELS],
+                        },
+                    },
+                }
+                if level == 0
+                else {"subfiletype": 1, "metadata": None}
+            )
+            tif.write(arr, resolution=(1 / px_cm, 1 / px_cm), **options, **extra)
+    validate_ome_tiff(path, len(pyramid), image.shape)
+
+    # Cells are the dark lumens between the bright walls: the same threshold +
+    # watershed as the nuclei, run on the inverted wall signal, so lumens that
+    # touch through a gap in a wall are still split. The measured ring is each
+    # lumen grown by 2 px, so the wall around it counts towards its intensities.
+    wall = image.astype(np.float32).max(axis=0) / 255
+    lumens = segment_nuclei(1 - wall, min_size=args.tiff_min_cell, min_distance=4)
+    counts = np.bincount(lumens.ravel())
+    lumens[(counts > args.tiff_max_cell)[lumens]] = 0
+    lumens, _, _ = segmentation.relabel_sequential(lumens)
+    rings = segmentation.expand_labels(lumens, 2)
+    props = measure.regionprops(rings, intensity_image=image.transpose(1, 2, 0))
+    means = np.array([p.intensity_mean for p in props], dtype=float)
+    # "Thick-walled" when the Ch2 ring intensity, on the scale of its own 99th
+    # percentile, is above the Otsu cut of all cells: the sheaths around the
+    # vascular bundles and the stem's outer ring. A heuristic, not a classifier.
+    ch2 = means[:, 1] / np.percentile(image[1], 99)
+    ch2_cut = filters.threshold_otsu(ch2)
+    rows = []
+    for i, (p, m, c2) in enumerate(zip(props, means, ch2, strict=True), start=1):
+        y, x = p.centroid
+        rows.append(
+            [
+                f"lily_{i:04d}",
+                name,
+                round(float(x), 2),
+                round(float(y), 2),
+                int(p.area),
+                round(float(p.area) * LILY_XY_UM**2, 2),
+                *(round(float(v), 1) for v in m),
+                "thick-walled" if c2 > ch2_cut else "thin-walled",
+            ]
+        )
+    write_csv(
+        out / f"{name}_cells.csv",
+        [
+            "cell_id",
+            "sample",
+            "x",
+            "y",
+            "area_px",
+            "area_um2",
+            *(f"mean_{c['short']}" for c in LILY_CHANNELS),
+            "wall_type",
+        ],
+        rows,
+    )
+    return {"store": path.name, "bytes": path.stat().st_size, "rows": len(rows)}
+
+
+def validate_ome_tiff(path: Path, levels: int, shape: tuple[int, ...]) -> None:
+    """Read the file back the way viv needs it.
+
+    One OME series, tiled, one plane per top-level IFD (not interleaved), and the
+    reduced levels as SubIFDs of each plane.
+    """
+    import tifffile
+
+    with tifffile.TiffFile(path) as tif:
+        if not tif.is_ome or len(tif.series) != 1:
+            raise RuntimeError(f"{path}: not a single-series OME-TIFF")
+        series = tif.series[0]
+        # viv expects every level to be exactly level 0 shifted right by n.
+        expected = [(*shape[:-2], shape[-2] >> n, shape[-1] >> n) for n in range(levels)]
+        if [lv.shape for lv in series.levels] != expected:
+            raise RuntimeError(f"{path}: levels {[lv.shape for lv in series.levels]}")
+        if len(tif.pages) != shape[0]:
+            raise RuntimeError(f"{path}: reduced levels are not SubIFDs ({len(tif.pages)} IFDs)")
+        pages = [page.aspage() for page in tif.pages]
+        if not all(page.is_tiled and page.samplesperpixel == 1 for page in pages):
+            raise RuntimeError(f"{path}: planes must be tiled, single-sample IFDs")
+
+
+def example_spatialdata(out: Path, args) -> dict:
+    """Run make_spatialdata_example.py in its own environment (it needs zarr 3)."""
+    uv = shutil.which("uv")
+    if uv is None:
+        raise SystemExit("uv not found: install it, or pass --no-spatialdata")
+    script = Path(__file__).resolve().parent / "make_spatialdata_example.py"
+    cmd = [
+        uv,
+        "run",
+        "--no-project",
+        "--python",
+        "3.12",
+        "--with",
+        f"spatialdata=={args.spatialdata_version}",
+        "--with",
+        "pooch",
+        "python",
+        str(script),
+        "--out",
+        str(out),
+        "--seed",
+        str(args.seed),
+        "--levels",
+        str(args.levels),
+        "--chunk",
+        str(args.chunk),
+        "--json",
+    ]
+    done = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--out", type=Path, required=True, help="Output data directory")
@@ -671,6 +868,22 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     # Multi-sample example.
     p.add_argument("--sample-crop", type=int, default=256, help="Crop edge per sample store")
+    # OME-TIFF example.
+    p.add_argument("--tiff-crop", type=int, default=480, help="lily crop edge in pixels")
+    p.add_argument("--tiff-origin", type=int, nargs=2, default=(256, 256), metavar=("Y", "X"))
+    p.add_argument("--tiff-min-cell", type=int, default=15, help="Smallest cell, in pixels")
+    p.add_argument("--tiff-max-cell", type=int, default=4000, help="Largest cell, in pixels")
+    # SpatialData example.
+    p.add_argument(
+        "--spatialdata-version",
+        default=SPATIALDATA_VERSION,
+        help="spatialdata release the store is written with",
+    )
+    p.add_argument(
+        "--no-spatialdata",
+        action="store_true",
+        help="Skip the SpatialData store (keeps the one already written and its manifest entry)",
+    )
     p.add_argument("--no-validate", action="store_true", help="Skip ome-zarr read-back")
     return p.parse_args(argv)
 
@@ -692,18 +905,35 @@ def main(argv: list[str]) -> int:
         store = out / res["store"]
         if not args.no_validate:
             validate_store(store, args.levels)
+    # Validated as they are written, by their own readers.
+    results.append(example_ome_tiff(out, args))
+    if args.no_spatialdata:
+        results.extend(_previous_spatialdata_entries(out / "manifest.json"))
+    else:
+        results.append(example_spatialdata(out, args))
+    for res in results:
         print(f"  {res['store']:<34} {res['bytes'] / 1e6:6.2f} MB  {res['rows']:5d} table rows")
     total = sum(r["bytes"] for r in results)
     print(f"  total store size: {total / 1e6:.2f} MB")
     manifest = {
         "generator": "dev/bioimage/make_examples.py",
-        # `out` and `no_validate` do not change the bytes written; leaving them out
-        # keeps the manifest identical wherever the script is run from.
-        "args": {k: v for k, v in vars(args).items() if k not in {"out", "no_validate"}},
+        # `out`, `no_validate` and `no_spatialdata` do not change the bytes written;
+        # leaving them out keeps the manifest identical wherever the script is run from.
+        "args": {
+            k: v for k, v in vars(args).items() if k not in {"out", "no_validate", "no_spatialdata"}
+        },
         "stores": results,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return 0
+
+
+def _previous_spatialdata_entries(manifest: Path) -> list[dict]:
+    """The SpatialData entries of an existing manifest (``--no-spatialdata``)."""
+    if not manifest.exists():
+        return []
+    stores = json.loads(manifest.read_text()).get("stores", [])
+    return [s for s in stores if "spatialdata_version" in s]
 
 
 if __name__ == "__main__":

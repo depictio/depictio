@@ -1,4 +1,5 @@
-// Pyramidal OME-Zarr (NGFF 0.4) viewer behind a strict interface.
+// Pyramidal bioimage viewer behind a strict interface: OME-Zarr (NGFF 0.4,
+// which is also how a SpatialData image is served) and OME-TIFF.
 //
 // Dynamically imported by BioimageViewerRenderer (deck.gl + viv are heavy and
 // WebGL-only), so the main viewer bundle and cold start are untouched. deck
@@ -12,9 +13,14 @@
 
 import { Deck, OrthographicView } from '@deck.gl/core';
 import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
-import { MultiscaleImageLayer, getChannelStats, loadOmeZarrFromStore } from '@hms-dbmi/viv';
+import {
+  MultiscaleImageLayer,
+  getChannelStats,
+  loadOmeTiff,
+  loadOmeZarrFromStore,
+} from '@hms-dbmi/viv';
 
-import type { BioimageZarrStore } from '../../../api';
+import type { BioimageSource, BioimageTiffSource, BioimageZarrStore } from '../../../api';
 import {
   axisSizes,
   hexToRgb,
@@ -28,6 +34,7 @@ import {
   type Rgb,
 } from './channels';
 import { fitViewState, rectToPolygon, type Polygon, type Vec2 } from './geometry';
+import { normaliseOmeTiffMetadata, type OmeXmlImage } from './omeTiff';
 
 export type SelectionMode = 'pan' | 'lasso' | 'rect';
 
@@ -76,11 +83,11 @@ export interface BioimageLoadOptions {
 }
 
 export interface BioimageViewer {
-  /** Open a store (replacing any previous one) and fit it in view. Resolves
+  /** Open an image (replacing any previous one) and fit it in view. Resolves
    *  with the image's shape and channel state. A load superseded by a later
    *  one rejects with `LoadSupersededError`. */
   load(
-    store: BioimageZarrStore,
+    source: BioimageSource,
     configChannels?: readonly ConfigChannel[],
     loadOpts?: BioimageLoadOptions,
   ): Promise<BioimageInfo>;
@@ -98,7 +105,7 @@ export interface BioimageViewer {
 
 export class LoadSupersededError extends Error {
   constructor() {
-    super('OME-Zarr load superseded');
+    super('Bioimage load superseded');
     this.name = 'LoadSupersededError';
   }
 }
@@ -118,6 +125,50 @@ type PixelSource = {
   labels: string[];
   getRaster(opts: { selection: Record<string, number> }): Promise<{ data: ArrayLike<number> }>;
 };
+
+/** An opened image, whatever its format: the pyramid (level 0 first) and the
+ *  metadata the channel defaults and scale bar read, in the OME-Zarr shape. */
+interface OpenedImage {
+  pyramid: PixelSource[];
+  omero: {
+    channels?: object[];
+    rdefs?: { defaultZ?: number; defaultT?: number };
+  } | null;
+  physicalSize: { value: number; unit: string } | null;
+}
+
+async function openOmeZarr(store: BioimageZarrStore): Promise<OpenedImage> {
+  const loaded = await loadOmeZarrFromStore(store as never);
+  const rootAttrs = loaded.metadata as unknown as {
+    omero?: OpenedImage['omero'];
+    multiscales?: never[];
+  };
+  return {
+    pyramid: loaded.data as unknown as PixelSource[],
+    omero: rootAttrs.omero ?? null,
+    physicalSize: physicalPixelSize(rootAttrs as never),
+  };
+}
+
+async function openOmeTiff(tiff: BioimageTiffSource): Promise<OpenedImage> {
+  let loaded: Awaited<ReturnType<typeof loadOmeTiff>>;
+  try {
+    // No decoder pool: tiles decode on the main thread, as zarr chunks do,
+    // which keeps geotiff's blob-URL workers (and a CSP worker-src) out of it.
+    loaded = await loadOmeTiff(tiff.url, { headers: await tiff.headers() });
+  } catch (err) {
+    // geotiff reports every HTTP failure as the same bare message: the API
+    // says why (a 403 on a remote store, a 404), else the parse error stands.
+    await tiff.check();
+    throw err;
+  }
+  const pyramid = loaded.data as unknown as PixelSource[];
+  if (pyramid[0]?.labels.includes('_c')) {
+    throw new Error('Interleaved RGB OME-TIFF is not supported yet');
+  }
+  const meta = normaliseOmeTiffMetadata(loaded.metadata as unknown as OmeXmlImage);
+  return { pyramid, omero: meta.omero, physicalSize: meta.physicalSize };
+}
 
 interface ViewState {
   target: [number, number, number];
@@ -334,26 +385,20 @@ export async function createBioimageViewer(
   host.addEventListener('pointercancel', onPointerUp, listen);
 
   return {
-    async load(store, configChannels, loadOpts) {
+    async load(source, configChannels, loadOpts) {
       loadToken += 1;
       const token = loadToken;
-      const loaded = await loadOmeZarrFromStore(store as never);
+      const opened =
+        source.kind === 'tiff' ? await openOmeTiff(source.tiff) : await openOmeZarr(source.store);
       if (token !== loadToken || disposed) throw new LoadSupersededError();
-      const pyramid = loaded.data as unknown as PixelSource[];
-      const rootAttrs = loaded.metadata as unknown as {
-        omero?: {
-          channels?: Array<Record<string, unknown>>;
-          rdefs?: { defaultZ?: number; defaultT?: number };
-        };
-        multiscales?: never[];
-      };
+      const { pyramid, omero } = opened;
       const base = pyramid[0];
       const labels = [...base.labels];
       const shape = [...base.shape];
       const sizes = axisSizes(labels, shape);
       const width = shape[labels.indexOf('x')] ?? shape[shape.length - 1];
       const height = shape[labels.indexOf('y')] ?? shape[shape.length - 2];
-      const rdefs = rootAttrs.omero?.rdefs;
+      const rdefs = omero?.rdefs;
       const clampIndex = (v: unknown, size: number, fallback: number) =>
         typeof v === 'number' && v >= 0 && v < size ? Math.floor(v) : fallback;
       const defaultZ = clampIndex(rdefs?.defaultZ, sizes.z, Math.floor(sizes.z / 2));
@@ -367,7 +412,7 @@ export async function createBioimageViewer(
       const pinned = new Set(
         (configChannels ?? []).filter((c) => c.contrast_limits).map((c) => c.index),
       );
-      const omeroChannels = (rootAttrs.omero?.channels ?? []) as Array<{
+      const omeroChannels = (omero?.channels ?? []) as Array<{
         window?: { start?: number; end?: number };
       }>;
       const stats: Array<ChannelStats | null> = [];
@@ -397,7 +442,7 @@ export async function createBioimageViewer(
       const resolved = resolveChannels({
         sizeC: sizes.c,
         dtype: base.dtype,
-        omero: rootAttrs.omero as never,
+        omero: omero as never,
         config: configChannels,
         stats,
       });
@@ -421,7 +466,7 @@ export async function createBioimageViewer(
         channels,
         defaultZ,
         defaultT,
-        physicalSize: physicalPixelSize(rootAttrs as never),
+        physicalSize: opened.physicalSize,
       };
       if (!keep || !userMoved) fit();
       render();

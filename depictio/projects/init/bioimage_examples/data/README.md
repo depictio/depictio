@@ -1,9 +1,11 @@
-# OME-Zarr example data
+# Bioimage example data
 
-Small NGFF 0.4 image stores and the tables derived from them, for the
-`bioimage_examples` project. Every image comes from a scikit-image sample
-dataset under a permissive licence; every table is computed from those pixels
-by `dev/bioimage/make_examples.py`. Nothing here is an experimental result.
+Small images and the tables derived from them, for the `bioimage_examples`
+project: NGFF 0.4 OME-Zarr stores, one pyramidal OME-TIFF and one SpatialData
+store. Every image comes from a scikit-image sample dataset under a permissive
+licence; every table is computed from those pixels by
+`dev/bioimage/make_examples.py` (and `dev/bioimage/make_spatialdata_example.py`,
+which it runs). Nothing here is an experimental result.
 
 ## Files
 
@@ -18,12 +20,16 @@ by `dev/bioimage/make_examples.py`. Nothing here is an experimental result.
 | `multi_sample/sample_{A,B,C}.zarr` | One DNA channel, 256 x 256, uint8, `c,y,x` | `skimage.data.human_mitosis`, three crops |
 | `multi_sample/cells.csv` | One row per nucleus of the three samples, with a heuristic `phase` | derived |
 | `multi_sample/samples.csv` | Sample sheet. `sample` equals the store name without `.zarr` | derived |
+| `lily_stem.ome.tif` | 2-channel fluorescence, 480 x 480, uint8, pyramidal OME-TIFF | `skimage.data.lily`, channels 1 and 2, cropped |
+| `lily_stem_cells.csv` | One row per plant cell: centroid, lumen area, mean intensity per channel, wall type | derived |
+| `skin_spatialdata.zarr` | SpatialData store: H&E image (640 x 896, uint8 RGB), spot circles, nucleus points, an AnnData table | `skimage.data.skin`, cropped |
+| `skin_spatialdata_spots.csv` | The store's spot table as CSV: cluster, nuclei under the spot, four synthetic gene counts | derived |
 | `manifest.json` | Generator arguments and store sizes | derived |
 
-All `x` / `y` columns are level-0 pixel coordinates of the matching store
+All `x` / `y` columns are level-0 pixel coordinates of the matching image
 (column, row), so a viewer overlays them with `points_scale: 1`.
 
-## Stores
+## OME-Zarr stores
 
 - NGFF 0.4, zarr v2, `dimension_separator: "/"`, zlib-compressed chunks of at
   most 256 x 256 in y/x (one plane per chunk on the other axes).
@@ -41,6 +47,53 @@ Physical pixel sizes:
   axis is nominal: 60 s between frames.
 - `ihc_spatial`: 0.5 um, **nominal**. The source image carries no calibration.
 - `multi_sample/*`: 0.65 um, **nominal**, for the same reason.
+- `lily_stem`: 1.24 um, as documented by scikit-image.
+- `skin_spatialdata`: none. SpatialData keeps the image in its pixel frame
+  (identity transform to the `global` coordinate system) and the source
+  image carries no calibration.
+
+## OME-TIFF
+
+`lily_stem.ome.tif` is one file the viewer reads with HTTP Range requests:
+
+- OME-XML (in the first IFD) names and colours both channels and sets
+  `PhysicalSizeX` / `PhysicalSizeY` to 1.24 um.
+- One uint8 plane per top-level IFD (`CYX`, not interleaved), tiled 256 x 256,
+  zlib (deflate) compressed.
+- Three levels: the two reduced ones are SubIFDs of each plane, each a 2x
+  mean downsampling, so level n is exactly level 0 shifted right by n
+  (480, 240, 120).
+- 12-bit to 8-bit per channel on the crop's 0.5 / 99.8 percentiles, two of
+  the four channels and a 480 px crop: a single file cannot be split into
+  chunk files like a zarr store, and the repository's
+  `check-added-large-files` hook caps one file at 500 kB.
+- lily's channels carry no documented stain, so they are named by what they
+  show: Ch1 (cell walls, magenta) and Ch2 (thick walls, green). Ch3 is a
+  dimmer copy of Ch2 and Ch4 looks much like Ch1.
+
+## SpatialData store
+
+`skin_spatialdata.zarr` is written by the `spatialdata` library (the version
+is recorded in the root `.zattrs` and in `manifest.json`) and read back with it:
+
+| Element | What it is |
+| --- | --- |
+| `images/he` | The H&E crop, `c,y,x`, 3 levels (`s0`, `s1`, `s2`), chunks of 1 x 256 x 256, zstd |
+| `shapes/spots` | Visium-like circles (hex grid, 32 px pitch, radius 9 px) where at least half the disk is tissue |
+| `points/nuclei` | Nucleus centres: local maxima of the smoothed hematoxylin channel |
+| `tables/table` | AnnData annotating `spots` (`region_key: region`, `instance_key: spot_id`): four synthetic gene counts in `X`, `cluster` and `n_nuclei` in `obs`, centres in `obsm["spatial"]` |
+
+It is written in the SpatialData 0.1 on-disk formats, which is zarr v2 with an
+NGFF 0.4 image. spatialdata 0.8 writes zarr v3 / NGFF 0.5 by default (a
+`zarr.json` per node), which Depictio does not read yet, so the generator
+passes `SpatialDataContainerFormatV01`, `RasterFormatV01`, `PointsFormatV01`,
+`ShapesFormatV02` and `TablesFormatV01` to `SpatialData.write`. spatialdata
+records channel labels only; the generator adds the NGFF `omero` colours and
+windows to `images/he` (red, green, blue, 0 to 255) and then consolidates the
+metadata, so the image renders as RGB.
+
+Depictio shows the `images/he` element (the DC's `image_path`) and uploads only
+that subtree; the spot table it filters on is the CSV export.
 
 ## What is synthetic
 
@@ -61,6 +114,17 @@ Physical pixel sizes:
   chromatin, not a trained classifier.
 - The `condition` and `replicate` columns of `samples.csv` are labels for the
   demo. They are not the conditions of the screen the image comes from.
+- Lily cells are the dark lumens between the bright walls, split with a
+  distance-transform watershed. `wall_type` is "thick-walled" when a cell's
+  Ch2 intensity (lumen plus a 2 px wall ring) is above the Otsu cut over all
+  cells: in practice the sheaths around the vascular bundles and the stem's
+  outer ring. A heuristic, not a classifier.
+- The SpatialData spots follow the same layout rule as `ihc_spatial`, with a
+  32 px pitch. Nuclei are local hematoxylin maxima, so the cornified top layer
+  yields a few false ones. Clusters are k-means on each spot's mean
+  hematoxylin, eosin and the nuclei within one pitch, numbered so that `C1` is
+  the most hematoxylin-rich. `gene_A` follows hematoxylin, `gene_B` eosin,
+  `gene_C` nuclear density and `gene_D` a top-to-bottom gradient (Poisson).
 
 ## Licences
 
@@ -69,6 +133,8 @@ Physical pixel sizes:
 | `kidney` | CC0 | Genevieve Buckley, Monash Micro Imaging, 2018 (confocal, mouse kidney slide) |
 | `immunohistochemistry` | No known copyright restrictions | Center for Microscopy and Molecular Imaging (CMMI), colonic glands with FHL2 (DAB) and hematoxylin |
 | `human_mitosis` | CC0 | David Root; Moffat et al., Cell 124(6):1283-98, 2006, doi:10.1016/j.cell.2006.01.040 |
+| `lily` | CC0 | Genevieve Buckley, Monash Micro Imaging, 2018 (confocal, lily of the valley stem slide) |
+| `skin` | Public domain | Wikipedia user Kilbad, [Normal Epidermis and Dermis with Intradermal Nevus 10x](https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG) |
 
 The derived stores and tables are released under the same terms as their
 source image. `skimage.data.cells3d` was deliberately not used: it comes from
@@ -87,8 +153,15 @@ uv run --no-project --python 3.12 \
     --out depictio/projects/init/bioimage_examples/data
 ```
 
-`pooch` downloads `kidney` and `human_mitosis` into the scikit-image cache on
-first use. The output is byte-identical across runs for the same `--seed` and
-library versions (generated with scikit-image 0.26.0, zarr 2.18.7,
-numcodecs 0.15.1, ome-zarr 0.10.3). `--help` lists the size, crop, drift,
-spot and codec options.
+`pooch` downloads `kidney`, `human_mitosis`, `lily` and `skin` into the
+scikit-image cache on first use. The OME-TIFF is written with `tifffile`, a
+scikit-image dependency. The SpatialData store needs zarr 3, so the script runs
+`make_spatialdata_example.py` in a second throwaway environment,
+`uv run --with spatialdata==0.8.0` (so `uv` must be on `PATH`; pass
+`--no-spatialdata` to skip it and keep the store already there).
+
+The output is byte-identical across runs for the same `--seed` and library
+versions (generated with scikit-image 0.26.0, zarr 2.18.7, numcodecs 0.15.1,
+ome-zarr 0.10.3, tifffile 2026.9.20; the SpatialData store with spatialdata
+0.8.0, zarr 3.4.0). `--help` lists the size, crop, drift, spot and codec
+options.

@@ -1,7 +1,8 @@
-# Bioimage examples: four OME-Zarr NGFF 0.4 image cases for the bioimage_viewer
-# (multichannel 2D, Visium-like spatial, 3D + time, multi-sample), each with the
-# table its points overlay and its filters read. Images come from scikit-image
-# sample data; tables are derived from the pixels. See data/README.md, and
+# Bioimage examples: six image cases for the bioimage_viewer, four OME-Zarr NGFF
+# 0.4 stores (multichannel 2D, Visium-like spatial, 3D + time, multi-sample), a
+# pyramidal OME-TIFF and a SpatialData store, each with the table its points
+# overlay and its filters read. Images come from scikit-image sample data;
+# tables are derived from the pixels. See data/README.md, and
 # dev/bioimage/make_examples.py to regenerate.
 #
 # Optional project: not part of the default seed set. Seed it with
@@ -18,7 +19,7 @@ workflows:
     engine:
       name: "python"
       version: "3.11"
-    description: "Small OME-Zarr stores from scikit-image sample data, with derived cell and spot tables"
+    description: "Small OME-Zarr, OME-TIFF and SpatialData images from scikit-image sample data, with derived cell and spot tables"
     # Flat: the data folder is one run, which is what the recursive multi-sample
     # DC below scans for stores.
     data_location:
@@ -221,6 +222,94 @@ workflows:
               crop_x: "Crop origin column in the source image"
               n_cells: "Nuclei segmented in the sample"
               mitotic_fraction: "Share of nuclei called mitotic"
+
+      # ----------------------------------------------------------------
+      # 5. OME-TIFF: one pyramidal file, read with HTTP Range requests
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f0b"
+        data_collection_tag: "lily_stem_image"
+        description: "Lily of the valley stem, 2-channel confocal fluorescence, pyramidal OME-TIFF (480 x 480)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/lily_stem.ome.tif"
+          dc_specific_properties:
+            format: "ome-tiff"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f0c"
+        data_collection_tag: "lily_stem_cells"
+        description: "Plant cells segmented between the cell walls of the lily stem"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/lily_stem_cells.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              cell_id: "Cell identifier"
+              sample: "File the cell belongs to (lily_stem)"
+              x: "Centroid column, level-0 pixels"
+              y: "Centroid row, level-0 pixels"
+              area_px: "Lumen area in pixels"
+              area_um2: "Lumen area in square micrometres"
+              mean_ch1: "Mean Ch1 intensity over the lumen and its wall"
+              mean_ch2: "Mean Ch2 intensity over the lumen and its wall"
+              wall_type: "thick-walled (bright Ch2 wall) or thin-walled: a heuristic"
+
+      # ----------------------------------------------------------------
+      # 6. SpatialData: an H&E image, spots, nuclei and a table in one store
+      # ----------------------------------------------------------------
+      # Only the image element at image_path is shown (and uploaded); the spot
+      # table the viewer and filters read is the CSV export below.
+      - id: "646b0f3c1e4a2d7f8e5b8f0d"
+        data_collection_tag: "skin_spatialdata_image"
+        description: "Skin section, H&E (RGB, 640 x 896), the image element of a SpatialData store"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/skin_spatialdata.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            image_path: "images/he"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f0e"
+        data_collection_tag: "skin_spatialdata_spots"
+        description: "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/skin_spatialdata_spots.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              spot_id: "Spot identifier (instance key of the store's table)"
+              sample: "Store the spot belongs to (skin_spatialdata)"
+              x: "Spot centre column, level-0 pixels"
+              y: "Spot centre row, level-0 pixels"
+              cluster: "k-means cluster on hematoxylin, eosin and nuclear density (C1 = most hematoxylin)"
+              n_nuclei: "Nuclei of the store's points element under the spot"
+              total_counts: "Sum of the four synthetic gene counts"
+              gene_A: "Synthetic count, follows hematoxylin"
+              gene_B: "Synthetic count, follows eosin"
+              gene_C: "Synthetic count, follows nuclear density"
+              gene_D: "Synthetic count, top-to-bottom gradient"
 
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.
