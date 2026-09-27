@@ -593,7 +593,7 @@ class TestIngest:
             return FakeS3()
 
         monkeypatch.setattr(deltatables, "_s3_client", make_client)
-        monkeypatch.setenv("DEPICTIO_BIOIMAGE_UPLOAD_WORKERS", "4")
+        monkeypatch.setenv("DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS", "4")
         _registered(monkeypatch, make_store(tmp_path, "sample_A.zarr"))
 
         process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
@@ -694,7 +694,7 @@ class TestUploadStore:
 
     @pytest.mark.parametrize(("raw", "expected"), [("", 16), ("8", 8), ("0", 1), ("x", 16)])
     def test_worker_count_from_env(self, monkeypatch, raw, expected):
-        monkeypatch.setenv("DEPICTIO_BIOIMAGE_UPLOAD_WORKERS", raw)
+        monkeypatch.setenv("DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS", raw)
         assert bioimage_upload_workers() == expected
 
 

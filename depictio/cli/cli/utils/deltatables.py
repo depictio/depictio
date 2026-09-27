@@ -1174,12 +1174,12 @@ _S3_DELETE_BATCH = 1000
 
 
 def bioimage_upload_workers() -> int:
-    """Upload threads per store: ``DEPICTIO_BIOIMAGE_UPLOAD_WORKERS`` or 16."""
-    raw = os.getenv("DEPICTIO_BIOIMAGE_UPLOAD_WORKERS", "").strip()
+    """Upload threads per store: ``DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS`` or 16."""
+    raw = os.getenv("DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS", "").strip()
     try:
         workers = int(raw) if raw else BIOIMAGE_UPLOAD_WORKERS_DEFAULT
     except ValueError:
-        logger.warning(f"Ignoring non-integer DEPICTIO_BIOIMAGE_UPLOAD_WORKERS={raw!r}")
+        logger.warning(f"Ignoring non-integer DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS={raw!r}")
         workers = BIOIMAGE_UPLOAD_WORKERS_DEFAULT
     return max(1, workers)
 
