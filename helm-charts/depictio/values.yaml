@@ -355,6 +355,15 @@ backend:
     DEPICTIO_FEEDBACK_URL: ""
     DEPICTIO_FEEDBACK_LABEL: "Feedback"
 
+    # Remote bioimage stores (s3:// or https:// URLs in a bioimage DC's
+    # remote_stores), read in place and proxied by the API. Only allow-listed
+    # buckets (on the server's own S3 endpoint, never DEPICTIO_S3_BUCKET) and
+    # hosts are read; both are comma-separated, and empty keeps remote reading off.
+    DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS: ""
+    DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS: ""
+    DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S: "20"
+    DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB: "64"
+
     # Which view /dashboards opens in for someone who never picked one
     # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
     # the CSS viewport the dashboard is laid out at, times a pixel density that

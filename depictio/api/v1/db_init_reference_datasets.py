@@ -322,8 +322,9 @@ STATIC_IDS = {
             "variantbenchmarking_sv_cnv": "846b0f3c1e4a2d7f8e5bba22",
         },
     },
-    # Bioimage viewer examples (optional, see OPTIONAL_DATASETS): four image
-    # cases, each with the table its points overlay reads. The image DCs have no
+    # Bioimage viewer examples (optional, see OPTIONAL_DATASETS): six image
+    # cases (four OME-Zarr, one OME-TIFF, one SpatialData), each with the table
+    # its points overlay reads. The image DCs have no
     # delta table; their stores are uploaded under `bioimage/{dc_id}/`. See
     # projects/init/bioimage_examples/.
     "bioimage_examples": {
@@ -339,6 +340,10 @@ STATIC_IDS = {
             "multi_sample_images": "646b0f3c1e4a2d7f8e5b8f08",
             "multi_sample_cells": "646b0f3c1e4a2d7f8e5b8f09",
             "multi_sample_samples": "646b0f3c1e4a2d7f8e5b8f0a",
+            "lily_stem_image": "646b0f3c1e4a2d7f8e5b8f0b",
+            "lily_stem_cells": "646b0f3c1e4a2d7f8e5b8f0c",
+            "skin_spatialdata_image": "646b0f3c1e4a2d7f8e5b8f0d",
+            "skin_spatialdata_spots": "646b0f3c1e4a2d7f8e5b8f0e",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -346,6 +351,8 @@ STATIC_IDS = {
             "bioimage_spatial": "646b0f3c1e4a2d7f8e5b8f10",
             "bioimage_volume": "646b0f3c1e4a2d7f8e5b8f11",
             "bioimage_multi_sample": "646b0f3c1e4a2d7f8e5b8f12",
+            "bioimage_ome_tiff": "646b0f3c1e4a2d7f8e5b8f13",
+            "bioimage_spatialdata": "646b0f3c1e4a2d7f8e5b8f14",
         },
     },
 }

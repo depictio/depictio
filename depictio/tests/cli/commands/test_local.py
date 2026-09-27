@@ -49,6 +49,14 @@ def test_server_env_drops_inherited_depictio_variables(paths, monkeypatch):
     assert env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] == "true"
 
 
+def test_server_env_keeps_the_bioimage_allow_lists(paths, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS", "uk1s3.embassy.ebi.ac.uk")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, {"s3_password": "x", "admin_password": "y"}, "none", True)
+
+    assert env["DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS"] == "uk1s3.embassy.ebi.ac.uk"
+
+
 def test_pick_ports_skips_a_busy_preferred_port(monkeypatch):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))

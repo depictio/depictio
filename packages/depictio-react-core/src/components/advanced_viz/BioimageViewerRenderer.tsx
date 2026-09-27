@@ -21,7 +21,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import {
-  createBioimageZarrStore,
+  createBioimageSource,
   fetchAdvancedVizData,
   fetchBioimageStores,
   InteractiveFilter,
@@ -127,6 +127,17 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Why an image failed to open, for the tile. A 403 on a remote store is the
+ *  server's allow-list refusing the host or bucket, which the reader cannot fix
+ *  from here, so it says so instead of echoing a status code. */
+function imageErrorText(err: unknown, store: string, remote: boolean): string {
+  const status = (err as { status?: unknown } | null)?.status;
+  if (remote && status === 403) {
+    return `Could not open ${store}: remote host not allowed on this server`;
+  }
+  return `Could not open ${store}: ${errorText(err)}`;
+}
+
 /** Whether two store listings name the same stores, so a refresh that found
  *  nothing new keeps the previous list (and its object identities). */
 function sameStores(a: BioimageStoreInfo[] | null, b: BioimageStoreInfo[]): boolean {
@@ -207,8 +218,9 @@ function OverlayButton({ label, icon, active, onClick }: OverlayButtonProps): Re
 }
 
 /**
- * Pyramidal OME-Zarr (NGFF 0.4) viewer (viz_kind "bioimage_viewer"): viv's
- * multiscale image layer on deck.gl, behind the adapter in ./bioimage/viewer.ts.
+ * Pyramidal image viewer (viz_kind "bioimage_viewer") for OME-Zarr (NGFF 0.4),
+ * SpatialData images (served as OME-Zarr) and OME-TIFF: viv's multiscale
+ * image layer on deck.gl, behind the adapter in ./bioimage/viewer.ts.
  *
  * Which store is shown: the one whose sample an upstream filter on
  * `sample_column` selects, else the reader's pick, else `store`, else the
@@ -376,6 +388,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   // channel edits and plane carry over.
   const loadedRef = useRef<{ viewer: BioimageViewer; key: string } | null>(null);
   const activeStoreName = activeStore?.name ?? null;
+  const activeStoreFormat = activeStore?.format ?? 'ome-zarr';
+  const activeStoreRemote = Boolean(activeStore?.remote);
 
   useEffect(() => {
     if (!viewer || !activeStoreName || !imageDcId) return;
@@ -390,9 +404,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       setInfo(null);
     }
     viewer
-      .load(createBioimageZarrStore(imageDcId, activeStoreName), configChannelsRef.current, {
-        keepView: refresh,
-      })
+      .load(
+        createBioimageSource(imageDcId, { name: activeStoreName, format: activeStoreFormat }),
+        configChannelsRef.current,
+        { keepView: refresh },
+      )
       .then((loaded) => {
         if (cancelled) return;
         setInfo(loaded);
@@ -411,13 +427,13 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       })
       .catch((err: unknown) => {
         if (cancelled || (err instanceof Error && err.name === 'LoadSupersededError')) return;
-        setImageError(`Could not open ${activeStoreName}: ${errorText(err)}`);
+        setImageError(imageErrorText(err, activeStoreName, activeStoreRemote));
         setImageLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [viewer, activeStoreName, imageDcId, refreshTick]);
+  }, [viewer, activeStoreName, activeStoreFormat, activeStoreRemote, imageDcId, refreshTick]);
 
   // An image error replaces the host (and so the viewer) with the message.
   // Another store, or a refresh, deserves a fresh attempt: clearing the error

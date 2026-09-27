@@ -1,0 +1,210 @@
+# SpatialData: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'SpatialData'
+subtitle: 'The H&E image of a SpatialData store, with its spots'
+icon: 'mdi:layers-outline'
+icon_color: 'pink'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f14'
+is_main_tab: false
+tab_order: 5
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:layers-outline'
+tab_icon_color: 'pink'
+
+filter_sections:
+  - name: 'Spots'
+    icon: 'mdi:filter-variant'
+    color: 'pink'
+    description: 'Narrows the spots drawn over the section, the table and the cards'
+
+grid_sections:
+  - name: 'Section spots'
+    icon: 'mdi:counter'
+    color: 'pink'
+    description: 'The spots under the tissue in numbers'
+  - name: 'Section'
+    icon: 'mdi:map-marker-outline'
+    color: 'pink'
+    description: 'The stained section with one point per spot; lasso spots to filter the table'
+
+components:
+  - tag: text-spatialdata
+    index: omz-sd-text
+    component_type: text
+    title: 'A SpatialData store'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Section spots'
+    body: >
+      An H&E skin section (epidermis over dermis) saved as a SpatialData store, which also
+      holds spot shapes, nucleus points and an AnnData table. The viewer shows the store's
+      image element; the spot table is exported to a CSV that the cards, filters and table
+      read. Clusters group spots by stain and nuclear density, so C1 is the most
+      hematoxylin-rich. The four gene counts are synthetic. Lasso spots to filter.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-spatialdata-spots
+    index: omz-sd-card-count
+    component_type: card
+    section: 'Section spots'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    aggregation: count
+    column_name: spot_id
+    column_type: object
+    icon_name: mdi:counter
+    title_font_size: md
+    value_font_size: xl
+    title: 'Spots under tissue'
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+
+  - tag: card-spatialdata-clusters
+    index: omz-sd-card-clusters
+    component_type: card
+    section: 'Section spots'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    aggregation: nunique
+    column_name: cluster
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: cluster
+    top_n_count: 4
+    icon_name: mdi:chart-donut
+    title_font_size: md
+    value_font_size: xl
+    title: 'Clusters'
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+
+  - tag: card-spatialdata-nuclei
+    index: omz-sd-card-nuclei
+    component_type: card
+    section: 'Section spots'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    aggregation: median
+    secondary_layout: histogram
+    column_name: n_nuclei
+    column_type: int64
+    icon_name: mdi:chart-histogram
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nuclei per spot'
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+
+  - tag: card-spatialdata-counts
+    index: omz-sd-card-counts
+    component_type: card
+    section: 'Section spots'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: total_counts
+    column_type: int64
+    icon_name: mdi:chart-box-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Total counts'
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  # The image element carries no physical unit (SpatialData keeps the pixel
+  # frame), so there is no scale bar to draw.
+  - tag: viz-spatialdata
+    index: omz-sd-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_image
+    title: 'Skin section, H&E'
+    description: 'The images/he element of a SpatialData store (RGB). Points are spots, coloured by cluster.'
+    section: 'Section'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: skin_spatialdata_image
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f0d'
+      points_dc_tag: skin_spatialdata_spots
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f0e'
+      cell_id_col: spot_id
+      x_col: x
+      y_col: y
+      color_col: cluster
+      points_sample_col: sample
+      point_radius: 5
+      show_scalebar: false
+      selection_enabled: true
+    layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  - tag: table-spatialdata-spots
+    index: omz-sd-table
+    component_type: table
+    section: 'Section'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    title: 'Spots'
+    description: 'One row per spot. A lasso on the section narrows it to the spots inside.'
+    columns: [spot_id, cluster, n_nuclei, total_counts, gene_A, gene_B, gene_C, gene_D]
+    page_size: 50
+    layout: { x: 0, y: 9, w: 8, h: 5 }
+
+  - tag: filter-spatialdata-cluster
+    index: omz-sd-f-cluster
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    interactive_component_type: MultiSelect
+    column_name: cluster
+    column_type: object
+    title: 'Cluster'
+    placement: left
+    section: 'Spots'
+    group: 'Spot filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-spatialdata-nuclei
+    index: omz-sd-f-nuclei
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    interactive_component_type: RangeSlider
+    column_name: n_nuclei
+    column_type: int64
+    title: 'Nuclei per spot'
+    placement: left
+    section: 'Spots'
+    group: 'Spot filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-spatialdata-gene-d
+    index: omz-sd-f-gene-d
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: skin_spatialdata_spots
+    interactive_component_type: RangeSlider
+    column_name: gene_D
+    column_type: int64
+    title: 'gene_D counts'
+    placement: left
+    section: 'Spots'
+    group: 'Spot filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

@@ -473,7 +473,7 @@
       "order": 4,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Each tab shows one kind of OME-Zarr image: several fluorescence channels, a stained tissue section with spatial spots, a 3D stack over time, and one store per sample. The images are scikit-image sample datasets (CC0 or without known restrictions) converted to NGFF 0.4. The cells and spots are computed from the pixels, and the time course, spot counts and sample conditions are synthetic. Nothing here is a result.\n",
+      "body": "Each tab shows one kind of image: several fluorescence channels, a stained section with spatial spots, a 3D stack over time and one store per sample (all OME-Zarr), then a pyramidal OME-TIFF and a SpatialData store. The images are scikit-image sample datasets (CC0, public domain or without known restrictions). Cells and spots are computed from the pixels; time courses, counts and conditions are synthetic. Nothing here is a result.\n",
       "wf_tag": "python/bioimage_demo"
     }
   ],

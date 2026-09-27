@@ -319,7 +319,16 @@ class DataCollectionConfig(MongoModel):
         # - MultiQC: has its own data handling
         # - Image: now requires scan config (works like Table DC with mandatory image_column)
         skip_scan_types = ["multiqc"]
-        if type_value not in skip_scan_types and is_native_source and not values.get("scan"):
+        # A bioimage DC whose stores are all remote has nothing to scan: the API
+        # reads them in place from `remote_stores`.
+        props = values.get("dc_specific_properties")
+        remote_only = type_value == "bioimage" and bool(getattr(props, "remote_stores", None))
+        if (
+            type_value not in skip_scan_types
+            and not remote_only
+            and is_native_source
+            and not values.get("scan")
+        ):
             raise ValueError(
                 "scan field is required for native data collections "
                 "(ingested from external sources). For joined/derived data collections, "

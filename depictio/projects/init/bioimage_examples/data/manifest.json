@@ -13,7 +13,15 @@
     "levels": 3,
     "sample_crop": 256,
     "seed": 1086,
+    "spatialdata_version": "0.8.0",
     "spot_spacing": 14.0,
+    "tiff_crop": 480,
+    "tiff_max_cell": 4000,
+    "tiff_min_cell": 15,
+    "tiff_origin": [
+      256,
+      256
+    ],
     "timepoints": 5,
     "tissue_threshold": 0.85,
     "volume_channels": "0,2",
@@ -55,6 +63,20 @@
       "bytes": 40106,
       "rows": 89,
       "store": "multi_sample/sample_C.zarr"
+    },
+    {
+      "bytes": 459458,
+      "rows": 1102,
+      "store": "lily_stem.ome.tif"
+    },
+    {
+      "bytes": 2019579,
+      "image_path": "images/he",
+      "nuclei": 1220,
+      "rows": 618,
+      "spatialdata_version": "0.8.0",
+      "store": "skin_spatialdata.zarr",
+      "zarr_version": "3.4.0"
     }
   ]
 }
