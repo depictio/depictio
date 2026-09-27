@@ -295,7 +295,8 @@
                 "cnv_profile",
                 "genome_chord",
                 "record_card",
-                "parallel_coordinates"
+                "parallel_coordinates",
+                "bioimage_viewer"
               ],
               "type": "string"
             },

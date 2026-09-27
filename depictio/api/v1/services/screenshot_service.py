@@ -33,6 +33,7 @@ from depictio.api.v1.services.screenshot_helpers import (
     HOST_UNREACHABLE_MARKERS,
     apply_init_script,
     hide_ui_chrome,
+    wait_for_bioimage_ready,
     wait_for_dashboard_content,
     wait_for_plotly_drawn,
     wait_for_theme_applied,
@@ -393,6 +394,30 @@ def _is_auth_redirect(url: str) -> bool:
     return urlparse(url).path.startswith("/auth")
 
 
+def _count_bioimage_tiles(dashboard_id: str) -> int:
+    """How many bioimage tiles the dashboard tab holds, 0 when unknown.
+
+    Read from the stored metadata rather than the page: before a tile is ready
+    the DOM carries no marker of it, so the page alone cannot say how many
+    `data-bioimage-ready` hosts to wait for.
+    """
+    try:
+        dashboard = dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(dashboard_id)}, {"stored_metadata": 1}
+        )
+    except Exception as e:
+        logger.debug(f"Bioimage tile count unavailable for {dashboard_id}: {e}")
+        return 0
+    components = (dashboard or {}).get("stored_metadata") or []
+    return sum(
+        1
+        for c in components
+        if isinstance(c, dict)
+        and c.get("component_type") == "advanced_viz"
+        and c.get("viz_kind") == "bioimage_viewer"
+    )
+
+
 async def _try_open_viz_settings(page: Page) -> bool:
     """Click the first advanced-viz settings cog so the popover shows in the shot.
 
@@ -522,6 +547,7 @@ async def generate_react_dual_theme_screenshots(
         token_data_json = json.dumps(token_data)
 
         logger.info(f"React dual-theme screenshot: dashboard {dashboard_id} via {dashboard_url}")
+        bioimage_tiles = _count_bioimage_tiles(dashboard_id)
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -633,6 +659,12 @@ async def generate_react_dual_theme_screenshots(
                     logger.warning(
                         f"React: plotly draw timed out ({theme}) on dashboard "
                         f"{dashboard_id} — capturing anyway"
+                    )
+
+                if not await wait_for_bioimage_ready(page, bioimage_tiles):
+                    logger.warning(
+                        f"React: bioimage tiles not ready ({theme}) on dashboard "
+                        f"{dashboard_id}; capturing anyway"
                     )
 
                 # `.plot-container` mounting only means the figure frame exists;
