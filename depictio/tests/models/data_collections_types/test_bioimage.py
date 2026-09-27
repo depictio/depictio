@@ -24,7 +24,7 @@ class TestDCBioimageConfig:
     def test_defaults(self):
         config = DCBioimageConfig()
         assert config.format == "ome-zarr"
-        assert config.ngff_version == "0.4"
+        assert config.ngff_version is None
         assert config.upload is True
 
     def test_explicit_format(self):
@@ -39,7 +39,7 @@ class TestDCBioimageConfig:
 
     def test_unsupported_ngff_version_rejected(self):
         with pytest.raises(ValidationError):
-            DCBioimageConfig(ngff_version="0.5")  # type: ignore[arg-type]
+            DCBioimageConfig(ngff_version="0.6")  # type: ignore[arg-type]
 
     def test_extra_fields_forbidden(self):
         with pytest.raises(ValidationError):

@@ -231,8 +231,9 @@ components:
     section: 'About these examples'
     body: >
       Each tab shows one kind of image: several fluorescence channels, a stained section
-      with spatial spots, a 3D stack over time and one store per sample (all OME-Zarr),
-      then a pyramidal OME-TIFF and a SpatialData store. The images are scikit-image
+      with spatial spots, a 3D stack over time and one store per sample (all OME-Zarr
+      NGFF 0.4), then a pyramidal OME-TIFF, a SpatialData store and an OME-Zarr NGFF 0.5
+      store with sharded arrays. The images are scikit-image
       sample datasets (CC0, public domain or without known restrictions). Cells and spots
       are computed from the pixels; time courses, counts and conditions are synthetic.
       Nothing here is a result.

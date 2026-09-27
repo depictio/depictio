@@ -161,15 +161,14 @@ exclude = ["depictio.viewer.node_modules*"]
   "projects/**/*",
   # Globs skip dot-directories: the dashboard seeds need their own pattern.
   "projects/**/.db_seeds/*",
-  # ...and dotfiles: the zarr v2 metadata of the bundled OME-Zarr and SpatialData
-  # stores (chunk, parquet and .ome.tif files have no leading dot and are matched
-  # above). SpatialData also consolidates its metadata into a root .zmetadata.
+  # ...and dotfiles: the zarr v2 (NGFF 0.4) metadata of the bundled OME-Zarr
+  # stores. zarr v3 stores (zarr.json, c/ chunks, shards), chunk and .ome.tif
+  # files have no leading dot and are matched above.
   "projects/**/*.zarr/**/.zattrs",
   "projects/**/*.zarr/**/.zgroup",
   "projects/**/*.zarr/**/.zarray",
   "projects/**/*.zarr/.zattrs",
   "projects/**/*.zarr/.zgroup",
-  "projects/**/*.zarr/.zmetadata",
   "catalog/**/*",
   "cli/configs/**/*",
 ]

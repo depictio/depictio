@@ -1,6 +1,7 @@
-# Bioimage examples: six image cases for the bioimage_viewer, four OME-Zarr NGFF
-# 0.4 stores (multichannel 2D, Visium-like spatial, 3D + time, multi-sample), a
-# pyramidal OME-TIFF and a SpatialData store, each with the table its points
+# Bioimage examples: seven image cases for the bioimage_viewer, four OME-Zarr
+# NGFF 0.4 stores (multichannel 2D, Visium-like spatial, 3D + time,
+# multi-sample), a pyramidal OME-TIFF, a SpatialData store (zarr v3) and an
+# OME-Zarr NGFF 0.5 store with sharded arrays, each with the table its points
 # overlay and its filters read. Images come from scikit-image sample data;
 # tables are derived from the pixels. See data/README.md, and
 # dev/bioimage/make_examples.py to regenerate.
@@ -19,7 +20,7 @@ workflows:
     engine:
       name: "python"
       version: "3.11"
-    description: "Small OME-Zarr, OME-TIFF and SpatialData images from scikit-image sample data, with derived cell and spot tables"
+    description: "Small OME-Zarr (NGFF 0.4 and 0.5), OME-TIFF and SpatialData images from scikit-image sample data, with derived cell and spot tables"
     # Flat: the data folder is one run, which is what the recursive multi-sample
     # DC below scans for stores.
     data_location:
@@ -268,7 +269,8 @@ workflows:
       # 6. SpatialData: an H&E image, spots, nuclei and a table in one store
       # ----------------------------------------------------------------
       # Only the image element at image_path is shown (and uploaded); the spot
-      # table the viewer and filters read is the CSV export below.
+      # table the viewer and filters read is the CSV export below. The store is
+      # zarr v3, its image NGFF 0.5 (spatialdata's default formats).
       - id: "646b0f3c1e4a2d7f8e5b8f0d"
         data_collection_tag: "skin_spatialdata_image"
         description: "Skin section, H&E (RGB, 640 x 896), the image element of a SpatialData store"
@@ -281,7 +283,7 @@ workflows:
           dc_specific_properties:
             format: "spatialdata"
             image_path: "images/he"
-            ngff_version: "0.4"
+            ngff_version: "0.5"
             upload: true
 
       - id: "646b0f3c1e4a2d7f8e5b8f0e"
@@ -310,6 +312,52 @@ workflows:
               gene_B: "Synthetic count, follows eosin"
               gene_C: "Synthetic count, follows nuclear density"
               gene_D: "Synthetic count, top-to-bottom gradient"
+
+      # ----------------------------------------------------------------
+      # 7. NGFF 0.5 (sharded): zarr v3, each shard file holds many chunks
+      # ----------------------------------------------------------------
+      # The viewer reads a shard's index, then each chunk it needs, with HTTP
+      # Range requests. The id pair is not contiguous: 8f10 to 8f15 are the
+      # dashboards of this project.
+      - id: "646b0f3c1e4a2d7f8e5b8f0f"
+        data_collection_tag: "lily_sharded_image"
+        description: "Lily of the valley stem, 3-channel confocal fluorescence, 12-bit, OME-Zarr NGFF 0.5 with sharded arrays (512 x 512)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/lily_sharded.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.5"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f16"
+        data_collection_tag: "lily_sharded_cells"
+        description: "Plant cells segmented between the cell walls of the sharded lily stem store"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/lily_sharded_cells.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              cell_id: "Cell identifier"
+              sample: "Store the cell belongs to (lily_sharded)"
+              x: "Centroid column, level-0 pixels"
+              y: "Centroid row, level-0 pixels"
+              area_px: "Lumen area in pixels"
+              area_um2: "Lumen area in square micrometres"
+              mean_ch1: "Mean Ch1 intensity (12-bit) over the lumen and its wall"
+              mean_ch2: "Mean Ch2 intensity (12-bit) over the lumen and its wall"
+              mean_ch4: "Mean Ch4 intensity (12-bit) over the lumen and its wall"
+              wall_type: "thick-walled (bright Ch2 wall) or thin-walled: a heuristic"
 
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.

@@ -218,7 +218,7 @@ function OverlayButton({ label, icon, active, onClick }: OverlayButtonProps): Re
 }
 
 /**
- * Pyramidal image viewer (viz_kind "bioimage_viewer") for OME-Zarr (NGFF 0.4),
+ * Pyramidal image viewer (viz_kind "bioimage_viewer") for OME-Zarr (NGFF 0.4/0.5),
  * SpatialData images (served as OME-Zarr) and OME-TIFF: viv's multiscale
  * image layer on deck.gl, behind the adapter in ./bioimage/viewer.ts.
  *

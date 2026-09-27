@@ -1047,59 +1047,115 @@ def process_phylogeny_data_collection(
     }
 
 
-def validate_ome_zarr_store(store_path: str) -> None:
-    """Raise ValueError unless ``store_path`` is an NGFF 0.4 image store.
+# NGFF version of each zarr layout: 0.4 is zarr v2 (``.zattrs``), 0.5 is
+# zarr v3 (``zarr.json``, OME metadata under ``attributes.ome``).
+_NGFF_LAYOUTS = {"0.4": "zarr v2, .zattrs", "0.5": "zarr v3, zarr.json"}
 
-    Only the root ``.zattrs`` is checked: it must be a JSON object carrying a
-    non-empty ``multiscales`` list, which is what the viewer reads first.
-    """
-    zattrs_path = os.path.join(store_path, ".zattrs")
-    if not os.path.isfile(zattrs_path):
-        _raise_if_zarr_v3(store_path)
-        raise ValueError(
-            f"{store_path} is not an OME-Zarr store: no root .zattrs "
-            "(only NGFF 0.4 / zarr v2 stores are supported)"
-        )
+
+def _read_json_object(path: str) -> dict:
+    """The JSON object stored at ``path``, or a ValueError naming the file."""
     try:
-        with open(zattrs_path, encoding="utf-8") as fh:
-            attrs = json.load(fh)
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
     except (OSError, ValueError) as e:
-        raise ValueError(f"{zattrs_path} is not valid JSON: {e}") from e
-    multiscales = attrs.get("multiscales") if isinstance(attrs, dict) else None
+        raise ValueError(f"{path} is not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    return data
+
+
+def _check_ngff_version(path: str, found: str, expected: str | None) -> None:
+    if expected is not None and found != expected:
+        raise ValueError(
+            f"{path} is NGFF {found} ({_NGFF_LAYOUTS[found]}) but the data collection "
+            f"requires ngff_version {expected} ({_NGFF_LAYOUTS[expected]})"
+        )
+
+
+def _require_multiscales(multiscales: object, where: str) -> list:
     if not isinstance(multiscales, list) or not multiscales:
         raise ValueError(
-            f"{zattrs_path} has no 'multiscales' entry: not an OME-NGFF image "
+            f"{where} has no 'multiscales' entry: not an OME-NGFF image "
             "(plates and label-only stores are not supported)"
         )
+    return multiscales
 
 
-def _raise_if_zarr_v3(path: str) -> None:
-    """Clear error for a zarr v3 group (``zarr.json`` and no ``.zattrs``)."""
-    if os.path.isfile(os.path.join(path, "zarr.json")) and not os.path.isfile(
-        os.path.join(path, ".zattrs")
-    ):
+def validate_ome_zarr_store(store_path: str, ngff_version: str | None = None) -> str:
+    """Raise ValueError unless ``store_path`` is an NGFF 0.4 or 0.5 image store.
+
+    NGFF 0.4 (zarr v2): the root ``.zattrs`` must be a JSON object carrying a
+    non-empty ``multiscales`` list, which is what the viewer reads first.
+    NGFF 0.5 (zarr v3): the root ``zarr.json`` must be a group whose
+    ``attributes.ome.multiscales`` is non-empty, and every dataset path must
+    hold an array ``zarr.json`` (sharded or not: chunks are never read).
+    With ``ngff_version`` set, a store of the other version is rejected.
+
+    Returns:
+        The store's NGFF version, ``"0.4"`` or ``"0.5"``.
+    """
+    zattrs_path = os.path.join(store_path, ".zattrs")
+    zarr_json_path = os.path.join(store_path, "zarr.json")
+    if os.path.isfile(zattrs_path):
+        _check_ngff_version(store_path, "0.4", ngff_version)
+        _require_multiscales(_read_json_object(zattrs_path).get("multiscales"), zattrs_path)
+        return "0.4"
+    if not os.path.isfile(zarr_json_path):
         raise ValueError(
-            f"{path} is a zarr v3 store (zarr.json): NGFF 0.5 / zarr v3 is not "
-            "supported yet, only NGFF 0.4 / zarr v2"
+            f"{store_path} is not an OME-Zarr store: no root .zattrs (NGFF 0.4) "
+            "or zarr.json (NGFF 0.5)"
         )
 
+    _check_ngff_version(store_path, "0.5", ngff_version)
+    meta = _read_json_object(zarr_json_path)
+    if meta.get("zarr_format") != 3 or meta.get("node_type") != "group":
+        raise ValueError(
+            f"{zarr_json_path} is not a zarr v3 group (zarr_format 3, node_type group)"
+        )
+    attributes = meta.get("attributes")
+    ome = attributes.get("ome") if isinstance(attributes, dict) else None
+    if not isinstance(ome, dict):
+        raise ValueError(f"{zarr_json_path} has no 'attributes.ome' entry: not an NGFF 0.5 image")
+    where = f"{zarr_json_path} attributes.ome"
+    for multiscale in _require_multiscales(ome.get("multiscales"), where):
+        datasets = multiscale.get("datasets") if isinstance(multiscale, dict) else None
+        if not isinstance(datasets, list) or not datasets:
+            raise ValueError(f"{where} has a multiscale without datasets")
+        for dataset in datasets:
+            path = dataset.get("path") if isinstance(dataset, dict) else None
+            parts = path.split("/") if isinstance(path, str) else []
+            if not path or path.startswith("/") or ".." in parts:
+                raise ValueError(f"{where} has an invalid dataset path {path!r}")
+            array_json = os.path.join(store_path, *parts, "zarr.json")
+            if not os.path.isfile(array_json):
+                raise ValueError(
+                    f"{store_path} has no array at dataset path {path!r} (no zarr.json)"
+                )
+            if _read_json_object(array_json).get("node_type") != "array":
+                raise ValueError(f"{array_json} is not a zarr v3 array")
+    return "0.5"
 
-def validate_spatialdata_store(store_path: str, image_path: str) -> None:
+
+def validate_spatialdata_store(
+    store_path: str, image_path: str, ngff_version: str | None = None
+) -> str:
     """Raise ValueError unless ``store_path`` is a SpatialData store whose
-    ``image_path`` element is an NGFF 0.4 multiscales image."""
-    has_zattrs = os.path.isfile(os.path.join(store_path, ".zattrs"))
-    has_zgroup = os.path.isfile(os.path.join(store_path, ".zgroup"))
-    if not (has_zattrs or has_zgroup):
-        _raise_if_zarr_v3(store_path)
+    ``image_path`` element is an NGFF multiscales image.
+
+    The root may be zarr v2 (``.zgroup`` / ``.zattrs``) or zarr v3
+    (``zarr.json``); ``ngff_version`` is enforced on the image element, which
+    is what the viewer reads. Returns the image's NGFF version.
+    """
+    markers = (".zattrs", ".zgroup", "zarr.json")
+    if not any(os.path.isfile(os.path.join(store_path, m)) for m in markers):
         raise ValueError(
-            f"{store_path} is not a SpatialData store: no root .zgroup or .zattrs "
-            "(only zarr v2 stores are supported)"
+            f"{store_path} is not a SpatialData store: no root .zgroup, .zattrs "
+            "(zarr v2) or zarr.json (zarr v3)"
         )
-    _raise_if_zarr_v3(store_path)
     image_dir = os.path.join(store_path, *image_path.split("/"))
     if not os.path.isdir(image_dir):
         raise ValueError(f"{store_path} has no image element at image_path {image_path!r}")
-    validate_ome_zarr_store(image_dir)
+    return validate_ome_zarr_store(image_dir, ngff_version)
 
 
 # TIFF ImageDescription tag, which holds the OME-XML in an OME-TIFF's first IFD.
@@ -1206,8 +1262,8 @@ def zarr_store_hash(store_path: str, image_path: str | None = None) -> str:
     store_name = os.path.basename(store_path.rstrip("/"))
     source = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
     name = f"{store_name}/{image_path}" if image_path else store_name
-    total_size, max_mtime, zattrs = zarr_store_stats(source)
-    return generate_zarr_store_hash(name, total_size, format_timestamp(max_mtime), zattrs)
+    total_size, max_mtime, root_meta = zarr_store_stats(source)
+    return generate_zarr_store_hash(name, total_size, format_timestamp(max_mtime), root_meta)
 
 
 def single_file_store_hash(path: str) -> str:
@@ -1273,7 +1329,9 @@ def upload_zarr_store(
     """Mirror a local store under ``bioimage_s3_prefix(dc_id, store_name)``.
 
     Keys keep the store-relative path with ``/`` separators, so chunk keys like
-    ``0/0.0.0.0.0`` (or nested ``0/0/0/0/0/0``) resolve unchanged. With
+    ``0/0.0.0.0.0``, nested ``0/0/0/0/0/0`` or zarr v3 ``0/c/0/0/0`` resolve
+    unchanged; a large zarr v3 shard goes through boto3's managed (multipart)
+    transfer like any other file. With
     ``image_path`` (SpatialData) only ``<store>/<image_path>`` is uploaded, with
     keys relative to it, so the prefix reads like a plain OME-Zarr store. Files are
     uploaded in parallel over the shared ``s3_client`` (boto3 clients are
@@ -1386,9 +1444,9 @@ def _validate_bioimage_store(store_path: str, props: DCBioimageConfig) -> None:
     if props.format == "ome-tiff":
         validate_ome_tiff(store_path)
     elif props.format == "spatialdata":
-        validate_spatialdata_store(store_path, props.image_path or "")
+        validate_spatialdata_store(store_path, props.image_path or "", props.ngff_version)
     else:
-        validate_ome_zarr_store(store_path)
+        validate_ome_zarr_store(store_path, props.ngff_version)
 
 
 def process_bioimage_data_collection(

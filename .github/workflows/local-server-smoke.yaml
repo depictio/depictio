@@ -107,14 +107,17 @@ jobs:
           curl -fsS -o /dev/null "$API/$DC/sample_A.zarr/0/0/0/0"
 
       # The OME-TIFF is one file read with HTTP Range requests (the viewer asks
-      # for a few KB at a time), and the SpatialData store is served from its
-      # image element (images/he) as if it were an OME-Zarr store.
-      - name: Check the OME-TIFF and SpatialData examples
+      # for a few KB at a time), and the SpatialData store (zarr v3) is served
+      # from its image element (images/he) as if it were an OME-Zarr store. The
+      # NGFF 0.5 store is sharded: a reader fetches each shard's index (its last
+      # bytes) with a suffix Range request, then the chunks by byte range.
+      - name: Check the OME-TIFF, SpatialData and NGFF 0.5 examples
         run: |
           API=http://127.0.0.1:8058/depictio/api/v1/advanced_viz/bioimage
           TIFF_DC=646b0f3c1e4a2d7f8e5b8f0b  # lily_stem_image
           SD_DC=646b0f3c1e4a2d7f8e5b8f0d    # skin_spatialdata_image
-          for dc in "$TIFF_DC" "$SD_DC"; do
+          SH_DC=646b0f3c1e4a2d7f8e5b8f0f    # lily_sharded_image
+          for dc in "$TIFF_DC" "$SD_DC" "$SH_DC"; do
             n=0
             for i in $(seq 1 60); do
               n=$(curl -fsS "$API/$dc/stores" 2>/dev/null | jq length 2>/dev/null || echo 0)
@@ -127,9 +130,19 @@ jobs:
             "$API/$TIFF_DC/lily_stem.ome.tif")
           [ "$code" = "206" ] || { echo "Range read returned $code, expected 206"; exit 1; }
           [ "$(wc -c < "$RUNNER_TEMP/range.bin" | tr -d ' ')" = "1024" ] || { echo "Range read size mismatch"; exit 1; }
-          curl -fsS "$API/$SD_DC/skin_spatialdata.zarr/.zattrs" \
-            | jq -e '.multiscales[0].version == "0.4" and (.multiscales[0].datasets | length == 3)'
-          curl -fsS -o /dev/null "$API/$SD_DC/skin_spatialdata.zarr/s0/.zarray"
+          # spatialdata 0.8 records its NGFF 0.5 images as "0.5-dev-spatialdata".
+          curl -fsS "$API/$SD_DC/skin_spatialdata.zarr/zarr.json" \
+            | jq -e '(.attributes.ome.version | startswith("0.5")) and (.attributes.ome.multiscales[0].datasets | length == 3)'
+          curl -fsS -o /dev/null "$API/$SD_DC/skin_spatialdata.zarr/s0/zarr.json"
+          curl -fsS "$API/$SH_DC/lily_sharded.zarr/zarr.json" \
+            | jq -e '.attributes.ome.version == "0.5" and (.attributes.ome.multiscales[0].datasets | length == 3)'
+          curl -fsS "$API/$SH_DC/lily_sharded.zarr/0/zarr.json" \
+            | jq -e '.codecs[0].name == "sharding_indexed"'
+          # Level 0 shards hold 2 x 2 chunks: a 4 x 16-byte index plus a 4-byte crc32c.
+          code=$(curl -sS -o "$RUNNER_TEMP/index.bin" -w '%{http_code}' -H 'Range: bytes=-68' \
+            "$API/$SH_DC/lily_sharded.zarr/0/c/0/0/0")
+          [ "$code" = "206" ] || { echo "Shard index read returned $code, expected 206"; exit 1; }
+          [ "$(wc -c < "$RUNNER_TEMP/index.bin" | tr -d ' ')" = "68" ] || { echo "Shard index size mismatch"; exit 1; }
 
       - name: Set up Node.js
         uses: actions/setup-node@v7

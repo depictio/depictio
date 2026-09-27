@@ -21,17 +21,19 @@ The SpatialData example needs the ``spatialdata`` library, which requires zarr 3
 so it lives in ``make_spatialdata_example.py`` and this script runs it through
 ``uv run --with spatialdata==<--spatialdata-version>`` in a second throwaway
 environment (``uv`` must be on PATH; ``--no-spatialdata`` skips that step and
-keeps the store and manifest entry already there).
+keeps the store and manifest entry already there). The NGFF 0.5 (sharded)
+example needs zarr 3 too: ``make_ngff05_example.py``, run the same way with
+``--with zarr==<--zarr3-version>`` (``--no-ngff05`` skips it).
 
 The OME-TIFF example is written with ``tifffile``, which scikit-image depends
 on: a tiled, zlib-compressed pyramid whose reduced levels are SubIFDs of the
 full-resolution planes, with channel names, colours and the physical pixel
 size in the OME-XML.
 
-OME-Zarr stores are NGFF 0.4: zarr v2, ``/`` dimension separator, a ``multiscales``
-block with physical ``scale`` transforms and an ``omero`` block with channel
-names, colours and contrast windows. Output is deterministic for a given
-``--seed`` and library versions.
+The OME-Zarr stores written here are NGFF 0.4: zarr v2, ``/`` dimension
+separator, a ``multiscales`` block with physical ``scale`` transforms and an
+``omero`` block with channel names, colours and contrast windows. Output is
+deterministic for a given ``--seed`` and library versions.
 """
 
 from __future__ import annotations
@@ -64,10 +66,11 @@ MITOSIS_XY_UM_NOMINAL = 0.65
 # skimage.data.lily documents 1.24 um pixels.
 LILY_XY_UM = 1.24
 
-# The SpatialData store is written by this pinned version (see the README).
-# 0.8.0 writes zarr v3 by default; make_spatialdata_example.py passes its 0.1
-# format classes to get zarr v2, and a newer release may rename them.
+# The SpatialData store is written by this pinned version (see the README), in
+# its default on-disk formats: zarr v3, an NGFF 0.5 image.
 SPATIALDATA_VERSION = "0.8.0"
+# The NGFF 0.5 (sharded) store is written by this pinned zarr-python release.
+ZARR3_VERSION = "3.4.0"
 
 KIDNEY_CHANNELS = [
     # scikit-image: emission wavelengths 450, 515 and 605 nm.
@@ -278,6 +281,22 @@ def segment_nuclei(channel: np.ndarray, min_size: int, min_distance: int) -> np.
     markers[tuple(peaks.T)] = np.arange(1, len(peaks) + 1)
     labels = segmentation.watershed(-distance, markers, mask=mask)
     return drop_small(labels, min_size)
+
+
+def segment_plant_cells(wall: np.ndarray, min_cell: int, max_cell: int) -> np.ndarray:
+    """Plant cells of a section whose walls are bright, as labels.
+
+    Cells are the dark lumens between the walls: the same threshold + watershed
+    as the nuclei, run on the inverted wall signal (``wall`` scaled to 0-1), so
+    lumens that touch through a gap in a wall are still split. Lumens over
+    ``max_cell`` pixels (background, vessels) are dropped. Each label is the
+    lumen grown by 2 px, so the wall around it counts towards its intensities.
+    """
+    lumens = segment_nuclei(1 - wall, min_size=min_cell, min_distance=4)
+    counts = np.bincount(lumens.ravel())
+    lumens[(counts > max_cell)[lumens]] = 0
+    lumens, _, _ = segmentation.relabel_sequential(lumens)
+    return segmentation.expand_labels(lumens, 2)
 
 
 def kmeans(features: np.ndarray, k: int, rng: np.random.Generator, iters: int = 50) -> np.ndarray:
@@ -725,16 +744,9 @@ def example_ome_tiff(out: Path, args) -> dict:
             tif.write(arr, resolution=(1 / px_cm, 1 / px_cm), **options, **extra)
     validate_ome_tiff(path, len(pyramid), image.shape)
 
-    # Cells are the dark lumens between the bright walls: the same threshold +
-    # watershed as the nuclei, run on the inverted wall signal, so lumens that
-    # touch through a gap in a wall are still split. The measured ring is each
-    # lumen grown by 2 px, so the wall around it counts towards its intensities.
-    wall = image.astype(np.float32).max(axis=0) / 255
-    lumens = segment_nuclei(1 - wall, min_size=args.tiff_min_cell, min_distance=4)
-    counts = np.bincount(lumens.ravel())
-    lumens[(counts > args.tiff_max_cell)[lumens]] = 0
-    lumens, _, _ = segmentation.relabel_sequential(lumens)
-    rings = segmentation.expand_labels(lumens, 2)
+    rings = segment_plant_cells(
+        image.astype(np.float32).max(axis=0) / 255, args.tiff_min_cell, args.tiff_max_cell
+    )
     props = measure.regionprops(rings, intensity_image=image.transpose(1, 2, 0))
     means = np.array([p.intensity_mean for p in props], dtype=float)
     # "Thick-walled" when the Ch2 ring intensity, on the scale of its own 99th
@@ -829,6 +841,39 @@ def example_spatialdata(out: Path, args) -> dict:
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
+def example_ngff05(out: Path, args) -> dict:
+    """Run make_ngff05_example.py in its own environment (it needs zarr 3)."""
+    uv = shutil.which("uv")
+    if uv is None:
+        raise SystemExit("uv not found: install it, or pass --no-ngff05")
+    script = Path(__file__).resolve().parent / "make_ngff05_example.py"
+    cmd = [
+        uv,
+        "run",
+        "--no-project",
+        "--python",
+        "3.12",
+        "--with",
+        f"zarr=={args.zarr3_version}",
+        "--with",
+        # Only reads the store back (0.12 is the first release that reads NGFF 0.5).
+        "ome-zarr>=0.12",
+        "--with",
+        "scikit-image",
+        "--with",
+        "pooch",
+        "python",
+        str(script),
+        "--out",
+        str(out),
+        "--levels",
+        str(args.levels),
+        "--json",
+    ]
+    done = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--out", type=Path, required=True, help="Output data directory")
@@ -884,6 +929,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Skip the SpatialData store (keeps the one already written and its manifest entry)",
     )
+    # NGFF 0.5 (sharded) example.
+    p.add_argument(
+        "--zarr3-version",
+        default=ZARR3_VERSION,
+        help="zarr-python 3 release the NGFF 0.5 store is written with",
+    )
+    p.add_argument(
+        "--no-ngff05",
+        action="store_true",
+        help="Skip the NGFF 0.5 store (keeps the one already written and its manifest entry)",
+    )
     p.add_argument("--no-validate", action="store_true", help="Skip ome-zarr read-back")
     return p.parse_args(argv)
 
@@ -908,19 +964,25 @@ def main(argv: list[str]) -> int:
     # Validated as they are written, by their own readers.
     results.append(example_ome_tiff(out, args))
     if args.no_spatialdata:
-        results.extend(_previous_spatialdata_entries(out / "manifest.json"))
+        results.extend(_previous_entries(out / "manifest.json", "spatialdata_version"))
     else:
         results.append(example_spatialdata(out, args))
+    if args.no_ngff05:
+        results.extend(_previous_entries(out / "manifest.json", "shard"))
+    else:
+        results.append(example_ngff05(out, args))
     for res in results:
         print(f"  {res['store']:<34} {res['bytes'] / 1e6:6.2f} MB  {res['rows']:5d} table rows")
     total = sum(r["bytes"] for r in results)
     print(f"  total store size: {total / 1e6:.2f} MB")
     manifest = {
         "generator": "dev/bioimage/make_examples.py",
-        # `out`, `no_validate` and `no_spatialdata` do not change the bytes written;
-        # leaving them out keeps the manifest identical wherever the script is run from.
+        # `out` and the `no_*` switches do not change the bytes written; leaving
+        # them out keeps the manifest identical wherever the script is run from.
         "args": {
-            k: v for k, v in vars(args).items() if k not in {"out", "no_validate", "no_spatialdata"}
+            k: v
+            for k, v in vars(args).items()
+            if k not in {"out", "no_validate", "no_spatialdata", "no_ngff05"}
         },
         "stores": results,
     }
@@ -928,12 +990,12 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-def _previous_spatialdata_entries(manifest: Path) -> list[dict]:
-    """The SpatialData entries of an existing manifest (``--no-spatialdata``)."""
+def _previous_entries(manifest: Path, key: str) -> list[dict]:
+    """Entries of an existing manifest carrying ``key`` (``--no-spatialdata``, ``--no-ngff05``)."""
     if not manifest.exists():
         return []
     stores = json.loads(manifest.read_text()).get("stores", [])
-    return [s for s in stores if "spatialdata_version" in s]
+    return [s for s in stores if key in s]
 
 
 if __name__ == "__main__":
