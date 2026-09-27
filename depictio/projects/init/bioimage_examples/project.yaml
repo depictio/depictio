@@ -1,0 +1,236 @@
+# Bioimage examples: four OME-Zarr NGFF 0.4 image cases for the bioimage_viewer
+# (multichannel 2D, Visium-like spatial, 3D + time, multi-sample), each with the
+# table its points overlay and its filters read. Images come from scikit-image
+# sample data; tables are derived from the pixels. See data/README.md, and
+# dev/bioimage/make_examples.py to regenerate.
+#
+# Optional project: not part of the default seed set. Seed it with
+# DEPICTIO_SEED_EXTRA_PROJECTS=bioimage_examples, or
+# `depictio local up --examples bioimage_examples`.
+
+id: "646b0f3c1e4a2d7f8e5b8f00"
+name: "Bioimage Examples"
+project_type: "advanced"
+is_public: true
+workflows:
+  - id: "646b0f3c1e4a2d7f8e5b8f01"
+    name: "bioimage_demo"
+    engine:
+      name: "python"
+      version: "3.11"
+    description: "Small OME-Zarr stores from scikit-image sample data, with derived cell and spot tables"
+    # Flat: the data folder is one run, which is what the recursive multi-sample
+    # DC below scans for stores.
+    data_location:
+      structure: "flat"
+      locations:
+        - /app/depictio/projects/init/bioimage_examples/data
+    data_collections:
+      # ----------------------------------------------------------------
+      # 1. Multichannel 2D fluorescence (kidney, maximum projection)
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f02"
+        data_collection_tag: "kidney_2d_image"
+        description: "Mouse kidney, 3-channel confocal fluorescence, maximum projection (512 x 512)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/kidney_2d.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f03"
+        data_collection_tag: "kidney_2d_cells"
+        description: "Nuclei segmented on the 450 nm channel of the kidney projection"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/kidney_2d_cells.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              cell_id: "Nucleus identifier"
+              sample: "Store the nucleus belongs to (kidney_2d)"
+              x: "Centroid column, level-0 pixels"
+              y: "Centroid row, level-0 pixels"
+              area_px: "Area in pixels"
+              area_um2: "Area in square micrometres"
+              mean_em450: "Mean intensity, 450 nm channel"
+              mean_em515: "Mean intensity, 515 nm channel"
+              mean_em605: "Mean intensity, 605 nm channel"
+              dominant_channel: "Brightest channel relative to its own 99th percentile"
+
+      # ----------------------------------------------------------------
+      # 2. Visium-like spatial: RGB tissue + spots
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f04"
+        data_collection_tag: "ihc_spatial_image"
+        description: "Colonic glands, DAB immunohistochemistry with hematoxylin (RGB, 512 x 512)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/ihc_spatial.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f05"
+        data_collection_tag: "ihc_spatial_spots"
+        description: "Visium-like spots over the tissue, clustered on stain intensities, with synthetic counts"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/ihc_spatial_spots.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              spot_id: "Spot identifier"
+              sample: "Store the spot belongs to (ihc_spatial)"
+              x: "Spot centre column, level-0 pixels"
+              y: "Spot centre row, level-0 pixels"
+              cluster: "k-means cluster on hematoxylin, DAB and brightness (C1 = most DAB)"
+              gene_A: "Synthetic count, follows DAB"
+              gene_B: "Synthetic count, follows hematoxylin"
+              gene_C: "Synthetic count, left-to-right gradient"
+
+      # ----------------------------------------------------------------
+      # 3. 3D stack with a time axis (t, c, z, y, x)
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f06"
+        data_collection_tag: "kidney_3d_timelapse_image"
+        description: "Kidney volume, 2 channels x 8 planes x 5 timepoints (synthetic drift and bleaching)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/kidney_3d_timelapse.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f07"
+        data_collection_tag: "kidney_3d_timelapse_nuclei"
+        description: "Nuclei of the first timepoint, segmented in 3D"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/kidney_3d_timelapse_nuclei.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              cell_id: "Nucleus identifier"
+              sample: "Store the nucleus belongs to (kidney_3d_timelapse)"
+              x: "Centroid column, level-0 pixels"
+              y: "Centroid row, level-0 pixels"
+              z: "Centroid plane index"
+              depth_band: "Upper, middle or lower third of the nuclei by depth"
+              volume_voxels: "Volume in voxels"
+              volume_um3: "Volume in cubic micrometres"
+              mean_intensity: "Mean nuclear-channel intensity"
+
+      # ----------------------------------------------------------------
+      # 4. Multi-sample: one store per sample, a sample sheet, a cells table
+      # ----------------------------------------------------------------
+      # Recursive: every store named sample_*.zarr under the run becomes one
+      # File, and the viewer picks the one whose name matches the selected
+      # sample.
+      - id: "646b0f3c1e4a2d7f8e5b8f08"
+        data_collection_tag: "multi_sample_images"
+        description: "Three crops of a human cell mitosis screen image, one store per sample"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "sample_[A-Za-z0-9]+\\.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f09"
+        data_collection_tag: "multi_sample_cells"
+        description: "Nuclei of the three samples, with a heuristic mitotic call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/multi_sample/cells.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              cell_id: "Nucleus identifier"
+              sample: "Sample (store name without .zarr)"
+              x: "Centroid column, level-0 pixels of the sample's store"
+              y: "Centroid row, level-0 pixels of the sample's store"
+              area_px: "Area in pixels"
+              mean_intensity: "Mean DNA intensity"
+              eccentricity: "Eccentricity of the fitted ellipse"
+              phase: "mitotic (bright and compact) or interphase: a heuristic"
+
+      - id: "646b0f3c1e4a2d7f8e5b8f0a"
+        data_collection_tag: "multi_sample_samples"
+        description: "Sample sheet: one row per store"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/multi_sample/samples.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              sample: "Sample name, equal to the store name without .zarr"
+              condition: "Demo condition label"
+              replicate: "Replicate number within the condition"
+              tissue: "Sample type"
+              stain: "Stained structure"
+              crop_y: "Crop origin row in the source image"
+              crop_x: "Crop origin column in the source image"
+              n_cells: "Nuclei segmented in the sample"
+              mitotic_fraction: "Share of nuclei called mitotic"
+
+# A sample picked in the sample sheet narrows the cells table, so the cards and
+# table of the multi-sample tab follow the store the viewer is showing.
+links:
+  - source_dc_tag: "multi_sample_samples"
+    source_column: "sample"
+    target_dc_tag: "multi_sample_cells"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cells of the multi-sample tab by the samples selected in the sheet"
+    enabled: true

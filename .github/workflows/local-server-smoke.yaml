@@ -53,7 +53,7 @@ jobs:
           uv build --wheel --out-dir "$RUNNER_TEMP/wheels" packages/plotly-complexheatmap
           ls -la "$RUNNER_TEMP/wheels"
 
-      - name: depictio local up (iris example, from the wheel, outside the checkout)
+      - name: depictio local up (iris + bioimage examples, from the wheel, outside the checkout)
         working-directory: ${{ runner.temp }}
         run: |
           W="$RUNNER_TEMP/wheels"
@@ -61,7 +61,7 @@ jobs:
             --from "depictio[local] @ file://$(ls $W/depictio-*.whl)" \
             --with "$(ls $W/plotly_upset-*.whl)" \
             --with "$(ls $W/plotly_complexheatmap-*.whl)" \
-            depictio local up --examples iris --no-open
+            depictio local up --examples iris,bioimage_examples --no-open
 
       - name: Check the API, the viewer and the ingested iris table
         run: |
@@ -86,6 +86,25 @@ jobs:
           if grep -E "exited with 'signal|WorkerLostError" ~/.depictio/local/logs/worker.log; then
             echo "a worker process crashed"; exit 1
           fi
+
+      # The OME-Zarr stores reach the wheel only through package-data globs that
+      # name their dotfiles (.zattrs, .zarray): a store missing them lists fine
+      # and then 404s on its metadata. They are uploaded after iris, in the
+      # same background pass.
+      - name: Check the OME-Zarr example stores
+        run: |
+          API=http://127.0.0.1:8058/depictio/api/v1/advanced_viz/bioimage
+          DC=646b0f3c1e4a2d7f8e5b8f08  # multi_sample_images: three stores
+          n=0
+          for i in $(seq 1 60); do
+            n=$(curl -fsS "$API/$DC/stores" 2>/dev/null | jq length 2>/dev/null || echo 0)
+            [ "$n" = "3" ] && break
+            sleep 5
+          done
+          [ "$n" = "3" ] || { echo "expected 3 multi-sample stores, got $n"; exit 1; }
+          curl -fsS "$API/$DC/sample_A.zarr/.zattrs" | jq -e '.multiscales[0].datasets | length == 3'
+          curl -fsS -o /dev/null "$API/$DC/sample_A.zarr/0/.zarray"
+          curl -fsS -o /dev/null "$API/$DC/sample_A.zarr/0/0/0/0"
 
       - name: Set up Node.js
         uses: actions/setup-node@v7

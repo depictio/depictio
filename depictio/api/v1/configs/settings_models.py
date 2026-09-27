@@ -1812,7 +1812,9 @@ class Settings(BaseSettings):
             "startup, e.g. 'iris' or 'iris,penguins'. Empty (the default) seeds "
             "all of them. Ignored when DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is "
             "true (that takes precedence and seeds nothing). Valid names: "
-            "iris, penguins, ampliseq, advanced_viz_showcase, viralrecon."
+            "iris, penguins, ampliseq, advanced_viz_showcase, viralrecon, plus the "
+            "optional catalog_conformance and bioimage_examples, which are seeded "
+            "when listed here even though the default set leaves them out."
         ),
     )
 
@@ -1820,11 +1822,12 @@ class Settings(BaseSettings):
         default="",
         description=(
             "Comma-separated list of *optional* reference projects to seed in "
-            "addition to the default set, e.g. 'catalog_conformance'. Empty (the "
-            "default) seeds none of them. This is additive, unlike "
-            "DEPICTIO_SEED_PROJECTS which narrows the default set — an optional "
-            "project is a test fixture, so it stays out of ordinary deployments "
-            "until something asks for it. Ignored when "
+            "addition to the default set: 'catalog_conformance' (a test fixture) "
+            "or 'bioimage_examples' (image examples, heavier than the table "
+            "demos). Empty (the default) seeds none of them. This is additive, "
+            "unlike DEPICTIO_SEED_PROJECTS which narrows the default set, so an "
+            "optional project stays out of ordinary deployments until something "
+            "asks for it. Ignored when "
             "DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is true."
         ),
     )

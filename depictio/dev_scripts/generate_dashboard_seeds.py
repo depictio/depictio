@@ -5,7 +5,8 @@ collections and so need no ingest to rebuild: ``advanced_viz_showcase``
 (23 tabs), ``nfcore_megatests_showcase`` (10) and ``catalog_conformance`` (1).
 All three used to keep their seeds as hand-written or Mongo-dumped JSON, which
 meant the shipped dashboards had no authorable source: adding a filter or a
-caption meant editing a MongoDB document.
+caption meant editing a MongoDB document. ``bioimage_examples`` (4) was
+authored here from the start.
 
 The nf-core reference projects are NOT here, and should not be: their YAML
 leans on ``use:`` catalog bindings that only the importer resolves, so their
@@ -66,6 +67,14 @@ PROJECTS: dict[str, dict[str, Any]] = {
         "dir": "depictio/projects/init/advanced_viz_showcase",
         "config": "project.yaml",
         "static_ids_key": "advanced_viz_showcase",
+        "is_public": True,
+    },
+    # Optional (DEPICTIO_SEED_EXTRA_PROJECTS), so, like catalog_conformance, a
+    # machine that has not opted in has no project to import into.
+    "bioimage_examples": {
+        "dir": "depictio/projects/init/bioimage_examples",
+        "config": "project.yaml",
+        "static_ids_key": "bioimage_examples",
         "is_public": True,
     },
     "nfcore_megatests_showcase": {

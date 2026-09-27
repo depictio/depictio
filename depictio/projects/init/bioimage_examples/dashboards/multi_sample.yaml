@@ -1,0 +1,247 @@
+# Multi-sample: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Multi-sample'
+subtitle: 'One store per sample, picked from the sample sheet'
+icon: 'mdi:image-multiple'
+icon_color: 'blue'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f12'
+is_main_tab: false
+tab_order: 3
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:image-multiple'
+tab_icon_color: 'blue'
+
+filter_sections:
+  - name: 'Samples'
+    icon: 'mdi:test-tube'
+    color: 'blue'
+    description: 'The sample picked here is the image the viewer opens'
+  - name: 'Nuclei'
+    icon: 'mdi:filter-variant'
+    color: 'cyan'
+    description: 'Narrows the nuclei drawn over the image, the table and the cards'
+
+grid_sections:
+  - name: 'Sample nuclei'
+    icon: 'mdi:counter'
+    color: 'blue'
+    description: 'The nuclei of the selected samples in numbers'
+  - name: 'Image'
+    icon: 'mdi:microscope'
+    color: 'blue'
+    description: 'The selected sample, with one point per nucleus; lasso nuclei to filter the table'
+  - name: 'Sample sheet'
+    icon: 'mdi:table-account'
+    color: 'blue'
+    description: 'One row per store'
+
+components:
+  - tag: text-multi-sample
+    index: omz-ms-text
+    component_type: text
+    title: 'One image per sample'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Sample nuclei'
+    body: >
+      Three crops of a human cell screen image (DNA stain), each its own OME-Zarr store,
+      named after the sample in the sheet below. Pick a sample on the left: the viewer
+      opens that store, and the cards and the table narrow to its nuclei. The condition
+      labels are for the demo, and "mitotic" marks bright, compact nuclei: a heuristic,
+      not a classifier.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-multi-sample-nuclei
+    index: omz-ms-card-count
+    component_type: card
+    section: 'Sample nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    aggregation: count
+    column_name: cell_id
+    column_type: object
+    icon_name: mdi:counter
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nuclei'
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+
+  - tag: card-multi-sample-phase
+    index: omz-ms-card-phase
+    component_type: card
+    section: 'Sample nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    aggregation: nunique
+    column_name: phase
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: phase
+    top_n_count: 2
+    icon_name: mdi:chart-donut
+    title_font_size: md
+    value_font_size: xl
+    title: 'Phase'
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+
+  - tag: card-multi-sample-area
+    index: omz-ms-card-area
+    component_type: card
+    section: 'Sample nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    aggregation: median
+    secondary_layout: histogram
+    column_name: area_px
+    column_type: int64
+    icon_name: mdi:chart-histogram
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nucleus area (px)'
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+
+  - tag: card-multi-sample-intensity
+    index: omz-ms-card-intensity
+    component_type: card
+    section: 'Sample nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_intensity
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'DNA intensity'
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  - tag: viz-multi-sample
+    index: omz-ms-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_images
+    title: 'Selected sample'
+    description: 'One 256 x 256 store per sample (nominal 0.65 um pixels). Points are nuclei of the store on screen, coloured by phase.'
+    section: 'Image'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: multi_sample_images
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f08'
+      store: sample_A.zarr
+      sample_dc_tag: multi_sample_samples
+      sample_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      sample_dc_id: '646b0f3c1e4a2d7f8e5b8f0a'
+      sample_column: sample
+      points_dc_tag: multi_sample_cells
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f09'
+      cell_id_col: cell_id
+      x_col: x
+      y_col: y
+      color_col: phase
+      points_sample_col: sample
+      point_radius: 5
+      show_scalebar: true
+      selection_enabled: true
+    layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  - tag: table-multi-sample-cells
+    index: omz-ms-table
+    component_type: table
+    section: 'Image'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    title: 'Nuclei'
+    description: 'One row per nucleus of the selected samples. A lasso on the image narrows it.'
+    columns: [cell_id, sample, area_px, mean_intensity, eccentricity, phase]
+    page_size: 50
+    layout: { x: 0, y: 9, w: 8, h: 5 }
+
+  - tag: table-multi-sample-sheet
+    index: omz-ms-sheet
+    component_type: table
+    section: 'Sample sheet'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_samples
+    title: 'Samples'
+    description: 'The sample sheet. `sample` is the store name without .zarr.'
+    page_size: 10
+    layout: { x: 0, y: 0, w: 8, h: 3 }
+
+  - tag: filter-multi-sample-sample
+    index: omz-ms-f-sample
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_samples
+    interactive_component_type: Select
+    column_name: sample
+    column_type: object
+    title: 'Sample'
+    placement: left
+    section: 'Samples'
+    display:
+      title_size: md
+      icon_name: 'mdi:test-tube'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-multi-sample-condition
+    index: omz-ms-f-condition
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_samples
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    title: 'Condition'
+    placement: left
+    section: 'Samples'
+    display:
+      title_size: md
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-multi-sample-phase
+    index: omz-ms-f-phase
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    interactive_component_type: MultiSelect
+    column_name: phase
+    column_type: object
+    title: 'Phase'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 6, w: 1, h: 3 }
+
+  - tag: filter-multi-sample-area
+    index: omz-ms-f-area
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_cells
+    interactive_component_type: RangeSlider
+    column_name: area_px
+    column_type: int64
+    title: 'Nucleus area (px)'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 9, w: 1, h: 3 }

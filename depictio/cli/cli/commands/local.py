@@ -79,7 +79,9 @@ def up(
         typer.Option(
             "--examples",
             help="Bundled example projects to seed: comma-separated names, 'all' or 'none'. "
-            "Defaults to 'iris,penguins' without --template and 'none' with it.",
+            "Defaults to 'iris,penguins' without --template and 'none' with it. "
+            "'all' is the default set; the optional bioimage_examples (OME-Zarr images) "
+            "is seeded only when named.",
         ),
     ] = None,
     port: Annotated[
