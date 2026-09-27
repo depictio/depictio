@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
@@ -174,6 +175,7 @@ class DataCollectionConfig(MongoModel):
         | DCImageConfig
         | DCGeoJSONConfig
         | DCPhylogenyConfig
+        | DCGenomicTracksConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
@@ -213,7 +215,15 @@ class DataCollectionConfig(MongoModel):
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2", "multiqc", "image", "geojson", "phylogeny"]
+        allowed_values = [
+            "table",
+            "jbrowse2",
+            "genomic_tracks",
+            "multiqc",
+            "image",
+            "geojson",
+            "phylogeny",
+        ]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
@@ -282,6 +292,13 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCGeoJSONConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCGeoJSONConfig()
+        elif type_value == "genomic_tracks":
+            # Manifest table of genome-browser tracks (jbrowse component).
+            if not isinstance(dc_specific_properties, DCGenomicTracksConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCGenomicTracksConfig(
+                        **dc_specific_properties
+                    )
         elif type_value == "phylogeny":
             if not isinstance(dc_specific_properties, DCPhylogenyConfig):
                 if isinstance(dc_specific_properties, dict):

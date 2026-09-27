@@ -183,8 +183,11 @@ app.add_middleware(
     cast(Any, CORSMiddleware),
     allow_origins=_cors_origins,
     allow_credentials=settings.fastapi.cors_allow_credentials and bool(_cors_origins),
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    # Range + the exposed headers let a genome browser on another origin (dev
+    # server, split viewer/API hosts) read track files by byte range.
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Range"],
+    expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
     max_age=600,
 )
 if not _cors_origins:

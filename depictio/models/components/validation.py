@@ -8,7 +8,7 @@ The validation rules ensure that:
 - Standard components (Figure, Card, Interactive, Table) only work with Table DCs
 - Image components only work with Image DCs
 - MultiQC components only work with MultiQC DCs
-- JBrowse2 components only work with JBrowse2 DCs
+- JBrowse components work with genomic_tracks DCs (and legacy jbrowse2 DCs)
 - Map components only work with Table DCs whose config carries lat/lon column hints
   (enforced via `dc_has_coordinates`)
 """
@@ -19,11 +19,13 @@ from typing import Any
 COMPONENT_DC_TYPE_MAPPING: dict[str, list[str]] = {
     "Figure": ["table"],
     "Card": ["table"],
-    "Interactive": ["table"],
-    "Table": ["table"],
+    "Interactive": ["table", "genomic_tracks"],
+    # A genomic_tracks manifest is a Delta table too, so it can be listed and
+    # filtered like one next to the genome browser.
+    "Table": ["table", "genomic_tracks"],
     "MultiQC": ["multiqc"],
     "Image": ["image"],
-    "JBrowse2": ["jbrowse2"],
+    "JBrowse2": ["genomic_tracks", "jbrowse2"],
     "Map": ["table"],
     # Advanced viz consumes tabular DCs whose columns satisfy one of the
     # canonical viz schemas (see advanced_viz/schemas.py). The viz-side
@@ -45,6 +47,7 @@ DC_COMPONENT_TYPE_MAPPING: dict[str, list[str]] = {
     "multiqc": ["MultiQC"],
     "image": ["Image"],
     "jbrowse2": ["JBrowse2"],
+    "genomic_tracks": ["JBrowse2", "Table", "Interactive"],
     "geojson": ["Map"],
 }
 

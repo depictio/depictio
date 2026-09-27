@@ -3912,31 +3912,87 @@ def get_cross_tab_components(
 
 
 # ============================================================================
-# React viewer: JBrowse session URL
+# React viewer: JBrowse genome browser
 # ============================================================================
 
 
+def _find_project_dc(project_id: Any, dc_tag: str) -> tuple[str, str] | None:
+    """(wf_id, dc_id) of the DC tagged ``dc_tag`` in the project, if any."""
+    project = projects_collection.find_one(
+        {"_id": ObjectId(str(project_id))}, {"workflows._id": 1, "workflows.data_collections": 1}
+    )
+    for wf in (project or {}).get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if dc.get("data_collection_tag") == dc_tag:
+                return str(wf.get("_id")), str(dc.get("_id"))
+    return None
+
+
+def _jbrowse_locus(
+    component: dict, filters: list[dict], project_id: Any, access_token: str | None
+) -> str | None:
+    """Locus of the filtered rows of ``locus_from`` when they narrow to a few rows."""
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.jbrowse.render import locus_from_rows
+
+    spec = component.get("locus_from")
+    if not spec or not filters:
+        return None
+    found = _find_project_dc(project_id, spec.get("data_collection_tag", ""))
+    if not found:
+        return None
+    wf_id, dc_id = found
+    merged = _resolve_link_filters_cached(
+        filters=filters,
+        target_dc_id=dc_id,
+        project_id=project_id,
+        access_token=access_token,
+        component_type="jbrowse",
+    )
+    metadata = _build_filter_metadata(merged)
+    if not metadata:
+        return None
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(wf_id), data_collection_id=dc_id, metadata=metadata
+        )
+    except Exception as e:  # noqa: BLE001 - a missing locus must not fail the view
+        logger.warning(f"render_jbrowse: locus lookup failed: {e}")
+        return None
+    if df.height == 0 or df.height > int(spec.get("max_rows", 20)):
+        return None
+    return locus_from_rows(df.head(1).to_dicts(), spec)
+
+
 @dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
-async def render_jbrowse_endpoint(
+def render_jbrowse_endpoint(
     dashboard_id: PyObjectId,
     component_id: str,
-    request: dict,
+    request: dict | None = Body(default=None),
     current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ):
-    """Synthesise the JBrowse 2 iframe URL for the React viewer.
+    """JBrowse configuration of a ``jbrowse`` component under the dashboard filters.
 
-    JBrowse 2 must be running at ``localhost:3000`` and its session config
-    server at ``localhost:9010/sessions/...``; if either is unreachable,
-    returns 503 (no silent fallback).
+    Request body: ``{"filters": [...]}`` (same payload as the other render
+    endpoints; the component strips its own ``jbrowse_selection`` entry).
+    Filters are extended over DC links, then applied to the component's
+    ``genomic_tracks`` manifest: the matching tracks are the ones shown.
+
+    Returns the assembly and track configurations (file locations are signed
+    proxy URLs), the track ids to show, the locus and view flags, plus a
+    per-track summary the viewer uses to turn a click back into a filter.
     """
-    import httpx
+    from depictio.api.v1.services.jbrowse.render import (
+        build_jbrowse_payload,
+        filtered_track_rows,
+    )
+    from depictio.api.v1.services.jbrowse.tracks import find_tracks_dc
 
-    from depictio.api.v1.configs.config import API_BASE_URL
+    if not settings.jbrowse.enabled:
+        raise HTTPException(status_code=404, detail="The genome browser is disabled.")
 
-    JBROWSE_HOST = "http://localhost:3000"
-    JBROWSE_SESSIONS_HOST = "http://localhost:9010"
-
-    filters = request.get("filters") or []
+    filters = (request or {}).get("filters") or []
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -3959,82 +4015,38 @@ async def render_jbrowse_endpoint(
             status_code=404, detail=f"JBrowse component '{component_id}' not found."
         )
 
-    wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
-
-    dc_config = component.get("dc_config") or {}
-    jbrowse_params = dc_config.get("jbrowse_params") or {}
-    assembly = jbrowse_params.get("assemblyName") or "hg38"
-    default_loc = jbrowse_params.get("default_location") or "chr1:1-248956422"
-
-    user_id = str(getattr(current_user, "id", "anonymous"))
-    session = f"{user_id}_{dc_id}_lite.json"
-
-    track_ids: list[str] = []
-    filter_applied = bool(filters)
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            if filters:
-                try:
-                    map_resp = await client.get(
-                        f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/"
-                        f"{wf_id}/{dc_id}",
-                    )
-                    if map_resp.status_code == 200:
-                        mapping = map_resp.json() or {}
-                        dc_map = mapping.get(str(dc_id), {})
-                        for f in filters:
-                            col = f.get("column_name")
-                            value = f.get("value")
-                            if not col or value in (None, [], ""):
-                                continue
-                            values = value if isinstance(value, list) else [value]
-                            col_map = dc_map.get(col, {})
-                            for v in values:
-                                tid = col_map.get(str(v))
-                                if tid:
-                                    track_ids.append(tid)
-                except httpx.HTTPError as e:
-                    logger.warning(f"render_jbrowse: map_tracks unreachable: {e}")
-
-                if track_ids and len(track_ids) <= 100:
-                    try:
-                        filter_resp = await client.post(
-                            f"{API_BASE_URL}/depictio/api/v1/jbrowse/filter_config",
-                            json={
-                                "tracks": track_ids,
-                                "dashboard_id": str(dashboard_id),
-                                "data_collection_id": str(dc_id),
-                            },
-                        )
-                        if filter_resp.status_code == 200:
-                            body = filter_resp.json() or {}
-                            if body.get("session"):
-                                session = body["session"]
-                    except httpx.HTTPError as e:
-                        logger.warning(f"render_jbrowse: filter_config unreachable: {e}")
-    except Exception as e:
-        logger.error(f"render_jbrowse: internal jbrowse routing failed: {e}", exc_info=True)
+    if not dc_id:
+        raise HTTPException(status_code=400, detail="Component has no track data collection.")
+    tdc = find_tracks_dc(str(dc_id))
+    if tdc is None:
         raise HTTPException(
-            status_code=503,
-            detail=f"JBrowse internal services unreachable: {e}",
+            status_code=400,
+            detail="The component's data collection is not a genomic_tracks collection.",
         )
 
-    qs = f"assembly={assembly}&loc={default_loc}"
-    if track_ids and len(track_ids) <= 100:
-        qs += f"&tracks={','.join(track_ids)}"
-    iframe_url = f"{JBROWSE_HOST}?config={JBROWSE_SESSIONS_HOST}/sessions/{session}&{qs}"
-
-    return {
-        "iframe_url": iframe_url,
-        "assembly": assembly,
-        "location": default_loc,
-        "tracks": track_ids or None,
-        "metadata": {"filter_applied": filter_applied},
-    }
+    merged_filters = _resolve_link_filters_cached(
+        filters=filters,
+        target_dc_id=str(dc_id),
+        project_id=project_id,
+        access_token=access_token,
+        component_type="jbrowse",
+    )
+    try:
+        filtered = filtered_track_rows(tdc, _build_filter_metadata(merged_filters))
+        locus = _jbrowse_locus(component, filters, project_id, access_token)
+        return build_jbrowse_payload(
+            component,
+            tdc,
+            filtered,
+            uid=str(getattr(current_user, "id", "")),
+            locus=locus,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"render_jbrowse failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to build the genome browser: {e}")
 
 
 # ============================================================================
