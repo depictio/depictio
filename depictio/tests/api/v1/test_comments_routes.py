@@ -813,6 +813,7 @@ def test_backup_leaves_out_threads_of_temporary_users_dashboards():
         "instance_settings",
         "branding_assets",
         "comment_threads",
+        "project_storage",
     ]
     with ExitStack() as stack:
         for name in names:
