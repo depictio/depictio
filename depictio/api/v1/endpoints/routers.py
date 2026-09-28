@@ -10,6 +10,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import (
     advanced_viz_endpoint_router,
 )
+from depictio.api.v1.endpoints.ai_endpoints.routes import ai_endpoint_router
 from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
     router as analytics_data_router,
 )
@@ -174,6 +175,14 @@ if settings.analytics.enabled:
         analytics_data_router,
         prefix="/analytics-data",
         tags=["Analytics Data"],
+    )
+
+# Include AI assistant routes (feature-gated, off by default)
+if settings.ai.enabled:
+    router.include_router(
+        ai_endpoint_router,
+        prefix="/ai",
+        tags=["AI"],
     )
 
 # Include Real-time Events routes (WebSocket)

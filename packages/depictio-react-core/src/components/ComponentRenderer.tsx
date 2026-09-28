@@ -74,6 +74,10 @@ interface ComponentRendererProps {
    *  rangeslider / timeline children drop their own Paper and tighten internal
    *  spacing. Marks default to hidden unless the metadata sets show_marks=true. */
   compact?: boolean;
+  /** Transient Plotly kwargs override (AI figure mutations) for figure
+   *  components. Merged server-side over the stored dict_kwargs; never
+   *  persisted. Ignored by every other component type. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 /**
@@ -94,6 +98,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   extraActions,
   showDragHandle,
   compact,
+  dictKwargsPatch,
 }) => {
   // Two states of one chrome slot, scoped to the component types that can be a
   // selection source and therefore receive `chromeExtras`: figure, table, map,
@@ -238,6 +243,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         groupRender={groupRender}
         extraActions={chromeExtras}
         showDragHandle={showDragHandle}
+        dictKwargsPatch={dictKwargsPatch}
       />
     );
   }
@@ -551,6 +557,7 @@ const FigureBlock: React.FC<{
   groupRender?: GroupRenderState;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  dictKwargsPatch?: Record<string, unknown>;
 }> = ({
   dashboardId,
   metadata,
@@ -561,6 +568,7 @@ const FigureBlock: React.FC<{
   groupRender,
   extraActions,
   showDragHandle,
+  dictKwargsPatch,
 }) => {
   const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
   // Only scatter / scatter_3d traces carry the per-row customdata we need for
@@ -602,6 +610,7 @@ const FigureBlock: React.FC<{
         activeHighlight={activeHighlight}
         groupRender={groupRender}
         onLoadAllState={setLoadAllState}
+        dictKwargsPatch={dictKwargsPatch}
       />
     </Suspense>,
     { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },

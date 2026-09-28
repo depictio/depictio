@@ -358,6 +358,9 @@ interface SettingsDrawerProps {
   /** Editor only: uploads a dashboard logo (the server stamps it on the
    *  dashboard's brand theme) — reject to surface an error. */
   onUploadLogo?: (file: File) => Promise<void>;
+  /** Extra section rendered above the dashboard info (e.g. the AI key
+   *  section when the AI feature is enabled). */
+  extraSection?: React.ReactNode;
 }
 
 /**
@@ -378,6 +381,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onChangeBrandTheme,
   onToggleFunnelFiltering,
   onUploadLogo,
+  extraSection,
 }) => (
   <Drawer
     opened={opened}
@@ -395,6 +399,12 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     }
   >
     <Stack gap="md">
+      {extraSection && (
+        <>
+          {extraSection}
+          <Divider />
+        </>
+      )}
       <DashboardInfoBody dashboard={dashboard} active={opened} />
       {onToggleFunnelFiltering && (
         <>
