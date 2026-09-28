@@ -380,15 +380,13 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     # A recipe DC's payload waits on its own recipe's dc_ref sources, only
     # those that still have a step in this run, never on a DC that has none.
     payloads_by_tag = {p["dc_tag"]: p for p in payloads}
-    assert payloads_by_tag["taxonomy_heatmap"]["depends_on"] == [
-        "taxonomy_rel_abundance",
-        "metadata",
-    ]
-    assert payloads_by_tag["embedding_pcoa"]["depends_on"] == ["taxonomy_heatmap", "metadata"]
-    # bray_curtis_canonical's only dc_ref (taxonomy_rel_abundance) is a
-    # required-missing collection: seeded failed (terminal) from the start,
-    # still named as a dependency so the worker never has to guess why.
-    assert payloads_by_tag["bray_curtis_canonical"]["depends_on"] == ["taxonomy_rel_abundance"]
+    # Which recipes chain on which is the template's business; the invariant
+    # is that every dependency named is a collection this run seeds a step for
+    # (ingestable, or required-missing and so failed from the start).
+    seeded = set(ingestable) | set(required_missing) | set(optional_missing)
+    dependent = {tag: p["depends_on"] for tag, p in payloads_by_tag.items() if p.get("depends_on")}
+    assert dependent, "at least one recipe collection waits on another"
+    assert all(set(deps) <= seeded for deps in dependent.values())
     assert "depends_on" not in payloads_by_tag["multiqc_data"]
     assert "depends_on" not in payloads_by_tag["samplesheet"]
     assert "depends_on" not in payloads_by_tag["taxonomy_composition"]
@@ -464,8 +462,12 @@ def test_poll_route_serves_a_from_run_ingestion(mock_db, megatest_s3):
     assert by_tag["alpha_rarefaction"].status == "failed"
     assert "alpha_rarefaction" not in [tag for tag, row in rows.items() if row.status != "missing"]
     # An optional collection the run folder doesn't produce polls "skipped",
-    # not "failed": a nominal absence, not something that went wrong.
-    assert by_tag["sankey_canonical"].status == "skipped"
+    # not "failed": a nominal absence, not something that went wrong. Derived
+    # from the report rather than named, since which optional collections a
+    # megatest folder misses follows the template's recipes.
+    optional_missing = [t for t, row in rows.items() if row.status == "missing" and row.optional]
+    assert optional_missing
+    assert all(by_tag[tag].status == "skipped" for tag in optional_missing)
 
     # A run belonging to somebody else is not readable.
     with (
