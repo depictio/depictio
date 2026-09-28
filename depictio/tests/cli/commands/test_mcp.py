@@ -96,9 +96,45 @@ class FakeAPI:
 
 def test_flags_override_the_config_file(tmp_path):
     cfg = _write_config(tmp_path / "c.yaml", "http://file:1", "file-token")
-    target = mcp_cmd.resolve_target(str(cfg), api_url="http://flag:2/", token=None)
-    assert (target.api_url, target.token) == ("http://flag:2", "file-token")
+    target = mcp_cmd.resolve_target(str(cfg), api_url="http://flag:2/", token="flag-token")
+    assert (target.api_url, target.token) == ("http://flag:2", "flag-token")
     assert target.mcp_url == "http://flag:2/depictio/api/v1/mcp"
+
+
+def test_config_token_follows_a_matching_url_only(tmp_path):
+    cfg = _write_config(tmp_path / "c.yaml", "http://file:1/", "file-token")
+    same = mcp_cmd.resolve_target(str(cfg), api_url="http://file:1", token=None)
+    assert (same.api_url, same.token) == ("http://file:1", "file-token")
+    with pytest.raises(mcp_cmd.MCPConfigError, match="No token for http://flag:2; pass --token"):
+        mcp_cmd.resolve_target(str(cfg), api_url="http://flag:2", token=None)
+
+
+def test_token_only_config_follows_the_flag_url(tmp_path):
+    cfg = tmp_path / "t.yaml"
+    cfg.write_text(yaml.safe_dump({"token": {"access_token": "file-token"}}))
+    target = mcp_cmd.resolve_target(str(cfg), api_url="http://flag:2", token=None)
+    assert (target.api_url, target.token) == ("http://flag:2", "file-token")
+
+
+def test_env_token_is_not_sent_to_another_url(monkeypatch):
+    monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "http://env:1/")
+    monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "env-token")
+    same = mcp_cmd.resolve_target(api_url="http://env:1")
+    assert (same.api_url, same.token) == ("http://env:1", "env-token")
+    with pytest.raises(mcp_cmd.MCPConfigError, match="No token for https://other"):
+        mcp_cmd.resolve_target(api_url="https://other")
+    # A URL-less env token vouches for no server either.
+    monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL")
+    with pytest.raises(mcp_cmd.MCPConfigError, match="No token for https://other"):
+        mcp_cmd.resolve_target(api_url="https://other")
+
+
+def test_default_config_token_is_not_sent_to_another_url(tmp_path):
+    _write_config(tmp_path / "default" / "CLI.yaml", "http://default:3/", "default-token")
+    same = mcp_cmd.resolve_target(api_url="http://default:3")
+    assert (same.api_url, same.token) == ("http://default:3", "default-token")
+    with pytest.raises(mcp_cmd.MCPConfigError, match="No token for https://other"):
+        mcp_cmd.resolve_target(api_url="https://other/")
 
 
 def test_flags_win_over_environment(monkeypatch):
@@ -129,9 +165,12 @@ def test_nothing_configured_raises():
 
 def test_local_token_never_goes_to_another_url(monkeypatch, tmp_path, local_home):
     monkeypatch.setenv("DEPICTIO_MCP_API_URL", "http://remote:9")
-    _write_config(tmp_path / "default" / "CLI.yaml", "http://default:3", "default-token")
+    _write_config(tmp_path / "default" / "CLI.yaml", "http://remote:9", "default-token")
     target = mcp_cmd.resolve_target()
     assert (target.api_url, target.token) == ("http://remote:9", "default-token")
+    _write_config(tmp_path / "default" / "CLI.yaml", "http://default:3", "default-token")
+    with pytest.raises(mcp_cmd.MCPConfigError, match="No token for http://remote:9"):
+        mcp_cmd.resolve_target()
 
 
 # ---------------------------------------------------------------------------

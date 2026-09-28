@@ -269,6 +269,8 @@ class MongoDBConfig(ServiceConfig):
         comment_threads_collection: str = Field(default="comment_threads")
         # One row per agent tool call (MCP or in-app), kept 90 days by a TTL index.
         agent_tool_calls_collection: str = Field(default="agent_tool_calls")
+        # Daily per-token write counters for agents (threads, reports), kept two days by a TTL index.
+        agent_quotas_collection: str = Field(default="agent_quotas")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)

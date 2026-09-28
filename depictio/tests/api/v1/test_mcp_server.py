@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -34,11 +35,13 @@ class Args(BaseModel):
 def world():
     user = SimpleNamespace(id=ObjectId())
     seen = {}
+    token_ids = {name: ObjectId() for name in TOKENS}
 
     async def fake_fetch(token):
         if token not in TOKENS:
             return None
-        return user, SimpleNamespace(id=ObjectId(), name=f"{token}-token", scopes=TOKENS[token])
+        doc = SimpleNamespace(id=token_ids[token], name=f"{token}-token", scopes=TOKENS[token])
+        return user, doc
 
     @agent_tool(name="t_mcp_read", scope="read", description="Read tool", input_model=Args)
     async def read_tool(ctx, args):
@@ -61,7 +64,7 @@ def world():
             patch.object(ratelimit, "_redis_client", return_value=None),
             patch.object(settings.mcp, "enabled", True),
         ):
-            yield SimpleNamespace(user=user, seen=seen, audit=audit)
+            yield SimpleNamespace(user=user, seen=seen, audit=audit, token_ids=token_ids)
     finally:
         REGISTRY.pop("t_mcp_read", None)
         REGISTRY.pop("t_mcp_annotate", None)
@@ -179,7 +182,23 @@ def test_agent_name_falls_back_to_token_name(world):
 
     run(_with_client(go))
     assert world.seen["ctx"].agent_name == "full-token"
-    assert len(world.seen["ctx"].run_id) == 32
+
+
+def test_calls_without_a_run_header_share_a_daily_token_run(world):
+    """Stateless transport: without X-Depictio-Run-Id, the run is per token and UTC day."""
+
+    async def go(client):
+        run_ids = []
+        for _ in range(2):
+            await _rpc(
+                client, "full", "tools/call", {"name": "t_mcp_read", "arguments": {"text": "x"}}
+            )
+            run_ids.append(world.seen["ctx"].run_id)
+        return run_ids
+
+    first, second = run(_with_client(go))
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    assert first == second == f"token-{world.token_ids['full']}-{day}"
 
 
 def test_trailing_slash_variants_are_served(world):

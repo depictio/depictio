@@ -300,6 +300,7 @@ def test_query_data_by_component_and_policy(world, sandbox):  # noqa: F811
 
     blocked = call("query_data", world.owner, dc_id=world.dc_id, code="__import__('os')")
     assert not blocked.ok and blocked.error.startswith("Query failed")
+    assert '"untrusted":' in blocked.error
     assert "Allowed form: one expression rooted at df or pl" in blocked.error
 
     assigned = call("query_data", world.owner, dc_id=world.dc_id, code="x = df\nx")

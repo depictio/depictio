@@ -356,7 +356,7 @@ async def _create(
     except ValidationError as exc:
         raise ToolError(validation_message(exc, "Invalid annotation"), status=422) from exc
     thread, created = await service.create_agent_thread(
-        ctx.user, payload, agent_info(ctx), dedupe_key=dedupe_key
+        ctx.user, payload, agent_info(ctx), dedupe_key=dedupe_key, token_id=ctx.token_id
     )
     return _written(thread, created)
 

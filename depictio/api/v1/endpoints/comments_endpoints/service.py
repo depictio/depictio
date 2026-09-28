@@ -35,6 +35,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from pymongo import ReturnDocument
 
+from depictio.api.v1.agents import quotas
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import comment_threads_collection, dashboards_collection
@@ -272,25 +273,22 @@ def _agent_author(current_user: User, agent: AgentInfo) -> Author:
     )
 
 
-def _token_agent() -> AgentInfo:
+def _token_agent(current_user: User) -> AgentInfo:
     """The agent a scoped-token REST caller writes as: named after its token.
 
-    The run id is stable per token and UTC day, so the per-run thread cap
-    also bounds a client that never sends its own run id.
+    The run id is stable per token (else user) and UTC day, so the per-run
+    thread cap also bounds a client that never sends its own run id.
     """
     name = token_scopes.current_token_name.get() or DEFAULT_TOKEN_AGENT_NAME
     token_id = token_scopes.current_token_id.get()
-    run_id = (
-        f"token-{token_id}-{datetime.now(timezone.utc):%Y%m%d}" if token_id else uuid.uuid4().hex
-    )
-    return AgentInfo(name=name[:120], run_id=run_id)
+    return AgentInfo(name=name[:120], run_id=quotas.daily_run_id(token_id or str(current_user.id)))
 
 
-def _acting_agent(agent: AgentInfo | None) -> AgentInfo | None:
+def _acting_agent(agent: AgentInfo | None, current_user: User) -> AgentInfo | None:
     """The agent the caller acts as: the one passed in, else a scoped token's, else None."""
     if agent is not None:
         return agent
-    return _token_agent() if token_scopes.request_is_scoped() else None
+    return _token_agent(current_user) if token_scopes.request_is_scoped() else None
 
 
 def _is_agent_caller(agent: AgentInfo | None) -> bool:
@@ -540,8 +538,15 @@ async def create_thread(
     when a ``dedupe_key`` updated an existing proposal instead.
     """
     acting = agent or payload.agent
-    if acting is None and token_scopes.request_is_scoped():
-        acting = _token_agent()
+    if agent is None and token_scopes.request_is_scoped():
+        # A scoped caller may name its agent but never pick its run: a client
+        # chosen run id would reset the per-run cap at will.
+        token_agent = _token_agent(current_user)
+        acting = (
+            payload.agent.model_copy(update={"run_id": token_agent.run_id, "on_behalf_of": None})
+            if payload.agent is not None
+            else token_agent
+        )
     if acting is not None:
         return await create_agent_thread(current_user, payload, acting)
     return _create_thread(current_user, payload)
@@ -553,6 +558,7 @@ async def create_agent_thread(
     agent: AgentInfo,
     *,
     dedupe_key: str | None = None,
+    token_id: str | None = None,
 ) -> tuple[ThreadOut, bool]:
     """Open a thread written by ``agent`` on behalf of ``current_user``. Returns ``(thread, created)``.
 
@@ -565,6 +571,8 @@ async def create_agent_thread(
     anchor, annotation and evidence are replaced, and so is the opening
     comment's text when the same agent wrote it and no human has replied (see
     :func:`has_human_reply`); after a human reply the new text is appended.
+    ``token_id`` (else the request's token) also caps new threads per token
+    and UTC day, whatever run ids the client sends.
     """
     data = payload.model_dump(mode="python", exclude_unset=True)
     data["agent"] = agent.model_dump(mode="python")
@@ -578,10 +586,14 @@ async def create_agent_thread(
         raise HTTPException(
             status_code=422, detail=exc.errors(include_url=False, include_context=False)
         ) from exc
-    return _create_thread(current_user, body)
+    return _create_thread(
+        current_user, body, token_id=token_id or token_scopes.current_token_id.get()
+    )
 
 
-def _create_thread(current_user: User, body: ThreadCreate) -> tuple[ThreadOut, bool]:
+def _create_thread(
+    current_user: User, body: ThreadCreate, *, token_id: str | None = None
+) -> tuple[ThreadOut, bool]:
     """Fingerprints in the anchor are always computed here; client values are ignored."""
     dashboard = _require_dashboard_editor(
         _oid(body.anchor.dashboard_id, "Dashboard"),  # type: ignore[arg-type]
@@ -677,6 +689,18 @@ def _create_thread(current_user: User, body: ThreadCreate) -> tuple[ThreadOut, b
 
     if run_id is not None:
         check_run_cap()
+    if (
+        body.agent is not None
+        and token_id
+        and not quotas.take("threads", token_id, quotas.MAX_THREADS_PER_TOKEN_PER_DAY)
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"A token may open at most {quotas.MAX_THREADS_PER_TOKEN_PER_DAY} agent "
+                "threads per day."
+            ),
+        )
 
     comments = []
     if body.body is not None:
@@ -844,7 +868,7 @@ async def add_comment(
     thread, _ = _load_thread(thread_id, current_user)
     if thread.status == "rejected":
         raise HTTPException(status_code=409, detail="A rejected thread takes no replies.")
-    acting = _acting_agent(agent)
+    acting = _acting_agent(agent, current_user)
     author = _agent_author(current_user, acting) if acting is not None else _human(current_user)
     now = utcnow()
     comment = Comment(id=uuid.uuid4().hex, author=author, body=payload.body, created_at=now)

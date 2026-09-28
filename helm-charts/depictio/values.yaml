@@ -416,6 +416,16 @@ backend:
     DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT: "1"
     DEPICTIO_AI_GENERATE_MAX_COLLECTIONS: "6"
 
+    # MCP server for external agents (Claude Code, Claude Desktop, ...) at
+    # /depictio/api/v1/mcp. Off by default. Agents authenticate with a scoped
+    # API token; ingestion tools and tools that call the LLM are opt-in on top.
+    DEPICTIO_MCP_ENABLED: "false"
+    DEPICTIO_MCP_ENABLE_INGEST: "false"
+    DEPICTIO_MCP_ENABLE_LLM_TOOLS: "false"
+    DEPICTIO_MCP_MAX_OUTPUT_CHARS: "12000"
+    DEPICTIO_MCP_RATE_PER_MIN: "60"
+    DEPICTIO_MCP_QUERY_TIMEOUT_S: "20"
+
     # Realtime Events (WebSocket / SSE / MongoDB change streams) — disabled
     # by default. Set DEPICTIO_EVENTS_ENABLED=true to expose the WebSocket /
     # SSE endpoints and start the MongoDB change-stream watcher.

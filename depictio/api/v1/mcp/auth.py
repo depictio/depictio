@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from uuid import uuid4
 
 from depictio.api.v1.agents.context import ToolContext
+from depictio.api.v1.agents.quotas import daily_run_id
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.token_scopes import bearer_token
 from depictio.models.models.users import TokenBeanie, UserBeanie, effective_scopes
@@ -52,10 +52,15 @@ async def resolve_context(headers: Mapping[str, str]) -> ToolContext | None:
     if found is None:
         return None
     user, token_doc = found
+    token_id = str(token_doc.id) if token_doc.id is not None else None
+    # The transport is stateless, so without the header every request would be
+    # its own run and the per-run caps would never apply. The default run is
+    # the same one a scoped REST caller gets: one per token and UTC day.
+    run_id = _label(headers.get(RUN_ID_HEADER)) or daily_run_id(token_id or str(user.id))
     return ToolContext(
         user=user,
         scopes=effective_scopes(token_doc.scopes),
         agent_name=_label(headers.get(AGENT_HEADER)) or _label(token_doc.name) or "mcp-client",
-        run_id=_label(headers.get(RUN_ID_HEADER)) or uuid4().hex,
-        token_id=str(token_doc.id),
+        run_id=run_id,
+        token_id=token_id,
     )

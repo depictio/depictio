@@ -316,13 +316,15 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         # match current reality, not a judgment that it shouldn't ever be backed up;
         # adding real backup coverage for it is a separate, deliberate change.
         # 'agent_tool_calls' is the agent tool audit ledger (90-day TTL), same
-        # footing as 'task_events'.
+        # footing as 'task_events'; 'agent_quotas' holds daily write counters
+        # (2-day TTL).
         ledger_collections = [
             "task_events",
             "app_logs",
             "telemetry",
             "ingestion_runs",
             "agent_tool_calls",
+            "agent_quotas",
         ]
         # The assistant's history ('ai_summaries', 'ai_analyses', and the
         # 'ai_generations' run records) is LLM output keyed by dashboard:

@@ -9,7 +9,7 @@ import pytest
 from bson import ObjectId
 
 from depictio.api.v1 import db
-from depictio.api.v1.agents import ratelimit
+from depictio.api.v1.agents import quotas, ratelimit
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.registry import invoke
 from depictio.api.v1.agents.tools import annotations  # noqa: F401 (registers the tools)
@@ -44,6 +44,7 @@ def world():
         patch.object(svc, "_get_aggregation_hash", return_value="h1"),
         patch.object(settings.auth, "single_user_mode", False),
         patch.object(db, "agent_tool_calls_collection", database["agent_tool_calls"]),
+        patch.object(db, "agent_quotas_collection", database["agent_quotas"]),
         patch.object(ratelimit, "_redis_client", return_value=None),
     ):
         editor, viewer = _user(), _user()
@@ -157,6 +158,14 @@ def test_run_cap_surfaces_as_tool_error(world):
         assert annotate(world, body="one").ok
         capped = annotate(world, body="two")
     assert not capped.ok and "at most 1 threads" in capped.error
+
+
+def test_rotating_run_ids_cannot_pass_the_daily_token_cap(world):
+    with patch.object(quotas, "MAX_THREADS_PER_TOKEN_PER_DAY", 2):
+        assert annotate(world, ctx(world.editor, run_id="a"), body="one").ok
+        assert annotate(world, ctx(world.editor, run_id="b"), body="two").ok
+        capped = annotate(world, ctx(world.editor, run_id="c"), body="three")
+    assert not capped.ok and "at most 2 agent threads per day" in capped.error
 
 
 def test_scope_refusal(world):

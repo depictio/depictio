@@ -8,6 +8,7 @@ dashboards router's permission helpers running for real against a seeded
 
 import asyncio
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -17,11 +18,16 @@ from bson import ObjectId
 from fastapi import HTTPException, Response
 from pydantic import ValidationError
 
+from depictio.api.v1 import db
+from depictio.api.v1.agents import quotas
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.comments_endpoints import routes as cr
 from depictio.api.v1.endpoints.comments_endpoints import service as svc
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
-from depictio.api.v1.endpoints.user_endpoints.token_scopes import current_token_scopes
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import (
+    current_token_id,
+    current_token_scopes,
+)
 from depictio.models.models.comments import (
     AgentInfo,
     CommentCreate,
@@ -400,6 +406,40 @@ class TestScopedToken:
                 )
             )
         assert e.value.status_code == 403
+
+    def test_client_run_id_is_ignored(self, world):
+        body = payload(world, agent={"name": "bot@2", "run_id": "client-run"})
+        with scoped_token("annotate"):
+            first = run(
+                cr.create_thread(
+                    body=body, response=Response(status_code=201), current_user=world.editor
+                )
+            )
+            second = run(
+                cr.create_thread(
+                    body=payload(world, agent={"name": "bot@2", "run_id": "other-run"}),
+                    response=Response(status_code=201),
+                    current_user=world.editor,
+                )
+            )
+        day = datetime.now(timezone.utc).strftime("%Y%m%d")
+        assert first.created_by.agent.name == "bot@2"
+        assert first.run_id == second.run_id == f"token-{world.editor.id}-{day}"
+
+    def test_daily_token_cap(self, world):
+        tok = current_token_id.set("tok1")
+        try:
+            with (
+                scoped_token("annotate"),
+                patch.object(db, "agent_quotas_collection", world.db["agent_quotas"]),
+                patch.object(quotas, "MAX_THREADS_PER_TOKEN_PER_DAY", 1),
+            ):
+                run(svc.create_thread(world.editor, payload(world)))
+                with pytest.raises(HTTPException) as e:
+                    run(svc.create_thread(world.editor, payload(world)))
+        finally:
+            current_token_id.reset(tok)
+        assert e.value.status_code == 429 and "per day" in e.value.detail
 
     def test_unscoped_request_stays_human(self, world):
         thread = run(

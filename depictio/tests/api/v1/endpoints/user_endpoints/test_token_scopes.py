@@ -106,6 +106,23 @@ def test_scope_tables_have_no_stale_entries():
     assert not DENIED_READS - get_paths
 
 
+# GETs known to write, launch jobs or hand out credentials. Pinned so a table
+# edit cannot silently re-allow them to scoped tokens.
+SIDE_EFFECT_GETS = {
+    "/utils/drop_S3_content",
+    "/utils/drop_all_collections",
+    "/utils/screenshot-react-dual/{dashboard_id}",
+    "/utils/infrastructure-diagnostics",
+    "/backup/download/{backup_id}",
+}
+
+
+def test_side_effecting_gets_are_denied():
+    get_paths = {path for method, path in ROUTE_KEYS if method == "GET"}
+    assert SIDE_EFFECT_GETS <= get_paths
+    assert SIDE_EFFECT_GETS <= DENIED_READS
+
+
 def test_every_api_route_carries_the_gate():
     missing = []
     for ctx in iter_route_contexts(app.routes):
@@ -262,6 +279,8 @@ def test_token_lookup_failure_fails_closed():
         ("DELETE", "/projects/delete"),
         ("POST", "/comments/threads/abc/review"),
         ("POST", "/backup/create"),
+        ("GET", "/utils/screenshot-react-dual/abc"),
+        ("GET", "/utils/infrastructure-diagnostics"),
     ],
 )
 def test_real_app_refuses_scoped_token(method, path):

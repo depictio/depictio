@@ -9,7 +9,7 @@ import pytest
 from bson import ObjectId
 
 from depictio.api.v1 import db
-from depictio.api.v1.agents import ratelimit
+from depictio.api.v1.agents import quotas, ratelimit
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.registry import invoke
 from depictio.api.v1.agents.tools import reports
@@ -43,6 +43,7 @@ def world():
         patch.object(dash_routes, "projects_collection", database["projects"]),
         patch.object(db, "ai_analyses_collection", database["ai_analyses"]),
         patch.object(db, "agent_tool_calls_collection", database["agent_tool_calls"]),
+        patch.object(db, "agent_quotas_collection", database["agent_quotas"]),
         patch.object(ratelimit, "_redis_client", return_value=None),
     ):
         viewer, stranger = _user(), _user()
@@ -65,9 +66,13 @@ def world():
     ratelimit.reset_local()
 
 
-def ctx(user, scopes=None, run_id="run1"):
+def ctx(user, scopes=None, run_id="run1", token_id=None):
     return ToolContext(
-        user=user, scopes=effective_scopes(scopes), agent_name="reporter@1", run_id=run_id
+        user=user,
+        scopes=effective_scopes(scopes),
+        agent_name="reporter@1",
+        run_id=run_id,
+        token_id=token_id,
     )
 
 
@@ -136,6 +141,16 @@ def test_run_cap(world):
         capped = create(world)
         assert not capped.ok and "at most 2 reports" in capped.error
         assert create(world, ctx(world.viewer, run_id="run2")).ok
+
+
+def test_rotating_run_ids_cannot_pass_the_daily_token_cap(world):
+    with patch.object(quotas, "MAX_REPORTS_PER_TOKEN_PER_DAY", 3):
+        for i in range(3):
+            assert create(world, ctx(world.viewer, run_id=f"r{i}", token_id="tok")).ok
+        capped = create(world, ctx(world.viewer, run_id="r-new", token_id="tok"))
+        assert not capped.ok and "at most 3 reports per day" in capped.error
+        # Another token has its own budget.
+        assert create(world, ctx(world.viewer, run_id="r-new", token_id="tok2")).ok
 
 
 def test_scope_and_permission_refusals(world):

@@ -47,6 +47,10 @@ DENIED_READS: frozenset[str] = frozenset(
     {
         "/utils/drop_S3_content",
         "/utils/drop_all_collections",
+        # Drives a headless browser in the worker and writes PNGs.
+        "/utils/screenshot-react-dual/{dashboard_id}",
+        # Launches a browser and runs storage I/O probes.
+        "/utils/infrastructure-diagnostics",
         "/auth/list_tokens",
         "/auth/fetch_user/from_token",
         "/auth/fetch_user/from_email",

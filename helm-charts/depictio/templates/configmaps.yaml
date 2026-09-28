@@ -104,6 +104,16 @@ data:
   DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT | default "1" | quote }}
   DEPICTIO_AI_GENERATE_MAX_COLLECTIONS: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_COLLECTIONS | default "6" | quote }}
 
+  # MCP server for external agents (MCPConfig in api/v1/configs/settings_models.py,
+  # env_prefix DEPICTIO_MCP_). Off by default: the endpoint is not mounted.
+  # Defaults mirror the Python defaults.
+  DEPICTIO_MCP_ENABLED: {{ .Values.backend.env.DEPICTIO_MCP_ENABLED | default "false" | quote }}
+  DEPICTIO_MCP_ENABLE_INGEST: {{ .Values.backend.env.DEPICTIO_MCP_ENABLE_INGEST | default "false" | quote }}
+  DEPICTIO_MCP_ENABLE_LLM_TOOLS: {{ .Values.backend.env.DEPICTIO_MCP_ENABLE_LLM_TOOLS | default "false" | quote }}
+  DEPICTIO_MCP_MAX_OUTPUT_CHARS: {{ .Values.backend.env.DEPICTIO_MCP_MAX_OUTPUT_CHARS | default "12000" | quote }}
+  DEPICTIO_MCP_RATE_PER_MIN: {{ .Values.backend.env.DEPICTIO_MCP_RATE_PER_MIN | default "60" | quote }}
+  DEPICTIO_MCP_QUERY_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_MCP_QUERY_TIMEOUT_S | default "20" | quote }}
+
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Analytics

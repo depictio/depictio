@@ -16,6 +16,7 @@ on columns the collection lacks are reported under ``filters_ignored``.
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 import threading
@@ -719,7 +720,8 @@ async def run_query(user: Any, args: QueryDataArgs) -> dict[str, Any]:
             raise _load_error(exc) from exc
 
     if step.status == "error":
-        message = f"Query failed: {clean_text(step.output)[:1500]}"
+        # The output can echo data values: mark it as data, like a successful result.
+        message = "Query failed: " + json.dumps(untrusted(step.output[:1500]), ensure_ascii=False)
         if step.output.startswith("BlockedByPolicy"):
             message += _POLICY_HINT
         raise ToolError(message)

@@ -259,8 +259,10 @@ def start_agent_audit_indexes(should_initialize: bool) -> None:
         return
     try:
         from depictio.api.v1.agents.audit import ensure_agent_audit_indexes
+        from depictio.api.v1.agents.quotas import ensure_quota_indexes
 
         ensure_agent_audit_indexes()
+        ensure_quota_indexes()
     except Exception as exc:
         logger.warning(f"Worker {WORKER_ID}: Agent audit index setup failed: {exc}")
 

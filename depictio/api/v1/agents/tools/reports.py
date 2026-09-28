@@ -5,7 +5,8 @@ produces, and use the same permission gate: view access on the dashboard
 (``build_dashboard_context``). An agent report carries its author in
 ``AnalysisReport.agent`` and its findings in ``agent_findings``; an agent may
 only update the reports its own run created, and a run writes at most
-:data:`MAX_REPORTS_PER_RUN` of them.
+:data:`MAX_REPORTS_PER_RUN` of them (and a token at most
+``quotas.MAX_REPORTS_PER_TOKEN_PER_DAY`` a day, whatever run ids it sends).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import Any, Literal
 from bson import ObjectId
 from pydantic import Field
 
+from depictio.api.v1.agents import quotas
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.envelope import preview, untrusted
 from depictio.api.v1.agents.registry import ToolArgs, ToolError, agent_tool
@@ -238,6 +240,14 @@ async def create_report(ctx: ToolContext, args: CreateReportArgs) -> dict[str, A
     if await asyncio.to_thread(_reports_of_run, ctx) >= MAX_REPORTS_PER_RUN:
         raise ToolError(
             f"An agent run may write at most {MAX_REPORTS_PER_RUN} reports; "
+            "update an existing one instead.",
+            status=429,
+        )
+    if ctx.token_id and not await asyncio.to_thread(
+        quotas.take, "reports", ctx.token_id, quotas.MAX_REPORTS_PER_TOKEN_PER_DAY
+    ):
+        raise ToolError(
+            f"A token may write at most {quotas.MAX_REPORTS_PER_TOKEN_PER_DAY} reports per day; "
             "update an existing one instead.",
             status=429,
         )

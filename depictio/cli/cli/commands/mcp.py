@@ -4,7 +4,8 @@ The API serves MCP over streamable HTTP at ``/depictio/api/v1/mcp``. Most deskto
 clients speak stdio, so ``depictio mcp serve`` is a small stdio server that forwards
 every tools/resources/prompts request to that endpoint with the resolved Bearer token.
 
-Where the API URL and token come from, first match wins per field:
+Where the API URL and token come from, first match wins per field, except that a
+token is only sent to the server its source names (``--token`` follows the URL):
 
 1. ``--config`` (a CLI config YAML), then ``--api-url`` / ``--token`` on top of it;
 2. environment: ``DEPICTIO_MCP_API_URL`` / ``DEPICTIO_CLI_API_BASE_URL`` and
@@ -195,6 +196,10 @@ def local_scoped_token(paths: Any, api_url: str, client: httpx.Client | None = N
     return minted["access_token"]
 
 
+def _norm_url(url: str | None) -> str | None:
+    return url.rstrip("/") if url else None
+
+
 def resolve_target(
     config_path: str | None = None,
     api_url: str | None = None,
@@ -205,21 +210,29 @@ def resolve_target(
 ) -> MCPTarget:
     """Resolve the API URL and token (see the module docstring for the order).
 
+    The first URL found wins. A token only goes to the server it was configured
+    for: ``--token`` (and a token-only ``--config``) follow the chosen URL, while
+    any other source's token is used only when that source names the same URL.
     ``scoped_local=False`` returns the local admin token itself, for ``token create``,
     which needs a token allowed to mint others.
     """
-    url = api_url.rstrip("/") if api_url else None
+    url = _norm_url(api_url)
     source = "flags"
     if config_path:
         file_url, file_token = _read_config_file(config_path)
-        url, token = url or file_url, token or file_token
+        file_url = _norm_url(file_url)
+        url = url or file_url
+        if token is None and file_url in (None, url):
+            token = file_token
         source = str(config_path)
     if url and token:
         return MCPTarget(url, token, source)
 
-    env_url = _env_first("DEPICTIO_MCP_API_URL", "DEPICTIO_CLI_API_BASE_URL")
+    env_url = _norm_url(_env_first("DEPICTIO_MCP_API_URL", "DEPICTIO_CLI_API_BASE_URL"))
     env_token = _env_first("DEPICTIO_MCP_TOKEN", "DEPICTIO_CLI_TOKEN")
-    url, token = url or (env_url.rstrip("/") if env_url else None), token or env_token
+    url = url or env_url
+    if token is None and env_url is not None and env_url == url:
+        token = env_token
     if url and token:
         return MCPTarget(url, token, "environment")
 
@@ -239,10 +252,18 @@ def resolve_target(
     default_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH") or DEFAULT_CLI_CONFIG
     if Path(default_path).expanduser().is_file():
         file_url, file_token = _read_config_file(default_path)
-        url, token = url or file_url, token or file_token
+        file_url = _norm_url(file_url)
+        url = url or file_url
+        if token is None and file_url is not None and file_url == url:
+            token = file_token
         if url and token:
             return MCPTarget(url, token, default_path)
 
+    if url:
+        raise MCPConfigError(
+            f"No token for {url}; pass --token. Tokens configured for other servers "
+            "are never sent to it."
+        )
     raise MCPConfigError(
         "No Depictio API URL and token found. Pass --config or --api-url/--token, set "
         "DEPICTIO_MCP_API_URL and DEPICTIO_MCP_TOKEN, start a local server with "
