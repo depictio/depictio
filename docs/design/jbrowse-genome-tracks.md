@@ -266,13 +266,21 @@ key of `backend.env`), `.env.example` and `depictio local up`.
    ![variant](../images/jbrowse/sarscov2_variant.png)
 3. **nf-core/cutandrun 3.1** — *Genome tracks* tab: bigWig per sample coloured
    per target, SEACR and MACS2 peaks, deduplicated BAM, driven by the target
-   filter. ![cutandrun in context](../images/jbrowse/nfcore_cutandrun_context.png)
+   filter; cards, a SEACR Manhattan and a region table on the same tab.
+   ![cutandrun in context](../images/jbrowse/nfcore_cutandrun_context.png)
    ![cutandrun](../images/jbrowse/nfcore_cutandrun.png)
+   A region picked in the table (or on the Manhattan) opens its sample's
+   tracks on it (`seacr_peaks -> tracks` link + `locus_from`), and every other
+   component of the tab narrows with it:
+   ![peak picked in context](../images/jbrowse/nfcore_cutandrun_peak_context.png)
+   ![peak picked](../images/jbrowse/nfcore_cutandrun_peak.png)
 4. **nf-core/chipseq 1.2.0** — ChIP and input bigWigs, MACS2 narrowPeak calls
-   and BAM per antibody (hg19 megatest). ![chipseq in context](../images/jbrowse/nfcore_chipseq_context.png)
+   and BAM per antibody (hg19 megatest), with cards, a MACS2 Manhattan and a
+   peak table that drive it the same way. ![chipseq in context](../images/jbrowse/nfcore_chipseq_context.png)
    ![chipseq](../images/jbrowse/nfcore_chipseq.png)
 5. **nf-core/rnaseq 3.26.0** — strand-specific bigWig coverage and BAM per
-   sample (hg19 megatest). ![rnaseq in context](../images/jbrowse/nfcore_rnaseq_context.png)
+   sample (hg19 megatest), with cards and two lassoable sample scatters.
+   ![rnaseq in context](../images/jbrowse/nfcore_rnaseq_context.png)
    ![rnaseq](../images/jbrowse/nfcore_rnaseq.png)
 
 The nf-core templates read the tracks in place when `TRACKS_URI` is set
