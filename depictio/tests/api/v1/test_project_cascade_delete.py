@@ -107,3 +107,76 @@ def test_phylogeny_trees_are_collected_for_deletion():
         locations = _collect_s3_locations_for_project([tree_dc, table_dc], "bucket")
 
     assert locations == [phylogeny_s3_key(str(tree_dc))]
+
+
+def test_bioimage_stores_are_collected_for_deletion():
+    """Every zarr key of every store sits under one DC prefix; consumers list
+    each location as a prefix, so the prefix alone covers the whole upload."""
+    from depictio.api.v1.endpoints.migrate_endpoints.routes import (
+        _collect_s3_locations_for_project,
+    )
+    from depictio.models.models.data_collections_types.bioimage import bioimage_s3_prefix
+    from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+
+    zarr_dc, tree_dc, other_project_zarr = ObjectId(), ObjectId(), ObjectId()
+    projects = MagicMock()
+    projects.find.return_value = [
+        {
+            "workflows": [
+                {
+                    "data_collections": [
+                        {"_id": zarr_dc, "config": {"type": "bioimage"}},
+                        {"_id": tree_dc, "config": {"type": "phylogeny"}},
+                        {"_id": other_project_zarr, "config": {"type": "bioimage"}},
+                    ]
+                }
+            ]
+        }
+    ]
+    empty = MagicMock()
+    empty.find.return_value = []
+    migrate = "depictio.api.v1.endpoints.migrate_endpoints.routes"
+
+    with (
+        patch(f"{migrate}.projects_collection", projects),
+        patch(f"{migrate}.deltatables_collection", empty),
+        patch(f"{migrate}.data_collections_collection", empty),
+        patch(f"{migrate}.multiqc_collection", empty),
+        patch(f"{migrate}.jbrowse_collection", empty),
+    ):
+        locations = _collect_s3_locations_for_project([zarr_dc, tree_dc], "bucket")
+
+    assert locations == [bioimage_s3_prefix(str(zarr_dc)), phylogeny_s3_key(str(tree_dc))]
+
+
+def test_cascade_deletes_every_object_under_the_bioimage_prefix():
+    """The cascade lists by prefix, so all chunks of all stores are removed."""
+    from depictio.api.v1.endpoints.projects_endpoints.routes import _cascade_delete_project
+    from depictio.models.models.data_collections_types.bioimage import bioimage_s3_prefix
+
+    prefix = bioimage_s3_prefix(str(DC_ID))
+    projects = MagicMock()
+    projects.aggregate.return_value = [{"dc_id": DC_ID, "wf_id": WF_ID}]
+    s3 = MagicMock()
+    s3.get_paginator.return_value.paginate.return_value = [
+        {"Contents": [{"Key": f"{prefix}a.zarr/.zattrs"}, {"Key": f"{prefix}a.zarr/0/0.0"}]}
+    ]
+
+    with (
+        patch(f"{MODULE}.projects_collection", projects),
+        patch(f"{MODULE}.runs_collection", MagicMock()),
+        patch(f"{MODULE}.files_collection", MagicMock()),
+        patch(f"{MODULE}.deltatables_collection", MagicMock()),
+        patch(f"{MODULE}.multiqc_collection", MagicMock()),
+        patch(f"{MODULE}.jbrowse_collection", MagicMock()),
+        patch(f"{MODULE}.data_collections_collection", MagicMock()),
+        patch(f"{MODULE}.dashboards_collection", MagicMock()),
+        patch(f"{MODULE}._collect_s3_locations_for_project", return_value=[prefix]),
+        patch(f"{MODULE}.boto3.client", return_value=s3),
+    ):
+        _cascade_delete_project(PROJECT_ID, "demo")
+
+    listed = s3.get_paginator.return_value.paginate.call_args.kwargs["Prefix"]
+    assert listed == prefix.strip("/")
+    deleted = s3.delete_objects.call_args.kwargs["Delete"]["Objects"]
+    assert {o["Key"] for o in deleted} == {f"{prefix}a.zarr/.zattrs", f"{prefix}a.zarr/0/0.0"}

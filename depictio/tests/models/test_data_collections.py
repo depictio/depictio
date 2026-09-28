@@ -14,6 +14,7 @@ from depictio.models.models.data_collections import (
     TableJoinConfig,
     WildcardRegexBase,
 )
+from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
@@ -359,6 +360,41 @@ class TestDataCollectionConfig:
         )
         assert isinstance(config.dc_specific_properties, DCGeoJSONConfig)
         assert config.dc_specific_properties.feature_id_key == "properties.ISO_A3"
+
+    def test_bioimage_config_defaults(self):
+        """A bioimage DC with no properties gets the default DCBioimageConfig."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="sample_A.zarr"))
+
+        config = DataCollectionConfig(
+            type="BIOIMAGE",
+            scan=scan_config,
+            dc_specific_properties=None,  # type: ignore[arg-type]
+        )
+        assert config.type == "bioimage"
+        assert isinstance(config.dc_specific_properties, DCBioimageConfig)
+        assert config.dc_specific_properties.format == "ome-zarr"
+        assert config.dc_specific_properties.upload is True
+
+    def test_bioimage_config_round_trip(self):
+        """A stored dict (Mongo rehydration) comes back as DCBioimageConfig."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="stores"))
+        config = DataCollectionConfig(
+            type="bioimage",
+            scan=scan_config,
+            dc_specific_properties={"format": "ome-zarr", "upload": False},  # type: ignore[arg-type]
+        )
+        again = DataCollectionConfig(**config.model_dump())
+        assert isinstance(again.dc_specific_properties, DCBioimageConfig)
+        assert again.dc_specific_properties.upload is False
+
+    def test_bioimage_rejects_foreign_properties(self):
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="sample_A.zarr"))
+        with pytest.raises(ValidationError):
+            DataCollectionConfig(
+                type="bioimage",
+                scan=scan_config,
+                dc_specific_properties={"separator": ","},  # type: ignore[arg-type]
+            )
 
     def test_table_coordinates_dispatch(self):
         """Table DC with lat_column/lon_column materialises as DCTableCoordinatesConfig.
