@@ -16,6 +16,8 @@ from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.envelope import preview, untrusted
 from depictio.api.v1.agents.registry import ToolArgs, ToolError, agent_tool, validation_message
 from depictio.api.v1.agents.tools.common import agent_info, viewer_path
+from depictio.api.v1.agents.tools.data import ComponentDataArgs, FilterIn, component_data
+from depictio.api.v1.agents.tools.discovery import find_component, load_viewable_dashboard
 from depictio.api.v1.endpoints.ai_endpoints.schemas import AgentEvidence
 from depictio.api.v1.endpoints.comments_endpoints import service
 from depictio.models.models.comments import (
@@ -33,6 +35,10 @@ from depictio.models.models.comments import (
 
 PREVIEW_CHARS = 500
 MAX_LISTED_THREADS = 200
+# Rows looked up when marked points are turned into coordinates.
+MAX_POINT_ROWS = 200
+# Visual types whose points can be marked on a plain figure.
+_POINT_VISU_TYPES = frozenset({"scatter", "scatter_3d"})
 
 ShapeKind = Literal["x_range", "y_range", "ref_line", "points", "arrow_note", "geo_note"]
 
@@ -98,7 +104,9 @@ class CreateAnnotationArgs(ToolArgs):
         description=(
             "Optional shape drawn on the component, in data coordinates. "
             "x_range: x0,x1. y_range: y0,y1. ref_line: axis ('x'|'y'), value. "
-            "points: column+ids (rows by id) and/or points [{x,y}]; geo=true on maps "
+            "points: points [{x,y}] by coordinate (always drawable), or column+ids "
+            "(rows by id, drawable only on the component's selection column; on a chart "
+            "without one the rows' x/y are looked up instead); geo=true on maps "
             "(x=longitude, y=latitude). arrow_note: x,y. geo_note: lat,lon (maps)."
         ),
     )
@@ -206,6 +214,67 @@ def _annotation(args: CreateAnnotationArgs) -> dict[str, Any] | None:
     if args.variant is not None:
         annotation["variant"] = args.variant
     return annotation
+
+
+async def _points_by_coordinates(
+    ctx: ToolContext, args: CreateAnnotationArgs
+) -> CreateAnnotationArgs:
+    """Make marked points drawable on a plain figure, or reject them.
+
+    A figure finds points by id only through its selection column (the ids
+    ride in each point's customdata). On a figure without one, or when the ids
+    are of another column, the rows' x / y values are looked up with the loader
+    ``get_component_data`` uses and the points are marked by coordinate. Without
+    x and y columns to look up, the call is rejected with what to send instead.
+    Other component types (maps, advanced viz, MultiQC) resolve ids themselves.
+    """
+    if args.shape != "points" or args.geo or not args.ids or not args.column:
+        return args
+    comp = find_component(
+        load_viewable_dashboard(ctx.user, args.dashboard_id), args.component_index
+    )
+    if comp.get("component_type") != "figure":
+        return args
+    selection = comp.get("selection_column") if comp.get("selection_enabled") else None
+    if selection and selection == args.column:
+        return args
+    kwargs = comp.get("dict_kwargs") or {}
+    x, y = kwargs.get("x"), kwargs.get("y")
+    why = f"Component {args.component_index} cannot find points by {args.column!r}: " + (
+        f"its selection column is {selection!r}." if selection else "it has no selection column."
+    )
+    if not (isinstance(x, str) and x and isinstance(y, str) and y) or (
+        comp.get("visu_type") not in _POINT_VISU_TYPES
+    ):
+        raise ToolError(
+            f"{why} Mark the points by coordinate instead (points: [{{x, y}}] in the axis "
+            "columns' units), or use x_range / y_range / ref_line.",
+            status=422,
+        )
+    data = await component_data(
+        ctx.user,
+        ComponentDataArgs(
+            dashboard_id=args.dashboard_id,
+            index=args.component_index,
+            filters=[FilterIn(column=args.column, operator="in", value=list(args.ids))],
+            columns=list(dict.fromkeys([args.column, x, y])),
+            max_rows=MAX_POINT_ROWS,
+        ),
+    )
+    coords = [
+        {"x": row[x], "y": row[y]}
+        for row in data.get("rows") or []
+        if row.get(x) is not None and row.get(y) is not None
+    ]
+    if not coords:
+        raise ToolError(
+            f"{why} None of the given ids has a row with {x!r} and {y!r} values to mark it "
+            "by coordinate instead. Check the ids, or use points: [{x, y}].",
+            status=422,
+        )
+    existing = [p.model_dump(exclude_none=True) for p in args.points or []]
+    points = [PointIn.model_validate(c) for c in [*existing, *coords][:MAX_POINT_ROWS]]
+    return args.model_copy(update={"points": points, "column": None, "ids": None})
 
 
 def _author(author: Author) -> dict[str, Any]:
@@ -420,6 +489,7 @@ async def get_thread(ctx: ToolContext, args: GetThreadArgs) -> dict[str, Any]:
 async def create_annotation(ctx: ToolContext, args: CreateAnnotationArgs) -> dict[str, Any]:
     if args.body is None and args.shape is None:
         raise ToolError("Give a body, a shape, or both.", status=422)
+    args = await _points_by_coordinates(ctx, args)
     return await _create(
         ctx,
         dashboard_id=args.dashboard_id,

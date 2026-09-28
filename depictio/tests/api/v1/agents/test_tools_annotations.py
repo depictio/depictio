@@ -12,7 +12,10 @@ from depictio.api.v1 import db
 from depictio.api.v1.agents import quotas, ratelimit
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.registry import invoke
-from depictio.api.v1.agents.tools import annotations  # noqa: F401 (registers the tools)
+from depictio.api.v1.agents.tools import (
+    annotations,  # registers the tools
+    discovery,
+)
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.comments_endpoints import service as svc
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
@@ -39,6 +42,7 @@ def world():
     with (
         patch.object(svc, "comment_threads_collection", database["comment_threads"]),
         patch.object(svc, "dashboards_collection", database["dashboards"]),
+        patch.object(discovery, "dashboards_collection", database["dashboards"]),
         patch.object(dash_routes, "dashboards_collection", database["dashboards"]),
         patch.object(dash_routes, "projects_collection", database["projects"]),
         patch.object(svc, "_get_aggregation_hash", return_value="h1"),
@@ -65,7 +69,35 @@ def world():
                 "dashboard_id": main,
                 "project_id": project_id,
                 "is_main_tab": True,
-                "stored_metadata": [{"index": "c1", "dc_id": DC, "title": "Scatter"}],
+                "stored_metadata": [
+                    {"index": "c1", "dc_id": DC, "title": "Scatter"},
+                    {
+                        "index": "fig",
+                        "dc_id": DC,
+                        "title": "Bill scatter",
+                        "component_type": "figure",
+                        "visu_type": "scatter",
+                        "dict_kwargs": {"x": "bill_length_mm", "y": "bill_depth_mm"},
+                        "selection_enabled": False,
+                        "selection_column": None,
+                    },
+                    {
+                        "index": "hist",
+                        "dc_id": DC,
+                        "component_type": "figure",
+                        "visu_type": "histogram",
+                        "dict_kwargs": {"x": "bill_length_mm"},
+                    },
+                    {
+                        "index": "sel",
+                        "dc_id": DC,
+                        "component_type": "figure",
+                        "visu_type": "scatter",
+                        "dict_kwargs": {"x": "bill_length_mm", "y": "bill_depth_mm"},
+                        "selection_enabled": True,
+                        "selection_column": "individual_id",
+                    },
+                ],
             }
         )
         yield SimpleNamespace(db=database, main=str(main), editor=editor, viewer=viewer)
@@ -117,6 +149,74 @@ def test_points_and_geo_note_shapes(world):
     assert not bad.ok and bad.error.startswith("Invalid annotation")
     empty = annotate(world)
     assert not empty.ok and "body" in empty.error
+
+
+def _fake_rows(rows):
+    seen = []
+
+    async def fake(user, args):
+        seen.append(args)
+        return {"rows": rows}
+
+    return fake, seen
+
+
+def test_points_by_id_without_selection_become_coordinates(world):
+    fake, seen = _fake_rows(
+        [
+            {"individual_id": "N1", "bill_length_mm": 59.6, "bill_depth_mm": 17.0},
+            {"individual_id": "N2", "bill_length_mm": None, "bill_depth_mm": 15.0},
+        ]
+    )
+    with patch.object(annotations, "component_data", fake):
+        result = annotate(
+            world,
+            component_index="fig",
+            shape="points",
+            column="individual_id",
+            ids=["N1", "N2"],
+            label="long bills",
+        )
+    assert result.ok, result.error
+    [args] = seen
+    assert args.filters[0].column == "individual_id" and args.filters[0].value == ["N1", "N2"]
+    assert args.columns == ["individual_id", "bill_length_mm", "bill_depth_mm"]
+    doc = world.db["comment_threads"].find_one({"_id": ObjectId(result.data["thread_id"])})
+    geometry = doc["annotation"]["geometry"]
+    assert [(c["x"], c["y"]) for c in geometry["coords"]] == [(59.6, 17.0)]
+    assert not geometry["ids"] and not geometry.get("column")
+
+
+def test_points_by_id_kept_on_the_selection_column(world):
+    fake, seen = _fake_rows([])
+    with patch.object(annotations, "component_data", fake):
+        result = annotate(
+            world,
+            component_index="sel",
+            shape="points",
+            column="individual_id",
+            ids=["N1"],
+            label="x",
+        )
+    assert result.ok, result.error
+    assert not seen
+    doc = world.db["comment_threads"].find_one({"_id": ObjectId(result.data["thread_id"])})
+    assert doc["annotation"]["geometry"]["ids"] == ["N1"]
+
+
+def test_points_by_id_rejected_when_not_drawable(world):
+    fake, _ = _fake_rows([])
+    with patch.object(annotations, "component_data", fake):
+        no_axes = annotate(
+            world, component_index="hist", shape="points", column="id", ids=["a"], label="x"
+        )
+        no_rows = annotate(
+            world, component_index="fig", shape="points", column="id", ids=["a"], label="x"
+        )
+    assert not no_axes.ok and "by coordinate" in no_axes.error
+    assert "no selection column" in no_axes.error
+    assert not no_rows.ok and "None of the given ids" in no_rows.error
+    assert world.db["comment_threads"].count_documents({}) == 0
 
 
 def test_dedupe_key_updates_the_same_proposal(world):
