@@ -66,7 +66,7 @@ endpoint module is a module attribute here (``projects_collection``,
 ``dashboards_collection``, ``build_project_data_context``,
 ``compose_offers_for_project``, ``check_project_permission``,
 ``check_dashboard_mutation_permission``, ``_persist_lite_dashboard``,
-``probe_component``) so the route tests can substitute them without a
+``probe_verdict``) so the route tests can substitute them without a
 database. The ones that live in the big endpoint modules are lazy wrappers:
 importing ``dashboards_endpoints.routes`` at module load would pull the whole
 dashboard API in behind the AI package.
@@ -118,11 +118,13 @@ from depictio.api.v1.endpoints.ai_endpoints.dashboard_plan import (
     parse_plan,
 )
 from depictio.api.v1.endpoints.ai_endpoints.dashboard_validate import (
-    check_against_schema,
+    schema_error,
+    substance_error,
     validate_envelope,
 )
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     BudgetSpent,
+    ComponentCheck,
     GenerateDashboardRequest,
     GeneratedComponentEvent,
     GeneratedComponentStatus,
@@ -220,17 +222,18 @@ def regenerate_component_fields(component: dict[str, Any]) -> None:
     regenerate(component)
 
 
-def probe_component(component: dict[str, Any], ctx: Any | None, user: Any) -> str | None:
-    """`dashboard_probe.probe_component`, imported on first use.
+def probe_verdict(component: dict[str, Any], ctx: Any | None, user: Any) -> Any:
+    """`dashboard_probe.probe_verdict`, imported on first use.
 
-    None when the component renders (or when its type has no cheap probe),
-    a short human-readable reason otherwise. Lazy like the collaborators
-    above: the probe reaches into the advanced_viz compute endpoint, which
-    has no business being imported behind a dashboard that never generates.
+    Says whether the component rendered, would not render, or was never
+    probed at all, which is what the run has to record. Lazy like the
+    collaborators above: the probe reaches into the advanced_viz compute
+    endpoint, which has no business being imported behind a dashboard that
+    never generates.
     """
     from depictio.api.v1.endpoints.ai_endpoints import dashboard_probe
 
-    return dashboard_probe.probe_component(component, ctx, user)
+    return dashboard_probe.probe_verdict(component, ctx, user)
 
 
 def _sse(event: StreamEvent) -> bytes:
@@ -411,11 +414,16 @@ def component_event(
     *,
     attempts: int = 1,
     error: str | None = None,
+    checks: list[ComponentCheck] | None = None,
+    repair: str | None = None,
 ) -> GeneratedComponentEvent:
     """The ``component`` stream event of one planned component.
 
     `attempts` counts the fill calls the model was given; pass 0 for a
-    component dropped before the fill loop could call it at all.
+    component dropped before the fill loop could call it at all. `checks` is
+    the gate-by-gate record and `repair` the finding a successful repair
+    round corrected, so the review panel can say how a tile got here rather
+    than only that it did.
     """
     return GeneratedComponentEvent(
         tag=planned.tag,
@@ -424,11 +432,16 @@ def component_event(
         status=status,
         attempts=attempts,
         error=error,
+        checks=list(checks or []),
+        repair=repair,
     )
 
 
 def render_drop_event(
-    component: dict[str, Any], planned: PlannedComponent | None, error: str
+    component: dict[str, Any],
+    planned: PlannedComponent | None,
+    error: str,
+    checks: list[ComponentCheck] | None = None,
 ) -> GeneratedComponentEvent:
     """The ``component`` event of a filled tile the render check dropped.
 
@@ -440,7 +453,7 @@ def render_drop_event(
     """
     detail = f"render: {error}"
     if planned is not None:
-        return component_event(planned, "dropped", attempts=0, error=detail)
+        return component_event(planned, "dropped", attempts=0, error=detail, checks=checks)
     return GeneratedComponentEvent(  # pragma: no cover, every filled tile has its entry
         tag=str(component.get("tag") or ""),
         section=str(component.get("section") or ""),
@@ -448,7 +461,82 @@ def render_drop_event(
         status="dropped",
         attempts=0,
         error=detail,
+        checks=list(checks or []),
     )
+
+
+ENVELOPE_DROP_DETAIL = "the assembled dashboard did not validate with this component in it"
+
+
+def envelope_drop_event(
+    tag: str,
+    planned: PlannedComponent | None,
+    filled: GeneratedComponentEvent | None,
+) -> GeneratedComponentEvent:
+    """The ``component`` event of a filled tile the assembled envelope rejected.
+
+    Reported like every other drop: such a tile used to leave the run saying
+    "ok" about it and the warning saying otherwise, the one place the record
+    contradicted itself. The envelope is the ``model`` gate one tile later, so
+    its verdict replaces the per-tile ``model`` pass instead of sitting after
+    it. `filled` is the tile's last event, which is where the rest of its
+    record and its attempt count come from.
+    """
+    check = ComponentCheck(layer="model", status="failed", detail=ENVELOPE_DROP_DETAIL)
+    if planned is None:  # pragma: no cover, every filled tile has its plan entry
+        return GeneratedComponentEvent(
+            tag=tag,
+            section="",
+            component_type=(filled.component_type if filled is not None else "text"),
+            status="dropped",
+            attempts=0,
+            error=ENVELOPE_DROP_DETAIL,
+            checks=[check],
+        )
+    prior = [c for c in (filled.checks if filled is not None else []) if c.layer != "model"]
+    return component_event(
+        planned,
+        "dropped",
+        attempts=filled.attempts if filled is not None else 0,
+        error=ENVELOPE_DROP_DETAIL,
+        checks=[check, *prior],
+    )
+
+
+PROBE_BROKE_NOTE = "The render check could not run; the components were kept unchecked."
+
+
+async def render_check(
+    component: dict[str, Any], ctx: DataContext | None, user: Any, warnings: list[str]
+) -> ComponentCheck:
+    """One filled component through `dashboard_probe`, as a ``render`` verdict.
+
+    `probe_verdict` never raises by contract, and the probe is a safety net
+    around the fill rather than a gate on it: should it fail anyway (an
+    unavailable module, a collaborator that changed shape) the component is
+    kept and the run says once, in `warnings`, that it went unchecked, because
+    a broken probe is not evidence about the tile. That case is ``skipped``
+    rather than ``passed``: keeping the tile is the right call, calling it
+    checked would not be.
+
+    Shared by the generator and the regeneration so a tile refilled from the
+    review panel is held to what a tile filled by the run was held to.
+    """
+    try:
+        verdict = await asyncio.to_thread(probe_verdict, component, ctx, user)
+    except Exception as e:  # noqa: BLE001, see the docstring
+        tag = str(component.get("tag") or "")
+        if PROBE_BROKE_NOTE in warnings:
+            # Whatever broke breaks for every tile: one traceback is the
+            # diagnosis, the other N are noise.
+            logger.warning("generate-dashboard: the render check failed on '%s': %s", tag, e)
+        else:
+            logger.exception("generate-dashboard: the render check could not run")
+            warnings.append(PROBE_BROKE_NOTE)
+        return ComponentCheck(
+            layer="render", status="skipped", detail="the render check could not run"
+        )
+    return ComponentCheck(layer="render", status=verdict.status, detail=verdict.detail)
 
 
 @dataclass
@@ -609,6 +697,33 @@ def section_rationales(plan: DashboardPlan | None) -> list[dict[str, Any]]:
     return rows
 
 
+def component_check_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """One `GeneratedComponentEvent` dump as its ``ai_generation.checks`` entry.
+
+    Only the four fields the review panel draws are carried over. None for an
+    event from a run that predates the gates, so the stamp records nothing
+    about it rather than an empty pass.
+    """
+    checks = row.get("checks") or []
+    if not checks:
+        return None
+    return {
+        "tag": str(row.get("tag") or ""),
+        "attempts": int(row.get("attempts") or 0),
+        "repair": str(row.get("repair") or ""),
+        "checks": [dict(c) for c in checks],
+    }
+
+
+def component_checks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The per-tile gate record for the ``ai_generation`` stamp, in run order.
+
+    `rows` are `GeneratedComponentEvent` dumps as the run holds them.
+    """
+    entries = (component_check_row(row) for row in rows)
+    return [entry for entry in entries if entry is not None]
+
+
 def validate_component(component: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     """One component dict through the CLI validator: (validated, None) or (None, error text).
 
@@ -703,32 +818,6 @@ def bind_to_collection(
     # decorations are held to the pickers' own lists (see component_style).
     sanitize_style(component)
     return component
-
-
-def substance_error(component: dict[str, Any]) -> str | None:
-    """Reject a validated component that would render nothing.
-
-    The lite figure defaults to a scatter with no bindings, so a UI-mode
-    figure without a single `dict_kwargs` column passes the validator and
-    draws an empty plot; the repair prompt asks for the bindings instead.
-    """
-    if component.get("component_type") == "figure" and component.get("mode", "ui") != "code":
-        if not (component.get("dict_kwargs") or component.get("figure_params")):
-            return (
-                "figure: dict_kwargs is empty; bind at least one column (x, y, color, ...) "
-                "from DATASET SCHEMA"
-            )
-    return None
-
-
-def schema_error(component: dict[str, Any], ctx: DataContext) -> str | None:
-    """`check_against_schema` on one validated component, as repair-prompt text or None."""
-    lite = validate_envelope({"title": "AI", "components": [component]})
-    tag = ctx.data_collection_tag or ctx.data_collection_id
-    findings = check_against_schema(lite, {tag: ctx})
-    if not findings:
-        return None
-    return "Schema check failed:\n" + "\n".join(f"- {f['field']}: {f['message']}" for f in findings)
 
 
 def _role_bindings(kind: str, suggestion: dict[str, Any]) -> tuple[dict[str, str], str | None]:
@@ -880,15 +969,27 @@ def _now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 
+def _is_code_figure(component: dict[str, Any]) -> bool:
+    """A figure whose bindings live in Python rather than in `dict_kwargs`."""
+    return component.get("component_type") == "figure" and component.get("mode") == "code"
+
+
 def validate_answer(
     raw: str, planned: PlannedComponent, ctx: DataContext | None
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[dict[str, Any] | None, str | None, list[ComponentCheck]]:
     """Parse, bind, validate offline, then check against the collection's columns.
 
     `ctx` is None for a tile that binds no collection (text): the binding
     clears the collection tags instead of pinning them, and there is no
     schema to check the answer against.
+
+    The third member is the gate-by-gate record, in the order the gates ran.
+    It exists because the reviewer needs to know which checks a tile actually
+    passed, and a tile that reaches the draft having skipped two of them looks
+    exactly like one that passed all four unless something says so. It stops
+    at the first failure, since the gates after it never ran either.
     """
+    checks: list[ComponentCheck] = []
     try:
         component = component_yaml._parse_component_yaml(raw)
         if ctx is None:
@@ -896,14 +997,60 @@ def validate_answer(
         else:
             bind_to_collection(component, planned, ctx)
     except ValueError as e:
-        return None, component_yaml.format_validation_error_for_llm(e)
+        error = component_yaml.format_validation_error_for_llm(e)
+        checks.append(ComponentCheck(layer="model", status="failed", detail=error))
+        return None, error, checks
     validated, error = validate_component(component)
     if validated is None:
-        return None, error
-    error = substance_error(validated) or (schema_error(validated, ctx) if ctx else None)
+        checks.append(ComponentCheck(layer="model", status="failed", detail=error or ""))
+        return None, error, checks
+    checks.append(ComponentCheck(layer="model", status="passed"))
+
+    # `sanitize_style` runs inside `bind_to_collection`; a standalone tile
+    # never reaches it, and carries no icon or colour to hold to the lists.
+    if ctx is None:
+        checks.append(
+            ComponentCheck(
+                layer="style", status="skipped", detail="a text tile carries no icon or colour"
+            )
+        )
+    else:
+        checks.append(ComponentCheck(layer="style", status="passed"))
+
+    error = substance_error(validated)
     if error:
-        return None, error
-    return validated, None
+        checks.append(ComponentCheck(layer="substance", status="failed", detail=error))
+        return None, error, checks
+    checks.append(ComponentCheck(layer="substance", status="passed"))
+
+    if ctx is None:
+        checks.append(
+            ComponentCheck(
+                layer="schema", status="skipped", detail="a text tile binds no collection"
+            )
+        )
+        return validated, None, checks
+    error = schema_error(validated, ctx)
+    if error:
+        checks.append(ComponentCheck(layer="schema", status="failed", detail=error))
+        return None, error, checks
+    # Run either way, so a bad `selection_column` still fails, but a clean pass
+    # on a code-mode figure proves nothing: the column check reads `dict_kwargs`
+    # and a code figure has none. Only the render probe covers those bindings.
+    if _is_code_figure(validated):
+        checks.append(
+            ComponentCheck(
+                layer="schema",
+                status="skipped",
+                detail=(
+                    "a code-mode figure binds its columns in Python, "
+                    "out of reach of the column check"
+                ),
+            )
+        )
+    else:
+        checks.append(ComponentCheck(layer="schema", status="passed"))
+    return validated, None, checks
 
 
 def fill_intent(planned: PlannedComponent, ctx: DataContext | None, instruction: str | None) -> str:
@@ -952,6 +1099,7 @@ async def fill_component(
     max_attempts = 1 + settings.ai.generate_max_repairs_per_component
     last_error = "(unknown)"
     attempts = 0
+    checks: list[ComponentCheck] = []
     for attempt in range(1, max_attempts + 1):
         if attempt > 1 and budget.exhausted():
             last_error = f"{last_error} (no budget left to repair)"
@@ -966,10 +1114,18 @@ async def fill_component(
         if after_call is not None:
             after_call()
         raw = completion.content
-        component, error = await asyncio.to_thread(validate_answer, raw, planned, ctx)
+        component, error, checks = await asyncio.to_thread(validate_answer, raw, planned, ctx)
         if component is not None and error is None:
             status = "ok" if attempt == 1 else "repaired"
-            return component, component_event(planned, status, attempts=attempt)
+            # What the repair corrected is the finding of the attempt before
+            # it, which `last_error` still holds on every attempt past the first.
+            return component, component_event(
+                planned,
+                status,
+                attempts=attempt,
+                checks=checks,
+                repair=last_error if attempt > 1 else None,
+            )
         last_error = error or "(unknown)"
         logger.warning(
             "generate-dashboard: '%s' attempt %d failed: %s", planned.tag, attempt, last_error
@@ -981,7 +1137,9 @@ async def fill_component(
                 "content": f"{last_error}\n\nRe-emit the corrected YAML only: no prose, no fences.",
             },
         ]
-    return None, component_event(planned, "dropped", attempts=attempts, error=last_error)
+    return None, component_event(
+        planned, "dropped", attempts=attempts, error=last_error, checks=checks
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1151,6 +1309,9 @@ class _Generation(_Stream):
         self.components: list[dict[str, Any]] = []
         self.dropped: list[str] = []
         self.filled_tags: list[str] = []
+        # The last event emitted per tag, so the render pass can add its
+        # verdict to what the fill already reported rather than replacing it.
+        self.events_by_tag: dict[str, GeneratedComponentEvent] = {}
         # tag -> the plan entry it was filled from, so the render check can
         # report a drop as the same `component` event the fill loop emits.
         self.planned_by_tag: dict[str, PlannedComponent] = {}
@@ -1200,6 +1361,7 @@ class _Generation(_Stream):
         dropped, never as both.
         """
         row = event.model_dump(mode="json")
+        self.events_by_tag[event.tag] = event
         for position, existing in enumerate(self.run.components):
             if existing.get("tag") == event.tag:
                 self.run.components[position] = row
@@ -1291,29 +1453,10 @@ class _Generation(_Stream):
             raise _Abort(f"The approved plan cannot be used: {error or '(unknown)'}")
         return plan, targets
 
-    async def check_render(self, component: dict[str, Any]) -> str | None:
-        """One filled component through `dashboard_probe`; None when it renders.
-
-        `probe_component` never raises by contract, and the probe is a
-        safety net around the fill rather than a gate on it: should it fail
-        anyway (an unavailable module, a collaborator that changed shape)
-        the component is kept and the run says once that it went unchecked,
-        because a broken probe is not evidence about the tile.
-        """
+    async def check_render(self, component: dict[str, Any]) -> ComponentCheck:
+        """`render_check` against this run's contexts, collecting its warning."""
         ctx = self.contexts.get(str(component.get("data_collection_tag") or ""))
-        tag = str(component.get("tag") or "")
-        try:
-            return await asyncio.to_thread(probe_component, component, ctx, self.user)
-        except Exception as e:  # noqa: BLE001, see the docstring
-            note = "The render check could not run; the components were kept unchecked."
-            if note in self.warnings:
-                # Whatever broke breaks for every tile: one traceback is the
-                # diagnosis, the other N are noise.
-                logger.warning("generate-dashboard: the render check failed on '%s': %s", tag, e)
-            else:
-                logger.exception("generate-dashboard: the render check could not run")
-                self.warnings.append(note)
-            return None
+        return await render_check(component, ctx, self.user, self.warnings)
 
     async def fill_llm(
         self, target: FillTarget
@@ -1360,6 +1503,10 @@ class _Generation(_Stream):
         planner's reason for each section, so the review pass can say what is
         missing and why the layout looks like it does without reading the run
         record; `reviewed` starts empty and is written by the review route.
+
+        `checks` is the same duplication for the same reason: the gates each
+        tile went through live on the run, and the review panel would need a
+        second fetch (and a run that may since have been pruned) to draw them.
         """
         return {
             "status": "draft",
@@ -1371,6 +1518,7 @@ class _Generation(_Stream):
             "reviewed": [],
             "dropped": list(self.dropped),
             "sections": section_rationales(self.plan),
+            "checks": component_checks(self.run.components),
         }
 
 
@@ -1557,14 +1705,26 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
     yield gen.status("checking")
     kept: list[dict[str, Any]] = []
     for component in gen.components:
-        error = await gen.check_render(component)
-        if error is None:
-            kept.append(component)
-            continue
         tag = str(component.get("tag") or "")
-        event = render_drop_event(component, gen.planned_by_tag.get(tag), error)
+        check = await gen.check_render(component)
+        filled = gen.events_by_tag.get(tag)
+        # What the fill already recorded, plus the verdict it could not know yet.
+        checks = [*(filled.checks if filled is not None else []), check]
+        if check.status != "failed":
+            kept.append(component)
+            # Re-report the tile so its render verdict reaches the panel too:
+            # passing the probe, and never having been probed, are different
+            # things to a reviewer.
+            if filled is not None:
+                filled.checks = checks
+                gen.record_component(filled)
+                yield gen.component_frame(filled)
+            continue
+        event = render_drop_event(
+            component, gen.planned_by_tag.get(tag), check.detail, checks=checks
+        )
         gen.record_component(event)
-        gen.warnings.append(f"'{tag}' does not render and was dropped: {error}")
+        gen.warnings.append(f"'{tag}' does not render and was dropped: {check.detail}")
         yield gen.component_frame(event)
     if len(kept) != len(gen.components):
         gen.components = kept
@@ -1594,7 +1754,13 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
             f"Dropped {', '.join(sorted(culprits))}: the assembled dashboard did not validate"
         )
         gen.components = [c for c in gen.components if c.get("tag") not in culprits]
-        gen.dropped.extend(sorted(culprits))
+        for tag in sorted(culprits):
+            event = envelope_drop_event(
+                tag, gen.planned_by_tag.get(tag), gen.events_by_tag.get(tag)
+            )
+            gen.record_component(event)
+            yield gen.component_frame(event)
+        await gen.save()
         if not gen.has_data_bound():
             raise _Abort("no component could be generated") from e
         lite_dict = gen.envelope(title)
@@ -1933,6 +2099,7 @@ def write_components(
     dashboard_oid: ObjectId,
     replacements: dict[int, dict[str, Any]],
     layouts: dict[str, list[dict[str, Any]]] | None = None,
+    checks: list[dict[str, Any]] | None = None,
 ) -> None:
     """Replace components in place in ``stored_metadata``, the way an edit lands.
 
@@ -1940,11 +2107,46 @@ def write_components(
     the document (and a concurrent autosave of it) is left alone, and
     `last_saved_ts` is bumped exactly as ``/dashboards/save/{id}`` does: the
     dashboard listing's cache-buster reads it, and it must stay a string.
+
+    `checks` rides in the same `$set` rather than a second write: a tile and
+    the record of what was proved about it are one fact, and two writes could
+    leave a regenerated tile carrying the previous tile's verdicts. Dotted,
+    like the review and promote routes' writes, so the planner's section
+    rationales and the reviewer's kept list survive beside it.
     """
     update: dict[str, Any] = {f"stored_metadata.{i}": c for i, c in replacements.items()}
     update.update(layouts or {})
+    if checks is not None:
+        update["ai_generation.checks"] = checks
     update["last_saved_ts"] = utc_now_str()
     dashboards_collection.update_one({"dashboard_id": dashboard_oid}, {"$set": update})
+
+
+def merge_checks(
+    info: dict[str, Any], refreshed: dict[str, GeneratedComponentEvent]
+) -> list[dict[str, Any]] | None:
+    """The draft's ``checks`` with the regenerated tiles' verdicts folded in.
+
+    None when there is nothing to write, so the caller leaves the field
+    alone. A tag the stamp never carried is appended, which is how a draft
+    generated before the gates were recorded starts collecting them as its
+    tiles are regenerated.
+    """
+    if not refreshed:
+        return None
+    rows = [dict(r) for r in (info.get("checks") or []) if isinstance(r, dict)]
+    positions = {str(r.get("tag") or ""): i for i, r in enumerate(rows)}
+    for tag, event in refreshed.items():
+        row = component_check_row(event.model_dump(mode="json"))
+        if row is None:
+            continue
+        position = positions.get(tag)
+        if position is None:
+            positions[tag] = len(rows)
+            rows.append(row)
+        else:
+            rows[position] = row
+    return rows
 
 
 def jsonable(component: dict[str, Any]) -> dict[str, Any]:
@@ -2058,12 +2260,14 @@ async def _regenerate(reg: _Regeneration) -> AsyncIterator[bytes]:
     yield reg.status("regenerating")
     siblings = [t for t in (generation_tag(c) for c in components) if t]
     replacements: dict[int, dict[str, Any]] = {}
+    refreshed: dict[str, GeneratedComponentEvent] = {}
     for position in reg.positions:
         stored = components[position]
         tag = generation_tag(stored)
         planned = planned_for(stored, tag=tag, plan=plan)
+        target = target_for(stored, planned, contexts)
         component, event, warnings = await regenerate_target(
-            target_for(stored, planned, contexts),
+            target,
             complete=reg.complete,
             budget=reg.budget,
             dashboard_title=title,
@@ -2072,6 +2276,24 @@ async def _regenerate(reg: _Regeneration) -> AsyncIterator[bytes]:
             plan=plan,
         )
         reg.warnings.extend(warnings)
+        if component is not None:
+            # The gate the regeneration used to skip. A tile refilled here is
+            # written straight back onto a saved dashboard, so it gets less
+            # scrutiny than a generated one unless it is probed too.
+            check = await render_check(component, target.ctx, reg.user, reg.warnings)
+            event.checks = [*event.checks, check]
+            if check.status == "failed":
+                reg.warnings.append(
+                    f"'{tag}' does not render and was not written back: {check.detail}"
+                )
+                event = component_event(
+                    planned,
+                    "dropped",
+                    attempts=event.attempts,
+                    error=f"render: {check.detail}",
+                    checks=event.checks,
+                )
+                component = None
         if component is not None:
             slim = _slim(component)
             slim["ai_source"] = ai_source_stamp(
@@ -2095,7 +2317,16 @@ async def _regenerate(reg: _Regeneration) -> AsyncIterator[bytes]:
                     "dropped",
                     attempts=event.attempts,
                     error=component_yaml.format_validation_error_for_llm(e),
+                    checks=event.checks,
                 )
+        # Only a tile that was actually written back updates the stamp. A
+        # candidate that failed a gate leaves the stored tile in place, so its
+        # verdict describes a component the dashboard does not hold; stamping
+        # it would mark a tile that renders fine as one that does not. The
+        # event still goes out on the stream, where it is live feedback on the
+        # attempt rather than a record of what is saved.
+        if tag and position in replacements:
+            refreshed[tag] = event
         yield reg.budget_frame()
         yield reg.component_frame(event)
 
@@ -2108,7 +2339,9 @@ async def _regenerate(reg: _Regeneration) -> AsyncIterator[bytes]:
     for position, replacement in replacements.items():
         merged[position] = replacement
     layouts = relayout_section(merged, reg.positions, doc) if reg.section is not None else {}
-    await asyncio.to_thread(write_components, dashboard_oid, replacements, layouts)
+    await asyncio.to_thread(
+        write_components, dashboard_oid, replacements, layouts, merge_checks(info, refreshed)
+    )
 
     written = [jsonable(merged[p]) for p in reg.positions]
     single = reg.section is None and len(reg.positions) == 1

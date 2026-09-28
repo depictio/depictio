@@ -27,9 +27,10 @@ STAMP = {
 }
 
 # The same stamp once the model has loaded it: a draft written before the
-# review pass existed gains its two empty bookkeeping lists, and one written
-# before the planner explained itself an empty `sections` list.
-STAMP_STORED = {**STAMP, "reviewed": [], "dropped": [], "sections": []}
+# review pass existed gains its two empty bookkeeping lists, one written
+# before the planner explained itself an empty `sections` list, and one
+# written before the gates were recorded an empty `checks` list.
+STAMP_STORED = {**STAMP, "reviewed": [], "dropped": [], "sections": [], "checks": []}
 
 
 def _dashboard(**extra) -> DashboardData:
@@ -76,6 +77,50 @@ class TestAIGenerationInfo:
         )
         assert [s.kind for s in info.sections] == ["filter", "grid"]
         assert info.sections[1].rationale == "the headline numbers"
+
+    def test_keeps_the_gates_each_tile_went_through(self):
+        info = AIGenerationInfo(
+            **STAMP,
+            checks=[
+                {
+                    "tag": "sepal_scatter",
+                    "attempts": 2,
+                    "repair": "figure: dict_kwargs is empty",
+                    "checks": [
+                        {"layer": "model", "status": "passed"},
+                        {"layer": "render", "status": "skipped", "detail": "no cheap probe"},
+                    ],
+                }
+            ],
+        )
+        (row,) = info.checks
+        assert row.tag == "sepal_scatter"
+        assert row.attempts == 2
+        assert row.repair == "figure: dict_kwargs is empty"
+        assert [(c.layer, c.status) for c in row.checks] == [
+            ("model", "passed"),
+            ("render", "skipped"),
+        ]
+        assert row.checks[0].detail == ""
+        assert row.checks[1].detail == "no cheap probe"
+
+    def test_a_gate_this_build_does_not_know_still_loads(self):
+        """Open strings on purpose: a newer server may record a gate this one
+        has never heard of, and rejecting the whole dashboard over a label
+        would lose the draft, not just the label."""
+        info = AIGenerationInfo(
+            **STAMP,
+            checks=[{"tag": "t", "checks": [{"layer": "quantum", "status": "shrugged"}]}],
+        )
+        assert info.checks[0].checks[0].layer == "quantum"
+        assert info.checks[0].attempts == 1
+
+    def test_rejects_an_unknown_key_inside_a_check(self):
+        with pytest.raises(ValidationError):
+            AIGenerationInfo(
+                **STAMP,
+                checks=[{"tag": "t", "checks": [{"layer": "model", "status": "passed", "why": 1}]}],
+            )
 
     def test_rejects_an_unknown_section_kind(self):
         with pytest.raises(ValidationError):

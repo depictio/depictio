@@ -21,7 +21,9 @@ import { Icon } from '@iconify/react';
 
 import { componentTypeVisual } from 'depictio-react-core';
 
+import CheckStrip from './CheckStrip';
 import { sectionIconId } from '../componentVisuals';
+import type { RecordedCheck } from '../types';
 import { AI_COLOR } from '../icons';
 
 /** One generated tile of the draft, as the review addresses it. */
@@ -45,6 +47,12 @@ export interface DraftTile {
   /** The planner's brief for this tile, stamped on it at generation time.
    *  Null on a draft made before the planner was asked to explain itself. */
   intent: string | null;
+  /** The gates this tile went through, from the draft's own stamp. Null on a
+   *  draft saved before they were recorded, which the panel says out loud
+   *  rather than drawing as a clean pass. */
+  checks?: RecordedCheck[] | null;
+  /** The finding a repair round corrected while the tile was being filled. */
+  repair?: string | null;
   reviewed: boolean;
 }
 
@@ -589,6 +597,21 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
                 )}
               </Box>
             )}
+            {/* How the tile was checked, under why it was asked for. The
+                planner's reason says what this tile is meant to do; this
+                says what the server proved about it before saving it, which
+                is the other half of deciding whether to keep it. */}
+            <Box>
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={2}>
+                How this was checked
+              </Text>
+              <CheckStrip
+                checks={current.checks}
+                repair={current.repair}
+                variant="list"
+                testId="draft-review-checks"
+              />
+            </Box>
           </Stack>
         )}
 

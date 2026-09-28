@@ -285,7 +285,9 @@ as a recommendation.
 - **Fill**: every data-bound component goes through the same generation as
   the Describe step (its intent plus a dashboard context: the title, its
   section and the sibling tags already filled) and the same validator
-  (`validate_single`, the `depictio-cli dashboard import` grammar).
+  (`validate_single`, the `depictio-cli dashboard import` grammar). The
+  decorations are held to the pickers' own lists, so an icon the bundled
+  subset does not carry never reaches the builder as a blank box.
   Section headers are written from the plan without a model call, and
   advanced visualizations are bound deterministically from a catalog offer
   or from the ranked role bindings, never invented.
@@ -304,7 +306,10 @@ as a recommendation.
   its reason rather than saved into a dashboard where it would answer 500.
   Text has nothing to probe, and image, map and MultiQC tiles have no
   in-process probe cheap enough to be worth its cost, so they are not
-  checked.
+  checked. A figure written in code mode is checked here and nowhere else:
+  it declares no column bindings for the schema check to read, and the
+  render path reports what its code raised. A tile regenerated from the
+  review panel goes through the same probe before it is written back.
 - **Repair, then drop**: a component that fails gets
   `DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT` repair rounds with the
   formatted error; once they are exhausted the component is dropped and
@@ -317,6 +322,33 @@ as a recommendation.
   `POST /dashboards/import/yaml` uses, with the `ai_generation` provenance
   added. The YAML travels in the terminal event, so a draft can be
   re-imported with the CLI.
+
+### What each check can see
+
+The chain is not a single wall, and the gates do not all apply to every
+component. A card is checked against the column types the collection really
+stores; a text tile has no collection, so that check does not run at all. A
+figure written in code mode binds its columns inside Python, where the column
+check cannot follow, and is covered by the render probe instead. Four types
+have no render probe cheap enough to be worth its cost.
+
+Because those gaps are real, the run records which gates each component
+actually went through and how each one answered: passed, failed, or not run
+with the reason it did not. That record travels in the stream, so the progress
+panel shows a row of marks under each tile as it is filled and again once it
+has been probed, and it is stamped on the draft, so the review panel can still
+show it a day later when the run itself is gone. A tile whose gates were never
+recorded says so rather than showing an unearned row of green, which matters
+for drafts generated before the record existed.
+
+The same gates run wherever a component is generated, not only in a whole
+dashboard run. Describing a single component with AI puts the answer through
+the grammar, the style allowlists, the substance check and the column check,
+and repairs it once from the finding, within the same two attempts. The
+suggestion list runs the column check too and drops what fails, since a
+suggestion has no repair round. Neither of those two runs the render probe:
+both hand their answer straight to the builder, which draws a real preview of
+it within the second.
 
 ### Layout conventions
 

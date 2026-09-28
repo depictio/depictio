@@ -398,9 +398,42 @@ export interface DashboardPlan {
   components: PlannedComponent[];
 }
 
+/** The gates one filled component passes, named after what actually runs.
+ *  Mirrors CheckLayer in the AI package's schemas.py. */
+export type CheckLayer = 'model' | 'style' | 'substance' | 'schema' | 'render';
+
+/** How one gate answered. `skipped` is its own state: a gate can decline to
+ *  run (a text tile has no table to check columns against, four types have no
+ *  cheap render probe, a code-mode figure binds no columns statically, the
+ *  probe itself can break) and showing that as `passed` would claim a check
+ *  that never happened. */
+export type CheckStatus = 'passed' | 'failed' | 'skipped';
+
+/** One gate's verdict, read loosely.
+ *
+ *  What the surfaces that draw a strip actually need. It is deliberately open
+ *  where `ComponentCheck` is closed, because those surfaces draw two sources:
+ *  this run's own events, which come from this build's server, and the stamp
+ *  on a draft, which may have been written by another one. A gate this build
+ *  has never heard of is something to show, not to choke on, which is the
+ *  same call `AIComponentCheck` makes in the Pydantic model. */
+export interface RecordedCheck {
+  layer: string;
+  status: string;
+  /** The finding when failed, the reason when skipped. */
+  detail: string;
+}
+
+/** One gate's verdict on one component of the run in progress. */
+export interface ComponentCheck extends RecordedCheck {
+  layer: CheckLayer;
+  status: CheckStatus;
+}
+
 /** Payload of a `component` event, one per planned component. A later event
  *  for the same tag supersedes the earlier one: a repair turns a failing
- *  component into `repaired`, an exhausted repair budget into `dropped`. */
+ *  component into `repaired`, an exhausted repair budget into `dropped`, and
+ *  the render pass re-reports every tile once it has been probed. */
 export interface GeneratedComponentEvent {
   tag: string;
   section: string;
@@ -408,6 +441,11 @@ export interface GeneratedComponentEvent {
   status: 'ok' | 'repaired' | 'dropped';
   attempts: number;
   error?: string | null;
+  /** The gates the component went through, in the order they ran. Absent on
+   *  a run from a server that did not record them. */
+  checks?: ComponentCheck[];
+  /** The finding a successful repair round corrected. */
+  repair?: string | null;
 }
 
 /** Payload of the terminal `dashboard` event: the persisted draft. */
@@ -422,10 +460,6 @@ export interface GeneratedDashboardEvent {
   dropped: string[];
 }
 
-/** `ai_generation` on a dashboard document. Mirrors AIGenerationInfo in
- *  depictio/models/models/dashboards.py; structurally identical to
- *  depictio-react-core's DashboardAIGeneration so hosts pass the
- *  dashboard's field straight through. */
 /** One planned section with the planner's reason for it; mirrors
  *  AISectionRationale in depictio/models/models/dashboards.py and
  *  DashboardAISection in depictio-react-core. */
@@ -435,6 +469,22 @@ export interface AISectionRationale {
   rationale: string;
 }
 
+/** The gates one generated tile went through, as the draft records them.
+ *  Mirrors AIComponentChecks in depictio/models/models/dashboards.py. */
+export interface AIComponentChecks {
+  tag: string;
+  attempts: number;
+  /** The finding a successful repair round corrected; empty when none. */
+  repair: string;
+  /** Loose, like the stamp itself: a draft can have been written by another
+   *  server build than the one reading it. */
+  checks: RecordedCheck[];
+}
+
+/** `ai_generation` on a dashboard document. Mirrors AIGenerationInfo in
+ *  depictio/models/models/dashboards.py; structurally identical to
+ *  depictio-react-core's DashboardAIGeneration so hosts pass the
+ *  dashboard's field straight through. */
 export interface AIGenerationInfo {
   status: 'draft' | 'promoted';
   model: string;
@@ -451,6 +501,12 @@ export interface AIGenerationInfo {
    *  grid, in plan order. Absent on drafts generated before the planner was
    *  asked to explain itself, so readers default it to []. */
   sections?: AISectionRationale[];
+  /** Generation tags the run planned but could not deliver. */
+  dropped?: string[];
+  /** Which gates each tile passed. Absent on drafts saved before the gates
+   *  were recorded, which readers must show as "not recorded" rather than
+   *  as a clean pass. */
+  checks?: AIComponentChecks[];
 }
 
 /** Answer of POST /ai/generated-dashboards/{id}/promote. */
