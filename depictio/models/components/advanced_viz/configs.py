@@ -815,8 +815,8 @@ class BioimageViewerConfig(_BaseVizConfig):
     The pixels come from a *separate* DC with ``type: "bioimage"`` holding one
     or more stores: ``.zarr`` key trees served key by key through
     ``/advanced_viz/bioimage/{dc_id}/{store}/{key}``, or ``.ome.tif`` files
-    read with Range through ``/advanced_viz/bioimage/{dc_id}/{store}``. The image has no tabular
-    payload, so the CANONICAL_SCHEMAS entry is empty.
+    read with Range through ``/advanced_viz/bioimage/{dc_id}/{store}``. The
+    image has no tabular payload, so the CANONICAL_SCHEMAS entry is empty.
 
     Two optional table DCs plug into it. A *sample* DC lets an upstream filter
     on ``sample_column`` pick the store to show (the store whose name without

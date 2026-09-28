@@ -1504,8 +1504,8 @@ export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreIn
 }
 
 /** Root URL of one store. Zarr keys (`.zattrs` or `zarr.json`, `0/.zarray`,
- *  chunks and shards) resolve under it; a single-file store (OME-TIFF) is the file itself. No
- *  trailing slash. */
+ *  chunks and shards) resolve under it; a single-file store (OME-TIFF) is the
+ *  file itself. No trailing slash. */
 export function bioimageStoreUrl(dcId: string, store: string): string {
   return `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}`;
 }
@@ -1528,9 +1528,9 @@ export type BioimageRangeQuery = { offset: number; length: number } | { suffixLe
 
 /** The subset of zarrita's `AsyncReadable` store interface the OME-Zarr
  *  loader calls: `get` resolves a key to its bytes, or `undefined` when the key
- *  does not exist (a sparse chunk, an absent `.zattrs` or `zarr.json`). `getRange` reads part
- *  of a key: zarr v3 sharded arrays fetch a shard's index (a suffix) and then
- *  each inner chunk (an offset and length) this way. */
+ *  does not exist (a sparse chunk, an absent `.zattrs` or `zarr.json`).
+ *  `getRange` reads part of a key: zarr v3 sharded arrays fetch a shard's index
+ *  (a suffix) and then each inner chunk (an offset and length) this way. */
 export interface BioimageZarrStore {
   get(key: string, opts?: { signal?: AbortSignal }): Promise<Uint8Array | undefined>;
   getRange(

@@ -1676,8 +1676,9 @@ def get_phylogeny_newick(
 #
 # A zarr reader in the browser fetches one small object per request (``.zattrs``,
 # ``.zarray`` or a v3 ``zarr.json``, then many chunks, or byte ranges of a v3
-# shard), and an OME-TIFF reader one byte range per tile, so both the access check and the per-DC store lookup are cached briefly
-# instead of hitting Mongo on every read.
+# shard), and an OME-TIFF reader one byte range per tile, so both the access
+# check and the per-DC store lookup are cached briefly instead of hitting Mongo
+# on every read.
 #
 # Where a store is read from (see ``data_collections_types.bioimage``):
 # * key-tree formats (ome-zarr, spatialdata): the CLI upload under
@@ -2019,21 +2020,15 @@ def _range_not_satisfiable(size: int | None = None) -> HTTPException:
     return HTTPException(status_code=416, detail="Requested range not satisfiable", headers=headers)
 
 
-def _bioimage_s3_read(
-    bucket: str, key: str, byte_range: str | None = None, *, capped: bool = True
-) -> _Blob:
-    """One object (or byte range of it), whole-read and capped at the relay limit.
-
-    ``capped=False`` lifts the cap for a whole read of the DC's own upload (a
-    zarr chunk, read as before); a ranged read is always capped by its span.
-    """
+def _bioimage_s3_get(bucket: str, key: str, byte_range: str | None = None) -> dict[str, Any]:
+    """``get_object`` with its errors mapped to a miss, a 416 or an upstream failure."""
     from botocore.exceptions import ClientError
 
     kwargs: dict[str, Any] = {"Bucket": bucket, "Key": key}
     if byte_range:
         kwargs["Range"] = byte_range
     try:
-        obj = _bioimage_s3_client().get_object(**kwargs)
+        return _bioimage_s3_client().get_object(**kwargs)
     except ClientError as exc:
         code = str(exc.response.get("Error", {}).get("Code", ""))
         if code in _S3_MISS_CODES:
@@ -2044,23 +2039,57 @@ def _bioimage_s3_read(
     except Exception as exc:
         raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
 
+
+def _read_s3_body(obj: dict[str, Any], bucket: str, key: str) -> bytes:
+    """The whole body: a mid-read failure is then a 502, not a truncated 200."""
     body = obj["Body"]
-    capped = capped or bool(byte_range)
     try:
-        length = obj.get("ContentLength")
-        if capped and isinstance(length, int) and length > _bioimage_max_bytes():
-            raise _bioimage_too_large()
-        # Read whole: a mid-read failure is then a 502, not a truncated 200.
-        content = body.read()
-    except HTTPException:
-        raise
+        return body.read()
     except Exception as exc:
         raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
     finally:
         body.close()
-    if capped and len(content) > _bioimage_max_bytes():
+
+
+def _bioimage_s3_read(bucket: str, key: str, byte_range: str | None = None) -> _Blob:
+    """One object (or byte range of it), whole-read and capped at the relay limit."""
+    obj = _bioimage_s3_get(bucket, key, byte_range)
+    length = obj.get("ContentLength")
+    if isinstance(length, int) and length > _bioimage_max_bytes():
+        obj["Body"].close()
+        raise _bioimage_too_large()
+    content = _read_s3_body(obj, bucket, key)
+    if len(content) > _bioimage_max_bytes():
         raise _bioimage_too_large()
     return _Blob(content, obj.get("ContentRange") if byte_range else None)
+
+
+def _bioimage_s3_whole_response(
+    bucket: str, key: str, media_type: str, headers: dict[str, str]
+) -> Response:
+    """A whole key of the DC's own upload, uncapped.
+
+    Metadata and zarr v2 chunks are small and read whole (502 on a mid-read
+    failure). A key past the relay limit, typically a zarr v3 shard fetched
+    without Range, is streamed instead of being held in API memory.
+    """
+    from fastapi.responses import StreamingResponse
+
+    obj = _bioimage_s3_get(bucket, key)
+    length = obj.get("ContentLength")
+    if not isinstance(length, int) or length <= _bioimage_max_bytes():
+        content = _read_s3_body(obj, bucket, key)
+        return Response(content=content, media_type=media_type, headers=headers)
+    body = obj["Body"]
+
+    def chunks():
+        try:
+            yield from body.iter_chunks(_DISK_READ_CHUNK)
+        finally:
+            body.close()
+
+    headers = {**headers, "Content-Length": str(length)}
+    return StreamingResponse(chunks(), media_type=media_type, headers=headers)
 
 
 def _bioimage_s3_size(bucket: str, key: str) -> int:
@@ -2236,9 +2265,13 @@ def _resolve_byte_range(requested: _ByteRange, size: int) -> tuple[int, int]:
     return start, end
 
 
+def _head_response(size: int, media_type: str, headers: dict[str, str]) -> Response:
+    headers = {**headers, "Content-Length": str(size)}
+    return Response(status_code=200, media_type=media_type, headers=headers)
+
+
 def _tiff_head_response(size: int) -> Response:
-    headers = {**_TIFF_HEADERS, "Content-Length": str(size)}
-    return Response(status_code=200, media_type=_TIFF_MEDIA_TYPE, headers=headers)
+    return _head_response(size, _TIFF_MEDIA_TYPE, _TIFF_HEADERS)
 
 
 def _blob_response(
@@ -2278,10 +2311,9 @@ def _disk_response(
     from fastapi.responses import StreamingResponse
 
     size = os.path.getsize(path)
-    headers = dict(headers)
     if head:
-        headers["Content-Length"] = str(size)
-        return Response(status_code=200, media_type=media_type, headers=headers)
+        return _head_response(size, media_type, headers)
+    headers = dict(headers)
     if requested is None:
         start, end, status = 0, size - 1, 200
     else:
@@ -2427,11 +2459,10 @@ def get_bioimage_key(
     if info["upload"]:
         s3_key = bioimage_s3_prefix(str(dc_oid), store) + normalized
         try:
-            # Read whole (a key, or one range of a shard): a mid-read S3
-            # failure then maps to 502 instead of a truncated 200 the reader
-            # would decode as garbage. A whole key of the DC's own upload is
-            # not capped, as before; a range is capped by its span.
-            blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range, capped=False)
+            if byte_range is None:
+                return _bioimage_s3_whole_response(settings.s3.bucket, s3_key, media_type, headers)
+            # One range of a shard, capped by its span.
+            blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range)
             return _blob_response(blob, requested, media_type, headers)
         except _BioimageMiss:
             pass
