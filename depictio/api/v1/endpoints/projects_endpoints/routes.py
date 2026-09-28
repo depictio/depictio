@@ -33,6 +33,11 @@ from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     FromManifestRequest,
     _create_project_from_manifest,
 )
+from depictio.api.v1.endpoints.projects_endpoints.from_run import (
+    FromRunReport,
+    FromRunRequest,
+    _create_project_from_run,
+)
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
     IngestionSummary,
@@ -546,6 +551,42 @@ async def create_project_from_manifest(
     return await asyncio.to_thread(
         _create_project_from_manifest,
         manifest_url=payload.manifest_url,
+        template_id=payload.template_id,
+        current_user=current_user,
+        project_name=payload.project_name,
+        variables=payload.variables,
+        dry_run=payload.dry_run,
+    )
+
+
+@projects_endpoint_router.post("/from_run", response_model=FromRunReport)
+async def create_project_from_run(
+    payload: FromRunRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a project (and its dashboards) from a template + an ``s3://`` run folder.
+
+    The browser twin of ``depictio run --template ... --data-root s3://...``:
+    resolve the template against the run prefix, report per data collection
+    what it would find there, create the project, import its dashboards, and
+    hand the ingestion itself to Celery workers — a real run folder is minutes
+    of work, far past a request. The response carries a ``run_id`` to poll via
+    ``GET /projects/refresh_manifest/{run_id}``. ``dry_run=true`` returns the
+    same per-collection plan and creates nothing.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    # Mirror POST /projects/create's public/demo-mode gate.
+    _reject_non_admin_in_public_mode(current_user, "Project creation")
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _create_project_from_run,
+        data_root=payload.data_root,
         template_id=payload.template_id,
         current_user=current_user,
         project_name=payload.project_name,
