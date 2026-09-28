@@ -343,6 +343,17 @@ class Pipeline:
         self.permission = True
         self.persist_error: HTTPException | None = None
         self.persist_failures = 0
+        # The render check: every filled tile is probed, and a tag listed in
+        # `probe_errors` answers with that reason instead of None. Faked here
+        # like every other collaborator, so no test needs the real probe (it
+        # reads the data) to know what the check does with its answer.
+        self.probe_errors: dict[str, str] = {}
+        self.probed: list[tuple[str, str | None]] = []
+
+        def fake_probe(component, ctx_, user):
+            tag = str(component.get("tag") or "")
+            self.probed.append((tag, ctx_.data_collection_tag if ctx_ else None))
+            return self.probe_errors.get(tag)
 
         async def fake_context(project_id, user, dc_ids=None, *, max_collections=6):
             self.context_call = SimpleNamespace(
@@ -378,6 +389,7 @@ class Pipeline:
             dashboard_gen, "compose_offers_for_project", lambda doc: {"modules": []}
         )
         monkeypatch.setattr(dashboard_gen, "_persist_lite_dashboard", fake_persist)
+        monkeypatch.setattr(dashboard_gen, "probe_component", fake_probe)
         monkeypatch.setattr(dashboard_gen, "projects_collection", _FakeProjects(project_doc()))
         monkeypatch.setattr(
             dashboard_gen, "check_project_permission", lambda pid, user, perm: self.permission
@@ -873,6 +885,176 @@ class TestTitles:
 
 
 # ---------------------------------------------------------------------------
+# The render check, between the fill loop and the layout
+# ---------------------------------------------------------------------------
+
+
+class TestRenderCheck:
+    def test_every_filled_tile_is_probed_with_its_collection(self, client, iris, monkeypatch):
+        generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
+        probed = dict(iris.probed)
+        assert set(probed) == {c["tag"] for c in IRIS_PLAN["components"]}
+        # The tile's own collection reaches the probe; text binds none.
+        assert set(probed.values()) == {"iris_table"}
+
+    def test_a_tile_that_does_not_render_is_dropped_from_the_draft(self, client, iris, monkeypatch):
+        iris.probe_errors["petal_box"] = "duplicate column 'petal.length'"
+        events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
+        types = [t for t, _ in events]
+        assert types[-2:] == ["dashboard", "done"]
+        # The fill said ok, the check said dropped: both frames, in that order.
+        petal = [d for t, d in events if t == "component" and d["tag"] == "petal_box"]
+        assert [d["status"] for d in petal] == ["ok", "dropped"]
+        assert petal[-1]["error"] == "render: duplicate column 'petal.length'"
+        assert petal[-1]["attempts"] == 0
+        # `checking` runs after the last fill and before the layout.
+        statuses = [d["message"] for t, d in events if t == "status"]
+        assert statuses.index("checking") > statuses.index("filling")
+        assert statuses.index("checking") < statuses.index("laying out")
+
+        dashboard = _one(events, "dashboard")
+        assert dashboard["dropped"] == ["petal_box"]
+        assert "petal_box" not in {
+            c["tag"] for c in yaml.safe_load(dashboard["yaml"])["components"]
+        }
+        assert any("does not render" in w for w in dashboard["warnings"])
+        # One entry per planned component: the drop replaces the fill's ok.
+        run = iris.last_run
+        assert [c["tag"] for c in run.components] == [c["tag"] for c in IRIS_PLAN["components"]]
+        assert {c["tag"] for c in run.components if c["status"] == "dropped"} == {"petal_box"}
+
+    def test_a_run_left_with_no_data_bound_tile_ends_in_error(self, client, iris, monkeypatch):
+        iris.probe_errors = {c["tag"]: "nope" for c in IRIS_PLAN["components"]}
+        events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
+        assert "dashboard" not in [t for t, _ in events]
+        assert _one(events, "error")["detail"] == "no component could be generated"
+        assert iris.last_run.status == "failed"
+
+    def test_a_probe_that_blows_up_keeps_the_tile_and_says_so(self, client, iris, monkeypatch):
+        def boom(component, ctx, user):
+            raise RuntimeError("the probe module is not there")
+
+        monkeypatch.setattr(dashboard_gen, "probe_component", boom)
+        events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
+        dashboard = _one(events, "dashboard")
+        assert dashboard["dropped"] == []
+        assert sum("could not run" in w for w in dashboard["warnings"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Two phases: plan_only, then the approved plan
+# ---------------------------------------------------------------------------
+
+
+class TestPlanOnly:
+    def test_stops_at_the_plan_and_saves_nothing(self, client, iris, monkeypatch):
+        fake = FakeLLM(IRIS_PLAN, IRIS_ANSWERS)
+        events = generate(client, monkeypatch, fake, plan_only=True)
+        types = [t for t, _ in events]
+
+        assert fake.calls == ["plan"]
+        assert types[-3:] == ["plan", "budget", "done"]
+        assert "component" not in types and "dashboard" not in types
+        assert _one(events, "plan")["plan"]["title"] == "Iris overview"
+        assert iris.persisted == []
+        assert iris.probed == []
+
+        run = iris.last_run
+        # Not `complete`: the run stopped at the plan on purpose and saved no
+        # dashboard, and the history has to be able to say so.
+        assert run.status == "planned"
+        assert run.dashboard_id is None
+        assert run.yaml == ""
+        assert run.plan["title"] == "Iris overview"
+        # One planning call, and only that one, is what the caller paid for.
+        assert run.budget_spent.tokens == TOKENS_PER_CALL
+        assert any("Plan-only" in w for w in run.warnings)
+
+    def test_with_a_plan_is_422_before_the_stream(self, client, iris):
+        r = client.post(
+            "/ai/generate-dashboard",
+            json={"project_id": PROJECT_ID, "plan_only": True, "plan": IRIS_PLAN},
+        )
+        assert r.status_code == 422
+
+
+class TestApprovedPlan:
+    def test_fills_the_given_plan_without_a_planning_call(self, client, iris, monkeypatch):
+        fake = FakeLLM({"title": "never asked"}, IRIS_ANSWERS)
+        events = generate(client, monkeypatch, fake, plan=IRIS_PLAN)
+        types = [t for t, _ in events]
+
+        assert "plan" not in fake.calls
+        assert fake.calls == [c["tag"] for c in IRIS_PLAN["components"]]
+        # The panel reads the same budget-then-plan pair in both phases.
+        assert types[types.index("plan") - 1] == "budget"
+        assert _one(events, "plan")["plan"]["title"] == "Iris overview"
+        assert types[-2:] == ["dashboard", "done"]
+        assert _one(events, "dashboard")["title"] == "Iris overview"
+        assert iris.last_run.status == "complete"
+        # Only the fills were charged: the planning call was not made.
+        assert iris.last_run.budget_spent.tokens == 12 * TOKENS_PER_CALL
+
+    def test_the_plan_event_is_the_normalised_plan_not_the_one_sent(
+        self, client, iris, monkeypatch
+    ):
+        sent = {
+            **IRIS_PLAN,
+            "grid_sections": [
+                *[
+                    {**s, "icon": "not:an-icon", "color": "chartreuse"}
+                    if s["name"] == "Reference"
+                    else s
+                    for s in IRIS_PLAN["grid_sections"]
+                ],
+                {"name": "Empty", "description": "a section nothing lives in"},
+            ],
+        }
+        events = generate(
+            client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS), plan=sent, title="Pinned"
+        )
+        plan = _one(events, "plan")["plan"]
+        # Normalised exactly as a model answer is: the empty section is gone,
+        # the pinned title wins, and no icon or colour outside the allowlists
+        # survives into the draft.
+        assert [s["name"] for s in plan["grid_sections"]] == ["Cohort", "Measurements", "Reference"]
+        assert plan["title"] == "Pinned"
+        reference = next(s for s in plan["grid_sections"] if s["name"] == "Reference")
+        assert reference["color"] is None
+        assert reference["icon"] != "not:an-icon"
+
+    def test_a_plan_naming_a_collection_of_another_project_is_an_error(
+        self, client, iris, monkeypatch
+    ):
+        sent = {
+            **IRIS_PLAN,
+            "components": [
+                *IRIS_PLAN["components"],
+                _component("smuggled", "Reference", "table", "someone_elses_dc"),
+            ],
+        }
+        fake = FakeLLM(IRIS_PLAN, IRIS_ANSWERS)
+        events = generate(client, monkeypatch, fake, plan=sent)
+        detail = _one(events, "error")["detail"]
+        assert "someone_elses_dc" in detail and "iris_table" in detail
+        assert fake.calls == []
+        assert iris.persisted == []
+        assert [t for t, _ in events][-1] == "done"
+        assert iris.last_run.status == "failed"
+
+    def test_a_plan_that_does_not_parse_is_an_error_not_a_500(self, client, iris, monkeypatch):
+        fake = FakeLLM(IRIS_PLAN, IRIS_ANSWERS)
+        events = generate(
+            client, monkeypatch, fake, plan={"title": "T", "components": [{"tag": "x"}]}
+        )
+        types = [t for t, _ in events]
+        assert "plan" not in types and "dashboard" not in types
+        assert "cannot be used" in _one(events, "error")["detail"]
+        assert fake.calls == []
+        assert types[-1] == "done"
+
+
+# ---------------------------------------------------------------------------
 # Gates (real HTTP codes, before the stream)
 # ---------------------------------------------------------------------------
 
@@ -1059,6 +1241,98 @@ class TestBudgetTracker:
         budget.started -= 61
         assert budget.exhausted()
         assert budget.event()["seconds"] >= 61
+
+    def test_cost_is_none_until_a_call_reports_one_then_sums_those(self):
+        budget = dashboard_gen.Budget(max_tokens=10_000, max_seconds=60, max_steps=5)
+        # Nothing reported: None, not 0.0. "No figure" is not "no money".
+        budget.charge(llm_client.Completion("x", llm_client.CompletionUsage(1, 1, 100), False))
+        assert budget.event()["cost_usd"] is None
+        assert budget.spent().cost_usd is None
+        budget.charge(
+            llm_client.Completion("x", llm_client.CompletionUsage(1, 1, 100, 0.002), False)
+        )
+        budget.charge(
+            llm_client.Completion("x", llm_client.CompletionUsage(1, 1, 100, 0.001), False)
+        )
+        # A cached call is free, so its cost is not charged either.
+        budget.charge(llm_client.Completion("x", llm_client.CompletionUsage(1, 1, 100, 0.5), True))
+        assert budget.event()["cost_usd"] == pytest.approx(0.003)
+        assert budget.spent().cost_usd == pytest.approx(0.003)
+
+
+class TestResponseCost:
+    """`_response_cost_usd`: the provider's own figure, or None for every reason."""
+
+    def _response(self, hidden):
+        return SimpleNamespace(_hidden_params=hidden)
+
+    def test_reads_the_openrouter_header_litellm_parks(self):
+        response = self._response(
+            {"additional_headers": {"llm_provider-x-litellm-response-cost": 0.00421}}
+        )
+        assert llm_client._response_cost_usd(response) == pytest.approx(0.00421)
+
+    def test_a_string_is_still_a_number(self):
+        response = self._response(
+            {"additional_headers": {"llm_provider-x-litellm-response-cost": "0.5"}}
+        )
+        assert llm_client._response_cost_usd(response) == 0.5
+
+    @pytest.mark.parametrize(
+        "hidden",
+        [
+            {},
+            {"additional_headers": {}},
+            {"additional_headers": {"llm_provider-x-litellm-response-cost": None}},
+            {"additional_headers": {"llm_provider-x-litellm-response-cost": "free"}},
+            # `response_cost` is the racing one a logging handler fills in;
+            # it is deliberately not read.
+            {"response_cost": 0.9},
+        ],
+    )
+    def test_missing_or_unusable_is_none(self, hidden):
+        assert llm_client._response_cost_usd(self._response(hidden)) is None
+
+    def test_a_response_without_hidden_params_is_none(self):
+        assert llm_client._response_cost_usd(SimpleNamespace()) is None
+
+
+class TestRoleBindings:
+    """`_role_bindings`: one column per required role, never the same twice."""
+
+    def _suggestion(self, **candidates) -> dict:
+        return {"role_candidates": {k: list(v) for k, v in candidates.items()}}
+
+    def test_a_column_taken_by_another_role_advances_to_the_next_candidate(self):
+        # The ranker offers the same float to depth and metric; binding it
+        # twice makes /advanced_viz/data reject a duplicate column.
+        suggestion = self._suggestion(
+            sample_id=["individual_id", "species"],
+            depth=["bill_depth_mm", "bill_length_mm"],
+            metric=["bill_depth_mm", "bill_length_mm"],
+        )
+        bindings, error = dashboard_gen._role_bindings("rarefaction", suggestion)
+        assert error is None
+        assert bindings == {
+            "sample_id_col": "individual_id",
+            "depth_col": "bill_depth_mm",
+            "metric_col": "bill_length_mm",
+        }
+        assert len(set(bindings.values())) == len(bindings)
+
+    def test_a_role_with_no_candidate_left_fails_the_binding(self):
+        suggestion = self._suggestion(
+            sample_id=["individual_id"], depth=["depth"], metric=["depth"]
+        )
+        bindings, error = dashboard_gen._role_bindings("rarefaction", suggestion)
+        assert bindings == {}
+        assert "metric" in error and "already bound" in error
+
+    def test_an_empty_candidate_list_still_reports_the_unfilled_role(self):
+        suggestion = self._suggestion(sample_id=["s"], depth=["d"], metric=[])
+        bindings, error = dashboard_gen._role_bindings("rarefaction", suggestion)
+        assert bindings == {}
+        assert "no column of the collection fills the role 'metric'" in error
 
 
 class TestPlanToTargets:

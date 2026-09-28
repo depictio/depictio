@@ -24,6 +24,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from depictio.api.v1.endpoints.ai_endpoints.schemas import ComponentType
+from depictio.models.components.constants import MAX_INTERACTIVE_GROUP_SIZE
 
 # ---------------------------------------------------------------------------
 # Allowlists
@@ -104,6 +105,11 @@ DATA_BOUND_TYPES: frozenset[str] = frozenset(
     {"figure", "card", "interactive", "table", "image", "multiqc", "map", "advanced_viz"}
 )
 
+# A section rationale is one sentence a reviewer reads at a glance, so a model
+# that answers with a paragraph is cut here rather than dropped: a truncated
+# reason still says more than no reason at all.
+MAX_SECTION_RATIONALE = 240
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -118,6 +124,11 @@ class SectionSpec(BaseModel):
     icon: str | None = None
     color: str | None = None
     description: str | None = None
+    # The planner's one sentence on why this section exists and what it holds.
+    # Unlike `description`, which the server turns into the section header's
+    # body text, this is never rendered into the dashboard: it is shown to
+    # whoever reviews the draft, so the choice can be read back.
+    rationale: str | None = None
 
 
 class PlannedComponent(BaseModel):
@@ -125,7 +136,9 @@ class PlannedComponent(BaseModel):
 
     `intent` is the natural-language brief handed to the fill call. `use` pins
     a catalog offer (advanced_viz) and `viz_kind` a ranked advanced_viz kind;
-    both are optional hints the fill step honours when present.
+    both are optional hints the fill step honours when present. `group` is the
+    filter panel's own grouping: interactive components sharing one name render
+    inside a single collapsible card.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -137,6 +150,7 @@ class PlannedComponent(BaseModel):
     intent: str = ""
     use: str | None = None
     viz_kind: str | None = None
+    group: str | None = None
 
 
 class DashboardPlan(BaseModel):
@@ -312,7 +326,7 @@ def _section_entry(raw: Any) -> dict[str, Any] | None:
         if not isinstance(name, str) or not name.strip():
             return None
         out: dict[str, Any] = {"name": name.strip()}
-        for key in ("icon", "color", "description"):
+        for key in ("icon", "color", "description", "rationale"):
             value = raw.get(key)
             if isinstance(value, str) and value.strip():
                 out[key] = value.strip()
@@ -341,7 +355,7 @@ def _component_entry(raw: Any, position: int) -> dict[str, Any] | None:
     for alias, canonical in _COMPONENT_TYPE_ALIASES.items():
         if canonical not in raw and alias in raw:
             out[canonical] = raw[alias]
-    for key in ("component_type", "tag", "use", "viz_kind"):
+    for key in ("component_type", "tag", "use", "viz_kind", "group"):
         if key in raw:
             out[key] = raw[key]
     if not out.get("tag"):
@@ -472,6 +486,39 @@ def _canonical(name: str, sections: list[SectionSpec]) -> str | None:
     return None
 
 
+def _clamp_filter_groups(components: list[PlannedComponent]) -> list[str]:
+    """Keep the filter groups renderable; returns the warnings it raised.
+
+    Only interactive components group, and the dashboard model rejects a group
+    holding more than `MAX_INTERACTIVE_GROUP_SIZE` of them, so a group the
+    planner over-filled would fail the whole envelope. The overflow is ungrouped
+    instead of split: an arbitrary "-2" group would claim the planner meant two
+    groups, and each ungrouped control still renders, just in a card of its own.
+    Mutates the components in place.
+    """
+    warnings: list[str] = []
+    counts: dict[str, int] = {}
+    for component in components:
+        group = (component.group or "").strip()
+        if not group:
+            component.group = None
+            continue
+        if component.component_type != "interactive":
+            # A grouped card would be dropped by the same envelope validator.
+            component.group = None
+            continue
+        counts[group] = counts.get(group, 0) + 1
+        if counts[group] > MAX_INTERACTIVE_GROUP_SIZE:
+            component.group = None
+            warnings.append(
+                f"filter group '{group}' held more than {MAX_INTERACTIVE_GROUP_SIZE} "
+                f"controls: '{component.tag}' was left ungrouped"
+            )
+        else:
+            component.group = group
+    return warnings
+
+
 def normalize_plan(
     plan: DashboardPlan, *, max_components: int, max_sections: int
 ) -> tuple[DashboardPlan, list[str]]:
@@ -487,7 +534,9 @@ def normalize_plan(
     cleaned and made unique with `-2`, `-3` suffixes; sections are stably
     sorted into the funnel order; icons and colours outside the allowlists
     are replaced (fallback icon, no colour) and blank icons get a stage
-    default.
+    default; section descriptions and rationales are whitespace-collapsed,
+    dropped when they say nothing, and a rationale longer than
+    `MAX_SECTION_RATIONALE` is cut to it.
     """
     warnings: list[str] = []
 
@@ -637,8 +686,14 @@ def normalize_plan(
             )
             color = None
         description = " ".join(spec.description.split()) if spec.description else None
+        rationale = " ".join(spec.rationale.split()) if spec.rationale else ""
         return spec.model_copy(
-            update={"icon": icon, "color": color, "description": description or None}
+            update={
+                "icon": icon,
+                "color": color,
+                "description": description or None,
+                "rationale": rationale[:MAX_SECTION_RATIONALE].rstrip() or None,
+            }
         )
 
     filter_sections = [
@@ -647,6 +702,8 @@ def normalize_plan(
     grid_sections = [
         styled(s, rank, _DEFAULT_GRID_ICON) for rank, s in ranked(grid_sections, "grid")
     ]
+
+    warnings.extend(_clamp_filter_groups(components))
 
     normalized = DashboardPlan(
         title=title,

@@ -98,7 +98,9 @@ class TestPersistence:
         generations.save(run)
         doc = collection.find_one({"id": run.id})
         assert doc is not None
-        assert doc["budget_spent"] == {"steps": 1, "tokens": 10, "seconds": 0.5}
+        # cost_usd rides along, None here: no call reported one, which the
+        # record says as null rather than as 0.0.
+        assert doc["budget_spent"] == {"steps": 1, "tokens": 10, "seconds": 0.5, "cost_usd": None}
         assert doc["created_at"] == run.created_at
         assert doc["status"] == "running"
 

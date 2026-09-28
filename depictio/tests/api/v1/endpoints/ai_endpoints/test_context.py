@@ -255,6 +255,14 @@ DE_COLUMNS = {
     "symbol": "String",
 }
 IRIS_COLUMNS = {"sepal_length": "Float64", "variety": "String"}
+# The penguins `physical_features` collection, the schema that produced a
+# `rarefaction` advanced viz nobody could render (see `viz_suggestions_for`).
+PENGUIN_COLUMNS = {
+    "individual_id": "String",
+    "bill_length_mm": "Float64",
+    "bill_depth_mm": "Float64",
+    "body_mass_g": "Float64",
+}
 
 
 def _columns(spec: dict[str, str]) -> list[ColumnSummary]:
@@ -298,6 +306,31 @@ class TestVizSuggestionsFor:
 
     def test_limit_is_honoured(self):
         assert len(viz_suggestions_for(_columns(DE_COLUMNS), limit=1)) == 1
+
+    def test_refuses_a_kind_whose_required_role_is_a_dtype_match_only(self):
+        # On penguins the ranker puts kinds over the RECOMMENDED_SCORE bar only
+        # via the optional-role nudge: a required role (rarefaction's `metric`,
+        # for one) has no name signal at all and lands on whatever float column
+        # is left, which is what the generator would then have bound and saved.
+        # Which kind ranks first moves as kinds are added; the rule does not.
+        from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
+
+        thin = [
+            s
+            for s in suggest_viz_kinds(PENGUIN_COLUMNS, dc_type="table")
+            if s.score >= 0.8 and not s.unmet_roles and s.weak_roles
+        ]
+        assert thin, "penguins should still yield a kind that only a dtype match satisfies"
+
+        assert viz_suggestions_for(_columns(PENGUIN_COLUMNS)) == []
+
+    def test_a_fully_named_kind_survives_while_a_thin_one_does_not(self):
+        kinds = {s["viz_kind"] for s in viz_suggestions_for(_columns(DE_COLUMNS))}
+        # Every required role of volcano matches a column by name.
+        assert "volcano" in kinds
+        # `ma` scores 0.88 on the same schema, but `avg_log_intensity` is
+        # satisfied by dtype alone, so it is no longer offered to the planner.
+        assert "ma" not in kinds
 
 
 class TestPromptLines:

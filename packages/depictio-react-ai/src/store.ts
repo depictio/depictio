@@ -3,6 +3,11 @@
  *
  * Per-dashboard state: transcript, llm key, model selection.
  *
+ * It also holds the one whole-dashboard generation run, which is not
+ * per-dashboard (no dashboard exists yet) and, unlike everything else here,
+ * outlives the component that started it: a run takes minutes and the dialog
+ * it runs in is closed and reopened while it streams. See `GenerationRun`.
+ *
  * Persistence: only the `llmKey` and `model` fields per dashboard
  * survive a reload. We use *direct* localStorage I/O instead of
  * zustand/persist middleware — easier to verify in DevTools, no
@@ -23,7 +28,16 @@
 
 import { create } from 'zustand';
 
-import type { AnalysisResult, AnalyzeMode, ExecutionStep } from './types';
+import type {
+  AnalysisResult,
+  AnalyzeMode,
+  BudgetTick,
+  DashboardPlan,
+  ExecutionStep,
+  GenerateDashboardRequest,
+  GeneratedComponentEvent,
+  GeneratedDashboardEvent,
+} from './types';
 
 const STORAGE_KEY = 'depictio.ai.creds';
 
@@ -140,8 +154,114 @@ export interface AISession {
   abort: AbortController | null;
 }
 
+/** Live state of one whole-dashboard generation call, as its stream fills
+ *  it: the status line, the plan, the budget countdown, the per-component
+ *  outcomes and finally the saved draft. */
+export interface GenerateDashboardRunState {
+  status: string;
+  plan: DashboardPlan | null;
+  budget: BudgetTick | null;
+  /** One entry per reported component tag, the latest event winning. */
+  components: GeneratedComponentEvent[];
+  dashboard: GeneratedDashboardEvent | null;
+  error: string | null;
+}
+
+/** Stable empty run state. Frozen and shared for the same reason as
+ *  EMPTY_SESSION: a fresh literal per selector call would re-render forever. */
+export const EMPTY_GENERATION: GenerateDashboardRunState = Object.freeze({
+  status: '',
+  plan: null,
+  budget: null,
+  components: [],
+  dashboard: null,
+  error: null,
+}) as GenerateDashboardRunState;
+
+/** What the calls of one generation session have spent between them.
+ *  Reviewing a plan before building it costs two calls and each call resets
+ *  the run state, so the first one's spend only survives here. */
+export interface RunSpend {
+  /** Calls counted, the one in flight excluded (it is still on the budget). */
+  runs: number;
+  tokens: number;
+  seconds: number;
+  /** Null when no call could be priced. */
+  cost: number | null;
+}
+
+export const EMPTY_SPEND: RunSpend = Object.freeze({
+  runs: 0,
+  tokens: 0,
+  seconds: 0,
+  cost: null,
+}) as RunSpend;
+
+/**
+ * The whole-dashboard generation run: everything about it that must outlive
+ * the panel, which is unmounted every time the New Dashboard dialog closes.
+ *
+ * One slot, so one run is tracked at a time. Deliberately not persisted: an
+ * AbortController and an open stream cannot survive a reload, and a "still
+ * generating" flag restored without the fetch behind it would be a lie.
+ */
+export interface GenerationRun {
+  /** New per call. A listener uses it to tell a fresh run from a re-render
+   *  of the one it has already reacted to. */
+  id: string;
+  /** What this call was started with. The panel restores its form from it
+   *  after a remount, and the fill phase re-sends it with the approved plan. */
+  request: GenerateDashboardRequest;
+  /** Label of the project being generated into, so a host that has no
+   *  project list to hand can still name the run. */
+  projectName: string;
+  /** This call asked for a plan and nothing else, so a plan that arrives is
+   *  waiting for the user's verdict rather than being filled. */
+  planPhase: boolean;
+  /** True while the stream is open. The only flag anything should read to
+   *  decide whether a run is going. */
+  pending: boolean;
+  /** Bound to the open stream. Only an explicit stop aborts it: unmounting
+   *  the panel must leave the run alone. */
+  abort: AbortController | null;
+  /** Spend of the calls before this one. */
+  spent: RunSpend;
+  state: GenerateDashboardRunState;
+}
+
+/** The planning call ended with a plan and nothing built: the run stops
+ *  there until the user says what to do with it. The panel and any host
+ *  affordance both read a run through this, so "still going" means one
+ *  thing in both places. */
+export function awaitingVerdict(run: GenerationRun | null): boolean {
+  if (!run || run.pending || !run.planPhase) return false;
+  return Boolean(run.state.plan) && !run.state.error && !run.state.dashboard;
+}
+
+/** Fold an ending call's budget into what the session had already spent. */
+function bankSpend(prev: GenerationRun | null): RunSpend {
+  if (!prev) return EMPTY_SPEND;
+  const ending = prev.state.budget;
+  if (!ending) return prev.spent;
+  return {
+    runs: prev.spent.runs + 1,
+    tokens: prev.spent.tokens + ending.tokens_used,
+    seconds: prev.spent.seconds + ending.seconds,
+    cost:
+      typeof ending.cost_usd === 'number'
+        ? (prev.spent.cost ?? 0) + ending.cost_usd
+        : prev.spent.cost,
+  };
+}
+
+function newRunId(): string {
+  return `gen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 interface State {
   sessions: Record<string, AISession>;
+  /** The whole-dashboard generation run, null until one is started. */
+  generation: GenerationRun | null;
 }
 
 interface Actions {
@@ -163,6 +283,23 @@ interface Actions {
   /** Drop specific messages (one exchange = its user + assistant ids). */
   removeMessages: (dashboardId: string, messageIds: string[]) => void;
   reset: (dashboardId: string) => void;
+  /** Take the generation slot for a new call. Returns the run id to patch
+   *  under, or null when the slot is busy (see the refusal rule on the
+   *  implementation). */
+  startGeneration: (args: {
+    request: GenerateDashboardRequest;
+    projectName: string;
+    planPhase: boolean;
+    abort: AbortController;
+  }) => string | null;
+  /** Merge stream events into the run state, ignoring anything arriving
+   *  under an id that is no longer the current run. */
+  patchGeneration: (runId: string, patch: Partial<GenerateDashboardRunState>) => void;
+  /** The stream is over (finished, failed or aborted): drop the pending flag
+   *  and the abort handle, keep what the run produced. */
+  endGeneration: (runId: string) => void;
+  /** Abort the open stream, which is what "Stop generating" does. */
+  stopGeneration: () => void;
 }
 
 const empty = (): AISession => ({
@@ -198,6 +335,7 @@ function initialSessions(): Record<string, AISession> {
 
 export const useAIStore = create<State & Actions>((set, get) => ({
   sessions: initialSessions(),
+  generation: null,
 
   ensureSession: (dashboardId) => {
     const existing = get().sessions[dashboardId];
@@ -295,6 +433,55 @@ export const useAIStore = create<State & Actions>((set, get) => ({
         },
       };
     }),
+
+  startGeneration: ({ request, projectName, planPhase, abort }) => {
+    // Refuse rather than replace: a run in flight owns the slot, and taking
+    // it from under an open stream would interleave two streams into one
+    // state. The panel disables its button while pending, so this only
+    // fires for a caller the panel does not own (a second tab of the
+    // dialog, a host-level retry).
+    const current = get().generation;
+    if (current?.pending) return null;
+    const id = newRunId();
+    set({
+      generation: {
+        id,
+        request,
+        projectName,
+        planPhase,
+        pending: true,
+        abort,
+        // Each call resets the run state, so the session total the panel
+        // shows spans both phases only because the ending call is banked here.
+        spent: bankSpend(current),
+        state: { ...EMPTY_GENERATION, status: 'starting' },
+      },
+    });
+    return id;
+  },
+
+  patchGeneration: (runId, patch) =>
+    set((s) => {
+      const cur = s.generation;
+      if (!cur || cur.id !== runId) return s;
+      return { generation: { ...cur, state: { ...cur.state, ...patch } } };
+    }),
+
+  endGeneration: (runId) =>
+    set((s) => {
+      const cur = s.generation;
+      if (!cur || cur.id !== runId) return s;
+      return { generation: { ...cur, pending: false, abort: null } };
+    }),
+
+  stopGeneration: () => {
+    const cur = get().generation;
+    if (!cur) return;
+    cur.abort?.abort();
+    // The stream's own `finally` also clears these, but a fetch that never
+    // settles must not leave the flag stuck on.
+    set({ generation: { ...cur, pending: false, abort: null } });
+  },
 
   reset: (dashboardId) =>
     set((s) => {
