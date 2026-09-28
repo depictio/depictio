@@ -564,6 +564,17 @@ links:
       target_field: "sample_id"
     description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
     enabled: true
+  # A region picked on the Genome tracks tab (Manhattan or peak table) opens
+  # its sample's tracks; the browser's locus_from moves the view onto it.
+  - source_dc_tag: "seacr_peaks"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the sample a picked SEACR region was called in"
+    enabled: true
 
   # Hub -> everything keyed on the sample name.
   - source_dc_tag: "samples"

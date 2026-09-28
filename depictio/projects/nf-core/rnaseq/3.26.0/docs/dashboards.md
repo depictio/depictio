@@ -142,6 +142,11 @@ panel and the `Samples` table under the browser (row selection) pick which track
 and clicking a feature in the browser filters every other tab on its sample. A
 `PSEUDOALIGNER_ONLY` run has no BAM and no bigWig, so that route drops the collection.
 
+Four cards above the browser give the libraries in scope, the genes expressed and detected
+and the median TPM. The `Samples at a glance` section under it holds two scatters of
+`sample_overview` (library depth, and the sample PCA) whose lasso selects on `sample_id`;
+the `sample_overview -> tracks` link opens the coverage of the lassoed samples.
+
 The tables-only megatest subset holds none of the track files. Pass
 `--var TRACKS_URI=s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon`
 and the collection reads them in place, by range; without it the recipe keeps only the files

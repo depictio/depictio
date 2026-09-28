@@ -1816,6 +1816,10 @@ tabs:
     icon: mdi:dna
     color: teal
     description: The tracks of the samples in scope, around GREB1
+  - name: Peaks
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Pick a peak to open its sample's tracks at that peak
   - name: ChIP samples
     icon: mdi:table
     color: gray
@@ -1831,13 +1835,80 @@ tabs:
     alignment: left
     body: >
       Each ChIP's bigWig sits next to its MACS2 peaks; the grey tracks are the
-      inputs, listed under their own ids. The view opens on GREB1, where FOXA1
-      calls three to four times more peaks after E2 than in vehicle. Pick
-      samples on the left or below to open tracks; click a peak to filter
-      every tab.
+      inputs. The view opens on GREB1, the cards summarise the peaks of the
+      samples in scope, and a click on a peak in the Manhattan or in the peak
+      table below opens its sample's tracks at that peak.
     workflow_tag: chipseq
     data_collection_tag: tracks
     layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: cs-tracks-card-peaks
+    index: cs-tracks-card-peaks
+    section: Genome browser
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    aggregation: count
+    column_name: peak_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: MACS2 peaks in view
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: cs-tracks-card-width
+    index: cs-tracks-card-width
+    section: Genome browser
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: width
+    column_type: int64
+    display: {icon_name: 'mdi:ruler', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median peak width
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: cs-tracks-card-fold
+    index: cs-tracks-card-fold
+    section: Genome browser
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: fold_enrichment
+    column_type: float64
+    display: {icon_name: 'mdi:magnet', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median fold enrichment
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: cs-tracks-card-samples
+    index: cs-tracks-card-samples
+    section: Genome browser
+    workflow_tag: chipseq
+    data_collection_tag: design
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: antibody
+    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: ChIP samples in scope
+    layout: {x: 6, y: 1, w: 2, h: 2}
   - component_type: jbrowse
     tag: cs-tracks-browser
     index: cs-tracks-browser
@@ -1851,7 +1922,50 @@ tabs:
     selection_enabled: true
     selection_column: sample_id
     show_overview: false
-    layout: {x: 0, y: 1, w: 8, h: 9}
+    # A picked peak (Manhattan point or table row) narrows macs2_peaks to a
+    # few rows: the view then jumps to it. A sample filter leaves hundreds of
+    # rows, so it never moves the view off GREB1.
+    locus_from:
+      data_collection_tag: macs2_peaks
+      chrom_column: chr
+      start_column: start
+      end_column: end
+      padding: 2000
+      max_rows: 5
+    layout: {x: 0, y: 3, w: 8, h: 9}
+  - component_type: advanced_viz
+    tag: cs-tracks-av-manhattan
+    index: cs-tracks-av-manhattan
+    section: Peaks
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peak_significance
+    config:
+      feature_col: peak_id
+      score_kind: "-log10(q)"
+      color_by_columns: [sample]
+      default_color_by: sample
+      selection_enabled: true
+      selection_column: peak_id
+      top_n_labels: 10
+    title: Peak significance along the genome
+    description: Every peak at its summit position, height is -log10 of the MACS2 q-value. Click a peak to open its sample's tracks at that peak.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    tag: cs-tracks-table-peaks
+    index: cs-tracks-table-peaks
+    section: Peaks
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    title: MACS2 peak calls
+    description: Pick a peak to open its sample's tracks at that peak.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: table
     tag: cs-tracks-samples
     index: cs-tracks-samples

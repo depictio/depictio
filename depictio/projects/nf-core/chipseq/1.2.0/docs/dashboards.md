@@ -202,6 +202,13 @@ The design sheet links to the manifest both ways on `sample_id`: the sample filt
 left panel and the `ChIP samples` table under the browser (row selection) pick which tracks
 are open, and clicking a feature in the browser filters every other tab on its sample.
 
+Four cards above the browser count the MACS2 peaks and ChIP samples in scope and give the
+median peak width and fold enrichment. The `Peaks` section under it holds the MACS2
+significance Manhattan (`selection_column: peak_id`) and the `MACS2 peak calls` table (row
+selection on `peak_id`): a peak picked in either opens its sample's tracks through the
+`macs2_peaks -> tracks` link, and the browser's `locus_from` moves the view onto the peak
+(± 2 kb).
+
 The tables-only megatest subset holds none of the track files. Pass
 `--var TRACKS_URI=s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea`
 and the collection reads them in place, by range; without it the recipe keeps only the files

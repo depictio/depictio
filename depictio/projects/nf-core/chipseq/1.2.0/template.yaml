@@ -609,6 +609,15 @@ links:
       target_field: "sample_id"
     description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
     enabled: true
+  - source_dc_tag: "macs2_peaks"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the sample a picked peak was called in"
+    enabled: true
 
   # Hub -> everything keyed on the ChIP sample name.
   - source_dc_tag: "design"

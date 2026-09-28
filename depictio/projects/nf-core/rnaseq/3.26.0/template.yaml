@@ -449,6 +449,18 @@ links:
     description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
     enabled: true
 
+  # The Genome tracks tab's scatter and cards read sample_overview: a lasso
+  # there opens the lassoed libraries' tracks in the browser beside it.
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the samples picked in the sample-overview scatter"
+    enabled: true
+
   - source_dc_tag: "samplesheet"
     source_column: "sample"
     target_dc_tag: "multiqc_data"

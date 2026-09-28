@@ -175,6 +175,32 @@ it.
 
 ![Consensus and reproducibility](screenshots/consensus-and-reproducibility.png)
 
+## Genome tracks
+
+A JBrowse genome browser over the `tracks` collection, a manifest the project-local recipe
+`depictio/projects/nf-core/cutandrun/recipes/tracks.py` spells out from the validated
+samplesheet: per sample the bigWig signal, the SEACR stringent and MACS2 narrowPeak calls
+(targets only) and the deduplicated BAM, coloured per target like the run's own IGV
+session. The assembly is the `hg38` preset; the browser opens on the HOXA cluster
+(`chr7:27,090,000-27,220,000`), where both marks meet.
+
+The browser sits among the tab's other components, all driven by the same filters:
+
+- four cards above it count the samples in scope and the SEACR regions, and give the median
+  region width and the coverage per base;
+- the `Peaks` section holds the SEACR Manhattan (`selection_column: peak_id`) and the
+  `SEACR regions` table (row selection on `peak_id`). A region picked in either filters
+  `seacr_peaks` to that row: the `seacr_peaks -> tracks` link opens its sample's tracks, and
+  the browser's `locus_from` moves the view onto the region (± 2 kb);
+- the `Samples` table (row selection on `sample_id`) and the sample and target filters of
+  the left panel pick which tracks are open; clicking a feature in the browser filters every
+  other tab on its sample.
+
+The tables-only megatest subset holds none of the track files. Pass
+`--var TRACKS_URI=s3://nf-core-awsmegatests/cutandrun/results-42502fb44975e930eec865353c5481f472bcf766`
+and the collection reads them in place, by range; without it the recipe keeps only the files
+DATA_ROOT holds and the CLI uploads them at ingestion.
+
 ## Reproducing
 
 ```bash

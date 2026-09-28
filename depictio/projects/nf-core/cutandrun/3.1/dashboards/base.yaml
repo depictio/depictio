@@ -1689,6 +1689,10 @@ tabs:
     icon: mdi:dna
     color: teal
     description: The tracks of the samples in scope, around the HOXA cluster
+  - name: Peaks
+    icon: mdi:chart-bell-curve
+    color: indigo
+    description: Every SEACR region along the genome; pick one to open its sample's tracks on it
   - name: Samples
     icon: mdi:table
     color: gray
@@ -1705,11 +1709,82 @@ tabs:
     body: >
       H3K27me3 paints broad repressed domains, H3K4me3 sharp promoter peaks and
       the IgG control stays flat. The browser opens on the HOXA cluster, where
-      both marks meet. Pick samples in the left panel or in the table below to
-      open their tracks; click a peak to filter every tab on its sample.
+      both marks meet; the cards count what the filters keep. Click a region on
+      the Manhattan or in the peak table below to open its sample's tracks on
+      that region, or pick samples in the left panel or the sample table.
     workflow_tag: cutandrun
     data_collection_tag: tracks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cr-tracks-card-samples
+    index: cr-tracks-card-samples
+    section: Genome browser
+    workflow_tag: cutandrun
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: target
+    display: {icon_name: 'mdi:test-tube', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples in scope
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-tracks-card-regions
+    index: cr-tracks-card-regions
+    section: Genome browser
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/peaks
+    aggregation: count
+    column_name: peak_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: SEACR regions
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-tracks-card-width
+    index: cr-tracks-card-width
+    section: Genome browser
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/peaks
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: width
+    column_type: int64
+    display: {icon_name: 'mdi:ruler', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Region width
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-tracks-card-density
+    index: cr-tracks-card-density
+    section: Genome browser
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/peaks
+    aggregation: average
+    column_name: signal_density
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 50
+    threshold_direction: min
+    threshold_warn: 25
+    display: {icon_name: 'mdi:chart-line', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Coverage per base
+    layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: jbrowse
     tag: cr-tracks-browser
     index: cr-tracks-browser
@@ -1723,7 +1798,49 @@ tabs:
     selection_enabled: true
     selection_column: sample_id
     show_overview: false
-    layout: {x: 0, y: 1, w: 8, h: 9}
+    # A region picked on the Manhattan or in the peak table (a filter that
+    # narrows seacr_peaks to a handful of rows) moves the view onto it.
+    locus_from:
+      data_collection_tag: seacr_peaks
+      chrom_column: chr
+      start_column: start
+      end_column: end
+      padding: 2000
+      max_rows: 5
+    layout: {x: 0, y: 4, w: 8, h: 9}
+  - component_type: advanced_viz
+    tag: cr-tracks-av-manhattan
+    index: cr-tracks-av-manhattan
+    section: Peaks
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/seacr_peak_signal
+    config:
+      feature_col: peak_id
+      score_kind: "log10(signal)"
+      color_by_columns: [sample]
+      default_color_by: sample
+      selection_enabled: true
+      selection_column: peak_id
+      top_n_labels: 10
+    title: SEACR signal along the genome
+    description: Every region at its maximum-signal position, coloured by sample. Click one to open its sample's tracks on it.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    tag: cr-tracks-peaks
+    index: cr-tracks-peaks
+    section: Peaks
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/peaks
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    title: SEACR regions
+    description: Pick a region to open its sample's tracks on it.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: table
     tag: cr-tracks-samples
     index: cr-tracks-samples
@@ -1736,4 +1853,4 @@ tabs:
     description: Select rows to open their tracks in the browser above.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 10, w: 8, h: 3}
+    layout: {x: 0, y: 0, w: 8, h: 3}
