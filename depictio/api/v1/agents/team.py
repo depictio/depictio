@@ -841,9 +841,13 @@ class TeamRun:
             for a in analyst_ids
         ):
             return "failed"
-        if any(o.status == "budget" for o in self.outcomes.values()) or self.ledger.exhausted(
-            reserve=True
-        ):
+        # Agents stopping at their phase share is expected; the run only counts
+        # as cut short when that cost it a report or a verdict.
+        cut_short = self.run.outputs.report_id is None or any(
+            f.verdict == "unverified" for f in self.run.findings
+        )
+        stopped = any(o.status == "budget" for o in self.outcomes.values())
+        if cut_short and (stopped or self.ledger.exhausted(reserve=True)):
             return "budget"
         return "complete"
 
