@@ -270,13 +270,21 @@ def _plain(value: Any) -> str:
     return str(value)
 
 
-def summarise_result(result: ToolResult) -> str:
-    """A tool result as plain ``key: value`` text for the trace, not JSON."""
+# Result fields that only restate which data was queried; the trace shows the args.
+_ECHO_FIELDS = frozenset({"dc_id", "dc_tag", "code"})
+
+
+def summarise_result(result: ToolResult, args: dict[str, Any] | None = None) -> str:
+    """A tool result as plain ``key: value`` text for the trace, not JSON.
+
+    Fields echoing the call's own arguments are left out: the trace shows those.
+    """
     if not result.ok:
         return f"error: {result.error or 'failed'}"[:RESULT_SUMMARY_CHARS]
     data = result.data
     if isinstance(data, dict):
-        text = "; ".join(f"{k}: {_plain(v)}" for k, v in data.items())
+        echoed = _ECHO_FIELDS | set(args or ())
+        text = "; ".join(f"{k}: {_plain(v)}" for k, v in data.items() if k not in echoed)
     elif isinstance(data, list):
         text = _plain(data)
     else:
@@ -440,7 +448,7 @@ class _Loop:
         values = None
         if evidence and result.data is not None:
             values, _ = fit_to_budget(result.data, STORED_VALUES_CHARS)
-        summary = summarise_result(result)
+        summary = summarise_result(result, args)
         self.record.tool_calls.append(
             ToolCallRecord(
                 call_id=result.call_id,

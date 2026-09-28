@@ -5,7 +5,8 @@ import json
 
 from depictio.api.v1.agents.budget import BudgetLedger
 from depictio.api.v1.agents.profiles import load_profiles
-from depictio.api.v1.agents.runner import CancelToken, agent_loop
+from depictio.api.v1.agents.registry import ToolResult
+from depictio.api.v1.agents.runner import CancelToken, agent_loop, summarise_result
 from depictio.api.v1.agents.runs import AgentRecord
 from depictio.tests.api.v1.agents._fakes import FakeLLM, FakeToolbox, call, ctx, default_tools, turn
 
@@ -179,3 +180,14 @@ def test_llm_failure_is_an_agent_error():
 
     outcome, _ = _run(FakeLLM(boom))
     assert outcome.status == "error" and "provider down" in outcome.summary
+
+
+def test_result_summary_leaves_out_fields_echoing_the_args():
+    result = ToolResult(
+        ok=True,
+        call_id="c1",
+        data={"dc_id": "x", "dc_tag": "t", "code": "df.height", "status": "success", "rows_out": 3},
+    )
+    assert summarise_result(result, {"dc_id": "x", "code": "df.height"}) == (
+        "status: success; rows_out: 3"
+    )

@@ -462,7 +462,7 @@ class TeamRun:
         """
         started = time.perf_counter()
         result = await self.deps.toolbox.invoke(tool, self.context(member), args)
-        summary = summarise_result(result)
+        summary = summarise_result(result, args)
         record.tool_calls.append(
             ToolCallRecord(
                 call_id=result.call_id,
