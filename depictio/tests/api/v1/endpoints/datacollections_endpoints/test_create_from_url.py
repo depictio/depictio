@@ -24,11 +24,11 @@ STORAGE = "depictio.api.v1.endpoints.projects_endpoints.storage_config"
 CLI_HELPER = "depictio.cli.cli.utils.helpers.process_data_collection_helper"
 
 
-def _call(url: str, project_id: str = str(ObjectId()), user=None):
+def _call(url: str, project_id: str = str(ObjectId()), user=None, name: str = "remote-dc"):
     user = user or _user()
     return dc_utils._create_dc_from_url(
         project_id=project_id,
-        name="remote-dc",
+        name=name,
         description="",
         data_type="table",
         file_format="csv",
@@ -190,4 +190,124 @@ def test_unusable_project_storage_is_a_clean_http_error_before_any_write(mock_db
     assert "/app/depictio/keys" not in exc.value.detail  # sanitized: no server paths
     helper.assert_not_called()
     # Resolved before the workflow $push: nothing to roll back, nothing left behind.
+    assert mock_db["projects"].find_one({"_id": project_id})["workflows"] == []
+
+
+# ── Happy path ──────────────────────────────────────────────────────────────
+
+
+def _ingest_recorder(outcomes: dict[str, dict] | None = None):
+    """Fake CLI helper that records each stage and answers per ``outcomes``."""
+    seen: list[dict] = []
+    outcomes = outcomes or {}
+
+    def _fake_helper(CLI_config, wf, dc_id, mode, command_parameters=None):
+        seen.append(
+            {
+                "mode": mode,
+                "dc_id": dc_id,
+                "workflow_id": str(wf.id),
+                "command_parameters": command_parameters,
+                "cli_config": CLI_config,
+            }
+        )
+        return outcomes.get(mode, {"result": "success"})
+
+    return seen, _fake_helper
+
+
+def test_https_url_becomes_a_url_scan_workflow_that_is_ingested(mock_db):
+    url = "https://example.org/run42/data.csv"
+    user = _user()
+    project_id = _owned_project_with_token(mock_db, user)
+    seen, fake_helper = _ingest_recorder()
+
+    with (
+        patch(f"{STORAGE}.storage_options_for_project", return_value=None),
+        patch(CLI_HELPER, side_effect=fake_helper),
+    ):
+        result = _call(url, project_id=str(project_id), user=user, name="  remote-dc  ")
+
+    assert result["success"] is True
+    assert "remote-dc" in result["message"]
+
+    # Scan, then process (overwriting), both against the same new DC.
+    assert [s["mode"] for s in seen] == ["scan", "process"]
+    assert {s["dc_id"] for s in seen} == {result["data_collection_id"]}
+    assert {s["workflow_id"] for s in seen} == {result["workflow_id"]}
+    assert seen[1]["command_parameters"] == {"overwrite": True}
+    cli_config = seen[0]["cli_config"]
+    assert str(cli_config.user.id) == str(user.id)
+    assert cli_config.remote_storage_options is None  # no project storage: instance creds
+
+    # The workflow the ingest ran on is the one persisted on the project.
+    (workflow,) = mock_db["projects"].find_one({"_id": project_id})["workflows"]
+    assert str(workflow["_id"]) == result["workflow_id"]
+    assert workflow["data_location"]["locations"] == [url]
+    (dc,) = workflow["data_collections"]
+    assert str(dc["_id"]) == result["data_collection_id"]
+    assert dc["data_collection_tag"] == "remote-dc"  # whitespace trimmed
+    scan = dc["config"]["scan"]
+    assert str(scan["mode"]).lower() == "url"
+    assert scan["scan_parameters"] == {"url": url}
+    table = dc["config"]["dc_specific_properties"]
+    assert table["format"] == "csv"
+    assert table["polars_kwargs"]["separator"] == ","
+    assert table["polars_kwargs"]["has_header"] is True
+    assert "lat_column" not in table
+
+
+def test_coordinate_columns_select_the_coordinates_table_config(mock_db):
+    user = _user()
+    project_id = _owned_project_with_token(mock_db, user)
+    _, fake_helper = _ingest_recorder()
+
+    with (
+        patch(f"{STORAGE}.storage_options_for_project", return_value=None),
+        patch(CLI_HELPER, side_effect=fake_helper),
+    ):
+        result = dc_utils._create_dc_from_url(
+            project_id=str(project_id),
+            name="sites",
+            description="Sampling sites",
+            data_type="table",
+            file_format="tsv",
+            separator="\t",
+            custom_separator=None,
+            compression="none",
+            has_header=True,
+            url="https://example.org/sites.tsv",
+            current_user=user,
+            lat_column="lat",
+            lon_column="lon",
+        )
+
+    assert result["success"] is True
+    (workflow,) = mock_db["projects"].find_one({"_id": project_id})["workflows"]
+    (dc,) = workflow["data_collections"]
+    assert dc["description"] == "Sampling sites"
+    table = dc["config"]["dc_specific_properties"]
+    assert table["format"] == "tsv"
+    assert table["polars_kwargs"]["separator"] == "\t"
+    assert (table["lat_column"], table["lon_column"]) == ("lat", "lon")
+
+
+def test_failed_processing_is_a_500_and_rolls_the_workflow_back(mock_db):
+    user = _user()
+    project_id = _owned_project_with_token(mock_db, user)
+    seen, fake_helper = _ingest_recorder(
+        {"process": {"result": "error", "message": "remote read failed"}}
+    )
+
+    with (
+        patch(f"{STORAGE}.storage_options_for_project", return_value=None),
+        patch(CLI_HELPER, side_effect=fake_helper),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _call("https://example.org/run42/data.csv", project_id=str(project_id), user=user)
+
+    assert exc.value.status_code == 500
+    assert "remote read failed" in exc.value.detail
+    assert [s["mode"] for s in seen] == ["scan", "process"]
+    # No ghost workflow without a delta table behind it.
     assert mock_db["projects"].find_one({"_id": project_id})["workflows"] == []
