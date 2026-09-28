@@ -11,6 +11,10 @@ It replaces the 0.13.x Dash port (an iframe to a separately deployed JBrowse on
 shipped anymore. Nothing else has to run: the browser is a lazy chunk of the
 SPA and the track bytes come through the API.
 
+![Strand-seq showcase in Depictio](../images/jbrowse/strandseq_context.png)
+
+Closer, the same tiles:
+
 ![Strand-seq overview](../images/jbrowse/strandseq_overview.png)
 
 ## Architecture
@@ -250,6 +254,7 @@ key of `backend.env`), `.env.example` and `depictio local up`.
    files uploaded). 4 HGSVC samples and 384 cells with their ASHLEYS call;
    213 MosaiCatcher SV BEDs coloured by call class. Lasso cells in the scatter →
    their SV tracks; click an SV → the cell is picked everywhere.
+   ![filter in context](../images/jbrowse/strandseq_filter_context.png)
    ![filter](../images/jbrowse/strandseq_filter.png)
    ![click](../images/jbrowse/strandseq_click.png)
    ![compact](../images/jbrowse/strandseq_compact.png)
@@ -257,14 +262,18 @@ key of `backend.env`), `.env.example` and `depictio local up`.
    in place from the viralrecon megatest). iVar VCFs + primer-trimmed BAMs,
    `locus_from` jumps to the picked variant, a custom `compact_amplicons`
    preset and an extra UCSC gene track from `config_overrides`.
+   ![variant in context](../images/jbrowse/sarscov2_context.png)
    ![variant](../images/jbrowse/sarscov2_variant.png)
 3. **nf-core/cutandrun 3.1** — *Genome tracks* tab: bigWig per sample coloured
    per target, SEACR and MACS2 peaks, deduplicated BAM, driven by the target
-   filter. ![cutandrun](../images/jbrowse/nfcore_cutandrun.png)
+   filter. ![cutandrun in context](../images/jbrowse/nfcore_cutandrun_context.png)
+   ![cutandrun](../images/jbrowse/nfcore_cutandrun.png)
 4. **nf-core/chipseq 1.2.0** — ChIP and input bigWigs, MACS2 narrowPeak calls
-   and BAM per antibody (hg19 megatest). ![chipseq](../images/jbrowse/nfcore_chipseq.png)
+   and BAM per antibody (hg19 megatest). ![chipseq in context](../images/jbrowse/nfcore_chipseq_context.png)
+   ![chipseq](../images/jbrowse/nfcore_chipseq.png)
 5. **nf-core/rnaseq 3.26.0** — strand-specific bigWig coverage and BAM per
-   sample (hg19 megatest). ![rnaseq](../images/jbrowse/nfcore_rnaseq.png)
+   sample (hg19 megatest). ![rnaseq in context](../images/jbrowse/nfcore_rnaseq_context.png)
+   ![rnaseq](../images/jbrowse/nfcore_rnaseq.png)
 
 The nf-core templates read the tracks in place when `TRACKS_URI` is set
 (`depictio run --var TRACKS_URI=s3://…/results/`; the template turns it into
