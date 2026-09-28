@@ -35,6 +35,7 @@ import { useBuilderStore } from '../store/useBuilderStore';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import DesignShell from '../shared/DesignShell';
 import JBrowsePreview from './JBrowsePreview';
+import UcscTrackPicker from './UcscTrackPicker';
 import {
   fetchJBrowseAssemblies,
   fetchJBrowsePresets,
@@ -64,6 +65,8 @@ export interface JBrowseConfig {
   max_tracks?: number;
   initial_tracks?: number;
   default_tracks?: string[];
+  /** UCSC Genome Browser track names shown by default. */
+  ucsc_tracks?: string[];
   show_annotation?: boolean;
   selection_enabled?: boolean;
   selection_column?: string | null;
@@ -71,6 +74,10 @@ export interface JBrowseConfig {
   show_header?: boolean;
   show_overview?: boolean;
   track_labels?: 'overlapping' | 'offset' | 'hidden';
+  /** Default of the viewer's "Force load" toggle. */
+  force_load?: boolean;
+  /** Per-track fetch cap in MB before JBrowse asks to force load; null = JBrowse default. */
+  fetch_size_limit_mb?: number | null;
   preset?: string | null;
   config_overrides?: Record<string, unknown>;
 }
@@ -405,6 +412,12 @@ const JBrowseBuilder: React.FC = () => {
         clearable
       />
 
+      <UcscTrackPicker
+        assembly={config.assembly || dcAssembly || null}
+        value={config.ucsc_tracks ?? []}
+        onChange={(vals) => patchConfig({ ucsc_tracks: vals })}
+      />
+
       <Stack gap={6}>
         <Text size="sm" fw={500}>
           Display
@@ -431,6 +444,33 @@ const JBrowseBuilder: React.FC = () => {
           value={config.track_labels ?? 'offset'}
           onChange={(val) => val && patchConfig({ track_labels: val })}
           allowDeselect={false}
+        />
+      </Stack>
+
+      <Stack gap={6}>
+        <Text size="sm" fw={500}>
+          Data loading
+        </Text>
+        <Switch
+          label="Force load"
+          description="Fetch every track even when the region holds a lot of data (may be slow). Viewers can still switch it from the tile toolbar."
+          checked={!!config.force_load}
+          onChange={(e) => patchConfig({ force_load: e.currentTarget.checked })}
+          data-testid="jbrowse-builder-force-load"
+        />
+        <NumberInput
+          label="Fetch size limit (MB)"
+          description="Data a track may fetch for the visible region before JBrowse asks to force load; empty uses the JBrowse default"
+          placeholder="JBrowse default"
+          min={0.1}
+          max={10000}
+          clampBehavior="blur"
+          value={config.fetch_size_limit_mb ?? ''}
+          onChange={(val) =>
+            patchConfig({ fetch_size_limit_mb: typeof val === 'number' && val > 0 ? val : null })
+          }
+          allowNegative={false}
+          data-testid="jbrowse-builder-fetch-size-limit"
         />
       </Stack>
 

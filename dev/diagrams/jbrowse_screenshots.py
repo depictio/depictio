@@ -129,6 +129,16 @@ async def _union(locator, origin: tuple[float, float]) -> tuple[float, float, fl
     return x0 - origin[0], y0 - origin[1], x1 - x0, y1 - y0
 
 
+async def _boxes_union(locators, origin: tuple[float, float]) -> tuple[float, float, float, float]:
+    """Bounding box of the first element of each locator."""
+    boxes = [b for b in [await loc.first.bounding_box() for loc in locators] if b]
+    x0 = min(b["x"] for b in boxes)
+    y0 = min(b["y"] for b in boxes)
+    x1 = max(b["x"] + b["width"] for b in boxes)
+    y1 = max(b["y"] + b["height"] for b in boxes)
+    return x0 - origin[0], y0 - origin[1], x1 - x0, y1 - y0
+
+
 async def _clip_capture(page, locators, pad: int = 16) -> tuple[bytes, tuple[float, float]]:
     """Screenshot the union of ``locators`` (plus padding); returns (png, origin)."""
     boxes = [await loc.bounding_box() for loc in locators]
@@ -635,7 +645,7 @@ async def nfcore_tab(
 
 
 async def builder_jbrowse(page, base: str) -> Shot:
-    await page.set_viewport_size({"width": 1680, "height": 1500})
+    await page.set_viewport_size({"width": 1680, "height": 2300})
     await page.goto(
         f"{base}/dashboard-edit/{SARSCOV2}/component/edit/cov-browser",
         wait_until="networkidle",
@@ -651,16 +661,27 @@ async def builder_jbrowse(page, base: str) -> Shot:
     form = page.get_by_text("Genome Browser Configuration", exact=True).first
     summary = page.get_by_text("Draft summary", exact=True).first
     overrides = page.get_by_text("Config overrides", exact=True).first
-    # The two columns side by side (form + summary), down to the overrides editor.
+    ucsc_picker = page.locator('[data-testid="jbrowse-builder-ucsc-tracks"]').first
+    loading = page.get_by_text("Data loading", exact=True).first
+    # The two columns side by side (form + summary), down to the last section.
     fb = await form.bounding_box()
-    ob = await overrides.locator("xpath=../..").bounding_box()
-    assert fb and ob
+    bottoms = [
+        b["y"] + b["height"]
+        for b in [
+            await overrides.locator("xpath=../..").bounding_box(),
+            await page.locator(
+                '[data-testid="jbrowse-builder-fetch-size-limit"]'
+            ).first.bounding_box(),
+        ]
+        if b
+    ]
+    assert fb and bottoms
     x0, y0 = fb["x"] - 24, fb["y"] - 24
     clip = {
         "x": x0,
         "y": y0,
         "width": 1680 - 2 * x0,
-        "height": ob["y"] + ob["height"] + 24 - y0,
+        "height": max(bottoms) + 24 - y0,
     }
     png, origin = await page.screenshot(clip=clip), (x0, y0)
     assembly = page.get_by_text("Assembly", exact=True).first.locator("xpath=..")
@@ -685,6 +706,14 @@ async def builder_jbrowse(page, base: str) -> Shot:
                 "The defaults of the chrome toggles; viewers can still flip them.",
             ),
             Callout(
+                await _boxes_union(
+                    [page.get_by_text("UCSC tracks", exact=True), ucsc_picker], origin
+                ),
+                "UCSC tracks",
+                "Searchable picker over the assembly's UCSC catalogue (resolved through the "
+                "UCSC API); the picked tracks open by default.",
+            ),
+            Callout(
                 await _box(cross, origin),
                 "Cross-filtering",
                 "Selection column and mode: clicked feature, or every open track.",
@@ -696,10 +725,191 @@ async def builder_jbrowse(page, base: str) -> Shot:
                 "last: formats, tracks, view, configuration, extra_tracks.",
             ),
             Callout(
+                await _boxes_union(
+                    [loading, page.locator('[data-testid="jbrowse-builder-fetch-size-limit"]')],
+                    origin,
+                ),
+                "Data loading",
+                "Force load by default, and the per-track fetch size limit (MB).",
+            ),
+            Callout(
                 await _box(summary.locator("xpath=../.."), origin),
                 "Live summary",
                 "Which tracks would show under the current filters; 'Saved view' renders "
                 "the real browser.",
+            ),
+        ],
+    )
+
+
+async def _sars_browser(page, base: str, locus: str | None = None):
+    """The SARS-CoV-2 tab's browser, settled, optionally moved to ``locus``."""
+    await _open(page, base, SARSCOV2)
+    tile = await _tile(page, "Variants and reads")
+    await _settle(page)
+    if locus:
+        search = tile.locator("input").first
+        await search.fill(locus)
+        await search.press("Enter")
+        await _settle(page, 8000)
+    return tile
+
+
+async def track_menu(page, base: str) -> Shot:
+    tile = await _sars_browser(page, base)
+    await tile.hover()
+    await tile.locator('[data-testid="jbrowse-toggle-tracks"]').click()
+    menu = page.locator('[data-testid="jbrowse-track-menu"]')
+    await menu.wait_for(state="visible")
+    await page.locator('[data-testid="jbrowse-track-search"]').fill("SAMPLE_41")
+    await page.wait_for_timeout(600)
+    await menu.locator('[data-track-id="SAMPLE_41.variants"]').click()
+    await _settle(page, 7000)
+    # Keep the tile's action bar (it shows on hover) in the shot.
+    await tile.locator('[data-testid="jbrowse-toggle-tracks"]').hover()
+    await page.wait_for_timeout(400)
+    png, origin = await _clip_capture(page, [tile, menu], pad=12)
+    buttons = page.locator(
+        '[data-testid="jbrowse-tracks-show-all"], [data-testid="jbrowse-tracks-hide-all"], '
+        '[data-testid="jbrowse-tracks-reset"]'
+    )
+    return Shot(
+        "track_menu",
+        "Tracks menu: open tracks one by one",
+        "Every track matching the filters is offered (here 93), only max_tracks open",
+        png,
+        [
+            Callout(
+                await _box(tile.locator('[data-testid="jbrowse-toggle-tracks"]'), origin),
+                "Tracks button",
+                "In the tile's action bar, next to the header / overview / status toggles.",
+            ),
+            Callout(
+                await _box(page.locator('[data-testid="jbrowse-track-menu-count"]'), origin),
+                "Open / offered",
+                "Tracks open in the view against every track the view carries.",
+            ),
+            Callout(
+                await _box(page.locator('[data-testid="jbrowse-track-search"]'), origin),
+                "Search",
+                "Matches name, sample, category and format.",
+            ),
+            Callout(
+                await _union(buttons, origin),
+                "Show all / Hide all / Back to filters",
+                "Show all is capped at 60 tracks; Back to filters restores the tracks the "
+                "dashboard filters pick.",
+            ),
+            Callout(
+                await _box(menu.locator('[data-track-id="SAMPLE_41.variants"]'), origin),
+                "Ticked here",
+                "Grouped by the manifest's category column; ticking a box opens the track.",
+            ),
+            Callout(
+                await _box(tile.get_by_text("SAMPLE_41 iVar variants").first, origin),
+                "Opened in the view",
+                "Manual choices hold until the filters change.",
+            ),
+        ],
+    )
+
+
+FORCE_LOCUS = "NC_045512v2:1-29,903"
+
+
+async def _hover_toolbar(tile) -> None:
+    """Show the tile's action bar without a feature tooltip under the mouse."""
+    await tile.hover(position={"x": 8, "y": 8})
+    await tile.page.wait_for_timeout(400)
+
+
+async def force_load_before(page, base: str) -> Shot:
+    tile = await _sars_browser(page, base, FORCE_LOCUS)
+    await _hover_toolbar(tile)
+    png, origin = await _clip_capture(page, [tile])
+    return Shot(
+        "force_load_before",
+        "Force load: JBrowse's download limit",
+        "The whole genome of SARS-CoV-2 in view: the BAMs exceed the 1 MB per-track limit",
+        png,
+        [
+            Callout(
+                await _box(tile.get_by_text("Requested too much data").first, origin),
+                "Limit reached",
+                "JBrowse stops at fetchSizeLimit (1 MB by default) and asks to zoom in; "
+                "fetch_size_limit_mb sets it per component.",
+            ),
+            Callout(
+                await _box(tile.get_by_role("button", name="Force load", exact=True).first, origin),
+                "Per-track button",
+                "JBrowse's own force load, one track at a time.",
+            ),
+            Callout(
+                await _box(tile.locator('[data-testid="jbrowse-toggle-forceload"]'), origin),
+                "Force load toggle",
+                "Lifts the limits of every open track at once (next shot).",
+            ),
+        ],
+    )
+
+
+async def force_load_after(page, base: str) -> Shot:
+    tile = await _sars_browser(page, base, FORCE_LOCUS)
+    await tile.hover()
+    await tile.locator('[data-testid="jbrowse-toggle-forceload"]').click()
+    await _settle(page, 20000)
+    await _hover_toolbar(tile)
+    png, origin = await _clip_capture(page, [tile])
+    return Shot(
+        "force_load_after",
+        "Force load: every track, whatever its size",
+        "The same view with the toggle on: the reads load, and tracks opened or zoomed out later "
+        "follow",
+        png,
+        [
+            Callout(
+                await _box(tile.locator('[data-testid="jbrowse-toggle-forceload"]'), origin),
+                "Force load on",
+                "Remembered per viewer; force_load: true makes it the component's default.",
+            ),
+            Callout(
+                await _box(tile.get_by_text("SAMPLE_11 primer-trimmed reads").first, origin),
+                "Reads loaded",
+                "65 MB of alignments read by range through the proxy.",
+            ),
+            Callout(
+                await _box(tile.locator('[data-testid="jbrowse-status"]'), origin),
+                "Status",
+                "The status bar says force load is on.",
+            ),
+        ],
+    )
+
+
+async def ucsc_tracks(page, base: str) -> Shot:
+    tile = await _sars_browser(page, base, "NC_045512v2:21,400-25,500")
+    await _hover_toolbar(tile)
+    png, origin = await _clip_capture(page, [tile])
+    return Shot(
+        "ucsc_tracks",
+        "UCSC tracks opened by default",
+        "ucsc_tracks: [artic, nextstrainClade], resolved through the UCSC API for wuhCor1",
+        png,
+        [
+            Callout(
+                await _box(tile.get_by_text("ARTIC Primers V3").first, origin),
+                "ARTIC primers (UCSC)",
+                "The amplicon scheme the megatest was sequenced with, from UCSC's catalogue.",
+            ),
+            Callout(
+                await _box(tile.get_by_text("Nextstrain Clades").first, origin),
+                "Nextstrain clades (UCSC)",
+                "Any bigBed / bigWig / VCF track of the genome's UCSC catalogue, by name.",
+            ),
+            Callout(
+                await _box(tile.get_by_text("SAMPLE_11 iVar variants").first, origin),
+                "The collection's tracks",
+                "Next to them, driven by the dashboard filters as before.",
             ),
         ],
     )
@@ -712,6 +922,10 @@ SCENARIOS: dict[str, Callable[..., Awaitable[Shot]]] = {
     "strandseq_click": strandseq_click,
     "strandseq_compact": strandseq_compact,
     "sarscov2_variant": sarscov2_variant,
+    "track_menu": track_menu,
+    "force_load_before": force_load_before,
+    "force_load_after": force_load_after,
+    "ucsc_tracks": ucsc_tracks,
 }
 
 
@@ -898,6 +1112,11 @@ NFCORE = {
                 "The deduplicated BAM, range-read through the API proxy.",
             ),
             (
+                "text=ENCODE3 cCREs",
+                "UCSC track",
+                "ENCODE candidate cis-regulatory elements: ucsc_tracks: [encodeCcreCombined].",
+            ),
+            (
                 '[data-testid="jbrowse-status"]',
                 "Driven by the target filter",
                 "The persistent left-panel filter (samples → tracks link) picks the tracks.",
@@ -913,6 +1132,12 @@ NFCORE = {
         [
             ("text=FOXA1_IP_E2_R1", "IP signal", "FOXA1 bigWigs, E2 vs vehicle."),
             ("text=peaks", "MACS2 peaks", "narrowPeak calls of the same samples."),
+            (
+                "text=JASPAR 2022 TFBS",
+                "UCSC track, too dense here",
+                "JASPAR motifs (ucsc_tracks: [jaspar2022]): at 80 kb JBrowse asks to zoom in or "
+                "force load; the Force load toggle lifts it for every track.",
+            ),
             (
                 '[data-testid="jbrowse-status"]',
                 "Filtered by design",

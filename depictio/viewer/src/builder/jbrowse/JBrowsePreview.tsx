@@ -113,11 +113,16 @@ const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
   const shownCount = filtered ? Math.min(matching, maxTracks) : Math.min(initialTracks, maxTracks);
   const plural = (n: number, word: string) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
   const pinned = config.default_tracks?.length ?? 0;
+  const ucsc = config.ucsc_tracks?.length ?? 0;
+  const extras = [
+    pinned ? `${pinned} always-shown` : '',
+    ucsc ? plural(ucsc, 'UCSC track') : '',
+  ].filter(Boolean);
   const countLine = [
     filtered
       ? `${plural(matching, 'manifest row')} ${matching === 1 ? 'matches' : 'match'} the dashboard filters`
       : `No filter applies: the view opens with the first ${plural(initialTracks, 'track')}`,
-    `up to ${shownCount} shown (limit ${maxTracks})${pinned ? `, plus ${pinned} always-shown` : ''}.`,
+    `up to ${shownCount} shown (limit ${maxTracks})${extras.length ? `, plus ${extras.join(' and ')}` : ''}.`,
   ].join('; ');
 
   const summary = (
@@ -143,6 +148,21 @@ const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
         {config.selection_enabled && (
           <Badge variant="light" radius="sm" color="gray">
             Cross-filters on {config.selection_column || dcProps?.sampleColumn || 'sample'}
+          </Badge>
+        )}
+        {ucsc > 0 && (
+          <Badge variant="light" radius="sm" color="gray">
+            UCSC: {ucsc}
+          </Badge>
+        )}
+        {config.force_load && (
+          <Badge variant="light" radius="sm" color="orange">
+            Force load
+          </Badge>
+        )}
+        {config.fetch_size_limit_mb != null && (
+          <Badge variant="light" radius="sm" color="gray">
+            Fetch limit: {config.fetch_size_limit_mb} MB
           </Badge>
         )}
         {config.locus_from?.data_collection_tag && (
