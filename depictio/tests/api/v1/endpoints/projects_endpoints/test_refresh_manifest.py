@@ -2,7 +2,7 @@
 
 Refresh re-fetches the manifest URLs already stored on each manifest-mode DC
 and re-ingests in place — no scan-config writes, no revert bookkeeping. These
-prove the contract: manifest DCs are discovered from the stored scan configs,
+prove the contract: refreshable DCs are discovered from the stored scan configs,
 ``sync_files`` is threaded into the re-ingest, a manifest that dropped a DC's
 type marks it failed without running the scan, and per-DC fetch failures don't
 block DCs backed by a different manifest.
@@ -58,13 +58,16 @@ def _project_doc(
     tags: list[str],
     manifest_url: str = "https://example.org/manifest.json",
     scan_mode: str = "manifest",
+    location: str | None = None,
 ) -> dict:
-    """A minimal project whose DCs already carry a manifest (or url) scan config."""
+    """A minimal project whose DCs already carry a manifest, url or local scan config."""
     from depictio.models.models.data_collections import (
         DataCollection,
         DataCollectionConfig,
+        Regex,
         Scan,
         ScanManifest,
+        ScanRecursive,
         ScanURL,
     )
     from depictio.models.models.data_collections_types.table import DCTableConfig
@@ -81,6 +84,11 @@ def _project_doc(
             scan = Scan(
                 mode="manifest",
                 scan_parameters=ScanManifest(manifest_url=manifest_url, manifest_type=tag),
+            )
+        elif scan_mode == "recursive":
+            scan = Scan(
+                mode="recursive",
+                scan_parameters=ScanRecursive(regex_config=Regex(pattern=r".*\.csv")),
             )
         else:
             scan = Scan(mode="url", scan_parameters=ScanURL(url=f"https://example.org/{tag}.csv"))
@@ -100,7 +108,7 @@ def _project_doc(
         workflow_tag="wf",
         engine=WorkflowEngine(name="python", version="3.12"),
         config=WorkflowConfig(),
-        data_location=WorkflowDataLocation(structure="flat", locations=[manifest_url]),
+        data_location=WorkflowDataLocation(structure="flat", locations=[location or manifest_url]),
         data_collections=data_collections,
     )
     return {
@@ -159,14 +167,41 @@ def test_no_edit_permission_403(mock_db):
     assert exc.value.status_code == 403
 
 
-def test_no_manifest_dcs_422(mock_db):
+def test_a_url_dc_is_refreshable_too(mock_db):
+    """Re-ingestion is scan-mode agnostic, so restricting refresh to manifest
+    mode was only ever a restriction on the *selection*. A url DC gets past it
+    and fails later, on this fixture's missing API token, not on a 422."""
     user = _user()
     doc = _project_doc(user.id, tags=["counts"], scan_mode="url")
     mock_db["projects"].insert_one(doc)
     with pytest.raises(HTTPException) as exc:
         _call(project_id=str(doc["_id"]), user=user)
+    assert exc.value.status_code != 422
+
+
+def test_a_local_dc_the_server_cannot_see_is_not_offered(mock_db):
+    """A CLI-created project points at the user's own filesystem, which the API
+    container has never seen. Offering a refresh button for it would only
+    produce a scan failure with an unhelpful message."""
+    user = _user()
+    doc = _project_doc(
+        user.id, tags=["counts"], scan_mode="recursive", location="/nowhere/the-server/can-see"
+    )
+    mock_db["projects"].insert_one(doc)
+    with pytest.raises(HTTPException) as exc:
+        _call(project_id=str(doc["_id"]), user=user)
     assert exc.value.status_code == 422
-    assert "no manifest-backed" in exc.value.detail
+    assert "re-read" in exc.value.detail
+
+
+def test_a_local_dc_the_server_can_see_is_offered(mock_db, tmp_path):
+    """The same project on a server that does have the data root mounted."""
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"], scan_mode="recursive", location=str(tmp_path))
+    mock_db["projects"].insert_one(doc)
+    with pytest.raises(HTTPException) as exc:
+        _call(project_id=str(doc["_id"]), user=user)
+    assert exc.value.status_code != 422
 
 
 def test_unknown_tag_422(mock_db):
@@ -176,7 +211,7 @@ def test_unknown_tag_422(mock_db):
     with pytest.raises(HTTPException) as exc:
         _call(project_id=str(doc["_id"]), user=user, data_collection_tag="nope")
     assert exc.value.status_code == 422
-    assert "counts" in exc.value.detail  # available manifest DCs are surfaced
+    assert "counts" in exc.value.detail  # the refreshable DCs are surfaced
 
 
 def test_dry_run_reports_planned_counts(mock_db, served_manifest):

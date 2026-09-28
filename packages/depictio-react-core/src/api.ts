@@ -3301,7 +3301,7 @@ export interface ManifestRefreshReport {
 }
 
 /** Inputs for POST /projects/refresh_manifest. `dataCollectionTag` restricts
- *  the refresh to one manifest-backed collection (all of them otherwise);
+ *  the refresh to one re-readable collection (all of them otherwise);
  *  `dryRun` only reports per-DC entry counts; `asyncRun` dispatches the
  *  per-DC re-ingestion to workers and returns a `run_id` to poll with
  *  `getManifestRefreshRun`. */
@@ -3312,10 +3312,10 @@ export interface RefreshManifestInput {
   asyncRun?: boolean;
 }
 
-/** Re-fetch and re-ingest a project's manifest-backed data collections
- *  (owners and editors; admins only in public mode). Backend errors carry
- *  actionable `{detail}` strings (no manifest DC, unknown tag, no edit
- *  permission) and are surfaced verbatim. */
+/** Re-read and re-ingest the data collections whose source this server can
+ *  still reach, whatever their scan mode (owners and editors; admins only in
+ *  public mode). Backend errors carry actionable `{detail}` strings (nothing
+ *  re-readable, unknown tag, no edit permission) and are surfaced verbatim. */
 export async function refreshManifest(
   input: RefreshManifestInput,
 ): Promise<ManifestRefreshReport> {
@@ -3328,7 +3328,7 @@ export async function refreshManifest(
       async_run: Boolean(input.asyncRun),
     }),
   });
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh from manifest');
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh data');
   return (await res.json()) as ManifestRefreshReport;
 }
 
