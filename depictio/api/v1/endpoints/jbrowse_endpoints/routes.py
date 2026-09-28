@@ -22,7 +22,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.services import remote_read
-from depictio.api.v1.services.jbrowse import signing
+from depictio.api.v1.services.jbrowse import signing, ucsc
 from depictio.api.v1.services.jbrowse.assemblies import (
     PRESET_ROLES,
     get_assembly_preset,
@@ -288,3 +288,32 @@ def proxy_preset_file(name: str, role: str, request: Request) -> Response:
         _small_files[uri] = data
         return _serve_bytes(request, data, uri)
     return _serve(request, src, uri)
+
+
+@jbrowse_endpoints_router.get("/ucsc/{assembly}/tracks")
+def list_ucsc_tracks(assembly: str, q: str = "", limit: int = 50) -> dict:
+    """UCSC tracks a component can open by default (``ucsc_tracks``), for the builder.
+
+    ``assembly`` is a preset name or alias (hg38, GRCh38, TAIR10, MN908947.3, ...)
+    or a GenArk accession; ``genome`` is null when it has no UCSC counterpart.
+    """
+    genome = ucsc.ucsc_genome(assembly)
+    if genome is None or not settings.jbrowse.ucsc_tracks_enabled:
+        return {"genome": None, "tracks": []}
+    return {"genome": genome, "tracks": ucsc.search(genome, q, limit)}
+
+
+@jbrowse_endpoints_router.api_route("/ucsc/{genome}/{track}/{role}", methods=["GET", "HEAD"])
+def proxy_ucsc_file(genome: str, track: str, role: str, request: Request) -> Response:
+    """Serve (a byte range of) a UCSC track file.
+
+    Public, like the preset files: only files listed in UCSC's own catalogue for
+    that genome, on UCSC's download server or an allow-listed host, can be read.
+    """
+    if role not in ucsc.UCSC_ROLES or not settings.jbrowse.ucsc_tracks_enabled:
+        raise HTTPException(status_code=404, detail="Unknown UCSC track file")
+    entry = ucsc.catalog(genome).get(track)
+    uri = None if entry is None else (entry.url if role == "data" else entry.index_url)
+    if not uri:
+        raise HTTPException(status_code=404, detail="Unknown UCSC track file")
+    return _serve(request, remote_read.ByteSource("https", url=uri), uri)

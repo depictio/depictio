@@ -130,12 +130,18 @@
       "initial_tracks": 4,
       "default_tracks": [],
       "show_annotation": true,
+      "ucsc_tracks": [
+        "artic",
+        "nextstrainClade"
+      ],
       "selection_enabled": true,
       "selection_column": "sample",
       "selection_mode": "feature_click",
       "show_header": true,
       "show_overview": true,
       "track_labels": "offset",
+      "force_load": false,
+      "fetch_size_limit_mb": null,
       "preset": "compact_amplicons",
       "config_overrides": {
         "extra_tracks": [

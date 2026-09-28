@@ -86,6 +86,9 @@ components:
     selection_enabled: true
     selection_column: sample
     preset: compact_amplicons
+    # UCSC tracks of the wuhCor1 genome, resolved through the UCSC API: the ARTIC
+    # V3 primers the megatest amplicons come from, and the Nextstrain clades.
+    ucsc_tracks: [artic, nextstrainClade]
     locus_from:
       data_collection_tag: variants
       chrom_column: CHROM

@@ -188,6 +188,8 @@ The browser sits among the tab's other components, all driven by the same filter
 
 - four cards above it count the samples in scope and the SEACR regions, and give the median
   region width and the coverage per base;
+- the ENCODE candidate cis-regulatory elements open under the gene track, a UCSC track
+  (`ucsc_tracks: [encodeCcreCombined]`) read through the API's UCSC proxy;
 - the `Peaks` section holds the SEACR Manhattan (`selection_column: peak_id`) and the
   `SEACR regions` table (row selection on `peak_id`). A region picked in either filters
   `seacr_peaks` to that row: the `seacr_peaks -> tracks` link opens its sample's tracks, and

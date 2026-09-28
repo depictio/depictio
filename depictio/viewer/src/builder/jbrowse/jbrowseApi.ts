@@ -65,7 +65,13 @@ export interface GenomicTracksProps {
 /** Reads the DC config returned by `fetchDataCollectionConfig`. The assembly is
  *  either a preset name or a custom-assembly object, which is named by `name`. */
 export function readGenomicTracksProps(cfg: Record<string, unknown> | null): GenomicTracksProps {
-  const props = (cfg?.dc_specific_properties ?? {}) as Record<string, unknown>;
+  // `/datacollections/specs/{id}` nests the type and properties under `config`;
+  // a bare config (tests, older callers) carries them at the top level.
+  const root = ((cfg?.config as Record<string, unknown> | undefined) ?? cfg ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const props = (root.dc_specific_properties ?? {}) as Record<string, unknown>;
   const rawAssembly = props.assembly;
   const assembly =
     typeof rawAssembly === 'string'
@@ -80,7 +86,7 @@ export function readGenomicTracksProps(cfg: Record<string, unknown> | null): Gen
     description: str((frag as { description?: unknown } | null)?.description) ?? '',
   }));
   return {
-    dcType: str(cfg?.type)?.toLowerCase() ?? null,
+    dcType: str(root.type)?.toLowerCase() ?? null,
     assembly,
     sampleColumn: str(props.sample_column),
     trackIdColumn: str(props.track_id_column),

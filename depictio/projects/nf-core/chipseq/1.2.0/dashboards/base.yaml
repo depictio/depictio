@@ -1922,6 +1922,8 @@ tabs:
     selection_enabled: true
     selection_column: sample_id
     show_overview: false
+    # JASPAR 2022 motifs from UCSC: FOXA1 sites under the FOXA1 peaks.
+    ucsc_tracks: [jaspar2022]
     # A picked peak (Manhattan point or table row) narrows macs2_peaks to a
     # few rows: the view then jumps to it. A sample filter leaves hundreds of
     # rows, so it never moves the view off GREB1.

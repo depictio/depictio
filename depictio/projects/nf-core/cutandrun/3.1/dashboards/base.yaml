@@ -1798,6 +1798,8 @@ tabs:
     selection_enabled: true
     selection_column: sample_id
     show_overview: false
+    # ENCODE candidate cis-regulatory elements from UCSC, next to the marks.
+    ucsc_tracks: [encodeCcreCombined]
     # A region picked on the Manhattan or in the peak table (a filter that
     # narrows seacr_peaks to a handful of rows) moves the view onto it.
     locus_from:

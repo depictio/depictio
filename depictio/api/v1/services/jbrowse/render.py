@@ -13,8 +13,9 @@ from bson import ObjectId
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.services.jbrowse import signing
+from depictio.api.v1.services.jbrowse import signing, ucsc
 from depictio.api.v1.services.jbrowse.config_builder import (
+    apply_fetch_size_limit,
     build_assembly_config,
     build_track_config,
     deep_merge,
@@ -29,8 +30,9 @@ from depictio.api.v1.services.jbrowse.tracks import (
 from depictio.models.models.data_collections_types.genomic_tracks import CustomAssembly
 
 API_PREFIX = "/depictio/api/v1"
-# Tracks carried in the config when ``track_mode: all``; beyond this the view
-# only receives the shown tracks (the manifest can hold thousands of cells).
+# Tracks carried in the view's config (and so offered in its track menus): the
+# ones matching the filters, or every track with ``track_mode: all``. Only
+# ``max_tracks`` of them open; a manifest can hold thousands of cells.
 MAX_CONFIG_TRACKS = 500
 
 
@@ -82,6 +84,24 @@ def _track_summary(track: TrackRow, selection_column: str | None) -> dict[str, A
         "format": track.fmt,
         "sample": track.sample,
         "selection_value": None if value is None else str(value),
+        "category": track.category,
+        "color": track.color,
+        "source": "manifest",
+    }
+
+
+def _conf_summary(conf: dict[str, Any], source: str) -> dict[str, Any]:
+    """Menu row of a track that is not in the manifest (annotation, UCSC, extra)."""
+    category = conf.get("category")
+    return {
+        "track_id": conf["trackId"],
+        "name": str(conf.get("name") or conf["trackId"]),
+        "format": str((conf.get("adapter") or {}).get("type") or conf.get("type") or ""),
+        "sample": None,
+        "selection_value": None,
+        "category": category[-1] if isinstance(category, list) and category else None,
+        "color": None,
+        "source": source,
     }
 
 
@@ -137,13 +157,19 @@ def build_jbrowse_payload(
     truncated = len(shown) > max_tracks
     shown = shown[:max_tracks]
 
-    if component.get("track_mode") == "all":
-        carried = {t.track_id: t for t in all_tracks[:MAX_CONFIG_TRACKS]}
-        for t in shown:
+    # Every track the view may open, shown ones first: filtered mode offers the
+    # tracks matching the filters (all of them when nothing filters), ``all``
+    # mode the whole manifest. Capped, the shown ones always carried.
+    offered = all_tracks if component.get("track_mode") == "all" or not filter_applied else matched
+    carried = {t.track_id: t for t in shown}
+    for t in [*(by_id[i] for i in default_ids if i in by_id), *offered]:
+        if len(carried) >= MAX_CONFIG_TRACKS:
+            break
+        if t.fmt != "fasta":
             carried.setdefault(t.track_id, t)
-        config_tracks = list(carried.values())
-    else:
-        config_tracks = shown
+    config_tracks = list(carried.values())
+    limit_mb = component.get("fetch_size_limit_mb")
+    fetch_size_limit = int(float(limit_mb) * 1024 * 1024) if limit_mb else None
 
     # Assembly (component override wins over the DC's)
     assembly_spec: str | CustomAssembly = component.get("assembly") or props.assembly
@@ -166,7 +192,9 @@ def build_jbrowse_payload(
     tracks_conf: list[dict[str, Any]] = []
     for track in config_tracks:
         try:
-            conf = build_track_config(track, assembly_name, track_url, format_layers)
+            conf = build_track_config(
+                track, assembly_name, track_url, format_layers, fetch_size_limit
+            )
         except ValueError as exc:
             logger.info(f"jbrowse: skipping track {track.track_id}: {exc}")
             continue
@@ -176,14 +204,29 @@ def build_jbrowse_payload(
 
     built = {c["trackId"] for c in tracks_conf}
     shown_ids = [t.track_id for t in shown if t.track_id in built]
+    track_rows = [_track_summary(t, selection_column) for t in config_tracks if t.track_id in built]
     if annotation and component.get("show_annotation", True):
         tracks_conf.insert(0, annotation)
         shown_ids.insert(0, annotation["trackId"])
+        track_rows.insert(0, _conf_summary(annotation, "annotation"))
+    ucsc_confs, ucsc_missing = ucsc.track_configs(
+        ucsc.ucsc_genome(assembly_spec),
+        list(component.get("ucsc_tracks") or []),
+        assembly_name,
+        ucsc.proxy_url(API_PREFIX),
+    )
+    # Reference tracks open first: the gene annotation, then the UCSC tracks.
+    at = 1 if annotation and component.get("show_annotation", True) else 0
+    for i, conf in enumerate(ucsc_confs):
+        tracks_conf.append(apply_fetch_size_limit(conf, fetch_size_limit))
+        shown_ids.insert(at + i, conf["trackId"])
+        track_rows.append(_conf_summary(conf, "ucsc"))
     for extra in overrides.get("extra_tracks") or []:
         if isinstance(extra, dict) and extra.get("trackId"):
             extra = {"assemblyNames": [assembly_name], **extra}
             tracks_conf.append(extra)
             shown_ids.append(extra["trackId"])
+            track_rows.append(_conf_summary(extra, "extra"))
 
     if overrides.get("assembly"):
         assembly_conf = deep_merge(assembly_conf, overrides["assembly"])
@@ -208,13 +251,16 @@ def build_jbrowse_payload(
         "location": location,
         "view": view,
         "configuration": configuration,
-        "track_rows": [_track_summary(t, selection_column) for t in config_tracks],
+        "track_rows": track_rows,
         "selection_column": selection_column,
         "tracks_dc_id": tdc.dc_id,
         "filter_applied": filter_applied,
         "total_tracks": len(all_tracks),
         "matched_tracks": len(filtered_rows) if filtered_rows is not None else len(all_tracks),
         "truncated": truncated,
+        "max_tracks": max_tracks,
+        "force_load": bool(component.get("force_load", False)),
+        "ucsc_missing": ucsc_missing,
     }
 
 

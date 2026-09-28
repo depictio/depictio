@@ -873,6 +873,19 @@ class JBrowseConfig(BaseSettings):
         "through the API (one origin, works behind browser-side firewalls, small files "
         "cached), or 'direct' from hgdownload.soe.ucsc.edu (CORS + Range, no API load)",
     )
+    ucsc_tracks_enabled: bool = Field(
+        default=True,
+        description="Resolve components' `ucsc_tracks` through the UCSC REST API",
+    )
+    ucsc_api_url: str = Field(
+        default="https://api.genome.ucsc.edu",
+        description="UCSC REST API the UCSC track catalogue is read from",
+    )
+    ucsc_catalog_ttl_s: int = Field(
+        default=24 * 3600,
+        ge=60,
+        description="How long a genome's UCSC track catalogue is cached in the API process",
+    )
     remote_timeout_s: float = Field(default=30.0, gt=0, description="Remote read timeout")
     max_range_mb: int = Field(
         default=64,

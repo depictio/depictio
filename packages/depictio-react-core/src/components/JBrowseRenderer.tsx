@@ -15,16 +15,17 @@ import { readConfObject } from '@jbrowse/core/configuration';
 import { LoadingEllipses, createJBrowseTheme } from '@jbrowse/core/ui';
 import { useWidthSetter } from '@jbrowse/core/util';
 import { ModalWidget } from '@jbrowse/embedded-core';
-import { getEnv } from '@jbrowse/mobx-state-tree';
+import { getEnv, isAlive } from '@jbrowse/mobx-state-tree';
 import GtfPlugin from '@jbrowse/plugin-gtf';
 import { Paper, ScopedCssBaseline, ThemeProvider, createTheme } from '@mui/material';
-import { reaction } from 'mobx';
+import { comparer, reaction } from 'mobx';
 import { observer } from 'mobx-react';
 
 import {
   fetchJBrowseSession,
   InteractiveFilter,
   JBrowseSessionResponse,
+  JBrowseTrackRow,
   StoredMetadata,
 } from '../api';
 import { filtersExcludingOwn } from '../selection';
@@ -37,18 +38,53 @@ import {
   selectionValuesFor,
   toggleValue,
 } from './jbrowse/trackSync';
+import { hideAllIds, manifestTrackIds } from './jbrowse/trackMenu';
+import {
+  hasLiftedLimits,
+  liftDisplayLimits,
+  planForceLoadReset,
+} from './jbrowse/forceLoad';
+import TrackMenu from './jbrowse/TrackMenu';
 
 type ViewState = ReturnType<typeof createViewState>;
+
+/** The slice of the LinearGenomeView model this component reads. */
+interface LgvTrack {
+  configuration: { trackId: string };
+  displays?: unknown[];
+}
+interface LgvView {
+  tracks: LgvTrack[];
+  bpPerPx: number;
+  showTrack: (trackId: string) => unknown;
+  hideTrack: (trackId: string) => unknown;
+}
+
+/** ``isAlive`` throws on anything that is not a state-tree node. */
+const aliveNode = (node: unknown): boolean => {
+  try {
+    return isAlive(node as Parameters<typeof isAlive>[0]);
+  } catch {
+    return false;
+  }
+};
+
+const openTrackIds = (view: LgvView): string[] =>
+  view.tracks.map((t) => t.configuration.trackId);
 
 /** Signed track URLs live `url_ttl_s` (6 h by default) server-side; rebuild the
  *  view well before that so a long-open dashboard never reads with a stale one. */
 const VIEW_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
+const EMPTY_ROWS: JBrowseTrackRow[] = [];
 
 export interface JBrowseToolbarState {
   showHeader: boolean;
   showOverview: boolean;
   showStatus: boolean;
   clickFilters: boolean;
+  /** Lift JBrowse's "region too large" limits on every open track. */
+  forceLoad: boolean;
 }
 
 interface JBrowseRendererProps {
@@ -189,7 +225,8 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     location: null,
   });
   // Track ids this component manages (the manifest's): user-opened tracks
-  // outside this set (annotation, from the track selector) are never hidden.
+  // outside this set (annotation, UCSC, from the track selector or the track
+  // menu) are never hidden by a filter change.
   const managedIds = useRef<Set<string>>(new Set());
 
   const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
@@ -202,6 +239,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     showOverview: readToggle(`${storageKey}.overview`, metadata.show_overview !== false),
     showStatus: readToggle(`${storageKey}.status`, true),
     clickFilters: readToggle(`${storageKey}.clickFilters`, true),
+    forceLoad: readToggle(`${storageKey}.forceLoad`, metadata.force_load === true),
   }));
   const setToggle = useCallback(
     (key: keyof JBrowseToolbarState, suffix: string) => {
@@ -276,7 +314,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     if (!payload) return;
     const assemblyName = String(payload.assembly.name ?? '');
     const tracks = absolutize(payload.tracks);
-    for (const row of payload.track_rows) managedIds.current.add(row.track_id);
+    for (const id of manifestTrackIds(payload.track_rows)) managedIds.current.add(id);
 
     const stale = Date.now() - viewMeta.current.createdAt > VIEW_MAX_AGE_MS;
     if (!viewState || viewMeta.current.assembly !== assemblyName || stale) {
@@ -313,7 +351,9 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       return;
     }
 
-    // Same assembly: diff the open tracks towards the payload.
+    // Same assembly: diff the open tracks towards the payload. This is also
+    // where choices made in the track menu end: a new payload (filter change,
+    // realtime refresh) re-applies the filtered set to the manifest tracks.
     const { session } = viewState;
     const view = session.view;
     const known = new Set<string>(
@@ -363,11 +403,171 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
 
   // Fullscreen / tile resize: JBrowse measures its container, but a synthetic
   // resize after a fullscreen flip lets it pick the new width up immediately.
+  // The fullscreen element is also where the track menu's dropdown portals.
+  const [fullscreenEl, setFullscreenEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    const onFs = () => window.requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    const onFs = () => {
+      setFullscreenEl((document.fullscreenElement as HTMLElement | null) ?? null);
+      window.requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  // ---- open tracks (live) → track menu ---------------------------------------
+  // Manual choices made in the menu hold until the next payload: the sync
+  // effect above then re-applies the filtered set (to manifest tracks only).
+  const payloadRef = useRef(payload);
+  payloadRef.current = payload;
+  const [openIds, setOpenIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (!viewState) {
+      setOpenIds([]);
+      return;
+    }
+    const view = viewState.session.view as unknown as LgvView;
+    return reaction(
+      () => (aliveNode(view) ? openTrackIds(view) : []),
+      (ids) => setOpenIds(ids),
+      { fireImmediately: true, equals: comparer.structural },
+    );
+  }, [viewState]);
+
+  const withView = useCallback(
+    (fn: (view: LgvView) => void) => {
+      if (!viewState) return;
+      const view = viewState.session.view as unknown as LgvView;
+      if (!aliveNode(view)) return;
+      try {
+        fn(view);
+      } catch (err) {
+        console.warn('jbrowse: track change failed', err);
+      }
+    },
+    [viewState],
+  );
+  const showTracks = useCallback(
+    (ids: string[]) =>
+      withView((view) => {
+        const open = new Set(openTrackIds(view));
+        for (const id of ids) {
+          if (open.has(id)) continue;
+          try {
+            view.showTrack(id);
+          } catch (err) {
+            console.warn(`jbrowse: cannot show track ${id}`, err);
+          }
+        }
+      }),
+    [withView],
+  );
+  const hideTracks = useCallback(
+    (ids: string[]) =>
+      withView((view) => {
+        for (const id of ids) view.hideTrack(id);
+      }),
+    [withView],
+  );
+  const onToggleTrack = useCallback(
+    (id: string, show: boolean) => (show ? showTracks([id]) : hideTracks([id])),
+    [showTracks, hideTracks],
+  );
+  const onHideAll = useCallback(
+    () =>
+      withView((view) => {
+        for (const id of hideAllIds(openTrackIds(view), payloadRef.current?.track_rows ?? []))
+          view.hideTrack(id);
+      }),
+    [withView],
+  );
+  // "Back to filters": the same diff a new payload applies, but over every
+  // row of the menu (UCSC / reference too), so the view returns to exactly
+  // what the dashboard filters open.
+  const onBackToFilters = useCallback(
+    () =>
+      withView((view) => {
+        const p = payloadRef.current;
+        if (!p) return;
+        const managed = new Set<string>(managedIds.current);
+        for (const row of p.track_rows) managed.add(row.track_id);
+        const plan = planTrackSync(openTrackIds(view), p.shown_track_ids, managed);
+        for (const id of plan.hide) view.hideTrack(id);
+        for (const id of plan.show) {
+          try {
+            view.showTrack(id);
+          } catch (err) {
+            console.warn(`jbrowse: cannot show track ${id}`, err);
+          }
+        }
+      }),
+    [withView],
+  );
+  // ---- force load ------------------------------------------------------------
+  // ON: lift the density / byte limits of every display now, of every display
+  // created later (a track opened, a display type switched) and again on zoom
+  // out (the density lift only covers the zoom it was set at).
+  useEffect(() => {
+    if (!viewState || !toolbar.forceLoad) return;
+    const view = viewState.session.view as unknown as LgvView;
+    const displaysOf = (): unknown[] =>
+      aliveNode(view) ? view.tracks.flatMap((t) => [...(t.displays ?? [])]) : [];
+    const lift = (displays: unknown[], reload: 'always' | 'ifBlocked') => {
+      try {
+        for (const d of displays) {
+          liftDisplayLimits(d, { bpPerPx: view.bpPerPx, reload, alive: aliveNode });
+        }
+      } catch (err) {
+        console.warn('jbrowse: force load failed', err);
+      }
+    };
+    lift(displaysOf(), 'always');
+    let seen = new Set(displaysOf());
+    const disposeDisplays = reaction(
+      displaysOf,
+      (displays) => {
+        lift(
+          displays.filter((d) => !seen.has(d)),
+          'ifBlocked',
+        );
+        seen = new Set(displays);
+      },
+      { equals: comparer.shallow },
+    );
+    const disposeZoom = reaction(
+      () => (aliveNode(view) ? view.bpPerPx : 0),
+      () => lift(displaysOf(), 'ifBlocked'),
+    );
+    return () => {
+      disposeDisplays();
+      disposeZoom();
+    };
+  }, [viewState, toolbar.forceLoad]);
+
+  // OFF (after having been ON): the lifted limits live on the display models
+  // and JBrowse has no action to clear them, so re-open the affected tracks —
+  // fresh displays come back with the configured limits.
+  const prevForceLoad = useRef(toolbar.forceLoad);
+  useEffect(() => {
+    const wasOn = prevForceLoad.current;
+    prevForceLoad.current = toolbar.forceLoad;
+    if (!wasOn || toolbar.forceLoad) return;
+    withView((view) => {
+      const affected = new Set(
+        view.tracks
+          .filter((t) => (t.displays ?? []).some((d) => hasLiftedLimits(d, aliveNode)))
+          .map((t) => t.configuration.trackId),
+      );
+      const reopen = planForceLoadReset(openTrackIds(view), affected);
+      for (const id of reopen) view.hideTrack(id);
+      for (const id of reopen) {
+        try {
+          view.showTrack(id);
+        } catch (err) {
+          console.warn(`jbrowse: cannot re-open track ${id}`, err);
+        }
+      }
+    });
+  }, [toolbar.forceLoad, withView]);
 
   // ---- inverse direction: JBrowse → dashboard filter ------------------------
   const rowsRef = useRef(payload?.track_rows ?? []);
@@ -438,6 +638,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   toolbarRef.current = toolbar;
 
   // ---- chrome toggles -------------------------------------------------------
+  const trackRows = payload?.track_rows ?? EMPTY_ROWS;
   useEffect(() => {
     if (!onToolbarNode) return;
     const item = (
@@ -462,6 +663,26 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     );
     onToolbarNode(
       <React.Fragment key="jbrowse-toolbar">
+        <TrackMenu
+          key="tracks"
+          rows={trackRows}
+          openIds={openIds}
+          portalTarget={fullscreenEl}
+          disabled={!viewState}
+          onToggle={onToggleTrack}
+          onShowAll={showTracks}
+          onHideAll={onHideAll}
+          onBackToFilters={onBackToFilters}
+        />
+        {item(
+          'forceload',
+          toolbar.forceLoad
+            ? 'Normal loading limits'
+            : 'Force load: fetch every track even when the region holds a lot of data (may be slow)',
+          'mdi:download-multiple',
+          toolbar.forceLoad,
+          () => setToggle('forceLoad', 'forceLoad'),
+        )}
         {item(
           'header',
           toolbar.showHeader ? 'Hide navigation header' : 'Show navigation header',
@@ -496,15 +717,30 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           : null}
       </React.Fragment>,
     );
-  }, [onToolbarNode, toolbar, setToggle, selectionEnabled, selectionMode]);
+  }, [
+    onToolbarNode,
+    toolbar,
+    setToggle,
+    selectionEnabled,
+    selectionMode,
+    trackRows,
+    openIds,
+    fullscreenEl,
+    viewState,
+    onToggleTrack,
+    showTracks,
+    onHideAll,
+    onBackToFilters,
+  ]);
   useEffect(() => () => onToolbarNode?.(null), [onToolbarNode]);
 
   // ---- render ----------------------------------------------------------------
   const statusText = payload
     ? `${payload.shown_track_ids.length} shown · ${payload.matched_tracks}/${payload.total_tracks} tracks${
         payload.filter_applied ? ' match the filters' : ''
-      }${payload.truncated ? ` (first ${metadata.max_tracks ?? 20})` : ''}`
+      }${payload.truncated ? ` (first ${payload.max_tracks ?? metadata.max_tracks ?? 20})` : ''}`
     : '';
+  const ucscMissing = payload?.ucsc_missing ?? [];
   const selectedCount = Array.isArray(ownFilter?.value) ? (ownFilter!.value as unknown[]).length : 0;
 
   return (
@@ -558,6 +794,18 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           {payload.filter_applied && (
             <Badge size="xs" variant="light">
               filtered
+            </Badge>
+          )}
+          {ucscMissing.length > 0 && (
+            <Tooltip label={`UCSC tracks not found: ${ucscMissing.join(', ')}`} withinPortal={false}>
+              <Badge size="xs" variant="light" color="orange" data-testid="jbrowse-ucsc-missing">
+                {ucscMissing.length} UCSC missing
+              </Badge>
+            </Tooltip>
+          )}
+          {toolbar.forceLoad && (
+            <Badge size="xs" variant="light" color="gray">
+              force load
             </Badge>
           )}
           {selectedCount > 0 && (

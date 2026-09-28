@@ -203,7 +203,9 @@ left panel and the `ChIP samples` table under the browser (row selection) pick w
 are open, and clicking a feature in the browser filters every other tab on its sample.
 
 Four cards above the browser count the MACS2 peaks and ChIP samples in scope and give the
-median peak width and fold enrichment. The `Peaks` section under it holds the MACS2
+median peak width and fold enrichment. The JASPAR 2022 motifs open under the gene track, a
+UCSC track (`ucsc_tracks: [jaspar2022]`); dense at the default 80 kb view, they load once
+zoomed in or with the tile's Force load toggle. The `Peaks` section under it holds the MACS2
 significance Manhattan (`selection_column: peak_id`) and the `MACS2 peak calls` table (row
 selection on `peak_id`): a peak picked in either opens its sample's tracks through the
 `macs2_peaks -> tracks` link, and the browser's `locus_from` moves the view onto the peak

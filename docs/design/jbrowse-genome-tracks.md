@@ -153,6 +153,9 @@ only the present ones when they are uploaded.
   initial_tracks: 6           # tracks shown when nothing is filtered
   default_tracks: []          # track ids always shown
   show_annotation: true       # the preset's gene track
+  ucsc_tracks: [clinvarMain]  # UCSC tracks opened by default (see below)
+  force_load: false           # start with force load on
+  fetch_size_limit_mb: 5      # per-track download limit before "Force load"
   selection_enabled: true     # emit a filter back to the dashboard
   selection_column: sample    # default: the DC's sample_column
   selection_mode: feature_click   # or visible_tracks
@@ -200,6 +203,42 @@ overview bar, the status line and click-to-filter (defaults from the YAML,
 remembered per viewer), plus reset, metadata and fullscreen. JBrowse menus and
 dialogs portal into the fullscreen element, so they keep working there.
 
+**Loading tracks:**
+
+- *One by one.* The **Tracks** menu of the tile's action bar lists every track
+  the view carries (search, one checkbox per track, grouped by the manifest's
+  `category_column`, then UCSC and reference tracks), with *Show all* (capped),
+  *Hide all* and *Back to filters*. The view carries every track matching the
+  filters, up to 500 (the whole manifest with `track_mode: all`); only
+  `max_tracks` of them open. Manual choices hold until the filters change.
+  JBrowse's own track selector (list icon of the navigation header) shows the
+  same tracks.
+- *Force load.* JBrowse stops at a per-track download limit (1 MB by default,
+  `fetchSizeLimit`) and shows a *Force load* button in the track.
+  `fetch_size_limit_mb` sets that limit on every display (the pileup and
+  SNP-coverage sub-displays of alignments included). The **Force load** toggle
+  of the action bar lifts it for every open track, and for tracks opened or
+  zoomed out later, which is what JBrowse's per-track button does. `force_load:
+  true` makes it the default; each viewer's choice is remembered.
+- *UCSC tracks.* `ucsc_tracks` names UCSC Genome Browser tracks (`clinvarMain`,
+  `encodeCcreCombined`, `artic`, ...) opened next to the collection's tracks.
+  Names are resolved through the UCSC REST API (`/list/tracks`) for the
+  assembly's UCSC genome: the preset's database, the GenArk accession of TAIR10,
+  or a custom assembly's alias (`MN908947.3` -> `wuhCor1`). Tracks backed by a
+  bigWig, bigBed-family or tabix VCF file are supported; database-backed tracks
+  (e.g. hg38 `cpgIslandExt`) have no file and are reported in `ucsc_missing`.
+  Files are read from `hgdownload.soe.ucsc.edu` (or an allow-listed host)
+  through `/jbrowse/ucsc/{genome}/{track}/{data|index}`, a public proxy that only
+  reads files of UCSC's own catalogue; `DEPICTIO_JBROWSE_PRESET_ACCESS=direct`
+  lets the browser read UCSC itself. The catalogue is cached per genome
+  (`DEPICTIO_JBROWSE_UCSC_CATALOG_TTL_S`); the builder searches it through
+  `GET /jbrowse/ucsc/{assembly}/tracks?q=`.
+
+![Tracks menu](../images/jbrowse/track_menu.png)
+![Force load: limit reached](../images/jbrowse/force_load_before.png)
+![Force load: toggle on](../images/jbrowse/force_load_after.png)
+![UCSC tracks](../images/jbrowse/ucsc_tracks.png)
+
 **Builder:** the component builder has a *Genome browser* type with the
 assembly, locus, tracks, display toggles, cross-filtering, "follow filtered
 rows", preset and a JSON override editor, plus a live summary of the tracks the
@@ -244,6 +283,7 @@ current filters would show.
 | `DEPICTIO_JBROWSE_REMOTE_TIMEOUT_S` | `30` |
 | `DEPICTIO_JBROWSE_MAX_RANGE_MB` / `_MAX_FULL_READ_MB` | `64` / `256` |
 | `DEPICTIO_JBROWSE_URL_TTL_S` | `21600` |
+| `DEPICTIO_JBROWSE_UCSC_TRACKS_ENABLED` / `_UCSC_API_URL` / `_UCSC_CATALOG_TTL_S` | `true` / `https://api.genome.ucsc.edu` / `86400` |
 
 Wired in `docker-compose*.yaml`, the Helm configmap (any `DEPICTIO_JBROWSE_*`
 key of `backend.env`), `.env.example` and `depictio local up`.
@@ -310,8 +350,8 @@ The nf-core templates read the tracks in place when `TRACKS_URI` is set
 `weber8thomas/BelSVedere` (a JBrowse 2 SV browser) provided: the adapter
 builder per format, the assembly block (2bit + `RefNameAliasAdapter` +
 aliases), the UCSC 2bit/chrom.sizes URLs (its own T2T sizes were wrong, UCSC's
-are used), the JEXL `itemRgb` colour callback for SV BEDs, the "force load"
-display limits, the diff-based sample → track sync with a cap, and the Range
+are used), the JEXL `itemRgb` colour callback for SV BEDs, the diff-based
+sample → track sync with a cap, and the Range
 lessons (clamp the end, strip conditional headers, expose `Content-Range`).
 
 ## Known limits and follow-ups

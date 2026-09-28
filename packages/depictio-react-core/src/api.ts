@@ -1634,6 +1634,14 @@ export interface JBrowseTrackRow {
   sample: string | null;
   /** Value of the component's selection column for this track. */
   selection_value: string | null;
+  /** Manifest grouping (e.g. assay / mark) the track menu groups rows by. */
+  category?: string | null;
+  /** Display colour (any CSS colour) from the manifest, when it declares one. */
+  color?: string | null;
+  /** Where the track comes from: a manifest row, the assembly's annotation,
+   *  a UCSC track, or a `config_overrides.extra_tracks` entry. Absent on an
+   *  older backend: read as `manifest`. */
+  source?: 'manifest' | 'annotation' | 'ucsc' | 'extra';
 }
 
 /** `POST /dashboards/render_jbrowse` — everything the embedded linear genome
@@ -1656,6 +1664,12 @@ export interface JBrowseSessionResponse {
   total_tracks: number;
   matched_tracks: number;
   truncated: boolean;
+  /** Default of the viewer's "Force load" toggle (component `force_load`). */
+  force_load?: boolean;
+  /** The component's `max_tracks` cap on `shown_track_ids`. */
+  max_tracks?: number;
+  /** Requested UCSC track names the backend could not resolve. */
+  ucsc_missing?: string[];
 }
 
 export async function fetchJBrowseSession(
@@ -1672,6 +1686,41 @@ export async function fetchJBrowseSession(
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to render JBrowse');
   return res.json();
+}
+
+/** One UCSC Genome Browser track offered by the builder's track picker. */
+export interface UcscTrackOption {
+  name: string;
+  label: string;
+  type: string;
+  group: string | null;
+}
+
+/** `GET /jbrowse/ucsc/{assembly}/tracks` — `genome` is the UCSC genome the
+ *  assembly (preset name or alias) maps to, null when it has none. */
+export interface UcscTracksResponse {
+  genome: string | null;
+  tracks: UcscTrackOption[];
+}
+
+export async function fetchUcscTracks(
+  assembly: string,
+  q = '',
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<UcscTracksResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (q) params.set('q', q);
+  const res = await authFetch(
+    `${API_BASE}/jbrowse/ucsc/${encodeURIComponent(assembly)}/tracks?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list UCSC tracks');
+  const body = (await res.json()) as Partial<UcscTracksResponse>;
+  return {
+    genome: body?.genome ?? null,
+    tracks: Array.isArray(body?.tracks) ? body.tracks : [],
+  };
 }
 
 /** Backend signals "figure cache is being warmed" via HTTP 202. The viewer

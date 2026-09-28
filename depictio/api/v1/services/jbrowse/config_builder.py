@@ -287,6 +287,40 @@ _DISPLAY_FOR_TRACK = {
 }
 
 
+_ALIGNMENT_SUBDISPLAYS = {
+    "pileupDisplay": "LinearPileupDisplay",
+    "snpCoverageDisplay": "LinearSNPCoverageDisplay",
+}
+
+
+def apply_fetch_size_limit(conf: dict[str, Any], limit_bytes: int | None) -> dict[str, Any]:
+    """Raise (or lower) JBrowse's per-track download limit on every display.
+
+    JBrowse stops at ``fetchSizeLimit`` bytes (1 MB by default) and shows a
+    "Force load" button instead of the features. The limit is a display setting,
+    so the track's default display is created when the config has none; an
+    alignments display carries it on its pileup and SNP-coverage sub-displays.
+    """
+    if not limit_bytes:
+        return conf
+    display_type = _DISPLAY_FOR_TRACK.get(conf.get("type", ""))
+    displays = list(conf.get("displays") or [])
+    if display_type and not any(d.get("type") == display_type for d in displays):
+        displays.append({"type": display_type})
+    for display in displays:
+        if display.get("type") == "LinearAlignmentsDisplay":
+            for slot, sub_type in _ALIGNMENT_SUBDISPLAYS.items():
+                sub = dict(display.get(slot) or {})
+                sub.setdefault("type", sub_type)
+                sub.setdefault("displayId", f"{conf['trackId']}-{sub_type}")
+                sub["fetchSizeLimit"] = limit_bytes
+                display[slot] = sub
+        else:
+            display["fetchSizeLimit"] = limit_bytes
+    conf["displays"] = displays
+    return conf
+
+
 def _finalize_displays(conf: dict[str, Any]) -> dict[str, Any]:
     """Give every display a ``displayId`` (JBrowse requires one per display)."""
     for display in conf.get("displays", []) or []:
@@ -299,6 +333,7 @@ def build_track_config(
     assembly_name: str,
     url_for: UrlFor,
     format_overrides: list[dict[str, Any]],
+    fetch_size_limit: int | None = None,
 ) -> dict[str, Any]:
     """One JBrowse track configuration for a manifest row."""
     track_type, adapter = _base_track(track, assembly_name)
@@ -318,7 +353,7 @@ def build_track_config(
         fmt_conf = override.get(track.fmt)
         if fmt_conf:
             conf = deep_merge(conf, fmt_conf)
-    return _finalize_displays(conf)
+    return _finalize_displays(apply_fetch_size_limit(conf, fetch_size_limit))
 
 
 def build_assembly_config(

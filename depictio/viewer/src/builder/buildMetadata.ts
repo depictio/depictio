@@ -446,6 +446,7 @@ function buildJBrowse(
     max_tracks?: number;
     initial_tracks?: number;
     default_tracks?: unknown;
+    ucsc_tracks?: unknown;
     show_annotation?: boolean;
     selection_enabled?: boolean;
     selection_column?: string | null;
@@ -453,6 +454,8 @@ function buildJBrowse(
     show_header?: boolean;
     show_overview?: boolean;
     track_labels?: string;
+    force_load?: boolean;
+    fetch_size_limit_mb?: unknown;
     preset?: string | null;
     config_overrides?: unknown;
   }>(state.config);
@@ -471,6 +474,8 @@ function buildJBrowse(
         }
       : null;
   const overrides = c.config_overrides;
+  const fetchLimit =
+    typeof c.fetch_size_limit_mb === 'number' ? c.fetch_size_limit_mb : Number.NaN;
   return {
     ...existing,
     ...base,
@@ -484,6 +489,13 @@ function buildJBrowse(
     default_tracks: Array.isArray(c.default_tracks)
       ? c.default_tracks.filter((t): t is string => typeof t === 'string' && t.length > 0)
       : [],
+    ucsc_tracks: Array.isArray(c.ucsc_tracks)
+      ? [
+          ...new Set(
+            c.ucsc_tracks.filter((t): t is string => typeof t === 'string' && t.length > 0),
+          ),
+        ]
+      : [],
     show_annotation: c.show_annotation !== false,
     selection_enabled: Boolean(c.selection_enabled),
     // null = the DC's sample_column, resolved server-side.
@@ -495,6 +507,10 @@ function buildJBrowse(
       c.track_labels === 'overlapping' || c.track_labels === 'hidden'
         ? c.track_labels
         : 'offset',
+    force_load: c.force_load === true,
+    // null = JBrowse's own per-adapter fetchSizeLimit (the model caps it at 10 000 MB).
+    fetch_size_limit_mb:
+      Number.isFinite(fetchLimit) && fetchLimit > 0 ? Math.min(fetchLimit, 10_000) : null,
     preset: c.preset || null,
     config_overrides:
       overrides && typeof overrides === 'object' && !Array.isArray(overrides)

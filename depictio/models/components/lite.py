@@ -771,6 +771,12 @@ class JBrowseLiteComponent(BaseLiteComponent):
     show_annotation: bool = Field(
         default=True, description="Show the assembly preset's gene annotation track"
     )
+    ucsc_tracks: list[str] = Field(
+        default_factory=list,
+        description="UCSC Genome Browser tracks shown by default, by UCSC track name "
+        "(e.g. 'clinvarMain', 'encodeCcreCombined'); resolved through the UCSC API "
+        "for the assembly. Tracks backed by a bigBed / bigWig / VCF file only",
+    )
 
     # Cross-filtering (JBrowse → dashboard)
     selection_enabled: bool = Field(
@@ -793,6 +799,20 @@ class JBrowseLiteComponent(BaseLiteComponent):
     )
     track_labels: Literal["overlapping", "offset", "hidden"] = Field(
         default="offset", description="Track label placement"
+    )
+
+    # Loading limits
+    force_load: bool = Field(
+        default=False,
+        description="Start with force load on: fetch every track even when the region "
+        "holds more data than JBrowse's limits (viewers can toggle it)",
+    )
+    fetch_size_limit_mb: float | None = Field(
+        default=None,
+        gt=0,
+        le=10_000,
+        description="Per-track download limit (MB) before JBrowse asks to force load; "
+        "unset = JBrowse's default (1 MB, alignments excepted)",
     )
 
     # Custom configuration

@@ -19,6 +19,7 @@ from depictio.api.v1.services.jbrowse.assemblies import get_assembly_preset
 from depictio.api.v1.services.jbrowse.config_builder import (
     BUILTIN_PRESETS,
     NARROWPEAK_COLUMNS,
+    apply_fetch_size_limit,
     build_assembly_config,
     build_track_config,
     deep_merge,
@@ -436,7 +437,10 @@ class TestPayloadSelection:
         assert payload["truncated"] is False
         assert payload["total_tracks"] == 31
         assert payload["matched_tracks"] == 31
-        assert [c["trackId"] for c in payload["tracks"]] == ["c00", "c01", "c02"]
+        # Every track is offered (track menus), the shown ones first.
+        ids = [c["trackId"] for c in payload["tracks"]]
+        assert ids[:3] == ["c00", "c01", "c02"]
+        assert len(ids) == 31
 
     def test_filtered_is_capped(self, cells):
         payload = _payload({"max_tracks": 10}, filtered=cells[:25])
@@ -444,6 +448,28 @@ class TestPayloadSelection:
         assert payload["truncated"] is True
         assert payload["filter_applied"] is True
         assert payload["matched_tracks"] == 25
+
+    def test_filtered_offers_every_match(self, cells):
+        payload = _payload({"max_tracks": 10}, filtered=cells[:25])
+        assert len(payload["tracks"]) == 25
+        assert len(payload["track_rows"]) == 25
+        assert payload["max_tracks"] == 10
+
+    def test_offered_tracks_are_capped(self, cells, monkeypatch):
+        monkeypatch.setattr(render, "MAX_CONFIG_TRACKS", 5)
+        payload = _payload({"max_tracks": 3}, filtered=cells[:25])
+        assert len(payload["tracks"]) == 5
+        assert payload["shown_track_ids"] == ["c00", "c01", "c02"]
+
+    def test_force_load_flag(self, cells):
+        assert _payload({})["force_load"] is False
+        assert _payload({"force_load": True})["force_load"] is True
+
+    def test_fetch_size_limit_on_every_display(self, cells):
+        payload = _payload({"initial_tracks": 1, "fetch_size_limit_mb": 5})
+        (display,) = payload["tracks"][0]["displays"]
+        assert display["type"] == "LinearWiggleDisplay"
+        assert display["fetchSizeLimit"] == 5 * 1024 * 1024
 
     def test_filtered_to_nothing(self, cells):
         payload = _payload({}, filtered=[])
@@ -467,13 +493,16 @@ class TestPayloadSelection:
 
     def test_selection_value_in_track_rows(self, cells):
         payload = _payload({"initial_tracks": 1})
-        (row,) = payload["track_rows"]
+        row = payload["track_rows"][0]
         assert row == {
             "track_id": "c00",
             "name": "c00.bw",
             "format": "bigwig",
             "sample": "C00",
             "selection_value": "C00",
+            "category": None,
+            "color": None,
+            "source": "manifest",
         }
         assert payload["selection_column"] == "cell"
 
@@ -554,7 +583,8 @@ class TestPayloadConfig:
             {"initial_tracks": 2, "config_overrides": {"tracks": {"c01": {"name": "Renamed"}}}}
         )
         names = {c["trackId"]: c["name"] for c in payload["tracks"]}
-        assert names == {"c00": "c00.bw", "c01": "Renamed"}
+        assert names["c00"] == "c00.bw"
+        assert names["c01"] == "Renamed"
 
     def test_view_and_configuration_overrides(self, cells):
         payload = _payload(
@@ -662,3 +692,44 @@ def test_preset_files_go_through_the_api_in_proxy_mode(monkeypatch):
     )
     assert annotation is not None
     assert annotation["adapter"]["bigBedLocation"]["uri"].endswith("/preset/hg38/annotation")
+
+
+# --------------------------------------------------------------------------
+# fetch size limit
+# --------------------------------------------------------------------------
+
+
+class TestFetchSizeLimit:
+    def test_none_leaves_config_alone(self):
+        conf = {"type": "FeatureTrack", "trackId": "t"}
+        assert apply_fetch_size_limit(dict(conf), None) == conf
+
+    def test_existing_display_gets_the_limit(self):
+        conf = {
+            "type": "VariantTrack",
+            "trackId": "t",
+            "displays": [{"type": "LinearVariantDisplay", "height": 30}],
+        }
+        out = apply_fetch_size_limit(conf, 123)
+        assert out["displays"] == [
+            {"type": "LinearVariantDisplay", "height": 30, "fetchSizeLimit": 123}
+        ]
+
+    def test_alignments_limit_sits_on_sub_displays(self):
+        out = apply_fetch_size_limit({"type": "AlignmentsTrack", "trackId": "t"}, 9)
+        (display,) = out["displays"]
+        assert display["type"] == "LinearAlignmentsDisplay"
+        assert "fetchSizeLimit" not in display
+        assert display["pileupDisplay"] == {
+            "type": "LinearPileupDisplay",
+            "displayId": "t-LinearPileupDisplay",
+            "fetchSizeLimit": 9,
+        }
+        assert display["snpCoverageDisplay"]["fetchSizeLimit"] == 9
+
+    def test_bam_track_via_build(self):
+        track = _track("reads.bam", track_id="r")
+        conf = build_track_config(track, "hg38", lambda t, role: f"/{role}", [], 7)
+        (display,) = conf["displays"]
+        assert display["displayId"] == "r-LinearAlignmentsDisplay"
+        assert display["pileupDisplay"]["fetchSizeLimit"] == 7
