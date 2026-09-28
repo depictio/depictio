@@ -9,6 +9,7 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY_PATH, settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import current_token_scopes
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
@@ -364,6 +365,9 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
     if not user:
         return None
 
+    # Expose the token's scopes to the rest of the request (REST scope gate,
+    # comment authorship); None keeps full access for legacy tokens.
+    current_token_scopes.set(token_doc.scopes)
     return user
 
 
@@ -639,6 +643,7 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
             else datetime.max
         ),
         name=token_data.name,
+        scopes=token_data.scopes,
         token_lifetime=token_data.token_lifetime,
         user_id=token_data.sub,  # type: ignore[invalid-argument-type]
     )
