@@ -684,11 +684,27 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   );
 };
 
-/** Dry-run plan for the Preview step: per-DC rows plus the manifest types the
- *  template didn't match and the optional collections it pruned. Same shape is
- *  reused untouched when the real report replaces the plan. */
-const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ report }) => {
+/** True when a real (non dry-run) from-manifest report carries something the
+ *  user should see before moving on: a manifest type no collection matched,
+ *  an optional collection the template pruned, a collection or dashboard
+ *  that failed. A clean report redirects straight to the dashboard. */
+export function manifestReportNeedsReview(report: FromManifestReport): boolean {
+  return (
+    !report.success ||
+    report.unmatched_manifest_types.length > 0 ||
+    report.pruned_optional_dcs.length > 0 ||
+    report.ingestion.some((dc) => dc.status === 'failed') ||
+    report.dashboards.some((d) => !d.success)
+  );
+}
+
+/** Per-DC rows plus the manifest types the template didn't match and the
+ *  optional collections it pruned. Renders the dry-run plan on the Preview
+ *  step and, unchanged, the real report after creation (where dashboards
+ *  that failed to import are listed as well). */
+export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ report }) => {
   const accent = useBrandAccents();
+  const failedDashboards = report.dashboards.filter((d) => !d.success);
   return (
     <Stack gap="sm" data-testid="manifest-preview-report">
       <Group gap="xs" wrap="wrap">
@@ -769,7 +785,121 @@ const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ repor
           ))}
         </Group>
       )}
+      {failedDashboards.length > 0 && (
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">
+            Dashboards that failed to import:
+          </Text>
+          {failedDashboards.map((d) => (
+            <Group key={d.path} gap="xs" wrap="nowrap">
+              <Badge variant="light" color="red" size="sm" radius="sm">
+                {d.title || d.path}
+              </Badge>
+              {d.error && (
+                <Text size="xs" c="red">
+                  {d.error}
+                </Text>
+              )}
+            </Group>
+          ))}
+        </Stack>
+      )}
     </Stack>
+  );
+};
+
+/** Post-creation report for a from-manifest project that needs a look before
+ *  the user lands on its dashboard (see `manifestReportNeedsReview`). The
+ *  project already exists and the list behind the modal is refreshed; the
+ *  user picks between opening the dashboard and staying on the list. */
+export const ManifestCreatedModal: React.FC<{
+  report: FromManifestReport | null;
+  onClose: () => void;
+}> = ({ report, onClose }) => {
+  const accent = useBrandAccents();
+  const dashboardId =
+    report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
+
+  const summary: string[] = [];
+  if (report) {
+    const ingested = report.ingestion.filter((dc) => dc.status === 'ingested').length;
+    const failed = report.ingestion.filter((dc) => dc.status === 'failed').length;
+    summary.push(
+      `${ingested} of ${report.ingestion.length} collection${
+        report.ingestion.length === 1 ? '' : 's'
+      } ingested${failed > 0 ? `, ${failed} failed` : ''}`,
+    );
+    if (report.unmatched_manifest_types.length > 0) {
+      summary.push(
+        `${report.unmatched_manifest_types.length} manifest type${
+          report.unmatched_manifest_types.length === 1 ? '' : 's'
+        } without a matching collection`,
+      );
+    }
+    if (report.pruned_optional_dcs.length > 0) {
+      summary.push(
+        `${report.pruned_optional_dcs.length} optional collection${
+          report.pruned_optional_dcs.length === 1 ? '' : 's'
+        } skipped`,
+      );
+    }
+    const failedDashboards = report.dashboards.filter((d) => !d.success).length;
+    if (failedDashboards > 0) {
+      summary.push(
+        `${failedDashboards} dashboard${failedDashboards === 1 ? '' : 's'} failed to import`,
+      );
+    }
+  }
+
+  return (
+    <Modal
+      opened={Boolean(report)}
+      onClose={onClose}
+      centered
+      size="lg"
+      title={
+        <Group gap="xs" wrap="nowrap">
+          <Icon
+            icon="mdi:clipboard-check-outline"
+            width={20}
+            color={`var(--mantine-color-${accent.secondary}-6)`}
+          />
+          <Text fw={600}>Project created with notes</Text>
+        </Group>
+      }
+    >
+      {report && (
+        <Stack gap="md" data-testid="manifest-created-modal">
+          <Alert
+            color={report.success ? 'yellow' : 'orange'}
+            variant="light"
+            icon={<Icon icon="mdi:information-outline" width={16} />}
+          >
+            <Text size="sm">
+              &ldquo;{report.project_name}&rdquo; was created: {summary.join('; ')}.
+            </Text>
+          </Alert>
+          <ManifestPreviewReport report={report} />
+          <Group justify="flex-end" gap="xs">
+            <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
+              Stay on projects
+            </Button>
+            <Button
+              color={accent.secondary}
+              leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+              disabled={!dashboardId}
+              title={dashboardId ? undefined : 'No dashboard was imported for this project'}
+              onClick={() => {
+                if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
+              }}
+              data-testid="manifest-created-open-dashboard"
+            >
+              Open dashboard
+            </Button>
+          </Group>
+        </Stack>
+      )}
+    </Modal>
   );
 };
 
