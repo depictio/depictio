@@ -257,6 +257,13 @@ class AIGenerationInfo(BaseModel):
         default_factory=list,
         description="Which validation gates each generated tile went through",
     )
+    source_dashboard_id: str | None = Field(
+        default=None,
+        description="Dashboard an agent draft was copied from; None for generated drafts",
+    )
+    agent: str | None = Field(
+        default=None, description="Name of the agent that proposed the draft, when one did"
+    )
 
 
 class DashboardDataLite(BaseModel):

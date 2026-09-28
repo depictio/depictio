@@ -30,7 +30,15 @@ STAMP = {
 # review pass existed gains its two empty bookkeeping lists, one written
 # before the planner explained itself an empty `sections` list, and one
 # written before the gates were recorded an empty `checks` list.
-STAMP_STORED = {**STAMP, "reviewed": [], "dropped": [], "sections": [], "checks": []}
+STAMP_STORED = {
+    **STAMP,
+    "reviewed": [],
+    "dropped": [],
+    "sections": [],
+    "checks": [],
+    "source_dashboard_id": None,
+    "agent": None,
+}
 
 
 def _dashboard(**extra) -> DashboardData:
