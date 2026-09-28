@@ -344,6 +344,70 @@ class AnalysisReport(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+# ---------- Whole-dashboard generation ----------
+
+
+class GenerateDashboardRequest(BaseModel):
+    """Body for `/ai/generate-dashboard` (prompt -> whole dashboard draft).
+
+    `prompt` may be empty: the planner then builds the most useful overview
+    of the project it can. `data_collection_ids` narrows the collections the
+    planner sees (every table collection of the project when empty); each
+    id must belong to the project. `title` pins the dashboard title, and a
+    title collision is then a 409 unless `overwrite`; left None, the planner
+    chooses one and a collision gets a suffix instead.
+    """
+
+    project_id: str
+    prompt: str = Field(default="", max_length=2000)
+    title: str | None = None
+    data_collection_ids: list[str] = Field(default_factory=list)
+    overwrite: bool = False
+
+
+GeneratedComponentStatus = Literal["ok", "repaired", "dropped"]
+"""Fate of one planned component.
+
+``ok``: validated first time. ``repaired``: validated after at least one
+repair round-trip. ``dropped``: left out of the draft (repairs exhausted,
+or the token / wall-clock budget ran out before it was filled).
+"""
+
+
+class GeneratedComponentEvent(BaseModel):
+    """Payload of one `component` stream event, emitted once per planned component."""
+
+    tag: str
+    section: str
+    component_type: ComponentType
+    status: GeneratedComponentStatus
+    attempts: int = 1
+    error: str | None = None
+
+
+class GeneratedDashboardEvent(BaseModel):
+    """Payload of the terminal `dashboard` stream event.
+
+    `yaml` is the persisted draft (show-your-work, like the single component
+    flow); `dropped` lists the tags that did not make it so the client can
+    say what is missing without diffing the plan.
+    """
+
+    dashboard_id: str
+    title: str
+    project_id: str
+    yaml: str
+    warnings: list[str] = Field(default_factory=list)
+    dropped: list[str] = Field(default_factory=list)
+
+
+class PromoteResponse(BaseModel):
+    """Returned by `/ai/generated-dashboards/{dashboard_id}/promote`."""
+
+    dashboard_id: str
+    status: Literal["promoted"] = "promoted"
+
+
 # ---------- Request bodies ----------
 
 
@@ -506,6 +570,11 @@ StreamEventType = Literal[
     "plan",
     "budget",
     "report",
+    # Whole-dashboard generation: `component` once per planned component
+    # (GeneratedComponentEvent) and `dashboard` as the terminal payload
+    # (GeneratedDashboardEvent), before `done`.
+    "component",
+    "dashboard",
     "error",
     "done",
 ]
