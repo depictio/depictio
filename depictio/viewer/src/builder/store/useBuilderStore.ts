@@ -73,7 +73,9 @@ export function stepAfterType(t: ComponentType | null): number {
 }
 
 export interface AISource {
-  flow: 'component-from-prompt';
+  /** Which assistant flow authored the component: a prompt on the Describe
+   *  step (or the Design step's AI fill), or a picked typed suggestion. */
+  flow: 'component-from-prompt' | 'suggest-components';
   prompt?: string;
 }
 
