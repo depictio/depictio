@@ -454,7 +454,8 @@ class TestAgents:
         same = self.agent_thread(world, body="claim v2", dedupe_key="k", response=resp3)
         assert (resp1.status_code, resp2.status_code, resp3.status_code) == (201, 200, 200)
         assert first.id == again.id == same.id
-        assert [c.body for c in same.comments] == ["claim", "claim v2"]
+        # The agent's opening comment is rewritten, not appended to.
+        assert [c.body for c in same.comments] == ["claim v2"]
         assert same.number == first.number
         assert world.db["comment_threads"].count_documents({}) == 1
 

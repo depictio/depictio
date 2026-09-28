@@ -134,7 +134,10 @@ class CreateAnnotationArgs(_Args):
     dedupe_key: str | None = Field(
         default=None,
         max_length=200,
-        description="Stable key: calling again with it updates your earlier proposal.",
+        description=(
+            "Stable key: calling again with it rewrites your earlier proposal in place "
+            "(text, shape, evidence) while it awaits review, or appends if a human replied."
+        ),
     )
 
 
@@ -318,6 +321,28 @@ def _detail(thread: ThreadOut) -> dict[str, Any]:
     return out
 
 
+def _written_note(thread: ThreadOut, created: bool) -> str:
+    """What happened and what comes next, for the agent to relay."""
+    if thread.annotation is not None:
+        note = (
+            "Proposed: a human reviews it in the comments drawer and accepts or rejects it; "
+            "an accepted annotation stays hidden from viewers until a human also publishes it."
+        )
+    else:
+        note = "Proposed: a human reviews it in the comments drawer before it counts."
+    if created:
+        return note
+    if service.has_human_reply(thread):
+        return (
+            "Updated your earlier proposal (same thread_id). A human has already replied, so "
+            "new text was appended as a comment instead of replacing your first one. " + note
+        )
+    return (
+        "Updated your earlier proposal in place (same thread_id): your opening comment, "
+        "shape and evidence now hold the new values. " + note
+    )
+
+
 def _written(thread: ThreadOut, created: bool) -> dict[str, Any]:
     return {
         "thread_id": thread.id,
@@ -328,7 +353,7 @@ def _written(thread: ThreadOut, created: bool) -> dict[str, Any]:
         "dashboard_id": thread.anchor.dashboard_id,
         "component_index": thread.anchor.component_index,
         "viewer_path": _viewer_path(thread),
-        "note": "Proposed: a human reviews it in the comments drawer before it counts.",
+        "note": _written_note(thread, created),
     }
 
 
@@ -412,10 +437,12 @@ async def get_thread(ctx: ToolContext, args: GetThreadArgs) -> dict[str, Any]:
     description=(
         "Propose a comment on a dashboard component, optionally with a shape drawn on it "
         "(range, reference line, marked points, arrow note, map note). It is saved as a "
-        "'proposed' thread authored by you: a human must accept it. Back it with evidence "
-        "(call_id of the query_data / get_component_data result, values). Pass a stable "
-        "dedupe_key so re-running updates the same proposal. Returns thread_id, status, "
-        "created, viewer_path. At most 50 threads per run."
+        "'proposed' thread authored by you: a human accepts it and may then publish it to "
+        "viewers (you cannot do either). Back it with evidence (call_id of the query_data / "
+        "get_component_data result, values). Pass a stable dedupe_key: re-sending with it "
+        "replaces your proposal's text, shape and evidence (same thread_id) while it awaits "
+        "review; once a human has replied, new text is appended instead. Returns thread_id, "
+        "status, created, viewer_path, note. At most 50 threads per run."
     ),
     input_model=CreateAnnotationArgs,
     writes=True,

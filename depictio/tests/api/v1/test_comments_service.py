@@ -156,7 +156,12 @@ class TestAgentThreads:
         )
         assert not created and again.id == first.id
         assert again.run_id == "r2"
-        assert [c.body for c in again.comments] == ["v1", "v2"]
+        # Same agent, no human reply: the opening comment is rewritten, not appended to.
+        assert [c.body for c in again.comments] == ["v2"]
+        assert again.comments[0].id == first.comments[0].id
+        assert again.comments[0].edited_at is not None
+        assert again.comments[0].author.agent.run_id == "r2"
+        assert again.updated_at > first.updated_at
         assert world.db["comment_threads"].count_documents({}) == 1
 
         # Another user's run never touches this proposal.
@@ -164,6 +169,60 @@ class TestAgentThreads:
             svc.create_agent_thread(world.other, payload(world), agent("r1"), dedupe_key="k")
         )
         assert created
+
+    def test_dedupe_resend_replaces_annotation_and_evidence(self, world):
+        evidence = [{"claim": "mean 4", "values": {"mean": 4}}]
+        first, _ = run(
+            svc.create_agent_thread(
+                world.editor,
+                payload(world, body="v1", annotation=RANGE, evidence=evidence),
+                agent(),
+                dedupe_key="k",
+            )
+        )
+        moved = {**RANGE, "geometry": {"kind": "x_range", "x0": 5, "x1": 6}}
+        again, created = run(
+            svc.create_agent_thread(
+                world.editor,
+                payload(world, body="v2", annotation=moved, evidence=[{"claim": "mean 5"}]),
+                agent(),
+                dedupe_key="k",
+            )
+        )
+        assert not created and again.id == first.id and again.number == first.number
+        assert again.annotation.geometry.x0 == 5 and again.annotation.published is False
+        assert [e.claim for e in again.evidence] == ["mean 5"]
+        assert [c.body for c in again.comments] == ["v2"]
+
+    def test_dedupe_resend_appends_after_a_human_reply(self, world):
+        first, _ = run(
+            svc.create_agent_thread(
+                world.editor, payload(world, body="v1"), agent(), dedupe_key="k"
+            )
+        )
+        assert not svc.has_human_reply(first)
+        run(svc.add_comment(world.other, first.id, CommentCreate(body="why?")))
+        again, created = run(
+            svc.create_agent_thread(
+                world.editor, payload(world, body="v2"), agent("r2"), dedupe_key="k"
+            )
+        )
+        assert not created and svc.has_human_reply(again)
+        assert [c.body for c in again.comments] == ["v1", "why?", "v2"]
+        assert again.comments[0].edited_at is None
+
+    def test_dedupe_resend_by_another_agent_appends(self, world):
+        run(
+            svc.create_agent_thread(
+                world.editor, payload(world, body="v1"), agent(), dedupe_key="k"
+            )
+        )
+        again, _ = run(
+            svc.create_agent_thread(
+                world.editor, payload(world, body="v2"), agent(name="other@2"), dedupe_key="k"
+            )
+        )
+        assert [c.body for c in again.comments] == ["v1", "v2"]
 
     def test_rejected_proposal_goes_back_to_review(self, world):
         first, _ = run(

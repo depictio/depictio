@@ -219,12 +219,14 @@ def test_token_create_command_prints_the_token(local_home, monkeypatch, tmp_path
 # ---------------------------------------------------------------------------
 
 
-def test_install_prints_both_snippets_by_default(tmp_path):
+def test_install_prints_both_snippets_by_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEPICTIO_LOCAL_HOME")
     result = CliRunner().invoke(
         mcp_cmd.app, ["install", "--desktop-config", str(tmp_path / "d.json")]
     )
     assert result.exit_code == 0
-    assert "claude mcp add depictio -- depictio mcp serve" in result.stdout
+    assert "claude mcp add depictio -- depictio mcp serve\n" in result.stdout
+    assert '"env"' not in result.stdout
     assert '"mcpServers"' in result.stdout
     assert not (tmp_path / "d.json").exists()
 
@@ -243,6 +245,68 @@ def test_install_desktop_write_merges_and_backs_up(tmp_path):
     assert data["mcpServers"]["depictio"]["args"] == ["mcp", "serve"]
     backups = list(tmp_path.glob("claude_desktop_config.json.bak-*"))
     assert len(backups) == 1 and "depictio" not in backups[0].read_text()
+
+
+def _desktop_json(stdout: str) -> dict:
+    return json.loads(stdout[stdout.index("{") :])["mcpServers"]["depictio"]
+
+
+def test_install_carries_a_non_default_local_home(tmp_path, monkeypatch):
+    home = tmp_path / "my home"
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(home))
+    runner = CliRunner()
+    code = runner.invoke(mcp_cmd.app, ["install", "--client", "claude-code"])
+    assert code.exit_code == 0, code.output
+    expected = f"claude mcp add depictio -e 'DEPICTIO_LOCAL_HOME={home.resolve()}' -- "
+    assert expected + "depictio mcp serve" in code.stdout
+
+    desktop = runner.invoke(
+        mcp_cmd.app,
+        ["install", "--client", "claude-desktop", "--desktop-config", str(tmp_path / "d.json")],
+    )
+    entry = _desktop_json(desktop.stdout)
+    assert entry["env"] == {"DEPICTIO_LOCAL_HOME": str(home.resolve())}
+    assert entry["args"] == ["mcp", "serve"]
+
+    # The default home needs nothing extra.
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", "~/.depictio/local")
+    plain = runner.invoke(mcp_cmd.app, ["install", "--client", "claude-code"])
+    assert "-e " not in plain.stdout
+
+
+def test_install_carries_an_explicit_config(tmp_path, monkeypatch):
+    cfg = _write_config(tmp_path / "cfg.yaml", API, "t")
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    code = runner.invoke(
+        mcp_cmd.app, ["install", "--client", "claude-code", "--config", "cfg.yaml"]
+    )
+    assert code.exit_code == 0, code.output
+    assert f"-- depictio mcp serve --config {cfg.resolve()}" in code.stdout
+    # --config wins over the local home, so the home is not forwarded.
+    assert "DEPICTIO_LOCAL_HOME" not in code.stdout
+
+    desktop_cfg = tmp_path / "d.json"
+    written = runner.invoke(
+        mcp_cmd.app,
+        [
+            "install",
+            "--client",
+            "claude-desktop",
+            "--write",
+            "--desktop-config",
+            str(desktop_cfg),
+            "--config",
+            "cfg.yaml",
+        ],
+    )
+    assert written.exit_code == 0, written.output
+    entry = json.loads(desktop_cfg.read_text())["mcpServers"]["depictio"]
+    assert entry["args"] == ["mcp", "serve", "--config", str(cfg.resolve())]
+    assert "env" not in entry
+
+    missing = runner.invoke(mcp_cmd.app, ["install", "--config", "nope.yaml"])
+    assert missing.exit_code == 1
 
 
 def test_install_write_requires_claude_desktop():

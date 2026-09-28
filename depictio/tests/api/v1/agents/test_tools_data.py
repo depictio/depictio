@@ -19,6 +19,7 @@ from depictio.api.v1.agents.tools import data
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.deltatables_utils import apply_runtime_filters
 from depictio.api.v1.endpoints.ai_endpoints import context as ai_context
+from depictio.api.v1.endpoints.ai_endpoints.executor import execute_polars
 from depictio.api.v1.endpoints.ai_endpoints.sandbox import InlineSandbox
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
 from depictio.tests.api.v1.agents.test_tools_discovery import (  # noqa: F401 - fixture
@@ -299,6 +300,10 @@ def test_query_data_by_component_and_policy(world, sandbox):  # noqa: F811
 
     blocked = call("query_data", world.owner, dc_id=world.dc_id, code="__import__('os')")
     assert not blocked.ok and blocked.error.startswith("Query failed")
+    assert "Allowed form: one expression rooted at df or pl" in blocked.error
+
+    assigned = call("query_data", world.owner, dc_id=world.dc_id, code="x = df\nx")
+    assert not assigned.ok and "Assign" in assigned.error and "Allowed form" in assigned.error
 
     both = call(
         "query_data", world.owner, dc_id=world.dc_id, dashboard_id=world.main, code="df.height"
@@ -307,6 +312,17 @@ def test_query_data_by_component_and_policy(world, sandbox):  # noqa: F811
 
     denied = call("query_data", world.stranger, dc_id=world.dc_id, code="df.height")
     assert not denied.ok and "access denied" in denied.error
+
+
+def test_query_data_documented_examples_pass_the_policy():
+    """Every example the tool advertises must run under the executor's allowlist."""
+    frame = pl.DataFrame({"g": ["a", "a", "a", "b", "b"], "x": [1.0, 2.0, 30.0, 4.0, 5.0]})
+    examples = data._CODE_DESCRIPTION.split("Examples: ", 1)[1].split(" | ")
+    hint = data._POLICY_HINT.split("e.g. ", 1)[1].split("; ", 1)[0]
+    assert len(examples) == 3
+    for code in [*examples, hint]:
+        step = execute_polars(code, frame)
+        assert step.status == "success", (code, step.output)
 
 
 def test_query_data_timeout_closes_the_sandbox(world, loads):  # noqa: F811

@@ -340,6 +340,41 @@ def _owns_as_agent(author: Author, uid: str) -> bool:
     return author.kind == "agent" and author.agent is not None and author.agent.on_behalf_of == uid
 
 
+def has_human_reply(thread: CommentThread) -> bool:
+    """A live human comment on the thread: an agent re-send must not rewrite what it answers."""
+    return any(c.author.kind == "human" and not c.deleted for c in thread.comments)
+
+
+def _dedupe_comments(
+    existing: CommentThread, author: Author, text: str, now: datetime
+) -> tuple[list[Comment] | None, Comment | None]:
+    """How a dedupe re-send carries its text: ``(replaced comments, None)`` or ``(None, new)``.
+
+    The opening comment is rewritten in place when the same agent (name and
+    user, any run) wrote it and no human has replied; otherwise the text is
+    appended, so a human reply never ends up under words it did not answer.
+    ``(None, None)``: nothing to write.
+    """
+    opening = existing.comments[0] if existing.comments else None
+    opener = opening.author.agent if opening is not None and not opening.deleted else None
+    if (
+        opening is not None
+        and opener is not None
+        and author.agent is not None
+        and opener.name == author.agent.name
+        and _owns_as_agent(opening.author, author.user_id)
+        and not has_human_reply(existing)
+    ):
+        if opening.body == text:
+            return None, None
+        rewritten = opening.model_copy(update={"body": text, "author": author, "edited_at": now})
+        return [rewritten, *existing.comments[1:]], None
+    live = [c for c in existing.comments if not c.deleted]
+    if live and live[-1].body == text:
+        return None, None
+    return None, Comment(id=uuid.uuid4().hex, author=author, body=text, created_at=now)
+
+
 # ---------------------------------------------------------------------------
 # Access and reads
 # ---------------------------------------------------------------------------
@@ -526,7 +561,10 @@ async def create_agent_thread(
     (``agent.run_id``, required) opens at most ``MAX_THREADS_PER_RUN`` threads
     for one user. ``dedupe_key`` (else ``payload.dedupe_key``) makes re-runs
     idempotent: a proposal of the same user on the same anchor with that key,
-    still awaiting review or rejected, is updated in place (``created`` False).
+    still awaiting review or rejected, is updated in place (``created`` False):
+    anchor, annotation and evidence are replaced, and so is the opening
+    comment's text when the same agent wrote it and no human has replied (see
+    :func:`has_human_reply`); after a human reply the new text is appended.
     """
     data = payload.model_dump(mode="python", exclude_unset=True)
     data["agent"] = agent.model_dump(mode="python")
@@ -627,14 +665,14 @@ def _create_thread(current_user: User, body: ThreadCreate) -> tuple[ThreadOut, b
             if body.evidence is not None:
                 update_set["evidence"] = [e.model_dump(mode="python") for e in body.evidence]
             update: dict[str, Any] = {"$set": update_set}
-            live = [c for c in existing.comments if not c.deleted]
-            if body.body is not None and (not live or live[-1].body != body.body):
-                if len(existing.comments) >= MAX_COMMENTS_PER_THREAD:
-                    raise HTTPException(status_code=409, detail="This thread is full.")
-                comment = Comment(
-                    id=uuid.uuid4().hex, author=author, body=body.body, created_at=now
-                )
-                update["$push"] = {"comments": comment.model_dump(mode="python")}
+            if body.body is not None:
+                rewritten, appended = _dedupe_comments(existing, author, body.body, now)
+                if rewritten is not None:
+                    update_set["comments"] = [c.model_dump(mode="python") for c in rewritten]
+                elif appended is not None:
+                    if len(existing.comments) >= MAX_COMMENTS_PER_THREAD:
+                        raise HTTPException(status_code=409, detail="This thread is full.")
+                    update["$push"] = {"comments": appended.model_dump(mode="python")}
             return _update_thread(existing.id, update), False
 
     if run_id is not None:

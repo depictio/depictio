@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import sys
 import uuid
@@ -546,7 +547,40 @@ def token_create(
 # install
 # ---------------------------------------------------------------------------
 
-CLAUDE_CODE_COMMAND = f"claude mcp add {SERVER_NAME} -- depictio mcp serve"
+DEFAULT_LOCAL_HOME = "~/.depictio/local"
+
+
+@dataclass(frozen=True)
+class ServeLaunch:
+    """How a client should start ``depictio mcp serve`` to resolve what this shell does."""
+
+    env: dict[str, str]
+    args: list[str]
+
+
+def serve_launch(config: Path | None = None) -> ServeLaunch:
+    """``--config`` (absolute) when given, else a non-default ``DEPICTIO_LOCAL_HOME``.
+
+    The client starts the server with its own environment and working directory,
+    so a relative config path or a local home set only in this shell would resolve
+    to nothing there.
+    """
+    if config is not None:
+        return ServeLaunch(env={}, args=["--config", str(config.expanduser().resolve())])
+    home = os.environ.get("DEPICTIO_LOCAL_HOME")
+    if home:
+        resolved = Path(home).expanduser().resolve()
+        if resolved != Path(DEFAULT_LOCAL_HOME).expanduser().resolve():
+            return ServeLaunch(env={"DEPICTIO_LOCAL_HOME": str(resolved)}, args=[])
+    return ServeLaunch(env={}, args=[])
+
+
+def claude_code_command(launch: ServeLaunch | None = None) -> str:
+    launch = launch or ServeLaunch(env={}, args=[])
+    parts = ["claude", "mcp", "add", SERVER_NAME]
+    for key, value in launch.env.items():
+        parts += ["-e", f"{key}={value}"]
+    return shlex.join([*parts, "--", "depictio", "mcp", "serve", *launch.args])
 
 
 def claude_desktop_config_path() -> Path:
@@ -561,13 +595,17 @@ def claude_desktop_config_path() -> Path:
     return Path("~/.config/Claude/claude_desktop_config.json").expanduser()
 
 
-def claude_desktop_entry() -> dict:
+def claude_desktop_entry(launch: ServeLaunch | None = None) -> dict:
     # Claude Desktop does not inherit the shell PATH, so point at the executable.
+    launch = launch or ServeLaunch(env={}, args=[])
     command = shutil.which("depictio") or "depictio"
-    return {"command": command, "args": ["mcp", "serve"]}
+    entry: dict[str, Any] = {"command": command, "args": ["mcp", "serve", *launch.args]}
+    if launch.env:
+        entry["env"] = dict(launch.env)
+    return entry
 
 
-def merge_desktop_config(path: Path) -> Path | None:
+def merge_desktop_config(path: Path, launch: ServeLaunch | None = None) -> Path | None:
     """Add the depictio server to a Claude Desktop config; returns the backup path."""
     backup = None
     data: dict = {}
@@ -575,7 +613,7 @@ def merge_desktop_config(path: Path) -> Path | None:
         data = json.loads(path.read_text() or "{}")
         backup = path.with_name(f"{path.name}.bak-{datetime.now().strftime('%Y%m%d%H%M%S')}")
         shutil.copy2(path, backup)
-    data.setdefault("mcpServers", {})[SERVER_NAME] = claude_desktop_entry()
+    data.setdefault("mcpServers", {})[SERVER_NAME] = claude_desktop_entry(launch)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")
     return backup
@@ -597,8 +635,16 @@ def install(
         Path | None,
         typer.Option("--desktop-config", help="Claude Desktop config file (default per OS)"),
     ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="CLI config YAML the server should use (passed through)"),
+    ] = None,
 ):
-    """Show how to register `depictio mcp serve` with Claude Code or Claude Desktop."""
+    """Show how to register `depictio mcp serve` with Claude Code or Claude Desktop.
+
+    ``--config``, or a non-default ``DEPICTIO_LOCAL_HOME``, is carried into the
+    registered command so the client resolves the same server as this shell.
+    """
     if client not in ("claude-code", "claude-desktop", "print"):
         _stderr("--client must be claude-code, claude-desktop or print")
         raise typer.Exit(code=1)
@@ -606,14 +652,19 @@ def install(
         _stderr("--write only applies to --client claude-desktop")
         raise typer.Exit(code=1)
 
+    if config is not None and not config.expanduser().is_file():
+        _stderr(f"{config} does not exist")
+        raise typer.Exit(code=1)
+    launch = serve_launch(config)
+
     if client in ("claude-code", "print"):
         typer.echo("Claude Code:")
-        typer.echo(f"  {CLAUDE_CODE_COMMAND}")
+        typer.echo(f"  {claude_code_command(launch)}")
     if client in ("claude-desktop", "print"):
         path = desktop_config or claude_desktop_config_path()
         if write:
             try:
-                backup = merge_desktop_config(path)
+                backup = merge_desktop_config(path, launch)
             except ValueError as exc:
                 _stderr(f"{path} is not valid JSON, left untouched: {exc}")
                 raise typer.Exit(code=1)
@@ -624,4 +675,5 @@ def install(
         if client == "print":
             typer.echo("")
         typer.echo(f"Claude Desktop ({path}):")
-        typer.echo(json.dumps({"mcpServers": {SERVER_NAME: claude_desktop_entry()}}, indent=2))
+        entry = claude_desktop_entry(launch)
+        typer.echo(json.dumps({"mcpServers": {SERVER_NAME: entry}}, indent=2))

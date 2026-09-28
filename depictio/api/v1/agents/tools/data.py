@@ -159,14 +159,40 @@ class DescribeDataCollectionArgs(_Args):
     sample_rows: int = Field(default=5, ge=0, le=20, description="Sample rows to include.")
 
 
+# What the executor's AST allowlist accepts, spelled out so the model gets it
+# right the first time (see ai_endpoints/executor.py for the policy itself).
+_QUERY_FORM = (
+    "Write ONE Polars expression. Names: `df` (the frame), `pl` (polars); nothing else. "
+    "Every call must hang off `df` or `pl` (pl.col, pl.len, pl.when, pl.lit, ...). "
+    "No assignments, def, lambda, import, comprehensions, f-strings or bare calls like len()."
+)
+_CODE_DESCRIPTION = (
+    _QUERY_FORM + " The value of the expression is returned. A method cannot follow a "
+    "parenthesized arithmetic result: `(a - b).abs()` is rejected, so name the result as a "
+    "keyword in select/with_columns/agg and use it in a following .filter. Per-group stats: "
+    "`.over('group')` or join a group_by back onto df. Methods: select, filter, with_columns, "
+    "group_by/agg, join, sort, head, top_k, unique, value_counts, describe, pivot, unpivot; "
+    "on expressions: mean, median, std, quantile, count, n_unique, abs, is_in, is_between, "
+    "rank, over, alias, when/then/otherwise, .str/.dt/.list accessors. Examples: "
+    "df.group_by('g').agg(n=pl.len(), mean_x=pl.col('x').mean()) | "
+    "df.with_columns(z=(pl.col('x') - pl.col('x').mean().over('g')) / "
+    "pl.col('x').std().over('g')).filter(pl.col('z').abs() > 3) | "
+    "df.join(df.group_by('g').agg(q3=pl.col('x').quantile(0.75)), on='g')"
+    ".filter(pl.col('x') > pl.col('q3'))"
+)
+# Appended to a policy rejection so the retry lands in the allowed form.
+_POLICY_HINT = (
+    " Allowed form: one expression rooted at df or pl, e.g. "
+    "df.with_columns(d=pl.col('x') - pl.col('x').mean().over('g')).filter(pl.col('d').abs() > 1); "
+    "name intermediate results as keywords instead of assigning them."
+)
+
+
 class QueryDataArgs(_Args):
     code: str = Field(
         min_length=1,
         max_length=MAX_CODE_CHARS,
-        description=(
-            "Polars code; the value of the last expression is returned. `df` is the frame, "
-            "`pl` is polars. Example: df.group_by('species').agg(pl.col('x').mean())"
-        ),
+        description=_CODE_DESCRIPTION,
     )
     dc_id: str | None = Field(default=None, description="Data collection to query.")
     dashboard_id: str | None = Field(
@@ -698,7 +724,10 @@ async def run_query(user: Any, args: QueryDataArgs) -> dict[str, Any]:
             raise _load_error(exc) from exc
 
     if step.status == "error":
-        raise ToolError(f"Query failed: {clean_text(step.output)[:1500]}")
+        message = f"Query failed: {clean_text(step.output)[:1500]}"
+        if step.output.startswith("BlockedByPolicy"):
+            message += _POLICY_HINT
+        raise ToolError(message)
     return {
         "dc_id": dc_id,
         "dc_tag": tag,
@@ -756,9 +785,9 @@ async def describe_data_collection(
     description=(
         "Run Polars code against one data collection (by dc_id, or the collection of a "
         "dashboard component) in a sandbox and return the printed result of the last "
-        "expression (frames show at most 200 rows), its row counts and the code. Only "
-        "an allowlist of DataFrame and expression methods is accepted (select, filter, "
-        "with_columns, group_by, agg, sort, head, describe, join, ...); no imports, no I/O. "
+        "expression (frames show at most 200 rows), its row counts and the code. "
+        + _QUERY_FORM
+        + " See the code field for the allowed methods and examples. "
         + _FILTERS_DESCRIPTION
         + f" Times out after the configured limit; at most {MAX_CONCURRENT_QUERIES} run at "
         "once per user. Aggregate rather than dumping rows. Results can be cited as evidence."

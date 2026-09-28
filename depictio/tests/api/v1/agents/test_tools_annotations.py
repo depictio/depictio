@@ -16,6 +16,7 @@ from depictio.api.v1.agents.tools import annotations  # noqa: F401 (registers th
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.comments_endpoints import service as svc
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+from depictio.models.models.comments import CommentCreate
 from depictio.models.models.users import effective_scopes
 
 DC = ObjectId()
@@ -123,7 +124,27 @@ def test_dedupe_key_updates_the_same_proposal(world):
     assert first.ok and second.ok
     assert second.data["created"] is False
     assert second.data["thread_id"] == first.data["thread_id"]
+    assert "in place" in second.data["note"]
     assert world.db["comment_threads"].count_documents({}) == 1
+    doc = world.db["comment_threads"].find_one({})
+    assert [c["body"] for c in doc["comments"]] == ["v2"]
+
+    run(
+        svc.add_comment(
+            world.editor, first.data["thread_id"], CommentCreate(body="is this expected?")
+        )
+    )
+    third = annotate(world, body="v3", dedupe_key="k")
+    assert third.ok and third.data["thread_id"] == first.data["thread_id"]
+    assert "A human has already replied" in third.data["note"]
+    doc = world.db["comment_threads"].find_one({})
+    assert [c["body"] for c in doc["comments"]] == ["v2", "is this expected?", "v3"]
+
+
+def test_note_says_a_human_accepts_and_may_publish(world):
+    shaped = annotate(world, shape="x_range", x0=1, x1=2, label="band")
+    assert shaped.ok and "until a human also publishes it" in shaped.data["note"]
+    assert shaped.data["created"] is True and "Updated" not in shaped.data["note"]
 
 
 def test_unknown_component_is_refused(world):
