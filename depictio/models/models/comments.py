@@ -43,6 +43,8 @@ MAX_EVIDENCE_ITEMS = 20
 MAX_VARIANT_CHARS = 200
 MAX_LATITUDE = 90.0
 MAX_LONGITUDE = 180.0
+MAX_THREADS_PER_RUN = 50
+"""Threads one agent run may open on behalf of one user."""
 
 # Mantine palette names: annotations pick a theme colour, never a raw value, so
 # they follow light and dark mode like the rest of the viewer.
@@ -63,6 +65,9 @@ AnnotationColor = Literal[
 ]
 
 ThreadStatus = Literal["open", "resolved", "proposed", "rejected"]
+ThreadKind = Literal["comment", "question"]
+"""A ``question`` asks the reader for an answer (typically an agent asking a
+human); it is filtered and answered apart from plain comments."""
 AnnotationKind = Literal["range", "line", "points", "note"]
 
 # Keys of a stored component that do not change what a comment on it is about.
@@ -372,6 +377,7 @@ class CommentThread(BaseModel):
     parent_dashboard_id: str
     """The main tab of the dashboard family, for tab-wide listing and cascade deletes."""
     anchor: Anchor
+    kind: ThreadKind = "comment"
     annotation: Annotation | None = None
     number: int | None = None
     """Per-tab number of the annotation, shown as a numbered dot in the chart and drawer."""
@@ -407,6 +413,7 @@ def _not_blank(v: str | None) -> str | None:
 
 class ThreadCreate(_Strict):
     anchor: Anchor
+    kind: ThreadKind = "comment"
     body: str | None = Field(default=None, max_length=MAX_BODY_CHARS)
     """First comment. Optional when the thread carries an annotation."""
     annotation: Annotation | None = None
@@ -424,6 +431,8 @@ class ThreadCreate(_Strict):
     def _has_content(self) -> ThreadCreate:
         if self.body is None and self.annotation is None:
             raise ValueError("a thread needs a comment or an annotation")
+        if self.kind == "question" and self.body is None:
+            raise ValueError("a question needs a body")
         if self.agent is not None and not self.agent.run_id:
             raise ValueError("an agent thread needs agent.run_id")
         if self.agent is not None and self.annotation is not None and self.annotation.published:
