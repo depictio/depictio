@@ -60,6 +60,15 @@ def _attrs(node: Any) -> dict:
     return dict(node.attrs)
 
 
+def _store_name(store_path: str) -> str:
+    return os.path.basename(os.path.normpath(store_path))
+
+
+def _element_dir(store_path: str, element: str) -> str:
+    """Directory of a store-relative element path such as ``images/he``."""
+    return os.path.join(store_path, *element.split("/"))
+
+
 # ---------------------------------------------------------------------------
 # AnnData column encodings
 # ---------------------------------------------------------------------------
@@ -130,10 +139,6 @@ def _dataframe_index(group: Any, where: str) -> pl.Series:
     return index.cast(pl.Utf8)
 
 
-def _read_scalar_or_list(node: Any) -> Any:
-    return np.asarray(node[()]).tolist()
-
-
 def _table_region_attrs(table: Any) -> tuple[list[str], str | None, str | None]:
     """The regions a table annotates, its ``region_key`` and ``instance_key``.
 
@@ -146,22 +151,24 @@ def _table_region_attrs(table: Any) -> tuple[list[str], str | None, str | None]:
     instance_key = attrs.get("instance_key")
     if region is None and "uns" in table and "spatialdata_attrs" in table["uns"]:
         uns = table["uns"]["spatialdata_attrs"]
-        if "region" in uns:
-            region = _read_scalar_or_list(uns["region"])
-        if "region_key" in uns:
-            region_key = _read_scalar_or_list(uns["region_key"])
-        if "instance_key" in uns:
-            instance_key = _read_scalar_or_list(uns["instance_key"])
+        legacy = {
+            key: np.asarray(uns[key][()]).tolist()
+            for key in ("region", "region_key", "instance_key")
+            if key in uns
+        }
+        region = legacy.get("region", region)
+        region_key = legacy.get("region_key", region_key)
+        instance_key = legacy.get("instance_key", instance_key)
     regions = [region] if isinstance(region, str) else [str(r) for r in (region or [])]
     return regions, region_key, instance_key
 
 
-# Non-zeros read per block when pulling genes out of a CSR matrix.
-_CSR_BLOCK_NNZ = 10_000_000
-
 # ---------------------------------------------------------------------------
 # X / layers
 # ---------------------------------------------------------------------------
+
+# Non-zeros read per block when pulling genes out of a CSR matrix.
+_CSR_BLOCK_NNZ = 10_000_000
 
 
 def _gene_columns(table: Any, source: SpatialDataTableSource, n_obs: int) -> list[pl.Series]:
@@ -190,8 +197,9 @@ def _gene_columns(table: Any, source: SpatialDataTableSource, n_obs: int) -> lis
         block = np.asarray(matrix.oindex[:, idxs], dtype=np.float64)
         return _float_columns(source.genes, block)
 
-    encoding = _attrs(matrix).get("encoding-type")
-    shape = tuple(_attrs(matrix).get("shape") or ())
+    attrs = _attrs(matrix)
+    encoding = attrs.get("encoding-type")
+    shape = tuple(attrs.get("shape") or ())
     if encoding not in ("csr_matrix", "csc_matrix"):
         raise ValueError(f"{where} has unsupported encoding {encoding!r}")
     if len(shape) != 2 or shape[0] != n_obs:
@@ -376,6 +384,11 @@ def _find_element(store_path: str, name: str) -> tuple[str, str] | None:
     return None
 
 
+def _element_group(store_path: str, name: str) -> str | None:
+    found = _find_element(store_path, name)
+    return found[0] if found else None
+
+
 def _element_systems(element_dir: str) -> dict[str, st.Affine2D]:
     """Coordinate system name -> transform from the element's intrinsic space.
 
@@ -505,18 +518,18 @@ def _coordinates(
     obs: dict[str, pl.Series],
     n_obs: int,
 ) -> tuple[pl.Series, pl.Series] | None:
-    where = f"{os.path.basename(store_path.rstrip('/'))}/{source.table}"
+    where = f"{_store_name(store_path)}/{source.table}"
     regions, region_key, instance_key = _table_region_attrs(table)
     has_obsm = "obsm" in table and "spatial" in table["obsm"]
     region_ready = bool(regions) and bool(instance_key) and instance_key in obs
 
     mode = source.coordinates
     if mode == "auto":
-        shapes_regions = region_ready and all(
-            (_find_element(store_path, r) or ("",))[0] == "shapes" for r in regions
-        )
-        mode = "obsm" if has_obsm else "region" if shapes_regions else None
-        if mode is None:
+        if has_obsm:
+            mode = "obsm"
+        elif region_ready and all(_element_group(store_path, r) == "shapes" for r in regions):
+            mode = "region"
+        else:
             logger.warning(f"{where}: no obsm['spatial'] and no shapes region; x / y omitted")
             return None
     elif mode == "obsm" and not has_obsm:
@@ -540,7 +553,7 @@ def _coordinates(
         xs, ys = _region_xy(store_path, regions, row_regions, instance_ids)
 
     if source.image:
-        image_dir = os.path.join(store_path, *source.image.split("/"))
+        image_dir = _element_dir(store_path, source.image)
         if not os.path.isdir(image_dir):
             raise ValueError(f"image element {source.image!r} not found in {store_path}")
         image_systems = _element_systems(image_dir)
@@ -567,7 +580,7 @@ def _coordinates(
 
 
 def _table_dir(store_path: str, source: SpatialDataTableSource) -> str:
-    table_dir = os.path.join(store_path, *source.table.split("/"))
+    table_dir = _element_dir(store_path, source.table)
     if not os.path.isdir(table_dir):
         raise ValueError(f"table element {source.table!r} not found in {store_path}")
     return table_dir
@@ -602,8 +615,8 @@ def read_spatialdata_table(store_path: str, source: SpatialDataTableSource | dic
         columns[series.name] = series
         origins[series.name] = origin
 
-    store_name = os.path.basename(os.path.normpath(store_path))
-    add(pl.Series("sample", [bioimage_sample_name(store_name)] * n_obs, dtype=pl.Utf8), "sample")
+    sample = bioimage_sample_name(_store_name(store_path))
+    add(pl.Series("sample", [sample] * n_obs, dtype=pl.Utf8), "sample")
 
     obs: dict[str, pl.Series] = {}
     for name in _attrs(obs_group).get("column-order") or []:
@@ -669,8 +682,7 @@ def spatialdata_table_stats(
     """
     source = _source(source)
     table_dir = _table_dir(store_path, source)
-    store_name = os.path.basename(os.path.normpath(store_path))
-    digest = hashlib.sha256(f"{store_name}\0{source.model_dump_json()}\0".encode())
+    digest = hashlib.sha256(f"{_store_name(store_path)}\0{source.model_dump_json()}\0".encode())
     total, newest = _hash_tree(digest, table_dir, source.table)
 
     regions, _, _ = _table_region_attrs(_open_group(table_dir))
@@ -686,7 +698,7 @@ def spatialdata_table_stats(
         else:
             _hash_metadata(digest, element_dir, rel)
     if source.image:
-        image_dir = os.path.join(store_path, *source.image.split("/"))
+        image_dir = _element_dir(store_path, source.image)
         if os.path.isdir(image_dir):
             _hash_metadata(digest, image_dir, source.image)
     return total, newest, digest.hexdigest()
