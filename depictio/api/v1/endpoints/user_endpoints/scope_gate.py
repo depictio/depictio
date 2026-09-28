@@ -31,7 +31,7 @@ from fastapi.routing import APIRoute
 from starlette.requests import HTTPConnection
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.endpoints.user_endpoints.token_scopes import current_token_scopes
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import set_current_token
 from depictio.models.models.users import TokenBeanie, TokenScope, effective_scopes
 
 RouteKey = tuple[str, str]
@@ -340,7 +340,7 @@ async def enforce_token_scopes(conn: HTTPConnection) -> None:
         return  # unknown token (route auth rejects it) or legacy full access
 
     # Expose the scopes before route dependencies run, too.
-    current_token_scopes.set(token_doc.scopes)
+    set_current_token(token_doc.scopes, token_doc.name, str(token_doc.id))
 
     if conn.scope.get("type") == "websocket":
         return  # event streams are reads, and read is implied by any scope

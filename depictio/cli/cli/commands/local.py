@@ -95,6 +95,14 @@ def up(
             help="Dashboard thumbnails via Playwright; installs Chromium (~150 MB) if needed.",
         ),
     ] = False,
+    mcp: Annotated[
+        bool,
+        typer.Option(
+            "--mcp/--no-mcp",
+            help="Serve the MCP endpoint so AI agents (Claude Code, Claude Desktop) can "
+            "read and annotate dashboards; connect with `depictio mcp install`.",
+        ),
+    ] = False,
 ):
     """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
     if (template is None) != (data_root is None):
@@ -128,7 +136,7 @@ def up(
                 install_chromium()
             seed = examples or ("none" if template else "iris,penguins")
             secret_values = load_secrets(paths)
-            env = server_env(paths, ports, secret_values, seed, screenshots)
+            env = server_env(paths, ports, secret_values, seed, screenshots, mcp=mcp)
             url = f"http://127.0.0.1:{ports['api']}"
             state = {"pids": {}, "ports": ports, "url": url, "home": str(paths.home)}
             save_state(paths, state)
@@ -166,7 +174,8 @@ def up(
     dashboards_url = f"{url}/dashboards"
     rich_print_checked_statement(f"Depictio is ready: {dashboards_url}", "success")
     _info(f"CLI config for this instance: {paths.cli_config}")
-    _info("Connect Claude Code (needs DEPICTIO_MCP_ENABLED=true): depictio mcp install")
+    if mcp:
+        _info("Connect Claude Code: depictio mcp install")
     if open_browser:
         webbrowser.open(dashboards_url)
 

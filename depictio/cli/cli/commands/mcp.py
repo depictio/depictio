@@ -423,10 +423,7 @@ def _require_mcp_sdk() -> None:
     try:
         import mcp  # noqa: F401
     except ImportError:
-        _stderr(
-            "The MCP SDK is not installed. Install the server package (pip install depictio) "
-            "or add `mcp` to this environment."
-        )
+        _stderr("The MCP SDK is not installed: pip install 'depictio-cli[mcp]'")
         raise typer.Exit(code=1)
 
 

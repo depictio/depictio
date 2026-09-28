@@ -285,14 +285,17 @@ def _agent_author(current_user: User, agent: AgentInfo) -> Author:
 
 
 def _token_agent() -> AgentInfo:
-    """The agent a scoped-token REST caller writes as: named after its token, with a fresh run id.
+    """The agent a scoped-token REST caller writes as: named after its token.
 
-    The token name is read from ``token_scopes.current_token_name`` when the
-    auth layer exposes it; otherwise the agent is :data:`DEFAULT_TOKEN_AGENT_NAME`.
+    The run id is stable per token and UTC day, so the per-run thread cap
+    also bounds a client that never sends its own run id.
     """
-    token_name = getattr(token_scopes, "current_token_name", None)
-    name = token_name.get() if token_name is not None else None
-    return AgentInfo(name=(name or DEFAULT_TOKEN_AGENT_NAME)[:120], run_id=uuid.uuid4().hex)
+    name = token_scopes.current_token_name.get() or DEFAULT_TOKEN_AGENT_NAME
+    token_id = token_scopes.current_token_id.get()
+    run_id = (
+        f"token-{token_id}-{datetime.now(timezone.utc):%Y%m%d}" if token_id else uuid.uuid4().hex
+    )
+    return AgentInfo(name=name[:120], run_id=run_id)
 
 
 def _acting_agent(agent: AgentInfo | None) -> AgentInfo | None:

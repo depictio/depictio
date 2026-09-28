@@ -49,6 +49,20 @@ def test_server_env_drops_inherited_depictio_variables(paths, monkeypatch):
     assert env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] == "true"
 
 
+def test_server_env_keeps_ai_and_mcp_settings_and_enables_mcp_on_request(paths, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_AI_API_KEY", "sk-test")
+    monkeypatch.setenv("DEPICTIO_MCP_RATE_PER_MIN", "30")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    secrets = {"s3_password": "x", "admin_password": "y"}
+
+    assert "DEPICTIO_MCP_ENABLED" not in server_env(paths, ports, secrets, "none", False)
+    env = server_env(paths, ports, secrets, "none", False, mcp=True)
+
+    assert env["DEPICTIO_MCP_ENABLED"] == "true"
+    assert env["DEPICTIO_AI_API_KEY"] == "sk-test"
+    assert env["DEPICTIO_MCP_RATE_PER_MIN"] == "30"
+
+
 def test_pick_ports_skips_a_busy_preferred_port(monkeypatch):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))

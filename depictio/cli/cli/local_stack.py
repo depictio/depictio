@@ -214,11 +214,25 @@ def pick_ports(api_port: int | None) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
+# Settings a user may still pass through from their shell: the AI provider
+# (keys, model) and the MCP endpoint's limits. Everything else is pinned below.
+PASSTHROUGH_PREFIXES = ("DEPICTIO_AI_", "DEPICTIO_MCP_")
+
+
 def server_env(
-    paths: Paths, ports: dict[str, int], secret_values: dict, seed: str, screenshots: bool
+    paths: Paths,
+    ports: dict[str, int],
+    secret_values: dict,
+    seed: str,
+    screenshots: bool,
+    mcp: bool = False,
 ) -> dict:
     host = "127.0.0.1"
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_")}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("DEPICTIO_") or k.startswith(PASSTHROUGH_PREFIXES)
+    }
     env.update(
         {
             "DEPICTIO_CONTEXT": "server",
@@ -267,6 +281,8 @@ def server_env(
             "DEPICTIO_PERFORMANCE_SCREENSHOTS_DIR": str(paths.home / "screenshots"),
         }
     )
+    if mcp:
+        env["DEPICTIO_MCP_ENABLED"] = "true"
     if seed == "none":
         env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] = "true"
     elif seed != "all":

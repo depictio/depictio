@@ -9,7 +9,7 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY_PATH, settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.endpoints.user_endpoints.token_scopes import current_token_scopes
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import set_current_token
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
@@ -367,7 +367,7 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
 
     # Expose the token's scopes to the rest of the request (REST scope gate,
     # comment authorship); None keeps full access for legacy tokens.
-    current_token_scopes.set(token_doc.scopes)
+    set_current_token(token_doc.scopes, token_doc.name, str(token_doc.id))
     return user
 
 
