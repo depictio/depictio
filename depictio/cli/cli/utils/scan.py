@@ -138,6 +138,12 @@ def _spatialdata_source(data_collection: "DataCollection") -> SpatialDataTableSo
     return None
 
 
+def _is_store_dc(data_collection: "DataCollection") -> bool:
+    """DCs whose Files are whole stores, never walked into: bioimages of any
+    format, and SpatialData tables."""
+    return _is_bioimage_dc(data_collection) or _spatialdata_source(data_collection) is not None
+
+
 def _is_zarr_store_dc(data_collection: "DataCollection") -> bool:
     """DCs whose Files are whole ``*.zarr`` stores: OME-Zarr / SpatialData bioimages,
     and SpatialData tables."""
@@ -274,7 +280,7 @@ def scan_single_file(
     # change detection or hash-based dedup.
     resolved_location = os.path.realpath(file_location)
     spatialdata = _spatialdata_source(data_collection)
-    if _is_bioimage_dc(data_collection) or spatialdata is not None:
+    if _is_store_dc(data_collection):
         # A bioimage store is named after its basename (store name, sample,
         # upload key), so a symlink to a differently named target (git-annex /
         # DataLad blobs, a *.zarr link to an unsuffixed folder) keeps the
@@ -429,7 +435,7 @@ def process_files(
         )
         logger.debug(f"Full Regex: {full_regex}")
 
-    if _is_bioimage_dc(data_collection) or _spatialdata_source(data_collection) is not None:
+    if _is_store_dc(data_collection):
         # Each store (a *.zarr directory or an *.ome.tif(f) file) is one File;
         # never walk into a zarr store.
         fmt = (
@@ -1065,7 +1071,7 @@ def _is_current_single_location(
     """
     if location == current_path:
         return True
-    if not _is_bioimage_dc(data_collection) and _spatialdata_source(data_collection) is None:
+    if not _is_store_dc(data_collection):
         return False
     root = os.path.realpath(current_path)
     return location == root or location.startswith(root.rstrip("/") + "/")
