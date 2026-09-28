@@ -23,7 +23,8 @@ import { useAnalysisReport } from '../hooks';
 import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
 import { renderInlineMarkdown } from 'depictio-react-core';
 import MarkdownLite from './MarkdownLite';
-import type { AnalysisReport, Finding } from '../types';
+import type { AgentReportFinding, AnalysisReport, Finding } from '../types';
+import { VerdictBadge } from './AgentRunTrace';
 import ExecutionTrace from './ExecutionTrace';
 
 interface Props {
@@ -33,6 +34,9 @@ interface Props {
   /** Active InteractiveFilter list, forwarded so the default collection
    *  is loaded with the rows the user currently sees. */
   activeFilters?: unknown[];
+  /** Report to show on opening (a team run's report), picked from the
+   *  dashboard's history once it loads. */
+  initialReportId?: string | null;
 }
 
 const CONFIDENCE_COLOR: Record<Finding['confidence'], string> = {
@@ -56,7 +60,13 @@ const STATUS_COLOR: Record<AnalysisReport['status'], string> = {
  * that prove it. There is no Apply button anywhere in this surface and
  * never will be; the server strips actions in this mode.
  */
-const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, activeFilters }) => {
+const AIAnalysisModal: React.FC<Props> = ({
+  dashboardId,
+  opened,
+  onClose,
+  activeFilters,
+  initialReportId,
+}) => {
   const { run, cancel, reset, pending, state, history, loadHistory } =
     useAnalysisReport(dashboardId);
   const [prompt, setPrompt] = useState('');
@@ -65,6 +75,16 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
   useEffect(() => {
     if (opened) void loadHistory();
   }, [opened, loadHistory]);
+
+  // Open on the requested report once the history holds it.
+  useEffect(() => {
+    if (!opened || !initialReportId) return;
+    const target = history.find((h) => h.id === initialReportId);
+    if (target) {
+      reset();
+      setViewing(target);
+    }
+  }, [opened, initialReportId, history, reset]);
 
   // The live run wins over a history selection.
   const report = state.report ?? viewing;
@@ -168,6 +188,17 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
                   <Badge variant="light" color={STATUS_COLOR[report.status]}>
                     {report.status}
                   </Badge>
+                  {report.agent && (
+                    <Tooltip label={report.agent.run_id ? `Run ${report.agent.run_id}` : 'Agent'}>
+                      <Badge
+                        variant="light"
+                        color="violet"
+                        leftSection={<Icon icon="mdi:robot-outline" width={12} />}
+                      >
+                        {report.agent.name}
+                      </Badge>
+                    </Tooltip>
+                  )}
                   <Text size="xs" c="dimmed">
                     {report.model} · {report.budget_spent.steps} steps ·{' '}
                     {report.budget_spent.tokens.toLocaleString()} tokens ·{' '}
@@ -206,6 +237,10 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
                       </Card>
                     ))}
                   </Stack>
+                )}
+
+                {(report.agent_findings?.length ?? 0) > 0 && (
+                  <AgentFindings findings={report.agent_findings ?? []} />
                 )}
 
                 {report.warnings.length > 0 && (
@@ -266,8 +301,13 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
                         <Text size="xs" c="dimmed">
                           {new Date(h.created_at).toLocaleString()}
                         </Text>
+                        {h.agent && (
+                          <Badge size="xs" variant="light" color="violet">
+                            agent
+                          </Badge>
+                        )}
                         <Text size="xs" c="dimmed" ml="auto">
-                          {h.findings.length} findings
+                          {h.findings.length + (h.agent_findings?.length ?? 0)} findings
                         </Text>
                       </Group>
                     </Stack>
@@ -281,5 +321,52 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
     </Modal>
   );
 };
+
+/** Findings of an agent-written report: each with its confidence, the
+ *  skeptic's verdict when the server attaches one, and the evidence notes
+ *  with the tool call ids that back them. */
+const AgentFindings: React.FC<{ findings: AgentReportFinding[] }> = ({ findings }) => (
+  <Stack gap="xs" data-testid="agent-report-findings">
+    <Title order={6}>Agent findings</Title>
+    {findings.map((f, i) => (
+      <Card key={f.finding_id ?? i} withBorder radius="md" p="sm">
+        <Stack gap={6}>
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Badge size="sm" variant="light" color={CONFIDENCE_COLOR[f.confidence] ?? 'gray'}>
+              {f.confidence}
+            </Badge>
+            {f.verdict && (
+              <VerdictBadge verdict={{ verdict: f.verdict, reason: f.verdict_reason }} />
+            )}
+            <Text size="sm" fw={600} flex={1}>
+              {f.title}
+            </Text>
+            {f.component_index && (
+              <Badge size="sm" variant="outline" color="gray">
+                {f.component_index.slice(0, 8)}
+              </Badge>
+            )}
+          </Group>
+          <Text size="sm">{renderInlineMarkdown(f.detail)}</Text>
+          {f.evidence.map((ev, j) => (
+            <Group key={j} gap={6} wrap="nowrap" align="flex-start">
+              <Icon icon="material-symbols:data-object" width={14} style={{ flexShrink: 0, marginTop: 3 }} />
+              <Text size="xs" style={{ minWidth: 0 }}>
+                {ev.note}
+              </Text>
+              {ev.call_id && (
+                <Tooltip label={ev.query || 'Tool call behind this evidence'} multiline w={320}>
+                  <Badge size="xs" variant="outline" color="gray" ml="auto" style={{ flexShrink: 0 }}>
+                    call {ev.call_id.slice(0, 8)}
+                  </Badge>
+                </Tooltip>
+              )}
+            </Group>
+          ))}
+        </Stack>
+      </Card>
+    ))}
+  </Stack>
+);
 
 export default AIAnalysisModal;

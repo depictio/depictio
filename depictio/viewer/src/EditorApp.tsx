@@ -2497,6 +2497,7 @@ const EditorApp: React.FC = () => {
                     activeFilters={filters}
                     serverKeyAvailable={aiServerKeyAvailable}
                     onApplyActions={handleApplyAIActions}
+                    agentsEnabled={serverFeatures.ai_agents}
                   />
                   {(aiFilterCount > 0 || aiFigureOverrideCount > 0) && (
                     <Group gap={6} mb={6}>
