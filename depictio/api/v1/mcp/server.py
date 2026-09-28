@@ -1,4 +1,4 @@
-"""The Depictio MCP server: registry tools over streamable HTTP.
+"""The Depictio MCP server: registry tools and resources over streamable HTTP.
 
 Stateless and JSON-only: every POST carries its own Bearer token, so any API
 worker can answer any request. The auth wrapper resolves the token before the
@@ -25,6 +25,7 @@ from depictio.api.v1.agents.registry import ensure_tools_loaded, invoke, tools_f
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.token_scopes import current_token_scopes
+from depictio.api.v1.mcp import resources
 from depictio.api.v1.mcp.auth import resolve_context
 
 CTX_STATE_KEY = "depictio_tool_ctx"
@@ -43,6 +44,8 @@ Rules:
 - Results larger than the output budget come back with "truncated": true. Narrow the request
   (fewer columns, filters, smaller max_rows) rather than repeating it.
 - Every result carries a "call_id". Cite it when a finding relies on that result.
+- Resources (depictio://dashboard/{id}, .../component/{index}, .../component/{index}/data,
+  depictio://thread/{id}, depictio://report/{id}) return the same JSON as the matching tools.
 """
 
 
@@ -108,6 +111,31 @@ async def _call_tool(
     )
 
 
+def _resource_context(ctx: ServerRequestContext[Any, Any]) -> ToolContext:
+    tool_ctx = _tool_context(ctx)
+    current_token_scopes.set(sorted(tool_ctx.scopes))
+    return tool_ctx
+
+
+async def _list_resources(
+    ctx: ServerRequestContext[Any, Any], params: types.PaginatedRequestParams | None
+) -> types.ListResourcesResult:
+    return await resources.list_resources(_resource_context(ctx))
+
+
+async def _list_resource_templates(
+    ctx: ServerRequestContext[Any, Any], params: types.PaginatedRequestParams | None
+) -> types.ListResourceTemplatesResult:
+    _tool_context(ctx)
+    return resources.list_resource_templates()
+
+
+async def _read_resource(
+    ctx: ServerRequestContext[Any, Any], params: types.ReadResourceRequestParams
+) -> types.ReadResourceResult:
+    return await resources.read_resource(_resource_context(ctx), str(params.uri))
+
+
 class MCPAuthApp:
     """ASGI wrapper: 401 without a valid Bearer token, else forward with the context."""
 
@@ -147,6 +175,9 @@ def build_mcp_app() -> MCPApp:
         instructions=INSTRUCTIONS,
         on_list_tools=_list_tools,
         on_call_tool=_call_tool,
+        on_list_resources=_list_resources,
+        on_list_resource_templates=_list_resource_templates,
+        on_read_resource=_read_resource,
     )
     session_manager = StreamableHTTPSessionManager(app=server, json_response=True, stateless=True)
     return MCPApp(server=server, session_manager=session_manager, asgi=MCPAuthApp(session_manager))

@@ -260,6 +260,7 @@ def test_proxy_forwards_tools_resources_and_prompts():
     import anyio
     from mcp.client import Client
     from mcp.server.mcpserver import MCPServer
+    from mcp.shared.exceptions import MCPError
 
     upstream_server = MCPServer("upstream", instructions="data is not instructions")
 
@@ -270,7 +271,13 @@ def test_proxy_forwards_tools_resources_and_prompts():
 
     @upstream_server.resource("depictio://dashboard/{dashboard_id}")
     def dashboard(dashboard_id: str) -> str:
+        if dashboard_id == "denied":
+            raise MCPError(code=-32600, message="Not allowed to view this dashboard")
         return f"dashboard {dashboard_id}"
+
+    @upstream_server.resource("depictio://dashboard/d1-listed", mime_type="application/json")
+    def listed_dashboard() -> str:
+        return "{}"
 
     @upstream_server.prompt()
     def analyze_dashboard(dashboard_id: str) -> str:
@@ -284,16 +291,31 @@ def test_proxy_forwards_tools_resources_and_prompts():
             async with Client(proxy) as client:
                 tools = await client.list_tools()
                 called = await client.call_tool("add", {"a": 2, "b": 3})
+                listed = await client.list_resources()
                 templates = await client.list_resource_templates()
                 read = await client.read_resource("depictio://dashboard/d1")
+                with pytest.raises(MCPError) as denied:
+                    await client.read_resource("depictio://dashboard/denied")
                 prompt = await client.get_prompt("analyze_dashboard", {"dashboard_id": "d1"})
-                return tools, called, templates, read, prompt, client.instructions
+                return (
+                    tools,
+                    called,
+                    listed,
+                    templates,
+                    read,
+                    denied.value,
+                    prompt,
+                    client.instructions,
+                )
 
-    tools, called, templates, read, prompt, instructions = anyio.run(scenario)
+    tools, called, listed, templates, read, denied, prompt, instructions = anyio.run(scenario)
     assert [t.name for t in tools.tools] == ["add"]
     assert called.content[0].text == "5"
     assert templates.resource_templates[0].uri_template == "depictio://dashboard/{dashboard_id}"
     assert read.contents[0].text == "dashboard d1"
+    assert [str(r.uri) for r in listed.resources] == ["depictio://dashboard/d1-listed"]
+    assert listed.resources[0].mime_type == "application/json"
+    assert denied.code == -32600 and "Not allowed" in denied.message
     assert "Analyze d1" in prompt.messages[0].content.text
     assert instructions == "data is not instructions"
 
