@@ -166,6 +166,7 @@ def up(
     dashboards_url = f"{url}/dashboards"
     rich_print_checked_statement(f"Depictio is ready: {dashboards_url}", "success")
     _info(f"CLI config for this instance: {paths.cli_config}")
+    _info("Connect Claude Code (needs DEPICTIO_MCP_ENABLED=true): depictio mcp install")
     if open_browser:
         webbrowser.open(dashboards_url)
 

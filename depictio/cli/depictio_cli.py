@@ -14,6 +14,7 @@ from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.local import app as local
 from depictio.cli.cli.commands.manifest import app as manifest
+from depictio.cli.cli.commands.mcp import app as mcp
 from depictio.cli.cli.commands.migrate import app as migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
@@ -84,6 +85,7 @@ app.add_typer(
 )
 app.add_typer(template, name="template", help="Template authoring (export a project as a template)")
 app.add_typer(local, name="local", help="Run Depictio locally without Docker")
+app.add_typer(mcp, name="mcp", help="Connect MCP clients (Claude Code, Claude Desktop) to Depictio")
 # Maintainer / CI tooling (catalog authoring, recipe test harness, backup
 # coverage). Hidden from the user-facing help; still callable as `depictio dev …`.
 app.add_typer(dev, name="dev", hidden=True)
