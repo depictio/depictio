@@ -28,20 +28,20 @@ from typing import Any, Literal, TypeVar
 import polars as pl
 from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.envelope import clean_text, untrusted
-from depictio.api.v1.agents.registry import ToolError, agent_tool
+from depictio.api.v1.agents.registry import ToolArgs, ToolError, agent_tool
 from depictio.api.v1.agents.tools.discovery import (
     FIGURE_ROLE_KEYS,
     dc_index,
     dc_schema,
     find_component,
     load_viewable_dashboard,
+    project_of,
 )
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import projects_collection
 from depictio.api.v1.deltatables_utils import (
     clean_filter_payload,
     count_deltatable_lite,
@@ -85,11 +85,7 @@ _COL_RE = re.compile(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)")
 Scalar = str | int | float | bool
 
 
-class _Args(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class FilterIn(_Args):
+class FilterIn(ToolArgs):
     column: str = Field(description="Column to filter on.")
     operator: FilterOperator = Field(
         default="eq",
@@ -132,7 +128,7 @@ _VIEWER_FILTERS_DESCRIPTION = (
 )
 
 
-class ComponentDataArgs(_Args):
+class ComponentDataArgs(ToolArgs):
     dashboard_id: str = Field(description="Dashboard tab id the component lives on.")
     index: str = Field(description="Component index, as listed by get_dashboard.")
     filters: list[FilterIn] = Field(default_factory=list, description=_FILTERS_DESCRIPTION)
@@ -154,7 +150,7 @@ class ComponentDataArgs(_Args):
     )
 
 
-class DescribeDataCollectionArgs(_Args):
+class DescribeDataCollectionArgs(ToolArgs):
     dc_id: str = Field(description="Data collection id (from get_dashboard or get_component).")
     sample_rows: int = Field(default=5, ge=0, le=20, description="Sample rows to include.")
 
@@ -188,7 +184,7 @@ _POLICY_HINT = (
 )
 
 
-class QueryDataArgs(_Args):
+class QueryDataArgs(ToolArgs):
     code: str = Field(
         min_length=1,
         max_length=MAX_CODE_CHARS,
@@ -686,8 +682,7 @@ async def _query_source(user: Any, args: QueryDataArgs) -> tuple[str, str, str]:
     if not comp.get("dc_id") or not comp.get("wf_id"):
         raise ToolError(f"Component {args.index} ({comp.get('component_type')}) has no data.")
     dc_id = str(comp["dc_id"])
-    project = projects_collection.find_one({"_id": ObjectId(str(doc["project_id"]))})
-    tag = (dc_index(project).get(dc_id) or {}).get("tag") or dc_id
+    tag = (dc_index(project_of(doc)).get(dc_id) or {}).get("tag") or dc_id
     return dc_id, str(comp["wf_id"]), str(tag)
 
 

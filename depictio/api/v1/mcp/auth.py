@@ -7,19 +7,12 @@ from uuid import uuid4
 
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import bearer_token
 from depictio.models.models.users import TokenBeanie, UserBeanie, effective_scopes
 
 AGENT_HEADER = "x-depictio-agent"
 RUN_ID_HEADER = "x-depictio-run-id"
 _MAX_LABEL_CHARS = 120
-
-
-def bearer_token(headers: Mapping[str, str]) -> str | None:
-    value = headers.get("authorization") or ""
-    scheme, _, token = value.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
 
 
 async def fetch_user_and_token(token: str) -> tuple[UserBeanie, TokenBeanie] | None:

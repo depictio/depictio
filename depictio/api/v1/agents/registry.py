@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic_core import to_jsonable_python
 from starlette.exceptions import HTTPException
 
@@ -52,6 +52,12 @@ class ToolError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
+
+
+class ToolArgs(BaseModel):
+    """Base of every tool's input model: unknown arguments are an error, not ignored."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ToolResult(BaseModel):
@@ -191,12 +197,13 @@ def inline_refs(schema: dict[str, Any], *, max_depth: int = 8) -> dict[str, Any]
     return resolve(schema, 0)
 
 
-def _validation_message(exc: ValidationError) -> str:
+def validation_message(exc: ValidationError, prefix: str = "Invalid arguments") -> str:
+    """``"<prefix>: loc: msg; loc: msg"``, readable by an agent."""
     parts = []
-    for err in exc.errors():
+    for err in exc.errors(include_url=False):
         loc = ".".join(str(part) for part in err.get("loc", ())) or "arguments"
         parts.append(f"{loc}: {err.get('msg', 'invalid')}")
-    return "Invalid arguments: " + "; ".join(parts)
+    return f"{prefix}: " + "; ".join(parts)
 
 
 def _jsonable(value: Any) -> Any:
@@ -223,12 +230,12 @@ async def invoke(name: str, ctx: ToolContext, raw_args: dict[str, Any] | None) -
                 f"Tool {name} needs the '{spec.scope}' scope, which this token does not have",
                 status=403,
             )
-        if not await ratelimit.allow(ctx.token_id or str(getattr(ctx.user, "id", ""))):
+        if not await ratelimit.allow(ctx.rate_limit_key):
             raise ToolError("Rate limit exceeded; wait a minute before calling more tools", 429)
         try:
             parsed = spec.input_model.model_validate(args)
         except ValidationError as exc:
-            raise ToolError(_validation_message(exc), status=422) from exc
+            raise ToolError(validation_message(exc), status=422) from exc
         try:
             output = await spec.fn(ctx, parsed)
         except HTTPException as exc:

@@ -16,7 +16,7 @@ from depictio.api.v1 import db
 from depictio.api.v1.agents import ratelimit
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.registry import invoke
-from depictio.api.v1.agents.tools import data, discovery
+from depictio.api.v1.agents.tools import discovery
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints import context as ai_context
 from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as dash_core
@@ -62,7 +62,6 @@ def world():
         patch.object(discovery, "dashboards_collection", dashboards),
         patch.object(discovery, "projects_collection", projects),
         patch.object(discovery, "deltatables_collection", deltatables),
-        patch.object(data, "projects_collection", projects),
         patch.object(dash_routes, "dashboards_collection", dashboards),
         patch.object(dash_routes, "projects_collection", projects),
         patch.object(dash_core, "dashboards_collection", dashboards),

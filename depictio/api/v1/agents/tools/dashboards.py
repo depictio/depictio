@@ -27,13 +27,13 @@ from types import SimpleNamespace
 from typing import Any
 
 import yaml
-from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.envelope import untrusted
-from depictio.api.v1.agents.registry import ToolError, agent_tool
+from depictio.api.v1.agents.registry import ToolArgs, ToolError, agent_tool
+from depictio.api.v1.agents.tools.common import editor_path, parse_oid
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.ai_endpoints import component_yaml, dashboard_gen
@@ -52,19 +52,10 @@ STANDALONE_TYPES = frozenset({"text"})
 MAX_RATIONALE_CHARS = 2000
 
 
-def _editor_path(dashboard_id: str) -> str:
-    """Where a user reviews an AI draft: the editor, which carries the review panel."""
-    return f"/dashboard-edit/{dashboard_id}"
-
-
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
-class _Args(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ProposeComponentArgs(_Args):
+class ProposeComponentArgs(ToolArgs):
     dashboard_id: str = Field(
         description="The dashboard to extend. A draft this run already made is reused."
     )
@@ -82,7 +73,7 @@ class ProposeComponentArgs(_Args):
     )
 
 
-class SuggestComponentsArgs(_Args):
+class SuggestComponentsArgs(ToolArgs):
     dashboard_id: str
     component_type: ComponentType | None = Field(
         default=None, description="Pin one type; left empty, types are mixed."
@@ -93,7 +84,7 @@ class SuggestComponentsArgs(_Args):
     n: int = Field(default=4, ge=1, le=8)
 
 
-class GenerateDashboardArgs(_Args):
+class GenerateDashboardArgs(ToolArgs):
     project_id: str
     prompt: str = Field(
         default="",
@@ -107,7 +98,7 @@ class GenerateDashboardArgs(_Args):
     )
 
 
-class ListComponentTypesArgs(_Args):
+class ListComponentTypesArgs(ToolArgs):
     component_type: ComponentType | None = Field(
         default=None,
         description="Give one type for its full field list, constraints and a YAML example.",
@@ -125,13 +116,6 @@ def _gate_draft_writes(user: Any) -> None:
         raise ToolError("Anonymous users cannot create dashboards", status=403)
 
 
-def _oid(value: str, what: str) -> ObjectId:
-    try:
-        return ObjectId(value)
-    except Exception as exc:
-        raise ToolError(f"Invalid {what}: {value!r}", status=400) from exc
-
-
 def _source_of(doc: dict[str, Any]) -> str | None:
     """The source dashboard id an agent draft was copied from, if it is one."""
     return (doc.get("ai_generation") or {}).get("source_dashboard_id")
@@ -147,7 +131,7 @@ def _is_run_draft(doc: dict[str, Any], ctx: ToolContext) -> bool:
 
 
 def _load_dashboard(dashboard_id: str) -> dict[str, Any]:
-    doc = dashboards_collection.find_one({"dashboard_id": _oid(dashboard_id, "dashboard_id")})
+    doc = dashboards_collection.find_one({"dashboard_id": parse_oid(dashboard_id, "dashboard_id")})
     if not doc:
         raise ToolError("Dashboard not found", status=404)
     return doc
@@ -415,7 +399,7 @@ def _propose(ctx: ToolContext, args: ProposeComponentArgs) -> dict[str, Any]:
         "component_tag": tag,
         "component_type": component_type,
         "probe": probe,
-        "review_path": _editor_path(draft_id),
+        "review_path": editor_path(draft_id),
         "note": "Draft only: the source dashboard is unchanged; the user reviews and promotes it.",
     }
 
@@ -544,7 +528,7 @@ async def generate_dashboard(ctx: ToolContext, args: GenerateDashboardArgs) -> d
         "components": components,
         "dropped": dashboard.get("dropped") or [],
         "warnings": dashboard.get("warnings") or [],
-        "review_path": _editor_path(draft_id),
+        "review_path": editor_path(draft_id),
     }
 
 

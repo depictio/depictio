@@ -31,7 +31,10 @@ from fastapi.routing import APIRoute
 from starlette.requests import HTTPConnection
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.endpoints.user_endpoints.token_scopes import set_current_token
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import (
+    bearer_token,
+    set_current_token,
+)
 from depictio.models.models.users import TokenBeanie, TokenScope, effective_scopes
 
 RouteKey = tuple[str, str]
@@ -314,19 +317,9 @@ def route_template(conn: HTTPConnection) -> str | None:
     return paths.get(id(route), getattr(route, "path", None))
 
 
-def _bearer_token(conn: HTTPConnection) -> str | None:
-    header = conn.headers.get("authorization")
-    if not header:
-        return None
-    scheme, _, token = header.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
-
-
 async def enforce_token_scopes(conn: HTTPConnection) -> None:
     """Refuse routes outside a scoped token's scopes (router-level dependency)."""
-    token = _bearer_token(conn)
+    token = bearer_token(conn.headers)
     if token is None:
         return  # unauthenticated or session cookie: the route's own auth decides
     try:

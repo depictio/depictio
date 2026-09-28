@@ -156,7 +156,7 @@ async def _audited(
     try:
         if not ctx.has("read"):
             raise ToolError("Resources need the 'read' scope", status=403)
-        if not await ratelimit.allow(ctx.token_id or str(getattr(ctx.user, "id", ""))):
+        if not await ratelimit.allow(ctx.rate_limit_key):
             raise ToolError("Rate limit exceeded; wait a minute before reading more", 429)
         try:
             output = await run()

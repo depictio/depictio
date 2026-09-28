@@ -10,18 +10,18 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import Field, ValidationError
 
 from depictio.api.v1.agents.context import ToolContext
-from depictio.api.v1.agents.envelope import untrusted
-from depictio.api.v1.agents.registry import ToolError, agent_tool
+from depictio.api.v1.agents.envelope import preview, untrusted
+from depictio.api.v1.agents.registry import ToolArgs, ToolError, agent_tool, validation_message
+from depictio.api.v1.agents.tools.common import agent_info, viewer_path
 from depictio.api.v1.endpoints.ai_endpoints.schemas import AgentEvidence
 from depictio.api.v1.endpoints.comments_endpoints import service
 from depictio.models.models.comments import (
     MAX_BODY_CHARS,
     MAX_EVIDENCE_ITEMS,
     MAX_LABEL_CHARS,
-    AgentInfo,
     AnnotationColor,
     Author,
     Evidence,
@@ -52,24 +52,20 @@ AxisValue = float | int | str
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
-class _Args(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ViewStateIn(_Args):
+class ViewStateIn(ToolArgs):
     filters: list[dict[str, Any]] = Field(
         default_factory=list, description="Filters applied when the finding was made."
     )
     selection: dict[str, Any] | None = Field(default=None, description="Selection, if any.")
 
 
-class PointIn(_Args):
+class PointIn(ToolArgs):
     x: AxisValue
     y: AxisValue
     trace: int | None = Field(default=None, description="Trace index when the chart has several.")
 
 
-class ListThreadsArgs(_Args):
+class ListThreadsArgs(ToolArgs):
     dashboard_id: str = Field(description="Dashboard (tab) id.")
     component_index: str | None = Field(
         default=None,
@@ -85,11 +81,11 @@ class ListThreadsArgs(_Args):
     limit: int = Field(default=50, ge=1, le=MAX_LISTED_THREADS, description="Newest first.")
 
 
-class GetThreadArgs(_Args):
+class GetThreadArgs(ToolArgs):
     thread_id: str
 
 
-class CreateAnnotationArgs(_Args):
+class CreateAnnotationArgs(ToolArgs):
     dashboard_id: str = Field(description="Dashboard (tab) id the component is on.")
     component_index: str = Field(description="Index of the component to annotate.")
     body: str | None = Field(
@@ -141,7 +137,7 @@ class CreateAnnotationArgs(_Args):
     )
 
 
-class AskQuestionArgs(_Args):
+class AskQuestionArgs(ToolArgs):
     dashboard_id: str
     component_index: str | None = Field(
         default=None, description="Component the question is about; omit for the whole tab."
@@ -151,7 +147,7 @@ class AskQuestionArgs(_Args):
     dedupe_key: str | None = Field(default=None, max_length=200)
 
 
-class ReplyArgs(_Args):
+class ReplyArgs(ToolArgs):
     thread_id: str
     body: str = Field(min_length=1, max_length=MAX_BODY_CHARS)
 
@@ -159,18 +155,6 @@ class ReplyArgs(_Args):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _agent(ctx: ToolContext) -> AgentInfo:
-    return AgentInfo(name=ctx.agent_name[:120], model=ctx.agent_model, run_id=ctx.run_id)
-
-
-def _invalid(exc: ValidationError) -> ToolError:
-    parts = []
-    for err in exc.errors(include_url=False):
-        loc = ".".join(str(p) for p in err.get("loc", ())) or "arguments"
-        parts.append(f"{loc}: {err.get('msg', 'invalid')}")
-    return ToolError("Invalid annotation: " + "; ".join(parts), status=422)
-
-
 def _evidence(items: list[AgentEvidence]) -> list[Evidence] | None:
     if not items:
         return None
@@ -230,20 +214,6 @@ def _author(author: Author) -> dict[str, Any]:
     return {"kind": "human", "user_id": author.user_id}
 
 
-def _preview(text: str | None) -> dict[str, str] | None:
-    if text is None:
-        return None
-    if len(text) > PREVIEW_CHARS:
-        text = text[:PREVIEW_CHARS] + "..."
-    return untrusted(text)
-
-
-def _viewer_path(thread: ThreadOut) -> str:
-    # The viewer has no deep link to a thread yet: this opens its tab, where the
-    # comments drawer lists it under its component.
-    return f"/dashboard/{thread.anchor.dashboard_id}"
-
-
 def _annotation_summary(thread: ThreadOut) -> dict[str, Any] | None:
     a = thread.annotation
     if a is None:
@@ -274,8 +244,8 @@ def _summary(thread: ThreadOut) -> dict[str, Any]:
         "annotation": _annotation_summary(thread),
         "evidence_count": len(thread.evidence or []),
         "comment_count": len(live),
-        "first_comment": _preview(live[0].body) if live else None,
-        "last_comment": _preview(live[-1].body) if len(live) > 1 else None,
+        "first_comment": preview(live[0].body, PREVIEW_CHARS) if live else None,
+        "last_comment": preview(live[-1].body, PREVIEW_CHARS) if len(live) > 1 else None,
         "staleness": thread.staleness.model_dump(),
     }
 
@@ -352,7 +322,7 @@ def _written(thread: ThreadOut, created: bool) -> dict[str, Any]:
         "number": thread.number,
         "dashboard_id": thread.anchor.dashboard_id,
         "component_index": thread.anchor.component_index,
-        "viewer_path": _viewer_path(thread),
+        "viewer_path": viewer_path(thread.anchor.dashboard_id),
         "note": _written_note(thread, created),
     }
 
@@ -384,9 +354,9 @@ async def _create(
             }
         )
     except ValidationError as exc:
-        raise _invalid(exc) from exc
+        raise ToolError(validation_message(exc, "Invalid annotation"), status=422) from exc
     thread, created = await service.create_agent_thread(
-        ctx.user, payload, _agent(ctx), dedupe_key=dedupe_key
+        ctx.user, payload, agent_info(ctx), dedupe_key=dedupe_key
     )
     return _written(thread, created)
 
@@ -499,10 +469,10 @@ async def ask_question(ctx: ToolContext, args: AskQuestionArgs) -> dict[str, Any
     writes=True,
 )
 async def reply(ctx: ToolContext, args: ReplyArgs) -> dict[str, Any]:
-    thread = await service.agent_reply(ctx.user, args.thread_id, args.body, _agent(ctx))
+    thread = await service.agent_reply(ctx.user, args.thread_id, args.body, agent_info(ctx))
     return {
         "thread_id": thread.id,
         "status": thread.status,
         "comment_count": len([c for c in thread.comments if not c.deleted]),
-        "viewer_path": _viewer_path(thread),
+        "viewer_path": viewer_path(thread.anchor.dashboard_id),
     }

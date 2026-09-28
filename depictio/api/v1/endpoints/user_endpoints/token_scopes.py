@@ -1,5 +1,6 @@
 """Request-scoped view of the calling token's scopes."""
 
+from collections.abc import Mapping
 from contextvars import ContextVar
 
 from depictio.models.models.users import TokenScope, effective_scopes
@@ -30,3 +31,12 @@ def request_is_scoped() -> bool:
 
 def request_has_scope(scope: TokenScope) -> bool:
     return scope in effective_scopes(current_token_scopes.get())
+
+
+def bearer_token(headers: Mapping[str, str]) -> str | None:
+    """The token of an ``Authorization: Bearer <token>`` header, else None."""
+    value = headers.get("authorization") or ""
+    scheme, _, token = value.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()

@@ -26,3 +26,8 @@ class ToolContext:
 
     def has(self, scope: TokenScope) -> bool:
         return scope in self.scopes
+
+    @property
+    def rate_limit_key(self) -> str:
+        """Tools and resources share one rate-limit bucket per token (else per user)."""
+        return self.token_id or str(getattr(self.user, "id", ""))

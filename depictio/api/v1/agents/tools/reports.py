@@ -15,15 +15,16 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from depictio.api.v1.agents.context import ToolContext
-from depictio.api.v1.agents.envelope import untrusted
-from depictio.api.v1.agents.registry import ToolError, agent_tool
+from depictio.api.v1.agents.envelope import preview, untrusted
+from depictio.api.v1.agents.registry import ToolArgs, ToolError, agent_tool
+from depictio.api.v1.agents.tools.common import agent_info, viewer_path
 from depictio.api.v1.endpoints.ai_endpoints import analyses
 from depictio.api.v1.endpoints.ai_endpoints import context as ai_context
 from depictio.api.v1.endpoints.ai_endpoints.schemas import AgentFinding, AnalysisReport
-from depictio.models.models.comments import MAX_BODY_CHARS, AgentInfo
+from depictio.models.models.comments import MAX_BODY_CHARS
 
 MAX_REPORTS_PER_RUN = 20
 MAX_FINDINGS = 30
@@ -35,20 +36,16 @@ STEP_OUTPUT_CHARS = 300
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
-class _Args(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ListReportsArgs(_Args):
+class ListReportsArgs(ToolArgs):
     dashboard_id: str
     limit: int = Field(default=10, ge=1, le=20, description="Newest first.")
 
 
-class GetReportArgs(_Args):
+class GetReportArgs(ToolArgs):
     report_id: str
 
 
-class CreateReportArgs(_Args):
+class CreateReportArgs(ToolArgs):
     dashboard_id: str
     question: str = Field(min_length=1, max_length=MAX_BODY_CHARS, description="What was asked.")
     summary: str = Field(
@@ -66,7 +63,7 @@ class CreateReportArgs(_Args):
     )
 
 
-class UpdateReportArgs(_Args):
+class UpdateReportArgs(ToolArgs):
     report_id: str
     question: str | None = Field(default=None, min_length=1, max_length=MAX_BODY_CHARS)
     summary: str | None = Field(default=None, min_length=1, max_length=MAX_SUMMARY_CHARS)
@@ -115,12 +112,6 @@ def _author(report: AnalysisReport) -> dict[str, Any]:
     return {"kind": "agent", "agent": report.agent.name, "run_id": report.agent.run_id}
 
 
-def _preview(text: str) -> dict[str, str] | None:
-    if len(text) > PREVIEW_CHARS:
-        text = text[:PREVIEW_CHARS] + "..."
-    return untrusted(text)
-
-
 def _summary(report: AnalysisReport) -> dict[str, Any]:
     return {
         "id": report.id,
@@ -130,7 +121,7 @@ def _summary(report: AnalysisReport) -> dict[str, Any]:
         "status": report.status,
         "author": _author(report),
         "question": untrusted(report.prompt),
-        "summary": _preview(report.narrative_md),
+        "summary": preview(report.narrative_md, PREVIEW_CHARS),
         "finding_count": len(report.findings) + len(report.agent_findings),
     }
 
@@ -169,7 +160,7 @@ def _detail(report: AnalysisReport) -> dict[str, Any]:
             "id": i,
             "status": s.status,
             "code": untrusted(s.code),
-            "output": _preview(s.output[:STEP_OUTPUT_CHARS]) if s.output else None,
+            "output": untrusted(s.output[:STEP_OUTPUT_CHARS]) if s.output else None,
             "rows_in": s.rows_in,
             "rows_out": s.rows_out,
         }
@@ -186,7 +177,7 @@ def _written(report: AnalysisReport, created: bool) -> dict[str, Any]:
         "status": report.status,
         "finding_count": len(report.agent_findings),
         "dashboard_id": report.dashboard_id,
-        "viewer_path": f"/dashboard/{report.dashboard_id}",
+        "viewer_path": viewer_path(report.dashboard_id),
     }
 
 
@@ -254,12 +245,7 @@ async def create_report(ctx: ToolContext, args: CreateReportArgs) -> dict[str, A
     report.status = "complete"
     report.narrative_md = args.summary
     report.agent_findings = list(args.findings)
-    report.agent = AgentInfo(
-        name=ctx.agent_name[:120],
-        model=ctx.agent_model,
-        run_id=ctx.run_id,
-        on_behalf_of=str(ctx.user.id),
-    )
+    report.agent = agent_info(ctx, on_behalf_of=str(ctx.user.id))
     report.updated_at = report.created_at
     await asyncio.to_thread(analyses.save, report)
     return _written(report, True)

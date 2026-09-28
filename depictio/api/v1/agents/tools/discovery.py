@@ -15,11 +15,11 @@ from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.envelope import untrusted
-from depictio.api.v1.agents.registry import agent_tool
+from depictio.api.v1.agents.registry import ToolArgs, agent_tool
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, deltatables_collection, projects_collection
 
@@ -95,10 +95,6 @@ _INTERNAL_FIELDS: frozenset[str] = frozenset(
 _FREE_TEXT_FIELDS: frozenset[str] = frozenset({"title", "description", "body", "code_content"})
 
 
-class _Args(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
 # ---------------------------------------------------------------------------
 # Shared lookups (also used by the data tools)
 # ---------------------------------------------------------------------------
@@ -123,6 +119,11 @@ def load_viewable_dashboard(user: Any, dashboard_id: str) -> dict[str, Any]:
             status_code=403, detail="You don't have permission to access this dashboard."
         )
     return doc
+
+
+def project_of(doc: dict[str, Any]) -> dict[str, Any]:
+    """The project document a dashboard belongs to, or ``{}``."""
+    return projects_collection.find_one({"_id": ObjectId(str(doc["project_id"]))}) or {}
 
 
 def find_component(doc: dict[str, Any], index: str) -> dict[str, Any]:
@@ -399,7 +400,7 @@ def dashboards_summary(user: Any, project_id: str | None = None) -> list[dict[st
 def dashboard_summary(user: Any, dashboard_id: str, *, include_tabs: bool = False) -> dict:
     """Compact structure of one dashboard tab (or its whole family)."""
     doc = load_viewable_dashboard(user, dashboard_id)
-    project = projects_collection.find_one({"_id": ObjectId(str(doc["project_id"]))}) or {}
+    project = project_of(doc)
     dcs = dc_index(project)
     family = _family(doc)
 
@@ -465,7 +466,7 @@ def component_detail(user: Any, dashboard_id: str, index: str) -> dict[str, Any]
     """Full config of one component plus the columns of its data collection."""
     doc = load_viewable_dashboard(user, dashboard_id)
     comp = find_component(doc, index)
-    project = projects_collection.find_one({"_id": ObjectId(str(doc["project_id"]))}) or {}
+    project = project_of(doc)
     dcs = dc_index(project)
 
     config = _lite_dump(comp, dcs) or _plain_dump(comp)
@@ -496,17 +497,17 @@ def component_detail(user: Any, dashboard_id: str, index: str) -> dict[str, Any]
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
-class ListProjectsArgs(_Args):
+class ListProjectsArgs(ToolArgs):
     pass
 
 
-class ListDashboardsArgs(_Args):
+class ListDashboardsArgs(ToolArgs):
     project_id: str | None = Field(
         default=None, description="Only dashboards of this project (id from list_projects)."
     )
 
 
-class GetDashboardArgs(_Args):
+class GetDashboardArgs(ToolArgs):
     dashboard_id: str = Field(description="Dashboard or tab id (from list_dashboards).")
     include_tabs: bool = Field(
         default=False,
@@ -514,7 +515,7 @@ class GetDashboardArgs(_Args):
     )
 
 
-class GetComponentArgs(_Args):
+class GetComponentArgs(ToolArgs):
     dashboard_id: str = Field(description="Dashboard tab id the component lives on.")
     index: str = Field(description="Component index, as listed by get_dashboard.")
 

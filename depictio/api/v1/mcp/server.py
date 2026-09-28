@@ -83,15 +83,22 @@ async def _list_tools(
     )
 
 
+def _scoped_context(ctx: ServerRequestContext[Any, Any]) -> ToolContext:
+    """The caller's context, with its scopes re-exposed to service code.
+
+    Handlers run in the session manager's task, not the request's, so the
+    scopes set during authentication are not visible here. Service code that
+    checks ``request_is_scoped()`` (agent authorship) needs them.
+    """
+    tool_ctx = _tool_context(ctx)
+    current_token_scopes.set(sorted(tool_ctx.scopes))
+    return tool_ctx
+
+
 async def _call_tool(
     ctx: ServerRequestContext[Any, Any], params: types.CallToolRequestParams
 ) -> types.CallToolResult:
-    tool_ctx = _tool_context(ctx)
-    # Handlers run in the session manager's task, not the request's, so the
-    # scopes set during authentication are not visible here. Re-expose them for
-    # service code that checks ``request_is_scoped()`` (agent authorship).
-    current_token_scopes.set(sorted(tool_ctx.scopes))
-    result = await invoke(params.name, tool_ctx, dict(params.arguments or {}))
+    result = await invoke(params.name, _scoped_context(ctx), dict(params.arguments or {}))
     if result.ok:
         payload: dict[str, Any] = {
             "call_id": result.call_id,
@@ -111,16 +118,10 @@ async def _call_tool(
     )
 
 
-def _resource_context(ctx: ServerRequestContext[Any, Any]) -> ToolContext:
-    tool_ctx = _tool_context(ctx)
-    current_token_scopes.set(sorted(tool_ctx.scopes))
-    return tool_ctx
-
-
 async def _list_resources(
     ctx: ServerRequestContext[Any, Any], params: types.PaginatedRequestParams | None
 ) -> types.ListResourcesResult:
-    return await resources.list_resources(_resource_context(ctx))
+    return await resources.list_resources(_scoped_context(ctx))
 
 
 async def _list_resource_templates(
@@ -133,7 +134,7 @@ async def _list_resource_templates(
 async def _read_resource(
     ctx: ServerRequestContext[Any, Any], params: types.ReadResourceRequestParams
 ) -> types.ReadResourceResult:
-    return await resources.read_resource(_resource_context(ctx), str(params.uri))
+    return await resources.read_resource(_scoped_context(ctx), str(params.uri))
 
 
 class MCPAuthApp:

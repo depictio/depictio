@@ -34,6 +34,15 @@ def untrusted(text: str | None) -> dict[str, str] | None:
     return {"untrusted": clean_text(str(text))}
 
 
+def preview(text: str | None, max_chars: int) -> dict[str, str] | None:
+    """``untrusted`` of the first ``max_chars`` characters, with ``...`` when cut."""
+    if text is None:
+        return None
+    if len(text) > max_chars:
+        text = text[:max_chars] + "..."
+    return untrusted(text)
+
+
 def json_size(obj: Any) -> int:
     return len(json.dumps(obj, default=str, ensure_ascii=False))
 

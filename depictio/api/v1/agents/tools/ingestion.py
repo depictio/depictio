@@ -25,10 +25,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from depictio.api.v1.agents.context import ToolContext
-from depictio.api.v1.agents.registry import ToolError, agent_tool
+from depictio.api.v1.agents.registry import ToolArgs, agent_tool
+from depictio.api.v1.agents.tools.common import parse_oid
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints import from_run, manifest_ingest
@@ -45,15 +46,11 @@ def _ingest_enabled() -> bool:
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
-class _Args(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ListTemplatesArgs(_Args):
+class ListTemplatesArgs(ToolArgs):
     pass
 
 
-class RunArgs(_Args):
+class RunArgs(ToolArgs):
     data_root: str = Field(
         description="An s3:// prefix holding one pipeline run's output (local paths are refused)."
     )
@@ -72,7 +69,7 @@ class RunArgs(_Args):
         return validate_template_id(value)
 
 
-class IngestionStatusArgs(_Args):
+class IngestionStatusArgs(ToolArgs):
     run_id: str | None = Field(
         default=None, description="The run_id create_project_from_run returned."
     )
@@ -195,17 +192,12 @@ def _status(ctx: ToolContext, args: IngestionStatusArgs) -> dict[str, Any]:
             "finished": run.get("status") not in (None, "running"),
         }
 
-    from bson import ObjectId
-
     from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
         build_ingestion_report,
     )
     from depictio.api.v1.endpoints.projects_endpoints.utils import _async_get_project_from_id
 
-    try:
-        project_oid = ObjectId(args.project_id)
-    except Exception as exc:
-        raise ToolError(f"Invalid project_id: {args.project_id!r}", status=400) from exc
+    project_oid = parse_oid(args.project_id or "", "project_id")
     project = _async_get_project_from_id(project_oid, ctx.user, projects_collection)
     report = build_ingestion_report(project).model_dump(mode="json")
     report["runs"] = report.get("runs", [])[:MAX_REPORTED_RUNS]
