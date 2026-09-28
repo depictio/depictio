@@ -832,11 +832,88 @@ class MultiQCPrerenderConfig(BaseSettings):
 
 
 class JBrowseConfig(BaseSettings):
-    """JBrowse genomics viewer integration configuration."""
+    """JBrowse genome browser (``jbrowse`` component, ``genomic_tracks`` DCs).
 
-    enabled: bool = Field(default=False, description="Enable JBrowse genomics viewer integration")
+    The browser is embedded in the viewer and every track byte goes through the
+    API's Range proxy, so there is no JBrowse server to deploy. Tracks stored
+    in Depictio's own bucket are always served; tracks *read in place* from a
+    remote ``https://`` host or ``s3://`` bucket are refused unless that host or
+    bucket is allow-listed here.
+    """
+
+    enabled: bool = Field(default=True, description="Enable the genome browser component")
+    # The nf-core AWS megatest bucket is public, anonymous and read-only: the
+    # shipped examples and the nf-core templates' TRACKS_URI read it in place.
+    remote_https_hosts: str = Field(
+        default="nf-core-awsmegatests.s3-eu-west-1.amazonaws.com",
+        description="Comma-separated hostnames the track proxy may read https:// tracks "
+        "from (exact match, e.g. 'nf-core-awsmegatests.s3-eu-west-1.amazonaws.com')",
+    )
+    remote_s3_buckets: str = Field(
+        default="nf-core-awsmegatests",
+        description="Comma-separated S3 buckets the track proxy may read s3:// tracks from "
+        "with the server's credentials. Any user who can open a DC pointing at a listed "
+        "bucket can read it; Depictio's own data bucket is never readable by URL.",
+    )
+    remote_s3_endpoint_url: str | None = Field(
+        default=None,
+        description="Endpoint for remote s3:// tracks (default: AWS). Public buckets are "
+        "read anonymously when no credentials are configured for them.",
+    )
+    remote_s3_region: str = Field(default="eu-west-1", description="Region for remote s3://")
+    remote_s3_access_key: str | None = Field(
+        default=None, description="Access key for remote s3:// buckets (anonymous if unset)"
+    )
+    remote_s3_secret_key: SecretStr | None = Field(
+        default=None, description="Secret key for remote s3:// buckets"
+    )
+    preset_access: Literal["proxy", "direct"] = Field(
+        default="proxy",
+        description="How the browser reads the built-in assemblies' UCSC files: 'proxy' "
+        "through the API (one origin, works behind browser-side firewalls, small files "
+        "cached), or 'direct' from hgdownload.soe.ucsc.edu (CORS + Range, no API load)",
+    )
+    ucsc_tracks_enabled: bool = Field(
+        default=True,
+        description="Resolve components' `ucsc_tracks` through the UCSC REST API",
+    )
+    ucsc_api_url: str = Field(
+        default="https://api.genome.ucsc.edu",
+        description="UCSC REST API the UCSC track catalogue is read from",
+    )
+    ucsc_catalog_ttl_s: int = Field(
+        default=24 * 3600,
+        ge=60,
+        description="How long a genome's UCSC track catalogue is cached in the API process",
+    )
+    remote_timeout_s: float = Field(default=30.0, gt=0, description="Remote read timeout")
+    max_range_mb: int = Field(
+        default=64,
+        ge=1,
+        description="Largest byte range served in one request (JBrowse reads in small "
+        "blocks; this caps an open-ended 'bytes=0-' on a large BAM)",
+    )
+    max_full_read_mb: int = Field(
+        default=256,
+        ge=1,
+        description="Largest file served whole when the browser sends no Range header "
+        "(plain BED/GFF/VCF are read whole; index them for larger files)",
+    )
+    url_ttl_s: int = Field(
+        default=6 * 3600,
+        ge=60,
+        description="Lifetime of the signed track URLs handed to the browser",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+
+    @property
+    def https_hosts(self) -> frozenset[str]:
+        return frozenset(h.strip().lower() for h in self.remote_https_hosts.split(",") if h.strip())
+
+    @property
+    def s3_buckets(self) -> frozenset[str]:
+        return frozenset(b.strip() for b in self.remote_s3_buckets.split(",") if b.strip())
 
 
 class BackupConfig(BaseSettings):

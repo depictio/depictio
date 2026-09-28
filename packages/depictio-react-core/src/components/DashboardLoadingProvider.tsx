@@ -28,6 +28,7 @@ export const TRACKED_LOAD_TYPES: ReadonlySet<string> = new Set([
   'image',
   'advanced_viz',
   'multiqc',
+  'jbrowse',
 ]);
 
 interface LoadingActions {

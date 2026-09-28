@@ -1120,3 +1120,187 @@ tabs:
     placement: left
     title: log2(TPM + 1)
     layout: {x: 0, y: 6, w: 1, h: 3}
+
+# ============================================================================
+# Genome tracks
+# ============================================================================
+# The run's own files in a genome browser: forward and reverse strand bigWig
+# coverage of every sample and the duplicate-marked STAR BAMs, read by range
+# from the results folder (TRACKS_URI) or from the files uploaded at ingestion.
+# The sample scope of the left panel (persistent across tabs) picks which
+# tracks are open; clicking a coverage track picks its sample back for every
+# other tab. A --skip_alignment run (PSEUDOALIGNER_ONLY) has no tracks, and the
+# route conditional drops the collection together with its panels.
+- title: Genome tracks
+  subtitle: Strand-specific coverage and alignments of the selected samples, read by range from the run's results
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  workflow_system: nf-core
+  grid_sections:
+  - name: Genome browser
+    icon: mdi:dna
+    color: teal
+    description: The coverage of the samples in scope, around the beta-globin locus
+  - name: Samples at a glance
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Library depth and sample similarity; lasso points to open their tracks
+  - name: Samples
+    icon: mdi:table
+    color: gray
+    description: Pick rows to open their tracks
+  components:
+  - component_type: text
+    tag: rna-tracks-intro
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: tracks
+    title: Coverage where expression differs
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One coverage track per strand and sample, coloured by condition. The view
+      opens on the beta-globin cluster, where HBG1, HBG2 and HBE1 peak in K562
+      only. The cards sum up the libraries in scope; lasso the scatter below or
+      pick samples on the left to open tracks, click a track to filter every tab.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: rna-tracks-card-libraries
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    use: salmon/sample_pca
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 4
+    display: {icon_name: 'mdi:flask', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title: Libraries in scope
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: rna-tracks-card-expressed
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    use: salmon/sample_pca
+    aggregation: average
+    column_name: genes_expressed
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 10000
+    threshold_direction: min
+    threshold_warn: 8000
+    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title: Genes expressed
+    description: Genes at 1 TPM or more. A library below 10000 has thin coverage outside its top genes.
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: rna-tracks-card-detected
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    use: salmon/sample_pca
+    aggregation: average
+    column_name: genes_detected
+    column_type: int64
+    secondary_layout: gauge
+    coverage_max: 30000
+    display: {icon_name: 'mdi:gauge', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title: Genes detected
+    description: Genes with any signal at all, against a 30000 reference for a protein-coding-heavy annotation.
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: rna-tracks-card-median-tpm
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    use: salmon/sample_pca
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_tpm
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title: Median TPM
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 1, w: 2, h: 2}
+  - component_type: jbrowse
+    tag: rna-tracks-browser
+    index: rna-tracks-browser
+    section: Genome browser
+    workflow_tag: rnaseq
+    data_collection_tag: tracks
+    title: Genome browser
+    location: chr11:5,240,000-5,300,000
+    max_tracks: 16
+    initial_tracks: 6
+    selection_enabled: true
+    selection_column: sample
+    show_overview: false
+    layout: {x: 0, y: 3, w: 8, h: 9}
+  - component_type: figure
+    tag: rna-tracks-fig-depth
+    index: rna-tracks-depth-scatter
+    section: Samples at a glance
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    use: salmon/sample_pca
+    visu_type: scatter
+    dict_kwargs:
+      x: genes_detected
+      y: median_tpm
+      color: group
+      opacity: 0.85
+      hover_data: ['sample_id', 'genes_expressed']
+    selection_enabled: true
+    selection_column: sample_id
+    title: Library depth
+    description: One point per library. A library that detects fewer genes at a higher median TPM spent its reads on too little of the transcriptome. Lasso points to open their tracks.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: figure
+    tag: rna-tracks-fig-pca
+    index: rna-tracks-pca-scatter
+    section: Samples at a glance
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    use: salmon/sample_pca
+    visu_type: scatter
+    dict_kwargs:
+      x: dim_1
+      y: dim_2
+      color: group
+      opacity: 0.85
+      hover_data: ['sample_id', 'median_tpm']
+    selection_enabled: true
+    selection_column: sample_id
+    title: Sample PCA
+    description: First two principal components of the log2(TPM + 1) matrix. Lasso a cluster of replicates to lay their coverage side by side.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: table
+    tag: rna-tracks-samples
+    index: rna-tracks-samples
+    section: Samples
+    workflow_tag: rnaseq
+    data_collection_tag: samplesheet
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Samples
+    description: Select rows to open their tracks in the browser above.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 4}

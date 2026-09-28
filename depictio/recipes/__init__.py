@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 
@@ -268,12 +270,38 @@ def validate_schema(
                     )
 
 
+@dataclass(frozen=True)
+class RecipeContext:
+    """What a two-argument ``transform(sources, context)`` receives."""
+
+    data_dir: Path
+    # The collection's dc_specific_properties (e.g. a genomic_tracks manifest's
+    # ``remote_base_uri``, set when the run is read in place).
+    properties: dict = field(default_factory=dict)
+
+    @property
+    def reads_in_place(self) -> bool:
+        """The run's files are read from a remote folder, not from ``data_dir``."""
+        return bool(self.properties.get("remote_base_uri"))
+
+    def exists(self, rel_path: str) -> bool:
+        """Whether the run folder holds ``rel_path``."""
+        return (self.data_dir / rel_path).is_file()
+
+    def glob(self, pattern: str) -> list[str]:
+        """Run-relative paths matching ``pattern`` (sorted)."""
+        return sorted(
+            str(p.relative_to(self.data_dir)) for p in self.data_dir.glob(pattern) if p.is_file()
+        )
+
+
 def execute_recipe(
     recipe_name: str,
     data_dir: str | Path,
     overrides: dict[str, str] | None = None,
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
+    properties: dict | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -308,8 +336,16 @@ def execute_recipe(
                     f"If it uses dc_ref, provide it via extra_sources."
                 )
 
-    # Checkpoint 3: transform
-    result = module.transform(sources)
+    # Checkpoint 3: transform. A recipe whose transform() takes a second
+    # argument also receives the run folder, for recipes that describe files
+    # rather than read them (a genome-track manifest lists which track files
+    # the run published).
+    if len(inspect.signature(module.transform).parameters) >= 2:
+        result = module.transform(
+            sources, RecipeContext(data_dir=Path(data_dir), properties=dict(properties or {}))
+        )
+    else:
+        result = module.transform(sources)
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "

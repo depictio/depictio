@@ -1,7 +1,8 @@
 /**
- * Shared "Cross-filtering" Accordion section used by figure, table, and map
- * builders to expose the toggle that controls whether selections on this
- * component emit a dashboard-wide filter, and which column drives the filter.
+ * Shared "Cross-filtering" Accordion section used by figure, table, map and
+ * genome browser builders to expose the toggle that controls whether
+ * selections on this component emit a dashboard-wide filter, and which column
+ * drives the filter.
  *
  * Wraps a single `Accordion.Item` (caller owns the surrounding `Accordion`)
  * so each builder can compose it alongside its own sections (table's
@@ -33,6 +34,11 @@ export interface CrossFilterSectionProps {
   columnLabel?: string;
   /** Override the column-picker description. */
   columnDescription?: string;
+  /** Placeholder for the column picker, e.g. the column used when none is picked. */
+  columnPlaceholder?: string;
+  /** Extra controls rendered under the column picker (e.g. the genome
+   *  browser's selection mode). */
+  children?: React.ReactNode;
 }
 
 const CrossFilterSection: React.FC<CrossFilterSectionProps> = ({
@@ -43,6 +49,8 @@ const CrossFilterSection: React.FC<CrossFilterSectionProps> = ({
   onColumnChange,
   columnLabel = 'Selection Column',
   columnDescription = 'Column to extract from selected elements',
+  columnPlaceholder,
+  children,
 }) => {
   return (
     <Accordion.Item value={itemValue}>
@@ -64,11 +72,13 @@ const CrossFilterSection: React.FC<CrossFilterSectionProps> = ({
           <ColumnSelect
             label={columnLabel}
             description={columnDescription}
+            placeholder={columnPlaceholder}
             value={column}
             onChange={(name) => onColumnChange(name)}
             clearable
             disabled={!enabled}
           />
+          {children}
         </Stack>
       </Accordion.Panel>
     </Accordion.Item>

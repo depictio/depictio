@@ -107,6 +107,10 @@ export default defineConfig({
           if (id.includes('@mantine')) {
             return 'vendor-mantine';
           }
+          // No manual chunk for the genome browser: only the lazy
+          // JBrowseRenderer imports it, so Rollup already emits it as async
+          // chunks. Forcing one hoists shared deps (react-dom/client, clsx)
+          // into it and the entry would then preload all of JBrowse.
           return undefined;
         },
       },

@@ -1,0 +1,781 @@
+{
+  "_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca00"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca00"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "sseq-intro",
+      "component_type": "text",
+      "title": "Strand-seq in a genome browser",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "384 single cells from four HGSVC samples. Lasso cells in the scatter, pick rows in the cell table or choose an SV class in the left panel: the genome browser opens the SV calls of those cells. Click an SV call in the browser to filter the whole dashboard on its cell; click a row of the SV call table to jump to that call.\n",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-card-cells",
+      "component_type": "card",
+      "title": "Cells",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells",
+      "aggregation": "count",
+      "column_name": "cell",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "icon_color": "teal",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-card-prob",
+      "component_type": "card",
+      "title": "ASHLEYS probability",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells",
+      "aggregation": "median",
+      "column_name": "ashleys_probability",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:check-decagram",
+      "icon_color": "green",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-card-svs",
+      "component_type": "card",
+      "title": "SV calls",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells",
+      "aggregation": "sum",
+      "column_name": "n_sv_calls",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:dna",
+      "icon_color": "grape",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-card-reads",
+      "component_type": "card",
+      "title": "Good reads per cell",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells",
+      "aggregation": "median",
+      "column_name": "good",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-bar",
+      "icon_color": "blue",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-scatter",
+      "component_type": "figure",
+      "title": "Cell quality",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Good reads against the ASHLEYS probability. Lasso cells to open their SV tracks.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Genome browser",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "x": "good",
+        "y": "ashleys_probability",
+        "color": "ashleys_call",
+        "symbol": "sample",
+        "log_x": true,
+        "opacity": 0.85,
+        "hover_data": [
+          "cell",
+          "n_sv_calls"
+        ],
+        "color_discrete_map": "{\"selected\": \"#2f9e44\", \"excluded\": \"#adb5bd\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "cell",
+      "font_scale": null,
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-browser",
+      "component_type": "jbrowse",
+      "title": "SV calls per cell",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "sv_tracks",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Genome tracks: one bgzipped BED of SV calls per selected cell, coloured by call class",
+        "data_collection_tag": "sv_tracks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One track per cell, calls coloured by class (inversions yellow, deletions blue, duplications purple)",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genome browser",
+      "assembly": null,
+      "location": "chr8:6,000,000-14,000,000",
+      "locus_from": {
+        "data_collection_tag": "sv_calls",
+        "chrom_column": "chrom",
+        "start_column": "start",
+        "end_column": "end",
+        "padding": 1000000,
+        "max_rows": 3
+      },
+      "track_mode": "filtered",
+      "max_tracks": 24,
+      "initial_tracks": 10,
+      "default_tracks": [],
+      "show_annotation": false,
+      "ucsc_tracks": [],
+      "selection_enabled": true,
+      "selection_column": "cell",
+      "selection_mode": "feature_click",
+      "show_header": true,
+      "show_overview": false,
+      "track_labels": "offset",
+      "force_load": false,
+      "fetch_size_limit_mb": null,
+      "preset": null,
+      "config_overrides": {},
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-table-cells",
+      "component_type": "table",
+      "title": "Cells",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Select rows to open the SV tracks of those cells.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tables",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "cell",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-table-svs",
+      "component_type": "table",
+      "title": "SV calls",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "sv_calls",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per structural-variant call (cell, locus, class, haplotype)",
+        "data_collection_tag": "sv_calls",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Select a call to jump to it and open its cell.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tables",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "call_id",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-filter-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:account-multiple",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-filter-call",
+      "component_type": "interactive",
+      "title": "ASHLEYS call",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "cells",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per single cell: ASHLEYS quality call and probability, MosaiCatcher read counts, number of SV calls",
+        "data_collection_tag": "cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "SegmentedControl",
+      "column_name": "ashleys_call",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:check-decagram",
+      "wf_tag": "python/genome_tracks_demo"
+    },
+    {
+      "index": "sseq-filter-svtype",
+      "component_type": "interactive",
+      "title": "SV class",
+      "workflow_tag": "python/genome_tracks_demo",
+      "data_collection_tag": "sv_calls",
+      "wf_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca01"
+      },
+      "dc_id": {
+        "$oid": "946b0f3c1e4a2d7f8e5bca11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per structural-variant call (cell, locus, class, haplotype)",
+        "data_collection_tag": "sv_calls",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "946b0f3c1e4a2d7f8e5bca11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "SV calls",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sv_call",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/genome_tracks_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-sseq-filter-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sseq-filter-call",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-sseq-filter-svtype",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-sseq-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sseq-card-cells",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sseq-card-prob",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sseq-card-svs",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sseq-card-reads",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-sseq-scatter",
+      "x": 0,
+      "y": 0,
+      "w": 3,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sseq-browser",
+      "x": 3,
+      "y": 0,
+      "w": 5,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sseq-table-cells",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sseq-table-svs",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Genome Tracks Showcase",
+  "subtitle": "Strand-seq single cells (HGSVC): cell quality next to each cell's structural-variant calls",
+  "icon": "mdi:dna",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "946b0f3c1e4a2d7f8e5bca00"
+  },
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "Strand-seq",
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Cells",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Which single cells to look at",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "SV calls",
+      "icon": "mdi:dna",
+      "color": "grape",
+      "description": "Show the cells carrying a class of structural variant",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Cells",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "Cell quality: ASHLEYS keeps the good Strand-seq libraries for SV calling",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Genome browser",
+      "icon": "mdi:dna",
+      "color": "grape",
+      "description": "Pick cells on the left, see their SV calls on the right (8p23.1 inversion)",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Tables",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Pick a cell or an SV call to open it in the browser",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

@@ -141,6 +141,12 @@ services:
         # the numbers useless. The shipped docker-compose.yaml has it on.
         DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
         DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose-dev}"
+        # Genome browser: remote track sources must be allow-listed
+        # (comma-separated hosts / buckets). See .env.example.
+        DEPICTIO_JBROWSE_ENABLED: "${DEPICTIO_JBROWSE_ENABLED:-true}"
+        DEPICTIO_JBROWSE_REMOTE_HTTPS_HOSTS: "${DEPICTIO_JBROWSE_REMOTE_HTTPS_HOSTS:-nf-core-awsmegatests.s3-eu-west-1.amazonaws.com}"
+        DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS: "${DEPICTIO_JBROWSE_REMOTE_S3_BUCKETS:-nf-core-awsmegatests}"
+        DEPICTIO_JBROWSE_PRESET_ACCESS: "${DEPICTIO_JBROWSE_PRESET_ACCESS:-proxy}"
         # Which view /dashboards opens in for someone who never picked one, and
         # the geometry of the thumbnails it shows. See .env.example.
         DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-thumbnails}"

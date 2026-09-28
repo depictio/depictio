@@ -1,7 +1,7 @@
 # nf-core/rnaseq 3.26.0: Depictio dashboards
 
 This template turns the output of [nf-core/rnaseq](https://nf-co.re/rnaseq) 3.26.0 into a
-single four-tab Depictio dashboard. rnaseq takes bulk RNA sequencing libraries, trims them,
+single five-tab Depictio dashboard. rnaseq takes bulk RNA sequencing libraries, trims them,
 aligns them with STAR, quantifies transcripts with Salmon and merges the per-sample estimates
 into gene-level TPM and count matrices. The template surfaces the pipeline's own MultiQC
 funnel next to three views computed from that merged TPM matrix: where the libraries sit
@@ -17,9 +17,11 @@ Trim Galore then STAR + Salmon.
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** MultiQC, then Expression overview, then Expression heatmap, then
-  Gene explorer. Each tab answers the question the previous one raises: are the libraries
-  usable, how do they relate to each other, which genes drive that, and what does one gene do.
+- **One funnel, four tabs, then the tracks.** MultiQC, then Expression overview, then
+  Expression heatmap, then Gene explorer. Each tab answers the question the previous one
+  raises: are the libraries usable, how do they relate to each other, which genes drive that,
+  and what does one gene do. A fifth tab, Genome tracks, shows the reads behind it all in a
+  genome browser.
 - **Persistent sample filter.** `Sample scope` (sample, condition, replicate) is pinned to the
   top of every tab's filter panel and reads the samplesheet, which links to every other
   collection. One pick there narrows the MultiQC panels, the PCA, the heatmap columns and the
@@ -122,6 +124,33 @@ rows, which is a distribution of the whole transcriptome rather than a compariso
 ---
 
 ![Gene explorer](screenshots/gene-explorer.png)
+
+## Genome tracks
+
+A JBrowse genome browser over the `tracks` collection, a manifest the project-local recipe
+`depictio/projects/nf-core/rnaseq/recipes/tracks.py` spells out from the samplesheet: per
+sample the forward and reverse strand bigWig coverage and the duplicate-marked STAR BAM under
+`star_salmon/` (24 rows on the megatest), coloured by condition with the reverse strand a
+lighter shade. The megatest was aligned to Ensembl GRCh37, whose bare chromosome names
+(`1`, `2`, ...) the `hg19` preset maps through UCSC's chromAlias. The browser opens on the
+beta-globin cluster (`chr11:5,240,000-5,300,000`), where HBG1, HBG2 and HBE1 reach thousands
+of TPM in K562 and stay near zero in the three other lines; the first six rows are the
+replicate-1 coverage pairs of GM12878, H1 and K562.
+
+The samplesheet links to the manifest both ways on `sample`: the sample scope of the left
+panel and the `Samples` table under the browser (row selection) pick which tracks are open,
+and clicking a feature in the browser filters every other tab on its sample. A
+`PSEUDOALIGNER_ONLY` run has no BAM and no bigWig, so that route drops the collection.
+
+Four cards above the browser give the libraries in scope, the genes expressed and detected
+and the median TPM. The `Samples at a glance` section under it holds two scatters of
+`sample_overview` (library depth, and the sample PCA) whose lasso selects on `sample_id`;
+the `sample_overview -> tracks` link opens the coverage of the lassoed samples.
+
+The tables-only megatest subset holds none of the track files. Pass
+`--var TRACKS_URI=s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon`
+and the collection reads them in place, by range; without it the recipe keeps only the files
+DATA_ROOT holds and the CLI uploads them at ingestion.
 
 ## Catalog module
 

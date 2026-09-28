@@ -80,12 +80,13 @@ router.include_router(
     prefix="/deltatables",
     tags=["DeltaTables"],
 )
-if settings.jbrowse.enabled:
-    router.include_router(
-        jbrowse_endpoints_router,
-        prefix="/jbrowse",
-        tags=["JBrowse"],
-    )
+# Always mounted: the genome browser's track proxy and assembly catalogue. The
+# signed URLs it serves are only minted when ``settings.jbrowse.enabled``.
+router.include_router(
+    jbrowse_endpoints_router,
+    prefix="/jbrowse",
+    tags=["JBrowse"],
+)
 
 router.include_router(
     utils_endpoint_router,

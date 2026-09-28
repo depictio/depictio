@@ -696,6 +696,138 @@ class ImageLiteComponent(BaseLiteComponent):
     max_images: int = Field(default=20, description="Maximum images to display")
 
 
+class JBrowseLocusSource(BaseModel):
+    """Where the genome browser takes its locus from when the dashboard filters.
+
+    When the filtered rows of ``data_collection_tag`` shrink to a handful (a
+    table row click, a volcano point…), the view navigates to the first row's
+    ``chrom:start-end`` (plus ``padding`` bp on each side).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    data_collection_tag: str = Field(..., description="DC holding the coordinates")
+    chrom_column: str = Field(..., description="Chromosome column")
+    start_column: str = Field(..., description="Start column")
+    end_column: str | None = Field(default=None, description="End column (defaults to start)")
+    padding: int = Field(default=5000, ge=0, description="Bases added on each side")
+    max_rows: int = Field(
+        default=20, ge=1, description="Navigate only when at most this many rows match"
+    )
+
+
+class JBrowseLiteComponent(BaseLiteComponent):
+    """Lite JBrowse (genome browser) component for user definition.
+
+    Binds to a ``genomic_tracks`` data collection. Dashboard filters (and link
+    resolution) narrow the manifest, and the browser shows the matching tracks;
+    clicking a feature (or changing the visible tracks) emits a
+    ``jbrowse_selection`` filter on ``selection_column`` back to the dashboard.
+
+    Example YAML:
+        - tag: sv-browser
+          component_type: jbrowse
+          workflow_tag: strandseq
+          data_collection_tag: sv_tracks
+          location: chr17:45,000,000-47,000,000
+          max_tracks: 12
+          selection_enabled: true
+          selection_column: cell
+          show_header: true
+          show_overview: false
+    """
+
+    component_type: Literal["jbrowse"] = "jbrowse"
+
+    # Reference / navigation
+    assembly: str | None = Field(
+        default=None,
+        description="Assembly preset overriding the data collection's (e.g. 'hg19')",
+    )
+    location: str | None = Field(
+        default=None, description="Initial locus (e.g. 'chr1:1-1,000,000' or a gene name)"
+    )
+    locus_from: JBrowseLocusSource | None = Field(
+        default=None, description="Navigate to the coordinates of filtered rows"
+    )
+
+    # Track selection
+    track_mode: Literal["filtered", "all"] = Field(
+        default="filtered",
+        description="'filtered': show the tracks matching the dashboard filters; "
+        "'all': keep every track loaded (filters only pick what is shown first)",
+    )
+    max_tracks: int = Field(default=20, ge=1, le=200, description="Maximum tracks shown")
+    initial_tracks: int = Field(
+        default=5,
+        ge=0,
+        le=200,
+        description="Tracks shown when no filter is active (first rows of the manifest)",
+    )
+    default_tracks: list[str] = Field(
+        default_factory=list,
+        description="Track ids always shown (e.g. an annotation track)",
+    )
+    show_annotation: bool = Field(
+        default=True, description="Show the assembly preset's gene annotation track"
+    )
+    ucsc_tracks: list[str] = Field(
+        default_factory=list,
+        description="UCSC Genome Browser tracks shown by default, by UCSC track name "
+        "(e.g. 'clinvarMain', 'encodeCcreCombined'); resolved through the UCSC API "
+        "for the assembly. Tracks backed by a bigBed / bigWig / VCF file only",
+    )
+
+    # Cross-filtering (JBrowse → dashboard)
+    selection_enabled: bool = Field(
+        default=False, description="Emit a filter when a feature or track is picked"
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description="Manifest column emitted (defaults to the DC's sample_column)",
+    )
+    selection_mode: Literal["feature_click", "visible_tracks"] = Field(
+        default="feature_click",
+        description="'feature_click': the clicked feature's track; "
+        "'visible_tracks': every track open in the view",
+    )
+
+    # Display
+    show_header: bool = Field(default=True, description="Show the navigation header")
+    show_overview: bool = Field(
+        default=True, description="Show the overview / ruler bar under the header"
+    )
+    track_labels: Literal["overlapping", "offset", "hidden"] = Field(
+        default="offset", description="Track label placement"
+    )
+
+    # Loading limits
+    force_load: bool = Field(
+        default=False,
+        description="Start with force load on: fetch every track even when the region "
+        "holds more data than JBrowse's limits (viewers can toggle it)",
+    )
+    fetch_size_limit_mb: float | None = Field(
+        default=None,
+        gt=0,
+        le=10_000,
+        description="Per-track download limit (MB) before JBrowse asks to force load; "
+        "unset = JBrowse's default (1 MB, alignments excepted)",
+    )
+
+    # Custom configuration
+    preset: str | None = Field(
+        default=None,
+        description="Named config preset (built-in, or from the DC's `presets`)",
+    )
+    config_overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Raw JBrowse config deep-merged last: keys 'formats' (per track "
+        "format), 'tracks' (by trackId), 'extra_tracks' (full track configs), "
+        "'assembly', 'view' and 'configuration'",
+    )
+
+
 class MultiQCLiteComponent(BaseLiteComponent):
     """Lite MultiQC component for user definition.
 
@@ -938,6 +1070,7 @@ LiteComponent = (
     | TableLiteComponent
     | TextLiteComponent
     | ImageLiteComponent
+    | JBrowseLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent
     | AdvancedVizLiteComponent

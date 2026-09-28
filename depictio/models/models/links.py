@@ -86,9 +86,10 @@ class DCLink(BaseModel):
     Phase 1 supports:
     - table: Direct column mapping or link-based filtering
     - multiqc: Sample name resolution via sample_mappings
+    - genomic_tracks: filters a track manifest (the jbrowse component then shows
+      the matching tracks); resolved like a table
 
     Future phases will add:
-    - jbrowse2: Track visibility based on sample patterns
     - images: Image selection based on metadata patterns
     - geomap: Marker/region filtering
 
@@ -131,11 +132,11 @@ class DCLink(BaseModel):
         description="Data collection tag for the target (used in templates, resolved to ID at instantiation)",
     )
 
-    target_type: Literal["table", "multiqc", "image"] = Field(
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"] = Field(
         ...,
         description="Type of the target DC. Determines which resolver strategies are valid. "
-        "Supported: 'table', 'multiqc', 'image'. "
-        "Future: 'jbrowse2', 'geomap'",
+        "Supported: 'table', 'multiqc', 'image', 'genomic_tracks'. "
+        "Future: 'geomap'",
     )
 
     link_config: LinkConfig = Field(
@@ -321,7 +322,9 @@ class LinkCreateRequest(BaseModel):
     source_dc_id: str = Field(..., description="Source data collection ID")
     source_column: str = Field(..., description="Column name in source DC")
     target_dc_id: str = Field(..., description="Target data collection ID")
-    target_type: Literal["table", "multiqc", "image"] = Field(..., description="Target DC type")
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"] = Field(
+        ..., description="Target DC type"
+    )
     link_config: LinkConfig = Field(default_factory=LinkConfig)
     description: str | None = Field(default=None)
     enabled: bool = Field(default=True)
@@ -338,7 +341,7 @@ class LinkUpdateRequest(BaseModel):
     source_dc_id: str | None = Field(default=None)
     source_column: str | None = Field(default=None)
     target_dc_id: str | None = Field(default=None)
-    target_type: Literal["table", "multiqc", "image"] | None = Field(default=None)
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"] | None = Field(default=None)
     link_config: LinkConfig | None = Field(default=None)
     description: str | None = Field(default=None)
     enabled: bool | None = Field(default=None)

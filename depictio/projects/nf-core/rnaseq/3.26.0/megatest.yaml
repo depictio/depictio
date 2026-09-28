@@ -15,6 +15,16 @@
 #
 # MultiQC 1.33 wrote its data dir as multiqc/star_salmon/multiqc_report_data/
 # (not multiqc_data/): the template scan regex pins that literal layout.
+#
+# Genome tracks: the stranded bigWigs (85 to 235 MB each) and the BAMs (10 to
+# 16 GB each) are NOT fetched and must never be added to `keys`. The `tracks`
+# collection reads them in place from the public bucket, by range, when the run
+# is ingested with
+#
+#   --var TRACKS_URI=s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon
+#
+# (the run_root, which is DATA_ROOT: the manifest uris are relative to it, e.g.
+# star_salmon/bigwig/K562_REP1.forward.bigWig).
 pipeline: rnaseq
 version: "3.26.0"
 # s3://nf-core-awsmegatests/rnaseq/results-<results_sha>/ == the 3.26.0 release tag_sha.
@@ -92,3 +102,8 @@ post_fetch_help: |
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
   depictio-cli run --template nf-core/rnaseq/3.26.0 --data-root {dest}
+
+  # 3. Same, with the Genome tracks tab reading the run's bigWig / BAM files in
+  #    place from the megatest bucket
+  depictio-cli run --template nf-core/rnaseq/3.26.0 --data-root {dest} \
+    --var TRACKS_URI=s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon

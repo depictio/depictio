@@ -70,7 +70,12 @@ const StepDesign: React.FC = () => {
     try {
       const metadata = buildMetadata(state);
       await upsertComponent(state.dashboardId!, metadata, {
-        appendLayout: state.mode === 'create',
+        // A genome browser needs the full grid width to read as one;
+        // `defaultLayoutForType` has no jbrowse case and would give it a
+        // half-width box.
+        appendLayout:
+          state.mode === 'create' &&
+          (state.componentType === 'jbrowse' ? { panel: 'right', w: 8, h: 6 } : true),
       });
       notifications.show({
         color: 'teal',
@@ -170,7 +175,9 @@ const StepDesign: React.FC = () => {
           data-tour-id="component-save"
           title={
             !state.previewReady
-              ? 'Bind all required columns before creating'
+              ? state.componentType === 'jbrowse'
+                ? 'Fix the config overrides JSON before saving'
+                : 'Bind all required columns before creating'
               : undefined
           }
         >

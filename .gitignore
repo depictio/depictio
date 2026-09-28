@@ -189,6 +189,9 @@ dump.rdb
 !depictio/projects/nf-core/atacseq/*/pipeline_info/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Genome tracks showcase: manifests/tables and the Strand-seq SV BEDs (bgzip + tabix)
+!depictio/projects/init/genome_tracks_examples/data/**/*.tsv
+!depictio/projects/init/genome_tracks_examples/data/strandseq/sv_calls/**/*.bed.gz
 # Allow the catalog conformance project's generated data. Every file here is a
 # copy of a catalog fixture, staged either as a recipe seed at the project root
 # or inside the fake run tree — see scripts/generate_project.py.
@@ -306,13 +309,6 @@ seaweedfs_backup_data/
 delta_dev/
 
 # Software Specific
-## JBrowse2
-jbrowse2/
-depictio/jbrowse2_configs/
-jbrowse-watcher-plugin/jbrowse2_sessions/
-jbrowse2_sessions/
-jbrowse2_configs/
-jbrowse-watcher-plugin/
 
 ## PyBuilder
 .pybuilder/

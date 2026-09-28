@@ -3,7 +3,3 @@ fastapi:
 
 dash:
   port: 5080
-
-jbrowse:
-  data_dir: "/data"
-  config_dir: "/jbrowse-watcher-plugin/sessions"

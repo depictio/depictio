@@ -36,6 +36,7 @@ from depictio.models.components.lite import (
     FigureLiteComponent,
     ImageLiteComponent,
     InteractiveLiteComponent,
+    JBrowseLiteComponent,
     LiteComponent,
     MapLiteComponent,
     MultiQCLiteComponent,
@@ -45,6 +46,34 @@ from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
 from depictio.models.models.users import Permission
+
+# JBrowse component fields carried between the lite (YAML) and full (stored)
+# forms, with the lite model's defaults so YAML export stays minimal.
+_JBROWSE_FIELDS: tuple[str, ...] = (
+    "assembly",
+    "location",
+    "locus_from",
+    "track_mode",
+    "max_tracks",
+    "initial_tracks",
+    "default_tracks",
+    "show_annotation",
+    "ucsc_tracks",
+    "selection_enabled",
+    "selection_column",
+    "selection_mode",
+    "show_header",
+    "show_overview",
+    "track_labels",
+    "force_load",
+    "fetch_size_limit_mb",
+    "preset",
+    "config_overrides",
+)
+_JBROWSE_DEFAULTS: dict[str, Any] = {
+    f: JBrowseLiteComponent.model_fields[f].get_default(call_default_factory=True)
+    for f in _JBROWSE_FIELDS
+}
 
 
 class LayoutItem(BaseModel):
@@ -302,6 +331,7 @@ class DashboardDataLite(BaseModel):
         "interactive": InteractiveLiteComponent,
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
+        "jbrowse": JBrowseLiteComponent,
         "multiqc": MultiQCLiteComponent,
         "map": MapLiteComponent,
     }
@@ -594,6 +624,10 @@ class DashboardDataLite(BaseModel):
                 # mandatory
                 "selected_module",
                 "selected_plot",
+            ],
+            "jbrowse": [
+                # optional user-defined
+                *_JBROWSE_FIELDS,
             ],
         }
 
@@ -1075,6 +1109,14 @@ class DashboardDataLite(BaseModel):
                 if comp.get("max_images") and comp["max_images"] != 20:
                     lite_comp["max_images"] = comp["max_images"]
 
+            elif comp_type == "jbrowse":
+                # Exported only when they differ from the model defaults.
+                for f in _JBROWSE_FIELDS:
+                    value = comp.get(f)
+                    if value is None or value == _JBROWSE_DEFAULTS.get(f):
+                        continue
+                    lite_comp[f] = value
+
             elif comp_type == "map":
                 # Fields exported only when they differ from model defaults
                 _MAP_DEFAULT_SKIP = {
@@ -1393,6 +1435,10 @@ class DashboardDataLite(BaseModel):
                         "max_images": comp_dict.get("max_images", 20),
                     }
                 )
+
+            elif comp_type == "jbrowse":
+                for f in _JBROWSE_FIELDS:
+                    full_comp[f] = comp_dict.get(f, _JBROWSE_DEFAULTS.get(f))
 
             elif comp_type == "map":
                 _MAP_FULL_DEFAULTS: dict[str, Any] = {

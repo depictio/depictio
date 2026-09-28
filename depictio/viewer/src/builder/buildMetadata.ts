@@ -54,6 +54,8 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildImage(state, base, existing);
     case 'map':
       return buildMap(state, base, existing);
+    case 'jbrowse':
+      return buildJBrowse(state, base, existing);
     case 'text':
       return buildText(state, base, existing);
     case 'advanced_viz':
@@ -410,5 +412,109 @@ function buildMap(
     // Written unconditionally so switching back to 'grid' actually clears it.
     placement: c.placement ?? 'grid',
     floating_initial_state: c.floating_initial_state ?? 'compact',
+  };
+}
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (v == null || v === '' || !Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+function buildJBrowse(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  // Keys and defaults mirror JBrowseLiteComponent (depictio/models/components/
+  // lite.py); depictio/api/v1/services/jbrowse/render.py reads them back. Unset
+  // optionals are written as null (not undefined) so an edit that clears one
+  // actually overrides the value carried in from `existing`.
+  const c = as<{
+    title?: string;
+    assembly?: string | null;
+    location?: string | null;
+    locus_from?: {
+      data_collection_tag?: string;
+      chrom_column?: string;
+      start_column?: string;
+      end_column?: string | null;
+      padding?: number;
+      max_rows?: number;
+    } | null;
+    track_mode?: string;
+    max_tracks?: number;
+    initial_tracks?: number;
+    default_tracks?: unknown;
+    ucsc_tracks?: unknown;
+    show_annotation?: boolean;
+    selection_enabled?: boolean;
+    selection_column?: string | null;
+    selection_mode?: string;
+    show_header?: boolean;
+    show_overview?: boolean;
+    track_labels?: string;
+    force_load?: boolean;
+    fetch_size_limit_mb?: unknown;
+    preset?: string | null;
+    config_overrides?: unknown;
+  }>(state.config);
+  // `locus_from` requires the DC and both coordinate columns (JBrowseLocusSource
+  // forbids partial objects), so a half-filled section is dropped, not saved.
+  const lf = c.locus_from;
+  const locusFrom =
+    lf && lf.data_collection_tag && lf.chrom_column && lf.start_column
+      ? {
+          data_collection_tag: lf.data_collection_tag,
+          chrom_column: lf.chrom_column,
+          start_column: lf.start_column,
+          end_column: lf.end_column || null,
+          padding: clampInt(lf.padding, 0, Number.MAX_SAFE_INTEGER, 5000),
+          max_rows: clampInt(lf.max_rows, 1, Number.MAX_SAFE_INTEGER, 20),
+        }
+      : null;
+  const overrides = c.config_overrides;
+  const fetchLimit =
+    typeof c.fetch_size_limit_mb === 'number' ? c.fetch_size_limit_mb : Number.NaN;
+  return {
+    ...existing,
+    ...base,
+    title: c.title ?? '',
+    assembly: c.assembly || null,
+    location: c.location?.trim() || null,
+    locus_from: locusFrom,
+    track_mode: c.track_mode === 'all' ? 'all' : 'filtered',
+    max_tracks: clampInt(c.max_tracks, 1, 200, 20),
+    initial_tracks: clampInt(c.initial_tracks, 0, 200, 5),
+    default_tracks: Array.isArray(c.default_tracks)
+      ? c.default_tracks.filter((t): t is string => typeof t === 'string' && t.length > 0)
+      : [],
+    ucsc_tracks: Array.isArray(c.ucsc_tracks)
+      ? [
+          ...new Set(
+            c.ucsc_tracks.filter((t): t is string => typeof t === 'string' && t.length > 0),
+          ),
+        ]
+      : [],
+    show_annotation: c.show_annotation !== false,
+    selection_enabled: Boolean(c.selection_enabled),
+    // null = the DC's sample_column, resolved server-side.
+    selection_column: c.selection_column || null,
+    selection_mode: c.selection_mode === 'visible_tracks' ? 'visible_tracks' : 'feature_click',
+    show_header: c.show_header !== false,
+    show_overview: c.show_overview !== false,
+    track_labels:
+      c.track_labels === 'overlapping' || c.track_labels === 'hidden'
+        ? c.track_labels
+        : 'offset',
+    force_load: c.force_load === true,
+    // null = JBrowse's own per-adapter fetchSizeLimit (the model caps it at 10 000 MB).
+    fetch_size_limit_mb:
+      Number.isFinite(fetchLimit) && fetchLimit > 0 ? Math.min(fetchLimit, 10_000) : null,
+    preset: c.preset || null,
+    config_overrides:
+      overrides && typeof overrides === 'object' && !Array.isArray(overrides)
+        ? (overrides as Record<string, unknown>)
+        : {},
   };
 }

@@ -55,6 +55,7 @@ export const COMPONENT_TYPES: ComponentTypeMeta[] = [
   }),
   entry('image', 'Interactive image grid with modal viewer'),
   entry('map', 'Geospatial map visualization with markers'),
+  entry('jbrowse', 'Genome browser over a collection of genomic tracks'),
   entry('text', 'Section headings and notes to document the dashboard'),
   entry(
     'advanced_viz',

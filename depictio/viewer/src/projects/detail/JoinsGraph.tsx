@@ -272,8 +272,9 @@ function buildElements(
       classes: bgClass,
     });
 
-    // Column nodes for tables only
-    if (dcType === 'table' && cols.length > 0) {
+    // Column nodes for tables only (a genomic_tracks manifest is a table of
+    // tracks, and links resolve against its columns like any other table's)
+    if ((dcType === 'table' || dcType === 'genomic_tracks') && cols.length > 0) {
       cols.forEach((col, j) => {
         elements.push({
           data: {

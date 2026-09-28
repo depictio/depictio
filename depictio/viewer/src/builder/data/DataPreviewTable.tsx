@@ -2,7 +2,7 @@
  * Data Preview pane. Mirrors the AG Grid panel rendered by the Dash stepper
  * `update_stepper_data_preview` callback (depictio/dash/layouts/stepper.py:838+).
  *
- *  - For table DCs: AG Grid with pagination (10 rows/page), sortable, filterable
+ *  - For table / genomic_tracks DCs: AG Grid with pagination (10 rows/page), sortable, filterable
  *  - For multiqc DCs: blue alert (no tabular preview)
  *  - For other non-tabular DCs: similar alert
  */
@@ -32,7 +32,11 @@ interface Props {
 
 const DataPreviewTable: React.FC<Props> = ({ dcId, dcType, shape }) => {
   const isMultiQC = dcType?.toLowerCase() === 'multiqc';
-  const isTable = dcType?.toLowerCase() === 'table' || dcType == null;
+  // A genomic_tracks DC is a track manifest stored as a Delta table.
+  const isTable =
+    dcType?.toLowerCase() === 'table' ||
+    dcType?.toLowerCase() === 'genomic_tracks' ||
+    dcType == null;
 
   const [data, setData] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);

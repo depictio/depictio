@@ -802,6 +802,8 @@ export type InteractiveFilterSource =
   | 'map_selection'
   | 'image_selection'
   | 'tree_selection'
+  /** Tracks picked in the genome browser (feature click / visible tracks). */
+  | 'jbrowse_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
@@ -1623,29 +1625,102 @@ export async function fetchMapData(
  *  narrow the visible tracks via existing /jbrowse/* internal endpoints. If
  *  any of those services are unreachable, the backend returns 503.
  */
+/** One track of the render payload, as the viewer needs it to map a click
+ *  back to a dashboard filter. */
+export interface JBrowseTrackRow {
+  track_id: string;
+  name: string;
+  format: string;
+  sample: string | null;
+  /** Value of the component's selection column for this track. */
+  selection_value: string | null;
+  /** Manifest grouping (e.g. assay / mark) the track menu groups rows by. */
+  category?: string | null;
+  /** Display colour (any CSS colour) from the manifest, when it declares one. */
+  color?: string | null;
+  /** Where the track comes from: a manifest row, the assembly's annotation,
+   *  a UCSC track, or a `config_overrides.extra_tracks` entry. Absent on an
+   *  older backend: read as `manifest`. */
+  source?: 'manifest' | 'annotation' | 'ucsc' | 'extra';
+}
+
+/** `POST /dashboards/render_jbrowse` — everything the embedded linear genome
+ *  view is built from. File locations are signed, short-lived API URLs (or the
+ *  raw https URL for `direct_access` collections). */
 export interface JBrowseSessionResponse {
-  iframe_url: string;
-  assembly: string;
-  location: string;
-  tracks?: string[];
-  metadata?: { filter_applied?: boolean };
+  assembly: Record<string, unknown>;
+  tracks: Array<Record<string, unknown> & { trackId: string }>;
+  shown_track_ids: string[];
+  location: string | null;
+  view: { hideHeader?: boolean; hideHeaderOverview?: boolean; trackLabels?: string } & Record<
+    string,
+    unknown
+  >;
+  configuration: Record<string, unknown>;
+  track_rows: JBrowseTrackRow[];
+  selection_column: string | null;
+  tracks_dc_id: string;
+  filter_applied: boolean;
+  total_tracks: number;
+  matched_tracks: number;
+  truncated: boolean;
+  /** Default of the viewer's "Force load" toggle (component `force_load`). */
+  force_load?: boolean;
+  /** The component's `max_tracks` cap on `shown_track_ids`. */
+  max_tracks?: number;
+  /** Requested UCSC track names the backend could not resolve. */
+  ucsc_missing?: string[];
 }
 
 export async function fetchJBrowseSession(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
-  theme: 'light' | 'dark' = 'light',
 ): Promise<JBrowseSessionResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters }),
     },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to render JBrowse');
   return res.json();
+}
+
+/** One UCSC Genome Browser track offered by the builder's track picker. */
+export interface UcscTrackOption {
+  name: string;
+  label: string;
+  type: string;
+  group: string | null;
+}
+
+/** `GET /jbrowse/ucsc/{assembly}/tracks` — `genome` is the UCSC genome the
+ *  assembly (preset name or alias) maps to, null when it has none. */
+export interface UcscTracksResponse {
+  genome: string | null;
+  tracks: UcscTrackOption[];
+}
+
+export async function fetchUcscTracks(
+  assembly: string,
+  q = '',
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<UcscTracksResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (q) params.set('q', q);
+  const res = await authFetch(
+    `${API_BASE}/jbrowse/ucsc/${encodeURIComponent(assembly)}/tracks?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list UCSC tracks');
+  const body = (await res.json()) as Partial<UcscTracksResponse>;
+  return {
+    genome: body?.genome ?? null,
+    tracks: Array.isArray(body?.tracks) ? body.tracks : [],
+  };
 }
 
 /** Backend signals "figure cache is being warmed" via HTTP 202. The viewer
@@ -2305,6 +2380,10 @@ export function defaultLayoutForType(
       return { x: 0, y, w: 4, h: 4 };
     case 'map':
       return { x: 0, y, w: 4, h: 4 };
+    case 'jbrowse':
+      // A genome browser needs the width for the locus and the height for a
+      // few stacked tracks.
+      return { x: 0, y, w: 8, h: 8 };
     case 'text':
       // Section heading / banner — wide and short.
       return { x: 0, y, w: 8, h: 3 };
@@ -4356,7 +4435,7 @@ export interface DCLinkConfig {
   case_sensitive?: boolean;
 }
 
-export type LinkTargetType = 'table' | 'multiqc' | 'image';
+export type LinkTargetType = 'table' | 'multiqc' | 'image' | 'genomic_tracks';
 
 export interface DCLink {
   id: string;
