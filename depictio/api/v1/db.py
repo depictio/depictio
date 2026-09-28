@@ -73,6 +73,7 @@ telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
 comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
 agent_tool_calls_collection = db[settings.mongodb.collections.agent_tool_calls_collection]
 agent_quotas_collection = db[settings.mongodb.collections.agent_quotas_collection]
+ai_agent_runs_collection = db[settings.mongodb.collections.ai_agent_runs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
 
 

@@ -119,6 +119,12 @@ WRITE_SCOPES: dict[RouteKey, TokenScope] = {
     ("POST", "/ai/analyze"): "report",
     ("POST", "/ai/summarize-section"): "report",
     ("POST", "/ai/resolve-filters"): "report",
+    # Agent-team runs write threads and a report, each through the tool
+    # registry with the run's own scope checks; the dry-run route may spend
+    # LLM tokens, so it sits with them.
+    ("POST", "/ai/agent-runs"): "report",
+    ("POST", "/ai/agent-runs/route"): "report",
+    ("POST", "/ai/agent-runs/{run_id}/cancel"): "report",
     # edit_dashboard: dashboard create/edit/import/save and AI generation.
     ("POST", "/dashboards/save/{dashboard_id}"): "edit_dashboard",
     ("POST", "/dashboards/edit/{dashboard_id}"): "edit_dashboard",
