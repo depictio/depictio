@@ -10,7 +10,7 @@ from depictio.models.models.templates import (
 )
 
 # The stubbed S3 listing lives with the template tests.
-from depictio.tests.cli.s3_stubs import s3_data_root
+from ..s3_stubs import s3_data_root
 
 
 def _write_params(tmp_path, name, payload):

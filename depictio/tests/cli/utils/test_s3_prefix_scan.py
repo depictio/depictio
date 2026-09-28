@@ -28,7 +28,8 @@ from depictio.models.models.workflows import (
     WorkflowDataLocation,
     WorkflowEngine,
 )
-from depictio.tests.cli.s3_stubs import install_s3_listing
+
+from ..s3_stubs import install_s3_listing
 
 # Every object is ten bytes, so ``Size`` is a constant the File assertions can
 # name; the shared stub derives it from the body.

@@ -27,7 +27,8 @@ from depictio.cli.cli.utils.deltatables import (
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.files import File
 from depictio.models.models.users import Permission, UserBase
-from depictio.tests.cli.s3_stubs import install_s3_listing
+
+from .s3_stubs import install_s3_listing
 
 
 @pytest.fixture(autouse=True)

@@ -20,7 +20,8 @@ from depictio.cli.cli.utils.data_root import (
     data_root_for,
     list_s3_objects,
 )
-from depictio.tests.cli.s3_stubs import install_s3_listing, s3_cli_config
+
+from ..s3_stubs import install_s3_listing, s3_cli_config
 
 # ── the shared virtual tree ──────────────────────────────────────────────────
 

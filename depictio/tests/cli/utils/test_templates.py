@@ -41,7 +41,8 @@ from depictio.models.models.templates import (
     TemplateOrigin,
     TemplateVariable,
 )
-from depictio.tests.cli.s3_stubs import (
+
+from ..s3_stubs import (
     MEGATEST_TREE,
     S3_BUCKET,
     S3_ROOT,

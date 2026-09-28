@@ -17,7 +17,7 @@ from depictio.cli.depictio_cli import app
 
 # One fixture tree, one definition of what a megatest prefix looks like: the
 # same stub the DataRoot and template tests run against.
-from depictio.tests.cli.s3_stubs import (
+from ..s3_stubs import (
     MEGATEST_TREE,
     S3_ROOT,
     install_megatest_listing,

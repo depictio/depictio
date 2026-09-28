@@ -1031,6 +1031,7 @@ def _infer_phylum_level(root: DataRoot, params: dict) -> int | None:
     the rank columns of the DADA2 taxonomy table; the DADA2 database's taxlevels
     from params. Capped at ``tax_agglom_max``. None when nothing names a Phylum.
     """
+
     def header(relative: str, sep: str) -> list[str]:
         try:
             first = root.read_bytes(relative).split(b"\n", 1)[0].decode("utf-8", errors="replace")
