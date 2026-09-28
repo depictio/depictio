@@ -179,18 +179,23 @@ def cube(s: Sketch, cx: float, cy: float, size: float, fill: str) -> None:
     s.line(tape, cy - h + d, tape, cy - h + d + size * 0.3, width=3, passes=1, colour=RED)
 
 
-def container(s: Sketch, x: float, y: float, w: float, h: float, fill: str, label: str) -> None:
+def container(
+    s: Sketch, x: float, y: float, w: float, h: float, fill: str, label: str, *, size: float = 15
+) -> None:
     """A shipping container: ribbed walls, a label on the door."""
     s.rect(Box(x, y, w, h, fill, ""))
     for i in range(1, 7):
         s.line(x + i * w / 7, y + 6, x + i * w / 7, y + h - 6, width=1.0, colour=DIM, passes=1)
-    s.rect(Box(x + w / 2 - 52, y + h / 2 - 15, 104, 30, WHITE, ""))
-    s.text(x + w / 2, y + h / 2 + 6, label, size=15)
+    door_w, door_h = size * 7, size * 2
+    s.rect(Box(x + w / 2 - door_w / 2, y + h / 2 - door_h / 2, door_w, door_h, WHITE, ""))
+    s.text(x + w / 2, y + h / 2 + size * 0.4, label, size=size)
 
 
-def pill(s: Sketch, cx: float, cy: float, text: str, fill: str, *, w: float = 150) -> None:
-    s.rect(Box(cx - w / 2, cy - 17, w, 34, fill, ""))
-    s.text(cx, cy + 6, text, size=16, weight="bold")
+def pill(
+    s: Sketch, cx: float, cy: float, text: str, fill: str, *, w: float = 150, size: float = 16
+) -> None:
+    s.rect(Box(cx - w / 2, cy - size - 1, w, size * 2 + 2, fill, ""))
+    s.text(cx, cy + size * 0.4, text, size=size, weight="bold")
 
 
 # --------------------------------------------------------------------------
@@ -256,6 +261,69 @@ def build_same_code() -> Sketch:
     s.arrow(code.x + 40, code.bottom, 360, 380)
     s.arrow(code.right - 40, code.bottom, 1115, 380)
     s.line(750, 400, 750, 820, dashed=True, colour=GREY)
+    return s
+
+
+# The same schema for a documentation column (~780 px): narrower canvas and
+# text large enough to stay readable at that width.
+DOCS_W, DOCS_H = 1000, 900
+
+
+def build_same_code_docs() -> Sketch:
+    s = Sketch(DOCS_W, DOCS_H)
+    s.text(40, 56, "One server, two ways to run it", size=34, anchor="start")
+    s.text(
+        40, 92, "only where MongoDB, Redis and the S3 store come from changes",
+        size=21, colour=DIM, anchor="start",
+    )
+
+    code = Box(250, 125, 440, 235, YELLOW, "")
+    s.rect(code)
+    s.text(code.cx, code.y + 40, "depictio  (one wheel)", size=28, weight="bold")
+    rack(s, code.x + 80, code.y + 66, 86, 70, WHITE)
+    gear(s, code.cx, code.y + 101, 36, STEEL)
+    bx = code.right - 132
+    s.rect(Box(bx, code.y + 66, 104, 72, WHITE, ""))
+    s.line(bx, code.y + 82, bx + 104, code.y + 82, amount=0.8, passes=1)
+    for i, frac in enumerate((0.5, 0.9, 0.65)):
+        s.rect(Box(bx + 16 + i * 27, code.y + 132 - 42 * frac, 17, 42 * frac, BAR_BLUE, ""))
+    for x, label in ((code.x + 80, "API"), (code.cx, "worker"), (bx + 52, "viewer")):
+        s.text(x, code.y + 178, label, size=22)
+    s.text(code.cx, code.y + 216, "configured by `DEPICTIO_*` variables", size=19, colour=DIM)
+
+    cube(s, 900, 190, 70, S3)
+    s.text(900, 262, "conda-forge", size=21, weight="bold")
+    s.text(900, 290, "`py-rattler`,", size=18, colour=DIM)
+    s.text(900, 314, "first run only", size=18, colour=DIM)
+    s.curve([(900, 330), (895, 380), (880, 440)], colour=INK)
+    s.arrow(880, 440, 872, 478)
+
+    s.text(250, 450, "Docker / Kubernetes", size=28, weight="bold")
+    s.rect(Box(30, 475, 440, 325, BLUE, ""), dashed=True, colour=DIM)
+    fills = (MONGO, REDIS, S3, YELLOW, YELLOW, YELLOW)
+    for i, label in enumerate(("mongo", "redis", "seaweedfs", "api", "worker", "viewer")):
+        col, row = i % 2, i // 2
+        container(s, 50 + col * 210, 495 + row * 100, 190, 80, fills[i], label, size=19)
+    s.text(250, 850, "one container per service", size=21, colour=DIM)
+
+    s.text(745, 450, "`depictio local up`", size=28, weight="bold")
+    screen = laptop(s, 540, 490, 420, 285)
+    cylinder(s, screen.x + 70, screen.y + 30, 76, 90, MONGO)
+    stack(s, screen.x + 210, screen.y + 35, 86, 86, REDIS)
+    bucket(s, screen.x + 350, screen.y + 38, 88, 86, S3)
+    for x, label in (
+        (screen.x + 70, "mongod"),
+        (screen.x + 210, "redis-server"),
+        (screen.x + 350, "weed mini"),
+    ):
+        s.text(x, screen.y + 162, label, size=20)
+    pill(s, screen.x + 115, screen.y + 225, "uvicorn", YELLOW, w=170, size=20)
+    pill(s, screen.x + 305, screen.y + 225, "celery", YELLOW, w=170, size=20)
+    s.text(750, 850, "plain processes on 127.0.0.1", size=21, colour=DIM)
+
+    s.arrow(code.x + 40, code.bottom, 250, 420)
+    s.arrow(code.right - 40, code.bottom, 745, 420)
+    s.line(500, 440, 500, 870, dashed=True, colour=GREY)
     return s
 
 
@@ -351,6 +419,7 @@ def main(
 ) -> None:
     """Write the same-code and up-flow schemas under --out."""
     write(build_same_code(), out, "same_code", png=png)
+    write(build_same_code_docs(), out, "same_code_docs", png=png)
     write(build_up_flow(), out, "up_flow", png=png)
 
 
