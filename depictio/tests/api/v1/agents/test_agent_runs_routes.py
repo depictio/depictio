@@ -89,7 +89,7 @@ def test_route_dry_run(world):
         "agent_id": "analyst/general@1",
         "role": "analyst",
         "topic": "general",
-        "reason": "no specialist topic matched this dashboard or question",
+        "reason": "no specialist topic matched this dashboard's structure",
     }
     bad = world.client.post(f"{AI}/agent-runs/route", json={**body, "team": ["nope/x"]})
     assert bad.status_code == 422

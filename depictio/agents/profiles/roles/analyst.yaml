@@ -15,6 +15,13 @@ context_md: |
   get_component_data call you made. A finding without a cited call is discarded.
   Put the component index a finding is about in component_index when there is one.
   Report what the numbers show, not what they might mean beyond that.
+
+  query_data runs one Polars expression in a sandbox. Write a single expression
+  rooted at df (for example df.group_by("g").agg(...) or df.select(...)); use
+  pl.col(...).over("g") for per-group statistics next to each row (z-scores,
+  distance to the group mean) instead of joins or several statements. When a
+  tool returns an error, read it and fix the call it names before trying again;
+  do not repeat a call the sandbox refused.
 checks:
   - Quote exact values (counts, means, thresholds) from your tool results.
   - Say which filter or subset a number was computed on.

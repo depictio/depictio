@@ -11,16 +11,24 @@ applies_to:
   catalog_modules:
     - deseq2
     - deseq2/*
+  # The column vocabulary of DE result tables (DESeq2, edgeR, limma). The
+  # router needs at least two of them (or a template / catalog match): the
+  # keywords below never route here on their own.
   columns:
     - "log2foldchange"
     - "*log2fc*"
     - "*log2_fold*"
-    - "padj"
-    - "*adj_p*"
-    - "*fdr*"
-    - "pvalue"
-    - "basemean"
+    - "logfc"
     - "lfcse"
+    - "basemean"
+    - "logcpm"
+    - "aveexpr"
+    - "padj"
+    - "*p_adj*"
+    - "*adj_p*"
+    - "adj.p.val"
+    - "pvalue"
+    - "*fdr*"
   keywords:
     - differential
     - expression

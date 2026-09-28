@@ -9,7 +9,7 @@ from depictio.api.v1.agents.profiles import load_profiles
 from depictio.api.v1.agents.registry import ToolResult
 from depictio.api.v1.agents.router import RouteContext, route
 from depictio.api.v1.agents.runner import CancelToken
-from depictio.api.v1.agents.team import TeamDeps, TeamRun, dedupe_key, new_run
+from depictio.api.v1.agents.team import TeamDeps, TeamRun, dedupe_key, new_run, shape_args
 from depictio.models.models.users import effective_scopes
 from depictio.tests.api.v1.agents._fakes import (
     FakeLLM,
@@ -96,11 +96,23 @@ def _finding_ids(text: str) -> list[str]:
     return list(dict.fromkeys(re.findall(r"f_[0-9a-f]{10}", text)))
 
 
-def _job(llm, toolbox, *, saved=None, cancel=None, scopes=None, question=QUESTION):
+def _job(
+    llm,
+    toolbox,
+    *,
+    saved=None,
+    cancel=None,
+    scopes=None,
+    question=QUESTION,
+    ledger=None,
+    summary=None,
+):
     profiles = load_profiles()
-    route_ctx = RouteContext(dashboard_id="d1", component_indexes={"c1", "c2"})
+    route_ctx = RouteContext(
+        dashboard_id="d1", component_indexes={"c1", "c2"}, summary=summary or {}
+    )
     plan = asyncio.run(route(profiles, route_ctx, question, team=["analyst/general@1"]))
-    ledger = BudgetLedger(max_tool_calls=30, limit_usd=1.0, max_tokens=100_000)
+    ledger = ledger or BudgetLedger(max_tool_calls=30, limit_usd=1.0, max_tokens=100_000)
     run = new_run(
         run_id="run-1",
         user_id="u1",
@@ -286,3 +298,132 @@ def test_all_analysts_failing_fails_the_run():
 
     events = _execute(_job(FakeLLM(boom), FakeToolbox(tools=default_tools())))
     assert events[-2][1]["status"] == "failed"
+
+
+def test_run_stays_under_the_usd_limit():
+    # The run that spent 0.48 of 0.40: analysts kept calling tools. Every call
+    # here costs 0.05; the ledger must stop each step before it would overrun.
+    def answer(messages, tools, choice):
+        role = role_of(messages)
+        if role == "analyst":
+            if choice == "none":
+                return turn(
+                    {
+                        "findings": [
+                            {
+                                "title": "Gentoo are heaviest",
+                                "detail": "Mean 5076 g.",
+                                "component_index": "c1",
+                                "evidence": [{"call_id": "call-1"}],
+                            }
+                        ]
+                    },
+                    cost=0.05,
+                )
+            return turn(calls=[call("query_data", {"code": "df.height"})], cost=0.05)
+        if role == "skeptic":
+            return turn(calls=[call("get_component_data", {"index": "c1"})], cost=0.05)
+        return turn({"summary_md": "Gentoo are heaviest.", "questions": []}, cost=0.05)
+
+    ledger = BudgetLedger(max_tool_calls=40, limit_usd=0.40, max_tokens=1_000_000)
+    toolbox = FakeToolbox(tools=default_tools())
+    job = _job(FakeLLM(answer), toolbox, ledger=ledger)
+    events = _execute(job)
+
+    assert ledger.spent_usd <= 0.40
+    assert events[-2][1]["status"] == "budget"
+    # The analyst concluded with its finding; the reporter used the reserve.
+    assert [d["title"] for e, d in events if e == "finding"] == ["Gentoo are heaviest"]
+    [report] = toolbox.calls_to("create_report")
+    assert report["summary"] == "Gentoo are heaviest."
+    budgets = [d for e, d in events if e == "budget"]
+    assert all(b["spent_usd"] <= 0.40 for b in budgets)
+
+
+def test_shape_args_validation():
+    assert shape_args({"shape": "ref_line", "axis": "y", "value": 4200.5, "label": "mean"}) == {
+        "shape": "ref_line",
+        "axis": "y",
+        "value": 4200.5,
+        "label": "mean",
+    }
+    assert shape_args({"shape": "y_range", "y0": 50, "y1": 45}) == {
+        "shape": "y_range",
+        "y0": 45,
+        "y1": 50,
+    }
+    assert shape_args({"shape": "x_range", "x0": "Adelie", "x1": "Gentoo"})["x0"] == "Adelie"
+    got = shape_args(
+        {"shape": "points", "column": "id", "ids": [3, "p7", None], "points": [{"x": 1}]}
+    )
+    assert got == {"shape": "points", "column": "id", "ids": [3, "p7"]}
+    got = shape_args({"shape": "points", "points": [{"x": 1, "y": 2}, {"x": 3}]})
+    assert got == {"shape": "points", "points": [{"x": 1, "y": 2}]}
+    # Incomplete, wrongly typed or not drawable: a plain comment instead.
+    for bad in (
+        {"shape": "ref_line", "axis": "y", "value": "high"},
+        {"shape": "ref_line", "value": 3},
+        {"shape": "y_range", "y0": 1, "y1": 1},
+        {"shape": "y_range", "y0": True, "y1": 2},
+        {"shape": "x_range", "x0": 1},
+        {"shape": "points", "column": "id", "ids": []},
+        {"shape": "arrow_note", "x": 1},
+        {"shape": "circle"},
+    ):
+        assert shape_args(bad) is None, bad
+    assert shape_args({"shape": "ref_line", "axis": "y", "value": 3}, "card") is None
+    assert shape_args({"shape": "ref_line", "axis": "y", "value": 3}, "figure") is not None
+
+
+def _annotator_script(annotation):
+    base = team_script()
+
+    def answer(messages, tools, choice):
+        if role_of(messages) == "annotator":
+            fid = _finding_ids(messages[-1]["content"])[0]
+            return turn({"annotations": [{"finding_id": fid, **annotation}]})
+        return base(messages, tools, choice)
+
+    return answer
+
+
+def test_annotator_gets_axes_and_draws_a_ref_line():
+    summary = {
+        "components": [
+            {
+                "index": "c1",
+                "type": "figure",
+                "config": {"visu_type": "box", "x": "species", "y": "bill_length_mm"},
+            },
+            {"index": "c2", "type": "card"},
+        ]
+    }
+    annotation = {
+        "body": "Gentoo mean bill length is 47.5 mm.",
+        "shape": "ref_line",
+        "axis": "y",
+        "value": 47.5,
+        "label": "Gentoo mean",
+        "ids": "not-a-list",
+    }
+    llm = FakeLLM(_annotator_script(annotation))
+    toolbox = FakeToolbox(tools=default_tools())
+    _execute(_job(llm, toolbox, summary=summary))
+    brief = next(
+        c["messages"][-1]["content"] for c in llm.calls if role_of(c["messages"]) == "annotator"
+    )
+    assert "bill_length_mm" in brief and '"shape_allowed": true' in brief
+    [written] = toolbox.calls_to("create_annotation")
+    assert written["shape"] == "ref_line" and written["value"] == 47.5
+    assert written["label"] == "Gentoo mean" and "ids" not in written
+
+
+def test_annotator_shape_on_a_card_becomes_a_plain_comment():
+    summary = {"components": [{"index": "c1", "type": "card"}]}
+    annotation = {"body": "Gentoo: 47.5 mm.", "shape": "ref_line", "axis": "y", "value": 47.5}
+    toolbox = FakeToolbox(tools=default_tools())
+    saved = []
+    _execute(_job(FakeLLM(_annotator_script(annotation)), toolbox, summary=summary, saved=saved))
+    [written] = toolbox.calls_to("create_annotation")
+    assert "shape" not in written and written["body"] == "Gentoo: 47.5 mm."
+    assert any("plain comment" in w for w in saved[-1].warnings)

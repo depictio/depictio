@@ -162,8 +162,88 @@ REPORTER_SCHEMA: dict[str, Any] = {
     "required": ["summary_md"],
 }
 
-# Shape fields the annotator may set; everything else is filled by the server.
-_SHAPE_FIELDS = ("label", "x0", "x1", "y0", "y1", "axis", "value", "x", "y", "column", "ids")
+# Component types a shape can be drawn on; others (cards, tables...) get a plain comment.
+SHAPE_COMPONENT_TYPES = frozenset({"figure", "advanced_viz", "multiqc"})
+MAX_SHAPE_IDS = 200
+# Config keys that say what a component's axes show, for the annotator's brief.
+_AXIS_KEYS = ("visu_type", "viz_kind", "x", "y", "color", "config", "selected_plot")
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_coord(value: Any) -> bool:
+    """A data coordinate: a number, or a category name on a categorical axis."""
+    return _is_number(value) or (isinstance(value, str) and bool(value.strip()))
+
+
+def _ordered(a: Any, b: Any) -> tuple[Any, Any]:
+    if _is_number(a) and _is_number(b) and a > b:
+        return b, a
+    return a, b
+
+
+def shape_args(spec: dict[str, Any], component_type: str | None = None) -> dict[str, Any] | None:
+    """The ``create_annotation`` shape fields of an annotator proposal, or None.
+
+    Only a complete, well-typed shape is kept: anything missing or odd (or a
+    component that cannot hold a shape) leaves the annotation a plain comment.
+    The annotation tool validates again; a shape it rejects is retried as a
+    plain comment by the caller.
+    """
+    shape = spec.get("shape")
+    if component_type and component_type.lower() not in SHAPE_COMPONENT_TYPES:
+        return None
+    out: dict[str, Any]
+    if shape == "x_range":
+        x0, x1 = spec.get("x0"), spec.get("x1")
+        if not (_is_coord(x0) and _is_coord(x1)) or x0 == x1:
+            return None
+        x0, x1 = _ordered(x0, x1)
+        out = {"shape": shape, "x0": x0, "x1": x1}
+    elif shape == "y_range":
+        y0, y1 = spec.get("y0"), spec.get("y1")
+        if not (_is_number(y0) and _is_number(y1)) or y0 == y1:
+            return None
+        y0, y1 = _ordered(y0, y1)
+        out = {"shape": shape, "y0": y0, "y1": y1}
+    elif shape == "ref_line":
+        axis, value = spec.get("axis"), spec.get("value")
+        if axis not in ("x", "y") or not _is_coord(value):
+            return None
+        if axis == "y" and not _is_number(value):
+            return None
+        out = {"shape": shape, "axis": axis, "value": value}
+    elif shape == "arrow_note":
+        x, y = spec.get("x"), spec.get("y")
+        if not (_is_coord(x) and _is_coord(y)):
+            return None
+        out = {"shape": shape, "x": x, "y": y}
+    elif shape == "points":
+        out = {"shape": shape}
+        column, ids = spec.get("column"), spec.get("ids")
+        if isinstance(column, str) and column.strip() and isinstance(ids, list):
+            kept = [i for i in ids if _is_coord(i)][:MAX_SHAPE_IDS]
+            if kept:
+                out["column"], out["ids"] = column.strip(), kept
+        points = spec.get("points")
+        if isinstance(points, list):
+            coords = [
+                {"x": pt["x"], "y": pt["y"]}
+                for pt in points
+                if isinstance(pt, dict) and _is_coord(pt.get("x")) and _is_coord(pt.get("y"))
+            ][:MAX_SHAPE_IDS]
+            if coords:
+                out["points"] = coords
+        if "ids" not in out and "points" not in out:
+            return None
+    else:
+        return None
+    label = spec.get("label")
+    if isinstance(label, str) and label.strip():
+        out["label"] = label.strip()[:MAX_LABEL_CHARS]
+    return out
 
 
 def _now() -> str:
@@ -500,6 +580,28 @@ class TeamRun:
             },
         )
 
+    def _components_by_index(self) -> dict[str, dict[str, Any]]:
+        return {
+            str(c.get("index")): c
+            for c in self.route_ctx.summary.get("components") or []
+            if isinstance(c, dict) and c.get("index") is not None
+        }
+
+    def _axes_brief(self, targets: list[RunFinding]) -> str:
+        """Type and axis columns of the components the findings are about."""
+        by_index = self._components_by_index()
+        items = []
+        for index in dict.fromkeys(f.component_index for f in targets if f.component_index):
+            comp = by_index.get(str(index))
+            if comp is None:
+                continue
+            config = comp.get("config") or {}
+            item: dict[str, Any] = {"component_index": index, "type": comp.get("type")}
+            item.update({k: config[k] for k in _AXIS_KEYS if k in config})
+            item["shape_allowed"] = str(comp.get("type") or "").lower() in SHAPE_COMPONENT_TYPES
+            items.append(item)
+        return _json(items, SUMMARY_CONTEXT_CHARS) if items else "[]"
+
     async def _annotator(self, member: TeamMember) -> None:
         targets = [f for f in self.run.findings if f.verdict == "confirmed" and f.component_index]
         if not targets:
@@ -510,11 +612,15 @@ class TeamRun:
             member,
             record,
             task=(
-                f"Dashboard id: {self.run.dashboard_id}\n\nConfirmed findings to annotate:\n"
+                f"Dashboard id: {self.run.dashboard_id}\n\nComponents of these findings "
+                "(type and the columns on their axes):\n"
+                + self._axes_brief(targets)
+                + "\n\nConfirmed findings to annotate:\n"
                 + self._findings_brief(targets)
             ),
             schema=ANNOTATOR_SCHEMA,
         )
+        types = {i: str(c.get("type") or "") for i, c in self._components_by_index().items()}
         specs: dict[str, dict[str, Any]] = {}
         for item in (outcome.output or {}).get("annotations") or []:
             if isinstance(item, dict) and item.get("finding_id"):
@@ -534,14 +640,14 @@ class TeamRun:
             }
             args = dict(base)
             if spec.get("shape"):
-                args["shape"] = spec["shape"]
-                for key in _SHAPE_FIELDS:
-                    if spec.get(key) is not None:
-                        args[key] = spec[key]
-                if isinstance(spec.get("points"), list):
-                    args["points"] = spec["points"]
-                if isinstance(args.get("label"), str):
-                    args["label"] = args["label"][:MAX_LABEL_CHARS]
+                shape = shape_args(spec, types.get(str(f.component_index)) or None)
+                if shape is None:
+                    self.run.warnings.append(
+                        f"{member.agent_id}: shape {spec.get('shape')!r} on {f.component_index} "
+                        "was incomplete or not drawable; written as a plain comment."
+                    )
+                else:
+                    args.update(shape)
             data = await self._write(member, record, "create_annotation", args)
             if data is None and "shape" in args:
                 # A shape the tool rejects must not cost the finding its comment.

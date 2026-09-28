@@ -1,4 +1,4 @@
-"""Team routing: rules on template, catalog, columns, components and keywords; LLM fallback."""
+"""Team routing: structural rules (template, catalog, columns), keywords to rank, LLM for ties."""
 
 import asyncio
 
@@ -23,19 +23,82 @@ def test_template_glob_routes_to_microbiome():
     assert "template" in plan.team[0].reason
 
 
+PENGUINS = {
+    "species",
+    "island",
+    "bill_length_mm",
+    "bill_depth_mm",
+    "flipper_length_mm",
+    "body_mass_g",
+    "sex",
+    "year",
+}
+IRIS = {"sepal_length", "sepal_width", "petal_length", "petal_width", "species"}
+PENGUIN_QUESTION = (
+    "Which penguin species differ most in body mass and flipper length, and are there outliers?"
+)
+
+
 def test_column_vocabulary_routes_to_differential_expression():
-    ctx = RouteContext(dashboard_id="d", columns={"gene_id", "log2foldchange", "padj", "basemean"})
-    plan = _route(ctx)
-    assert _topics(plan) == ["differential_expression"]
-    assert plan.scores["differential_expression"] == 3.0
+    # A DESeq2 results table, column names lowercased like build_route_context does.
+    deseq2 = {"gene_id", "basemean", "log2foldchange", "lfcse", "stat", "pvalue", "padj"}
+    llm = FakeLLM([])
+    plan = _route(RouteContext(dashboard_id="d", columns=deseq2), llm=llm)
+    assert _topics(plan) == ["differential_expression"] and plan.method == "rules"
+    assert plan.scores["differential_expression"] == 4.0  # capped at 4 columns
+    assert "columns" in plan.team[0].reason
+    assert not llm.calls
 
 
-def test_keywords_and_components():
-    ctx = RouteContext(dashboard_id="d", component_types={"multiqc", "figure"})
+def test_edger_columns_route_to_differential_expression():
+    edger = {"gene", "logfc", "logcpm", "pvalue", "fdr"}
+    assert _topics(_route(RouteContext(dashboard_id="d", columns=edger))) == [
+        "differential_expression"
+    ]
+
+
+def test_plain_tables_go_to_general_without_the_llm():
+    # The run that routed penguins to differential_expression: no structural
+    # signal anywhere, so no LLM call either, whatever the question says.
+    for columns in (PENGUINS, IRIS):
+        llm = FakeLLM([turn({"topics": ["differential_expression"]})])
+        ctx = RouteContext(dashboard_id="d", columns=columns, component_types={"figure", "card"})
+        for question in (PENGUIN_QUESTION, "Is there differential expression between species?"):
+            plan = _route(ctx, question, llm=llm)
+            assert _topics(plan) == ["general"] and plan.method == "rules"
+            assert plan.notes
+        assert not llm.calls
+
+
+def test_keywords_alone_never_pick_a_specialist():
+    # Keywords of three topics, no structure: general, no tie to break.
+    llm = FakeLLM([])
+    plan = _route(
+        RouteContext(dashboard_id="d"), "coverage of each variant and the diversity", llm=llm
+    )
+    assert _topics(plan) == ["general"] and not llm.calls
+    assert plan.scores["variants"] > 0  # scored, but not a candidate
+
+
+def test_keywords_and_components_add_to_a_structural_match():
+    ctx = RouteContext(
+        dashboard_id="d", catalog_modules={"multiqc"}, component_types={"multiqc", "figure"}
+    )
     plan = _route(ctx, "Which samples fail QC on duplication?")
     assert _topics(plan)[0] == "qc_multiqc"
     reason = plan.team[0].reason
-    assert "components multiqc" in reason and "question mentions" in reason
+    assert "catalog multiqc" in reason and "components multiqc" in reason
+    assert "question mentions" in reason
+
+
+def test_keywords_rank_structural_matches():
+    ctx = RouteContext(dashboard_id="d", catalog_modules={"qiime2", "ivar"})
+    assert _topics(_route(ctx)) == ["microbiome", "variants"]
+    llm = FakeLLM([])
+    plan = _route(ctx, "Which variant calls stand out?", llm=llm)
+    # variants gets the keyword on top of its catalog match and leads the team.
+    assert _topics(plan) == ["variants", "microbiome"] and plan.method == "rules"
+    assert not llm.calls
 
 
 def test_catalog_modules_from_components():
@@ -62,37 +125,30 @@ def test_two_topics_when_both_score():
     assert "Your focus" in plan.team[1].sub_question
 
 
-def test_no_match_without_llm_is_general():
-    # One weak signal (a single matching column) is not enough to pick a topic.
+def test_one_matching_column_is_not_structural():
     ctx = RouteContext(dashboard_id="d", columns={"sepal_length", "species", "genus"})
     plan = _route(ctx)
     assert _topics(plan) == ["general"] and plan.method == "rules"
-    assert plan.notes
-
-
-def test_no_match_asks_the_llm():
-    llm = FakeLLM([turn({"topics": ["variants", "not-a-topic"]})])
-    plan = _route(RouteContext(dashboard_id="d"), "anything", llm=llm)
-    assert plan.method == "llm" and _topics(plan) == ["variants"]
-    assert "Topics:" in llm.calls[0]["messages"][1]["content"]
-
-
-def test_llm_answer_unusable_falls_back_to_general():
-    llm = FakeLLM([turn("no idea")])
-    plan = _route(RouteContext(dashboard_id="d"), "anything", llm=llm)
-    assert _topics(plan) == ["general"]
+    assert plan.scores["microbiome"] == 0.0
 
 
 def test_tie_for_the_last_place_goes_to_the_llm():
-    # Three topics each matched by one keyword: two places, three candidates.
-    ctx = RouteContext(dashboard_id="d")
-    question = "coverage of each variant and the diversity"
-    llm = FakeLLM([turn({"topics": ["variants"]})])
-    plan = _route(ctx, question, llm=llm)
+    # Three topics each matched by one catalog module: two places, three candidates.
+    ctx = RouteContext(dashboard_id="d", catalog_modules={"qiime2", "multiqc", "ivar"})
+    llm = FakeLLM([turn({"topics": ["variants", "not-a-topic", "general"]})])
+    plan = _route(ctx, llm=llm)
     assert plan.method == "llm" and _topics(plan) == ["variants"]
-    no_llm = _route(ctx, question)
+    prompt = llm.calls[0]["messages"][1]["content"]
+    assert "Topics:" in prompt and "differential_expression" not in prompt
+    no_llm = _route(ctx)
     assert _topics(no_llm) == ["microbiome", "qc_multiqc"]  # alphabetical tie-break
     assert any("alphabetically" in n for n in no_llm.notes)
+
+
+def test_unusable_llm_answer_breaks_the_tie_alphabetically():
+    ctx = RouteContext(dashboard_id="d", catalog_modules={"qiime2", "multiqc", "ivar"})
+    plan = _route(ctx, llm=FakeLLM([turn("no idea")]))
+    assert _topics(plan) == ["microbiome", "qc_multiqc"] and plan.method == "rules"
 
 
 def test_team_override():

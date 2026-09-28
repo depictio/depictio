@@ -4,15 +4,20 @@ Topics are scored on what the dashboard is made of and what is asked:
 
 - the project's template id (``Project.template_origin.template_id``),
 - the catalog modules its components come from (``use:`` / ``catalog_source``),
-- the column names of its data collections,
+- the column names of its data collections (at least ``MIN_COLUMN_HITS`` of them),
 - its component types,
 - keywords of the question.
 
-The best one or two topics each get an analyst; the skeptic, annotator,
-questioner and reporter join bound to the first topic. When no topic scores,
-or several tie for the last place, the LLM picks among the candidates; with
-AI unavailable the ``general`` topic stands in. A ``team`` list in the
-request overrides all of this.
+The first three are structural signals: a specialist topic is only a candidate
+when at least one of them matches. Component types and keywords only add to
+the score of a candidate (they rank candidates and break ties), so a question
+that merely mentions "differential" on a penguin table stays ``general``.
+
+The best one or two candidates each get an analyst; the skeptic, annotator,
+questioner and reporter join bound to the first topic. With no candidate the
+``general`` topic is used, by the rules and without any LLM call. The LLM is
+asked only when candidates tie for the last place; without it the tie is
+broken alphabetically. A ``team`` list in the request overrides all of this.
 """
 
 from __future__ import annotations
@@ -37,8 +42,9 @@ from depictio.api.v1.agents.runner import LLMClient, extract_json
 from depictio.api.v1.configs.logging_init import logger
 
 MAX_TOPICS = 2
-# A topic needs more than one weak signal (a single column name) to be picked.
-MIN_SCORE = 2.0
+# One matching column name is too weak a signal (plain tables have a 'species'
+# or a 'pos' column too); this many distinct matches make a structural signal.
+MIN_COLUMN_HITS = 2
 # A second topic joins only when it scores at least this share of the first.
 SECOND_TOPIC_SHARE = 0.5
 
@@ -73,6 +79,8 @@ class RouteContext:
 class TopicScore:
     score: float = 0.0
     reasons: list[str] = field(default_factory=list)
+    # Template, catalog or column match: what makes the topic a candidate.
+    structural: bool = False
 
 
 @dataclass
@@ -188,16 +196,19 @@ def score_topic(topic: AgentProfile, ctx: RouteContext, question: str) -> TopicS
     ):
         out.score += W_TEMPLATE
         out.reasons.append(f"template {ctx.template_id}")
+        out.structural = True
 
     modules = sorted({m for p in rules.catalog_modules for m in _matches(p, ctx.catalog_modules)})
     if modules:
         out.score += W_CATALOG * min(len(modules), CAP_CATALOG)
         out.reasons.append("catalog " + ", ".join(modules[:3]))
+        out.structural = True
 
     columns = sorted({c for p in rules.columns for c in _matches(p, ctx.columns)})
-    if columns:
+    if len(columns) >= MIN_COLUMN_HITS:
         out.score += W_COLUMN * min(len(columns), CAP_COLUMNS)
         out.reasons.append("columns " + ", ".join(columns[:4]))
+        out.structural = True
 
     types = sorted({t for p in rules.component_types for t in _matches(p, ctx.component_types)})
     if types:
@@ -359,8 +370,9 @@ async def route(
 
     scores = score_topics(profiles, ctx, question)
     public_scores = {tid: s.score for tid, s in sorted(scores.items())}
+    # Keywords and component types alone never make a candidate.
     ranked = sorted(
-        ((tid, s) for tid, s in scores.items() if s.score >= MIN_SCORE),
+        ((tid, s) for tid, s in scores.items() if s.structural),
         key=lambda item: (-item[1].score, item[0]),
     )
     reasons = {tid: "; ".join(s.reasons) for tid, s in ranked}
@@ -383,28 +395,29 @@ async def route(
             chosen = eligible
 
     method: Literal["rules", "llm", "fixed"] = "rules"
-    if not ranked or ambiguous:
-        candidates = ambiguous or [t for t in profiles.topics if t != FALLBACK_TOPIC]
+    if ambiguous:
         picked: list[str] = []
         if llm is not None:
             try:
-                picked = await _llm_pick(llm, profiles, candidates, ctx, question)
+                picked = await _llm_pick(llm, profiles, ambiguous, ctx, question)
             except Exception as exc:  # noqa: BLE001, routing falls back to rules
                 logger.warning(f"agents: LLM routing failed: {exc}")
                 notes.append("LLM routing failed; used the rules only.")
+        room = MAX_TOPICS - len(chosen)
         if picked:
             method = "llm"
-            for tid in picked:
-                reasons.setdefault(tid, "picked by the router model")
-            chosen = [*chosen, *[t for t in picked if t not in chosen]][:MAX_TOPICS]
-        elif ambiguous:
-            chosen = [*chosen, *sorted(ambiguous)][:MAX_TOPICS]
+            chosen = [*chosen, *picked[:room]]
+        else:
+            chosen = [*chosen, *sorted(ambiguous)[:room]]
             notes.append("Tie between topics resolved alphabetically.")
 
     if not chosen:
         chosen = [FALLBACK_TOPIC]
-        reasons[FALLBACK_TOPIC] = "no specialist topic matched this dashboard or question"
-        notes.append("No specialist topic matched; general analysis.")
+        reasons[FALLBACK_TOPIC] = "no specialist topic matched this dashboard's structure"
+        notes.append(
+            "No template, catalog module or column vocabulary matched a specialist topic; "
+            "general analysis."
+        )
 
     return TeamPlan(
         team=assemble_team(profiles, chosen, question, reasons),

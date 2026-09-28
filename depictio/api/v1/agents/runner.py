@@ -9,7 +9,10 @@ without function calling it falls back to a JSON envelope: ``{"tool": name,
 Every call goes through ``registry.invoke`` (scope check, validation, rate
 limit, output budget, audit row) and draws on the run's ``BudgetLedger``.
 When the agent's or the run's budget runs out, the model gets one last
-"conclude" call without tools and must answer from what it has.
+"conclude" call without tools and must answer from what it has. The ledger
+anticipates: a turn that may call tools starts only while it and that
+conclude call are both expected to fit, and the conclude call itself only
+while it is expected to fit; otherwise the agent stops without an answer.
 """
 
 from __future__ import annotations
@@ -346,21 +349,29 @@ class _Loop:
         tool_choice: str | None = None,
     ) -> LLMTurn:
         turn = await self.llm.complete(messages, tools=tools, tool_choice=tool_choice)
-        cost = self.ledger.record_llm(turn.usage, self.llm.model)
+        cost = self.ledger.record_llm(turn.usage, self.llm.model, role=self.role.id)
         self.record.tokens += turn.usage.total_tokens
         if cost is not None:
             self.record.cost_usd = (self.record.cost_usd or 0.0) + cost
         await self._emit("budget", self.ledger.snapshot().event())
         return turn
 
+    def may_call_tools(self) -> bool:
+        return bool(self.allowed) and self.calls < self.role.budget.max_tool_calls
+
     def out_of_budget(self) -> bool:
+        # A turn that may call tools must leave room for the conclude call after it.
+        turns = 2 if self.may_call_tools() else 1
         return (
             self.budget_hit
             # An agent without tools has no call budget to run out of.
             or (bool(self.allowed) and self.calls >= self.role.budget.max_tool_calls)
             or self.record.tokens >= self.role.budget.max_tokens
-            or not self.ledger.can_think(reserve=self.reserve)
+            or not self.ledger.can_think(reserve=self.reserve, role=self.role.id, turns=turns)
         )
+
+    def can_conclude(self) -> bool:
+        return self.ledger.can_think(reserve=self.reserve, role=self.role.id, turns=1)
 
     async def run_tool(self, name: str, args: dict[str, Any] | None) -> str:
         """Invoke one tool for the model; returns the text of the tool message."""
@@ -558,6 +569,8 @@ async def agent_loop(
         # Out of budget or turns: one last call, no tools, answer from what is known.
         if cancel is not None and await cancel.cancelled():
             return AgentOutcome("cancelled", None, "Cancelled.")
+        if not loop.can_conclude():
+            return AgentOutcome("budget", None, "Budget exhausted before an answer.")
         convo.append(
             {
                 "role": "user",

@@ -125,10 +125,27 @@ def test_run_pool_refuses_calls_beyond_the_reporter_reserve():
 
 
 def test_cost_ceiling_stops_the_loop():
+    # The first call alone passes the limit: a conclude call of the same size
+    # cannot fit either, so the agent stops without one.
     llm = FakeLLM([turn(calls=[call("query_data", {"code": "df"})], cost=5.0), turn(FINAL)])
     outcome, _ = _run(llm, ledger=_ledger(usd=0.5))
-    assert outcome.status == "budget"
-    assert llm.calls[-1]["tool_choice"] == "none"
+    assert outcome.status == "budget" and outcome.output is None
+    assert len(llm.calls) == 1
+
+
+def test_cost_ceiling_leaves_room_to_conclude():
+    llm = FakeLLM(
+        [
+            turn(calls=[call("query_data", {"code": "df"})], cost=0.1),
+            turn(calls=[call("query_data", {"code": "df"}, "tc2")], cost=0.1),
+            turn(FINAL, cost=0.1),
+        ]
+    )
+    ledger = _ledger(usd=0.5)  # 0.425 without the reserve
+    outcome, _ = _run(llm, ledger=ledger)
+    # Third turn: 0.2 spent + 2 x 0.1 expected fits; a fourth would not.
+    assert outcome.status == "ok" and outcome.output == FINAL
+    assert ledger.spent_usd <= 0.425
 
 
 def test_tool_outside_the_profile_is_refused():

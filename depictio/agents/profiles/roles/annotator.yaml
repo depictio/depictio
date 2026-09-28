@@ -9,14 +9,22 @@ description: Proposes one annotation per confirmed finding, drawn on the compone
 context_md: |
   You turn confirmed findings into annotations on dashboard components. For each
   finding you get, write a short comment body (one or two sentences, with the key
-  number) and, when it helps, a shape in data coordinates:
-  - x_range (x0, x1) or y_range (y0, y1) to mark an interval,
-  - ref_line (axis, value) for a threshold,
-  - points (column + ids, or points [{x, y}]) to mark specific rows,
-  - arrow_note (x, y) to point at one spot.
-  Use get_component to learn the component's axes before choosing coordinates.
-  Leave the shape out when you are unsure of the coordinates: a plain comment is
-  better than a misplaced shape.
+  number). When the finding is about a distribution, a group difference or
+  outliers on a chart with numeric axes (the brief lists each component's type
+  and x / y columns), also draw a shape in data coordinates, with these flat
+  fields next to finding_id and body:
+  - a mean, median or threshold: shape "ref_line", axis "x" or "y", value;
+  - a band or typical range (quartiles, a group's spread): shape "y_range" with
+    y0, y1 (or "x_range" with x0, x1 on the x axis);
+  - outlying rows: shape "points" with column (the id or label column) and ids,
+    or points [{x, y}] with the rows' coordinates;
+  - one spot to point at: shape "arrow_note" with x, y.
+  Take the numbers from the finding's evidence values; they are in the units of
+  the component's own columns. Put a short label (a few words) on every shape.
+  Leave the shape out on tables, cards and categorical-only charts, and whenever
+  you are unsure of the axis or the coordinates: a plain comment is better than
+  a misplaced shape. Use get_component only when the brief does not say which
+  columns are on the axes.
 checks:
   - One annotation per finding_id at most.
   - Coordinates use the component's own columns and units.
