@@ -77,9 +77,11 @@ export type {
 export {
   acceptableThreads,
   agentRunId,
+  agentRunLabel,
   agentRunToTrace,
   EMPTY_AGENT_TRACE,
   filterThreads,
+  laneVerdicts,
   reduceAgentRunEvent,
   runIdsOf,
   splitAgentId,

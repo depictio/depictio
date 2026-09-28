@@ -31,6 +31,7 @@ import {
 import {
   acceptableThreads,
   agentRunId,
+  agentRunLabel,
   fetchAgentRun,
   fetchAgentRuns,
   filterThreads,
@@ -292,22 +293,20 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
     const byId = new Map(runs.map((r) => [agentRunId(r), r]));
     return runIds.map((id) => {
       const r = byId.get(id);
-      const q = r?.question ?? '';
-      return {
-        value: id,
-        label: r
-          ? `${q.slice(0, 48)}${q.length > 48 ? '…' : ''} · ${new Date(r.created_at).toLocaleDateString()}`
-          : `Run ${id.slice(0, 8)}`,
-      };
+      return { value: id, label: r ? agentRunLabel(r) : `Run ${id.slice(0, 8)}` };
     });
   }, [runIds, runs]);
   // A run whose threads were all deleted leaves the filter.
   useEffect(() => {
     if (runFilter && threads && !runIds.includes(runFilter)) setRunFilter(null);
   }, [runFilter, runIds, threads]);
+  // Counted within the selected run, like the list the chip narrows.
   const questionCount = useMemo(
-    () => inComponent.filter((t) => t.kind === 'question' && t.status !== 'rejected').length,
-    [inComponent],
+    () =>
+      filterThreads(inComponent, { runId: runFilter }).filter(
+        (t) => t.kind === 'question' && t.status !== 'rejected',
+      ).length,
+    [inComponent, runFilter],
   );
   const toAccept = useMemo(
     () => (runFilter ? acceptableThreads(threads ?? [], runFilter, selectedRun) : []),
@@ -656,7 +655,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
 
   const agentFilter =
     runIds.length > 0 || questionCount > 0 ? (
-      <Group gap={6} wrap="nowrap" data-testid="comments-agent-filter">
+      <Stack gap={6} data-testid="comments-agent-filter">
         {runIds.length > 0 && (
           <Select
             size="xs"
@@ -668,44 +667,45 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
             clearable
             leftSection={<Icon icon="mdi:robot-outline" width={14} />}
             comboboxProps={{ zIndex: Z_LAYERS.overlay + 1 }}
-            style={{ flex: 1, minWidth: 0 }}
+            w="100%"
             data-testid="comments-run-filter"
           />
         )}
-        <Chip
-          size="xs"
-          variant="light"
-          color="orange"
-          checked={questionsOnly}
-          onChange={setQuestionsOnly}
-          icon={<Icon icon="mdi:help-circle-outline" width={12} />}
-          data-testid="comments-questions-filter"
-        >
-          <Group gap={4} wrap="nowrap" component="span">
-            {!questionsOnly && <Icon icon="mdi:help-circle-outline" width={12} />}
-            <span>Questions</span>
-            {questionCount > 0 && (
-              <Text span size="xs" c="dimmed">
-                {questionCount}
-              </Text>
-            )}
-          </Group>
-        </Chip>
-        {runFilter && (
-          <Button
-            size="compact-xs"
+        <Group gap={6} wrap="wrap">
+          <Chip
+            size="xs"
             variant="light"
-            color="teal"
-            disabled={toAccept.length === 0}
-            leftSection={<Icon icon="mdi:check-all" width={14} />}
-            onClick={() => setConfirmAccept(true)}
-            style={{ flexShrink: 0 }}
-            data-testid="comments-accept-confirmed"
+            color="orange"
+            checked={questionsOnly}
+            onChange={setQuestionsOnly}
+            icon={<Icon icon="mdi:help-circle-outline" width={12} />}
+            data-testid="comments-questions-filter"
           >
-            Accept all confirmed ({toAccept.length})
-          </Button>
-        )}
-      </Group>
+            <Group gap={4} wrap="nowrap" component="span">
+              {!questionsOnly && <Icon icon="mdi:help-circle-outline" width={12} />}
+              <span>Questions</span>
+              {questionCount > 0 && (
+                <Text span size="xs" c="dimmed">
+                  {questionCount}
+                </Text>
+              )}
+            </Group>
+          </Chip>
+          {runFilter && (
+            <Button
+              size="compact-xs"
+              variant="light"
+              color="teal"
+              disabled={toAccept.length === 0}
+              leftSection={<Icon icon="mdi:check-all" width={14} />}
+              onClick={() => setConfirmAccept(true)}
+              data-testid="comments-accept-confirmed"
+            >
+              Accept all confirmed ({toAccept.length})
+            </Button>
+          )}
+        </Group>
+      </Stack>
     ) : null;
 
   const list = loadError ? (

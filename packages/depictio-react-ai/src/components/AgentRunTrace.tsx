@@ -5,6 +5,7 @@ import {
   Anchor,
   Badge,
   Button,
+  Code,
   Group,
   Loader,
   Progress,
@@ -15,7 +16,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
-import { traceReportId } from '../agentRuns';
+import { laneVerdicts, traceReportId } from '../agentRuns';
 import type { AgentLane, AgentRunTraceState, TraceFinding, TraceVerdict } from '../agentRuns';
 import type { AgentVerdict } from '../types';
 
@@ -80,6 +81,58 @@ export const VerdictBadge: React.FC<{ verdict: TraceVerdict | AgentVerdict }> = 
 function laneTitle(lane: AgentLane): string {
   return lane.topic ? `${lane.role ?? 'agent'} · ${lane.topic}` : lane.role ?? lane.agent_id;
 }
+
+/** Count badges a finished lane shows, beyond its findings and verdicts. */
+const COUNT_LABELS: [string, string, string][] = [
+  ['annotations', 'annotation', 'annotations'],
+  ['comments', 'comment', 'comments'],
+  ['questions', 'question', 'questions'],
+];
+
+const ARG_VALUE_CHARS = 80;
+
+function argValue(v: unknown): string {
+  if (v == null) return 'null';
+  if (typeof v === 'string') return v.length > ARG_VALUE_CHARS ? `${v.slice(0, ARG_VALUE_CHARS)}…` : v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) {
+    const flat = v.every((x) => x == null || ['string', 'number', 'boolean'].includes(typeof x));
+    const text = flat ? v.map(String).join(', ') : `${v.length} items`;
+    return text.length > ARG_VALUE_CHARS ? `${v.length} items` : text;
+  }
+  const text = JSON.stringify(v);
+  return text.length > ARG_VALUE_CHARS ? `${Object.keys(v as object).length} fields` : text;
+}
+
+/** A tool call's arguments: `code` as a code block, the rest as key: value. */
+const ToolCallArgs: React.FC<{ args: unknown }> = ({ args }) => {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const { code, ...rest } = args as Record<string, unknown>;
+  const entries = Object.entries(rest).filter(([k, v]) => v !== undefined && k !== 'evidence');
+  if (typeof code !== 'string' && !entries.length) return null;
+  return (
+    <Stack gap={2} pl={20}>
+      {entries.length > 0 && (
+        <Text size="xs" c="dimmed" style={{ wordBreak: 'break-word' }}>
+          {entries.map(([k, v], i) => (
+            <React.Fragment key={k}>
+              {i > 0 && ' · '}
+              <Text span size="xs" fw={500}>
+                {k}
+              </Text>
+              : {argValue(v)}
+            </React.Fragment>
+          ))}
+        </Text>
+      )}
+      {typeof code === 'string' && (
+        <Code block fz="xs" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {code}
+        </Code>
+      )}
+    </Stack>
+  );
+};
 
 function formatUsd(n: number): string {
   return n < 0.01 && n > 0 ? '<$0.01' : `$${n.toFixed(2)}`;
@@ -219,6 +272,7 @@ const AgentRunTrace: React.FC<Props> = ({ trace, onOpenThread, onOpenReport }) =
         {trace.lanes.map((lane) => {
           const st = LANE_STATUS[lane.status];
           const failed = lane.toolCalls.filter((c) => c.ok === false).length;
+          const judged = laneVerdicts(trace, lane.agent_id);
           return (
             <Accordion.Item key={lane.agent_id} value={lane.agent_id}>
               <Accordion.Control>
@@ -231,9 +285,11 @@ const AgentRunTrace: React.FC<Props> = ({ trace, onOpenThread, onOpenReport }) =
                   <Text size="sm" fw={600} lineClamp={1} flex={1}>
                     {laneTitle(lane)}
                   </Text>
-                  <Badge size="xs" variant="light" color="gray">
-                    {lane.toolCalls.length} calls
-                  </Badge>
+                  {(lane.toolCalls.length > 0 || !judged.length) && (
+                    <Badge size="xs" variant="light" color="gray">
+                      {lane.toolCalls.length} {lane.toolCalls.length === 1 ? 'call' : 'calls'}
+                    </Badge>
+                  )}
                   {failed > 0 && (
                     <Badge size="xs" variant="light" color="red">
                       {failed} failed
@@ -244,11 +300,24 @@ const AgentRunTrace: React.FC<Props> = ({ trace, onOpenThread, onOpenReport }) =
                       {lane.findings.length} findings
                     </Badge>
                   )}
-                  {lane.threads.length > 0 && (
-                    <Badge size="xs" variant="light" color="violet">
-                      {lane.threads.length} threads
+                  {judged.length > 0 && (
+                    <Badge size="xs" variant="light" color={AI_COLOR}>
+                      {judged.length} {judged.length === 1 ? 'verdict' : 'verdicts'}
                     </Badge>
                   )}
+                  {COUNT_LABELS.some(([k]) => lane.counts?.[k] != null)
+                    ? COUNT_LABELS.filter(([k]) => (lane.counts?.[k] ?? 0) > 0).map(
+                        ([k, one, many]) => (
+                          <Badge key={k} size="xs" variant="light" color="violet">
+                            {lane.counts![k]} {lane.counts![k] === 1 ? one : many}
+                          </Badge>
+                        ),
+                      )
+                    : lane.threads.length > 0 && (
+                        <Badge size="xs" variant="light" color="violet">
+                          {lane.threads.length} threads
+                        </Badge>
+                      )}
                   <Badge size="xs" variant="light" color={st.color}>
                     {st.label}
                   </Badge>
@@ -258,6 +327,7 @@ const AgentRunTrace: React.FC<Props> = ({ trace, onOpenThread, onOpenReport }) =
                 <LaneBody
                   lane={lane}
                   verdicts={trace.verdicts}
+                  judged={judged}
                   onOpenThread={onOpenThread}
                   onOpenReport={onOpenReport}
                 />
@@ -273,9 +343,11 @@ const AgentRunTrace: React.FC<Props> = ({ trace, onOpenThread, onOpenReport }) =
 const LaneBody: React.FC<{
   lane: AgentLane;
   verdicts: Record<string, TraceVerdict>;
+  /** Verdicts this agent gave (the skeptic's lane). */
+  judged: ReturnType<typeof laneVerdicts>;
   onOpenThread?: (threadId: string) => void;
   onOpenReport?: (reportId: string) => void;
-}> = ({ lane, verdicts, onOpenThread, onOpenReport }) => (
+}> = ({ lane, verdicts, judged, onOpenThread, onOpenReport }) => (
   <Stack gap="xs">
     <Text size="xs" c="dimmed" ff="monospace">
       {lane.agent_id}
@@ -297,28 +369,54 @@ const LaneBody: React.FC<{
           Tool calls
         </Text>
         {lane.toolCalls.map((c) => (
-          <Group key={c.call_id} gap={6} wrap="nowrap" align="flex-start">
-            {c.ok === undefined ? (
-              <Loader size={12} color={AI_COLOR} />
-            ) : (
-              <Icon
-                icon={c.ok ? 'material-symbols:check' : 'material-symbols:close'}
-                width={14}
-                color={`var(--mantine-color-${c.ok ? 'teal' : 'red'}-6)`}
-                style={{ flexShrink: 0, marginTop: 2 }}
-              />
+          <Stack key={c.call_id} gap={2}>
+            <Group gap={6} wrap="nowrap" align="flex-start">
+              {c.ok === undefined ? (
+                <Loader size={12} color={AI_COLOR} />
+              ) : (
+                <Icon
+                  icon={c.ok ? 'material-symbols:check' : 'material-symbols:close'}
+                  width={14}
+                  color={`var(--mantine-color-${c.ok ? 'teal' : 'red'}-6)`}
+                  style={{ flexShrink: 0, marginTop: 2 }}
+                />
+              )}
+              <Badge size="xs" variant="outline" color="gray" style={{ flexShrink: 0 }}>
+                {c.tool}
+              </Badge>
+              <Text size="xs" c={c.ok === false ? 'red' : 'dimmed'} style={{ minWidth: 0 }} lineClamp={3}>
+                {c.summary || ''}
+                {c.truncated ? ' (truncated)' : ''}
+              </Text>
+              <Text size="xs" c="dimmed" ff="monospace" ml="auto" style={{ flexShrink: 0 }}>
+                {c.call_id.slice(0, 8)}
+              </Text>
+            </Group>
+            <ToolCallArgs args={c.args} />
+          </Stack>
+        ))}
+      </Stack>
+    )}
+
+    {judged.length > 0 && (
+      <Stack gap={4}>
+        <Text size="xs" fw={600}>
+          Verdicts
+        </Text>
+        {judged.map((j) => (
+          <Stack key={j.finding_id} gap={0}>
+            <Group gap={6} wrap="nowrap" align="flex-start">
+              <VerdictBadge verdict={j.verdict} />
+              <Text size="xs" fw={500} style={{ flex: 1, minWidth: 0 }}>
+                {j.title}
+              </Text>
+            </Group>
+            {j.verdict.reason && (
+              <Text size="xs" c="dimmed">
+                {j.verdict.reason}
+              </Text>
             )}
-            <Badge size="xs" variant="outline" color="gray" style={{ flexShrink: 0 }}>
-              {c.tool}
-            </Badge>
-            <Text size="xs" c={c.ok === false ? 'red' : 'dimmed'} style={{ minWidth: 0 }} lineClamp={3}>
-              {c.summary || ''}
-              {c.truncated ? ' (truncated)' : ''}
-            </Text>
-            <Text size="xs" c="dimmed" ff="monospace" ml="auto" style={{ flexShrink: 0 }}>
-              {c.call_id.slice(0, 8)}
-            </Text>
-          </Group>
+          </Stack>
         ))}
       </Stack>
     )}

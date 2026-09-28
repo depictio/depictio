@@ -19,11 +19,12 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { fetchAgentRun } from '../api';
 import { useAnalysisReport } from '../hooks';
 import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
-import { renderInlineMarkdown } from 'depictio-react-core';
+import { fetchDashboard, renderInlineMarkdown } from 'depictio-react-core';
 import MarkdownLite from './MarkdownLite';
-import type { AgentReportFinding, AnalysisReport, Finding } from '../types';
+import type { AgentReportFinding, AgentRun, AnalysisReport, Finding } from '../types';
 import { VerdictBadge } from './AgentRunTrace';
 import ExecutionTrace from './ExecutionTrace';
 
@@ -51,6 +52,40 @@ const STATUS_COLOR: Record<AnalysisReport['status'], string> = {
   failed: 'red',
   cancelled: 'yellow',
 };
+
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+/** The stats line under a report: the analysis budget for `/ai/analyze`
+ *  reports; for an agent's report, the run behind it (team, tool calls, cost,
+ *  duration) once loaded. Zero stats an agent report never fills are left out. */
+export function reportStats(report: AnalysisReport, run: AgentRun | null): string {
+  const parts: string[] = [report.model];
+  if (report.agent) {
+    if (run) {
+      const team = run.team?.length ?? 0;
+      if (team) parts.push(`team of ${team}`);
+      const calls = run.budget?.tool_calls ?? 0;
+      if (calls) parts.push(`${calls} tool ${calls === 1 ? 'call' : 'calls'}`);
+      const spent = run.budget?.spent_usd ?? 0;
+      if (spent > 0) parts.push(spent < 0.01 ? '<$0.01' : `$${spent.toFixed(2)}`);
+      const start = Date.parse(run.created_at);
+      const end = run.finished_at ? Date.parse(run.finished_at) : NaN;
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+        parts.push(formatDuration(end - start));
+      }
+    }
+    const b = report.budget_spent;
+    if (b.steps > 0) parts.push(`${b.steps} steps`);
+    if (b.tokens > 0) parts.push(`${b.tokens.toLocaleString()} tokens`);
+    return parts.filter(Boolean).join(' · ');
+  }
+  const b = report.budget_spent;
+  parts.push(`${b.steps} steps`, `${b.tokens.toLocaleString()} tokens`, `${Math.round(b.seconds)}s`);
+  return parts.filter(Boolean).join(' · ');
+}
 
 /**
  * Full-screen surface for read-only analysis runs.
@@ -88,6 +123,43 @@ const AIAnalysisModal: React.FC<Props> = ({
 
   // The live run wins over a history selection.
   const report = state.report ?? viewing;
+
+  // An agent report's own budget is empty: its stats come from the run.
+  const runId = report?.agent?.run_id ?? null;
+  const [teamRun, setTeamRun] = useState<AgentRun | null>(null);
+  useEffect(() => {
+    setTeamRun(null);
+    if (!opened || !runId) return;
+    let alive = true;
+    fetchAgentRun(runId)
+      .then((r) => alive && setTeamRun(r))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [opened, runId]);
+
+  // Component titles for the agent findings' chips (the index means nothing).
+  const [titles, setTitles] = useState<Record<string, string>>({});
+  const needsTitles = (report?.agent_findings ?? []).some((f) => f.component_index);
+  useEffect(() => {
+    if (!opened || !needsTitles) return;
+    let alive = true;
+    fetchDashboard(dashboardId)
+      .then((d) => {
+        if (!alive) return;
+        const out: Record<string, string> = {};
+        (d.stored_metadata ?? []).forEach((m) => {
+          const title = (m as { title?: unknown }).title;
+          if (m.index && typeof title === 'string' && title.trim()) out[String(m.index)] = title.trim();
+        });
+        setTitles(out);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [opened, needsTitles, dashboardId]);
   const steps = state.report ? state.report.steps : state.steps.length ? state.steps : (viewing?.steps ?? []);
 
   const submit = () => {
@@ -200,9 +272,7 @@ const AIAnalysisModal: React.FC<Props> = ({
                     </Tooltip>
                   )}
                   <Text size="xs" c="dimmed">
-                    {report.model} · {report.budget_spent.steps} steps ·{' '}
-                    {report.budget_spent.tokens.toLocaleString()} tokens ·{' '}
-                    {Math.round(report.budget_spent.seconds)}s
+                    {reportStats(report, teamRun)}
                   </Text>
                 </Group>
 
@@ -240,7 +310,7 @@ const AIAnalysisModal: React.FC<Props> = ({
                 )}
 
                 {(report.agent_findings?.length ?? 0) > 0 && (
-                  <AgentFindings findings={report.agent_findings ?? []} />
+                  <AgentFindings findings={report.agent_findings ?? []} titles={titles} />
                 )}
 
                 {report.warnings.length > 0 && (
@@ -325,7 +395,11 @@ const AIAnalysisModal: React.FC<Props> = ({
 /** Findings of an agent-written report: each with its confidence, the
  *  skeptic's verdict when the server attaches one, and the evidence notes
  *  with the tool call ids that back them. */
-const AgentFindings: React.FC<{ findings: AgentReportFinding[] }> = ({ findings }) => (
+const AgentFindings: React.FC<{
+  findings: AgentReportFinding[];
+  /** Component titles by index; a finding on an unknown component shows no chip. */
+  titles: Record<string, string>;
+}> = ({ findings, titles }) => (
   <Stack gap="xs" data-testid="agent-report-findings">
     <Title order={6}>Agent findings</Title>
     {findings.map((f, i) => (
@@ -341,9 +415,15 @@ const AgentFindings: React.FC<{ findings: AgentReportFinding[] }> = ({ findings 
             <Text size="sm" fw={600} flex={1}>
               {f.title}
             </Text>
-            {f.component_index && (
-              <Badge size="sm" variant="outline" color="gray">
-                {f.component_index.slice(0, 8)}
+            {f.component_index && titles[f.component_index] && (
+              <Badge
+                size="sm"
+                variant="outline"
+                color="gray"
+                maw={220}
+                leftSection={<Icon icon="mdi:chart-box-outline" width={12} />}
+              >
+                {titles[f.component_index]}
               </Badge>
             )}
           </Group>

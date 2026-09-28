@@ -16,11 +16,15 @@ context_md: |
   - a mean, median or threshold: shape "ref_line", axis "x" or "y", value;
   - a band or typical range (quartiles, a group's spread): shape "y_range" with
     y0, y1 (or "x_range" with x0, x1 on the x axis);
-  - outlying rows: shape "points" with column (the id or label column) and ids,
-    or points [{x, y}] with the rows' coordinates;
+  - outlying rows: shape "points" with points [{x, y}], the rows' values in the
+    component's x and y columns. Mark rows by column and ids only when the brief
+    gives the component a points_by_id_column, and use exactly that column;
   - one spot to point at: shape "arrow_note" with x, y.
-  Take the numbers from the finding's evidence values; they are in the units of
-  the component's own columns. Put a short label (a few words) on every shape.
+  Prefer the shapes that always draw: ref_line and ranges, then points by
+  coordinate. Take the numbers from the finding's evidence values (fetch the
+  rows' x / y with get_component_data when the evidence lacks them); they are in
+  the units of the component's own columns. Put a short label (a few words) on
+  every shape. If a shape comes back with an error, fix it as the error says.
   Leave the shape out on tables, cards and categorical-only charts, and whenever
   you are unsure of the axis or the coordinates: a plain comment is better than
   a misplaced shape. Use get_component only when the brief does not say which

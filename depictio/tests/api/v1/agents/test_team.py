@@ -8,7 +8,7 @@ from depictio.api.v1.agents.budget import BudgetLedger
 from depictio.api.v1.agents.profiles import load_profiles
 from depictio.api.v1.agents.registry import ToolResult
 from depictio.api.v1.agents.router import RouteContext, route
-from depictio.api.v1.agents.runner import CancelToken
+from depictio.api.v1.agents.runner import CancelToken, clip_words
 from depictio.api.v1.agents.team import TeamDeps, TeamRun, dedupe_key, new_run, shape_args
 from depictio.models.models.users import effective_scopes
 from depictio.tests.api.v1.agents._fakes import (
@@ -257,9 +257,54 @@ def test_rejected_shape_falls_back_to_a_plain_comment():
         return await original(name, ctx, args)
 
     toolbox.invoke = reject_shapes
-    events = _execute(_job(FakeLLM(team_script()), toolbox))
+    llm, saved = FakeLLM(team_script()), []
+    events = _execute(_job(llm, toolbox, saved=saved))
     assert [d["thread_id"] for e, d in events if e == "thread_created"][0] == "t-c1"
-    assert any(e == "error" for e, _ in events)
+    # The annotator was told of the error and tried again before it degraded.
+    annotator_calls = [c for c in llm.calls if role_of(c["messages"]) == "annotator"]
+    assert len(annotator_calls) == 2
+    assert "Invalid annotation" in annotator_calls[1]["messages"][-1]["content"]
+    assert any("could not be drawn (Invalid annotation)" in w for w in saved[-1].warnings)
+    finished = {d["agent_id"]: d for e, d in events if e == "agent_finished"}
+    annotator = finished["annotator/general@1"]
+    assert annotator["summary"] == "0 annotations and 1 plain comment proposed"
+    assert annotator["counts"] == {"annotations": 0, "comments": 1}
+
+
+def test_bad_shape_is_retried_once_and_fixed():
+    base = team_script()
+    sent = []
+
+    def answer(messages, tools, choice):
+        if role_of(messages) == "annotator":
+            fid = _finding_ids(messages[-1]["content"])[0]
+            sent.append(messages[-1]["content"])
+            if len(sent) == 1:  # a points shape with no coordinates
+                shape = {"shape": "points", "points": [{"x": 47.5}]}
+            else:
+                shape = {"shape": "ref_line", "axis": "y", "value": 47.5}
+            return turn({"annotations": [{"finding_id": fid, "body": "Gentoo.", **shape}]})
+        return base(messages, tools, choice)
+
+    toolbox = FakeToolbox(tools=default_tools())
+    events = _execute(_job(FakeLLM(answer), toolbox))
+    assert len(sent) == 2 and "points needs points [{x, y}]" in sent[1]
+    [written] = toolbox.calls_to("create_annotation")
+    assert written["shape"] == "ref_line" and written["value"] == 47.5
+    finished = {d["agent_id"]: d for e, d in events if e == "agent_finished"}
+    assert finished["annotator/general@1"]["counts"] == {"annotations": 1, "comments": 0}
+    # The analyst's summary is its own prose; the count is a structured field.
+    analyst = finished["analyst/general@1"]
+    assert analyst["summary"] == "Two differences." and analyst["counts"] == {"findings": 2}
+    skeptic = finished["skeptic/general@1"]
+    assert skeptic["counts"] == {"confirmed": 1, "weakened": 1}
+
+
+def test_clip_words_cuts_on_a_word_boundary():
+    text = "word " * 400
+    clipped = clip_words(text, 1200)
+    assert len(clipped) <= 1200 and clipped.endswith("word\u2026")
+    assert clip_words("short", 1200) == "short"
 
 
 def test_user_without_annotate_scope_gets_no_threads():

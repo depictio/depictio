@@ -33,6 +33,7 @@ import asyncio
 import hashlib
 import json
 import time
+from collections import Counter
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -86,6 +87,12 @@ SKEPTIC_CONCLUDE = (
     "the tool results you have. Leave out a finding you could not judge."
 )
 UNVERIFIED_REASON = "The skeptic did not review this finding before the budget ran out."
+ANNOTATOR_RETRY = (
+    "These shapes could not be drawn (the error of each is given). Reply with the "
+    "annotations JSON again for these finding_ids only, each with a fixed shape. Prefer "
+    "shapes that are always drawable: ref_line, y_range / x_range, or points by "
+    "coordinate (points [{x, y}]). Leave the shape out only if you cannot place it."
+)
 
 _EVIDENCE_ITEM = {
     "type": "object",
@@ -204,41 +211,37 @@ def _ordered(a: Any, b: Any) -> tuple[Any, Any]:
     return a, b
 
 
-def shape_args(spec: dict[str, Any], component_type: str | None = None) -> dict[str, Any] | None:
-    """The ``create_annotation`` shape fields of an annotator proposal, or None.
+def check_shape(spec: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """The ``create_annotation`` shape fields of an annotator proposal, or why not.
 
-    Only a complete, well-typed shape is kept: anything missing or odd (or a
-    component that cannot hold a shape) leaves the annotation a plain comment.
-    The annotation tool validates again; a shape it rejects is retried as a
-    plain comment by the caller.
+    Returns ``(fields, None)`` for a complete, well-typed shape, else
+    ``(None, reason)`` with what the shape is missing, for the annotator's retry.
     """
     shape = spec.get("shape")
-    if component_type and component_type.lower() not in SHAPE_COMPONENT_TYPES:
-        return None
     out: dict[str, Any]
     if shape == "x_range":
         x0, x1 = spec.get("x0"), spec.get("x1")
         if not (_is_coord(x0) and _is_coord(x1)) or x0 == x1:
-            return None
+            return None, "x_range needs x0 and x1: two different numbers or category names."
         x0, x1 = _ordered(x0, x1)
         out = {"shape": shape, "x0": x0, "x1": x1}
     elif shape == "y_range":
         y0, y1 = spec.get("y0"), spec.get("y1")
         if not (_is_number(y0) and _is_number(y1)) or y0 == y1:
-            return None
+            return None, "y_range needs y0 and y1: two different numbers."
         y0, y1 = _ordered(y0, y1)
         out = {"shape": shape, "y0": y0, "y1": y1}
     elif shape == "ref_line":
         axis, value = spec.get("axis"), spec.get("value")
         if axis not in ("x", "y") or not _is_coord(value):
-            return None
+            return None, "ref_line needs axis ('x' or 'y') and a value."
         if axis == "y" and not _is_number(value):
-            return None
+            return None, "ref_line on the y axis needs a numeric value."
         out = {"shape": shape, "axis": axis, "value": value}
     elif shape == "arrow_note":
         x, y = spec.get("x"), spec.get("y")
         if not (_is_coord(x) and _is_coord(y)):
-            return None
+            return None, "arrow_note needs x and y coordinates."
         out = {"shape": shape, "x": x, "y": y}
     elif shape == "points":
         out = {"shape": shape}
@@ -257,13 +260,40 @@ def shape_args(spec: dict[str, Any], component_type: str | None = None) -> dict[
             if coords:
                 out["points"] = coords
         if "ids" not in out and "points" not in out:
-            return None
+            return None, "points needs points [{x, y}] with both coordinates (or column and ids)."
     else:
-        return None
+        return None, (
+            f"Unknown shape {shape!r}: use ref_line, y_range, x_range, points or arrow_note."
+        )
     label = spec.get("label")
     if isinstance(label, str) and label.strip():
         out["label"] = label.strip()[:MAX_LABEL_CHARS]
-    return out
+    return out, None
+
+
+def shape_allowed(component_type: str | None) -> bool:
+    """Whether a shape can be drawn on a component of this type (unknown: yes)."""
+    return not component_type or component_type.lower() in SHAPE_COMPONENT_TYPES
+
+
+def shape_args(spec: dict[str, Any], component_type: str | None = None) -> dict[str, Any] | None:
+    """``check_shape``'s fields, or None when incomplete or not drawable on the component."""
+    if not shape_allowed(component_type):
+        return None
+    return check_shape(spec)[0]
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def _specs_by_finding(output: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """The annotator's proposals by finding id, the first one of each."""
+    specs: dict[str, dict[str, Any]] = {}
+    for item in (output or {}).get("annotations") or []:
+        if isinstance(item, dict) and item.get("finding_id"):
+            specs.setdefault(str(item["finding_id"]), item)
+    return specs
 
 
 def _now() -> str:
@@ -359,15 +389,27 @@ class TeamRun:
         )
         return record
 
-    async def _finish(self, record: AgentRecord, status: str, summary: str) -> None:
+    async def _finish(
+        self,
+        record: AgentRecord,
+        status: str,
+        summary: str,
+        counts: dict[str, int] | None = None,
+    ) -> None:
         record.status = status  # type: ignore[assignment]
         record.summary = summary
+        record.counts = dict(counts or {})
         record.finished_at = _now()
         # The wire knows ok / budget / error: a skipped agent did its (empty) job.
         wire_status = {"skipped": "ok", "cancelled": "error"}.get(status, status)
         await self.emit(
             "agent_finished",
-            {"agent_id": record.agent_id, "status": wire_status, "summary": summary},
+            {
+                "agent_id": record.agent_id,
+                "status": wire_status,
+                "summary": summary,
+                "counts": record.counts,
+            },
         )
         await self.emit("budget", self.ledger.snapshot().event())
 
@@ -405,9 +447,19 @@ class TeamRun:
         return outcome
 
     async def _write(
-        self, member: TeamMember, record: AgentRecord, tool: str, args: dict[str, Any]
+        self,
+        member: TeamMember,
+        record: AgentRecord,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        errors: list[str] | None = None,
     ) -> dict[str, Any] | None:
-        """A write the pipeline makes for ``member``: invoked, recorded and streamed."""
+        """A write the pipeline makes for ``member``: invoked, recorded and streamed.
+
+        A failure is a run warning and an ``error`` event, unless ``errors`` is
+        given: then its message is appended there for the caller to retry.
+        """
         started = time.perf_counter()
         result = await self.deps.toolbox.invoke(tool, self.context(member), args)
         summary = summarise_result(result)
@@ -443,6 +495,9 @@ class TeamRun:
             },
         )
         if not result.ok:
+            if errors is not None:
+                errors.append(str(result.error or "failed"))
+                return None
             self.run.warnings.append(f"{member.agent_id}: {tool} failed: {result.error}")
             await self.emit(
                 "error", {"detail": f"{tool} failed: {result.error}", "agent_id": member.agent_id}
@@ -490,10 +545,7 @@ class TeamRun:
                     "evidence": [{"call_id": e.call_id, "note": e.note} for e in f.evidence],
                 },
             )
-        summary = outcome.summary
-        if outcome.status != "cancelled":
-            summary = f"{summary} ({len(findings)} finding(s) kept)"
-        await self._finish(record, outcome.status, summary)
+        await self._finish(record, outcome.status, outcome.summary, {"findings": len(findings)})
         return findings
 
     def _findings_brief(
@@ -575,11 +627,11 @@ class TeamRun:
                     "agent_id": member.agent_id,
                 },
             )
-        judged = sum(1 for f in findings if f.verdict != "unverified")
+        counts = Counter(str(f.verdict) for f in findings)
         summary = outcome.summary
-        if judged < len(findings):
-            summary = f"{summary} ({len(findings) - judged} of {len(findings)} unverified)"
-        await self._finish(record, outcome.status, summary)
+        if counts["unverified"]:
+            summary = f"{summary} ({counts['unverified']} of {len(findings)} unverified)"
+        await self._finish(record, outcome.status, summary, dict(counts))
 
     async def _skip(self, member: TeamMember, why: str) -> None:
         record = await self._start(member)
@@ -637,6 +689,8 @@ class TeamRun:
             item: dict[str, Any] = {"component_index": index, "type": comp.get("type")}
             item.update({k: config[k] for k in _AXIS_KEYS if k in config})
             item["shape_allowed"] = str(comp.get("type") or "").lower() in SHAPE_COMPONENT_TYPES
+            # Rows can be marked by id only through the component's selection column.
+            item["points_by_id_column"] = config.get("selection_column")
             items.append(item)
         return _json(items, SUMMARY_CONTEXT_CHARS) if items else "[]"
 
@@ -647,54 +701,126 @@ class TeamRun:
             return
         record = await self._start(member)
         outcome = await self._loop(
-            member,
-            record,
-            task=(
-                f"Dashboard id: {self.run.dashboard_id}\n\nComponents of these findings "
-                "(type and the columns on their axes):\n"
-                + self._axes_brief(targets)
-                + "\n\nConfirmed findings to annotate:\n"
-                + self._findings_brief(targets)
-            ),
-            schema=ANNOTATOR_SCHEMA,
+            member, record, task=self._annotator_task(targets), schema=ANNOTATOR_SCHEMA
         )
         types = {i: str(c.get("type") or "") for i, c in self._components_by_index().items()}
-        specs: dict[str, dict[str, Any]] = {}
-        for item in (outcome.output or {}).get("annotations") or []:
-            if isinstance(item, dict) and item.get("finding_id"):
-                specs.setdefault(str(item["finding_id"]), item)
-        written = 0
+        specs = _specs_by_finding(outcome.output)
+        drawn: dict[str, bool] = {}
+        retry: dict[str, str] = {}
+        # Without the annotate scope every write is refused: no retry to spend on.
+        can_retry = self.context(member).has("annotate")
         for f in targets:
             if await self.cancel.cancelled():
                 break
             spec = specs.get(f.finding_id) or {}
-            body = str(spec.get("body") or "").strip() or f"{f.title}. {f.detail}"
-            base: dict[str, Any] = {
-                "dashboard_id": self.run.dashboard_id,
-                "component_index": f.component_index,
-                "body": body[:MAX_BODY_CHARS],
-                "evidence": self._evidence_args(f),
-                "dedupe_key": dedupe_key(self.run.question, f.title, f.component_index),
-            }
-            args = dict(base)
-            if spec.get("shape"):
-                shape = shape_args(spec, types.get(str(f.component_index)) or None)
-                if shape is None:
-                    self.run.warnings.append(
-                        f"{member.agent_id}: shape {spec.get('shape')!r} on {f.component_index} "
-                        "was incomplete or not drawable; written as a plain comment."
-                    )
-                else:
-                    args.update(shape)
-            data = await self._write(member, record, "create_annotation", args)
-            if data is None and "shape" in args:
-                # A shape the tool rejects must not cost the finding its comment.
-                data = await self._write(member, record, "create_annotation", base)
-            if data is not None:
-                written += 1
-                await self._thread_created(member, data, f, "comment")
+            result = await self._annotate(member, record, f, spec, types, final=not can_retry)
+            if isinstance(result, str):
+                retry[f.finding_id] = result
+            elif result is not None:
+                drawn[f.finding_id] = result
+        if retry and not await self.cancel.cancelled():
+            # One more turn to fix the shapes, told what was wrong with each.
+            again = [f for f in targets if f.finding_id in retry]
+            problems = [
+                {
+                    "finding_id": f.finding_id,
+                    "sent": specs.get(f.finding_id),
+                    "error": retry[f.finding_id],
+                }
+                for f in again
+            ]
+            fixed = await self._loop(
+                member,
+                record,
+                task=self._annotator_task(again)
+                + "\n\nShapes that failed:\n"
+                + _json(problems, SUMMARY_CONTEXT_CHARS)
+                + "\n\n"
+                + ANNOTATOR_RETRY,
+                schema=ANNOTATOR_SCHEMA,
+            )
+            respecs = _specs_by_finding(fixed.output)
+            for f in again:
+                if await self.cancel.cancelled():
+                    break
+                spec = respecs.get(f.finding_id) or specs.get(f.finding_id) or {}
+                result = await self._annotate(member, record, f, spec, types, final=True)
+                if isinstance(result, bool):
+                    drawn[f.finding_id] = result
+        shapes = sum(drawn.values())
+        comments = len(drawn) - shapes
         status = outcome.status if outcome.status != "error" else "ok"
-        await self._finish(record, status, f"{written} annotation(s) proposed")
+        await self._finish(
+            record,
+            status,
+            f"{_plural(shapes, 'annotation')} and {_plural(comments, 'plain comment')} proposed",
+            {"annotations": shapes, "comments": comments},
+        )
+
+    def _annotator_task(self, targets: list[RunFinding]) -> str:
+        return (
+            f"Dashboard id: {self.run.dashboard_id}\n\nComponents of these findings "
+            "(type and the columns on their axes):\n"
+            + self._axes_brief(targets)
+            + "\n\nConfirmed findings to annotate:\n"
+            + self._findings_brief(targets)
+        )
+
+    async def _annotate(
+        self,
+        member: TeamMember,
+        record: AgentRecord,
+        f: RunFinding,
+        spec: dict[str, Any],
+        types: dict[str, str],
+        *,
+        final: bool,
+    ) -> bool | str | None:
+        """Write the annotation of ``f``: True with a shape, False as a plain comment.
+
+        A shape the annotator meant but got wrong (or the tool rejected) is
+        returned as its error string when not ``final``, for one retry; on the
+        final attempt it degrades to a plain comment with a run warning. None
+        when nothing could be written.
+        """
+        body = str(spec.get("body") or "").strip() or f"{f.title}. {f.detail}"
+        base: dict[str, Any] = {
+            "dashboard_id": self.run.dashboard_id,
+            "component_index": f.component_index,
+            "body": body[:MAX_BODY_CHARS],
+            "evidence": self._evidence_args(f),
+            "dedupe_key": dedupe_key(self.run.question, f.title, f.component_index),
+        }
+        problem: str | None = None
+        if spec.get("shape"):
+            comp_type = types.get(str(f.component_index)) or None
+            if not shape_allowed(comp_type):
+                self.run.warnings.append(
+                    f"{member.agent_id}: a {comp_type} ({f.component_index}) cannot hold a "
+                    f"shape; {spec.get('shape')!r} written as a plain comment."
+                )
+            else:
+                shape, problem = check_shape(spec)
+                if shape is not None:
+                    errors: list[str] = []
+                    data = await self._write(
+                        member, record, "create_annotation", {**base, **shape}, errors=errors
+                    )
+                    if data is not None:
+                        await self._thread_created(member, data, f, "comment")
+                        return True
+                    problem = errors[0] if errors else "rejected"
+                if not final:
+                    return problem
+                self.run.warnings.append(
+                    f"{member.agent_id}: shape {spec.get('shape')!r} on {f.component_index} "
+                    f"could not be drawn ({problem}); written as a plain comment."
+                )
+        data = await self._write(member, record, "create_annotation", base)
+        if data is None:
+            return None
+        await self._thread_created(member, data, f, "comment")
+        return False
 
     async def _questioner(self, member: TeamMember) -> None:
         targets = [f for f in self.run.findings if f.verdict == "weakened"]
@@ -736,7 +862,9 @@ class TeamRun:
             if data is not None:
                 asked += 1
                 await self._thread_created(member, data, f, "question")
-        await self._finish(record, outcome.status, f"{asked} question(s) asked")
+        await self._finish(
+            record, outcome.status, f"{_plural(asked, 'question')} asked", {"questions": asked}
+        )
 
     def _fallback_summary(self) -> str:
         lines = [f"**Question:** {self.run.question}", ""]

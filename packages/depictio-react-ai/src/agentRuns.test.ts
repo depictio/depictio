@@ -3,9 +3,11 @@ import type { CommentThread } from 'depictio-react-core';
 
 import {
   acceptableThreads,
+  agentRunLabel,
   agentRunToTrace,
   EMPTY_AGENT_TRACE,
   filterThreads,
+  laneVerdicts,
   reduceAgentRunEvent,
   runIdsOf,
   splitAgentId,
@@ -239,5 +241,64 @@ describe('agentRunToTrace', () => {
     expect(t.lanes[0].threads[0]).toMatchObject({ thread_id: 't1', kind: 'question' });
     expect(t.budget.spent_usd).toBe(0.2);
     expect(traceReportId(t)).toBe('rep');
+  });
+});
+
+describe('lane counts and verdicts', () => {
+  it('keeps agent_finished counts and lists the verdicts an agent gave', () => {
+    const t = fold([
+      ...RUN,
+      {
+        type: 'agent_finished',
+        data: {
+          agent_id: 'annotator@1',
+          status: 'ok',
+          summary: '1 annotation and 0 plain comments proposed',
+          counts: { annotations: 1, comments: 0 },
+        },
+      },
+    ]);
+    expect(t.lanes.find((l) => l.agent_id === 'annotator@1')!.counts).toEqual({
+      annotations: 1,
+      comments: 0,
+    });
+    expect(laneVerdicts(t, 'skeptic@1')).toEqual([
+      {
+        finding_id: 'f1',
+        title: 'Sample S3 fails QC',
+        verdict: { verdict: 'confirmed', reason: undefined, agent_id: 'skeptic@1' },
+      },
+    ]);
+    expect(laneVerdicts(t, 'analyst/qc@1')).toEqual([]);
+  });
+
+  it('drops the old "finding(s) kept" suffix from stored summaries', () => {
+    const t = agentRunToTrace({
+      id: 'r1',
+      dashboard_id: 'd',
+      question: 'q',
+      status: 'complete',
+      created_at: '2026-09-28T10:00:00Z',
+      agents: [{ agent_id: 'analyst/qc@1', summary: 'Two differences. (5 finding(s) kept)' }],
+    } as AgentRun);
+    expect(t.lanes[0].summary).toBe('Two differences.');
+  });
+});
+
+describe('agentRunLabel', () => {
+  it('names the time, team size and a status other than complete', () => {
+    const base = {
+      id: 'r1',
+      dashboard_id: 'd',
+      question: 'Which species differ in bill length and in body mass across islands?',
+      team: ['a', 'b', 'c'],
+      created_at: new Date(2026, 8, 28, 9, 5).toISOString(),
+    };
+    const done = agentRunLabel({ ...base, status: 'complete' });
+    expect(done).toContain('Which species differ in bill length and…');
+    expect(done).toContain('09:05');
+    expect(done).toContain('3 agents');
+    expect(done).not.toContain('complete');
+    expect(agentRunLabel({ ...base, status: 'budget' })).toMatch(/budget$/);
   });
 });

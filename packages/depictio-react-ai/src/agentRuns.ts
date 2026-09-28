@@ -60,6 +60,8 @@ export interface AgentLane {
   topic?: string | null;
   status: 'running' | AgentStatus;
   summary?: string | null;
+  /** What the agent produced, by kind, once it finished. */
+  counts?: Record<string, number>;
   toolCalls: TraceToolCall[];
   findings: TraceFinding[];
   threads: TraceThread[];
@@ -255,6 +257,7 @@ export function reduceAgentRunEvent(
         ...lane,
         status: d.status,
         summary: d.summary ?? lane.summary,
+        counts: d.counts ?? lane.counts,
       }));
     }
     case 'error': {
@@ -286,9 +289,51 @@ export function reduceAgentRunEvent(
   }
 }
 
+/** The verdicts `agentId` gave, in the order its findings were listed, with
+ *  the title of the finding each one judges. */
+export function laneVerdicts(
+  state: AgentRunTraceState,
+  agentId: string,
+): { finding_id: string; title: string; verdict: TraceVerdict }[] {
+  const titles = new Map<string, string>();
+  state.lanes.forEach((l) => l.findings.forEach((f) => titles.set(f.finding_id, f.title)));
+  return Object.entries(state.verdicts)
+    .filter(([, v]) => v.agent_id === agentId)
+    .map(([finding_id, verdict]) => ({
+      finding_id,
+      title: titles.get(finding_id) ?? finding_id,
+      verdict,
+    }));
+}
+
 /** The id a run row carries (`id` on stored documents, `run_id` on events). */
 export function agentRunId(run: Pick<AgentRunSummary, 'id' | 'run_id'>): string {
   return run.id ?? run.run_id ?? '';
+}
+
+const RUN_LABEL_QUESTION_CHARS = 40;
+
+/** A run as one line of a picker: the question (cut), the date and time it
+ *  started, the team size and, unless it completed, its status. Runs of the
+ *  same question stay apart by their time. */
+export function agentRunLabel(run: AgentRunSummary): string {
+  const q = run.question.trim();
+  const question =
+    q.length > RUN_LABEL_QUESTION_CHARS ? `${q.slice(0, RUN_LABEL_QUESTION_CHARS).trimEnd()}…` : q;
+  const at = new Date(run.created_at);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const when = Number.isNaN(at.getTime())
+    ? ''
+    : `${at.toLocaleDateString()} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  const team = run.team?.length ?? 0;
+  return [
+    question || `Run ${agentRunId(run).slice(0, 8)}`,
+    when,
+    team ? `${team} agents` : '',
+    run.status !== 'complete' ? run.status : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** The report of a finished trace: the run's output, else the last one a
@@ -322,7 +367,9 @@ export function agentRunToTrace(run: AgentRun): AgentRunTraceState {
           : a.status && a.status !== 'running'
             ? a.status
             : 'ok',
-      summary: a.summary,
+      // Runs stored before counts became a field carry them in the prose.
+      summary: a.summary?.replace(/\s*\(\d+ finding\(s\) kept\)$/, ''),
+      counts: a.counts ?? undefined,
       toolCalls: (a.tool_calls ?? []).map((c) => ({
         call_id: c.call_id,
         tool: c.tool,

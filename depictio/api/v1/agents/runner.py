@@ -48,6 +48,10 @@ InvokeFn = Callable[[str, ToolContext, dict[str, Any]], Awaitable[ToolResult]]
 
 ARG_SUMMARY_CHARS = 200
 RESULT_SUMMARY_CHARS = 240
+# An agent's closing summary, as stored and sent in ``agent_finished``.
+AGENT_SUMMARY_CHARS = 1200
+# query_data code is shown whole (up to this) as a code block in the trace.
+CODE_ARG_CHARS = 1500
 STORED_ARG_CHARS = 4_000
 STORED_VALUES_CHARS = 4_000
 
@@ -244,11 +248,12 @@ def _now() -> str:
 
 
 def summarise_args(args: dict[str, Any]) -> dict[str, Any]:
-    """Arguments as shown in the ``tool_call`` event: long values cut."""
+    """Arguments as shown in the ``tool_call`` event: long values cut (code less so)."""
     out: dict[str, Any] = {}
     for key, value in args.items():
-        if isinstance(value, str) and len(value) > ARG_SUMMARY_CHARS:
-            out[key] = value[:ARG_SUMMARY_CHARS] + "..."
+        limit = CODE_ARG_CHARS if key == "code" else ARG_SUMMARY_CHARS
+        if isinstance(value, str) and len(value) > limit:
+            out[key] = value[:limit] + "..."
         elif isinstance(value, list) and len(value) > 5:
             out[key] = [*value[:5], f"... {len(value) - 5} more"]
         else:
@@ -256,10 +261,26 @@ def summarise_args(args: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _plain(value: Any) -> str:
+    """One result value as short plain text: scalars as is, containers by size."""
+    if isinstance(value, list):
+        return f"{len(value)} item{'' if len(value) == 1 else 's'}"
+    if isinstance(value, dict):
+        return f"{len(value)} field{'' if len(value) == 1 else 's'}"
+    return str(value)
+
+
 def summarise_result(result: ToolResult) -> str:
+    """A tool result as plain ``key: value`` text for the trace, not JSON."""
     if not result.ok:
         return f"error: {result.error or 'failed'}"[:RESULT_SUMMARY_CHARS]
-    text = json.dumps(result.data, default=str, ensure_ascii=False)
+    data = result.data
+    if isinstance(data, dict):
+        text = "; ".join(f"{k}: {_plain(v)}" for k, v in data.items())
+    elif isinstance(data, list):
+        text = _plain(data)
+    else:
+        text = "" if data is None else str(data)
     if len(text) > RESULT_SUMMARY_CHARS:
         text = text[:RESULT_SUMMARY_CHARS] + "..."
     return text
@@ -625,10 +646,22 @@ async def agent_loop(
         return AgentOutcome("error", None, f"Agent failed: {exc}"[:300])
 
 
+def clip_words(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` characters on a word boundary, with an ellipsis."""
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    space = cut.rfind(" ")
+    if space > limit // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:-") + "\u2026"
+
+
 def _summary_of(output: dict[str, Any]) -> str:
     summary = output.get("summary")
     if isinstance(summary, str) and summary.strip():
-        return summary.strip()[:500]
+        return clip_words(summary, AGENT_SUMMARY_CHARS)
     for key in ("findings", "verdicts", "annotations", "questions"):
         if isinstance(output.get(key), list):
             return f"{len(output[key])} {key}"

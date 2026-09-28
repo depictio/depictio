@@ -92,6 +92,8 @@ class AgentRecord(BaseModel):
     reason: str = ""
     status: AgentStatus = "pending"
     summary: str = ""
+    # What the agent produced, by kind: findings, verdicts, annotations, comments...
+    counts: dict[str, int] = Field(default_factory=dict)
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     tokens: int = 0
     cost_usd: float | None = None
@@ -168,6 +170,7 @@ class AgentRun(BaseModel):
                     "topic_version": record.topic_version,
                     "status": record.status,
                     "summary": record.summary,
+                    "counts": record.counts,
                     "tokens": record.tokens,
                     "cost_usd": record.cost_usd,
                     "started_at": record.started_at,

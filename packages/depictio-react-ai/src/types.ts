@@ -772,7 +772,13 @@ export type AgentRunEvent =
   | { type: 'budget'; data: AgentRunBudget }
   | {
       type: 'agent_finished';
-      data: { agent_id: string; status: AgentStatus; summary?: string | null };
+      data: {
+        agent_id: string;
+        status: AgentStatus;
+        summary?: string | null;
+        /** What the agent produced, by kind (findings, annotations, comments...). */
+        counts?: Record<string, number> | null;
+      };
     }
   | { type: 'error'; data: { detail: string; agent_id?: string | null } }
   | {
@@ -829,6 +835,7 @@ export interface AgentRecord {
   topic?: string | null;
   status?: AgentStatus | 'running' | null;
   summary?: string | null;
+  counts?: Record<string, number> | null;
   tool_calls?: AgentToolCallRecord[];
   findings?: AgentFindingRecord[];
 }
