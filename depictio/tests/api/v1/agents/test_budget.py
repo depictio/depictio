@@ -84,3 +84,86 @@ def test_no_conclude_call_when_it_cannot_fit():
     outcome, _ = _run(llm, ledger=ledger)
     assert outcome.status == "budget" and outcome.output is None
     assert not llm.calls
+
+
+# -- phases ----------------------------------------------------------------------
+# At 0.40: analysts up to 0.18, skeptic up to 0.28, writers up to 0.34, reporter 0.40.
+
+
+def test_each_phase_stops_at_its_cumulative_share():
+    ledger = _ledger()
+    for _ in range(4):
+        ledger.record_llm(_usage(0.04), None, role="analyst")  # 0.16
+    assert not ledger.can_think(phase="analysts", role="analyst")  # 0.20 > 0.18
+    assert ledger.can_think(phase="skeptic", role="skeptic")  # 0.20 <= 0.28
+    assert not ledger.can_think(phase="skeptic", role="skeptic", turns=4)  # 0.32 > 0.28
+    ledger.record_llm(_usage(0.04), None, role="analyst")  # 0.20: past the analysts' share
+    assert not ledger.try_tool_call(phase="analysts")
+    assert ledger.try_tool_call(phase="skeptic")
+
+
+def test_unused_allowance_rolls_forward():
+    ledger = _ledger()
+    ledger.record_llm(_usage(0.04), None, role="analyst")  # analysts used 0.04 of 0.18
+    # The skeptic's own share is 0.10 (2 calls of 0.04); with what the analysts
+    # left it may make 6 (0.28).
+    assert ledger.can_think(phase="skeptic", role="skeptic", turns=5)
+    assert not ledger.can_think(phase="skeptic", role="skeptic", turns=7)
+    # A later phase never takes the reporter's share.
+    for _ in range(6):
+        ledger.record_llm(_usage(0.04), None, role="annotator")  # 0.28
+    assert not ledger.can_think(phase="writers", role="annotator", turns=2)  # 0.36 > 0.34
+    assert ledger.can_think(phase="reporter", role="reporter", turns=2)  # 0.36 <= 0.40
+    assert ledger.can_think(reserve=True, role="reporter", turns=2)
+
+
+def test_forced_answer_borrows_from_later_phases_but_not_the_reporter():
+    ledger = _ledger()
+    for _ in range(7):
+        ledger.record_llm(_usage(0.04), None, role="skeptic")  # 0.28
+    assert not ledger.can_think(phase="skeptic", role="skeptic")  # 0.32 > 0.28
+    assert ledger.can_force(role="skeptic", then="reporter")  # 0.28 + 0.04 + 0.04
+    ledger.record_llm(_usage(0.04), None, role="skeptic")  # 0.32
+    ledger.record_llm(_usage(0.04), None, role="skeptic")  # 0.36
+    assert not ledger.can_force(role="skeptic", then="reporter")  # 0.44 > 0.40
+
+
+def test_analyst_is_nudged_then_concludes_inside_its_phase():
+    import asyncio
+
+    from depictio.api.v1.agents.profiles import load_profiles
+    from depictio.api.v1.agents.runner import NUDGE_PROMPT, agent_loop
+    from depictio.tests.api.v1.agents._fakes import ctx
+    from depictio.tests.api.v1.agents.test_runner import _record
+
+    def answer(messages, tools, choice):
+        if choice == "none":
+            return turn({"findings": []}, cost=0.035)
+        return turn(calls=[call("query_data", {"code": "df.height"})], cost=0.035)
+
+    ledger = _ledger()
+    llm = FakeLLM(answer)
+    profiles = load_profiles()
+    outcome = asyncio.run(
+        agent_loop(
+            profiles.role("analyst"),
+            profiles.topic("general"),
+            ctx(),
+            "Which species differ?",
+            task="Dashboard id: d1",
+            output_schema={"type": "object"},
+            llm=llm,
+            ledger=ledger,
+            record=_record(),
+            toolbox=FakeToolbox(tools=default_tools()),
+            phase="analysts",
+        )
+    )
+    # Four tool turns (the last one after the nudge), then the conclude call.
+    assert outcome.status == "budget" and outcome.output == {"findings": []}
+    assert len(llm.calls) == 5 and llm.calls[-1]["tool_choice"] == "none"
+    assert ledger.spent_usd <= 0.18
+    nudges = [m for m in llm.calls[-1]["messages"] if m.get("content") == NUDGE_PROMPT]
+    assert len(nudges) == 1
+    assert not any(m.get("content") == NUDGE_PROMPT for m in llm.calls[2]["messages"])
+    assert any(m.get("content") == NUDGE_PROMPT for m in llm.calls[3]["messages"])

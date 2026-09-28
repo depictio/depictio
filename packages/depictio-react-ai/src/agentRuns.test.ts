@@ -188,6 +188,26 @@ describe('thread helpers', () => {
     };
     expect(acceptableThreads(threads, 'r1', run).map((t) => t.id)).toEqual(['a']);
   });
+
+  it('leaves out threads whose finding is unverified', () => {
+    const run: AgentRun = {
+      id: 'r1',
+      dashboard_id: 'd',
+      question: 'q',
+      status: 'budget',
+      created_at: '',
+      verdicts: [
+        { finding_id: 'f1', verdict: 'confirmed' },
+        { finding_id: 'f2', verdict: 'unverified' },
+      ],
+      threads: [
+        { thread_id: 'a', finding_id: 'f1' },
+        { thread_id: 'b', finding_id: 'f2' },
+      ],
+    };
+    expect(acceptableThreads(threads, 'r1', run).map((t) => t.id)).toEqual(['a']);
+    expect(agentRunToTrace(run).verdicts.f2.verdict).toBe('unverified');
+  });
 });
 
 describe('agentRunToTrace', () => {

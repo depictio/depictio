@@ -4,8 +4,10 @@ One run goes through fixed steps:
 
 1. analysts (one per routed topic) explore in parallel and return findings;
    ``evidence.validate`` keeps those backed by their own evidence calls;
-2. the skeptic re-checks every finding and gives a verdict
-   (confirmed / weakened / refuted);
+2. the skeptic re-checks the findings, given in one compact batch, and
+   gives a verdict (confirmed / weakened / refuted); when its budget runs out
+   it still answers for what it checked, and a finding it never judged is
+   ``unverified``;
 3. the annotator drafts an annotation for each confirmed finding that is about
    a component; the server writes it (``create_annotation``) with the
    finding's evidence and a deterministic ``dedupe_key``, so a re-run updates
@@ -13,7 +15,10 @@ One run goes through fixed steps:
 4. the questioner drafts a question for each weakened finding
    (``ask_question``);
 5. the reporter writes the summary; the server saves the report
-   (``create_report``) with the confirmed and weakened findings.
+   (``create_report``) with the confirmed, weakened and unverified findings.
+
+Each step spends from its own phase of the run's budget (``budget.PHASES``);
+what a step leaves unused rolls forward to the later ones.
 
 Agents only call read tools themselves. Writes are made by the pipeline, under
 the writing agent's ``ToolContext`` and through ``registry.invoke``, so an
@@ -35,7 +40,7 @@ from typing import Any, Protocol
 
 from depictio.api.v1.agents import evidence as evidence_mod
 from depictio.api.v1.agents import runs
-from depictio.api.v1.agents.budget import BudgetLedger
+from depictio.api.v1.agents.budget import BudgetLedger, phase_of
 from depictio.api.v1.agents.context import ToolContext
 from depictio.api.v1.agents.envelope import fit_to_budget
 from depictio.api.v1.agents.profiles import ProfileSet
@@ -66,6 +71,19 @@ from depictio.models.models.users import TokenScope
 SUMMARY_CONTEXT_CHARS = 8_000
 FINDINGS_CONTEXT_CHARS = 12_000
 EVIDENCE_PREVIEW_CHARS = 600
+# The skeptic gets every finding in one batch: shorter evidence previews.
+SKEPTIC_EVIDENCE_CHARS = 300
+SKEPTIC_TASK = (
+    "Review all these findings in this one pass. Most can be judged from the cited "
+    "evidence values; re-run a query only for a claim that needs it, and keep such checks "
+    "few. Answer with one JSON object holding a verdict for every finding_id."
+)
+SKEPTIC_CONCLUDE = (
+    "Your budget is used up. Do not call any tool. Reply now with the verdicts JSON: a "
+    "verdict for every finding you checked or can judge from the evidence in the brief and "
+    "the tool results you have. Leave out a finding you could not judge."
+)
+UNVERIFIED_REASON = "The skeptic did not review this finding before the budget ran out."
 
 _EVIDENCE_ITEM = {
     "type": "object",
@@ -359,6 +377,8 @@ class TeamRun:
         task: str,
         schema: dict[str, Any],
         reserve: bool = False,
+        conclude_prompt: str | None = None,
+        force_conclude_for: str | None = None,
     ) -> AgentOutcome:
         profiles = self.deps.profiles
         outcome = await agent_loop(
@@ -375,6 +395,9 @@ class TeamRun:
             emit=self.emit,
             cancel=self.cancel,
             reserve=reserve,
+            phase=phase_of(member.role),
+            conclude_prompt=conclude_prompt,
+            force_conclude_for=force_conclude_for,
         )
         self.outcomes[member.agent_id] = outcome
         return outcome
@@ -471,7 +494,12 @@ class TeamRun:
         await self._finish(record, outcome.status, summary)
         return findings
 
-    def _findings_brief(self, findings: list[RunFinding], with_verdicts: bool = False) -> str:
+    def _findings_brief(
+        self,
+        findings: list[RunFinding],
+        with_verdicts: bool = False,
+        preview: int = EVIDENCE_PREVIEW_CHARS,
+    ) -> str:
         items = []
         for f in findings:
             item: dict[str, Any] = {
@@ -483,8 +511,8 @@ class TeamRun:
                 "evidence": [
                     {
                         "call_id": e.call_id,
-                        "query": (e.query or "")[:EVIDENCE_PREVIEW_CHARS],
-                        "values": _json(e.values, EVIDENCE_PREVIEW_CHARS),
+                        "query": (e.query or "")[:preview],
+                        "values": _json(e.values, preview),
                     }
                     for e in f.evidence
                 ],
@@ -503,10 +531,14 @@ class TeamRun:
             record,
             task=(
                 f"Dashboard id: {self.run.dashboard_id}\n\nFindings to review:\n"
-                + self._findings_brief(findings)
-                + "\n\nGive one verdict per finding_id."
+                + self._findings_brief(findings, preview=SKEPTIC_EVIDENCE_CHARS)
+                + "\n\n"
+                + SKEPTIC_TASK
             ),
             schema=SKEPTIC_SCHEMA,
+            conclude_prompt=SKEPTIC_CONCLUDE,
+            # Verdicts gate every later step: answer past the phase if the reporter still fits.
+            force_conclude_for="reporter",
         )
         given: dict[str, dict[str, Any]] = {}
         for item in (outcome.output or {}).get("verdicts") or []:
@@ -519,7 +551,7 @@ class TeamRun:
         for f in findings:
             item = given.get(f.finding_id)
             if item is None:
-                verdict, reason = "weakened", "The skeptic gave no verdict on this finding."
+                verdict, reason = "unverified", UNVERIFIED_REASON
             else:
                 verdict = item["verdict"]
                 reason = str(item.get("reason") or "").strip()[:MAX_BODY_CHARS] or "No reason."
@@ -541,7 +573,11 @@ class TeamRun:
                     "agent_id": member.agent_id,
                 },
             )
-        await self._finish(record, outcome.status, outcome.summary)
+        judged = sum(1 for f in findings if f.verdict != "unverified")
+        summary = outcome.summary
+        if judged < len(findings):
+            summary = f"{summary} ({len(findings) - judged} of {len(findings)} unverified)"
+        await self._finish(record, outcome.status, summary)
 
     async def _skip(self, member: TeamMember, why: str) -> None:
         record = await self._start(member)
@@ -706,6 +742,7 @@ class TeamRun:
             ("Confirmed", "confirmed"),
             ("Weakened", "weakened"),
             ("Refuted", "refuted"),
+            ("Unverified (not reviewed)", "unverified"),
         ):
             group = [f for f in self.run.findings if f.verdict == verdict]
             if group:
@@ -722,7 +759,8 @@ class TeamRun:
             member,
             record,
             task=(
-                "Findings and verdicts:\n"
+                "Findings and verdicts (unverified: the skeptic did not review it, so "
+                "report it as unverified, with low confidence):\n"
                 + self._findings_brief(self.run.findings, with_verdicts=True)
                 + f"\n\nWarnings of the run: {_json(self.run.warnings[-10:], 2_000)}"
             ),
@@ -732,7 +770,9 @@ class TeamRun:
         summary = str((outcome.output or {}).get("summary_md") or "").strip()
         if not summary:
             summary = self._fallback_summary()
-        kept = [f for f in self.run.findings if f.verdict in ("confirmed", "weakened")]
+        kept = [
+            f for f in self.run.findings if f.verdict in ("confirmed", "weakened", "unverified")
+        ]
         report_findings = [
             AgentFinding(
                 title=f.title,

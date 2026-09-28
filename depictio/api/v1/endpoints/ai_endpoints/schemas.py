@@ -368,8 +368,9 @@ class AgentFinding(BaseModel):
     component_index: str | None = None
     confidence: Literal["low", "medium", "high"] = "medium"
     evidence: list[AgentEvidence] = Field(min_length=1, max_length=MAX_EVIDENCE_ITEMS)
-    # Set on findings an agent team reviewed: the skeptic's verdict and why.
-    verdict: Literal["confirmed", "weakened", "refuted"] | None = None
+    # Set on findings of an agent team: the skeptic's verdict and why ("unverified"
+    # when the skeptic did not review it).
+    verdict: Literal["confirmed", "weakened", "refuted", "unverified"] | None = None
     verdict_reason: str | None = Field(default=None, max_length=MAX_BODY_CHARS)
 
 

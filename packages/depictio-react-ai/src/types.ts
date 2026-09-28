@@ -688,7 +688,9 @@ export interface AgentRunRequest {
   budget_usd?: number;
 }
 
-export type AgentVerdict = 'confirmed' | 'weakened' | 'refuted';
+/** The skeptic's verdict on a finding; `unverified` when it did not review
+ *  the finding before its budget ran out (not annotated, not questioned). */
+export type AgentVerdict = 'confirmed' | 'weakened' | 'refuted' | 'unverified';
 export type AgentRunStatus = 'running' | 'complete' | 'cancelled' | 'failed' | 'budget';
 export type AgentStatus = 'ok' | 'budget' | 'error';
 

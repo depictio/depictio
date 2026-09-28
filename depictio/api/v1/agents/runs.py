@@ -19,7 +19,8 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import AgentEvidence
 
 RunStatus = Literal["running", "complete", "cancelled", "failed", "budget"]
 AgentStatus = Literal["pending", "running", "ok", "budget", "error", "cancelled", "skipped"]
-VerdictKind = Literal["confirmed", "weakened", "refuted"]
+# "unverified": a finding the skeptic did not review (its budget ran out).
+VerdictKind = Literal["confirmed", "weakened", "refuted", "unverified"]
 
 
 def _now() -> str:

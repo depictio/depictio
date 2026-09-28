@@ -23,12 +23,14 @@ export const VERDICT_COLOR: Record<AgentVerdict, string> = {
   confirmed: 'teal',
   weakened: 'yellow',
   refuted: 'red',
+  unverified: 'gray',
 };
 
 const VERDICT_ICON: Record<AgentVerdict, string> = {
   confirmed: 'material-symbols:check-circle-outline',
   weakened: 'material-symbols:warning-outline',
   refuted: 'material-symbols:cancel-outline',
+  unverified: 'material-symbols:help-outline',
 };
 
 const CONFIDENCE_COLOR: Record<TraceFinding['confidence'], string> = {
@@ -122,7 +124,12 @@ const AgentRunTrace: React.FC<Props> = ({ trace, onOpenThread, onOpenReport }) =
   }, [trace.lanes, trace.runId]);
 
   const verdictCounts = useMemo(() => {
-    const c: Record<AgentVerdict, number> = { confirmed: 0, weakened: 0, refuted: 0 };
+    const c: Record<AgentVerdict, number> = {
+      confirmed: 0,
+      weakened: 0,
+      refuted: 0,
+      unverified: 0,
+    };
     Object.values(trace.verdicts).forEach((v) => {
       c[v.verdict] = (c[v.verdict] ?? 0) + 1;
     });

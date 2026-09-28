@@ -427,3 +427,184 @@ def test_annotator_shape_on_a_card_becomes_a_plain_comment():
     [written] = toolbox.calls_to("create_annotation")
     assert "shape" not in written and written["body"] == "Gentoo: 47.5 mm."
     assert any("plain comment" in w for w in saved[-1].warnings)
+
+
+# -- phase budgets, partial skeptic, unverified findings ----------------------------
+
+
+def _all_ids(messages) -> list[str]:
+    return _finding_ids(" ".join(str(m.get("content") or "") for m in messages))
+
+
+def _three_findings(cost):
+    return turn(
+        {
+            "findings": [
+                {
+                    "title": "Gentoo are heaviest",
+                    "detail": "Mean 5076 g.",
+                    "component_index": "c1",
+                    "evidence": [{"call_id": "call-1"}],
+                },
+                {
+                    "title": "Chinstrap flippers are mid-sized",
+                    "detail": "Mean 196 mm.",
+                    "component_index": "c2",
+                    "evidence": [{"call_id": "call-1"}],
+                },
+                {
+                    "title": "Adelie bills are shortest",
+                    "detail": "Mean 38.8 mm.",
+                    "evidence": [{"call_id": "call-1"}],
+                },
+            ]
+        },
+        cost=cost,
+    )
+
+
+def test_skeptic_out_of_budget_concludes_and_the_rest_is_unverified():
+    # The skeptic's second call costs more than expected, leaving no room for
+    # its conclude call inside its phase: it is forced (the reporter still
+    # fits) and judges only the finding it checked. The other two stay
+    # unverified: no annotation, no question, reported with low confidence.
+    from depictio.api.v1.agents.runner import NUDGE_PROMPT
+    from depictio.api.v1.agents.team import SKEPTIC_CONCLUDE, UNVERIFIED_REASON
+
+    skeptic_costs = iter([0.05, 0.09])
+
+    def answer(messages, tools, choice):
+        role = role_of(messages)
+        if role == "analyst":
+            if any(m["role"] == "tool" for m in messages):
+                return _three_findings(0.03)
+            return turn(calls=[call("query_data", {"code": "df.mean()"})], cost=0.03)
+        if role == "skeptic":
+            if choice == "none":
+                ids = _all_ids(messages)
+                return turn(
+                    {"verdicts": [{"finding_id": ids[0], "verdict": "confirmed", "reason": "OK."}]},
+                    cost=0.03,
+                )
+            assert not any(m.get("content") == NUDGE_PROMPT for m in messages)
+            return turn(calls=[call("query_data", {"code": "df.height"})], cost=next(skeptic_costs))
+        if role == "annotator":
+            return turn({"annotations": []}, cost=0.02)
+        return turn({"summary_md": "Gentoo are heaviest; two claims unverified."}, cost=0.03)
+
+    ledger = BudgetLedger(max_tool_calls=40, limit_usd=0.40, max_tokens=1_000_000)
+    toolbox = FakeToolbox(tools=default_tools())
+    llm = FakeLLM(answer)
+    saved = []
+    events = _execute(_job(llm, toolbox, ledger=ledger, saved=saved))
+
+    skeptic_calls = [c for c in llm.calls if role_of(c["messages"]) == "skeptic"]
+    assert skeptic_calls[-1]["tool_choice"] == "none"
+    assert skeptic_calls[-1]["messages"][-1]["content"] == SKEPTIC_CONCLUDE
+    verdicts = [d for e, d in events if e == "verdict"]
+    assert [v["verdict"] for v in verdicts] == ["confirmed", "unverified", "unverified"]
+    assert all(v["reason"] == UNVERIFIED_REASON for v in verdicts[1:])
+
+    # Only the confirmed finding is annotated; nothing weakened, so no question.
+    assert [a["component_index"] for a in toolbox.calls_to("create_annotation")] == ["c1"]
+    assert not toolbox.calls_to("ask_question")
+    finished = {d["agent_id"]: d for e, d in events if e == "agent_finished"}
+    assert finished["questioner/general@1"]["summary"].startswith("Skipped")
+    assert "2 of 3 unverified" in finished["skeptic/general@1"]["summary"]
+
+    [report] = toolbox.calls_to("create_report")
+    by_verdict = Counter(f["verdict"] for f in report["findings"])
+    assert by_verdict == {"confirmed": 1, "unverified": 2}
+    assert all(f["confidence"] == "low" for f in report["findings"] if f["verdict"] == "unverified")
+    assert ledger.spent_usd <= 0.40
+    run = saved[-1]
+    assert [f.verdict for f in run.findings] == ["confirmed", "unverified", "unverified"]
+    assert [t.finding_id for t in run.threads] == [run.findings[0].finding_id]
+
+
+def test_fallback_summary_lists_unverified_findings():
+    def answer(messages, tools, choice):
+        role = role_of(messages)
+        if role == "analyst":
+            if any(m["role"] == "tool" for m in messages):
+                return _three_findings(0.001)
+            return turn(calls=[call("query_data", {"code": "df.mean()"})])
+        if role == "skeptic":
+            return turn({"verdicts": []})
+        return turn("not json at all")
+
+    saved = []
+    toolbox = FakeToolbox(tools=default_tools())
+    _execute(_job(FakeLLM(answer), toolbox, saved=saved))
+    [report] = toolbox.calls_to("create_report")
+    assert "**Unverified (not reviewed)**" in report["summary"]
+    assert "- Adelie bills are shortest" in report["summary"]
+    assert {f.verdict for f in saved[-1].findings} == {"unverified"}
+    assert not toolbox.calls_to("create_annotation") and not toolbox.calls_to("ask_question")
+
+
+def test_full_team_at_forty_cents_reaches_every_role():
+    # The live Penguins run: a 0.40 limit, about 0.03 per call. Analysts and the
+    # skeptic would keep querying; the phase shares stop them in time for every
+    # later role to run, and the skeptic answers once nudged.
+    from depictio.api.v1.agents.runner import NUDGE_PROMPT
+    from depictio.api.v1.agents.team import UNVERIFIED_REASON
+
+    cost = 0.031
+
+    def nudged(messages):
+        return any(m.get("content") == NUDGE_PROMPT for m in messages)
+
+    def answer(messages, tools, choice):
+        role = role_of(messages)
+        if role == "analyst":
+            if choice == "none":
+                return _three_findings(cost)
+            return turn(calls=[call("query_data", {"code": "df.describe()"})], cost=cost)
+        if role == "skeptic":
+            if choice == "none" or nudged(messages):
+                ids = _all_ids(messages)
+                return turn(
+                    {
+                        "verdicts": [
+                            {"finding_id": ids[0], "verdict": "confirmed", "reason": "n=124."},
+                            {"finding_id": ids[1], "verdict": "weakened", "reason": "n=68."},
+                            {"finding_id": ids[2], "verdict": "refuted", "reason": "39.1 mm."},
+                        ]
+                    },
+                    cost=cost,
+                )
+            return turn(calls=[call("query_data", {"code": "df.height"})], cost=cost)
+        if role == "annotator":
+            fid = _finding_ids(messages[1]["content"])[0]
+            return turn({"annotations": [{"finding_id": fid, "body": "5076 g."}]}, cost=cost)
+        if role == "questioner":
+            fid = _finding_ids(messages[1]["content"])[0]
+            return turn({"questions": [{"finding_id": fid, "body": "Juveniles?"}]}, cost=cost)
+        return turn({"summary_md": "Gentoo are heaviest."}, cost=cost)
+
+    ledger = BudgetLedger(max_tool_calls=60, limit_usd=0.40, max_tokens=1_000_000)
+    toolbox = FakeToolbox(tools=default_tools())
+    llm = FakeLLM(answer)
+    events = _execute(_job(llm, toolbox, ledger=ledger))
+
+    started = [d["role"] for e, d in events if e == "agent_started"]
+    assert started == ["analyst", "skeptic", "annotator", "questioner", "reporter"]
+    finished = {d["agent_id"]: d for e, d in events if e == "agent_finished"}
+    assert not any(d["summary"].startswith("Skipped") for d in finished.values())
+
+    verdicts = [d for e, d in events if e == "verdict"]
+    assert sorted(v["verdict"] for v in verdicts) == ["confirmed", "refuted", "weakened"]
+    assert not any(v["reason"] == UNVERIFIED_REASON for v in verdicts)
+    # The skeptic checked something, was nudged, and answered without a conclude call.
+    skeptic_calls = [c for c in llm.calls if role_of(c["messages"]) == "skeptic"]
+    assert len(skeptic_calls) >= 2 and nudged(skeptic_calls[-1]["messages"])
+
+    assert len(toolbox.calls_to("create_annotation")) == 1
+    assert len(toolbox.calls_to("ask_question")) == 1
+    assert ("report_created", {"agent_id": "reporter/general@1", "report_id": "r1"}) in events
+    # Analysts kept inside their share (0.18), the whole run inside the limit.
+    analyst_spend = sum(0.031 for c in llm.calls if role_of(c["messages"]) == "analyst")
+    assert analyst_spend <= 0.18 + 1e-9
+    assert ledger.spent_usd <= 0.40
+    assert all(d["spent_usd"] <= 0.40 for e, d in events if e == "budget")
