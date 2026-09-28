@@ -479,3 +479,124 @@ class TestMaterializeRecipeSeeds:
 
         dc_config = config["workflows"][0]["data_collections"][0]["config"]
         assert dc_config["dc_specific_properties"] == {"format": "tsv"}
+
+
+class TestManifestModeResolution:
+    """resolve_template with data_root=None (manifest-driven templates)."""
+
+    def test_reference_template_resolves_without_data_root(self) -> None:
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        config, meta, origin, dashboard_paths, variables = resolve_template(
+            "generic/manifest-tables/1",
+            data_root=None,
+            extra_vars={"MANIFEST_URL": "https://example.org/run42/manifest.json"},
+        )
+        assert origin.data_root is None
+        assert variables["MANIFEST_URL"] == "https://example.org/run42/manifest.json"
+        assert "DATA_ROOT" not in variables
+        scan = config["workflows"][0]["data_collections"][0]["config"]["scan"]
+        assert scan["mode"] == "manifest"
+        assert scan["scan_parameters"]["manifest_url"] == "https://example.org/run42/manifest.json"
+        assert [p.name for p in dashboard_paths] == ["base.yaml"]
+
+    def test_default_project_name_derives_from_manifest(self) -> None:
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        # The reference template carries a `name`, so exercise the fallback via
+        # project_name=None on a config whose name we blank through override.
+        config, _, _, _, _ = resolve_template(
+            "generic/manifest-tables/1",
+            data_root=None,
+            project_name="run42",
+            extra_vars={"MANIFEST_URL": "https://example.org/run42/manifest.json?token=x"},
+        )
+        assert config["name"] == "run42"
+
+    def test_origin_allows_none_data_root(self) -> None:
+        origin = TemplateOrigin(
+            template_id="generic/manifest-tables/1",
+            template_version="1.0.0",
+            variables={"MANIFEST_URL": "https://example.org/m.json"},
+        )
+        assert origin.data_root is None
+
+
+class TestLocateTemplateByPath:
+    """A received bundle must be runnable where it lands.
+
+    `depictio template export` produces a directory; without path support the
+    recipient would have to copy it into their own site-packages before
+    `--template` could see it, which is exactly what blocks sharing.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _cli_context(self, monkeypatch):
+        # The path form is a CLI affordance; the suite's default context is "server".
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
+
+    def test_directory_containing_template_yaml(self, tmp_path):
+        bundle = tmp_path / "recu"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: x\n")
+        assert locate_template(str(bundle)) == (bundle / "template.yaml").resolve()
+
+    def test_direct_yaml_file(self, tmp_path):
+        target = tmp_path / "template.yaml"
+        target.write_text("name: x\n")
+        assert locate_template(str(target)) == target.resolve()
+
+    def test_project_yaml_fallback(self, tmp_path):
+        bundle = tmp_path / "legacy"
+        bundle.mkdir()
+        (bundle / "project.yaml").write_text("name: x\n")
+        assert locate_template(str(bundle)) == (bundle / "project.yaml").resolve()
+
+    def test_directory_without_a_template_explains_what_is_missing(self, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        with pytest.raises(FileNotFoundError, match="no template.yaml or project.yaml"):
+            locate_template(str(empty))
+
+    def test_installed_ids_still_resolve(self):
+        """Path support must not shadow the shipped catalogue."""
+        assert locate_template("generic/manifest-tables/1").is_file()
+
+
+class TestLocateTemplateConfinement:
+    """Ids are confined to the templates directory; the path form is CLI-only.
+
+    The API resolves ids for remote callers (``POST /projects/from_manifest``),
+    so a path form there, or an id that walks out of the directory, would let
+    any request read an arbitrary YAML on the server.
+    """
+
+    def test_path_form_refused_outside_the_cli(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        bundle = tmp_path / "recu"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: x\n")
+        with pytest.raises(FileNotFoundError, match="not found"):
+            locate_template(str(bundle))
+        with pytest.raises(FileNotFoundError, match="not found"):
+            locate_template(str(bundle / "template.yaml"))
+
+    @pytest.mark.parametrize("context", ["server", "CLI"])
+    @pytest.mark.parametrize(
+        "escaping",
+        ["../../../nope-does-not-exist/x", "generic/../../nope/x", "./generic/manifest-tables/1"],
+    )
+    def test_id_leaving_the_templates_dir_is_refused(self, context, escaping, monkeypatch):
+        # On the CLI the path form is tried first, so none of these may exist
+        # relative to the working directory either.
+        monkeypatch.setenv("DEPICTIO_CONTEXT", context)
+        with pytest.raises(FileNotFoundError, match="not found"):
+            locate_template(escaping)
+
+    def test_installed_ids_resolve_in_server_context(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        assert locate_template("generic/manifest-tables/1").is_file()
+        with pytest.raises(FileNotFoundError) as exc:
+            locate_template("generic/does-not-exist/1")
+        # The catalogue is carried separately so the API can omit the path.
+        assert "generic/manifest-tables/1" in exc.value.available_templates

@@ -1,6 +1,8 @@
+import asyncio
+
 import boto3
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
@@ -12,6 +14,7 @@ from depictio.api.v1.db import (
     files_collection,
     jbrowse_collection,
     multiqc_collection,
+    project_storage_collection,
     projects_collection,
     runs_collection,
     users_collection,
@@ -20,10 +23,43 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
 )
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
+from depictio.api.v1.endpoints.projects_endpoints.export_template import (
+    ExportTemplateRequest,
+    build_template_bundle,
+    bundle_to_zip,
+)
+from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
+    FromManifestReport,
+    FromManifestRequest,
+    _create_project_from_manifest,
+)
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
     IngestionSummary,
     build_ingestion_report,
+)
+from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
+    IngestManifestRequest,
+    ManifestIngestReport,
+    ManifestRefreshReport,
+    RefreshManifestRequest,
+    _get_refresh_run_report,
+    _ingest_manifest_into_project,
+    _refresh_manifest_in_project,
+)
+from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+    ProjectStorageConfigIn,
+    ProjectStorageConfigOut,
+    ProjectStorageUnusable,
+    StorageTestResult,
+    _delete_project_storage,
+    _get_project_storage,
+    _set_project_storage,
+    _test_project_storage,
+)
+from depictio.api.v1.endpoints.projects_endpoints.templates_catalog import (
+    TemplateCatalog,
+    list_templates_catalog,
 )
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
@@ -129,8 +165,42 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
         )
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
+    # Per-project storage credentials live in their own collection (never on
+    # the project document); an orphaned config would keep an encrypted
+    # secret around for a project that no longer exists.
+    project_storage_collection.delete_one({"project_id": ObjectId(project_id)})
     projects_collection.delete_one({"_id": ObjectId(project_id)})
     logger.info(f"Project '{project_name}' ({project_id}) deleted with cascade.")
+
+
+async def _run_ingest_off_loop(fn, **kwargs):
+    """Run a sync ingest helper via ``asyncio.to_thread``.
+
+    A project's stored storage config that cannot be used (secret encrypted
+    with a key this instance does not have, endpoint no longer allowed) is
+    turned into a clean HTTP error carrying the client-safe ``detail`` instead
+    of a 500 traceback; the operator context stays in the log line.
+    """
+    try:
+        return await asyncio.to_thread(fn, **kwargs)
+    except ProjectStorageUnusable as exc:
+        logger.error(f"Project storage unusable during {fn.__name__}: {exc}")
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _reject_non_admin_in_public_mode(current_user, action: str) -> None:
+    """Public/demo-mode gate shared by the project-mutating manifest routes.
+
+    Mirrors ``create_project``: visitors are auto-minted as authenticated temp
+    users, so the per-project owner/editor gate alone would not stop them
+    from ingesting arbitrary remote data into (or exporting) a project they
+    can edit. Admins bypass it so they can still administer a demo.
+    """
+    if settings.auth.is_public_mode and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{action} is disabled in public/demo mode for non-admin users",
+        )
 
 
 # Endpoints
@@ -273,6 +343,215 @@ async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return build_ingestion_report(project).summary
+
+
+@projects_endpoint_router.post("/ingest_manifest", response_model=ManifestIngestReport)
+async def ingest_manifest(
+    payload: IngestManifestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Ingest a remote Data Manifest into an existing project.
+
+    Maps the manifest's ``type`` values onto the project's data-collection
+    tags, switches each matched DC to ``scan.mode: manifest``, then runs
+    scan + process in-process (same pipeline as ``/create_from_upload``).
+    ``dry_run=true`` returns the type→tag mapping plan without touching the
+    project. The manifest URL goes through the SSRF gateway before any fetch.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, "Manifest ingestion")
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await _run_ingest_off_loop(
+        _ingest_manifest_into_project,
+        project_id=payload.project_id,
+        manifest_url=payload.manifest_url,
+        current_user=current_user,
+        id_field=payload.id_field,
+        url_field=payload.url_field,
+        type_field=payload.type_field,
+        run_field=payload.run_field,
+        dry_run=payload.dry_run,
+    )
+
+
+@projects_endpoint_router.post("/refresh_manifest", response_model=ManifestRefreshReport)
+async def refresh_manifest(
+    payload: RefreshManifestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Re-fetch and re-ingest a project's manifest-backed data collections.
+
+    Overwrite-with-report semantics: File records sync to the manifest's
+    current entries (``sync_files`` beats the identity-hash skip) and each
+    Delta table is rebuilt from the resulting file set. A DC whose manifest
+    no longer lists its type is reported failed and left untouched.
+    ``dry_run=true`` reports what would refresh (per-DC entry counts) without
+    touching any data.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, "Manifest refresh")
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await _run_ingest_off_loop(
+        _refresh_manifest_in_project,
+        project_id=payload.project_id,
+        current_user=current_user,
+        data_collection_tag=payload.data_collection_tag,
+        dry_run=payload.dry_run,
+        async_run=payload.async_run,
+    )
+
+
+@projects_endpoint_router.get("/refresh_manifest/{run_id}", response_model=ManifestRefreshReport)
+async def get_refresh_manifest_run(
+    run_id: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Poll an async manifest refresh (``async_run=true``) by its run_id.
+
+    Aggregates the ingestion-run steps back into the same report shape as a
+    synchronous refresh; ``success`` flips once every worker finished green.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_get_refresh_run_report, run_id, current_user)
+
+
+@projects_endpoint_router.post("/{project_id}/export_template")
+async def export_project_template(
+    project_id: str,
+    payload: ExportTemplateRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Export the project and its dashboards as a template bundle (ZIP).
+
+    The archive holds ``template.yaml`` + ``dashboards/*.yaml`` ready to drop
+    into ``depictio/projects/<template_id>/``: runtime fields stripped, stored
+    manifest URLs re-parameterized to ``{MANIFEST_URL}``, an optional local
+    ``data_root`` prefix to ``{DATA_ROOT}``, dashboard references as portable
+    tags. The bundle is round-trip-checked before it is returned.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, "Template export")
+    bundle = await asyncio.to_thread(
+        build_template_bundle,
+        project_id,
+        current_user,
+        template_id=payload.template_id,
+        description=payload.description,
+        version=payload.version,
+        data_root=payload.data_root,
+    )
+    return Response(
+        content=bundle_to_zip(bundle),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{payload.template_id.replace("/", "_")}.zip"'
+            )
+        },
+    )
+
+
+@projects_endpoint_router.get("/{project_id}/storage", response_model=ProjectStorageConfigOut)
+async def get_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
+    """Storage config of a project (secret never returned — only ``has_secret``)."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_get_project_storage, project_id, current_user)
+
+
+@projects_endpoint_router.put("/{project_id}/storage", response_model=ProjectStorageConfigOut)
+async def set_project_storage(
+    project_id: str,
+    payload: ProjectStorageConfigIn,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Attach S3-compatible credentials to a project (owners only).
+
+    The secret is write-only: it is encrypted at rest and omitted secrets keep
+    the stored value. The endpoint URL goes through the same host gating as
+    remote data URLs.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_set_project_storage, project_id, payload, current_user)
+
+
+@projects_endpoint_router.delete("/{project_id}/storage")
+async def delete_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
+    """Remove a project's storage credentials (owners only)."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_delete_project_storage, project_id, current_user)
+
+
+@projects_endpoint_router.post("/{project_id}/storage/test", response_model=StorageTestResult)
+async def test_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
+    """Probe the configured endpoint/bucket with the stored credentials."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(_test_project_storage, project_id, current_user)
+
+
+@projects_endpoint_router.get("/templates", response_model=TemplateCatalog)
+async def list_project_templates(current_user=Depends(get_user_or_anonymous)):
+    """List the project templates shipped with this instance.
+
+    Backs the builder UI's template picker — the ``manifest_capable`` flag
+    marks templates usable with ``POST /projects/from_manifest``. Purely
+    filesystem-derived; template YAMLs that fail to parse are skipped.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(list_templates_catalog)
+
+
+@projects_endpoint_router.post("/from_manifest", response_model=FromManifestReport)
+async def create_project_from_manifest(
+    payload: FromManifestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a project (and its dashboards) from a template + a Data Manifest.
+
+    The zero-install flow: fetch the manifest through the SSRF gateway,
+    resolve the manifest-driven template server-side, coverage-check the
+    manifest's ``type`` values against the template's DCs, create the
+    project, ingest every manifest DC, and import the template's dashboards
+    in-process. ``dry_run=true`` returns the plan (coverage + per-DC entry
+    counts) without creating anything.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    # Mirror POST /projects/create's public/demo-mode gate.
+    _reject_non_admin_in_public_mode(current_user, "Project creation")
+    if not payload.dry_run:
+        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+            _ensure_user_cli_token,
+        )
+
+        await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _create_project_from_manifest,
+        manifest_url=payload.manifest_url,
+        template_id=payload.template_id,
+        current_user=current_user,
+        project_name=payload.project_name,
+        variables=payload.variables,
+        dry_run=payload.dry_run,
+    )
 
 
 @projects_endpoint_router.post("/create")
