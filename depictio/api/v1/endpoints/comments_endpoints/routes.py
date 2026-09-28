@@ -9,9 +9,7 @@ both).
 
 from __future__ import annotations
 
-import sys
-from types import ModuleType
-from typing import Any, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -43,22 +41,6 @@ from depictio.models.models.comments import (
 from depictio.models.models.users import User
 
 comments_endpoint_router = APIRouter()
-
-
-class _RoutesModule(ModuleType):
-    """Forward patches of the service's storage handles and caps to the service.
-
-    ``patch.object(routes, "comment_threads_collection", ...)`` predates the
-    service split; forwarding keeps such patches effective where the code now runs.
-    """
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in service.PATCHABLE:
-            setattr(service, name, value)
-        super().__setattr__(name, value)
-
-
-sys.modules[__name__].__class__ = _RoutesModule
 
 
 async def _optional_user(

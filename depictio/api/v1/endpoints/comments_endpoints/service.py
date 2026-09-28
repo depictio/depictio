@@ -75,18 +75,6 @@ TAB_KEY = "__tab__"
 DEFAULT_TOKEN_AGENT_NAME = "api-token"
 """Agent name of a scoped-token REST caller whose token name is unknown."""
 
-# Names the routes module forwards to this one when they are patched on it
-# (tests patch the storage handles and the caps on ``routes``).
-PATCHABLE = frozenset(
-    {
-        "comment_threads_collection",
-        "dashboards_collection",
-        "_get_aggregation_hash",
-        "MAX_THREADS_PER_RUN",
-        "MAX_COMMENTS_PER_THREAD",
-    }
-)
-
 # Component keys that point at a data collection the component reads.
 _DC_KEYS = ("dc_id", "geojson_dc_id")
 
