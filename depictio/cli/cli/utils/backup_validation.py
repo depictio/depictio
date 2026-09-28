@@ -315,7 +315,15 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         # _create_mongodb_backup's collections_config yet either — excluded here to
         # match current reality, not a judgment that it shouldn't ever be backed up;
         # adding real backup coverage for it is a separate, deliberate change.
-        ledger_collections = ["task_events", "app_logs", "telemetry", "ingestion_runs"]
+        # 'agent_tool_calls' is the agent tool audit ledger (90-day TTL), same
+        # footing as 'task_events'.
+        ledger_collections = [
+            "task_events",
+            "app_logs",
+            "telemetry",
+            "ingestion_runs",
+            "agent_tool_calls",
+        ]
         # The assistant's history ('ai_summaries', 'ai_analyses', and the
         # 'ai_generations' run records) is LLM output keyed by dashboard:
         # useful to keep, but not wired into _create_mongodb_backup's
