@@ -5,7 +5,9 @@ Drives a running Depictio (``depictio local up --examples genome_tracks_examples
 is enough; the nf-core shots also need the three lot1 templates ingested with
 ``--var TRACKS_URI=…``), captures each scenario with Playwright, then draws
 numbered callouts and a legend over the capture in the hand-drawn style of
-``sketch.py`` and renders it to PNG.
+``sketch.py`` and renders it to PNG. Scenarios that carry a ``context`` shot
+also render the whole Depictio page around the browser (``*_context.png``)
+before the close-up.
 
 Usage:
     venv/bin/python dev/diagrams/jbrowse_screenshots.py --out docs/images/jbrowse
@@ -60,6 +62,8 @@ class Shot:
     subtitle: str
     png: bytes
     callouts: list[Callout] = field(default_factory=list)
+    # The same state with Depictio around it, rendered first as ``<name>``.
+    context: Shot | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +188,88 @@ async def _pick_multiselect(page, placeholder: str, option: str) -> None:
     await page.keyboard.press("Escape")
 
 
+CONTEXT_VIEWPORT = {"width": 1680, "height": 1280}
+
+
+async def _filters_box(page, origin: tuple[float, float]) -> tuple[float, float, float, float]:
+    """The left filter panel, down to its last filter card (the panel itself is full height)."""
+    box = await page.evaluate(
+        """() => {
+          const title = [...document.querySelectorAll('h5')].find(e => e.textContent.trim() === 'Filters');
+          const paper = title && title.closest('.mantine-Paper-root');
+          if (!paper) return null;
+          const r = paper.getBoundingClientRect();
+          let bottom = r.top;
+          paper.querySelectorAll('*').forEach(el => {
+            const b = el.getBoundingClientRect();
+            if (b.height > 0 && b.height < r.height * 0.6 && b.bottom <= r.bottom)
+              bottom = Math.max(bottom, b.bottom);
+          });
+          return [r.left, r.top, r.width, bottom - r.top + 8];
+        }"""
+    )
+    if not box:
+        raise RuntimeError("filter panel not found")
+    return box[0] - origin[0], box[1] - origin[1], box[2], box[3]
+
+
+async def _context(
+    page,
+    name: str,
+    title: str,
+    subtitle: str,
+    tile,
+    section: str = "Genome browser",
+    extra: list[tuple[object, str, str]] | None = None,
+) -> Shot:
+    """The whole Depictio page around the browser, before the close-up crop.
+
+    The dashboard scrolls inside a fixed header and filter panel, so the section
+    holding the browser is brought to the top of that scroller and the viewport
+    made taller; both are restored for the crop that follows.
+    """
+    await page.set_viewport_size(CONTEXT_VIEWPORT)
+    sec = page.locator(".depictio-section-item").filter(has=page.get_by_text(section, exact=True))
+    if await sec.count():
+        await sec.first.evaluate("e => e.scrollIntoView({block: 'start'})")
+    else:
+        await tile.evaluate("e => e.scrollIntoView({block: 'center'})")
+    await _settle(page, 4000)
+    png = await page.screenshot()
+    origin = (0.0, 0.0)
+    header = page.locator(".mantine-AppShell-header").first
+    callouts = [
+        Callout(
+            await _box(header, origin),
+            "Depictio dashboard",
+            "Project / tab title, Analysis, Edit and Settings: the usual viewer.",
+        ),
+        Callout(
+            await _box(page.locator("[role=tablist]").first, origin),
+            "Dashboard tabs",
+            "The genome browser is one more component of a regular tab.",
+        ),
+        Callout(
+            await _filters_box(page, origin),
+            "Dashboard filters",
+            "Interactive filters of the left panel; the browser follows them through the DC links.",
+        ),
+        Callout(
+            await _box(tile, origin),
+            "Genome browser component",
+            "A tile of the grid like a figure or a table: Depictio title, action bar "
+            "(metadata, fullscreen, reset, header / overview / status toggles).",
+        ),
+    ]
+    for loc, head, body in extra or []:
+        if await loc.count():  # type: ignore[attr-defined]
+            callouts.append(Callout(await _box(loc.first, origin), head, body))  # type: ignore[attr-defined]
+    await page.set_viewport_size(VIEWPORT)
+    await tile.scroll_into_view_if_needed()
+    await _settle(page, 3000)
+    return Shot(name, title, subtitle, png, callouts)
+
+
 # ---------------------------------------------------------------------------
 # Scenarios
 # ---------------------------------------------------------------------------
@@ -197,6 +283,14 @@ async def strandseq_overview(page, base: str) -> Shot:
     tile = await _tile(page, "SV calls per cell")
     await _settle(page)
     scatter = page.locator(".react-grid-item").filter(has_text="Cell quality").first
+    context = await _context(
+        page,
+        "strandseq_context",
+        "Strand-seq showcase in Depictio",
+        "The genome browser next to a scatter, cards and tables, driven by the left-panel filters",
+        tile,
+        extra=[(scatter, "Figure next to it", "Lasso cells here to open their SV tracks.")],
+    )
     await tile.hover()
     await page.wait_for_timeout(500)
     png, origin = await _clip_capture(page, [scatter, tile])
@@ -232,6 +326,7 @@ async def strandseq_overview(page, base: str) -> Shot:
                 "Tracks shown, tracks matching the dashboard filters, selection count.",
             ),
         ],
+        context=context,
     )
 
 
@@ -241,6 +336,14 @@ async def strandseq_filter(page, base: str) -> Shot:
     tile = await _tile(page, "SV calls per cell")
     await _settle(page, 8000)
     sample_filter = page.get_by_text("Sample", exact=True).first.locator("xpath=../..")
+    context = await _context(
+        page,
+        "strandseq_filter_context",
+        "A dashboard filter drives the genome browser",
+        "Sample = HG002x01 in the left panel: every component narrows, the browser included",
+        tile,
+        extra=[(sample_filter, "Sample = HG002x01", "The active filter, in the left panel.")],
+    )
     png, origin = await _clip_capture(page, [sample_filter, tile], pad=20)
     status = tile.locator('[data-testid="jbrowse-status"]')
     return Shot(
@@ -266,6 +369,7 @@ async def strandseq_filter(page, base: str) -> Shot:
                 "How many tracks match the filters, and how many are shown (max_tracks).",
             ),
         ],
+        context=context,
     )
 
 
@@ -378,6 +482,16 @@ async def sarscov2_variant(page, base: str) -> Shot:
     await page.wait_for_timeout(800)
     await tile.scroll_into_view_if_needed()
     await _settle(page, 9000)
+    context = await _context(
+        page,
+        "sarscov2_context",
+        "SARS-CoV-2 showcase in Depictio",
+        "A variant picked in the table: the browser jumps to it (locus_from) and shows its samples",
+        tile,
+        extra=[
+            (table, "Variant table", "Selecting a row filters the dashboard on that variant."),
+        ],
+    )
     png, origin = await _clip_capture(page, [tile])
     return Shot(
         "sarscov2_variant",
@@ -404,6 +518,7 @@ async def sarscov2_variant(page, base: str) -> Shot:
                 "config_overrides.extra_tracks.",
             ),
         ],
+        context=context,
     )
 
 
@@ -428,13 +543,21 @@ async def nfcore_tab(
         await search.fill(locus)
         await search.press("Enter")
     await _settle(page, 12000)
-    png, origin = await _clip_capture(page, [tile])
+    context = await _context(
+        page,
+        f"{name}_context",
+        f"{heading.split(':')[0]} template in Depictio",
+        "The Genome tracks tab of the template: its tabs, its filters and the browser tile",
+        tile,
+    )
+    # Tight: the template puts a text block right above the tile.
+    png, origin = await _clip_capture(page, [tile], pad=4)
     callouts = []
     for selector, head, body in texts:
         loc = tile.locator(selector).first
         if await loc.count():
             callouts.append(Callout(await _box(loc, origin), head, body))
-    return Shot(name, heading, subtitle, png, callouts)
+    return Shot(name, heading, subtitle, png, callouts, context=context)
 
 
 async def builder_jbrowse(page, base: str) -> Shot:
@@ -638,16 +761,17 @@ async def run(
                 await ctx.close()
                 continue
             await ctx.close()
-            raw = out / f"_raw_{name}.png"
-            raw.write_bytes(shot.png)
-            size = Image.open(raw).size
-            sk = annotate(shot, size)
-            svg = out / f"{name}.svg"
-            svg.write_text(sk.svg().replace(SKETCH_FONT, FONT), encoding="utf-8")
-            await _render(svg, out / f"{name}.png", sk.width, sk.height)
-            svg.unlink()
-            raw.unlink()
-            print(f"✓ {out / f'{name}.png'}")
+            for one in [shot.context, shot] if shot.context else [shot]:
+                raw = out / f"_raw_{one.name}.png"
+                raw.write_bytes(one.png)
+                size = Image.open(raw).size
+                sk = annotate(one, size)
+                svg = out / f"{one.name}.svg"
+                svg.write_text(sk.svg().replace(SKETCH_FONT, FONT), encoding="utf-8")
+                await _render(svg, out / f"{one.name}.png", sk.width, sk.height)
+                svg.unlink()
+                raw.unlink()
+                print(f"✓ {out / f'{one.name}.png'}")
         await browser.close()
 
 
