@@ -4753,6 +4753,23 @@ export async function editPassword(oldPassword: string, newPassword: string): Pr
   if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
 }
 
+/** What a scoped token may do. Mirrors `TokenScope` in
+ *  `depictio/models/models/users.py`; `read` is implied by every other scope. */
+export type TokenScope = 'read' | 'annotate' | 'report' | 'edit_dashboard' | 'ingest';
+
+export const TOKEN_SCOPES: readonly TokenScope[] = [
+  'read',
+  'annotate',
+  'report',
+  'edit_dashboard',
+  'ingest',
+];
+
+function parseTokenScopes(raw: unknown): TokenScope[] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw.filter((s): s is TokenScope => TOKEN_SCOPES.includes(s as TokenScope));
+}
+
 /** A long-lived CLI token entry — the management page only renders these
  *  metadata fields (the access_token plaintext is shown only once at
  *  creation in DisplayTokenModal). */
@@ -4762,6 +4779,8 @@ export interface CliToken {
   expire_datetime: string;
   token_lifetime: string;
   user_id: string;
+  /** null = full access (legacy and unscoped tokens). */
+  scopes: TokenScope[] | null;
 }
 
 export async function listLongLivedTokens(): Promise<CliToken[]> {
@@ -4776,6 +4795,7 @@ export async function listLongLivedTokens(): Promise<CliToken[]> {
     expire_datetime: String(t.expire_datetime ?? ''),
     token_lifetime: String(t.token_lifetime ?? ''),
     user_id: String(t.user_id ?? ''),
+    scopes: parseTokenScopes(t.scopes),
   }));
 }
 
@@ -4792,12 +4812,17 @@ export interface CreatedToken {
   expire_datetime: string;
   refresh_expire_datetime: string;
   name: string | null;
+  scopes: TokenScope[] | null;
 }
 
-export async function createLongLivedToken(name: string): Promise<CreatedToken> {
+/** Create a long-lived token. `scopes` null/omitted = full access. */
+export async function createLongLivedToken(
+  name: string,
+  scopes: TokenScope[] | null = null,
+): Promise<CreatedToken> {
   const res = await authFetch(`${API_BASE}/auth/me/tokens`, {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(scopes ? { name, scopes } : { name }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create token');
   const t = (await res.json()) as Record<string, unknown>;
@@ -4811,6 +4836,7 @@ export async function createLongLivedToken(name: string): Promise<CreatedToken> 
     expire_datetime: String(t.expire_datetime ?? ''),
     refresh_expire_datetime: String(t.refresh_expire_datetime ?? ''),
     name: (t.name as string | null | undefined) ?? null,
+    scopes: parseTokenScopes(t.scopes),
   };
 }
 
@@ -5459,6 +5485,8 @@ export interface CommentThread {
   project_id: string;
   parent_dashboard_id: string;
   anchor: CommentAnchor;
+  /** `question` threads ask for an answer; absent on threads stored before kinds existed. */
+  kind?: 'comment' | 'question';
   annotation?: Annotation | null;
   number?: number | null;
   status: CommentThreadStatus;
@@ -5479,6 +5507,8 @@ export interface CommentThread {
 
 export interface ThreadCreatePayload {
   anchor: Pick<CommentAnchor, 'dashboard_id' | 'component_index' | 'component_title' | 'view_state'>;
+  /** Defaults to `comment`; a `question` needs a body. */
+  kind?: 'comment' | 'question';
   body?: string | null;
   annotation?: Annotation | null;
   evidence?: CommentEvidence[] | null;
@@ -5527,6 +5557,7 @@ export interface ListThreadsOptions {
   scope?: 'tab' | 'family';
   componentIndex?: string;
   status?: CommentThreadStatus;
+  kind?: 'comment' | 'question';
 }
 
 const COMMENTS_BASE = `${API_BASE}/comments`;
@@ -5554,6 +5585,7 @@ export async function fetchCommentThreads(
   if (opts.scope) qs.set('scope', opts.scope);
   if (opts.componentIndex) qs.set('component_index', opts.componentIndex);
   if (opts.status) qs.set('status', opts.status);
+  if (opts.kind) qs.set('kind', opts.kind);
   const q = qs.toString();
   const res = await authFetch(`${COMMENTS_BASE}/dashboard/${enc(dashboardId)}${q ? `?${q}` : ''}`);
   return commentsJson(res, 'Failed to load comments');
