@@ -636,6 +636,19 @@ class TextLiteComponent(BaseLiteComponent):
     )
     body: str = Field(default="", description="Optional paragraph below the heading")
 
+    @field_validator("order", mode="before")
+    @classmethod
+    def _clamp_order(cls, value: object) -> object:
+        """Clamp the heading level into 1..6, as the renderer does.
+
+        Shipped YAML already writes ``order: 0`` for a body-first tile, and
+        the viewer has always clamped it; rejecting it here would fail the
+        whole dashboard import over a heading size.
+        """
+        if isinstance(value, bool) or not isinstance(value, int):
+            return value
+        return min(6, max(1, value))
+
     # Text tiles don't bind to a data source — keep these optional/empty.
     workflow_tag: str = Field(default="", description="Unused for text components")
     data_collection_tag: str = Field(default="", description="Unused for text components")
