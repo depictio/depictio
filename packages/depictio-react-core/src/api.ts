@@ -5456,6 +5456,8 @@ export interface CommentEvidence {
   query?: string | null;
   values?: Record<string, unknown> | unknown[] | null;
   view_state?: CommentViewState | null;
+  /** Agent tool call that produced the values (audit trail). */
+  call_id?: string | null;
 }
 
 export interface CommentReview {

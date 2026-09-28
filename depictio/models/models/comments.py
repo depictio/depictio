@@ -350,6 +350,9 @@ class Evidence(_Strict):
     query: str | None = Field(default=None, max_length=MAX_BODY_CHARS)
     values: dict[str, Any] | list[Any] | None = None
     view_state: ViewState | None = None
+    # Id of the agent tool call that produced the values, so a reviewer (or
+    # the evidence check) can trace the claim back to its audit row.
+    call_id: str | None = Field(default=None, max_length=64)
 
 
 class Review(_Strict):
