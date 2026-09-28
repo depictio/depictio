@@ -38,10 +38,14 @@ jobs:
           node-version: "22"
           cache: pnpm
 
+      # Same knobs as docker-images/Dockerfile.viewer. The wheel excludes the
+      # sourcemaps anyway, and Node's default heap (~2 GB on the 7 GB macOS arm64
+      # runner) runs out while vite renders the chunks.
       - name: Build the viewer bundle
         run: |
           pnpm install --frozen-lockfile
-          cd depictio/viewer && pnpm run build
+          cd depictio/viewer
+          VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -54,6 +58,7 @@ jobs:
           ls -la "$RUNNER_TEMP/wheels"
 
       - name: depictio local up (iris example, from the wheel, outside the checkout)
+        id: up
         working-directory: ${{ runner.temp }}
         run: |
           W="$RUNNER_TEMP/wheels"
@@ -150,7 +155,7 @@ jobs:
           retention-days: 7
 
       - name: depictio local down
-        if: always()
+        if: always() && steps.up.outcome != 'skipped'
         working-directory: ${{ runner.temp }}
         run: |
           uvx --python 3.12 \
