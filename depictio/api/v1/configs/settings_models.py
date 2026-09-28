@@ -267,6 +267,8 @@ class MongoDBConfig(ServiceConfig):
         # Comment threads (and the annotations they carry) pinned to dashboard components. Stored
         # apart from `dashboards` so a dashboard save never rewrites or drops them.
         comment_threads_collection: str = Field(default="comment_threads")
+        # One row per agent tool call (MCP or in-app), kept 90 days by a TTL index.
+        agent_tool_calls_collection: str = Field(default="agent_tool_calls")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1042,6 +1044,37 @@ class AIConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")
+
+
+class MCPConfig(BaseSettings):
+    """Agent tools exposed over the Model Context Protocol.
+
+    Off by default: when disabled the ``/depictio/api/v1/mcp`` endpoint is not
+    mounted at all. Tools authenticate with the caller's Bearer token and only
+    see what the token's scopes allow.
+    """
+
+    enabled: bool = Field(default=False, description="Mount the MCP server at /depictio/api/v1/mcp")
+    max_output_chars: int = Field(
+        default=12_000,
+        ge=500,
+        description="Default cap on the JSON size of one tool result (larger results are truncated)",
+    )
+    rate_per_min: int = Field(
+        default=60, ge=1, description="Tool calls allowed per token (or user) per minute"
+    )
+    query_timeout_s: float = Field(
+        default=20, gt=0, description="Wall-clock seconds a data query tool may run"
+    )
+    enable_ingest: bool = Field(
+        default=False, description="Expose the ingestion tools (they also need the ingest scope)"
+    )
+    enable_llm_tools: bool = Field(
+        default=False,
+        description="Expose tools that call the configured LLM themselves (dashboard generation, suggestions)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MCP_")
 
 
 class BackupConfig(BaseSettings):
@@ -1988,6 +2021,7 @@ class Settings(BaseSettings):
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)

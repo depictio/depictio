@@ -127,6 +127,7 @@ async def status():
             "ai": settings.ai.enabled,
             "ai_user_keys": settings.ai.enabled and settings.ai.allow_user_keys,
             "ai_generate_dashboard": settings.ai.enabled and settings.ai.generate_dashboard_enabled,
+            "mcp": settings.mcp.enabled,
         },
     }
 

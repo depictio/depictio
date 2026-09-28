@@ -65,6 +65,9 @@ dependencies = [
   "fastapi==0.141.1",
   "gunicorn==26.0.0",
   "httpx==0.28.1",
+  # Model Context Protocol server, mounted at /depictio/api/v1/mcp when
+  # DEPICTIO_MCP_ENABLED is true
+  "mcp==2.2.0",
   "uvicorn==0.52.1",
   "websockets==17.0.1",
   # Database
