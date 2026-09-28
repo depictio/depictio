@@ -85,6 +85,11 @@ class CLIConfig(BaseModel):
     user: UserBaseCLIConfig
     s3_storage: S3DepictioCLIConfig
     instance_label: str | None = None  # Friendly CLI instance name for server-side monitoring
+    # Per-project credentials for *reading* remote url/manifest sources
+    # (polars storage_options shape). None = read with s3_storage. The Delta
+    # write target always stays s3_storage — read and write are two different
+    # credentials by design (RFC remote-data §5.3).
+    remote_storage_options: dict | None = None
 
     class ConfigDict:
         extra = "forbid"  # Reject unexpected fields
