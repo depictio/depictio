@@ -1502,16 +1502,19 @@ class TestDomainValidationCoversEveryLiteType:
         }
         assert set(DashboardDataLite._COMPONENT_TYPE_MAP) == union_types
 
-    def test_text_heading_level_out_of_range_is_reported(self):
-        with pytest.raises(ValidationError, match="order"):
-            DashboardDataLite.model_validate(
-                {
-                    "title": "T",
-                    "components": [
-                        {"component_type": "text", "tag": "intro", "title": "Intro", "order": 9}
-                    ],
-                }
-            )
+    def test_text_heading_level_out_of_range_is_clamped(self):
+        # Shipped YAML writes order: 0 for a body-first tile; the renderer
+        # clamps, so the model does too rather than failing the import.
+        lite = DashboardDataLite.model_validate(
+            {
+                "title": "T",
+                "components": [
+                    {"component_type": "text", "tag": "intro", "title": "Intro", "order": 9},
+                    {"component_type": "text", "tag": "body", "title": "Body", "order": 0},
+                ],
+            }
+        )
+        assert [c.order for c in lite.components] == [6, 1]
 
     def test_advanced_viz_unknown_config_key_is_reported_per_field(self):
         with pytest.raises(ValidationError, match="foo_col"):
