@@ -188,7 +188,24 @@ async def _pick_multiselect(page, placeholder: str, option: str) -> None:
     await page.keyboard.press("Escape")
 
 
-CONTEXT_VIEWPORT = {"width": 1680, "height": 1280}
+# The whole tab is captured at once: the viewport is made as tall as the
+# dashboard's own scroller, within these bounds.
+TAB_VIEW_MIN_H, TAB_VIEW_MAX_H = 1050, 4200
+
+# Per component kind: legend title prefix and default note.
+KIND_NOTES = {
+    "jbrowse": (
+        "Genome browser",
+        "A tile of the grid like the others: Depictio title and action bar "
+        "(metadata, fullscreen, reset, header / overview / status toggles).",
+    ),
+    "figure": ("Figure", "Selections on it filter the dashboard, the browser included."),
+    "table": (
+        "Table",
+        "Row selection filters the dashboard; the browser opens the matching tracks.",
+    ),
+    "cards": ("Cards", "Aggregates of what the filters keep, recomputed with them."),
+}
 
 
 async def _filters_box(page, origin: tuple[float, float]) -> tuple[float, float, float, float]:
@@ -213,34 +230,56 @@ async def _filters_box(page, origin: tuple[float, float]) -> tuple[float, float,
     return box[0] - origin[0], box[1] - origin[1], box[2], box[3]
 
 
+async def _grid_tiles(page) -> list[dict]:
+    """Every tile of the tab with its kind, title and page box, in reading order."""
+    return await page.evaluate(
+        """() => [...document.querySelectorAll('.react-grid-item')].map(el => {
+          const r = el.getBoundingClientRect();
+          const kind = el.querySelector('[data-testid="jbrowse-component"]') ? 'jbrowse'
+            : el.querySelector('.ag-root-wrapper, .ag-root') ? 'table'
+            : el.querySelector('.js-plotly-plot, canvas, svg.main-svg') ? 'figure'
+            : /\\d/.test(el.innerText) && r.height < 320 && el.innerText.length < 200 ? 'card'
+            : 'text';
+          const title = (el.innerText || '').split('\\n').map(t => t.trim()).find(Boolean) || '';
+          return {kind, title, x: r.left, y: r.top, w: r.width, h: r.height};
+        }).filter(t => t.w > 0 && t.h > 0).sort((a, b) => a.y - b.y || a.x - b.x)"""
+    )
+
+
 async def _context(
     page,
     name: str,
     title: str,
     subtitle: str,
     tile,
-    section: str = "Genome browser",
+    notes: dict[str, str] | None = None,
     extra: list[tuple[object, str, str]] | None = None,
 ) -> Shot:
-    """The whole Depictio page around the browser, before the close-up crop.
+    """The whole dashboard tab around the browser, before the close-up crop.
 
-    The dashboard scrolls inside a fixed header and filter panel, so the section
-    holding the browser is brought to the top of that scroller and the viewport
-    made taller; both are restored for the crop that follows.
+    The dashboard scrolls inside a fixed header and filter panel, so the
+    viewport is made as tall as that scroller: every component of the tab is in
+    the capture, each called out by kind (``notes`` overrides the text of the
+    tile whose title it names). The viewport is restored for the crop that
+    follows.
     """
-    await page.set_viewport_size(CONTEXT_VIEWPORT)
-    sec = page.locator(".depictio-section-item").filter(has=page.get_by_text(section, exact=True))
-    if await sec.count():
-        await sec.first.evaluate("e => e.scrollIntoView({block: 'start'})")
-    else:
-        await tile.evaluate("e => e.scrollIntoView({block: 'center'})")
-    await _settle(page, 4000)
+    height = await page.evaluate(
+        "() => { const c = document.querySelector('[data-testid=dashboard-content]');"
+        " return c ? c.scrollHeight + c.getBoundingClientRect().top + 16 : 0; }"
+    )
+    height = int(min(max(height, TAB_VIEW_MIN_H), TAB_VIEW_MAX_H))
+    await page.set_viewport_size({"width": VIEWPORT["width"], "height": height})
+    await page.evaluate(
+        "() => { const c = document.querySelector('[data-testid=dashboard-content]');"
+        " if (c) c.scrollTop = 0; }"
+    )
+    await page.mouse.move(2, VIEWPORT["height"] - 2)  # no hover tooltip in the shot
+    await _settle(page, 6000)
     png = await page.screenshot()
     origin = (0.0, 0.0)
-    header = page.locator(".mantine-AppShell-header").first
     callouts = [
         Callout(
-            await _box(header, origin),
+            await _box(page.locator(".mantine-AppShell-header").first, origin),
             "Depictio dashboard",
             "Project / tab title, Analysis, Edit and Settings: the usual viewer.",
         ),
@@ -252,18 +291,33 @@ async def _context(
         Callout(
             await _filters_box(page, origin),
             "Dashboard filters",
-            "Interactive filters of the left panel; the browser follows them through the DC links.",
-        ),
-        Callout(
-            await _box(tile, origin),
-            "Genome browser component",
-            "A tile of the grid like a figure or a table: Depictio title, action bar "
-            "(metadata, fullscreen, reset, header / overview / status toggles).",
+            "Left-panel filters narrow every component of the tab, the browser included.",
         ),
     ]
     for loc, head, body in extra or []:
         if await loc.count():  # type: ignore[attr-defined]
             callouts.append(Callout(await _box(loc.first, origin), head, body))  # type: ignore[attr-defined]
+    tiles = await _grid_tiles(page)
+    cards = [t for t in tiles if t["kind"] == "card"]
+    grid: list[tuple[float, float, Callout]] = []
+    if cards:
+        x0 = min(t["x"] for t in cards)
+        y0 = min(t["y"] for t in cards)
+        x1 = max(t["x"] + t["w"] for t in cards)
+        y1 = max(t["y"] + t["h"] for t in cards)
+        head, body = KIND_NOTES["cards"]
+        names = ", ".join(t["title"] for t in cards if t["title"])
+        grid.append((y0, x0, Callout((x0, y0, x1 - x0, y1 - y0), head, f"{body} ({names})")))
+    for t in tiles:
+        if t["kind"] not in ("jbrowse", "figure", "table"):
+            continue
+        prefix, body = KIND_NOTES[t["kind"]]
+        note = (notes or {}).get(t["title"], body)
+        # The tile's own title heads the entry; the kind leads the note.
+        head = t["title"] or prefix
+        body = note if head == prefix else f"{prefix}. {note}"
+        grid.append((t["y"], t["x"], Callout((t["x"], t["y"], t["w"], t["h"]), head, body)))
+    callouts += [c for _, _, c in sorted(grid, key=lambda g: (g[0], g[1]))]
     await page.set_viewport_size(VIEWPORT)
     await tile.scroll_into_view_if_needed()
     await _settle(page, 3000)
@@ -275,6 +329,22 @@ async def _context(
 # ---------------------------------------------------------------------------
 
 STRANDSEQ = "946b0f3c1e4a2d7f8e5bca00"
+STRANDSEQ_NOTES = {
+    "Cell quality": "Lasso cells here to open their SV tracks.",
+    "Cells": "Pick cells to open their SV tracks.",
+    "SV calls": "Pick an SV call: the browser opens its cell and jumps to it (locus_from).",
+}
+# Tile titles of the nf-core Genome tracks tabs -> what they do to the browser.
+NFCORE_NOTES = {
+    "SEACR signal along the genome": "Click a region: its sample's tracks open on it.",
+    "SEACR regions": "Pick a region: its sample's tracks open on it (locus_from).",
+    "Peak significance along the genome": "Click a peak: its sample's tracks open on it.",
+    "MACS2 peak calls": "Pick a peak: its sample's tracks open on it (locus_from).",
+    "Library depth": "Lasso samples to open their coverage tracks.",
+    "Sample PCA": "Lasso samples to open their coverage tracks.",
+    "Samples": "Pick samples to open their tracks.",
+    "ChIP samples": "Pick samples to open their tracks.",
+}
 SARSCOV2 = "946b0f3c1e4a2d7f8e5bca20"
 
 
@@ -286,10 +356,10 @@ async def strandseq_overview(page, base: str) -> Shot:
     context = await _context(
         page,
         "strandseq_context",
-        "Strand-seq showcase in Depictio",
-        "The genome browser next to a scatter, cards and tables, driven by the left-panel filters",
+        "Strand-seq tab in Depictio",
+        "Cards, a scatter, the genome browser and two tables on one tab, driven by the same filters",
         tile,
-        extra=[(scatter, "Figure next to it", "Lasso cells here to open their SV tracks.")],
+        notes=STRANDSEQ_NOTES,
     )
     await tile.hover()
     await page.wait_for_timeout(500)
@@ -342,6 +412,7 @@ async def strandseq_filter(page, base: str) -> Shot:
         "A dashboard filter drives the genome browser",
         "Sample = HG002x01 in the left panel: every component narrows, the browser included",
         tile,
+        notes=STRANDSEQ_NOTES,
         extra=[(sample_filter, "Sample = HG002x01", "The active filter, in the left panel.")],
     )
     png, origin = await _clip_capture(page, [sample_filter, tile], pad=20)
@@ -485,12 +556,14 @@ async def sarscov2_variant(page, base: str) -> Shot:
     context = await _context(
         page,
         "sarscov2_context",
-        "SARS-CoV-2 showcase in Depictio",
-        "A variant picked in the table: the browser jumps to it (locus_from) and shows its samples",
+        "SARS-CoV-2 tab in Depictio",
+        "A variant picked in the table: every component narrows, the browser jumps to it",
         tile,
-        extra=[
-            (table, "Variant table", "Selecting a row filters the dashboard on that variant."),
-        ],
+        notes={
+            "Coverage against variant load": "Lasso samples to open their tracks.",
+            "Variant calls": "The picked row filters the dashboard; the browser jumps to "
+            "the variant (locus_from).",
+        },
     )
     png, origin = await _clip_capture(page, [tile])
     return Shot(
@@ -546,9 +619,10 @@ async def nfcore_tab(
     context = await _context(
         page,
         f"{name}_context",
-        f"{heading.split(':')[0]} template in Depictio",
-        "The Genome tracks tab of the template: its tabs, its filters and the browser tile",
+        f"{heading.split(':')[0]}: the Genome tracks tab",
+        "Cards, the genome browser, figures and tables on one template tab, driven by the same filters",
         tile,
+        notes=NFCORE_NOTES,
     )
     # Tight: the template puts a text block right above the tile.
     png, origin = await _clip_capture(page, [tile], pad=4)
@@ -794,6 +868,8 @@ def main() -> None:
     for spec in args.nfcore:
         name, _, dash = spec.partition("=")
         extra[f"nfcore_{name}"] = _nfcore_scenario(name, dash)
+        if name == "cutandrun":
+            extra["nfcore_cutandrun_peak"] = _cutandrun_peak_scenario(dash)
     asyncio.run(
         run(args.base_url, args.out, set(args.only) if args.only else None, args.insecure, extra)
     )
@@ -872,6 +948,67 @@ def _nfcore_scenario(name: str, dashboard_id: str) -> Callable[..., Awaitable[Sh
     async def scenario(page, base: str) -> Shot:
         return await nfcore_tab(
             page, base, dashboard_id, title, f"nfcore_{name}", heading, subtitle, texts, pick, locus
+        )
+
+    return scenario
+
+
+def _cutandrun_peak_scenario(dashboard_id: str) -> Callable[..., Awaitable[Shot]]:
+    """A region picked in the peak table: the browser opens its sample on it."""
+
+    async def scenario(page, base: str) -> Shot:
+        await _open(page, base, dashboard_id)
+        tile = await _tile(page, "Genome browser")
+        await _settle(page)
+        # The peak table mounts once scrolled to (lazy tiles).
+        await page.evaluate(
+            "() => { const c = document.querySelector('[data-testid=dashboard-content]');"
+            " if (c) c.scrollTop = c.scrollHeight; }"
+        )
+        await page.wait_for_timeout(4000)
+        table = (
+            page.locator(".react-grid-item")
+            .filter(has=page.get_by_text("SEACR regions", exact=True))
+            .filter(has=page.locator(".ag-root-wrapper"))
+            .first
+        )
+        row = table.locator(".ag-row").nth(3)
+        await row.locator(".ag-checkbox-input-wrapper, .ag-selection-checkbox").first.click()
+        await page.wait_for_timeout(1500)
+        await tile.scroll_into_view_if_needed()
+        await _settle(page, 9000)
+        context = await _context(
+            page,
+            "nfcore_cutandrun_peak_context",
+            "nf-core/cutandrun: a region picked in the peak table",
+            "Cards, Manhattan and tables narrow to it; the browser opens its sample on the region",
+            tile,
+            notes={
+                **NFCORE_NOTES,
+                "SEACR regions": "The picked row: a filter on peak_id, carried to the tracks "
+                "through the seacr_peaks -> tracks link.",
+            },
+        )
+        png, origin = await _clip_capture(page, [tile], pad=4)
+        return Shot(
+            "nfcore_cutandrun_peak",
+            "nf-core/cutandrun: the browser on a picked region",
+            "locus_from moves the view onto the region (± 2 kb); only its sample's tracks stay open",
+            png,
+            [
+                Callout(
+                    await _box(tile.locator("input").first, origin),
+                    "Locus from the picked row",
+                    "The peak table narrows seacr_peaks to one row: locus_from jumps there.",
+                ),
+                Callout(
+                    await _box(tile.locator('[data-testid="jbrowse-status"]'), origin),
+                    "Its sample only",
+                    "The same filter, through the seacr_peaks -> tracks link, keeps that "
+                    "sample's signal, peaks and reads.",
+                ),
+            ],
+            context=context,
         )
 
     return scenario
