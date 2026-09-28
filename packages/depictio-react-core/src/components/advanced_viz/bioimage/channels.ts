@@ -1,7 +1,7 @@
 /**
- * NGFF metadata (0.4, or 0.5 with its attributes under `ome`) to viewer state: axis sizes, per-channel defaults and the
- * physical pixel size. Pure (no viv / deck import) so it runs in vitest and
- * stays off the renderer's eager path.
+ * NGFF metadata (0.4, or 0.5 with its attributes under `ome`) to viewer state:
+ * axis sizes, per-channel defaults and the physical pixel size. Pure (no viv /
+ * deck import) so it runs in vitest and stays off the renderer's eager path.
  */
 
 /** viv shades at most this many channels at once (its `MAX_CHANNELS`). */

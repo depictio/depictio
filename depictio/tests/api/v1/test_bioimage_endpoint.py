@@ -66,11 +66,17 @@ class Body:
         self.data = data
         self.fail = fail
         self.closed = False
+        self.read_whole = False
 
     def read(self) -> bytes:
         if self.fail:
             raise ConnectionError("connection reset mid-read")
+        self.read_whole = True
         return self.data
+
+    def iter_chunks(self, chunk_size: int):
+        for i in range(0, len(self.data), chunk_size):
+            yield self.data[i : i + chunk_size]
 
     def close(self) -> None:
         self.closed = True
@@ -1181,19 +1187,32 @@ class TestZarrV3OnS3:
         assert resp.status_code == 206
         assert env.s3.get_object.call_args.kwargs["Range"] == "bytes=-16"
 
-    def test_whole_key_is_not_capped_nor_ranged(self, tmp_path):
-        """A whole read of the DC's own upload is served as before the Range support."""
+    def test_whole_key_over_the_cap_is_streamed_not_refused(self, tmp_path):
+        """A whole shard of the DC's own upload is served, but never held in memory."""
         env = Env(tmp_path, bioimage=BioimageConfig(remote_max_object_mb=1))
+        data = b"x" * (3 * 1024 * 1024 + 1)
+        body = Body(data)
         env.s3.get_object.side_effect = None
-        env.s3.get_object.return_value = {
-            "Body": Body(b"x" * (1024 * 1024 + 1)),
-            "ContentLength": 1024 * 1024 + 1,
-        }
+        env.s3.get_object.return_value = {"Body": body, "ContentLength": len(data)}
         with env as client:
             resp = client.get(shard_url(), headers=AUTH)
 
         assert resp.status_code == 200
+        assert resp.content == data
+        assert resp.headers["content-length"] == str(len(data))
         assert "Range" not in env.s3.get_object.call_args.kwargs
+        assert not body.read_whole
+        assert body.closed
+
+    def test_whole_key_under_the_cap_is_read_whole(self, tmp_path):
+        """Small keys keep the whole read, so a mid-read failure is a 502."""
+        env = Env(tmp_path)
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {"Body": Body(b"x", fail=True), "ContentLength": 1}
+        with env as client:
+            resp = client.get(shard_url(), headers=AUTH)
+
+        assert resp.status_code == 502
 
     def test_range_over_the_cap_is_refused(self, tmp_path):
         env = Env(tmp_path, bioimage=BioimageConfig(remote_max_object_mb=1))
