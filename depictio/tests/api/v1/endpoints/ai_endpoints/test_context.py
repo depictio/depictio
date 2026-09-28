@@ -308,17 +308,19 @@ class TestVizSuggestionsFor:
         assert len(viz_suggestions_for(_columns(DE_COLUMNS), limit=1)) == 1
 
     def test_refuses_a_kind_whose_required_role_is_a_dtype_match_only(self):
-        # The ranker ranks rarefaction first on penguins and puts it over the
-        # RECOMMENDED_SCORE bar, but only via the optional-role nudge: `metric`
-        # has no name signal at all and lands on the same float column as
-        # `depth`, which is what the generator would then have bound and saved.
+        # On penguins the ranker puts kinds over the RECOMMENDED_SCORE bar only
+        # via the optional-role nudge: a required role (rarefaction's `metric`,
+        # for one) has no name signal at all and lands on whatever float column
+        # is left, which is what the generator would then have bound and saved.
+        # Which kind ranks first moves as kinds are added; the rule does not.
         from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
 
-        top = suggest_viz_kinds(PENGUIN_COLUMNS, dc_type="table")[0]
-        assert top.viz_kind == "rarefaction"
-        assert top.score >= 0.8
-        assert top.unmet_roles == []
-        assert top.weak_roles == ["metric"]
+        thin = [
+            s
+            for s in suggest_viz_kinds(PENGUIN_COLUMNS, dc_type="table")
+            if s.score >= 0.8 and not s.unmet_roles and s.weak_roles
+        ]
+        assert thin, "penguins should still yield a kind that only a dtype match satisfies"
 
         assert viz_suggestions_for(_columns(PENGUIN_COLUMNS)) == []
 
