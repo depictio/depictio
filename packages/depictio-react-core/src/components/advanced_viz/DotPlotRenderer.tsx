@@ -19,6 +19,8 @@ import {
 } from '../../api';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { dotSizeKey, dotSizes, type DotSizeKeyEntry } from './dotSizes';
 import { splitFigureByGroups } from './groupSplit';
@@ -566,6 +568,24 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // Whether any dot matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. A dot is a gene in a cluster, keyed on two columns,
+  // so marked dots are stored as (category) coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+  });
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -577,6 +597,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
       reduction={
         figure && (figure.capActive || fullGenes)
           ? {
@@ -597,11 +618,12 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       {groupedFigure ? (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
           <Plot
-            data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-            layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
+            data={annotations.data as any}
+            layout={annotations.layout as any}
             useResizeHandler
             style={{ width: '100%', flex: 1, minHeight: 0 }}
             config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
           />
           {/* Plotly has no size legend, and a legend-only trace cannot stand in
               for one: it clamps legend markers to 16 px (legend/style.js), so
@@ -609,6 +631,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
               understate the very dots it explains. Drawn here in SVG instead,
               at the exact diameters the plot used. */}
           <DotSizeKey entries={figure?.sizeKey ?? []} label={config.frac_expressing_col} />
+          {annotations.toolbar}
         </div>
       ) : null}
     </AdvancedVizFrame>

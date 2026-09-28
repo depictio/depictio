@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict
 
 from depictio.cli.cli_logging import logger
+from depictio.models.models.comments import Anchor, Author, ThreadStatus
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.deltatables import DeltaTableAggregated
@@ -54,6 +55,23 @@ class ProjectStorageConfigBackupDoc(BaseModel):
     access_key_id: str | None = None
     secret_encrypted: str | None = None
     updated_at: str | None = None
+
+
+class CommentThreadBackupDoc(BaseModel):
+    """A stored comment thread (``_id`` plus the ``CommentThread`` fields).
+
+    Loose on purpose: the backup carries Mongo's ``_id`` rather than the API's
+    ``id``, and datetimes as strings. The anchor and author are checked strictly,
+    since a thread whose anchor no longer parses can never be listed again.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    project_id: str
+    parent_dashboard_id: str
+    anchor: Anchor
+    created_by: Author
+    status: ThreadStatus = "open"
 
 
 def validate_backup_file(backup_path: str) -> Dict[str, Any]:
@@ -111,6 +129,7 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
             "project_storage_configs": ProjectStorageConfigBackupDoc,
+            "comment_threads": CommentThreadBackupDoc,
         }
 
         # Validate each collection
@@ -230,6 +249,7 @@ EXPECTED_BACKUP_COLLECTIONS = [
     "instance_settings",
     "branding_assets",
     "project_storage_configs",
+    "comment_threads",
 ]
 
 
@@ -269,6 +289,7 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
             "project_storage_configs": ProjectStorageConfigBackupDoc,
+            "comment_threads": CommentThreadBackupDoc,
         }
 
         # Check against expected collections

@@ -160,6 +160,9 @@ export {
   ResetButton,
   InspectorProvider,
   useInspectorControl,
+  CommentsButton,
+  CommentsControlProvider,
+  useCommentsControl,
   actionsFor,
   wrapWithChrome,
 } from './components/chrome';
@@ -167,6 +170,7 @@ export type {
   ComponentChromeProps,
   ChromeAction,
   InspectorControl,
+  CommentsControl,
   WrapWithChromeOpts,
 } from './components/chrome';
 
@@ -179,6 +183,40 @@ export {
   useDraftReview,
 } from './components/chrome/ComponentChrome';
 export type { DraftReviewControl } from './components/chrome/ComponentChrome';
+// Component comments & annotation threads (/comments API).
+export {
+  TAB_THREAD_KEY,
+  fetchCommentAccess,
+  fetchCommentThreads,
+  fetchCommentCounts,
+  createCommentThread,
+  addThreadComment,
+  editThreadComment,
+  deleteThreadComment,
+  updateCommentThread,
+  reviewCommentThread,
+  deleteCommentThread,
+  fetchPublishedAnnotations,
+} from './api';
+export type {
+  CommentThreadStatus,
+  CommentViewState,
+  CommentSelection,
+  CommentAnchor,
+  CommentAgentInfo,
+  CommentAuthor,
+  CommentEvidence,
+  CommentReview,
+  ThreadComment,
+  ThreadStaleness,
+  CommentThread,
+  ThreadCreatePayload,
+  AnnotationPatch,
+  ThreadUpdatePayload,
+  CommentCounts,
+  PublishedAnnotation,
+  ListThreadsOptions,
+} from './api';
 
 // API surface — fetchers, payload types, filter types
 export {
@@ -716,3 +754,20 @@ export type {
   ParsedAdminUrl,
 } from './adminUrlState';
 export { Z_LAYERS } from './zLayers';
+
+// Datawrapper-style chart annotations: types, Plotly conversion, event capture.
+export * from './annotations';
+export {
+  AnnotateToolbar,
+  AnnotationColorPicker,
+  AnnotationEditor,
+  AnnotationForm,
+  InlineAnnotationEditor,
+} from './components/annotations';
+export type {
+  AnnotateToolbarProps,
+  AnnotationColorPickerProps,
+  AnnotationEditorProps,
+  AnnotationFormProps,
+  InlineAnnotationEditorProps,
+} from './components/annotations';
