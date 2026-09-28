@@ -248,12 +248,37 @@ def list_runs(user_id: str, dashboard_id: str | None = None, limit: int = 20) ->
     return out
 
 
-def request_cancel(run_id: str) -> bool:
-    """Flag a running run for cancellation. False when it is not running."""
+def request_cancel(run_id: str, *, live: bool) -> bool:
+    """Cancel a run. True when it was running.
+
+    ``live``: the run executes in this process, which ends it as ``cancelled``
+    at its next check. Otherwise a run still marked running is flagged (so the
+    process running it, if any, stops) and marked cancelled right away, as no
+    process here will finish it.
+    """
+    if live:
+        _collection().update_one({"id": run_id}, {"$set": {"cancel_requested": True}})
+        return True
     result = _collection().update_one(
-        {"id": run_id, "status": "running"}, {"$set": {"cancel_requested": True}}
+        {"id": run_id, "status": "running"},
+        {"$set": {"cancel_requested": True, "status": "cancelled", "finished_at": _now()}},
     )
     return result.matched_count > 0
+
+
+ORPHAN_WARNING = "The API process running this run stopped before it finished."
+
+
+def sweep_orphans() -> int:
+    """Mark runs left ``running`` by a previous process as ``failed``. Call at startup."""
+    result = _collection().update_many(
+        {"status": "running"},
+        {
+            "$set": {"status": "failed", "finished_at": _now()},
+            "$push": {"warnings": ORPHAN_WARNING},
+        },
+    )
+    return result.modified_count
 
 
 def cancel_requested(run_id: str) -> bool:

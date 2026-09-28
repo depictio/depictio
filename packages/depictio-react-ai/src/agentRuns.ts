@@ -299,7 +299,8 @@ export function traceReportId(state: AgentRunTraceState): string | null {
   return ids.length ? ids[ids.length - 1] : null;
 }
 
-/** Rebuild the trace from a stored run, for runs opened from history. */
+/** Rebuild the trace from a stored run: one opened from history, or a run
+ *  still going that is followed by polling. */
 export function agentRunToTrace(run: AgentRun): AgentRunTraceState {
   const verdicts: Record<string, TraceVerdict> = {};
   (run.verdicts ?? []).forEach((v) => {
@@ -314,7 +315,13 @@ export function agentRunToTrace(run: AgentRun): AgentRunTraceState {
     });
     return {
       ...lane,
-      status: a.status && a.status !== 'running' ? a.status : 'ok',
+      // A lane still running is shown so only while the run itself is.
+      status:
+        a.status === 'running' && run.status === 'running'
+          ? 'running'
+          : a.status && a.status !== 'running'
+            ? a.status
+            : 'ok',
       summary: a.summary,
       toolCalls: (a.tool_calls ?? []).map((c) => ({
         call_id: c.call_id,

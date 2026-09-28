@@ -168,3 +168,17 @@ def test_team_override():
         _route(RouteContext(dashboard_id="d"), team=["skeptic/general"])
     with pytest.raises(ProfileError):
         _route(RouteContext(dashboard_id="d"), team=["analyst/nope"])
+
+
+def test_team_override_allows_many_analysts_but_one_of_each_support_role():
+    plan = _route(
+        RouteContext(dashboard_id="d"),
+        team=["analyst/general", "analyst/variants", "skeptic/general"],
+    )
+    assert [m.role for m in plan.team].count("analyst") == 2
+    for duplicated in (
+        ["analyst/general", "skeptic/general", "skeptic/variants"],
+        ["analyst/general", "reporter/general", "reporter/microbiome"],
+    ):
+        with pytest.raises(ProfileError, match="at most one"):
+            _route(RouteContext(dashboard_id="d"), team=duplicated)

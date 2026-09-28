@@ -13,7 +13,7 @@ import {
   routeAgentRun,
   streamAgentRun,
 } from './api';
-import { agentRunToTrace, EMPTY_AGENT_TRACE, reduceAgentRunEvent } from './agentRuns';
+import { agentRunId, agentRunToTrace, EMPTY_AGENT_TRACE, reduceAgentRunEvent } from './agentRuns';
 import type { AgentRunTraceState } from './agentRuns';
 import { useAISession } from './store';
 import type { AgentProfile, AgentRouteResponse, AgentRunSummary } from './types';
@@ -22,6 +22,8 @@ import type { AgentProfile, AgentRouteResponse, AgentRunSummary } from './types'
  *  half-typed word routes to noise. */
 const MIN_ROUTE_CHARS = 8;
 const ROUTE_DEBOUNCE_MS = 600;
+/** How often a run followed from its stored document (not its stream) is re-read. */
+const RUN_POLL_MS = 2000;
 
 export function useAgentProfiles(enabled: boolean): AgentProfile[] {
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
@@ -102,9 +104,47 @@ export function useAgentRun(dashboardId: string) {
   const [history, setHistory] = useState<AgentRunSummary[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current != null) window.clearTimeout(pollRef.current);
+    pollRef.current = null;
+  }, []);
+
+  /** Follow a run started earlier (the panel was closed meanwhile; the run
+   *  went on server-side) by re-reading its stored document until it ends. */
+  const follow = useCallback(
+    (runId: string) => {
+      stopPolling();
+      runIdRef.current = runId;
+      setPending(true);
+      const tick = async () => {
+        let running = false;
+        try {
+          const stored = await fetchAgentRun(runId);
+          if (runIdRef.current !== runId) return;
+          setTrace(agentRunToTrace(stored));
+          setQuestion(stored.question);
+          running = stored.status === 'running';
+        } catch (e) {
+          if (runIdRef.current !== runId) return;
+          setError(e instanceof Error ? e.message : String(e));
+        }
+        if (running) {
+          pollRef.current = window.setTimeout(() => void tick(), RUN_POLL_MS);
+        } else {
+          pollRef.current = null;
+          setPending(false);
+        }
+      };
+      void tick();
+    },
+    [stopPolling],
+  );
 
   const run = useCallback(
     async (text: string, opts: AgentRunOptions = {}) => {
+      stopPolling();
       abortRef.current?.abort();
       const abort = new AbortController();
       abortRef.current = abort;
@@ -141,7 +181,7 @@ export function useAgentRun(dashboardId: string) {
         }
       }
     },
-    [dashboardId, llmKey],
+    [dashboardId, llmKey, stopPolling],
   );
 
   /** Stops the run server-side (the stream alone would leave the agents
@@ -149,11 +189,12 @@ export function useAgentRun(dashboardId: string) {
   const cancel = useCallback(async () => {
     const runId = runIdRef.current;
     if (runId) await cancelAgentRun(runId).catch(() => undefined);
+    stopPolling();
     abortRef.current?.abort();
     abortRef.current = null;
     setPending(false);
     setTrace((s) => ({ ...s, status: 'cancelled' }));
-  }, []);
+  }, [stopPolling]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -163,20 +204,50 @@ export function useAgentRun(dashboardId: string) {
     }
   }, [dashboardId]);
 
-  const open = useCallback(async (runId: string) => {
-    try {
-      const stored = await fetchAgentRun(runId);
-      setTrace(agentRunToTrace(stored));
-      setQuestion(stored.question);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+  const open = useCallback(
+    async (runId: string) => {
+      try {
+        const stored = await fetchAgentRun(runId);
+        if (stored.status === 'running' && !abortRef.current) {
+          follow(runId);
+          return;
+        }
+        stopPolling();
+        setPending(false);
+        runIdRef.current = runId;
+        setTrace(agentRunToTrace(stored));
+        setQuestion(stored.question);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [follow, stopPolling],
+  );
 
-  // Leaving the dashboard stops following the stream (the run itself goes on
-  // server-side and stays listed in the history).
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // Back on the dashboard (or in Team mode) with a run still going: pick it up.
+  useEffect(() => {
+    let cancelled = false;
+    fetchAgentRuns(dashboardId)
+      .then((runs) => {
+        const live = runs.find((r) => r.status === 'running');
+        if (!cancelled && live && !abortRef.current) follow(agentRunId(live));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId, follow]);
+
+  // Leaving the dashboard stops following the run (the run itself goes on
+  // server-side, is picked up again on return and stays in the history).
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      stopPolling();
+    },
+    [stopPolling],
+  );
 
   return { trace, question, pending, error, run, cancel, history, loadHistory, open };
 }

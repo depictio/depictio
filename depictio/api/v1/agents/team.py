@@ -63,6 +63,8 @@ from depictio.api.v1.agents.runs import (
     ToolCallRecord,
     Verdict,
 )
+from depictio.api.v1.agents.tools.reports import MAX_FINDINGS as REPORT_MAX_FINDINGS
+from depictio.api.v1.agents.tools.reports import MAX_SUMMARY_CHARS as REPORT_MAX_SUMMARY_CHARS
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.ai_endpoints.schemas import AgentFinding
 from depictio.models.models.comments import MAX_BODY_CHARS, MAX_LABEL_CHARS
@@ -770,9 +772,19 @@ class TeamRun:
         summary = str((outcome.output or {}).get("summary_md") or "").strip()
         if not summary:
             summary = self._fallback_summary()
-        kept = [
-            f for f in self.run.findings if f.verdict in ("confirmed", "weakened", "unverified")
-        ]
+        if len(summary) > REPORT_MAX_SUMMARY_CHARS:
+            summary = summary[: REPORT_MAX_SUMMARY_CHARS - 1].rstrip() + "\u2026"
+        rank = {"confirmed": 0, "weakened": 1, "unverified": 2}
+        kept = sorted(
+            (f for f in self.run.findings if f.verdict in rank),
+            key=lambda f: rank[f.verdict or ""],
+        )
+        if len(kept) > REPORT_MAX_FINDINGS:
+            self.run.warnings.append(
+                f"{member.agent_id}: the report keeps {REPORT_MAX_FINDINGS} of "
+                f"{len(kept)} findings (confirmed first, then weakened, then unverified)."
+            )
+            kept = kept[:REPORT_MAX_FINDINGS]
         report_findings = [
             AgentFinding(
                 title=f.title,
@@ -849,6 +861,9 @@ class TeamRun:
         stopped = any(o.status == "budget" for o in self.outcomes.values())
         if cut_short and (stopped or self.ledger.exhausted(reserve=True)):
             return "budget"
+        if self.members("reporter") and self.run.outputs.report_id is None:
+            # The report is the run's deliverable: without it the run did not complete.
+            return "failed"
         return "complete"
 
     async def execute(self, emit: Emit) -> None:
@@ -951,8 +966,10 @@ class RunExecutor(Protocol):
 class InProcessExecutor:
     """Runs the pipeline as a task of this API process and relays its events.
 
-    If the client goes away mid-run, the run is cancelled at its next check
-    rather than left spending in the background.
+    The run is detached from the stream: if the client goes away mid-run, the
+    run goes on to its end (bounded by its budget ledger) and stays readable
+    through ``GET /ai/agent-runs/{run_id}``. Only an explicit cancel stops it.
+    The class-level registries keep each live task referenced until it ends.
     """
 
     _active: dict[str, TeamRun] = {}
@@ -967,9 +984,11 @@ class InProcessExecutor:
 
     async def events(self, job: TeamRun) -> AsyncIterator[Event]:
         queue: asyncio.Queue[Event | None] = asyncio.Queue()
+        listening = True
 
         async def emit(event: str, data: dict[str, Any]) -> None:
-            await queue.put((event, data))
+            if listening:
+                await queue.put((event, data))
 
         async def main() -> None:
             try:
@@ -989,8 +1008,8 @@ class InProcessExecutor:
                     return
                 yield item
         finally:
-            if not task.done():
-                job.cancel.cancel()
+            # The client left: stop queueing events nobody reads, keep the run going.
+            listening = False
 
 
 def format_sse(event: str, data: dict[str, Any]) -> bytes:

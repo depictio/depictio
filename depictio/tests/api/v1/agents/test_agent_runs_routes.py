@@ -53,6 +53,7 @@ def world():
         patch.object(settings.ai, "agents_enabled", True),
     ):
         state.client = TestClient(app)
+        state.app = app
         state.coll = coll
         yield state
 
@@ -93,6 +94,26 @@ def test_route_dry_run(world):
     }
     bad = world.client.post(f"{AI}/agent-runs/route", json={**body, "team": ["nope/x"]})
     assert bad.status_code == 422
+    dup = ["analyst/general", "skeptic/general", "skeptic/variants"]
+    bad = world.client.post(f"{AI}/agent-runs/route", json={**body, "team": dup})
+    assert bad.status_code == 422 and "at most one skeptic" in bad.json()["detail"]
+
+
+def test_route_dry_run_never_calls_the_llm(world):
+    # Three topics tie for two places: the dry run breaks the tie by the rules.
+    world.llm = FakeLLM([])
+    builder = lambda user, dashboard_id: RouteContext(  # noqa: E731
+        dashboard_id=dashboard_id, catalog_modules={"qiime2", "multiqc", "ivar"}
+    )
+    world.app.dependency_overrides[routes.get_route_context_builder] = lambda: builder
+    body = {"dashboard_id": "d1", "question": "What stands out?"}
+    out = world.client.post(f"{AI}/agent-runs/route", json=body).json()
+    assert out["routing"]["method"] == "rules"
+    assert [m["topic"] for m in out["team"] if m["role"] == "analyst"] == [
+        "microbiome",
+        "qc_multiqc",
+    ]
+    assert not world.llm.calls
 
 
 def test_run_without_llm_key_is_refused(world):
@@ -166,7 +187,28 @@ def test_cancel_flags_a_running_run(world):
             }
         },
     )
+    # No process here runs it (a leftover of a restart): marked cancelled at once.
     out = world.client.post(f"{AI}/agent-runs/r-live/cancel").json()
-    assert out == {"run_id": "r-live", "cancelled": True, "status": "running"}
-    assert world.coll.find_one({"id": "r-live"})["cancel_requested"] is True
+    assert out == {"run_id": "r-live", "cancelled": True, "status": "cancelled"}
+    stored = world.coll.find_one({"id": "r-live"})
+    assert stored["cancel_requested"] is True and stored["status"] == "cancelled"
+    # A run no longer running is not reported cancelled again.
+    again = world.client.post(f"{AI}/agent-runs/r-live/cancel").json()
+    assert again["cancelled"] is False
     assert world.client.post(f"{AI}/agent-runs/unknown/cancel").status_code == 404
+
+
+def test_startup_sweep_fails_runs_left_running(world):
+    from depictio.api.v1.agents import runs
+
+    world.coll.insert_many(
+        [
+            {"id": "orphan", "status": "running", "warnings": []},
+            {"id": "done", "status": "complete", "warnings": []},
+        ]
+    )
+    assert runs.sweep_orphans() == 1
+    orphan = world.coll.find_one({"id": "orphan"})
+    assert orphan["status"] == "failed" and orphan["finished_at"]
+    assert orphan["warnings"] == [runs.ORPHAN_WARNING]
+    assert world.coll.find_one({"id": "done"})["status"] == "complete"

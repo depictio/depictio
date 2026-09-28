@@ -4,13 +4,13 @@ Included in the ``/ai`` router, so they exist only when ``settings.ai.enabled``;
 each route also answers 404 unless ``settings.ai.agents_enabled``.
 
 * ``GET  /ai/agent-profiles``: the roles and topics a team is built from.
-* ``POST /ai/agent-runs/route``: dry run of the router (no LLM call unless the
-  rules cannot decide).
-* ``POST /ai/agent-runs``: route, then run the team; streams SSE events
-  (``run_started`` ... ``run_finished``, then ``done``).
+* ``POST /ai/agent-runs/route``: dry run of the router, rules only (no LLM call).
+* ``POST /ai/agent-runs``: route (the LLM breaks a tie of the rules), then run
+  the team; streams SSE events (``run_started`` ... ``run_finished``, then
+  ``done``). The run goes on if the client disconnects.
 * ``GET  /ai/agent-runs?dashboard_id=``: the caller's runs, newest first.
 * ``GET  /ai/agent-runs/{run_id}``: one run in full.
-* ``POST /ai/agent-runs/{run_id}/cancel``: stop a running run at its next check.
+* ``POST /ai/agent-runs/{run_id}/cancel``: stop a running run.
 
 Runs belong to the user who started them; others get 404.
 """
@@ -155,12 +155,11 @@ async def list_agent_profiles(
 async def route_agent_run(
     body: RouteRequest,
     current_user: User = Depends(get_current_user),
-    user_api_key: str | None = Depends(_llm_key),
-    llm_factory: LLMFactory = Depends(get_llm_factory),
     build: RouteContextBuilder = Depends(get_route_context_builder),
 ) -> dict[str, Any]:
-    """The team the router would pick. Spends LLM tokens only when the rules cannot decide."""
-    _, plan = await _plan(body, current_user, llm_factory(user_api_key), build)
+    """The team the rules would pick. Never calls the LLM (it runs on every debounced
+    keystroke): a tie is broken deterministically here, by the LLM at run start."""
+    _, plan = await _plan(body, current_user, None, build)
     return plan.public()
 
 
@@ -253,8 +252,10 @@ async def cancel_agent_run(
     current_user: User = Depends(get_current_user),
     executor: RunExecutor = Depends(get_executor),
 ) -> dict[str, Any]:
-    """Ask a running run to stop. It ends with status ``cancelled`` at its next check."""
+    """Stop a running run. A live one ends as ``cancelled`` at its next check; one no
+    process here is running (left over by a restart) is marked cancelled at once."""
     run = await _own_run(run_id, current_user)
-    flagged = await asyncio.to_thread(runs.request_cancel, run_id)
-    local = executor.cancel(run_id)
-    return {"run_id": run_id, "cancelled": flagged or local, "status": run.status}
+    live = executor.cancel(run_id)
+    cancelled = await asyncio.to_thread(runs.request_cancel, run_id, live=live)
+    status = "cancelled" if cancelled and not live else run.status
+    return {"run_id": run_id, "cancelled": cancelled, "status": status}

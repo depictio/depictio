@@ -13,6 +13,7 @@ from depictio.api.v1.agents.team import TeamDeps, TeamRun, dedupe_key, new_run, 
 from depictio.models.models.users import effective_scopes
 from depictio.tests.api.v1.agents._fakes import (
     FakeLLM,
+    FakeTool,
     FakeToolbox,
     call,
     default_tools,
@@ -608,3 +609,79 @@ def test_full_team_at_forty_cents_reaches_every_role():
     assert analyst_spend <= 0.18 + 1e-9
     assert ledger.spent_usd <= 0.40
     assert all(d["spent_usd"] <= 0.40 for e, d in events if e == "budget")
+
+
+def _reporter_job(toolbox, verdicts):
+    """A job whose run already holds findings with these verdicts, ready for the reporter."""
+    from depictio.api.v1.agents.runs import RunFinding
+    from depictio.api.v1.endpoints.ai_endpoints.schemas import AgentEvidence
+
+    job = _job(FakeLLM(lambda *a: turn({"summary_md": "x" * 30_000})), toolbox)
+    job.run.findings = [
+        RunFinding(
+            finding_id=f"f_{i:010d}",
+            agent_id="analyst/general@1",
+            title=f"{verdict} {i}",
+            detail="d",
+            evidence=[AgentEvidence(call_id="call-1", note="n")],
+            verdict=verdict,
+        )
+        for i, verdict in enumerate(verdicts)
+    ]
+    return job
+
+
+def test_reporter_caps_findings_confirmed_first():
+    from depictio.api.v1.agents.tools.reports import MAX_FINDINGS, MAX_SUMMARY_CHARS
+
+    # 35 kept findings (plus a refuted one) listed worst first: the cap keeps the best 30.
+    verdicts = ["unverified"] * 15 + ["refuted"] + ["weakened"] * 15 + ["confirmed"] * 5
+    toolbox = FakeToolbox(tools=default_tools())
+    job = _reporter_job(toolbox, verdicts)
+    asyncio.run(job._reporter(job.members("reporter")[0]))
+    [report] = toolbox.calls_to("create_report")
+    kept = [f["verdict"] for f in report["findings"]]
+    assert len(kept) == MAX_FINDINGS == 30
+    assert kept == ["confirmed"] * 5 + ["weakened"] * 15 + ["unverified"] * 10
+    assert len(report["summary"]) <= MAX_SUMMARY_CHARS
+    assert any("keeps 30 of 35 findings" in w for w in job.run.warnings)
+    assert job.run.outputs.report_id == "r1" and job._final_status() == "complete"
+
+
+def test_missing_report_fails_the_run():
+    tools = default_tools()
+    tools["create_report"] = FakeTool(scope="report", fail="findings: too many")
+    job = _reporter_job(FakeToolbox(tools=tools), ["confirmed"])
+    asyncio.run(job._reporter(job.members("reporter")[0]))
+    assert job.run.outputs.report_id is None
+    assert job._final_status() == "failed"
+
+
+def test_client_disconnect_does_not_cancel_the_run():
+    from depictio.api.v1.agents.team import InProcessExecutor
+
+    gate = asyncio.Event()
+    script = team_script()
+
+    class GatedLLM(FakeLLM):
+        async def complete(self, messages, *, tools=None, tool_choice=None):
+            await gate.wait()
+            return await super().complete(messages, tools=tools, tool_choice=tool_choice)
+
+    saved = []
+    job = _job(GatedLLM(script), FakeToolbox(tools=default_tools()), saved=saved)
+
+    async def scenario():
+        executor = InProcessExecutor()
+        stream = executor.events(job)
+        first, _ = await stream.__anext__()
+        assert first == "run_started"
+        await stream.aclose()  # the client went away mid-run
+        tasks = list(InProcessExecutor._tasks)
+        assert tasks and not await job.cancel.cancelled()
+        gate.set()
+        await asyncio.gather(*tasks)
+        assert not executor.cancel(job.run.id)  # no longer live once finished
+
+    asyncio.run(scenario())
+    assert saved[-1].status == "complete" and saved[-1].outputs.report_id == "r1"

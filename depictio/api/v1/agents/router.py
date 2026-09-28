@@ -269,7 +269,10 @@ def assemble_team(
 
 
 def team_from_ids(profiles: ProfileSet, ids: list[str], question: str) -> TeamPlan:
-    """The team a request names. Support roles missing from it are added."""
+    """The team a request names. Support roles missing from it are added.
+
+    Several analysts may be named, each support role at most once.
+    """
     members: list[TeamMember] = []
     seen: set[tuple[str, str]] = set()
     for raw in ids:
@@ -290,6 +293,10 @@ def team_from_ids(profiles: ProfileSet, ids: list[str], question: str) -> TeamPl
     analysts = [m for m in members if m.role == "analyst"]
     if not analysts:
         raise ProfileError("A team needs at least one analyst.")
+    for role_id in SUPPORT_ROLES:
+        named = [m.agent_id for m in members if m.role == role_id]
+        if len(named) > 1:
+            raise ProfileError(f"A team has at most one {role_id}; got {', '.join(named)}.")
     if len(analysts) > 1:
         for m in analysts:
             m.sub_question = sub_question(question, profiles.topic(m.topic))
