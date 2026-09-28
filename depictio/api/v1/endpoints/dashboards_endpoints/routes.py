@@ -69,7 +69,7 @@ dashboards_endpoint_router = APIRouter()
 
 # Screenshots PVC mount inside the backend container; bundled image ships
 # default PNGs here for the seeded reference dashboards.
-_SCREENSHOTS_DIR = "/app/depictio/api/static/screenshots"
+_SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 # Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
 # trigger sites agree on "stale".
 _SCREENSHOT_STALE_AFTER_S = 3600
@@ -694,7 +694,9 @@ async def save_dashboard(
         # explicit Save click passes `force_screenshot=true` to bypass
         # the 1h window and always regenerate.
         try:
-            if force_screenshot or _should_enqueue_screenshot(dashboard_id_str):
+            if settings.performance.screenshots_enabled and (
+                force_screenshot or _should_enqueue_screenshot(dashboard_id_str)
+            ):
                 # Lazy import keeps API startup independent of the worker
                 # module; broad except so a Celery/broker outage never
                 # breaks the save response itself.

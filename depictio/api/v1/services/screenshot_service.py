@@ -39,6 +39,8 @@ from depictio.api.v1.services.screenshot_helpers import (
 )
 from depictio.models.models.users import TokenBeanie, UserBeanie
 
+_SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
+
 __all__ = [
     "ScreenshotResult",
     "check_dashboard_owner_permission",
@@ -221,7 +223,7 @@ async def get_admin_auth_token() -> dict[str, str]:
 
 async def generate_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/api/static/screenshots",
+    output_folder: str = _SCREENSHOTS_DIR,
     user_id: str | None = None,
 ) -> ScreenshotResult:
     """
@@ -240,7 +242,7 @@ async def generate_dual_theme_screenshots(
 
     Args:
         dashboard_id: Dashboard ID to screenshot
-        output_folder: Directory to save screenshots (default: /app/depictio/api/static/screenshots)
+        output_folder: Directory to save screenshots (default: depictio/api/static/screenshots)
         user_id: Optional user ID for permission validation (recommended for security)
 
     Returns:
@@ -458,7 +460,7 @@ async def _capture_both_scales(capture, output_path: str, timeout: int) -> None:
 
 async def generate_react_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/api/static/screenshots",
+    output_folder: str = _SCREENSHOTS_DIR,
     user_id: str | None = None,
     open_settings: bool = False,
     filename_prefix: str = "",
