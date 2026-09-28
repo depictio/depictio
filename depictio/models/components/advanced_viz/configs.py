@@ -764,6 +764,174 @@ class PhylogeneticConfig(_BaseVizConfig):
     )
 
 
+_HEX_COLOUR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+class BioimageChannel(BaseModel):
+    """Display settings for one channel of an OME-Zarr image.
+
+    Unlisted channels keep what the store's own ``omero`` metadata says (or the
+    viewer's defaults when it says nothing).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(..., ge=0, description="Channel index along the image's c axis")
+    name: str | None = Field(default=None, description="Display name; null uses the store's")
+    visible: bool = Field(default=True, description="Draw this channel")
+    color: str | None = Field(
+        default=None, description="Hex colour (e.g. '#ff00ff'); null uses the store's"
+    )
+    contrast_limits: tuple[float, float] | None = Field(
+        default=None, description="(min, max) intensity window; null uses the store's"
+    )
+
+    @field_validator("color")
+    @classmethod
+    def _hex_colour(cls, value: str | None) -> str | None:
+        if value is not None and not _HEX_COLOUR_RE.match(value):
+            raise ValueError(f"color must be a hex colour like '#ff00ff', got {value!r}")
+        return value
+
+    @field_validator("contrast_limits", mode="before")
+    @classmethod
+    def _limits_from_yaml_list(cls, value: Any) -> Any:
+        """Accept the YAML spelling ``[min, max]``, for the reason given on
+        ``ProfileConfig._bands_from_yaml_lists``."""
+        return tuple(value) if isinstance(value, list) else value
+
+    @field_validator("contrast_limits")
+    @classmethod
+    def _ordered_limits(cls, value: tuple[float, float] | None) -> tuple[float, float] | None:
+        if value is not None and value[0] >= value[1]:
+            raise ValueError(f"contrast_limits must be (min, max) with min < max, got {value}")
+        return value
+
+
+class BioimageViewerConfig(_BaseVizConfig):
+    """Multiscale OME-Zarr image (NGFF 0.4) with an optional cell-points overlay.
+
+    The pixels come from a *separate* DC with ``type: "bioimage"`` (format
+    ``ome-zarr``) holding one or more ``.zarr`` stores, served key by key through
+    ``/advanced_viz/bioimage/{dc_id}/{store}/{key}``. The image has no tabular
+    payload, so the CANONICAL_SCHEMAS entry is empty.
+
+    Two optional table DCs plug into it. A *sample* DC lets an upstream filter
+    on ``sample_column`` pick the store to show (the store whose name without
+    ``.zarr`` equals the first selected value). A *points* DC draws one marker
+    per row at (``x_col``, ``y_col``) mapped to level-0 pixels, and a lasso on
+    those markers emits a ``scatter_selection`` filter on ``cell_id_col``.
+
+    Every ``*_dc_tag`` is what a template YAML ships; the dashboard import
+    rewrites the matching ``*_dc_id`` / ``*_wf_id`` from it, like the
+    phylogenetic viz's ``tree_dc_tag``.
+    """
+
+    viz_kind: Literal["bioimage_viewer"] = "bioimage_viewer"
+
+    # Image source: a bioimage DC.
+    image_wf_id: str | None = Field(default=None, description="Workflow id of the bioimage DC")
+    image_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the bioimage DC"
+    )
+    image_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the bioimage DC (resolved to ids at import)",
+    )
+    store: str | None = Field(
+        default=None,
+        description="Store shown first (e.g. 'sample_A.zarr'); null uses the first store",
+    )
+
+    # Sample source: a table DC whose filters choose the store.
+    sample_wf_id: str | None = Field(
+        default=None, description="Workflow id of the sample table DC (optional)"
+    )
+    sample_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the sample table DC (optional)"
+    )
+    sample_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the sample table DC (resolved to ids at import)",
+    )
+    sample_column: str | None = Field(
+        default=None,
+        description=(
+            "Column of the sample DC whose filtered value names the store to show "
+            "(matched against the store name without '.zarr')"
+        ),
+    )
+
+    channels: list[BioimageChannel] = Field(
+        default_factory=list, description="Per-channel overrides of the store's display metadata"
+    )
+    show_scalebar: bool = Field(
+        default=True, description="Draw a scale bar (needs physical units in the store)"
+    )
+
+    # Points overlay: a table DC with one row per cell / spot.
+    points_wf_id: str | None = Field(
+        default=None, description="Workflow id of the points table DC (optional)"
+    )
+    points_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the points table DC (optional)"
+    )
+    points_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the points table DC (resolved to ids at import)",
+    )
+    cell_id_col: str | None = Field(
+        default=None, description="Point identifier column, the one a lasso selection filters on"
+    )
+    x_col: str | None = Field(default=None, description="Point x coordinate column")
+    y_col: str | None = Field(default=None, description="Point y coordinate column")
+    color_col: str | None = Field(default=None, description="Optional point colour column")
+    points_scale: float = Field(
+        default=1.0, gt=0, description="Multiplier from table coordinates to level-0 pixels"
+    )
+    points_offset_x: float = Field(default=0.0, description="x offset in level-0 pixels")
+    points_offset_y: float = Field(default=0.0, description="y offset in level-0 pixels")
+    point_radius: float = Field(default=6.0, gt=0, description="Marker radius in screen pixels")
+    points_sample_col: str | None = Field(
+        default=None,
+        description="Points column holding the sample name, to keep only the shown store's points",
+    )
+
+    # On by default, unlike EmbeddingConfig: the kind is new, so no shipped
+    # dashboard inherits a cross-filter it did not ask for, and it stays inert
+    # until a points DC with a `cell_id_col` is bound.
+    selection_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let a lasso / box selection on the points emit a dashboard filter on "
+            "``cell_id_col`` of the points DC"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_bindings(self) -> BioimageViewerConfig:
+        # A tag alone counts as bound: the import clears the ids of a tag it
+        # cannot resolve, and that must not make the dashboard unloadable.
+        points_dc = self.points_dc_id or self.points_dc_tag
+        points_cols = (
+            self.cell_id_col,
+            self.x_col,
+            self.y_col,
+            self.color_col,
+            self.points_sample_col,
+        )
+        if any(points_cols) and not points_dc:
+            raise ValueError(
+                "points columns are set but no points DC is bound: set points_dc_id or "
+                "points_dc_tag"
+            )
+        if points_dc and not (self.x_col and self.y_col):
+            raise ValueError("a points DC needs both x_col and y_col")
+        if self.sample_column and not (self.sample_dc_id or self.sample_dc_tag):
+            raise ValueError("sample_column needs a sample DC: set sample_dc_id or sample_dc_tag")
+        return self
+
+
 class MAConfig(_BaseVizConfig):
     """MA (Bland-Altman) plot: mean log intensity (x) vs log fold change (y).
 
@@ -1614,6 +1782,7 @@ VizConfig = Annotated[
     | ManhattanConfig
     | StackedTaxonomyConfig
     | PhylogeneticConfig
+    | BioimageViewerConfig
     | RarefactionConfig
     | DaBarplotConfig
     | EnrichmentConfig

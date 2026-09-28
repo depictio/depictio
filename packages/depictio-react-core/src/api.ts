@@ -1019,7 +1019,8 @@ export type AdvancedVizKind =
   | 'gene_arrow_track'
   | 'gsea_running_score'
   | 'sashimi'
-  | 'scatter_xy';
+  | 'scatter_xy'
+  | 'bioimage_viewer';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -1474,6 +1475,61 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
   if (!res.ok) throw new Error(`Failed to fetch phylogeny newick: ${res.status}`);
   return res.text();
+}
+
+/** One OME-Zarr store registered under a `bioimage` DC. `sample` is the
+ *  store name without its `.zarr` suffix, the value an upstream sample filter
+ *  selects on. */
+export interface BioimageStoreInfo {
+  name: string;
+  sample: string;
+  file_id: string | null;
+}
+
+/** The stores of a `bioimage` DC, sorted by name. */
+export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreInfo[]> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/stores`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch OME-Zarr stores: ${res.status}`);
+  return res.json();
+}
+
+/** Root URL of one store; zarr keys (`.zattrs`, `0/.zarray`, `0/0.0.0.0.0`)
+ *  resolve under it. No trailing slash. */
+export function bioimageStoreUrl(dcId: string, store: string): string {
+  return `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}`;
+}
+
+/** The subset of zarrita's `AsyncReadable` store interface the OME-Zarr
+ *  loader calls: `get` resolves a key to its bytes, or `undefined` when the key
+ *  does not exist (a sparse chunk, an absent `.zattrs`). */
+export interface BioimageZarrStore {
+  get(key: string, opts?: { signal?: AbortSignal }): Promise<Uint8Array | undefined>;
+}
+
+/**
+ * A zarr store over one OME-Zarr store of a DC, fetching through `authFetch`.
+ *
+ * Auth: every key request carries the standard `Authorization: Bearer` header,
+ * with the same proactive refresh and single 401 retry as the rest of the app.
+ * That works because viv's `loadOmeZarrFromStore` takes a store object rather
+ * than a URL, so nothing forces the credential into the URL.
+ *
+ * A 404 is a missing key, which zarr readers treat as a fill-value chunk, so
+ * it resolves to `undefined`; any other failure throws.
+ */
+export function createBioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
+  const root = bioimageStoreUrl(dcId, store);
+  return {
+    async get(key, opts) {
+      const path = key.startsWith('/') ? key : `/${key}`;
+      const res = await authFetch(`${root}${path}`, { signal: opts?.signal });
+      if (res.status === 404) return undefined;
+      if (!res.ok) throw new Error(`OME-Zarr ${store}${path}: ${res.status}`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+  };
 }
 
 

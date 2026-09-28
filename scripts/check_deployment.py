@@ -176,7 +176,10 @@ SECONDARY_DC_KEYS = {
 #                 Its only data-leg call is for metadata_dc_id, covered separately.
 #   coverage_track dispatches compute_coverage_track and nothing else
 #                 (CoverageTrackRenderer.tsx).
-NO_DATA_LEG = {"phylogenetic", "coverage_track"}
+#   bioimage_viewer reads its pixels key by key from /advanced_viz/bioimage/{dc_id}/,
+#                 and that dc has no Delta table by design. Its store listing and
+#                 its optional points_dc_id are covered separately.
+NO_DATA_LEG = {"phylogenetic", "coverage_track", "bioimage_viewer"}
 
 
 @dataclass
@@ -450,7 +453,8 @@ def plan_checks(dash: dict, family_title: str) -> list[Check]:
 
 
 def _plan_secondary(new, meta: dict, config: dict, columns: list[str]) -> list[Check]:
-    """Probe the extra data collections complex_heatmap, upset_plot and phylogenetic pull."""
+    """Probe the extra data collections complex_heatmap, upset_plot, phylogenetic and
+    bioimage_viewer pull."""
     extra: list[Check] = []
     kind = str(meta.get("viz_kind") or "")
 
@@ -489,6 +493,53 @@ def _plan_secondary(new, meta: dict, config: dict, columns: list[str]) -> list[C
             validate="none",
         )
         check.dc_id, check.dc_tag = str(tree_dc), ""
+        extra.append(check)
+
+    if kind == "bioimage_viewer":
+        extra.extend(_plan_bioimage(new, meta, config))
+
+    return extra
+
+
+def _plan_bioimage(new, meta: dict, config: dict) -> list[Check]:
+    """The store listing every bioimage tile opens with, and its points table.
+
+    The points probe names only the points columns: the harvested column list
+    also carries `sample_column`, which belongs to the sample dc.
+    """
+    extra: list[Check] = []
+    image_dc = config.get("image_dc_id") or meta.get("dc_id")
+    if image_dc:
+        check = new(
+            meta,
+            subtype="bioimage_viewer",
+            probe="bioimage/stores",
+            method="GET",
+            path=f"/advanced_viz/bioimage/{image_dc}/stores",
+            validate="non_empty_list",
+        )
+        check.dc_id, check.dc_tag = str(image_dc), ""
+        extra.append(check)
+
+    points_dc = config.get("points_dc_id")
+    if points_dc:
+        keys = ("cell_id_col", "x_col", "y_col", "color_col", "points_sample_col")
+        check = new(
+            meta,
+            subtype="bioimage_viewer",
+            probe="advanced_viz/data (points_dc_id)",
+            method="POST",
+            path="/advanced_viz/data",
+            body={
+                "wf_id": config.get("points_wf_id") or meta.get("wf_id"),
+                "dc_id": points_dc,
+                "columns": [config[k] for k in keys if config.get(k)],
+                "filter_metadata": [],
+                "limit_rows": 200,
+            },
+            validate="advviz",
+        )
+        check.dc_id, check.dc_tag = str(points_dc), ""
         extra.append(check)
 
     return extra
@@ -534,6 +585,8 @@ def validate_payload(check: Check, payload: Any) -> str:
     kind = check.validate
     if kind == "none":
         return "OK"
+    if kind == "non_empty_list":
+        return "OK" if isinstance(payload, list) and payload else "EMPTY_RESULT"
     if not isinstance(payload, dict):
         return "EMPTY_RESULT"
 

@@ -12,6 +12,7 @@ What lives here:
     `page.evaluate` is too late).
   * Theme-applied wait (resolves on `data-mantine-color-scheme` attribute).
   * Grid-content wait (a `.react-grid-item` exists with non-zero bbox).
+  * Readiness waits for canvases the grid wait cannot see (Plotly, OME-Zarr).
   * UI chrome hider (navbar/header/debug menu/AppShell padding).
   * Mantine notification dismisser (kills toast banners that would
     otherwise clutter the shot).
@@ -126,6 +127,43 @@ async def wait_for_plotly_drawn(page: Page, timeout_ms: int = 3000) -> bool:
                 }
                 return true;
             }""",
+            timeout=timeout_ms,
+        )
+        return True
+    except Exception:
+        return False
+
+
+async def wait_for_bioimage_ready(page: Page, expected: int, timeout_ms: int = 20_000) -> bool:
+    """Block until `expected` bioimage tiles have settled, or the timeout
+    elapses.
+
+    A bioimage tile paints into a WebGL canvas after fetching its chunks, so
+    neither the Plotly probe nor the panel indicator sees it finish. The
+    renderer sets `data-bioimage-ready` on the tile host: "true" once the
+    first multiscale level is on screen, "error" when the image or store
+    failed to load, "skipped" when no WebGL slot was granted or no store
+    matched the selection. Any of the three counts as settled; "false" means
+    still loading. A tile that failed before its host mounted shows only
+    `.dashboard-error`, which also counts when it sits outside every host.
+    Headless Chromium gets WebGL through SwiftShader, which Playwright already
+    enables, so no launch flag is needed for it.
+    """
+    if expected <= 0:
+        return True
+    try:
+        await page.wait_for_function(
+            """(expected) => {
+                const settled = ['true', 'error', 'skipped'];
+                const ready = Array.from(
+                    document.querySelectorAll('[data-bioimage-ready]')
+                ).filter((el) => settled.includes(el.getAttribute('data-bioimage-ready'))).length;
+                const failed = Array.from(document.querySelectorAll('.dashboard-error')).filter(
+                    (el) => !el.closest('[data-bioimage-ready]')
+                ).length;
+                return ready + failed >= expected;
+            }""",
+            arg=expected,
             timeout=timeout_ms,
         )
         return True

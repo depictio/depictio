@@ -17,6 +17,8 @@ from depictio.models.components.advanced_viz.component import (
     AdvancedVizLiteComponent,
 )
 from depictio.models.components.advanced_viz.configs import (
+    BioimageChannel,
+    BioimageViewerConfig,
     ComplexHeatmapConfig,
     DaBarplotConfig,
     EmbeddingConfig,
@@ -45,6 +47,8 @@ __all__ = [
     "EmbeddingConfig",
     "EnrichmentConfig",
     "ManhattanConfig",
+    "BioimageChannel",
+    "BioimageViewerConfig",
     "PhylogeneticConfig",
     "RarefactionConfig",
     "StackedTaxonomyConfig",
