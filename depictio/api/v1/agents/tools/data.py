@@ -62,6 +62,9 @@ T = TypeVar("T")
 
 DEFAULT_MAX_ROWS = 50
 MAX_ROWS_CAP = 500
+# Columns the CLI adds to every table at ingest: bookkeeping, not data, and
+# their timestamps trip the PII phone pattern.
+INTERNAL_COLUMNS = frozenset({"depictio_run_id", "aggregation_time"})
 MAX_SHOWN_COLUMNS = 30
 MAX_GROUPS = 20
 # Strings at least this long are treated as free text and wrapped as untrusted.
@@ -548,6 +551,7 @@ def _component_data_sync(
         raise _load_error(exc) from exc
     if df is None:
         raise ToolError("The data collection could not be loaded.")
+    df = df.drop([c for c in INTERNAL_COLUMNS if c in df.columns and c not in used])
     shown = [c for c in shown if c in df.columns] or df.columns[:MAX_SHOWN_COLUMNS]
 
     comp_type = comp.get("component_type")
@@ -598,9 +602,14 @@ def _describe_sync(user: Any, dc_id: str, sample_rows: int) -> dict[str, Any]:
         "project_description": untrusted(ctx.project_description),
         "dc_description": untrusted(ctx.dc_description),
         "row_count": ctx.row_count,
-        "columns": [{**asdict(c), "null_pct": round(c.null_pct, 4)} for c in ctx.columns],
+        "columns": [
+            {**asdict(c), "null_pct": round(c.null_pct, 4)}
+            for c in ctx.columns
+            if c.name not in INTERNAL_COLUMNS
+        ],
         "sample_rows": [
-            {k: safe_cell(v) for k, v in row.items()} for row in ctx.sample_rows[:sample_rows]
+            {k: safe_cell(v) for k, v in row.items() if k not in INTERNAL_COLUMNS}
+            for row in ctx.sample_rows[:sample_rows]
         ],
     }
 

@@ -6,6 +6,7 @@ sandbox is the in-process ``InlineSandbox``.
 """
 
 import asyncio
+import sys
 import time
 from unittest.mock import patch
 
@@ -185,6 +186,19 @@ def test_rows_are_redacted_and_long_text_wrapped(world, loads):  # noqa: F811
     assert first["contact"] == "<email>"
     assert first["notes"] == {"untrusted": LONG_NOTE}
     assert result.data["rows"][1]["notes"] == "ok"
+
+
+def test_ingest_bookkeeping_columns_are_left_out(world, loads, monkeypatch):  # noqa: F811
+    stamped = FRAME.with_columns(
+        pl.lit("2026-09-28 22:01:23").alias("aggregation_time"),
+        pl.lit("run-1").alias("depictio_run_id"),
+    )
+    monkeypatch.setattr(sys.modules[__name__], "FRAME", stamped)
+    result = component_data(world, index="fig-1", max_rows=1)
+    assert result.ok
+    names = {c["name"] for c in result.data["columns"]}
+    assert not names & {"aggregation_time", "depictio_run_id"}
+    assert "aggregation_time" not in result.data["rows"][0]
 
 
 def test_permission_denied(world, loads):  # noqa: F811
