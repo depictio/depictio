@@ -24,10 +24,7 @@ dependencies = [
   "rich==15.0.0",
   "pydantic[email]==2.13.4",
   "pydantic-settings==2.14.1",
-  # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
-  # True) during init, which the latest mongomock (4.3.0) test double doesn't
-  # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
-  "beanie==2.0.0",
+  "beanie==2.2.0",
   "python-dotenv==1.2.2",
   "bleach==6.4.0",
   # Required by catalog recipes that build colour scales / hierarchical figures
