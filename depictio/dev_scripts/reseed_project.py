@@ -283,31 +283,33 @@ async def reseed(
     # process does this on startup; standalone scripts have to do it themselves.
     from depictio.api.v1.services.lifespan import init_pymongo_beanie
 
-    await init_pymongo_beanie()
+    mongo_client = await init_pymongo_beanie()
+    try:
+        if dashboards_only:
+            logger.info(f"reseed: dashboards-only refresh for {dataset_names}")
+            await _replace_dashboards_only(dataset_names)
+            logger.info(f"reseed: done for {dataset_names}")
+            return
 
-    if dashboards_only:
-        logger.info(f"reseed: dashboards-only refresh for {dataset_names}")
-        await _replace_dashboards_only(dataset_names)
+        logger.info(f"reseed: dropping existing state for {dataset_names}")
+        for name in dataset_names:
+            _drop_project_and_dependents(name)
+
+        logger.info(f"reseed: recreating project + DC documents for {dataset_names}")
+        await _recreate_project(dataset_names)
+
+        logger.info(f"reseed: recreating dashboards for {dataset_names}")
+        await _recreate_dashboards(dataset_names)
+
+        if materialise_data:
+            logger.info(f"reseed: materialising Delta tables for {dataset_names}")
+            await _trigger_data_materialisation(dataset_names)
+        else:
+            logger.info("reseed: --no-data passed; skipping Delta materialisation")
+
         logger.info(f"reseed: done for {dataset_names}")
-        return
-
-    logger.info(f"reseed: dropping existing state for {dataset_names}")
-    for name in dataset_names:
-        _drop_project_and_dependents(name)
-
-    logger.info(f"reseed: recreating project + DC documents for {dataset_names}")
-    await _recreate_project(dataset_names)
-
-    logger.info(f"reseed: recreating dashboards for {dataset_names}")
-    await _recreate_dashboards(dataset_names)
-
-    if materialise_data:
-        logger.info(f"reseed: materialising Delta tables for {dataset_names}")
-        await _trigger_data_materialisation(dataset_names)
-    else:
-        logger.info("reseed: --no-data passed; skipping Delta materialisation")
-
-    logger.info(f"reseed: done for {dataset_names}")
+    finally:
+        await mongo_client.close()
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

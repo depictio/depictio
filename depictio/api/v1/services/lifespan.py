@@ -47,8 +47,11 @@ from depictio.models.models.users import (
 WORKER_ID = os.getpid()
 
 
-async def init_pymongo_beanie() -> None:
+async def init_pymongo_beanie() -> AsyncMongoClient:
     """Initialize the async MongoDB client (pymongo) and Beanie ODM.
+
+    Returns the client so the caller closes it on shutdown: an unclosed
+    AsyncMongoClient leaves its monitor tasks on the event loop.
 
     Connection pool sizing:
     - maxPoolSize: 25 per worker (4 workers = ~100 total connections)
@@ -75,6 +78,7 @@ async def init_pymongo_beanie() -> None:
             UserActivity,
         ],
     )
+    return client
 
 
 async def handle_initialization() -> bool:
@@ -341,7 +345,7 @@ async def lifespan(_app: FastAPI):
     - Real-time event services
     """
     # Startup
-    await init_pymongo_beanie()
+    mongo_client = await init_pymongo_beanie()
     should_initialize = await handle_initialization()
     # Deliberately outside the `should_initialize` branch: an already-initialised
     # deployment never re-runs initialization, and it is exactly the deployment
@@ -359,3 +363,4 @@ async def lifespan(_app: FastAPI):
     # Shutdown
     await stop_event_services()
     stop_background_services(background_task, should_initialize)
+    await mongo_client.close()

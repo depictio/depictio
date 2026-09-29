@@ -102,7 +102,7 @@ class MongoDBChangeWatcher:
 
     async def _watch_data_collections(self) -> None:
         """Watch the data_collections collection for changes."""
-        if not self._db:
+        if self._db is None:
             return
 
         collection: AsyncCollection = self._db[settings.mongodb.collections.data_collection]
@@ -218,7 +218,7 @@ class MongoDBChangeWatcher:
         Returns:
             List of dashboard IDs that use this data collection
         """
-        if not self._db:
+        if self._db is None:
             return []
 
         try:

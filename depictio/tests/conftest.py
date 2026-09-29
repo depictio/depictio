@@ -40,7 +40,7 @@ import mongomock.database  # noqa: E402
 _orig_list_collection_names = mongomock.database.Database.list_collection_names
 
 
-def _list_collection_names_shim(self, filter=None, session=None, **kwargs):  # type: ignore[no-untyped-def]
+def _list_collection_names_shim(self, filter=None, session=None, **kwargs):
     kwargs.pop("nameOnly", None)
     kwargs.pop("authorizedCollections", None)
     return _orig_list_collection_names(self, filter=filter, session=session, **kwargs)
