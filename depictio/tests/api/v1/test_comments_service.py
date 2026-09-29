@@ -167,7 +167,9 @@ class TestAgentThreads:
         assert again.comments[0].id == first.comments[0].id
         assert again.comments[0].edited_at is not None
         assert again.comments[0].author.agent.run_id == "r2"
-        assert again.updated_at > first.updated_at
+        # Mongo keeps milliseconds and both writes can share one: compare at that precision.
+        first_ms = first.updated_at.replace(microsecond=first.updated_at.microsecond // 1000 * 1000)
+        assert again.updated_at >= first_ms
         assert world.db["comment_threads"].count_documents({}) == 1
 
         # Another user's run never touches this proposal.
