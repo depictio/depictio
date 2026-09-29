@@ -20,12 +20,12 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="composition", dc_ref="taxonomy_composition"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "feature_id": pl.Utf8,
     "avg_log_intensity": pl.Float64,
     "log2_fold_change": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "significance": pl.Float64,
     "label": pl.Utf8,
     "contrast": pl.Utf8,

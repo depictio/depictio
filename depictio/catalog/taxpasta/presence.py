@@ -18,7 +18,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy_id": pl.Utf8,
     "taxon": pl.Utf8,
@@ -27,7 +27,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 # One 0/1 column per profiler; the names are run-dependent, so they are not declared.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

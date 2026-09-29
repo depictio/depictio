@@ -23,12 +23,12 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="num_clones", path=f"{_TABLES}/num_clones_table.tsv", format="TSV"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
 }
 # Plus one Float64 column per sample; the sample set is discovered from the data.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def _subject(df: pl.DataFrame) -> pl.Expr:

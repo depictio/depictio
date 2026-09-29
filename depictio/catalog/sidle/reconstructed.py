@@ -30,7 +30,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "feature_id": pl.Utf8,
     "sample": pl.Utf8,
     "count": pl.Float64,
@@ -68,4 +68,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias(rank)
         for rank, prefix in _RANKS.items()
     )
-    return df.select(list(EXPECTED_SCHEMA.keys()))
+    return df.select(list(OUTPUT_SCHEMA.keys()))

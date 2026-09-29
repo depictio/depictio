@@ -56,7 +56,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,
     "chr": pl.Utf8,
@@ -98,4 +98,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # a broad call does not have.
         ((pl.col("start") + pl.col("end")) // 2 + 1).alias("midpoint"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "chr", "start"])

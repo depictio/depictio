@@ -141,7 +141,7 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
 
 ## The schema-ownership rule (no duplication)
 
-- **Recipe present** → the recipe (`EXPECTED_SCHEMA`) owns the output columns;
+- **Recipe present** → the recipe (`OUTPUT_SCHEMA`) owns the output columns;
   the YAML must **not** declare `columns`. `roles` are grounded against the
   recipe by `depictio dev catalog validate`.
 - **No recipe** → the raw file is bindable; declare its `columns` in the YAML,
@@ -179,7 +179,7 @@ while writing `roles`.
 2. `kind` valid for `advanced_viz`; role names valid for the `kind`.
 3. Each render's bound columns (`roles`/`dict_kwargs`/`card.column`) are
    **grounded** against the real data shape — the `fixture` (most complete) if
-   set, else the recipe's `EXPECTED_SCHEMA`, else the declared `columns`.
+   set, else the recipe's `OUTPUT_SCHEMA`, else the declared `columns`.
 4. Every referenced `recipe` resolves; every `fixture` reads.
 5. Every `nf_core_url` module + `edam_*` term **exists** in the vendored index.
 

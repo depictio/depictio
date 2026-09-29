@@ -31,7 +31,7 @@ def _patch_recipes(monkeypatch, sources, *, transform=None, schema=None):
 
     class _Module:
         SOURCES = sources
-        EXPECTED_SCHEMA = schema or {}
+        OUTPUT_SCHEMA = schema or {}
 
         @staticmethod
         def transform(resolved):

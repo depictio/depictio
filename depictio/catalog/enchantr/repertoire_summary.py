@@ -43,7 +43,7 @@ _DIVERSITY_COLS: list[str] = [
 ]
 _SIZE_COLS = ["clone_size_count_min", "clone_size_count_median", "clone_size_count_max"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "sequences": pl.Int64,
@@ -52,7 +52,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     **{c: pl.Float64 for c in _SIZE_COLS},
     **{c: pl.Float64 for c in _DIVERSITY_COLS},
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def _subject(df: pl.DataFrame) -> pl.Expr:

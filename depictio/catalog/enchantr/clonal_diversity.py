@@ -29,12 +29,12 @@ SOURCES: list[RecipeSource] = [
 
 _FLOAT_COLS = ["q", "d", "d_sd", "d_lower", "d_upper", "e", "e_lower", "e_upper"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     **{c: pl.Float64 for c in _FLOAT_COLS},
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def _subject(df: pl.DataFrame) -> pl.Expr:

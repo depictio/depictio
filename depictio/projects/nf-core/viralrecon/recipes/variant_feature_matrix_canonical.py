@@ -23,13 +23,13 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="nextclade", dc_ref="nextclade_results", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
 }
-# Mutation columns are dynamic — validated via OPTIONAL_SCHEMA = {}.
+# Mutation columns are dynamic — validated via OPTIONAL_OUTPUT_SCHEMA = {}.
 # `lineage` / `clade` are pass-through metadata for embedding colour / cluster
 # overlay (compute_embedding picks them up via extra_cols).
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "lineage": pl.Utf8,
     "clade": pl.Utf8,
 }

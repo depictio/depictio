@@ -39,7 +39,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "intron": pl.Utf8,
     "chrom": pl.Utf8,
     "start": pl.Int64,
@@ -96,5 +96,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("uniq_mapped").cast(pl.Float64).alias("score"),
         )
         .sort("chrom", "start")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

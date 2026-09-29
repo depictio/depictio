@@ -206,7 +206,7 @@ recipe.
 
 ### Output columns and dtypes
 
-`EXPECTED_SCHEMA`, in this order:
+`OUTPUT_SCHEMA`, in this order:
 
 | Column         | polars dtype | viz role       | Notes |
 | -------------- | ------------ | -------------- | ----- |
@@ -274,7 +274,7 @@ SOURCES = [
    contig), falling back to the whole `protein_id`. Short enough to sit under an
    arrow. When the annotation fallback is in use and carries a gene symbol or
    product, that wins.
-8. **Sort** by `sample`, `contig`, `start`, then `select(list(EXPECTED_SCHEMA))`.
+8. **Sort** by `sample`, `contig`, `start`, then `select(list(OUTPUT_SCHEMA))`.
 
 Expected size on this run: 155 regions over roughly as many contigs, a handful
 to a few dozen CDSs each, so low thousands of rows.

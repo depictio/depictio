@@ -66,7 +66,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "target": pl.Utf8,
     "caller": pl.Utf8,
@@ -81,7 +81,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "max_signal": pl.Float64,
 }
 # One Int8 0/1 column per replicate follows; the names are run-specific.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # `<sample>.seacr.peaks.stringent.bed`, `<sample>.macs2_peaks.narrowPeak`, ...
 _CALLERS = ("seacr", "macs2", "macs3", "epic2")
@@ -149,4 +149,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             ]
         ).alias("peak_id"),
     )
-    return df.select(list(EXPECTED_SCHEMA) + samples).sort(["target", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA) + samples).sort(["target", "chr", "start"])

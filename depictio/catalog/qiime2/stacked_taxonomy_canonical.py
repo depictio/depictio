@@ -64,14 +64,14 @@ SOURCES: list[RecipeSource] = [
 
 _METADATA_ID_COL = "sample"  # `Metadata_full.tsv` calls the sample col "sample"
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "taxon": pl.Utf8,
     "rank": pl.Utf8,
     "abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "lineage": pl.Utf8,
     "habitat": pl.Utf8,
 }

@@ -55,7 +55,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,
     "chr": pl.Utf8,
@@ -97,4 +97,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # narrowPeak start is 0-based; the summit offset is relative to it.
         (pl.col("start") + pl.col("summit_offset") + 1).alias("summit"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "chr", "start"])

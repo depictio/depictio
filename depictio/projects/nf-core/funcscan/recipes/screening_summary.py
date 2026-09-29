@@ -26,7 +26,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cazyme", dc_ref="dbcan_overview", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "arg_hits": pl.Int64,
     "arg_genes": pl.Int64,
@@ -95,7 +95,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for part in present[1:]:
         out = out.join(part, on="sample", how="full", coalesce=True)
 
-    count_cols = [c for c in EXPECTED_SCHEMA if c not in ("sample", "screens")]
+    count_cols = [c for c in OUTPUT_SCHEMA if c not in ("sample", "screens")]
     out = out.with_columns(
         *[
             (pl.col(c) if c in out.columns else pl.lit(0)).fill_null(0).cast(pl.Int64).alias(c)
@@ -115,5 +115,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("screens")
         )
         .sort("sample")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

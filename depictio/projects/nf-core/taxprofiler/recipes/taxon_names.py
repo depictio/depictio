@@ -42,13 +42,13 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxonomy_id": pl.Utf8,
     "name": pl.Utf8,
     "rank": pl.Utf8,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # kraken report rank codes. A trailing digit marks an intermediate level
 # (``D1`` = sub-domain), which collapses onto its parent rank here.

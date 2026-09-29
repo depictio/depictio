@@ -19,11 +19,11 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="pangolin", dc_ref="pangolin_lineages"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mutation_label": pl.Utf8,
 }
-# Lineage columns are dynamic — validated via OPTIONAL_SCHEMA = {}.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Lineage columns are dynamic — validated via OPTIONAL_OUTPUT_SCHEMA = {}.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

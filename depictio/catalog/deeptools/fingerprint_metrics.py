@@ -61,7 +61,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "auc": pl.Float64,
     "synthetic_auc": pl.Float64,
@@ -73,7 +73,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "synthetic_js_distance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "js_distance": pl.Float64,
     "percent_genome_enriched": pl.Float64,
     "diff_enrichment": pl.Float64,
@@ -126,11 +126,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for canonical, header in _HEADERS.items():
         source = present.get(header)
         if source is None:
-            if canonical in OPTIONAL_SCHEMA:
+            if canonical in OPTIONAL_OUTPUT_SCHEMA:
                 continue  # a run without --JSDsample: the column does not exist
             selections.append(pl.lit(None, dtype=pl.Float64).alias(canonical))
             continue
-        if canonical in OPTIONAL_SCHEMA:
+        if canonical in OPTIONAL_OUTPUT_SCHEMA:
             optional_present.append(canonical)
         selections.append(pl.col(source).cast(pl.Float64, strict=False).alias(canonical))
 
@@ -150,4 +150,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         frame = frame.sort("js_distance", descending=True, nulls_last=True)
     frame = frame.unique(subset=["sample"], keep="first")
 
-    return frame.select([*EXPECTED_SCHEMA, *optional_present]).sort("sample")
+    return frame.select([*OUTPUT_SCHEMA, *optional_present]).sort("sample")

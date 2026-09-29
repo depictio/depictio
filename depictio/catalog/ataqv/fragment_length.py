@@ -52,7 +52,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "fragment_length": pl.Int64,
     "read_count": pl.Int64,
@@ -129,4 +129,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("read_count").cast(pl.Int64, strict=False),
         pl.col("fraction_of_all_reads").cast(pl.Float64, strict=False),
     ).with_columns(_classify(pl.col("fragment_length")).alias("fragment_class"))
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "fragment_length"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "fragment_length"])

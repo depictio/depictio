@@ -50,12 +50,12 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
 }
 # Sample columns are run-dependent, so they sit outside the declared schema
-# and go unchecked: the ingest validates EXPECTED_SCHEMA only.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# and go unchecked: the ingest validates OUTPUT_SCHEMA only.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 TOP_N = 500
 MAX_ANNOTATIONS = 4
