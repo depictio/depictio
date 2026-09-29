@@ -18,7 +18,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "profiler": pl.Utf8,
     "database": pl.Utf8,
@@ -32,7 +32,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "evenness": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _GROUP = ["sample", "profiler", "database", "profiler_db", "platform"]
 

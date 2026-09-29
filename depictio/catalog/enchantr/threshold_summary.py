@@ -28,13 +28,13 @@ SOURCES: list[RecipeSource] = [
 
 _FLOAT_COLS = ["loglk", "threshold", "sensitivity", "specificity", "pvalue", "mean_threshold"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "subject_id": pl.Utf8,
     "model": pl.Utf8,
     "cutoff": pl.Utf8,
     **{c: pl.Float64 for c in _FLOAT_COLS},
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

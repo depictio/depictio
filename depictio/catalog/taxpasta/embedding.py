@@ -20,7 +20,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -31,7 +31,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "platform": pl.Utf8,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

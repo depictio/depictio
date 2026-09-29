@@ -40,7 +40,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "consensus_set": pl.Utf8,
     "interval_id": pl.Utf8,
@@ -51,7 +51,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "num_samples": pl.Int64,
 }
 # One Int8 0/1 column per sample follows; the names are run-specific.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _FIXED = ["chr", "start", "end", "interval_id", "num_peaks", "num_samples"]
 _FALLBACK_LABEL = "consensus"
@@ -122,4 +122,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             for s in samples
         ],
     )
-    return typed.select(list(EXPECTED_SCHEMA) + samples).sort(["consensus_set", "chr", "start"])
+    return typed.select(list(OUTPUT_SCHEMA) + samples).sort(["consensus_set", "chr", "start"])

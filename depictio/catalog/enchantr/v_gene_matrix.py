@@ -25,14 +25,14 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "row_id": pl.Utf8,
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "locus": pl.Utf8,
 }
 # Plus one Float64 column per V gene; the gene set is discovered from the data.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def _subject(df: pl.DataFrame) -> pl.Expr:

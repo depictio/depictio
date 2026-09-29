@@ -40,7 +40,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fusion": pl.Utf8,
     "caller": pl.Utf8,
     "position_5p": pl.Utf8,
@@ -131,4 +131,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("evidence_fraction"),
     )
 
-    return out.select(list(EXPECTED_SCHEMA)).sort(["fusion", "caller"])
+    return out.select(list(OUTPUT_SCHEMA)).sort(["fusion", "caller"])

@@ -27,13 +27,13 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxon": pl.Utf8,
     "rank": pl.Utf8,
 }
 
 # One column per profiling run; the names are run-dependent, so they are not declared.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _TOP_TAXA = 60
 _ANNOTATIONS_COL = "_col_annotations_json"

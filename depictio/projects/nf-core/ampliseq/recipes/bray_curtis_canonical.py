@@ -20,11 +20,11 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="rel_abundance", dc_ref="taxonomy_rel_abundance"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
-# Per-sample distance columns are dynamic — validated via OPTIONAL_SCHEMA = {}.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Per-sample distance columns are dynamic — validated via OPTIONAL_OUTPUT_SCHEMA = {}.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

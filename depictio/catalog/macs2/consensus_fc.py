@@ -35,7 +35,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "consensus_set": pl.Utf8,
     "interval_id": pl.Utf8,
@@ -44,7 +44,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "support": pl.Utf8,
 }
 # One Float64 fold-enrichment column per sample follows; names are run-specific.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Rows kept per consensus set. Server-side clustering is quadratic in rows, so
 # the matrix stays a few hundred intervals tall even for a 100k-peak set.
@@ -126,4 +126,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     top = df.filter(
         pl.col("_total_fc").rank("ordinal", descending=True).over("consensus_set") <= TOP_N
     ).sort(["consensus_set", "chr", "start"])
-    return top.select(list(EXPECTED_SCHEMA) + samples)
+    return top.select(list(OUTPUT_SCHEMA) + samples)

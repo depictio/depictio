@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "clone_id": pl.Utf8,
@@ -37,7 +37,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "rank": pl.Int64,
     "size_class": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Clonal-homeostasis bins on clone frequency (upper bound inclusive), the
 # convention immunarch's ``repClonality(.method = "homeo")`` popularised.

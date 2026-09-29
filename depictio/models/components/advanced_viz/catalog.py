@@ -4,7 +4,7 @@ For each tool output, one catalog entry links:
 
   - `find`        — how to recognise the raw nf-core file (used at scan time).
   - `recipe`      — optional `.py` that reshapes it. **The recipe owns the
-                    output columns** (its `EXPECTED_SCHEMA`); the catalog does
+                    output columns** (its `OUTPUT_SCHEMA`); the catalog does
                     not repeat them.
   - `columns`     — the bindable columns, declared **only when there is no
                     recipe** (raw == bindable). Omitted when a recipe is present.
@@ -755,11 +755,11 @@ def read_fixture_schema(path: Path) -> dict[str, str]:
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:
-    """Return the output column names a recipe produces (its EXPECTED_SCHEMA)."""
+    """Return the output column names a recipe produces (its OUTPUT_SCHEMA)."""
     from depictio.recipes import load_recipe
 
     module = load_recipe(recipe_ref)
-    return list(module.EXPECTED_SCHEMA.keys())
+    return list(module.OUTPUT_SCHEMA.keys())
 
 
 # Aggregations that are only meaningful on a numeric column. min/max/count/

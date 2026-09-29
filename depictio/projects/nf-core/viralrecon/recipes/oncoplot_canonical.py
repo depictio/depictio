@@ -20,12 +20,12 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="variants", dc_ref="variants_long"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "gene": pl.Utf8,
     "mutation_type": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mutation_label": pl.Utf8,
 }
 

@@ -49,7 +49,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
     "sample": pl.Utf8,
@@ -57,7 +57,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "log2_tpm": pl.Float64,
     "group": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 MIN_TPM = 1.0
 MAX_LEVELS = 12

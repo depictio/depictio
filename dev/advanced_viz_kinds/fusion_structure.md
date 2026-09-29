@@ -221,7 +221,7 @@ and it would otherwise burn a `top_n` facet.
 
 ### Output
 
-`EXPECTED_SCHEMA`, in order:
+`OUTPUT_SCHEMA`, in order:
 
 | Column          | Dtype     | Meaning |
 | --------------- | --------- | ------- |
@@ -355,7 +355,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
 
     return long.select(
-        [pl.col(name).cast(dtype).alias(name) for name, dtype in EXPECTED_SCHEMA.items()]
+        [pl.col(name).cast(dtype).alias(name) for name, dtype in OUTPUT_SCHEMA.items()]
     )
 ```
 

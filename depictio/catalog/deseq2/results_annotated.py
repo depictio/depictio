@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="annotated", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -66,7 +66,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "direction": pl.Utf8,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 PADJ_THRESHOLD = 0.05
 LFC_THRESHOLD = 1.0
@@ -205,4 +205,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("direction"),
     )
 
-    return df.select(list(EXPECTED_SCHEMA)).sort(["contrast", "chromosome", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["contrast", "chromosome", "start"])

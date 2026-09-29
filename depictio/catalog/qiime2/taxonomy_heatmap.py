@@ -31,12 +31,12 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "Phylum": pl.Utf8,
     "Kingdom": pl.Utf8,
 }
-# Sample columns are dynamic — validated via OPTIONAL_SCHEMA = {}
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Sample columns are dynamic — validated via OPTIONAL_OUTPUT_SCHEMA = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Column that holds the sample identifier in the metadata file
 _METADATA_ID_COL = "ID"

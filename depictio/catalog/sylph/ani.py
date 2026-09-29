@@ -23,7 +23,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="profile", glob_pattern="sylph/*/*.sylph.tsv", format="tsv"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "genome": pl.Utf8,
     "contig_name": pl.Utf8,
@@ -38,7 +38,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "kmers_reassigned": pl.Int64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Read-file suffixes taxprofiler leaves on the sylph sample name.
 _READ_SUFFIXES = (

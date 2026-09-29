@@ -38,7 +38,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "target": pl.Utf8,
     "replicate": pl.Int64,
@@ -104,4 +104,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("target"))
         .alias("role")
     )
-    return samples.select(list(EXPECTED_SCHEMA)).sort(["is_control", "target", "replicate"])
+    return samples.select(list(OUTPUT_SCHEMA)).sort(["is_control", "target", "replicate"])

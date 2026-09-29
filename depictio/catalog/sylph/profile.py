@@ -23,7 +23,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "clade_name": pl.Utf8,
     "taxon": pl.Utf8,
@@ -31,7 +31,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # MetaPhlAn-style lineage prefixes, root to leaf.
 _RANK_BY_PREFIX = {

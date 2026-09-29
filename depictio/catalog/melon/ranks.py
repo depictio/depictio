@@ -30,7 +30,7 @@ SOURCES: list[RecipeSource] = [
 
 _RANKS = ["superkingdom", "phylum", "class", "order", "family", "genus", "species"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     **{rank: pl.Utf8 for rank in _RANKS},
     "copy_number": pl.Float64,
     "abundance": pl.Float64,
@@ -38,7 +38,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "lineages": pl.Int64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _UNCLASSIFIED = "unclassified"
 

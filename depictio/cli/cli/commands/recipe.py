@@ -86,8 +86,13 @@ def recipe_run(
         )
 
         # Checkpoint 4: schema
-        validate_schema(result, module.EXPECTED_SCHEMA, recipe_name)
-        schema_str = ", ".join(f"{c}({t})" for c, t in module.EXPECTED_SCHEMA.items())
+        validate_schema(
+            result,
+            module.OUTPUT_SCHEMA,
+            recipe_name,
+            getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None),
+        )
+        schema_str = ", ".join(f"{c}({t})" for c, t in module.OUTPUT_SCHEMA.items())
         console.print(f"  [green]:white_check_mark:[/green] Schema valid: {schema_str}")
 
         # Display result (raw repr so it stays copy/paste-friendly)
@@ -150,7 +155,7 @@ def recipe_info(
         ),
     ] = None,
 ) -> None:
-    """Show recipe details: docstring, sources, and expected schema."""
+    """Show recipe details: docstring, sources, and output schema."""
     from depictio.cli.cli.utils.rich_utils import console, render_records_table
     from depictio.recipes import RecipeError, load_recipe
 
@@ -182,6 +187,12 @@ def recipe_info(
 
     # Schema
     render_records_table(
-        [{"Column": col, "Type": str(dtype)} for col, dtype in module.EXPECTED_SCHEMA.items()],
-        title=f"Expected output schema ({len(module.EXPECTED_SCHEMA)} columns)",
+        [{"Column": col, "Type": str(dtype)} for col, dtype in module.OUTPUT_SCHEMA.items()],
+        title=f"Output schema ({len(module.OUTPUT_SCHEMA)} columns)",
     )
+    optional_output_schema = getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None)
+    if optional_output_schema:
+        render_records_table(
+            [{"Column": col, "Type": str(dtype)} for col, dtype in optional_output_schema.items()],
+            title=f"Optional output schema ({len(optional_output_schema)} columns)",
+        )

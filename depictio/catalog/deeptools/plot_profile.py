@@ -55,7 +55,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "group": pl.Utf8,
     "bin": pl.Int64,
@@ -133,6 +133,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("bin_label").cast(pl.Utf8),
             pl.col("signal").cast(pl.Float64, strict=False),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "group", "bin"])
     )

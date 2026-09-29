@@ -71,7 +71,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="results", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,
     "base_mean": pl.Float64,
@@ -85,7 +85,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "direction": pl.Utf8,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "stat": pl.Float64,
 }
 
@@ -252,5 +252,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = normalise_results(sources["results"])
     df = add_derived_columns(df)
 
-    ordered = list(EXPECTED_SCHEMA) + [c for c in OPTIONAL_SCHEMA if c in df.columns]
+    ordered = list(OUTPUT_SCHEMA) + [c for c in OPTIONAL_OUTPUT_SCHEMA if c in df.columns]
     return df.select(ordered).sort(["contrast", "padj", "pvalue"], nulls_last=True)

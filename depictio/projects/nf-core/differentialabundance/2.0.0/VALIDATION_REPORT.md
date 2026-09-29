@@ -94,7 +94,7 @@ dedicated catalog render. No `multiqc/<module>.yaml` was created and no
 |---|---|
 | `depictio dev recipe run` on the three vst recipes + `samples.py` | 4 checkpoints pass each |
 | `results_long.py` / `results_annotated.py` | not runnable standalone (`dc_ref`); validated through a scan-path simulation and the real ingest |
-| catalog checks on the `deseq2` entry | 5 outputs, 25 renders, every role bound to an `EXPECTED_SCHEMA` column present in the fixture; `nf_core_url` module in `_index/nf_core_modules.txt` |
+| catalog checks on the `deseq2` entry | 5 outputs, 25 renders, every role bound to an `OUTPUT_SCHEMA` column present in the fixture; `nf_core_url` module in `_index/nf_core_modules.txt` |
 | `test_shipped_dashboard_yamls.py` assertions on `base.yaml` | 6/6 pass (tabs, `use:` expansion, card strips, section lists, icons and colours, text tile heights) |
 | CLI dry run | 8/8 steps |
 | CLI real ingest (project `Differential Abundance Analysis`) | 8/8 steps, 8/8 collections populated, 0 skipped, 0 failed |

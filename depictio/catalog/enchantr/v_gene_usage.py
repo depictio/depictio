@@ -39,7 +39,7 @@ SOURCES: list[RecipeSource] = [
 FAMILY_RANK = "V family"
 GENE_RANK = "V gene"
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "locus": pl.Utf8,
@@ -50,7 +50,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "locus_count": pl.Int64,
     "seq_freq": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def _subject(df: pl.DataFrame) -> pl.Expr:
