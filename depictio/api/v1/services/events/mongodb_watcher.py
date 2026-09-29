@@ -10,7 +10,9 @@ from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorDatabase
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.errors import OperationFailure
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
@@ -42,8 +44,8 @@ class MongoDBChangeWatcher:
                                Signature: async def callback(event: EventMessage, dashboard_ids: list[str])
         """
         self._on_change = on_change_callback
-        self._client: AsyncIOMotorClient | None = None
-        self._db: AsyncIOMotorDatabase | None = None
+        self._client: AsyncMongoClient | None = None
+        self._db: AsyncDatabase | None = None
         self._watch_task: asyncio.Task | None = None
         self._running = False
 
@@ -54,7 +56,7 @@ class MongoDBChangeWatcher:
             return
 
         try:
-            self._client = AsyncIOMotorClient(MONGODB_URL)
+            self._client = AsyncMongoClient(MONGODB_URL)
             self._db = self._client[settings.mongodb.db_name]
 
             # Verify connection
@@ -92,7 +94,7 @@ class MongoDBChangeWatcher:
             self._watch_task = None
 
         if self._client:
-            self._client.close()
+            await self._client.close()
             self._client = None
             self._db = None
 
@@ -103,7 +105,7 @@ class MongoDBChangeWatcher:
         if not self._db:
             return
 
-        collection: AsyncIOMotorCollection = self._db[settings.mongodb.collections.data_collection]
+        collection: AsyncCollection = self._db[settings.mongodb.collections.data_collection]
 
         # Pipeline to filter for relevant operations
         pipeline = [
@@ -117,7 +119,8 @@ class MongoDBChangeWatcher:
         try:
             logger.info("Starting MongoDB change stream on data_collections")
 
-            async with collection.watch(pipeline, full_document="updateLookup") as stream:
+            # pymongo's async watch() is a coroutine (unlike motor's), hence the await.
+            async with await collection.watch(pipeline, full_document="updateLookup") as stream:
                 async for change in stream:
                     if not self._running:
                         break
@@ -245,7 +248,7 @@ class MongoDBChangeWatcher:
                 {"$group": {"_id": "$_id"}},
             ]
 
-            cursor = dashboards_collection.aggregate(pipeline)
+            cursor = await dashboards_collection.aggregate(pipeline)
             dashboard_ids = [str(doc["_id"]) async for doc in cursor]
 
             return dashboard_ids
