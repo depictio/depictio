@@ -628,11 +628,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       const id = ids ? String(ids[i] ?? '') : String(i);
       const cat = cats ? String(cats[i] ?? '') : null;
-      const color = continuous
-        ? (rampColor(continuous, cats?.[i]) ?? base)
-        : cat != null && colorScale
-          ? (hexToRgb(colorScale.get(cat)) ?? base)
-          : base;
+      let color = base;
+      if (continuous) color = rampColor(continuous, cats?.[i]) ?? base;
+      else if (cat != null && colorScale) color = hexToRgb(colorScale.get(cat)) ?? base;
       out.push({ id, x, y, color, faded: keptIds ? !keptIds.has(id) : false });
     }
     return out;
@@ -673,9 +671,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     setLabelsError(null);
     setLabelsSize(null);
     const store =
-      labelsWanted && labelsDcId && pairedLabelsName
-        ? createBioimageZarrStore(labelsDcId, pairedLabelsName)
-        : null;
+      labelsDcId && pairedLabelsName ? createBioimageZarrStore(labelsDcId, pairedLabelsName) : null;
     viewer
       .setLabels(store)
       .then((opened) => {
@@ -689,7 +685,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       cancelled = true;
     };
     // `info` is a new object on every load, including a refresh of the same image.
-  }, [viewer, info, labelsWanted, labelsDcId, pairedLabelsName, refreshTick]);
+  }, [viewer, info, labelsDcId, pairedLabelsName, refreshTick]);
 
   const labelsShown = labelsVisible && labelsWanted && labelsSize !== null && !labelsError;
   // Masks share the image's pixel grid; another size would draw misaligned.
@@ -733,7 +729,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   }, [viewer, ownSelectionKey]);
 
   const legend = useMemo(() => {
-    if (continuous) return null;
+    // `colorScale` is null for a continuous colouring (its ramp has its own legend).
     if (!colorScale || !colorCol || overlay.length === 0 || !pointRows) return null;
     const present = new Set<string>();
     const cats = pointRows[colorCol] ?? [];
@@ -744,7 +740,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     }
     const entries = colorScale.universe.filter((v) => present.has(v));
     return { entries: entries.slice(0, LEGEND_MAX), more: Math.max(0, entries.length - LEGEND_MAX) };
-  }, [colorScale, colorCol, overlay.length, pointRows, sampleCol, activeStore, continuous]);
+  }, [colorScale, colorCol, overlay.length, pointRows, sampleCol, activeStore]);
 
   // ---- ROI selection ------------------------------------------------------
   const roiEnabled = Boolean(selectionColumn && pointsDcId && overlay.length > 0);

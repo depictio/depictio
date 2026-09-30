@@ -419,14 +419,15 @@ export async function createBioimageViewer(
     const layers: unknown[] = [];
     if (data && info) {
       const shown = renderedChannels(channels);
-      const labels = info.labels;
+      // The image's axis labels (not the labels overlay).
+      const axes = info.labels;
       // `colors` belongs to viv's default ColorPaletteExtension, which the
       // layer's own prop type does not list, hence the loose object.
       const imageProps: Record<string, unknown> = {
         // Keyed by load, so a new store starts from an empty tile cache.
         id: `bioimage-image-${loadToken}`,
         loader: data,
-        selections: shown.map((c) => selectionFor(labels, { c: c.index, z: plane.z, t: plane.t })),
+        selections: shown.map((c) => selectionFor(axes, { c: c.index, z: plane.z, t: plane.t })),
         colors: shown.map((c) => hexToRgb(c.color) ?? [255, 255, 255]),
         contrastLimits: shown.map((c) => c.contrastLimits),
         channelsVisible: shown.map((c) => c.visible),
@@ -437,7 +438,7 @@ export async function createBioimageViewer(
         },
       };
       const [base] = data;
-      const px = (axis: string) => base.shape[labels.indexOf(axis)] ?? 0;
+      const px = (axis: string) => base.shape[axes.indexOf(axis)] ?? 0;
       if (data.length === 1 && px('x') * px('y') <= WHOLE_IMAGE_MAX_PIXELS) {
         layers.push(new ImageLayer({ ...imageProps, loader: base } as never));
       } else {
