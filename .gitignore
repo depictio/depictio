@@ -209,6 +209,16 @@ dump.rdb
 !depictio/projects/nf-core/eager/*/input/*.tsv
 !depictio/projects/nf-core/methylseq/*/input/*.csv
 !depictio/projects/nf-core/hic/*/input/*.csv
+# Imaging lot (mcmicro, cellpainting, molkart, sopa, spatialvi).
+!depictio/projects/nf-core/mcmicro/*/input/*.csv
+!depictio/projects/nf-core/mcmicro/*/input/*.tsv
+!depictio/projects/nf-core/cellpainting/*/input/*.csv
+!depictio/projects/nf-core/molkart/*/input/*.csv
+!depictio/projects/nf-core/molkart/*/input/*.tsv
+!depictio/projects/nf-core/sopa/*/input/*.csv
+!depictio/projects/nf-core/sopa/*/input/*.tsv
+!depictio/projects/nf-core/spatialvi/*/input/*.csv
+!depictio/projects/nf-core/spatialvi/*/multiqc/multiqc_data/multiqc.parquet
 # chipseq is pre-DSL2 and publishes its software versions as CSV, not YAML.
 !depictio/projects/nf-core/chipseq/*/pipeline_info/*.csv
 # atacseq 1.2.2 is pre-DSL2 too and publishes the same CSV shape.
