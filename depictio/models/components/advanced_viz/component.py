@@ -143,7 +143,18 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
         # preview and the builder), with any user-supplied config taking
         # precedence. Spelling a list-typed role as `<role>_col` here handed the
         # renderer a key its config model does not have.
-        from depictio.models.components.advanced_viz.catalog import role_config_key
+        from depictio.models.components.advanced_viz.catalog import (
+            BIOIMAGE_VIEWER_KIND,
+            bioimage_viewer_use_config,
+            role_config_key,
+        )
+
+        if render.kind == BIOIMAGE_VIEWER_KIND:
+            # Its roles name partner outputs, not config fields: the column
+            # roles become the points bindings, and the data collections come
+            # from the tile (a missing one is an error listing all of them).
+            merged = bioimage_viewer_use_config(render, ref, data)
+            return {**data, "viz_kind": render.kind, "config": merged}
 
         inherited = {
             role_config_key(render.kind, role): col for role, col in (render.roles or {}).items()

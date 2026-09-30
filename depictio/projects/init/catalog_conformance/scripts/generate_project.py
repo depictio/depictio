@@ -25,6 +25,11 @@ Two lanes, chosen by the same rule the catalog already draws for itself
   it recursively. Compose recognises it by `find.filename` / `find.path_glob`,
   and the scan puts a real document in `files_collection`, which is the only
   code path in compose that neither other lane reaches.
+
+Bioimage outputs (`dc_type: bioimage`: an image or mask store) get no
+collection. Compose matches table and MultiQC collections only, so a store
+staged here would never be offered; they are recorded under the `bioimage`
+lane and listed in `coverage_exemptions`, which the coverage spec reads.
 """
 
 from __future__ import annotations
@@ -98,7 +103,13 @@ def recipe_groups(entries: tuple[CatalogEntry, ...]) -> dict[str, list[CatalogOu
 
 
 def raw_outputs(entries: tuple[CatalogEntry, ...]) -> list[tuple[CatalogEntry, CatalogOutput]]:
-    return [(e, o) for e in entries for o in e.outputs if not o.recipe]
+    """Recipe-free *table* outputs: the frames staged inside the run directory."""
+    return [(e, o) for e in entries for o in e.outputs if not o.recipe and o.dc_type != "bioimage"]
+
+
+def bioimage_outputs(entries: tuple[CatalogEntry, ...]) -> list[CatalogOutput]:
+    """Image and mask stores: never staged, exempt from the coverage walk."""
+    return [o for e in entries for o in e.outputs if o.dc_type == "bioimage"]
 
 
 def fixture_columns(output: CatalogOutput) -> set[str]:
@@ -477,6 +488,11 @@ def generate() -> None:
         collections.append(raw_table_collection(entry, output, relative))
         lanes[output.id] = "raw"
 
+    # --- bioimage outputs: no collection (see the module docstring) -----
+    bioimage_ids = sorted(o.id for o in bioimage_outputs(entries))
+    for output_id in bioimage_ids:
+        lanes[output_id] = "bioimage"
+
     exemptions: list[str] = []
     if multiqc_sections:
         sections = sorted(set(multiqc_sections))
@@ -497,6 +513,7 @@ def generate() -> None:
             if getattr(r, "section", None)
         }
         exemptions = sorted(by_section[s] for s in missing if s in by_section)
+    exemptions = sorted([*exemptions, *bioimage_ids])
 
     verify_raw_lane(entries, run_root, staged)
 

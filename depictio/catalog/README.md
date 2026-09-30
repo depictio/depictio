@@ -98,6 +98,88 @@ each gets a distinct handle (`rarefaction_alpha` vs `rarefaction`).
 Don't know a recipe's output column names while writing `roles`?
 `depictio dev catalog columns <recipe>` prints them.
 
+## Image outputs (`dc_type: bioimage`)
+
+An imaging tool writes images and segmentation masks as well as tables. Such an
+output declares `dc_type: bioimage` and a `bioimage` block (the bioimage data
+collection it becomes) instead of `columns` or a `recipe`:
+
+| `bioimage` field | Notes |
+|---|---|
+| `format` | `ome-tiff` (one pyramidal `*.ome.tif`), `ome-zarr` or `spatialdata` (a `*.zarr` directory), `tiff` (a plain mask, `kind: labels` only) |
+| `kind` | `image` (default) or `labels` (one integer per cell, 0 = background) |
+| `image_path` | `spatialdata` only: the image element, e.g. `images/<name>` |
+| `sample_pattern` | regex with one capture group applied to the store name, when the name carries more than the sample id |
+
+`find` matches a file (`*.ome.tif`, `*.tif`) or a `*.zarr` directory, and must
+spell the format's suffix. A fixture is optional; when set it is a tiny store of
+that format and `validate` checks its shape, not columns. A bioimage output
+renders only as `advanced_viz` kind `bioimage_viewer`.
+
+The viewer render usually sits on the per-cell table, whose columns it binds.
+Its roles name partner outputs (`image`, `labels`, `points`: an output id of
+the same tool, or `<tool>/<output>` for another tool) and the columns of the
+points table (`cell_id`, `x`, `y`, `color`, `sample`). `image` defaults to the
+render's own output when that is an image, `points` to its own output when that
+is a table. Worked example, a registration image, a mask and a quantification:
+
+```yaml
+# ashlar/registered.yaml
+id: ashlar_registered
+name: Registered image
+find: { path_glob: "**/registration/*.ome.tif" }
+dc_type: bioimage
+bioimage: { format: ome-tiff }
+```
+```yaml
+# deepcell/mask.yaml
+id: deepcell_mask
+name: Cell mask
+find: { filename: "*_mask.tif" }
+dc_type: bioimage
+bioimage: { format: tiff, kind: labels, sample_pattern: "^(.+?)_mask\\.tif$" }
+```
+```yaml
+# mcquant/cells.yaml
+id: mcquant_cells
+name: Cell quantification
+find: { filename: "*_cellMask.csv" }
+columns: { CellID: Int64, X_centroid: Float64, Y_centroid: Float64, Area: Float64, sample: String }
+renders_as:
+  - id: cell_viewer
+    component: advanced_viz
+    kind: bioimage_viewer
+    roles:
+      image: ashlar/registered     # <tool>/<output>, short or full output id
+      labels: deepcell/mask
+      cell_id: CellID              # equals the label value in the mask
+      x: X_centroid
+      y: Y_centroid
+      color: Area
+      sample: sample
+```
+
+The data collections are per project, so the dashboard tile names them;
+`use:` fills the column bindings, and a tile missing a required tag fails with
+the list of what is missing (`labels_dc_tag: null` opts out of the overlay):
+
+```yaml
+- component_type: advanced_viz
+  data_collection_tag: mc-img-registered
+  use: mcquant/cell_viewer
+  config:
+    image_dc_tag: mc-img-registered
+    labels_dc_tag: mc-img-mask
+    points_dc_tag: mc-cells
+    sample_dc_tag: samples       # optional: a sample filter picks the image
+    sample_column: sample
+```
+
+`depictio dev catalog compose <run> --dcs` proposes the data collections for a
+run, a `type: bioimage` one per image or mask output. The previews (gallery,
+Tool Studio) show an "image preview in Depictio only" card for the viewer: its
+pixels are served by the Depictio API.
+
 ## Catalog vs `projects/` — where a reshape lives
 
 A reshape is **tool-domain logic** the moment it depends only on a tool's

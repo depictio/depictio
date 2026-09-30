@@ -24,6 +24,7 @@ is done by `depictio catalog validate` (a trusted CLI/CI context), not here.
 
 from __future__ import annotations
 
+import re
 from fnmatch import fnmatch
 from functools import lru_cache
 from pathlib import Path
@@ -136,6 +137,31 @@ _NON_COLUMN_ROLES: dict[str, frozenset[str]] = {
 }
 
 
+# ``bioimage_viewer`` binds no column of its own output: its pixels are a
+# bioimage DC, so its roles name *partner outputs* and the columns of the one
+# that carries the cells. Reference roles take an output ref: a bare output id
+# of the same tool, or ``<tool>/<output>`` for another tool's output (the short
+# form without the ``<tool>_`` prefix is accepted, as ``use:`` does).
+BIOIMAGE_VIEWER_KIND = "bioimage_viewer"
+BIOIMAGE_REF_ROLES: dict[str, str] = {
+    "image": "image_dc_tag",  # a bioimage output, kind image
+    "labels": "labels_dc_tag",  # a bioimage output, kind labels (optional)
+    "points": "points_dc_tag",  # a table output with one row per cell (optional)
+}
+# Column roles of the points output → the viewer config field they fill.
+BIOIMAGE_COLUMN_ROLES: dict[str, str] = {
+    "cell_id": "cell_id_col",
+    "x": "x_col",
+    "y": "y_col",
+    "color": "color_col",
+    "sample": "points_sample_col",
+}
+# Column roles that must hold numbers (coordinates).
+_BIOIMAGE_NUMERIC_ROLES = frozenset({"x", "y"})
+# An output ref: `<output-id>` (same tool) or `<tool>/<output-id>`.
+_OUTPUT_REF_RE = re.compile(r"^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$")
+
+
 def role_config_key(kind: str | None, role: str) -> str:
     """The per-kind config field a role binds to.
 
@@ -153,6 +179,8 @@ def role_config_key(kind: str | None, role: str) -> str:
     if kind == "complex_heatmap" and role == "index":
         # ComplexHeatmapConfig's row-id field is `index_column`, not `index_col`.
         return "index_column"
+    if kind == BIOIMAGE_VIEWER_KIND and role in BIOIMAGE_COLUMN_ROLES:
+        return BIOIMAGE_COLUMN_ROLES[role]
     if role in ("value_columns", "row_annotation_cols", "compute_method"):
         return role
     return f"{role}_col"
@@ -163,6 +191,8 @@ def _allowed_roles(kind: AdvancedVizKind) -> set[str]:
     builder's binding panel offers), plus its list-typed and setting roles."""
     from depictio.models.components.advanced_viz.schemas import role_dtype_specs
 
+    if kind == BIOIMAGE_VIEWER_KIND:
+        return set(BIOIMAGE_REF_ROLES) | set(BIOIMAGE_COLUMN_ROLES)
     return (
         set(role_dtype_specs(kind))
         | set(_LIST_ROLES.get(kind, frozenset()))
@@ -274,7 +304,9 @@ class Render(BaseModel):
         cols: set[str] = set()
         settings = _NON_COLUMN_ROLES.get(self.kind or "", frozenset())
         for role, value in self.roles.items():
-            if role in settings:
+            if role in settings or self.kind == BIOIMAGE_VIEWER_KIND:
+                # bioimage_viewer binds partner outputs and the POINTS output's
+                # columns, never its own: see `bioimage_column_roles`.
                 continue  # a setting (e.g. embedding's reduction), not a column
             if isinstance(value, list):
                 cols |= {c for c in value if c}
@@ -294,6 +326,22 @@ class Render(BaseModel):
         if self.row_selection_column:
             cols.add(self.row_selection_column)
         return cols  # NB: `code`-mode figures are free-form → not grounded
+
+    @property
+    def is_bioimage_viewer(self) -> bool:
+        return self.component == "advanced_viz" and self.kind == BIOIMAGE_VIEWER_KIND
+
+    def bioimage_column_roles(self) -> dict[str, str]:
+        """bioimage_viewer: column role → column of the points output."""
+        if not self.is_bioimage_viewer:
+            return {}
+        return {r: str(v) for r, v in self.roles.items() if r in BIOIMAGE_COLUMN_ROLES and v}
+
+    def bioimage_refs(self) -> dict[str, str]:
+        """bioimage_viewer: reference role → the partner output ref it names."""
+        if not self.is_bioimage_viewer:
+            return {}
+        return {r: str(v) for r, v in self.roles.items() if r in BIOIMAGE_REF_ROLES and v}
 
     @model_validator(mode="after")
     def _check_component(self) -> Render:
@@ -333,6 +381,28 @@ class Render(BaseModel):
                 if not isinstance(steps, list) or len(steps) < 2:
                     raise ValueError(
                         "renders_as sankey requires 'roles.steps' with at least 2 columns"
+                    )
+            if self.kind == BIOIMAGE_VIEWER_KIND:
+                for role, ref in self.bioimage_refs().items():
+                    if not _OUTPUT_REF_RE.match(ref):
+                        raise ValueError(
+                            f"renders_as bioimage_viewer: role {role!r} must name an output, "
+                            f"'<output-id>' or '<tool>/<output-id>', got {ref!r}"
+                        )
+                if (
+                    "labels" in self.roles
+                    and self.bioimage_column_roles()
+                    and "cell_id" not in self.roles
+                ):
+                    raise ValueError(
+                        "renders_as bioimage_viewer: labels with point columns need "
+                        "'roles.cell_id', the column equal to the label value"
+                    )
+                if any(r in self.roles for r in ("x", "y")) and not (
+                    "x" in self.roles and "y" in self.roles
+                ):
+                    raise ValueError(
+                        "renders_as bioimage_viewer: bind both 'x' and 'y', or neither"
                     )
         else:
             if self.kind is not None:
@@ -425,6 +495,44 @@ class CatalogBioimage(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="after")
+    def _check_as_dc(self) -> CatalogBioimage:
+        # The block becomes a bioimage DC's `dc_specific_properties` as is, so
+        # it is held to that model's rules (spatialdata needs image_path, …)
+        # rather than a re-spelling of them that could drift.
+        from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
+
+        DCBioimageConfig.model_validate(self.dc_properties())
+        if self.format == "tiff" and self.kind != "labels":
+            raise ValueError("bioimage format 'tiff' is for masks: set kind 'labels'")
+        if self.sample_pattern is not None:
+            try:
+                groups = re.compile(self.sample_pattern).groups
+            except re.error as exc:
+                raise ValueError(f"sample_pattern is not a valid regex: {exc}") from exc
+            if groups != 1:
+                raise ValueError(
+                    f"sample_pattern must have exactly one capture group (the sample name), "
+                    f"got {groups}"
+                )
+        return self
+
+    def dc_properties(self) -> dict[str, str]:
+        """The bioimage DC's `dc_specific_properties` this block stands for."""
+        return self.model_dump(exclude_none=True, exclude_defaults=False)
+
+    def store_suffixes(self) -> tuple[str, ...]:
+        """Name suffixes a store (file or directory) of this format carries."""
+        if self.format in ("ome-tiff", "tiff"):
+            # An OME-TIFF may be named plain `*.tif(f)`: ingest checks its OME header.
+            return (".tif", ".tiff")
+        return (".zarr",)
+
+    @property
+    def is_directory_store(self) -> bool:
+        """OME-Zarr and SpatialData stores are `*.zarr` directories, TIFFs are files."""
+        return self.format in ("ome-zarr", "spatialdata")
+
 
 class CatalogOutput(BaseModel):
     """One file a tool emits → one or more dashboard renders."""
@@ -493,6 +601,46 @@ class CatalogOutput(BaseModel):
         if self.fixture and self._source_dir is not None:
             return self._source_dir / self.fixture
         return None
+
+    @model_validator(mode="after")
+    def _bioimage_shape(self) -> CatalogOutput:
+        """A bioimage output is an image store, not a frame: it declares its
+        store (`bioimage`) instead of columns, and renders only in the viewer."""
+        if self.dc_type != "bioimage":
+            if self.bioimage is not None:
+                raise ValueError(f"output {self.id!r}: a 'bioimage' block needs dc_type: bioimage")
+            return self
+        if self.bioimage is None:
+            raise ValueError(
+                f"output {self.id!r}: dc_type bioimage needs a 'bioimage' block "
+                "(format, and kind / image_path / sample_pattern where they apply)"
+            )
+        if self.recipe or self.columns:
+            raise ValueError(
+                f"output {self.id!r}: a bioimage output has no 'recipe' or 'columns' "
+                "(its pixels are served as a store, not read as a table)"
+            )
+        for r in self.renders_as:
+            if not r.is_bioimage_viewer:
+                raise ValueError(
+                    f"output {self.id!r}: a bioimage output renders only as "
+                    f"advanced_viz kind bioimage_viewer, not {r.kind or r.component}"
+                )
+        suffixes = self.bioimage.store_suffixes()
+        globs = [g for g in (self.find.filename, *self.find.path_globs()) if g]
+        stem = suffixes[0]  # the shortest spelling: `.tif` is inside `.tiff`
+        for glob in globs:
+            if stem not in glob.rsplit("/", 1)[-1]:
+                raise ValueError(
+                    f"output {self.id!r}: find {glob!r} cannot match a "
+                    f"{self.bioimage.format} store (named *{' or *'.join(suffixes)})"
+                )
+        if self.fixture and not self.fixture.endswith(suffixes):
+            raise ValueError(
+                f"output {self.id!r}: fixture {self.fixture!r} must be a "
+                f"{self.bioimage.format} store named *{' or *'.join(suffixes)}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _columns_ownership(self) -> CatalogOutput:
@@ -601,6 +749,111 @@ class CatalogEntry(CatalogTool):
                 f"render id(s) {sorted(clash)} in tool {self.id!r} collide with an output id"
             )
         return self
+
+    @model_validator(mode="after")
+    def _bioimage_viewer_partners(self) -> CatalogEntry:
+        # Partners inside this tool are checked here; a `<tool>/<output>` ref to
+        # another tool needs the whole catalog, so `check_bioimage_renders`
+        # (run by `catalog validate`) finishes the job.
+        problems = [
+            p
+            for output in self.outputs
+            for render in output.renders_as
+            if render.is_bioimage_viewer
+            for p in bioimage_viewer_partners(self, output, render, {self.id: self})[1]
+        ]
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+
+def _resolve_output_ref(
+    ref: str, tool_id: str, entries_by_id: dict[str, CatalogEntry]
+) -> tuple[CatalogOutput | None, bool]:
+    """``(output, tool_known)`` for an output ref of a render in ``tool_id``."""
+    other, short = ref.split("/", 1) if "/" in ref else (tool_id, ref)
+    entry = entries_by_id.get(other)
+    if entry is None:
+        return None, False
+    return next((o for o in entry.outputs if o.id in (short, f"{other}_{short}")), None), True
+
+
+def bioimage_viewer_partners(
+    entry: CatalogEntry,
+    output: CatalogOutput,
+    render: Render,
+    entries_by_id: dict[str, CatalogEntry],
+    report_unknown_tools: bool = False,
+) -> tuple[dict[str, CatalogOutput], list[str]]:
+    """Resolve a bioimage_viewer render's image / labels / points outputs.
+
+    ``image`` defaults to the render's own output when that is an image store,
+    ``points`` to its own output when that is a table and the render binds point
+    columns. A ref to a tool absent from ``entries_by_id`` is left unresolved
+    without a problem (the tool-level validator sees one tool only) unless
+    ``report_unknown_tools`` is set, as it is with the whole catalog in hand.
+    Returns ``(partners, problems)``.
+    """
+    where = f"output {output.id!r} render bioimage_viewer"
+    refs = render.bioimage_refs()
+    columns = render.bioimage_column_roles()
+    partners: dict[str, CatalogOutput] = {}
+    problems: list[str] = []
+
+    for role in BIOIMAGE_REF_ROLES:
+        ref = refs.get(role)
+        if ref is None:
+            continue
+        target, tool_known = _resolve_output_ref(ref, entry.id, entries_by_id)
+        if not tool_known:
+            if report_unknown_tools:
+                problems.append(f"{where}: role {role!r} names {ref!r}, an unknown catalog tool")
+        elif target is None:
+            problems.append(f"{where}: role {role!r} names {ref!r}, which is not an output")
+        else:
+            partners[role] = target
+
+    own_kind = output.bioimage.kind if output.bioimage else None
+    if "image" not in refs and output.dc_type == "bioimage" and own_kind == "image":
+        partners["image"] = output
+    if "points" not in refs and columns and output.dc_type == "table":
+        partners["points"] = output
+
+    if "image" not in partners and "image" not in refs:
+        problems.append(
+            f"{where}: needs 'roles.image' (a bioimage output of kind image) unless the "
+            "render sits on that image output"
+        )
+    if columns and "points" not in partners and "points" not in refs:
+        problems.append(
+            f"{where}: binds point columns {sorted(columns)} but names no points table "
+            "(set 'roles.points', or put the render on the table output)"
+        )
+
+    expected = {"image": ("bioimage", "image"), "labels": ("bioimage", "labels")}
+    for role, (dc_type, kind) in expected.items():
+        target = partners.get(role)
+        if target is not None and (
+            target.dc_type != dc_type or (target.bioimage and target.bioimage.kind) != kind
+        ):
+            problems.append(
+                f"{where}: role {role!r} must name a bioimage output of kind {kind}, "
+                f"{target.id!r} is not"
+            )
+    points = partners.get("points")
+    if points is not None:
+        if points.dc_type != "table":
+            problems.append(
+                f"{where}: role 'points' must name a table output, {points.id!r} is not"
+            )
+        elif points.columns and not points.fixture:
+            missing = sorted(set(columns.values()) - set(points.columns))
+            if missing:
+                problems.append(
+                    f"{where}: point column(s) {missing} are not declared by {points.id!r} "
+                    f"(declared: {sorted(points.columns)})"
+                )
+    return partners, problems
 
 
 # ---------------------------------------------------------------------------
@@ -838,6 +1091,142 @@ def ground_render_dtypes(out_id: str, render: Render, col_dtypes: dict[str, str]
     return problems
 
 
+def output_schema(output: CatalogOutput) -> tuple[dict[str, str], str]:
+    """``({column: dtype}, source)`` of a table output's bindable frame.
+
+    The same precedence `catalog validate` grounds renders with: the fixture
+    (plus author-declared dtypes), else the recipe's ``EXPECTED_SCHEMA`` (names
+    only, dtype ``""``), else the declared ``columns``. ``({}, "")`` when there
+    is nothing to ground against. Raises when the fixture or recipe cannot be read.
+    """
+    fx = output.fixture_file()
+    if fx:
+        schema = read_fixture_schema(fx)
+        schema.update(output.columns)
+        return schema, f"fixture {output.fixture}"
+    if output.recipe:
+        return {c: "" for c in recipe_output_columns(output.recipe)}, f"recipe {output.recipe}"
+    if output.columns:
+        return dict(output.columns), "declared columns"
+    return {}, ""
+
+
+def check_bioimage_fixture(output: CatalogOutput) -> list[str]:
+    """A bioimage output's fixture is optional; when set it must be a store of its format."""
+    if output.bioimage is None or not output.fixture:
+        return []
+    path = output.fixture_file()
+    if path is None or not path.exists():
+        return [f"{output.id}: fixture {output.fixture} does not exist"]
+    if output.bioimage.is_directory_store != path.is_dir():
+        shape = "a directory" if output.bioimage.is_directory_store else "a file"
+        return [
+            f"{output.id}: fixture {output.fixture} must be {shape} for {output.bioimage.format}"
+        ]
+    return []
+
+
+def check_bioimage_renders(
+    entries: tuple[CatalogEntry, ...] | list[CatalogEntry],
+    catalog: tuple[CatalogEntry, ...] | list[CatalogEntry] | None = None,
+) -> list[str]:
+    """Resolve every bioimage_viewer render against the whole catalog.
+
+    Beyond the tool-level validator: ``<tool>/<output>`` refs to other tools, and
+    the point column roles grounded against the points output's real schema
+    (fixture or recipe), with numeric coordinates. ``catalog`` defaults to the
+    bundled catalog, loaded only when a render names a tool ``entries`` lacks;
+    ``entries`` wins where both define a tool.
+    """
+    own = {e.id for e in entries}
+    if catalog is None:
+        foreign = {
+            ref.split("/", 1)[0]
+            for e in entries
+            for o in e.outputs
+            for r in o.renders_as
+            for ref in r.bioimage_refs().values()
+            if "/" in ref
+        }
+        catalog = load_catalog_entries() if foreign - own else ()
+    by_id = {e.id: e for e in catalog}
+    by_id.update({e.id: e for e in entries})
+    problems: list[str] = []
+    for entry in entries:
+        for output in entry.outputs:
+            for render in output.renders_as:
+                if not render.is_bioimage_viewer:
+                    continue
+                partners, found = bioimage_viewer_partners(
+                    entry, output, render, by_id, report_unknown_tools=True
+                )
+                problems.extend(found)
+                points = partners.get("points")
+                columns = render.bioimage_column_roles()
+                if points is None or points.dc_type != "table" or not columns:
+                    continue
+                try:
+                    schema, source = output_schema(points)
+                except Exception as exc:  # noqa: BLE001 — reported, never raised
+                    problems.append(f"{output.id} render bioimage_viewer: {points.id} → {exc}")
+                    continue
+                if not schema:
+                    continue
+                for role, col in columns.items():
+                    if col not in schema:
+                        problems.append(
+                            f"{output.id} render bioimage_viewer: role {role!r} → column "
+                            f"{col!r} absent from {points.id}'s {source} {sorted(schema)}"
+                        )
+                    elif (
+                        role in _BIOIMAGE_NUMERIC_ROLES
+                        and schema[col]
+                        and schema[col] not in _NUMERIC_DTYPES
+                    ):
+                        problems.append(
+                            f"{output.id} render bioimage_viewer: role {role!r} → column "
+                            f"{col!r} is {schema[col]}, a coordinate must be numeric"
+                        )
+    return problems
+
+
+def bioimage_viewer_use_config(render: Render, ref: str, tile: dict) -> dict:
+    """The ``config`` a ``use:`` tile on a bioimage_viewer render expands to.
+
+    The render carries the point column bindings; the data collections are
+    per-project, so the tile names them (``image_dc_tag``, plus
+    ``labels_dc_tag`` / ``points_dc_tag`` when the render binds labels or
+    points, and optionally ``sample_dc_tag`` + ``sample_column``). A tile that
+    leaves a required one out gets every missing key listed at once. An
+    explicit ``labels_dc_tag: null`` opts out of a labels overlay the render
+    declares, for a run without masks.
+    """
+    user_cfg = dict(tile.get("config") or {})
+    inherited = {
+        BIOIMAGE_COLUMN_ROLES[role]: col for role, col in render.bioimage_column_roles().items()
+    }
+    refs = render.bioimage_refs()
+    needed = {"image": refs.get("image", "the image output")}
+    if "labels" in refs:
+        needed["labels"] = refs["labels"]
+    if "points" in refs or inherited:
+        needed["points"] = refs.get("points", "the output carrying the cells")
+    missing = []
+    for role, what in needed.items():
+        tag_key = BIOIMAGE_REF_ROLES[role]
+        id_key = tag_key.replace("_tag", "_id")
+        if role == "labels" and tag_key in user_cfg and user_cfg[tag_key] is None:
+            continue  # explicit opt-out
+        if not (user_cfg.get(tag_key) or user_cfg.get(id_key)):
+            missing.append(f"config.{tag_key} (the data collection of {what})")
+    if missing:
+        raise ValueError(
+            f"`use: {ref}` (bioimage_viewer) needs the tile to name its data collections; "
+            f"missing: {', '.join(missing)}"
+        )
+    return {**inherited, **user_cfg, "viz_kind": BIOIMAGE_VIEWER_KIND}
+
+
 # ---------------------------------------------------------------------------
 # Recognition: match a scanned run directory against the catalog
 # ---------------------------------------------------------------------------
@@ -856,6 +1245,8 @@ class CatalogMatch(BaseModel):
     path: str
     mode: str | None = None
     renders: list[str] = Field(default_factory=list)
+    # What the file becomes: a table, or a bioimage store (an image or a mask).
+    dc_type: Literal["table", "bioimage"] = "table"
 
 
 def read_software_versions(run_dir: str | Path) -> set[str]:
@@ -902,13 +1293,20 @@ def match_run_dir(
             continue  # tool not in the run's software_versions.yml
         for output in entry.outputs:
             f = output.find
+            # An OME-Zarr / SpatialData store is a `*.zarr` directory; every
+            # other output is a file.
+            is_store_dir = bool(output.bioimage and output.bioimage.is_directory_store)
+
+            def _is_candidate(p: Path, is_store_dir: bool = is_store_dir) -> bool:
+                return p.is_dir() if is_store_dir else p.is_file()
+
             if f.path_glob:
                 # Every glob is tried; a file two of them reach (an alt overlapping
                 # the canonical glob) is reported once, in glob order.
-                hits = (p for g in f.path_globs() for p in run_dir.glob(g) if p.is_file())
+                hits = (p for g in f.path_globs() for p in run_dir.glob(g) if _is_candidate(p))
                 candidates = list(dict.fromkeys(hits))
             elif f.filename:
-                candidates = [p for p in run_dir.rglob(f.filename) if p.is_file()]
+                candidates = [p for p in run_dir.rglob(f.filename) if _is_candidate(p)]
             else:
                 candidates = []
             renders: list[str] = [
@@ -924,6 +1322,7 @@ def match_run_dir(
                         path=path.relative_to(run_dir).as_posix(),
                         mode=output.mode,
                         renders=renders,
+                        dc_type=output.dc_type,
                     )
                 )
     return matches
@@ -945,6 +1344,83 @@ def compose_run_dir(
     for match in match_run_dir(run_dir, entries, confirm_with_versions=confirm_with_versions):
         by_tool.setdefault(match.tool_id, []).append(match)
     return by_tool
+
+
+def _glob_to_regex(glob: str) -> str:
+    """A scan regex for a basename glob (the scanner matches store / file names)."""
+    out = []
+    for ch in glob:
+        if ch == "*":
+            out.append(".*")
+        elif ch == "?":
+            out.append(".")
+        else:
+            out.append(re.escape(ch))
+    return "".join(out) + "$"
+
+
+def _table_properties(path: str) -> dict[str, object]:
+    if path.endswith(".parquet"):
+        return {"format": "Parquet"}
+    if path.endswith(".csv"):
+        return {"format": "CSV", "polars_kwargs": {"separator": ","}}
+    return {"format": "TSV", "polars_kwargs": {"separator": "\t"}}
+
+
+def propose_data_collections(
+    matches: list[CatalogMatch],
+    entries: tuple[CatalogEntry, ...] | None = None,
+) -> list[dict[str, object]]:
+    """Template-shaped data collections for the outputs a run contains.
+
+    One per matched output, tagged with the output id: a ``bioimage`` DC whose
+    ``dc_specific_properties`` is the output's ``bioimage`` block for image and
+    mask stores, a table DC otherwise (a recipe output as ``source: transformed``
+    with its recipe, a raw one as a recursive scan). The scan regex is built
+    from the output's ``find`` basename glob, since the scanner matches names.
+    A proposal: tags, descriptions and the table read options are for the
+    author to review.
+    """
+    entries = entries if entries is not None else load_catalog_entries()
+    outputs = {(e.id, o.id): o for e in entries for o in e.outputs}
+    proposed: dict[str, dict[str, object]] = {}
+    for match in matches:
+        output = outputs.get((match.tool_id, match.output_id))
+        if output is None or output.id in proposed:
+            continue
+        proposed[output.id] = {
+            "data_collection_tag": output.id,
+            "description": output.name or output.description or output.id,
+            "config": _proposed_dc_config(output, match.path),
+        }
+    return list(proposed.values())
+
+
+def _proposed_dc_config(output: CatalogOutput, path: str) -> dict[str, object]:
+    glob = output.find.filename or (output.find.path_glob or "").rsplit("/", 1)[-1]
+    scan: dict[str, object] = {
+        "mode": "recursive",
+        "scan_parameters": {"regex_config": {"pattern": _glob_to_regex(glob)}},
+    }
+    if output.bioimage is not None:
+        return {
+            "type": "bioimage",
+            "scan": scan,
+            "dc_specific_properties": output.bioimage.dc_properties(),
+        }
+    if output.recipe:
+        return {
+            "type": "table",
+            "metatype": "Aggregate",
+            "source": "transformed",
+            "transform": {"recipe": output.recipe},
+        }
+    return {
+        "type": "table",
+        "metatype": "Aggregate",
+        "scan": scan,
+        "dc_specific_properties": _table_properties(path),
+    }
 
 
 def catalog_source_for_use(ref: str) -> dict[str, str] | None:

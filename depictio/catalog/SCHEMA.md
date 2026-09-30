@@ -73,7 +73,24 @@ existence-checking validates; the derived fields are trusted until a future
 | `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
 | `fixture` | CAN | str | A **co-located** sample filename, resolved next to the output's YAML in the module folder (e.g. `alpha_diversity.tsv`) — a small, committed, pipeline-agnostic sample of the bindable shape. Grounds renders in CI (Level-3) and feeds `preview` later. |
 | `renders_as` | CAN | list[Render] | Dashboard render target(s) + binding. |
+| `dc_type` | CAN (`table`) | `table` \| `bioimage` | What the matched file becomes. `bioimage` = an image or mask store read by the bioimage viewer. |
+| `bioimage` | cond. | Bioimage | **Required iff** `dc_type: bioimage`, forbidden otherwise. See below. |
 | `nf_core_url` / `biotools_url` / `edam_*` | CAN | str / list | Per-output identity overrides. |
+
+### Bioimage: an image or mask store (`dc_type: bioimage`)
+
+| Field | MUST/CAN | Type | Notes |
+|---|---|---|---|
+| `format` | **MUST** | `ome-tiff` / `ome-zarr` / `spatialdata` / `tiff` | `ome-zarr` and `spatialdata` stores are `*.zarr` directories; the TIFF formats are files. `tiff` is for masks only. |
+| `kind` | CAN (`image`) | `image` / `labels` | `labels` = a segmentation mask, one integer per cell. |
+| `image_path` | cond. | str | **Required iff** `format: spatialdata`: the image element, e.g. `images/<name>`. |
+| `sample_pattern` | CAN | regex | Exactly one capture group, applied to the store name, gives the sample. |
+
+A bioimage output has no `columns` and no `recipe`; its `find` spells the
+format's suffix (`.ome.tif`, `.tif` or `.zarr`) and may match a `*.zarr`
+directory. `fixture` is optional (a tiny store of the format; `validate` checks
+it is a file or a directory as the format says). Its only render is
+`advanced_viz` kind `bioimage_viewer`.
 
 ### Find — recognise the raw file (MUST set ≥ 1)
 
@@ -135,7 +152,32 @@ the catalog held no interactive renders until it could express them.
 
 `AdvancedVizKind`: volcano, embedding, manhattan, stacked_taxonomy,
 phylogenetic, rarefaction, da_barplot, enrichment, complex_heatmap, upset_plot,
-ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
+ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey,
+bioimage_viewer.
+
+### The `bioimage_viewer` render
+
+Its roles bind no column of its own output. They name partners and the columns
+of the table that carries the cells:
+
+| Role | Value | Notes |
+|---|---|---|
+| `image` | output ref | A bioimage output of kind `image`. Defaults to the render's own output when that is one. |
+| `labels` | output ref | CAN. A bioimage output of kind `labels`, drawn over the image of the same sample. |
+| `points` | output ref | CAN. A table output, one row per cell. Defaults to the render's own output when that is a table and point columns are bound. |
+| `cell_id` | column | Of the points table; equals the label value. Required when `labels` and point columns are both bound. |
+| `x`, `y` | column | Numeric coordinates in level-0 pixels; both or neither. |
+| `color`, `sample` | column | Point colour; the sample column that keeps the shown image's cells. |
+
+An output ref is an output id of the same tool, or `<tool>/<output>` for
+another tool's (the id with or without its `<tool>_` prefix). The tool model
+checks refs inside the tool; `validate` resolves cross-tool refs, checks each
+partner's `dc_type` / `kind`, and grounds the column roles against the points
+output's fixture, recipe or `columns`. `use: <tool>/<render-id>` expands the
+column roles to `cell_id_col`, `x_col`, `y_col`, `color_col` and
+`points_sample_col`; the tile supplies `image_dc_tag`, plus `labels_dc_tag` /
+`points_dc_tag` when the render binds them (`labels_dc_tag: null` opts out),
+and optionally `sample_dc_tag` + `sample_column`.
 
 ---
 
@@ -180,6 +222,8 @@ while writing `roles`.
 3. Each render's bound columns (`roles`/`dict_kwargs`/`card.column`) are
    **grounded** against the real data shape — the `fixture` (most complete) if
    set, else the recipe's `EXPECTED_SCHEMA`, else the declared `columns`.
+   A `bioimage_viewer` render is grounded against its points output, and its
+   image / labels / points refs against the whole catalog.
 4. Every referenced `recipe` resolves; every `fixture` reads.
 5. Every `nf_core_url` module + `edam_*` term **exists** in the vendored index.
 

@@ -331,7 +331,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
       }
     : null;
   const useSnippet = current && snippetCtx ? buildTileSnippet(snippetCtx, current) : '';
-  const snippetUnbound = snippetCtx ? snippetNeedsBinding(snippetCtx) : false;
+  const snippetUnbound = snippetCtx ? snippetNeedsBinding(snippetCtx, current) : false;
   const matchedOn = match.find?.path_glob || match.find?.filename;
   const toolUrl = catalogToolUrl(toolId);
 

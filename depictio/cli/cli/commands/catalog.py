@@ -55,7 +55,9 @@ def catalog_list() -> None:
             "Tool": entry.id,
             "Output": out.id,
             "Keyword": out.mode or "—",
-            "Source": out.recipe or ("columns" if out.columns else "—"),
+            "Source": out.recipe
+            or (f"bioimage {out.bioimage.format}" if out.bioimage else None)
+            or ("columns" if out.columns else "—"),
             "Renders as": ", ".join(r.kind or r.component for r in out.renders_as) or "—",
         }
         for entry in entries
@@ -100,6 +102,8 @@ def catalog_info(
         console.print(f"     [dim]find:[/dim]    {out.find.model_dump(exclude_none=True)}")
         if out.recipe:
             console.print(f"     [dim]recipe:[/dim]  {out.recipe}")
+        if out.bioimage:
+            console.print(f"     [dim]bioimage:[/dim] {out.bioimage.dc_properties()}")
         if out.columns:
             console.print(
                 f"     [dim]columns:[/dim] {', '.join(f'{c}:{t}' for c, t in out.columns.items())}"
@@ -277,8 +281,8 @@ def _check_fixture_sanity(entries) -> list[str]:
     for entry in entries:
         for out in entry.outputs:
             path = out.fixture_file()
-            if not path:
-                continue
+            if not path or out.dc_type == "bioimage":
+                continue  # an image store: `check_bioimage_fixture` checks its shape
             try:
                 data = path.read_bytes()
             except OSError as exc:
@@ -322,6 +326,8 @@ def catalog_validate(
     from depictio.models.components.advanced_viz.catalog import (
         CATALOG_DIR,
         CatalogEntry,
+        check_bioimage_fixture,
+        check_bioimage_renders,
         check_existence,
         ground_render_dtypes,
         load_entries_from_dir,
@@ -353,8 +359,15 @@ def catalog_validate(
     # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
     # Beyond name existence, dtypes are checked too (advanced_viz roles + numeric
     # card aggregations) via `ground_render_dtypes`.
+    # bioimage_viewer renders: partner outputs (possibly in another tool) exist
+    # with the right type, and the point columns are in the points output.
+    problems.extend(check_bioimage_renders(entries, None if path else entries))
     for entry in entries:
         for out in entry.outputs:
+            if out.dc_type == "bioimage":
+                # An image store: no columns to ground; the fixture is optional.
+                problems.extend(check_bioimage_fixture(out))
+                continue
             source = ""
             col_dtypes: dict[str, str] = {}
             fx = out.fixture_file()
@@ -412,7 +425,15 @@ def catalog_match(
         console.print(f"[yellow]No catalogued tool outputs found under {run_dir}[/yellow]")
         return
     render_records_table(
-        [{"File": str(hit.path), "Tool": hit.tool_id, "Output": hit.output_id} for hit in matches],
+        [
+            {
+                "File": str(hit.path),
+                "Tool": hit.tool_id,
+                "Output": hit.output_id,
+                "Type": hit.dc_type,
+            }
+            for hit in matches
+        ],
         title=f"Recognised {len(matches)} file(s) in {run_dir}",
     )
 
@@ -427,19 +448,39 @@ def catalog_compose(
             help="Restrict to tools listed in the run's software_versions.yml",
         ),
     ] = False,
+    dcs: Annotated[
+        bool,
+        typer.Option(
+            "--dcs",
+            help="Print the proposed template data_collections (YAML) instead of the summary",
+        ),
+    ] = False,
 ) -> None:
     """Preview the guided dashboard a run would compose (module → viz).
 
     Pipeline-agnostic: works for an nf-core pipeline run or a custom workflow
     that reuses nf-core modules. Groups recognised module outputs by tool and
-    shows the viz building blocks — a proposal, not a built dashboard.
+    shows the viz building blocks — a proposal, not a built dashboard. With
+    ``--dcs`` it prints the data collections a template would declare for them
+    instead: table DCs, and ``type: bioimage`` DCs for image and mask stores.
     """
     from depictio.cli.cli.utils.rich_utils import console
-    from depictio.models.components.advanced_viz.catalog import compose_run_dir
+    from depictio.models.components.advanced_viz.catalog import (
+        compose_run_dir,
+        propose_data_collections,
+    )
 
     by_tool = compose_run_dir(run_dir, confirm_with_versions=confirm_versions)
     if not by_tool:
         console.print(f"[yellow]No catalogued module outputs found under {run_dir}[/yellow]")
+        return
+    if dcs:
+        import yaml
+
+        proposed = propose_data_collections([m for ms in by_tool.values() for m in ms])
+        typer.echo(
+            yaml.safe_dump({"data_collections": proposed}, sort_keys=False, width=100).rstrip()
+        )
         return
     n_viz = sum(len(m.renders) for ms in by_tool.values() for m in ms)
     console.print(

@@ -32,6 +32,15 @@ export interface ManifestOutput {
   yamlPath?: string | null;
   /** The output YAML's raw text (append target). */
   rawYaml?: string | null;
+  /** `bioimage` for an image or mask store (no columns, no tabular fixture). */
+  dc_type?: 'table' | 'bioimage';
+  /** The store description of a bioimage output. */
+  bioimage?: {
+    format: 'ome-zarr' | 'ome-tiff' | 'spatialdata' | 'tiff';
+    kind?: 'image' | 'labels';
+    image_path?: string;
+    sample_pattern?: string;
+  };
 }
 
 export interface ManifestTool {

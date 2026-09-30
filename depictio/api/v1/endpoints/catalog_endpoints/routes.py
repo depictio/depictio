@@ -126,8 +126,12 @@ def _match_dc_to_catalog(
                         # Where this offer is declared, so the picker can link to
                         # the module definition rather than only describing it.
                         "source_url": github_blob_url(output._source_file),
+                        # The picker cannot fill the image / labels DC tags a
+                        # viewer tile needs, so it never offers that render.
                         "renders_as": [
-                            _render_to_dict(r, output) for r in (output.renders_as or [])
+                            _render_to_dict(r, output)
+                            for r in (output.renders_as or [])
+                            if not r.is_bioimage_viewer
                         ],
                     }
                 )

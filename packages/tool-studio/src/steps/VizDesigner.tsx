@@ -24,7 +24,10 @@ import { renderToSnippet, outputId } from '../catalog/yamlGen';
 import { metaFor, variantOf, bindsOf } from '../viz/renderMeta';
 import { renderSpecFromManifest } from '../catalog/fromManifestRender';
 import type { ManifestRender } from '../catalog/catalog';
-import RenderPreview from '../viz/RenderPreview';
+import RenderPreview, {
+  BioimagePreviewPlaceholder,
+  isBioimageViewerRender,
+} from '../viz/RenderPreview';
 import AddComponentModal from '../builder/AddComponentModal';
 import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
 import { HEADING_FONT } from '../theme';
@@ -254,7 +257,9 @@ function ExistingRenders({
                     </Code>
                   )}
                 </Group>
-                {spec && fixture ? (
+                {isBioimageViewerRender(raw) ? (
+                  <BioimagePreviewPlaceholder />
+                ) : spec && fixture ? (
                   <RenderPreview fixture={fixture} render={spec} index={index} />
                 ) : (
                   <Text size="xs" c="dimmed">
