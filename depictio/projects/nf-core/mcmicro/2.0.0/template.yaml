@@ -197,7 +197,7 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
-              "sample": "Sample name, e.g. registration/ashlar/<sample>.ome.tif; the key every other collection is linked on"
+              "sample": "Sample name, e.g. `registration/ashlar/<sample>.ome.tif`; the key every other collection is linked on"
               "n_cycles": "Acquisition cycles the sample was imaged in"
               "condition": "GROUP_COL of the design table (METADATA_FILE), else all"
 
