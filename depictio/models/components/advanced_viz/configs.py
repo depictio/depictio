@@ -1040,6 +1040,13 @@ class BioimageViewerConfig(_BaseVizConfig):
             "``cell_id_col`` of the points DC"
         ),
     )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Points column the selection filters on, when ``cell_id_col`` is unique only "
+            "per sample (e.g. a sample:cell key); defaults to ``cell_id_col``"
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_bindings(self) -> BioimageViewerConfig:
@@ -1052,6 +1059,7 @@ class BioimageViewerConfig(_BaseVizConfig):
             self.y_col,
             self.color_col,
             self.points_sample_col,
+            self.selection_column,
         )
         if any(points_cols) and not points_dc:
             raise ValueError(

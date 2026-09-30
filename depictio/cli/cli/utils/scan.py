@@ -159,17 +159,24 @@ def _remote_stores(data_collection: "DataCollection") -> list[str]:
     return list(props.remote_stores) if isinstance(props, DCBioimageConfig) else []
 
 
+def _is_bioimage_file_name(path: str, fmt: str) -> bool:
+    """Name-only half of ``is_bioimage_file``: no file is opened."""
+    name = os.path.basename(path)
+    if fmt == "tiff" and name.endswith(OME_TIFF_SUFFIXES):
+        return False  # an OME image beside the masks, not a mask
+    return os.path.isfile(path) and any(
+        name.endswith(s) and name != s for s in bioimage_store_suffixes(fmt)
+    )
+
+
 def is_bioimage_file(path: str, fmt: str = "ome-tiff") -> bool:
     """True when ``path`` is a regular file named like a file store of ``fmt``:
-    ``*.tif(f)`` for a labels TIFF; ``*.ome.tif(f)``, or a plain ``*.tif(f)``
-    whose header carries OME-XML, for OME-TIFF (so masks beside the images
-    are not picked up)."""
-    name = os.path.basename(path)
-    if not os.path.isfile(path) or not any(
-        name.endswith(s) and name != s for s in bioimage_store_suffixes(fmt)
-    ):
+    a non-OME ``*.tif(f)`` for a labels TIFF; ``*.ome.tif(f)``, or a plain
+    ``*.tif(f)`` whose header carries OME-XML, for OME-TIFF (so masks beside
+    the images are not picked up)."""
+    if not _is_bioimage_file_name(path, fmt):
         return False
-    if fmt != "ome-tiff" or name.endswith(OME_TIFF_SUFFIXES):
+    if fmt != "ome-tiff" or path.endswith(OME_TIFF_SUFFIXES):
         return True
     from depictio.cli.cli.utils.deltatables import validate_ome_tiff
 
@@ -545,12 +552,17 @@ def process_files(
 def _run_candidates(
     dc: DataCollection, all_files_in_run: list[str], all_zarr_stores_in_run: list[str]
 ) -> list[str]:
-    """Paths a DC's regex is matched against in a run: files, or bioimage / SpatialData stores."""
+    """Paths a DC's regex is matched against in a run: files, or bioimage / SpatialData stores.
+
+    File-store bioimage DCs are narrowed by name only; the OME-TIFF header
+    check runs after the regex (``is_bioimage_file``), so a run's other
+    ``*.tif`` files are never opened.
+    """
     if _is_zarr_store_dc(dc):
         return all_zarr_stores_in_run
     if _is_bioimage_dc(dc):
         fmt = _bioimage_format(dc)
-        return [f for f in all_files_in_run if is_bioimage_file(f, fmt)]
+        return [f for f in all_files_in_run if _is_bioimage_file_name(f, fmt)]
     return all_files_in_run
 
 
@@ -682,6 +694,13 @@ def scan_run_for_multiple_data_collections(
                     match, _ = regex_match(rel_path, full_regex)
                 if not match:
                     continue
+
+            if (
+                _is_bioimage_dc(dc)
+                and not _is_zarr_store_dc(dc)
+                and not is_bioimage_file(file_location, _bioimage_format(dc))
+            ):
+                continue
 
             logger.debug(f"File {file_name} matches DC {dc.data_collection_tag}")
 

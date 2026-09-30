@@ -51,7 +51,11 @@ export interface LabelLut {
 
 /** A cell as the points overlay describes it. */
 export interface LabelCell {
+  /** The id the selection filters on. */
   id: string;
+  /** The mask value, when it differs from `id` (a cell id unique per sample
+   *  while `id` is a sample:cell key). */
+  label?: string;
   color: Rgb;
   faded: boolean;
 }
@@ -71,7 +75,7 @@ export function buildLabelLut(
   const styles = new Map<number, LabelStyle>();
   const ids = new Map<number, string>();
   for (const cell of cells) {
-    const label = labelOf(cell.id);
+    const label = labelOf(cell.label ?? cell.id);
     if (label === null || styles.has(label)) continue;
     styles.set(label, { color: cell.color, faded: cell.faded, selected: selected.has(cell.id) });
     ids.set(label, cell.id);

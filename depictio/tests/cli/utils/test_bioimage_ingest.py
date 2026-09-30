@@ -35,6 +35,7 @@ from depictio.cli.cli.utils.deltatables import (
 )
 from depictio.cli.cli.utils.scan import (
     _is_current_single_location,
+    is_bioimage_file,
     process_files,
     scan_project_files,
     scan_run_for_multiple_data_collections,
@@ -454,6 +455,29 @@ class TestFormatScan:
         )
 
         assert [f.file_location for f in files] == [str(tiff.resolve())]
+
+    def test_recursive_ome_tiff_opens_only_regex_matched_tiffs(self, tmp_path):
+        """A run's other `*.tif` files are never header-checked: the regex runs first."""
+        run_dir = tmp_path / "run_1"
+        tiff = make_ome_tiff(run_dir / "images" / "s1.tif")
+        make_ome_tiff(run_dir / "raw" / "tile_001.tif", "a raw tile")
+
+        with patch.object(
+            deltatables, "validate_ome_tiff", wraps=deltatables.validate_ome_tiff
+        ) as validate:
+            files = TestRecursiveScan()._scan(
+                run_dir, _dc(mode="recursive", pattern=r"images/.+\.tif", format="ome-tiff")
+            )
+
+        assert [f.file_location for f in files] == [str(tiff.resolve())]
+        assert [c.args[0] for c in validate.call_args_list if "raw" in str(c.args[0])] == []
+
+    def test_labels_tiff_skips_ome_images_beside_the_masks(self, tmp_path):
+        mask = make_ome_tiff(tmp_path / "s1_mask.tif", "a mask")
+        image = make_ome_tiff(tmp_path / "s1.ome.tif")
+
+        assert is_bioimage_file(str(mask), "tiff")
+        assert not is_bioimage_file(str(image), "tiff")
 
     def test_recursive_spatialdata_registers_the_store_root(self, tmp_path):
         run_dir = tmp_path / "run_1"

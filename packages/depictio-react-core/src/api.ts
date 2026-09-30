@@ -1879,15 +1879,18 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
   const inflight = new Map<string, Promise<Uint8Array | undefined>>();
   const recent = new Map<string, Uint8Array | undefined>();
   let recentBytes = 0;
+  // A missing key (404) is cached too, at a nominal cost so it still counts
+  // toward the cap.
+  const entrySize = (bytes: Uint8Array | undefined) => bytes?.byteLength ?? 1024;
   const remember = (key: string, bytes: Uint8Array | undefined) => {
-    const size = bytes?.byteLength ?? 0;
+    const size = entrySize(bytes);
     if (size > BIOIMAGE_STORE_CACHE_BYTES) return;
     recent.set(key, bytes);
     recentBytes += size;
     for (const [oldKey, oldBytes] of recent) {
       if (recentBytes <= BIOIMAGE_STORE_CACHE_BYTES) break;
       recent.delete(oldKey);
-      recentBytes -= oldBytes?.byteLength ?? 0;
+      recentBytes -= entrySize(oldBytes);
     }
   };
   const fetchKey = (key: string): Promise<Uint8Array | undefined> => {

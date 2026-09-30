@@ -173,3 +173,20 @@ class TestLabelsBinding:
     def test_opacity_is_bounded(self, opacity):
         with pytest.raises(ValidationError):
             BioimageViewerConfig(image_dc_tag="i", labels_dc_tag="m", labels_opacity=opacity)
+
+
+class TestSelectionColumn:
+    def test_defaults_to_none(self):
+        assert BioimageViewerConfig().selection_column is None
+
+    def test_needs_a_points_dc(self):
+        with pytest.raises(ValidationError, match="no points DC is bound"):
+            BioimageViewerConfig(selection_column="cell_key")
+        config = BioimageViewerConfig(
+            points_dc_tag="cells",
+            x_col="x",
+            y_col="y",
+            cell_id_col="cell_id",
+            selection_column="cell_key",
+        )
+        assert config.selection_column == "cell_key"

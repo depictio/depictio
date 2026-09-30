@@ -147,9 +147,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
         (value) => typeof value === 'string' && value !== '',
       );
       if (!hasPoints) return undefined;
-      return typeof config.cell_id_col === 'string' && config.cell_id_col
-        ? config.cell_id_col
-        : undefined;
+      const cellIdCol =
+        typeof config.cell_id_col === 'string' && config.cell_id_col ? config.cell_id_col : undefined;
+      // A cell id unique only per sample names a sample:cell key column instead.
+      return cellIdCol ? (named ?? cellIdCol) : undefined;
     }
     case 'genome_chord': {
       // A chord is one named link between two loci, so its label is the
