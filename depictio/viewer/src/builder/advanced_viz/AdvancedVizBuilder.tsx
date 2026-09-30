@@ -60,6 +60,7 @@ import {
   suggestionTooltip,
 } from './kindPicker';
 import RecordCardLinkSettings from './RecordCardLinkSettings';
+import ProteinBindingSettings, { isProteinKind } from './ProteinBindingSettings';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -306,11 +307,12 @@ const AdvancedVizBuilder: React.FC = () => {
     [patchConfig],
   );
 
-  // Record-card link fields. Same override layer as above, except that
-  // `undefined` means "unset": the key is dropped when the saved config never
-  // had it, and nulled when it did, so clearing a link neither leaves the old
-  // one in place nor writes a key the saved component did not carry.
-  const setRecordCardFields = useCallback(
+  // Record-card link and protein companion fields. Same override layer as
+  // above, except that `undefined` means "unset": the key is dropped when the
+  // saved config never had it, and nulled when it did, so clearing a link
+  // neither leaves the old one in place nor writes a key the saved component
+  // did not carry.
+  const setOverrideFields = useCallback(
     (patch: Record<string, unknown>) => {
       const c = useBuilderStore.getState().config as {
         preset_config?: Record<string, unknown> | null;
@@ -1120,7 +1122,15 @@ const AdvancedVizBuilder: React.FC = () => {
         <RecordCardLinkSettings
           config={mergedPreset}
           idCol={typeof columnMapping.id === 'string' ? columnMapping.id : null}
-          onChange={setRecordCardFields}
+          onChange={setOverrideFields}
+        />
+      ) : null}
+
+      {selectedKind && isProteinKind(selectedKind) ? (
+        <ProteinBindingSettings
+          vizKind={selectedKind}
+          config={mergedPreset}
+          onChange={setOverrideFields}
         />
       ) : null}
     </Stack>

@@ -2,9 +2,11 @@
  * Which components of a dashboard can drive a record card.
  *
  * A record card follows the selection another tile emits, and it honours two
- * sources only (`RecordCardConfig.selection_source`): `scatter_selection`,
+ * sources (`RecordCardConfig.selection_source`): `scatter_selection`,
  * which scatter figures and the selecting advanced_viz kinds emit, and
- * `table_selection`, which tables with row selection emit. Maps and image
+ * `table_selection`, which tables with row selection emit. It also follows a
+ * `residue_selection` (molecule_3d, sequence_track, lollipop) under `any` or
+ * when linked to the emitting tile (see `readRecordSelection`). Maps and image
  * galleries select too, but on sources the card ignores, so offering them here
  * would link the card to a tile it can never hear.
  *
@@ -17,6 +19,11 @@ import type { StoredMetadata } from 'depictio-react-core';
 
 export type RecordCardSelectionSource = 'scatter_selection' | 'table_selection' | 'any';
 
+/** What an emitter sends. `residue_selection` (a protein tile's residue pick,
+ *  an entity and a position range) is followed by a linked card whatever its
+ *  `selection_source`, so it is not one of that field's values. */
+export type EmitterSource = Exclude<RecordCardSelectionSource, 'any'> | 'residue_selection';
+
 export interface SelectionEmitter {
   /** What the card stores in `linked_component`: the component's tag when it
    *  has one, its index otherwise. */
@@ -24,7 +31,7 @@ export interface SelectionEmitter {
   label: string;
   /** Short component-type label, shown next to the title in the picker. */
   typeLabel: string;
-  source: Exclude<RecordCardSelectionSource, 'any'>;
+  source: EmitterSource;
   /** Column the emitted values belong to, when the component names one. */
   column: string | null;
   index: string;
@@ -34,15 +41,28 @@ export interface SelectionEmitter {
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
+/** Kinds whose model defaults `selection_enabled` to true. Mirrors
+ *  `SELECTION_ON_BY_DEFAULT` in selection.ts and record_link.py. */
+const SELECTION_ON_BY_DEFAULT: ReadonlySet<string> = new Set(['molecule_3d', 'msa', 'sequence_track']);
+
+/** Kinds whose pick reaches the card as a `residue_selection` pair. Mirrors
+ *  `RESIDUE_EMITTING_KINDS` in record_link.py. */
+const RESIDUE_EMITTING_KINDS: ReadonlySet<string> = new Set(['molecule_3d', 'sequence_track', 'lollipop']);
+
 /** The column an advanced_viz tile selects on, or null when it cannot select.
  *  Mirrors `advancedVizSelectionColumn` (see the module comment). The second
  *  return value tells "cannot select" apart from "selects, column unnamed". */
 function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string | null } {
   const config = (m.config ?? {}) as Record<string, unknown>;
-  if (config.selection_enabled !== true) return { emits: false, column: null };
+  const kind = str(m.viz_kind) ?? '';
+  const enabled =
+    typeof config.selection_enabled === 'boolean'
+      ? config.selection_enabled
+      : SELECTION_ON_BY_DEFAULT.has(kind);
+  if (!enabled) return { emits: false, column: null };
   const named = str(config.selection_column);
   let column: string | null;
-  switch (str(m.viz_kind)) {
+  switch (kind) {
     case 'embedding':
       column = named ?? str(config.sample_id_col);
       break;
@@ -56,6 +76,16 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'manhattan':
     case 'genome_view':
       column = named;
+      break;
+    case 'molecule_3d':
+    case 'sequence_track':
+      column = str(config.position_col) ?? 'position';
+      break;
+    case 'msa':
+      column = str(config.seq_id_col) ?? 'seq_id';
+      break;
+    case 'lollipop':
+      column = named ?? str(config.label_col) ?? str(config.position_col) ?? 'position';
       break;
     default:
       return { emits: false, column: null };
@@ -83,7 +113,13 @@ function emitterOf(m: StoredMetadata): Pick<SelectionEmitter, 'source' | 'column
     case 'advanced_viz': {
       const { emits, column } = advancedVizEmits(m);
       if (!emits) return null;
-      return { source: 'scatter_selection', column, typeLabel: str(m.viz_kind) ?? 'Advanced viz' };
+      return {
+        source: RESIDUE_EMITTING_KINDS.has(str(m.viz_kind) ?? '')
+          ? 'residue_selection'
+          : 'scatter_selection',
+        column,
+        typeLabel: str(m.viz_kind) ?? 'Advanced viz',
+      };
     }
     default:
       return null;
