@@ -1,0 +1,602 @@
+# nf-core/mcmicro Template v2.0.0 - multiplexed whole-slide imaging
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/mcmicro/2.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/mcmicro AWS megatest results:
+#   s3://nf-core-awsmegatests/mcmicro/results-f4400001578642e370a72668966c6602fe172ef6
+#   (test_full profile: two samples of two cycles each, BaSiCPy illumination
+#    correction, Backsub, Mesmer and Cellpose segmentation. See megatest.yaml.)
+# ============================================================================
+#
+# A PAPER COMPANION, NOT AN IMAGE ANALYSIS SUITE.
+# The dashboard puts each sample's registered mosaic next to the cells MCQUANT
+# measured on it: the segmentation mask drawn over the image, one point per
+# cell coloured by a column of the cell table, and the table, cards, filters
+# and marker summaries around it. Everything is read from the run's published
+# outputs; nothing is re-segmented or re-quantified.
+#
+# IMAGES ARE BIOIMAGE COLLECTIONS.
+# `registration/ashlar/<sample>.ome.tif` (pyramidal OME-TIFF) is the image,
+# `segmentation/<module>/<sample>...tif` (plain integer TIFF) the labels. The
+# CLI uploads each file as one store; the viewer reads the image tile by tile
+# and draws the labels of the same sample over it. `sample_pattern` maps a mask
+# file name to its sample, since the segmenters decorate it (`_mask`,
+# `_backsub.ome_cp_masks`).
+#
+# ONE SEGMENTER DRIVES THE IMAGE TAB.
+# nf-core/mcmicro can run several segmentation modules at once
+# (`--segmentation mesmer,cellpose,mccellpose`), and a label value is a cell id
+# only within its own mask. SEGMENTER (default `mesmer`) picks the module whose
+# mask and MCQUANT table the Image and Markers tabs show; COMPARE_SEGMENTER
+# (default `cellpose`) the one drawn in the Segmentation QC tab's second viewer.
+# The pipeline's own default is `mccellpose`: pass `--var SEGMENTER=mccellpose`
+# for such a run. The compare collections are `optional: true`, so a
+# single-segmenter run still ingests and that viewer stays empty.
+#
+# CELL TABLES. MCQUANT writes one CSV per image and mask, keyed on `CellID` (the
+# label value) with one mean-intensity column per marker of the run's marker
+# sheet. `mcquant/cells.py` tidies them into one row per cell with the sample
+# and segmenter read off the path; marker columns keep the marker sheet's names.
+#
+# OPTIONAL STEPS. Background subtraction (`--backsub`), illumination correction
+# (`--illumination basicpy`) and TMA dearraying (`--tma_dearray`) are off by
+# default in the pipeline; their collections are `optional: true`.
+#
+# DESIGN. The optional design table (METADATA_FILE, ampliseq convention) adds
+# `condition` (its GROUP_COL) to the samples hub, which the pinned filters and
+# the Markers tab's group comparison read. Without it `condition` is `all`.
+template:
+  template_id: "nf-core/mcmicro/2.0.0"
+  description: "nf-core/mcmicro template: each sample's registered whole-slide image with its segmentation mask and MCQUANT cells overlaid, per-cell marker intensities and morphology, marker summaries and group comparisons, and a side-by-side check of two segmentation modules, on top of the MultiQC input checks."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of the mcmicro results (registration/, segmentation/, quantification/, multiqc/, pipeline_info/, and backsub/, illumination_correction/, tma_dearray/ when those steps ran)."
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "The cycle samplesheet the run was launched with (--input_cycle: sample, cycle_number, image_tiles). Auto-detected from {DATA_ROOT}/input/ when omitted."
+      required: false
+    - name: "SEGMENTER"
+      description: "Segmentation module whose mask and MCQUANT cells the Image and Markers tabs show: mesmer, cellpose or mccellpose (the pipeline default)."
+      required: false
+      default: "mesmer"
+    - name: "COMPARE_SEGMENTER"
+      description: "Second segmentation module, drawn in the Segmentation QC tab's viewer. Optional; its collections are skipped when the run did not use it."
+      required: false
+      default: "cellpose"
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample id in METADATA_ID_COL, one column per factor. GROUP_COL becomes the condition column of the samples hub; the other factors are carried as extra columns."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table id column. Auto-detected as the first column."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design table factor the run compares, carried as the condition column. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+  # The bundled reference dataset: the samplesheet and the design table are
+  # vendored in input/ (the megatest publishes neither).
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_FILE: "{DATA_ROOT}/input/metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "acquisition"
+      GROUP_COL_DISPLAY: "Acquisition"
+      SEGMENTER: "mesmer"
+      COMPARE_SEGMENTER: "cellpose"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url" # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Inputs"
+        key_patterns: ["input_*", "marker_sheet"]
+      - group: "Steps"
+        key_patterns: ["illumination", "backsub", "tma_dearray", "segmentation", "cellpose_model", "prelude"]
+      - group: "Run context"
+        key_patterns: ["outdir", "publish_dir_mode", "config_profile_*", "custom_config_*", "trace_report_suffix", "pipelines_testdata_base_path", "modules_testdata_base_path", "multiqc_*", "max_multiqc_email_size", "email*", "plaintext_email", "monochrome_logs", "validate_params", "help*", "show_hidden", "version"]
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Multiplexed Tissue Imaging"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "mcmicro"
+    version: "2.0.0"
+    engine:
+      name: "nextflow"
+      version: "26.04.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/mcmicro"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Samplesheet and design
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samplesheet"
+        description: "The cycle samplesheet the run was launched with, one row per acquisition cycle of a sample"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample name, the one every output file of the run uses"
+              "cycle_number": "Acquisition cycle of the raw image"
+              "image_tiles": "Raw multi-tile image of that cycle"
+
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample identifier, matching the samplesheet; every other column is a design factor"
+
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: sample name, cycle count and the design condition (GROUP_COL of METADATA_FILE, else all)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mcmicro/samples.py"
+            params:
+              group_col: "{GROUP_COL}"
+              id_col: "{METADATA_ID_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample name, e.g. registration/ashlar/<sample>.ome.tif; the key every other collection is linked on"
+              "n_cycles": "Acquisition cycles the sample was imaged in"
+              "condition": "GROUP_COL of the design table (METADATA_FILE), else all"
+
+      # ----------------------------------------------------------------
+      # MultiQC: the pipeline's input checks (OME-XML and samplesheet
+      # consistency per sample), written as custom content.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report: the pass / warn / fail matrix of the input checks the pipeline runs on every sample's OME-XML and samplesheet"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "matrix_summary"
+            plots:
+              matrix_summary:
+                - "matrix_summary-section"
+
+      # ----------------------------------------------------------------
+      # Images (bioimage collections, one store per file)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mc-img-registered"
+        description: "Registered, stitched multi-cycle mosaic from ASHLAR, one pyramidal OME-TIFF per sample"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?registration/ashlar/[^/]+\\.ome\\.tiff?$"
+          dc_specific_properties:
+            format: "ome-tiff"
+
+      - data_collection_tag: "mc-img-backsub"
+        optional: true
+        description: "Background-subtracted mosaic from Backsub (--backsub), one pyramidal OME-TIFF per sample"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?backsub/[^/]+_backsub\\.ome\\.tif$"
+          dc_specific_properties:
+            format: "ome-tiff"
+            sample_pattern: "^(.+?)_backsub\\.ome\\.tif$"
+
+      - data_collection_tag: "mc-img-flatfield"
+        optional: true
+        description: "BaSiCPy flat-field profile per sample and cycle (--illumination basicpy)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?basicpy/[^/]+-ffp\\.ome\\.tif$"
+          dc_specific_properties:
+            format: "ome-tiff"
+
+      # Masks of the SEGMENTER / COMPARE_SEGMENTER modules. Mesmer publishes
+      # under segmentation/deepcell_mesmer/, the two Cellpose flavours under
+      # segmentation/cellpose/ and segmentation/mccellpose/.
+      - data_collection_tag: "mc-img-mask"
+        description: "Segmentation mask of the SEGMENTER module, one integer label per cell, per sample"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?segmentation/(?:deepcell_)?{SEGMENTER}/[^/]+\\.tif$"
+          dc_specific_properties:
+            format: "tiff"
+            kind: "labels"
+            sample_pattern: "^(.+?)(?:_backsub)?(?:\\.ome)?(?:_cp_masks|_mask)(?:\\.ome)?\\.tif$"
+
+      - data_collection_tag: "mc-img-mask-compare"
+        optional: true
+        description: "Segmentation mask of the COMPARE_SEGMENTER module, one integer label per cell, per sample"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?segmentation/(?:deepcell_)?{COMPARE_SEGMENTER}/[^/]+\\.tif$"
+          dc_specific_properties:
+            format: "tiff"
+            kind: "labels"
+            sample_pattern: "^(.+?)(?:_backsub)?(?:\\.ome)?(?:_cp_masks|_mask)(?:\\.ome)?\\.tif$"
+
+      # ----------------------------------------------------------------
+      # MCQUANT cell tables
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mc-cells"
+        description: "Every quantified cell of every segmentation module: marker intensities, centroid, morphology, dominant marker and marker PCA"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mcquant/cells.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: &cell_columns
+              "sample": "Sample of the image the cell was segmented in"
+              "segmenter": "Segmentation module (mesmer, cellpose, mccellpose), the parent directory of the MCQUANT table"
+              "cell_id": "MCQUANT CellID, the label value of the cell in its mask"
+              "cell_uid": "sample/segmenter/cell_id, unique across the run"
+              "x_centroid": "Centroid column in full-resolution pixels"
+              "y_centroid": "Centroid row in full-resolution pixels"
+              "area": "Cell area in pixels"
+              "major_axis_length": "Major axis of the fitted ellipse, pixels"
+              "minor_axis_length": "Minor axis of the fitted ellipse, pixels"
+              "eccentricity": "Ellipse eccentricity, 0 round to 1 elongated"
+              "solidity": "Area over convex hull area; low for ragged outlines"
+              "extent": "Area over bounding box area"
+              "orientation": "Angle of the major axis, radians"
+              "dominant_marker": "Non-nuclear marker whose log1p intensity sits highest above its sample median (robust z-score)"
+              "pc_1": "First principal component of the standardised log1p marker intensities, per segmenter"
+              "pc_2": "Second principal component of the standardised log1p marker intensities, per segmenter"
+
+      - data_collection_tag: "mc-cells-primary"
+        description: "The cells of the SEGMENTER module only, the points drawn over its mask in the Image tab"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mcquant/cells.py"
+            params:
+              segmenter: "{SEGMENTER}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: *cell_columns
+
+      - data_collection_tag: "mc-cells-compare"
+        optional: true
+        description: "The cells of the COMPARE_SEGMENTER module only, drawn over its mask in the Segmentation QC tab"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mcquant/cells.py"
+            params:
+              segmenter: "{COMPARE_SEGMENTER}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description: *cell_columns
+
+      - data_collection_tag: "mc-markers-long"
+        description: "Marker intensities of the SEGMENTER cells, one row per cell and marker (at most 5000 cells per sample, a deterministic stride)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mcquant/marker_long.py"
+            params:
+              segmenter: "{SEGMENTER}"
+              max_cells: "5000"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample of the cell"
+              "segmenter": "Segmentation module"
+              "cell_id": "MCQUANT CellID"
+              "cell_uid": "sample/segmenter/cell_id"
+              "marker": "Marker name from the run's marker sheet, the column the marker picker filters on"
+              "marker_type": "nuclear (DNA, DAPI, Hoechst stains) or marker"
+              "intensity": "Mean intensity of the marker over the cell"
+              "log_intensity": "log1p of the mean intensity"
+
+      - data_collection_tag: "mc-marker-matrix"
+        description: "Median log1p intensity of every marker in every sample (SEGMENTER cells), marker by sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mcquant/marker_matrix.py"
+            params:
+              segmenter: "{SEGMENTER}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "marker": "Marker name from the run's marker sheet"
+              "marker_type": "nuclear or marker"
+
+      - data_collection_tag: "mc-sample-summary"
+        description: "Cells per sample and segmentation module, with the median morphology of those cells"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mcquant/sample_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "summary_id": "sample/segmenter, the row key"
+              "sample": "Sample"
+              "segmenter": "Segmentation module"
+              "n_cells": "Cells MCQUANT quantified"
+              "median_area": "Median cell area, pixels"
+              "median_major_axis_length": "Median major axis, pixels"
+              "median_minor_axis_length": "Median minor axis, pixels"
+              "median_eccentricity": "Median eccentricity"
+              "median_solidity": "Median solidity"
+              "median_extent": "Median extent"
+              "n_markers": "Marker columns in the MCQUANT tables"
+
+      - data_collection_tag: "mc-cell-markers"
+        description: "Marker intensities of the SEGMENTER cells with the design condition, the matrix the group comparison tests marker by marker"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mcmicro/cell_markers.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cell_uid": "sample/segmenter/cell_id"
+              "sample": "Sample of the cell"
+              "condition": "Design condition of the sample (GROUP_COL), else all"
+              "dominant_marker": "Dominant non-nuclear marker of the cell"
+
+      # ----------------------------------------------------------------
+      # Acquisition and channel sheets
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mc-acquisition"
+        optional: true
+        description: "Acquisition parameters of every sample and cycle from the pipeline's OME-XML checks: pixel size, channels, tiles"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mcmicro/acquisition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "cycle": "Acquisition cycle"
+              "pixel_size": "Physical pixel size"
+              "pixel_size_unit": "Unit of the pixel size"
+              "channel_count": "Channels in the cycle image"
+              "pixel_datatype": "Pixel data type"
+              "tile_count": "Tiles in the cycle image"
+              "tile_size_x": "Tile width, pixels"
+              "tile_size_y": "Tile height, pixels"
+              "n_checks_failed": "Input checks failed for this sample and cycle"
+              "n_checks_warned": "Input checks warned for this sample and cycle"
+
+      - data_collection_tag: "mc-backsub-markers"
+        optional: true
+        description: "Channel sheet of the background-subtracted image (--backsub): marker, cycle, exposure and the background channel removed"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "backsub/markers.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "channel_number": "Channel of the corrected image"
+              "cycle_number": "Acquisition cycle"
+              "marker_name": "Marker"
+              "exposure": "Exposure time of the channel"
+              "background": "Background channel subtracted from it, empty when none"
+              "background_subtracted": "True when a background channel was subtracted"
+
+      - data_collection_tag: "mc-tma-cores"
+        optional: true
+        description: "Tissue-microarray cores Coreograph detected (--tma_dearray), with their centres"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "coreograph/core_centroids.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Directory of the TMA outputs (tma when not nested per sample)"
+              "core": "Core number, the name of its crop and mask"
+              "y_centroid": "Core centre row, full-resolution pixels"
+              "x_centroid": "Core centre column, full-resolution pixels"
+
+links:
+  # Hub -> everything keyed on the sample name.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC input checks by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter every segmenter's cells by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-cells-primary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Image tab cells by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-cells-compare"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the comparison segmenter's cells by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-markers-long"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the marker distributions by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-cell-markers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the group comparison matrix by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-sample-summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-sample cell counts by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-acquisition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the acquisition table by sample"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mc-backsub-markers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the background-corrected channel sheet by sample"
+    enabled: true
+
+  # Cell selections (lasso on the cell map or on the marker PCA, ticked table
+  # rows) reach the per-marker tables of the same cells.
+  - source_dc_tag: "mc-cells-primary"
+    source_column: "cell_uid"
+    target_dc_tag: "mc-markers-long"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "cell_uid"}
+    description: "Narrow the marker distributions to the selected cells"
+    enabled: true
+
+  - source_dc_tag: "mc-cells-primary"
+    source_column: "cell_uid"
+    target_dc_tag: "mc-cell-markers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "cell_uid"}
+    description: "Narrow the group comparison matrix to the selected cells"
+    enabled: true
+
+  # Tab-local cell filters on the all-segmenter table reach the per-sample roll-up.
+  - source_dc_tag: "mc-cells"
+    source_column: "segmenter"
+    target_dc_tag: "mc-sample-summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmenter"}
+    description: "Filter the per-sample roll-up by segmentation module"
+    enabled: true
