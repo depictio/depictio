@@ -1009,6 +1009,27 @@ class BioimageViewerConfig(_BaseVizConfig):
         description="Points column holding the sample name, to keep only the shown store's points",
     )
 
+    # Labels overlay: a bioimage DC with ``kind: labels`` (segmentation masks),
+    # one store per sample, matched to the shown image by sample name. A label
+    # value is a cell id, so ``color_col`` / filters / selection of the points
+    # DC apply to the cells through ``cell_id_col``.
+    labels_wf_id: str | None = Field(
+        default=None, description="Workflow id of the labels bioimage DC (optional)"
+    )
+    labels_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the labels bioimage DC (optional)"
+    )
+    labels_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the labels bioimage DC (resolved to ids at import)",
+    )
+    labels_opacity: float = Field(
+        default=0.5, ge=0, le=1, description="Opacity of the filled labels"
+    )
+    labels_outline: bool = Field(
+        default=True, description="Draw each label's outline rather than only its fill"
+    )
+
     # On by default, unlike EmbeddingConfig: the kind is new, so no shipped
     # dashboard inherits a cross-filter it did not ask for, and it stays inert
     # until a points DC with a `cell_id_col` is bound.

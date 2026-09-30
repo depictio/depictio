@@ -1,5 +1,59 @@
 {
   "$defs": {
+    "CatalogBioimage": {
+      "additionalProperties": false,
+      "description": "How a `dc_type: bioimage` output is stored: the bioimage DC properties.",
+      "properties": {
+        "format": {
+          "enum": [
+            "ome-zarr",
+            "ome-tiff",
+            "spatialdata",
+            "tiff"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "kind": {
+          "default": "image",
+          "enum": [
+            "image",
+            "labels"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "image_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Path"
+        },
+        "sample_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Pattern"
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "title": "CatalogBioimage",
+      "type": "object"
+    },
     "CatalogFind": {
       "additionalProperties": false,
       "description": "How to recognise the raw output file among a scanned run's files.",
@@ -90,6 +144,26 @@
         },
         "find": {
           "$ref": "#/$defs/CatalogFind"
+        },
+        "dc_type": {
+          "default": "table",
+          "enum": [
+            "table",
+            "bioimage"
+          ],
+          "title": "Dc Type",
+          "type": "string"
+        },
+        "bioimage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogBioimage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "recipe": {
           "anyOf": [

@@ -11,6 +11,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Read pairs in, mates merged, reads discarded and sequences retained, from an AdapterRemoval .settings report. The counts balance exactly, which is what lets a read-fate flow be drawn from them without apportioning anything. One row per report, so a pipeline that trims per lane gets one row per lane.",
           "edam_formats": [],
           "edam_operations": [],
@@ -147,6 +148,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sequence cluster AMPcombi built across the run with MMseqs2, with the representative sequence header, the sample that contributed it and the number of members.",
           "edam_formats": [],
           "edam_operations": [],
@@ -215,6 +217,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Two-dimensional PCA of the AMP candidates over their physicochemical descriptors (molecular weight, isoelectric point, hydrophobicity and the helix, turn and sheet fractions), standardised before the decomposition.",
           "edam_formats": [],
           "edam_operations": [],
@@ -260,6 +263,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per antimicrobial-peptide candidate, with the per-tool probabilities, the physicochemistry AMPcombi computes (molecular weight, isoelectric point, hydrophobicity, secondary-structure fractions) and the reference-database hit.",
           "edam_formats": [],
           "edam_operations": [],
@@ -378,6 +382,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per contrast and gene with the four anota2seq analyses side by side and one regulatory mode: translation, buffering, mRNA abundance or not regulated, assigned with anota2seq's default selection thresholds.",
           "edam_formats": [],
           "edam_operations": [],
@@ -514,6 +519,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The four anota2seq analyses of every contrast stacked in one table: change in ribosome-bound mRNA, change in total mRNA, the translation effect (ribosome association not explained by mRNA level) and buffering, each with its effect, RVM p-value, adjusted p-value and anota2seq's default significance call.",
           "edam_formats": [],
           "edam_operations": [],
@@ -607,6 +613,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The same Arriba calls as the fusion table, read as pairs of genomic loci: the two \"chr:pos\" breakpoints are split into bindable chromosome and position columns, the read evidence is summed into one link weight, and the event class and confidence come through unchanged. This is the row shape a chord diagram binds, so a run's fusions can be read as a partner map across the genome instead of as a list of names.",
           "edam_formats": [],
           "edam_operations": [],
@@ -719,6 +726,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Fusion calls Arriba retained, one row per call. The recipe labels each fusion from its two partner genes, sums the split reads, discordant mates and local coverage into one evidence block, derives a log-scaled support and the fraction of local reads that support the call, and splits the contig out of each breakpoint so the partners can be read as a chromosome flow.",
           "edam_formats": [],
           "edam_operations": [],
@@ -883,6 +891,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "ASCAT's called segments, turned into the canonical copy-number profile contract. Per the ASCAT documentation the .cnvs.txt file carries sample, chr, startpos, endpos, nMajor and nMinor, one row per segment. The major and minor allele counts become an absolute copy number, a log2 ratio against a diploid baseline and the segment's expected B-allele frequency, so copy-neutral LOH reads as a BAF split even though the total copy number never moves.",
           "edam_formats": [],
           "edam_operations": [],
@@ -955,6 +964,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "ASCAT's fit for each tumour sample. Per the ASCAT documentation the .purityploidy.txt file carries AberrantCellFraction and Ploidy, one data row per sample. Purity is the share of sequenced cells carrying the tumour genome, ploidy the average copy number of that genome, and every log2 ratio on the copy-number profile is read against them: a low-purity sample flattens the whole track.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1028,6 +1038,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How each library's reads are spread over the reference sequences ataqv counted. One sequence carrying a disproportionate share, or a library whose profile does not match its peers, shows up here before any peak is called.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1127,6 +1138,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The fragment-length histogram of every library in long form. A good ATAC library shows a sub-nucleosomal peak below 100 bp followed by a decaying nucleosome ladder; a flat or ladder-free profile is a failed transposition.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1212,6 +1224,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per ATAC library: TSS enrichment, the share of high-quality autosomal alignments that fall inside peaks, mitochondrial and duplicate fractions, and the peak statistics ataqv computed. These are the numbers an ATAC library is accepted or rejected on, and MultiQC has no module that reports them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1335,6 +1348,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Aggregate read coverage in a window centred on every transcription start site, recentred so 0 is the TSS. The height of the central spike over the flanks is the TSS enrichment score; the shape says whether that enrichment is a sharp signal or a broad shoulder.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1444,6 +1458,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bambu gene-level read counts, the top 50 genes by total count across samples, features x samples.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1511,6 +1526,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bambu gene counts melted to one row per sample and gene, with CPM and log2(CPM + 1) normalised against the full library. The long shape is what a sample filter can reach: the wide matrix next to it carries no sample column.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1620,6 +1636,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bambu transcript-level read counts, the top 50 transcripts by total count across samples, features x samples.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1675,6 +1692,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bambu transcript counts melted to one row per sample and transcript, with CPM and log2(CPM + 1) normalised against the full library, and the gene and biotype each isoform belongs to carried alongside.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1771,6 +1789,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Square sample-by-sample Spearman correlation of log-CPM gene expression: the plot that shows a swapped label or a replicate that did not replicate, one row and one column per sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1838,6 +1857,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample: the first three principal components of the log-CPM gene matrix, restricted to the 500 most variable genes the way DESeq2 plotPCA does, next to the library size, the number of genes detected and the share of the library its 50 top genes take.",
           "edam_formats": [],
           "edam_operations": [],
@@ -1978,6 +1998,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The 100 genes with the highest variance of log2(CPM + 1) across the run, wide (genes x samples). Ranking on normalised values rather than raw counts is what makes it a design heatmap instead of a library-size heatmap.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2058,6 +2079,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The distribution blocks of `bcftools stats`, melted into one long frame so a single `section` filter drives every tile instead of five separate collections. `section` is one of `indel_length` (insertion and deletion length, deletions negative), `substitution` (the A to C, A to G, ... substitution spectrum), `depth` (read depth), `allele_frequency` (non-reference allele frequency) and `singleton_stats` (variants seen in exactly one allele copy). The key column differs per section, which is the price of melting: a numeric distribution puts its x value in `bin` and leaves `label` null, a categorical one puts its x value in `label` and leaves `bin` null, and `depth` fills both because bcftools writes its open-ended top bucket under a non-numeric bin name. `count` is always a count of variant records, but of a different kind per section (sites for indel length and depth, SNPs for allele frequency, substitutions or singletons for the two categorical ones), so summing it within a filtered section is meaningful and summing it across sections is not. Sample and caller are read off the report's own `ID` line, so any layout a pipeline publishes the reports under works. The quality block is left out: it is most of the rows of a real callset, and the VCFtools Ts/Tv-by-quality sweep answers its question.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2114,6 +2136,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample, per-caller variant record counts (SNPs, indels, multiallelic sites) from `bcftools stats`. Pipeline-agnostic: any workflow that runs `bcftools stats` per caller per sample, with the caller and sample in the path rather than in the file, lands in the same collection.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2211,6 +2234,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample, per-caller transition/transversion ratio from `bcftools stats`. A germline WES/WGS SNP call set typically lands close to 2.0-2.1; a caller with too few SNPs to score (e.g. a structural-variant caller) reads 0.0 rather than being absent.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2279,6 +2303,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How the reads of each lane were shared between the libraries of the sample sheet and the Undetermined reads no index matched, with the yield, base quality and index-match purity of each library, from bcl2fastq Stats.json.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2407,6 +2432,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per lane: clusters detected and passing filter, yield, base quality, the Undetermined share and how evenly the libraries split the lane, from bcl2fastq Stats.json.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2516,6 +2542,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Yield and the share of bases at Q30 or above for every read of every lane, pooled over the libraries and the Undetermined reads, from bcl2fastq Stats.json.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2588,6 +2615,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The index sequences bcl2fastq saw most often among the reads it could not assign, per lane, classed by whether their i7 and i5 belong to libraries of the lane: a pair of indexes both in use points at an index hop or a sample sheet swap.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2654,6 +2682,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How the reads of each lane were shared between the libraries of the sample sheet and the Undetermined reads no index matched, with the yield, base quality and index-match purity of each library, from BCL Convert Reports CSVs.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2782,6 +2811,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per lane: clusters detected and passing filter, yield, base quality, the Undetermined share and how evenly the libraries split the lane, from BCL Convert Reports CSVs.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2891,6 +2921,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Yield and the share of bases at Q30 or above for every read of every lane, pooled over the libraries and the Undetermined reads, from BCL Convert reports.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2963,6 +2994,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The index sequences BCL Convert saw most often among the reads it could not assign, per lane, classed by whether their i7 and i5 belong to libraries of the lane: a pair of indexes both in use points at an index hop or a sample sheet swap.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3029,6 +3061,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample Bismark bisulfite alignment: pairs analysed, the unique-best-hit count and mapping efficiency Bismark itself reports, plus how many pairs never aligned or mapped to more than one place. MultiQC draws the bar; the exact counts behind it are only readable here.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3126,6 +3159,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Genome-wide CpG methylation averaged into 10 kb windows, one row per library per window, streamed out of the per-CpG bedGraph without ever holding it in memory. The only coordinate-bound collection a methylseq run can produce, and the matrix every cohort-level panel downstream reads.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3265,6 +3299,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample Bismark PCR-duplicate removal: alignments examined, duplicates removed and the leftover count carried into methylation extraction. A duplication rate far above the run's median is the usual sign of a library that was oversequenced relative to its complexity.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3349,6 +3384,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "% methylation by read position in all three cytosine contexts and both reads, with the context and the read as columns so two small filters replace six tiles. The CHH panel is the read-position view of bisulfite conversion: a curve that climbs at the 5' end says the first bases of the read are not converting, which a run-level conversion percentage averages away.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3419,6 +3455,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "% methylation by read position, CpG context, read 1 and read 2 separately. MultiQC draws the same curve but as a static picture; here it is linkable through the sample filter, and the raw coverage behind each position stays queryable next to it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3476,6 +3513,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Post-deduplication, post-extraction methylation level in each cytosine context (CpG, CHG, CHH), one row per sample per context. CpG is where mammalian methylation concentrates; CHG and CHH sitting near zero is the usual bisulfite-conversion sanity check, not signal.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3558,6 +3596,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Distribution of per-CpG methylation, one curve per library, binned to 2 % buckets out of the full bedGraph. A healthy mammalian methylome is sharply bimodal at 0 % and 100 %; a curve that has lost the bimodality, or whose 0 % peak has drifted up, is reporting incomplete conversion or a depth too low for a site call.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3642,6 +3681,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bismark's own run-level table (bismark2summary), one row per library, the only file a methylseq run publishes that puts the read funnel and the cytosine counts side by side. Adds the ratios a reader asks of those counts: alignment and duplication yields, methylation level per context, and the bisulfite conversion efficiency read off the CHH calls.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3765,6 +3805,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The 150 windows whose methylation moves most across the cohort, wide (windows x libraries). The region-level equivalent of a top-variable-gene heatmap: a correlation matrix says the libraries differ, this says where. A ranking, not a test; significance is the group comparison's job.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3833,6 +3874,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Pairwise Pearson correlation of the libraries over their shared 10 kb windows, square (libraries x libraries). Replicates of a condition correlate with each other and less with everything else; a library that sits in the wrong block is a swap, a mislabelled sheet, or a conversion failure that flattened its methylome.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3875,6 +3917,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every eligible 10 kb window (enough CpGs in every library, re-binned from the per-CpG bedGraphs without the drawing stride) tested between the two levels of the first two-level factor of the run's design table, on the arcsine square-root transform of its methylation proportion, corrected with Benjamini-Hochberg over all tested windows. nf-core/methylseq ships no differential-methylation caller at any version, so this is the screen the published files support: a region ranking on library-level replication, not a called DMR set.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4002,6 +4045,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The first components of a PCA over the binned methylome, one point per library. Answers what no per-sample QC number can: whether the libraries separate by the design the sheet declares or by depth, batch and conversion rate. Decomposed with a plain numpy SVD inside the recipe.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4072,6 +4116,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The two Bowtie 2 alignments of a spike-in normalised run, side by side: how much of each library reached the target genome, how much reached the carrier spike-in genome, and the scale factor the pipeline divides the coverage by before two samples are compared.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4193,6 +4238,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per assessed assembly from BUSCO's batch summary: the complete, single-copy, duplicated, fragmented and missing percentages against the lineage dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is the headline; a high duplicated share on a haploid target points at retained haplotigs, a high fragmented share at a base-level error rate high enough to break gene models.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4307,6 +4353,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The same BUSCO scores unpivoted into the four classes that add up to the lineage set: complete single-copy, complete duplicated, fragmented and missing. Read as one stacked bar per assembly, it separates an assembly that lost genes from one that kept them twice, which a single complete percentage cannot.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4394,6 +4441,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "CellBender's per-sample accounting of ambient-RNA removal: counts removed, cells found against the expected count, and the training convergence parameters.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4472,6 +4520,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per nf-core/scrnaseq --aligner route: the cells it called, the cells CellBender kept on that route, its median UMI per cell and its mapping rate. Each route reports those through a different tool, so the table is the translation layer a comparison needs.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4568,6 +4617,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "UMI count per barcode against its rank, summed from the raw feature-barcode matrix (background droplets included) and flagged against the barcodes Cell Ranger kept as cells, the knee that separates real cells from ambient noise.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4652,6 +4702,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per barcode any method called a cell, across the Cell Ranger, simpleaf/alevin-fry and kallisto routes plus CellBender on each, on one normalised 16-mer barcode. Cell Ranger's barcodes carry a GEM-well suffix the other routes do not, so the normalisation is the whole point.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4727,6 +4778,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "S and G2/M scores per cell from the Tirosh gene sets, and the phase call that follows from them. Tells a cluster that is a distinct cell type apart from one that is the same cell type, cycling.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4836,6 +4888,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per called cell, one Float64 column per panel gene (the run's own cluster markers, the optional MARKER_PANEL of the run and the most dispersed genes), log1p(CP10k), next to the cell's UMAP coordinates and cluster. The embedding renderer lists every column in its Colour-by menu, so this is the table that answers \"type a gene, see it on the UMAP\", and the wide matrix the two-group comparison is computed over.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4922,6 +4975,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The marker-panel slice of the cell x gene matrix (MARKER_PANEL when set, else the top markers of each cluster), melted to one row per (cell, gene), so a distribution plot can show the spread of one marker across clusters rather than the cluster mean a dot plot draws.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5017,6 +5071,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample with the four stages of barcode filtering as four columns, in pipeline order: barcodes observed, cells called, cells CellBender also kept, cells no MAD rule flagged. The retention chain that is otherwise spread over four tiles in three sections.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5114,6 +5169,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per called cell: UMI / gene counts, mito / ribo / hemoglobin / top-20 fractions, graph-based and k-means clusters, UMAP / t-SNE / PCA coordinates, CellBender agreement and a MAD-based QC flag. The hub every other cell-level cellranger output joins to.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5482,6 +5538,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per graph-based cluster: size, QC medians and the share of cells CellBender also called, aggregated from the per-cell QC hub.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5615,6 +5672,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Top marker genes per graph-based cluster (cluster vs every other cell), ranked by adjusted p-value: log2 fold change, mean counts and significance.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5727,6 +5785,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "UMAP, t-SNE and the first 3 principal components of every cell, coloured by Cell Ranger's graph-based cluster.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5818,6 +5877,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Mean expression against normalised dispersion for every gene Cell Ranger measured, flagged with whether it kept the gene for the PCA. The feature selection step behind every embedding on the dashboard, and the answer to why a gene is missing from one.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5922,6 +5982,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The 5 headline Cell Ranger metrics 10x's QC guidance gives a pass/warn/fail band for, one row per (sample, metric), with the threshold and the status it crosses.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6000,6 +6061,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Confidently-mapped reads split into exonic, intronic and intergenic regions, plus the antisense and unmapped shares, for a stacked bar.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6045,6 +6107,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Mean log-normalised expression and detection rate of the top graph-based cluster marker genes, for every cluster, so the dot plot shows cluster-specificity.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6128,6 +6191,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Wide companion to marker_expression: one row per marker gene, one column per cluster, mean log-normalised expression, for the heatmap.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6170,6 +6234,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Cell Ranger count's headline per-sample metrics: cells called, sequencing depth and saturation, mapping rates and the QC-thresholds (Q30) behind them, typed and de-commafied.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6250,6 +6315,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Share of total expression variance each of Cell Ranger's reported principal components explains, the scree behind the PCA embedding.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6317,6 +6383,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How much of a genome each bin holds and how much of it belongs to something else. Completeness against contamination is the plot metagenome binning is read on: the top-left corner holds the bins worth naming, the right-hand side holds chimeras, and the spread between binners on the same assembly says which binner to trust for this sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6498,6 +6565,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "CNVkit's bin-level copy ratios and its called segments in one long table. Per CNVkit's file-format documentation the .cnr file carries chromosome, start, end, gene, depth, log2 and weight, one row per bin, and the .cns file carries chromosome, start, end, gene, log2, depth, probes and weight, one row per segment, with cn and baf added when cnvkit call has run. The two are folded together and told apart by the segment column, so one component draws the evidence and the call on the same axis.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6594,6 +6662,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The comBGC regions as coordinates rather than counts: contig, interval, product class and region length in kilobases, one row per predicted cluster. Three tracks read the same rows, so a run whose genome renderer is unavailable still has the lane view and the density profile.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6704,6 +6773,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per predicted biosynthetic gene cluster, with the caller, product class, region coordinates, CDS count and PFAM domain richness normalised across antiSMASH, DeepBGC and GECCO.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6815,6 +6885,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Contig by caller membership matrix, one 0/1 column per BGC prediction tool. Agreement is scored on the contig: the callers disagree on region boundaries by design, so a coordinate join would report no overlap at all.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6866,6 +6937,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Control-FREEC's per-window copy ratios and the segments they encode. Per the Control-FREEC documentation the _ratio.txt file carries Chromosome, Start, Ratio, MedianRatio and CopyNumber, plus BAF, estimatedBAF, Genotype and UncertaintyOfGT when a SNV file was supplied. MedianRatio is the segment value written on every window the segment covers, so a run of identical values is one segment: the windows and the recovered segments land in the same table, told apart by the segment column.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6963,6 +7035,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Binned, ICE-balanced intra-chromosomal contact matrix from a cooler dump, joined to its bins. One partition per resolution, keyed by the resolution column, so a tile re-bins itself as the reader zooms; coarser levels are derived by merging bins when the run dumped a single resolution.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7034,6 +7107,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Contact probability against genomic distance, recomputed from the balanced cooler dump over log-spaced distance bins, one curve per chromosome plus the genome-wide pooled curve, with the log-log slope alongside it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7118,6 +7192,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "TAD intervals derived from the insulation track's boundary calls, one row per domain per window size, with its span, the bins it covers and the boundary strength at each edge.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7218,6 +7293,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-chromosome eigenvalues behind the A/B compartment track, how much of the intra-chromosomal structure each eigenvector explains.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7274,6 +7350,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-bin first eigenvector (E1) of the intra-chromosomal correlation matrix, the A/B compartment track. Sign marks the compartment, zero-crossings are compartment boundaries. The recipe phases E1 per sample, resolution and chromosome so it correlates positively with bin coverage (1 / balancing weight): the better-covered compartment is A, the same way at every resolution, without a GC or gene track.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7360,6 +7437,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-bin insulation score and cooltools' own boundary calls at every window size the run scanned, low insulation marks a TAD boundary.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7469,6 +7547,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Splice junctions that matched the CTAT cancer intron reference, with their prevalence in TCGA tumour cohorts and GTEx normal tissues unpacked into a leading cohort and tissue. Empty on runs with no annotated cancer introns.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7550,6 +7629,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per splice junction CTAT-SPLICING read from the STAR alignment, with the junction coordinate split into chromosome and position, the gene it falls in and how many uniquely and multi mapped reads support it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7684,6 +7764,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample and peak caller: how many peaks that caller made, how wide they are, how many of them the other caller reproduced and how many it never saw. A sample a caller returned nothing for keeps a row with n_peaks 0.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7839,6 +7920,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Each sample's fragment coverage split into the part that falls inside its own peaks and the part that does not, in base pairs and as a fraction. SEACR reports no read count, so the numerator is the summed region signal de-scaled by the spike-in factor and the denominator is the fragment-length histogram.",
           "edam_formats": [],
           "edam_operations": [],
@@ -7923,6 +8005,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per CUT&RUN sample, collapsed from the library rows of the validated samplesheet: the name every output file uses, the target it profiles, its replicate number, whether it is an IgG control and which control it was called against.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8051,6 +8134,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per library pairing the two ancient-DNA authenticity signals, terminal deamination at the first base of a read and mapped fragment length, so a modern contaminant (long, undamaged), an ancient extract (short, damaged) and over-sheared modern DNA (short, undamaged) separate on one plane. Derived from the two tidied DamageProfiler collections, which a template must declare before this one.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8163,6 +8247,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Mapped fragment length by strand, from DamageProfiler's lgdistribution table. The second authenticity signal after the misincorporation profile: ancient DNA is depurination-fragmented and rarely survives past about 100 bp, so a length distribution that looks like a modern library's is a contamination flag even when the damage curve passes.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8259,6 +8344,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Substitution frequency by distance from the read end, 5' and 3', C>T and G>A deamination against every other substitution pooled, the ancient-DNA authentication read.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8343,6 +8429,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per predicted carbohydrate-active enzyme gene, with the family each of the three run_dbCAN tools called, how many agree, the resolved family, its CAZy class and the predicted substrate.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8455,6 +8542,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per CAZyme gene cluster with a predicted substrate, from homology to dbCAN-PUL (with its bitscore) and from the dbCAN-sub majority vote.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8525,6 +8613,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Gene by annotation-tool membership matrix: 1 when HMMER, dbCAN-sub or DIAMOND reported a CAZy family for the gene. run_dbCAN recommends a family only where at least two of the three agree, so the intersections read as call confidence.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8576,6 +8665,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Pairwise correlation of the genome-wide bin counts, square (samples x samples). Replicates of one target correlate with each other and with nothing else; a block that spans two targets is a swap or a contamination.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8618,6 +8708,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How concentrated each library's coverage is, as the quality metrics plotFingerprint writes beside its curve: the area under the observed cumulative-coverage curve, the same area for a perfectly uniform library of that depth, and the divergence between the two. Enriched targets sit far from the uniform reference, inputs and failed enrichments sit on top of it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8728,6 +8819,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The mean signal of every library across the plotted window, one row per bin. With `computeMatrix scale-regions` the window is the flanking region plus a gene body stretched to a fixed number of bins; with `reference-point` it is a window centred on one anchor. `bin_label` carries deepTools' own anchors, so the marker can be placed without hard-coding the window.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8824,6 +8916,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Where each library sits on the first components of a PCA over the genome-wide bin counts, with the share of variance each component explains. Replicates of one target cluster; a library that lands with the controls did not enrich.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8894,6 +8987,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The principal components nf-core's own deseq2_qc.r computed on the count matrix, read from the file the pipeline publishes rather than recomputed, so the dashboard and the MultiQC report show the same points. The variance each component explains is parsed out of the file header and kept as a column. A run with several count matrices (one per antibody, merge level or aligner route) gets one PCA per matrix, told apart by the pca_set column.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8952,6 +9046,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The square sample-by-sample Euclidean distance matrix nf-core's own deseq2_qc.r clusters its QC dendrogram on, read from the file the pipeline publishes. Symmetric with a zero diagonal, so a clustered heatmap over it reproduces the dendrogram the report draws.",
           "edam_formats": [],
           "edam_operations": [],
@@ -8996,6 +9091,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-contrast DESeq2 statistics concatenated into one tidy table, one row per contrast and feature, with the significance call and the MA abscissa precomputed.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9171,6 +9267,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The same DESeq2 statistics joined to the GTF gene annotation: symbol, chromosome, coordinates and biotype, so the calls can be placed on the genome.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9399,6 +9496,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Euclidean sample-to-sample distances over the most variable features, the square matrix behind the DESeq2 sample-clustering QC panel.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9433,6 +9531,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample density of the variance-stabilised expression matrix, binned on a grid shared by every sample so the curves are directly comparable, plus each sample's five-number summary. The features sitting at the matrix floor are excluded from the grid, because the spike they form is tall enough to flatten the rest of the curve, and published as a share instead. This is the panel that says whether a library is shaped like its neighbours at all, which a PCA cannot.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9514,6 +9613,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The 500 most variable features of the variance-stabilised matrix, wide (features x samples), with the sample sheet's factors as column annotations.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9548,6 +9648,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Principal components of the variance-stabilised expression matrix, one point per sample, computed on the most variable features the way DESeq2 plotPCA does.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9629,6 +9730,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "DEXSeq differential transcript usage (DTU) as nf-core/rnasplice's dexseq_dtu route writes it: one row per contrast and transcript with its usage log2 fold change (treatment over control), p-value, adjusted p-value and the gene-level q-value.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9712,6 +9814,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "DEXSeq differential exon usage as nf-core/rnasplice's dexseq_exon route writes it, summarised to one row per contrast and gene: the gene-level q-value, how many exonic bins were tested and called, and the most significant bin's log2 fold change, oriented treatment over control.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9807,6 +9910,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "DEXSeq per-transcript usage statistics from nanoseq's Bambu-based differential expression subworkflow, with the significance call precomputed on the gene-level adjusted q-value.",
           "edam_formats": [],
           "edam_operations": [],
@@ -9914,6 +10018,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "edgeR diffSpliceDGE as nf-core/rnasplice's edger_exon route writes it, one row per contrast and gene: the gene-level F-test and Simes FDRs, how many exons were tested and called, and the most significant exon's relative log2 fold change (treatment over control).",
           "edam_formats": [],
           "edam_operations": [],
@@ -10020,6 +10125,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "alakazam rank-abundance curve per sample: the bootstrapped relative abundance of every clone against its rank within the sample, with the confidence band the bootstrap gives it. The band is what separates a genuinely expanded head from one estimated off a handful of sequences.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10092,6 +10198,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "alakazam Hill diversity profile per sample: the bootstrapped diversity d at every order q from richness to inverse Simpson, with its confidence band and the matching evenness.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10151,6 +10258,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Sample by sample matrix of how many clones two samples share. Clones are defined within a subject, so samples of different subjects always read zero; the diagonal is zeroed so the colour scale spans the real sharing.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10206,6 +10314,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Clone by sample presence matrix. Each row is one clone of one subject and each sample column is a 0/1 membership flag, so an UpSet reads the intersections as clones shared by exactly those samples.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10259,6 +10368,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every clone of every sample with its sequence count and frequency, its rank within the sample (a rank-abundance curve) and its clonal-homeostasis size class.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10332,6 +10442,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "alakazam Hill diversity per sample at q = 0 (richness), q = 1 (Shannon) and q = 2 (inverse Simpson), with the bootstrap confidence interval, one labelled row per sample and order.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10388,6 +10499,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample: sequences that entered clonal assignment, the clones they collapsed into, the clone-size spread, and the rarefied Hill numbers with their confidence bounds.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10505,6 +10617,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Sequences left after every pRESTO and Change-O step, one row per sample, with the fraction of raw reads that reach the final annotated repertoire.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10593,6 +10706,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Where the reads of each sample go through the pRESTO and Change-O funnel, one weighted row per loss point, shaped for a Sankey.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10642,6 +10756,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The nearest-neighbour distance model shazam fitted per subject and the threshold it chose to separate clonally related from unrelated sequences, with the sensitivity and specificity that threshold achieves.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10711,6 +10826,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Sample by V gene matrix of sequence fractions, one row per sample and locus, ready to be clustered so samples with a similar V repertoire group together.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10753,6 +10869,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "V gene usage per sample at two resolutions, family and gene, stacked into one long table so the composition can be read at either level.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10822,6 +10939,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Share of a library's reads that map to the target reference, before and after the quality filter and deduplication, from endorS.py. The headline number of an ancient-DNA screen: it says how much of an extract is the organism rather than the soil, the excavator and the lab.",
           "edam_formats": [],
           "edam_operations": [],
@@ -10957,6 +11075,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per annotated contig with how many features each nf-core/funcscan screen put on it, the contig length and coverage when the contig name carries them (SPAdes or MEGAHIT headers, null otherwise), and the feature density that follows. This is the annotation layer the four screens share: they all report the contig a feature sits on, even though the annotation step itself publishes no table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11088,6 +11207,7 @@
             "fasta": "String",
             "sample": "String"
           },
+          "dc_type": "table",
           "description": "The nf-core/funcscan input sheet: one row per sample and the assembly it was screened from. Two columns and no experimental factor, which is why the cohort filters on this pipeline are built on the screening hub rather than on the sheet.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11119,6 +11239,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample with the headline count of every nf-core/funcscan screen that produced a result: resistance-gene hits and distinct genes, antimicrobial peptide candidates and how many reach high confidence, biosynthetic gene cluster regions and product classes, CAZyme genes and families. The four screens share no table of their own, so this is the collection every sample filter and every cross-screen comparison hangs off.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11282,6 +11403,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per process and tool with the version the run recorded, plus the screen the process belongs to. nf-core/funcscan feeds MultiQC nothing but this table, so the report has no plot to bind and the versions are read out of the report itself instead.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11391,6 +11513,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per FusionCatcher candidate fusion, with both partner genes, the annotation labels the pair matched, the read evidence supporting the call and its predicted effect on the coding sequence.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11511,6 +11634,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per fusion transcript pair that survived FusionInspector's re-alignment, with the junction and spanning read support, the normalised expression (FFPM), the fusion-allele ratios against each partner, and the protein-level consequence of the fusion.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11616,6 +11740,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The Pfam domains FusionInspector annotates on the 5' and 3' partner of each fusion protein, unpivoted from the packed PFAM_LEFT / PFAM_RIGHT fields into one row per domain with its amino-acid span and e-value.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11739,6 +11864,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Long form of the per-caller evidence strings fusion-report writes next to each fusion: one row per fusion and caller, with the read support that caller reported normalised to a single comparable count.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11848,6 +11974,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per fusion and sample, with the knowledge bases that already know it, the Fusion Indication Index fusion-report ranks by and a 0/1 flag per caller the run executed, named after the tool. The sample is read off the file name. The caller flags are the set columns a caller-concordance UpSet reads.",
           "edam_formats": [],
           "edam_operations": [],
@@ -11977,6 +12104,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "GenomeScope's fit to the read k-mer spectrum: the haploid genome length, the share of it in repeats, the heterozygosity and the read error rate, each as a min to max range. The haploid length is the size an assembly should approach; a high heterozygosity warns that a collapsed assembly will carry duplicated haplotigs, and a poor model fit that the other numbers are not to be trusted.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12085,6 +12213,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Gene sets enriched at one pole of a contrast, from the report tables a pre-ranked GSEA run publishes. Neither the contrast nor the pole is a column of those files, so the recipe recovers both from the file name and stacks every report into one frame. The leading-edge percentage is parsed out of the string GSEA writes for a human reader, and an FDR q-value of zero, which is what GSEA writes below its resolution, is clipped at the run's own floor rather than sent to infinity.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12213,6 +12342,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The community each binning run recovered, as bins per taxon at the rank you pick. Two binners on the same assembly rarely recover the same set, and this is where that shows: a binner that finds ten phyla where its neighbour finds four is either more sensitive or splitting one genome into pieces, and the bin quality tiles next to it say which.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12315,6 +12445,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Which organism each recovered bin is, placed against the Genome Taxonomy Database. The lineage is split into one column per rank, so a phylum becomes a filter that reaches every other tile and the deepest rank a bin reached becomes a readable number instead of a string to squint at.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12490,6 +12621,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Exon and CDS blocks of every transcript in a run's GTF/GFF annotations, one row per block, carrying the gene, the strand, the novelty class and the per-transcript expression when the writer recorded one.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12582,6 +12714,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Drug class by sample hit-count matrix, one aggregation level above the gene matrix: the three tool vocabularies are folded onto one leading class per row, with the screen that reports the class most often and how many distinct genes it covers as row annotations.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12630,6 +12763,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Resistance gene by sample hit-count matrix, one row per gene symbol with its most frequent drug class as a row annotation and one numeric column per sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12677,6 +12811,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample and resistance gene: how many hits were reported, how many of the screening tools agree on it, and the mean identity and coverage of the hits that carry them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12749,6 +12884,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per antimicrobial-resistance gene hit, with the sample recovered from the per-tool input file name and the drug class, screening tool, reference database, identity and coverage normalised across every ARG tool.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12869,6 +13005,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Contig by screening-tool membership matrix, one 0/1 column per ARG tool. Concordance is scored on the contig because every tool has its own gene vocabulary while the contig id is shared.",
           "edam_formats": [],
           "edam_operations": [],
@@ -12922,6 +13059,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Germline hap.py SNP precision-recall sweep across quality thresholds (one row per QQ threshold).",
           "edam_formats": [],
           "edam_operations": [],
@@ -12965,6 +13103,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Germline SNP/INDEL accuracy from hap.py, pooled across samples by variant type and filter (ALL/PASS) with recomputed precision/recall/F1.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13019,6 +13158,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Mean contact frequency against genomic distance, hicexplorer's hicPlotDistVsCounts curve, the standard Hi-C library-quality signature.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13087,6 +13227,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The same HiC-Pro statistics as one weighted row per read-pair fate, mapping to restriction-fragment filter to contact class, so the funnel can be drawn as a flow and the cis/trans split as a composition.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13161,6 +13302,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "HiC-Pro's own mapping, pairing, restriction-fragment and contact statistics pivoted into one row per sample, so the valid-pair funnel and its rates are filterable numbers instead of a MultiQC image.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13337,6 +13479,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per annotated peak: the genomic feature class HOMER assigned it, the signed distance to the nearest transcription start site and the gene that start site belongs to.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13456,6 +13599,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How each sample's peaks are distributed around the nearest transcription start site, counted in 250 bp bins across a 20 kb window. A sharp central spike means the peaks are promoter-bound; a flat curve means they sit across gene bodies and intergenic space.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13563,6 +13707,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Cluster density, clusters passing filter, phasing and prephasing, Q30 share, yield and PhiX error rate for every lane and read, from the InterOp summary table (interop_summary --csv=1), the numbers Sequencing Analysis Viewer shows.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13689,6 +13834,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Sample by gene mutation matrix derived from the long variant table, one row per observed sample/gene/effect combination.",
           "edam_formats": [],
           "edam_operations": [],
@@ -13771,6 +13917,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample annotated variant calls (long table).",
           "edam_formats": [],
           "edam_operations": [],
@@ -13919,6 +14066,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The k-mer multiplicity histogram of each read set, cut past the main peak. The main peak sits at the k-mer depth of the sequencing; a second peak at half that depth is the heterozygous share of the genome, and a long right tail the repeats. It is the curve GenomeScope fits, so a genome size estimate can be checked against it by eye.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14017,6 +14165,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Reads processed and pseudoaligned by kallisto bus, barcodes on the 10x whitelist after correction, and the cells kb count --filter called, one row per sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14096,6 +14245,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every MACS2 broad peak of every sample in one table, with the region width, its centre and the fold enrichment, p-value and q-value MACS2 reported for it. A broad call has no summit, so the region centre stands in for it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14206,6 +14356,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Merged consensus intervals against the samples that called a peak on them, as one 0/1 column per sample. The intersections say how reproducible the peak set is between replicates and between conditions.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14297,6 +14448,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Fold enrichment of the most strongly bound consensus intervals, one numeric column per sample, ready to cluster. Intervals a sample did not call are 0, so blocks of contrast-specific binding stand out.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14364,6 +14516,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample: how many peaks MACS2 called, the FRiP score, and the median, mean and maximum of peak width, fold enrichment and significance across those peaks.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14458,6 +14611,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every MACS2 narrow peak of every sample in one table, with the summit position, the peak width and the fold enrichment, p-value and q-value MACS2 reported for it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14617,6 +14771,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The peak calls of every sample aggregated on a 4 kb window centred on their summits, in 50 bp bins: the share of the sample's peaks still covering each offset (the average peak footprint), and how densely the other samples of the run place their own summits around this sample's summits. Derived from the narrowPeak intervals only, so it is a peak-call aggregate and not a read coverage metagene.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14726,6 +14881,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Everything four tools know about each recovered bin in one row: how complete and how clean CheckM2 thinks it is, how it is assembled, what Prokka found in it and what GTDB-Tk calls it. It is the table the whole binning question is settled on, and the only place the MIMAG tier is computed with its RNA criteria included rather than from completeness alone.",
           "edam_formats": [],
           "edam_operations": [],
@@ -14931,6 +15087,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How deeply each contig is covered, once per sample whose reads were mapped back onto the assembly. Length against depth is the plot a binner sees before it decides anything: contigs of one organism sit in a band, and a contig deep in one sample and flat in another belongs to something only one of them carries. Contigs under 1 kbp are left out because no binner uses them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15069,6 +15226,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Melon's marker-gene estimate of the community, as genome copies rather than read counts, with the seven NCBI ranks already split into their own columns. The rows are pooled across the long-read samples the tool ran on: the sample id lives only in melon's output path.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15169,6 +15327,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per assembly: the consensus quality value Merqury derives from k-mers found in the assembly but not in the reads, and the share of solid read k-mers the assembly recovers. QV is logarithmic (QV 40 is one error per 10 kbp, QV 50 one per 100 kbp); completeness below the expected level points at sequence the assembly lost, completeness near 100 with a low QV at an assembly that kept everything but did not polish it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15269,6 +15428,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Where the solid read k-mers ended up, per assembly: absent from it, present once, twice, three times, four times or more. On a haploid or collapsed assembly nearly all of them should be present once; a large absent share is lost sequence, a large two-copy share is duplicated sequence such as retained haplotigs. Read k-mers at or below the error trough of the read spectrum are left out, so sequencing errors do not count as absent sequence.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15341,6 +15501,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Merqury's QV for every contig or scaffold of every assembly. Errors are rarely spread evenly: a handful of short, low-QV sequences often carry most of an assembly's error k-mers, and they are the ones to inspect, polish or drop. Sequences with no error k-mer have no finite QV and are flagged error-free.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15440,6 +15601,7 @@
             "clade_name": "String",
             "relative_abundance": "Float64"
           },
+          "dc_type": "table",
           "description": "Per-sample taxonomic relative-abundance profile.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15495,6 +15657,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Matched fragment ions per identified peptide (b, y and other series) with the median absolute fragment mass error in ppm, summarised from the pyOpenMS ion annotation mhcquant writes with --annotate_ions.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15563,6 +15726,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Distinct peptide sequences per length and sample, as counts and as the share of the sample. The class I signature is a sharp 9-mer mode inside 8 to 12 residues; class II peptides spread over 13 to 25.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15630,6 +15794,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Frequency of every standard amino acid at every position of the distinct peptides of each well-supported length, per sample: the anchor positions of the presenting MHC alleles stand out as columns dominated by a few residues.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15685,6 +15850,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Each sample's distinct peptidoforms split three ways, by length, by precursor charge and by modification state, as a long table a stacked composition bar switches between.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15730,6 +15896,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every FDR-filtered peptide precursor of every sample, one row per sample, peptidoform and charge: score, PSM count, observed and predicted retention time, m/z, charge, neutral mass, hydropathy, P2 and C-terminal anchors, source proteins, consensus intensity and the number of replicates it was quantified in. Read from the per-sample tables mhcquant writes at the top of its output.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15877,6 +16044,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Peptidoform by replicate membership, one 0/1 column per replicate index (rep_1, rep_2 and so on), for the UpSet view of how much of a sample is seen in every injection.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15930,6 +16098,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Log10 intensity of every peptidoform in every raw replicate of its sample, long format, from the per-replicate intensity columns of a quantified run. Replicates are numbered in samplesheet ID order within the sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -15986,6 +16155,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Log10 intensity of each peptide in two replicates of the same sample, for every replicate pair, restricted to the peptides quantified in both. A good pair hugs the diagonal.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16041,6 +16211,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample: PSMs, peptides, peptidoforms and source proteins, the modified share, the length signature (median length, 9-mer share, class I and class II window shares), median score and retention-time error, and, for a quantified run, replicate completeness and correlation.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16270,6 +16441,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample and source protein: distinct peptides, shared peptides, PSMs, best score, summed intensity and the peptides themselves. Shared peptides are credited to every protein they map to.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16355,6 +16527,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "miRDeep2's novel precursor calls merged across samples by overlapping locus, one row per hairpin: how many samples report it, its best score and true-positive estimate, the reads on each arm summed over samples, the share of calls with a significant randfold test, any Rfam hit, and the sequences of its strongest call.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16451,6 +16624,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every precursor miRDeep2 scored, one row per sample and candidate: the novel hairpins it proposes and the miRBase precursors it re-discovered, with the miRDeep2 score, the estimated true-positive probability, the read stack on the mature, loop and star arms, the randfold test and the precursor locus.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16533,6 +16707,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "miRDeep2's own calibration table, one row per sample and integer score cutoff: novel candidates reported, their estimated false and true positives, known miRBase precursors recovered and the signal-to-noise ratio against permuted structures. The curve miRDeep2's authors read to pick a cutoff.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16615,6 +16790,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Each sample's miRNA reads partitioned four ways: by 3' end (reference, trimmed, templated extension, non-templated addition), by 5' end shift, by the added nucleotide, and by nucleotide change (seed, central, other). Each partition sums to the sample's miRNA reads.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16670,6 +16846,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "For the most expressed miRNAs, the mean share of reads in each isomiR class (reference, 3' trimmed or extended, 3' addition, 5' shift, seed or central change) and the fraction of samples where the class is a real part of the miRNA's reads.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16715,6 +16892,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Reads per mature miRNA and sample, summed over all its isomiRs from the joined mirtop table, with counts per million miRNA-assigned reads, their log2, the number of distinct isomiRs and the share of reads matching the reference sequence. Design columns ride along when a design table is given.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16804,6 +16982,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per miRNA: mean and median CPM, the spread of log2(CPM + 1) across samples, detection, isomiR diversity and the share of reads matching the reference sequence. The mean-variance plane of miRNAs and the record behind each point.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16887,6 +17066,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample and one CPM column per miRNA (the most expressed ones), with the design columns as text. The wide shape the two-group comparison tests column by column: pick two groups of samples, get a volcano of the miRNAs that separate them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16929,6 +17109,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Principal components of log2(CPM + 1) over the most variable expressed miRNAs, one point per sample, with the sample's miRNA library size and detected miRNAs so separation by depth can be told from separation by design.",
           "edam_formats": [],
           "edam_operations": [],
@@ -16987,6 +17168,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The most variable expressed miRNAs on the log2(CPM + 1) scale, wide (miRNAs x samples), with the design factors as column annotations when a design table is given.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17047,6 +17229,7 @@
             "sample": "String",
             "start": "Int64"
           },
+          "dc_type": "table",
           "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is).",
           "edam_formats": [],
           "edam_operations": [],
@@ -17095,6 +17278,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Log10 amplicon-coverage matrix (samples \u00d7 amplicons).",
           "edam_formats": [],
           "edam_operations": [],
@@ -17129,6 +17313,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Genome-wide coverage in windows, aggregated across all samples.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17178,6 +17363,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Read depth along the genome, from mosdepth's per-target `regions.bed.gz` files. The recipe folds the targets into fixed 1 Mb windows and reports the target-length-weighted mean depth of each window, so a capture panel with a few hundred thousand unevenly spaced targets becomes a track a browser can draw and an eye can read. Only the primary contigs are kept. One lane per sample: when mosdepth ran on more than one alignment stage of a sample (duplicate-marked, then recalibrated), one pass is kept, since both measure the same alignments.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17253,6 +17439,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "mosdepth's own headline table, one row per contig with its length, the bases of sequence that landed on it and the mean, minimum and maximum depth. When mosdepth runs against a target file it reports every contig twice, once genome-wide and once over the targets only; the recipe splits that into a `scope` column (genome or region) instead of mixing two very different depths on one axis. Sample and alignment stage come from the file name, one pass is kept per sample, and only the primary contigs and the run total are kept, which drops the thousands of ALT, decoy and HLA rows a GRCh38 run lists.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17310,6 +17497,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Mean depth on chromosome X and on chromosome Y for every library, from the small per-run table MultiQC's mosdepth module writes, split per sample and alignment stage. The X/Y depth ratio separates the two common karyotypes cleanly: two X and no Y leaves almost no Y signal and a large ratio, one X and one Y sits near 1. `inferred_sex` applies a 10x cut-off in the empty band between them. It is a heuristic on two summary numbers, not a genotype call, and a sex chromosome aneuploidy, a mixed or contaminated library or a very low-depth run can all land on the wrong side of it. Read it as a check against the sex recorded in the sample sheet, and read the raw X and Y depths beside it to see how far from the cut-off a library actually sits.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17379,6 +17567,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How many reads AdapterRemoval kept, discarded or collapsed into a single merged read, and the length ladder behind it, AdapterRemoval, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17413,6 +17602,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "ATAC-specific library quality, from ataqv, via MultiQC. The fragment-length ladder, the peak-enrichment percentiles, the MAPQ spread and the per-chromosome read distribution.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17447,6 +17637,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Variant-call statistics (substitution types, indel lengths, variant-quality counts) \u2014 bcftools stats, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17481,6 +17672,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How the reads of each lane were assigned to the libraries, and the undetermined barcodes, from bcl2fastq via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17515,6 +17707,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bismark alignment, deduplication, strand and M-bias plots, plus the per-sample methylation-extraction table, aggregated by MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17549,6 +17742,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Read-alignment summary against the reference (paired-end alignment rates) \u2014 Bowtie2, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17583,6 +17777,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bayesian re-estimation of species abundance from the kraken2 report (top taxa), from Bracken via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17617,6 +17812,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Cell Ranger count's per-sample summary stats table, barcode-rank plot, median-genes-per-cell and sequencing-saturation curves, from Cell Ranger via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17651,6 +17847,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Taxonomic read classification against a compressed FM-index (top taxa), from Centrifuge via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17685,6 +17882,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-bin completeness and contamination estimates, CheckM2, via MultiQC. No standalone CheckM2 report ships in this megatest run; these numbers only reach Depictio through this panel.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17719,6 +17917,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Pass or fail verdicts on reads per sample, undetermined share and overrepresented unknown indexes, from CheckQC via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17753,6 +17952,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17787,6 +17987,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "MultiQC's own 5' and 3' misincorporation curves and read-length distributions from DamageProfiler, one line per sample. The tidy per-position table with the \"other substitutions\" pooled is `damageprofiler/misincorporation`.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17821,6 +18022,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Signal enrichment across the genome \u2014 the plotFingerprint cumulative-coverage curve that separates an enriched ChIP from its input, from deepTools, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17855,6 +18057,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Duplication rate as a function of expression, the curve that separates a natural high-expression duplicate from a library-preparation artefact, from dupRadar via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17889,6 +18092,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-base quality, GC content, duplication and adapter content of the demultiplexed reads, from Falco (a FastQC reimplementation) via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17923,6 +18127,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) \u2014 fastp, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17957,6 +18162,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -17991,6 +18197,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How many reads were assigned to a feature and why the rest were not (no feature, ambiguity, multimapping), from featureCounts (Subread) via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18025,6 +18232,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Fraction of mapped reads falling inside called peaks, one bar per sample. Written by the nf-core chipseq / atacseq / cutandrun peak-QC step as custom content and picked up by MultiQC, which has no FRiP module of its own.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18059,6 +18267,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Base Quality Score Recalibration (BQSR) diagnostics, observed vs. reported quality after recalibration, from GATK4, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18093,6 +18302,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18126,6 +18336,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Taxonomic placement of each metagenome-assembled genome against the Genome Taxonomy Database, GTDB-Tk, via MultiQC. The panel lists the classification and the identity to the closest reference; the `gtdbtk` tool splits the same lineage into filterable ranks.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18160,6 +18371,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Germline small-variant accuracy per callset (SNP / INDEL precision, recall, F1) as hap.py reports it through MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18194,6 +18406,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Read mapping, pairing, valid-pair filtering and contact statistics, HiC-Pro plots aggregated by MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18228,6 +18441,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Amplicon primer-trimming and variant section metrics \u2014 iVar, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18262,6 +18476,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Protein-level taxonomic classification of reads (top taxa), from Kaiju via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18296,6 +18511,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Taxonomic read classification (top species/clades) \u2014 Kraken2, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18330,6 +18546,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Metagenomic read alignment against a reference database, from MALT, via MultiQC. How many queries aligned at all, and how many of those got a taxonomic assignment.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18364,6 +18581,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Clade-specific marker-gene community profile (top taxa), from MetaPhlAn via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18398,6 +18616,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "isomiR read counts per variant type (reference, 3p and 5p ends, non-templated additions, nucleotide changes) from mirtop stats, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18432,6 +18651,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Small RNA library QC (read QC outcome, RNA type composition, read length distribution, clade contamination check, miRNA complexity) from miRTrace, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18466,6 +18686,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Distinct miRNAs detected against reads sampled, per library. A flattened curve says deeper sequencing would find few new miRNAs; a climbing one says the library was sequenced short of its complexity.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18514,6 +18735,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "miRTrace's three per-library breakdowns in one stacked-composition frame: reads by RNA type (miRNA, rRNA, tRNA, artifact, unknown), reads by miRTrace QC outcome, and detected miRNAs by organism clade, the contamination check. Read from the plot input MultiQC stores in its parquet.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18573,6 +18795,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Reads per length for each library, as a percentage of the library, with the length band miRTrace draws (under 18 nt, 18 to 26 nt for miRNA, 26 to 40 nt, 40 nt and over). A clean miRNA library peaks at 20 to 24 nt.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18634,6 +18857,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18668,6 +18892,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Long-read length and quality distributions after filtering, from nanoq via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18702,6 +18927,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Long-read sequencing QC (read length, read quality, yield) from NanoPlot's NanoStat summary, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18736,6 +18962,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Metagenome coverage and sequencing-effort redundancy curves, from Nonpareil via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18770,6 +18997,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Normalised strand cross-correlation per sample, the ratio of the fragment-length correlation peak to the background. A value near 1 means the library carries no fragment-length enrichment at all.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18804,6 +19032,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Median weight Percolator gave each rescoring feature, per sample. A feature carrying most of the weight is the one the rescoring relies on, which is where a search or a prediction model problem shows first.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18838,6 +19067,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Library-level alignment metrics (duplication, insert-size distribution, where the bases land across transcript regions and along the gene body) from Picard, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18872,6 +19102,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Long-read adapter-trimming summary (reads and bases kept), Porechop_ABI, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18906,6 +19137,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Library complexity curve \u2014 how many additional unique molecules each extra million reads buys, from Preseq, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18940,6 +19172,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-bin gene-annotation summary (coding sequences, coding density, genome size), Prokka, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -18974,6 +19207,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Genomic origin of the reads (exonic, intronic, intergenic) and the 5' to 3' gene-body coverage profile, from Qualimap via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19008,6 +19242,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19042,6 +19277,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Ribo-seq quality from Ribo-TISH: reading-frame proportions and read-length distribution of the footprints, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19076,6 +19312,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Ribo-seq periodicity from riboWaltz: P-site region distribution, reading-frame distribution and metagene profiles at the start and stop codons, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19110,6 +19347,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Relative strand cross-correlation per sample, the fragment-length correlation peak measured against the read-length artefact peak rather than against the background. It separates real enrichment from a phantom peak.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19144,6 +19382,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Where the reads land on the transcriptome (read distribution, inner distance, junction annotation and saturation, strand inference), from RSeQC via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19178,6 +19417,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Selective-alignment quantification summary (library type, fragment-length distribution, mapping rate), from Salmon via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19212,6 +19452,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Alignment flagstat summaries (mapped %, properly paired) \u2014 samtools, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19246,6 +19487,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19280,6 +19522,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Somatic small-variant accuracy per caller (combined / indel / SNV precision, recall, F1) as som.py reports it through MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19314,6 +19557,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "rRNA removal: the share of each library's reads SortMeRNA matched to the rRNA databases and removed, per database, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19348,6 +19592,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Splice-aware read alignment summary (uniquely mapped, multi-mapped and unmapped fractions, plus the per-gene count assignment) from STAR, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19382,6 +19627,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Cross-correlation between the plus and minus strand read densities across a range of strand shifts, one curve per sample. The fragment-length peak says how sharp the enrichment is; a peak at the read length alone is a phantom.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19416,6 +19662,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample pipeline summary metrics (assembly + variant calling) \u2014 viralrecon summary tables, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19449,6 +19696,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19569,6 +19817,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Structural-variant accuracy per callset (precision vs recall, TP / FP / FN classifications) as Truvari reports it through MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19603,6 +19852,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Transition/transversion ratio as a function of variant quality and non-reference allele count, VCFtools, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19637,6 +19887,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Variant Effect Predictor annotation summary (consequence classes, SIFT/PolyPhen calls, chromosome distribution), Ensembl VEP, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19682,6 +19933,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "NanoStat's per-sample long-read summary read from the report itself: number of reads, yield, mean and median read length and quality, N50, and the longest and highest-quality read the run produced.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19860,6 +20112,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How much of each library survives a quality floor: reads, percentage and megabases above each NanoStat quality cutoff, one row per sample and cutoff. A mean quality hides whether a library is tight around it or bimodal; this ladder does not.",
           "edam_formats": [],
           "edam_operations": [],
@@ -19971,6 +20224,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample clade assignment + sequence QC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20063,6 +20317,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The coverage each library would reach at a given sequencing effort, rebuilt from the gamma model Nonpareil publishes in its merged summary. One curve per sequencing library, decimated to 200 points, with the effort actually sequenced and the effort projected for 95 percent coverage carried on every row.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20131,6 +20386,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Nonpareil's fitted numbers, one row per sequencing library: the share of the metagenome the reads already reach, the effort projected for 95 percent coverage, how many times deeper that is than the run went, and the Nonpareil diversity index. The card strip the coverage curve is read against.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20248,6 +20504,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Target PSMs accepted per raw file as the target-decoy q-value threshold on the raw Comet Xcorr is relaxed from 0 to 10%, with the Xcorr cut-off at each threshold. A steep early rise is a file with good spectra.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20305,6 +20562,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per raw file: spectra searched, target and decoy PSMs, PSMs accepted at 1% and 5% target-decoy FDR on the raw Comet Xcorr, the identification rate, median target and decoy Xcorr, and the median precursor mass error. The search's own yield, before rescoring.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20402,6 +20660,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample PANGO lineage report.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20480,6 +20739,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Reads examined, duplicates flagged and the resulting duplication rate from a Picard MarkDuplicates report, with the sample read off the report name because Picard's own LIBRARY field is whatever the read group said. Low-input ancient libraries run far higher duplication than a modern shotgun library at the same depth, which is what makes this the companion of the complexity curve.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20604,6 +20864,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How many distinct molecules each library would yield at a given sequencing depth, with the 95% interval preseq puts around that extrapolation. A curve still climbing at the depth already sequenced means resequencing buys new material; one that has flattened means the library is exhausted.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20726,6 +20987,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Where the genes sit along a bin's contigs, as an arrow per coding sequence, transfer RNA and ribosomal RNA. Pick one bin and one contig and the tile becomes a locus map: operon structure, strand switches, and the ribosomal RNA operon whose presence decides the bin's MIMAG tier.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20827,6 +21089,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "What Prokka found in each bin: coding sequences, transfer RNAs, ribosomal RNAs and the gene density that follows from them. The RNA counts are the half of the MIMAG high-quality standard that completeness cannot answer, so a bin that looks finished on the completeness axis and carries no ribosomal RNA is visible here and nowhere else.",
           "edam_formats": [],
           "edam_operations": [],
@@ -20979,6 +21242,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "QCatch's per-sample headline numbers for an alevin-fry / simpleaf quantification: retained cells, sequencing depth and saturation, mapping rate, the same shape as Cell Ranger's metrics_summary.csv.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21057,6 +21321,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026).",
           "edam_formats": [],
           "edam_operations": [],
@@ -21149,6 +21414,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Alpha-rarefaction curve (sample \u00d7 depth \u00d7 iteration \u00d7 metric).",
           "edam_formats": [],
           "edam_operations": [],
@@ -21186,6 +21452,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The alpha-rarefaction curves collapsed over the iteration axis: one row per sample and depth carrying the median estimate, the interquartile spread that median hides, and the sample metadata joined on. Two orders of magnitude smaller than the raw table, and groupable, which the raw table is not.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21283,6 +21550,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21408,6 +21676,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Sample by sample Bray-Curtis dissimilarity matrix computed from the relative-abundance table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21451,6 +21720,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The taxon by sample abundance matrix prepared for ComplexHeatmap: index and row-annotation columns cast to strings, so rows and columns can be clustered.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21486,6 +21756,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21557,6 +21828,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Mean abundance against log2 fold change per taxon, joining the ANCOM-BC differentials with the per-sample counts.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21602,6 +21874,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Multi-metric alpha-rarefaction curves (sample \u00d7 depth \u00d7 iteration; shannon, observed_features, faith_pd), fanned in from the per-metric QIIME2 rarefaction CSVs.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21639,6 +21912,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample relative-abundance table with taxonomy ranks.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21720,6 +21994,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Long-format stacked-taxonomy abundance (sample \u00d7 rank \u00d7 taxon) fanned in from the per-rank QIIME2 rel-table-{2..6}.tsv collapses, with a derived Kingdom level.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21758,6 +22033,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Hierarchical taxonomic composition (Kingdom\u2192\u2026\u2192Genus with relative abundance) for a sunburst, collapsed per sample from the QIIME2 per-rank rel-abundance tables.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21793,6 +22069,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Relative-abundance barplot table at a taxonomic level (wide \u2192 long via recipe).",
           "edam_formats": [],
           "edam_operations": [],
@@ -21831,6 +22108,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Long-format taxon counts per sample, melted from the taxa barplot export, with the taxonomy string split back into its ranks.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21875,6 +22153,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Taxon by sample abundance matrix (one row per taxon, one column per sample), pivoted from the relative-abundance table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -21906,6 +22185,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22009,6 +22289,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample depth, mapping quality, error rate and duplication from Qualimap's BamQC genome_results.txt summary.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22090,6 +22371,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Windowed read depth along the whole reference, from Qualimap BamQC's own coverage_across_reference table. Qualimap reports the window centre on the concatenated reference, so the recipe maps each window back onto its contig using the per-contig lengths in the same run's genome_results.txt; without that file the track falls back to a single pseudo-contig.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22203,6 +22485,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How many bases of the reference sit at each read depth, from Qualimap BamQC. The share of the reference at each depth is derived alongside the raw base count so two libraries mapped against different references stay comparable.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22286,6 +22569,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-contig length, mapped bases and mean depth from the last block of Qualimap BamQC's genome_results.txt, plus the depth relative to the library's own genome-wide mean. The substrate of a coverage-ratio sex call and the quickest read on whether one scaffold soaked up the library.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22384,6 +22668,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The share of the reference covered at least X deep, from Qualimap BamQC. The number a shallow shotgun library is judged on, because a mean depth well under 1X says nothing about whether the reads are spread over the genome or piled on a tenth of it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22479,6 +22764,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Contig counts, N50 and assembled length for each assembly, one row per assembler and sample. Total length says how much of the community was assembled at all; N50 says whether that length sits in a few long contigs a binner can work with, or in a drift of short ones it cannot.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22620,6 +22906,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Contig counts, N50 and length of every recovered bin. Read beside a completeness estimate it separates the bins that are a genome from the bins that are a pile of fragments carrying the right genes: same completeness, three contigs against four hundred.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22763,6 +23050,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How much of each assembly survives a minimum contig length. A curve that holds its length out to 25 kbp is an assembly a binner can work with; one that loses most of its bases between 1 and 5 kbp is a drift of fragments that will bin into chimeras whatever the binner.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22864,6 +23152,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The reference-based half of QUAST's report, written only when the run gave QUAST a reference: how much of the reference each assembly covers, how often it breaks with it (misassemblies), its mismatch and indel rates, and NGA50, the contiguity that is left once the assembly is cut at every misassembly. A high N50 with a much lower NGA50 is contiguity bought with joins the reference does not support.",
           "edam_formats": [],
           "edam_operations": [],
@@ -22976,6 +23265,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "RiboCode ORFs per library from the collapsed tables, keyed by the genomic stop codon, with the RiboCode ORF type, a class shared with other ORF callers, the protein length, the frame-0 P-sites and the adjusted periodicity p-value.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23080,6 +23370,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Ribo-TISH ORF predictions per library, collapsed from one row per start codon to one row per ORF and keyed by the genomic stop codon, with the Ribo-TISH initiation type, a class shared with other ORF callers, the protein length and the frame-test q-value.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23183,6 +23474,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Share of each library's P-sites in the three reading frames, per transcript region. Footprints of translating ribosomes pile into frame 0 of the CDS; the UTRs, which ribosomes do not translate, stay close to a third per frame.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23241,6 +23533,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Share of each library's reads at every read length riboWaltz kept for P-site assignment. Ribosome-protected fragments form a narrow peak; a broad or shifted distribution points at digestion or contamination problems.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23298,6 +23591,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per Ribo-seq library: P-sites assigned, share of CDS P-sites in frame 0 and its margin over the other frames, P-site share per region and the CDS enrichment over the length expectation, modal footprint length and its spread.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23421,6 +23715,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "P-site signal summed over all transcripts at each nucleotide around the annotated start codon, per library. A phased library peaks at the start codon and shows a 3-nt saw-tooth along the CDS.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23465,6 +23760,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "P-site signal summed over all transcripts at each nucleotide around the annotated stop codon, per library. The 3-nt saw-tooth should run up to the stop codon and fade after it, where ribosomes release.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23509,6 +23805,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Share of each library's P-sites in the 5' UTR, CDS and 3' UTR, next to the share each region would get from its length alone. Protected footprints are enriched in the CDS; a library that follows the length expectation behaves like fragmented RNA.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23578,6 +23875,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "rMATS junction-and-exon-count (JCEC) results for the five event types, stacked: one row per contrast and covered event with its gene, alternative region, mean inclusion (PSI) per condition, the treatment-minus-control difference, FDR and the significance call.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23699,6 +23997,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Where each library's reads land on the annotation: coding exons, the two UTRs, introns, the promoter and downstream rings, and everything intergenic. RSeQC publishes the upstream and downstream bands nested inside each other, so the recipe differences them into disjoint rings and adds the unassigned tags explicitly, which makes the composition sum to one.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23768,6 +24067,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-callset variant-calling accuracy (TP/FP/FN, precision, recall, F1) from rtg-tools vcfeval's aggregated summary. `label` is the callset's samplesheet id, `caller` the tool that made the calls and `truth_set` the truth set it was compared against. Serves the germline (small/) and somatic (snv/, indel/) routes with the same vocabulary.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23956,6 +24256,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The 500 most variable genes of the merged Salmon TPM matrix on the log2(TPM + 1) scale, wide (genes x samples), with the experimental factors as column annotations.",
           "edam_formats": [],
           "edam_operations": [],
@@ -23998,6 +24299,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The merged Salmon TPMs unpivoted to one row per gene and sample, restricted to the genes expressed in at least one sample, with the sample's condition attached. The shape a gene explorer filters and groups on.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24102,6 +24404,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The raw merged gene-level count matrix (gene_id, gene_name and one estimated count column per sample) tximport writes next to the TPM matrix. Shown as rows: it is the input a differential-expression tool is handed, so the value a dashboard adds is letting someone read and search it, not replot it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24131,6 +24434,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample: principal components of the log2(TPM + 1) matrix over its most variable genes, plus how many genes the sample detects and expresses and the median TPM of the genes it detects.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24262,6 +24566,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How many reads placed, before and after a run's mapping-quality filter , samtools flagstat, one row per (sample, stage).",
           "edam_formats": [],
           "edam_operations": [],
@@ -24331,6 +24636,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The distribution blocks of a samtools stats report, which MultiQC never surfaces: the read-length histogram (RL), the coverage-depth histogram (COV), the indel-length spectrum (ID) and, for paired data, the insert-size distribution (IS), with the SN summary block on one row per sample beside them. Each section has its own value column, so three profile tiles read the same collection without a filter between them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24509,6 +24815,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Merged consensus intervals per target against the replicates that called a peak on them, as one 0/1 column per replicate. The intersections say how reproducible the peak set is between replicates.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24631,6 +24938,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The fragment-length histogram binned into the four nucleosome classes: sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to 450 bp and multi-nucleosomal above it, with the share of each per sample and the mononucleosome to sub-nucleosome ratio behind it.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24727,6 +25035,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How long the sequenced fragments were, per sample: the count and the fraction of fragments at every length, plus the running fraction at most that long.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24823,6 +25132,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The sequenced fragments piled up in 100 bp bins on a 6 kb window centred on the summit of each sample's 500 strongest non-overlapping SEACR regions, per million fragments of the sample: a metagene matrix around the calls and a fragment coverage track under a locus navigator, from the same rows.",
           "edam_formats": [],
           "edam_operations": [],
@@ -24923,6 +25233,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample: how many regions SEACR called, how much of the genome they cover and the median width, total coverage and coverage per base across them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25016,6 +25327,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every SEACR region of every sample in one table, with the total and the maximum fragment coverage over the region, its width and where inside it the maximum was reached.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25182,6 +25494,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The cross-region reconstructed feature table melted to one row per feature and sample, with the Greengenes lineage split into rank columns. This is the community a multi-region run actually resolves, as opposed to the per-primer tables it starts from.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25300,6 +25613,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "How many amplified regions mapped to each reconstructed feature and how much kmer support stood behind them. A feature carried by one region is a different claim from one carried by all of them, and this is the table that separates the two.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25403,6 +25717,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "UMI count per barcode against its rank, read from alevin-fry's per-barcode feature dump and flagged against CellBender's cell-barcode list for this route, so it can be compared to the Cell Ranger knee curve for the same sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25459,6 +25774,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Reads processed and mapped by piscem/alevin-fry and the barcodes alevin-fry quantified, one row per sample.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25538,6 +25854,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per annotated variant call: the locus and allele the caller reported, its quality, filter status, genotype, depth and allele fraction, and SnpEff's most severe consequence for it (gene, impact class, consequence term and protein change). The per-variant counterpart of the SnpEff CSV summary.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25664,6 +25981,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "What kind of variants a callset holds, as SnpEff counts them: impact classes, functional classes, consequence terms, genomic regions, variant types and zygosity. One long frame keyed by section and category, so a single section picker drives every tile. Percent is null in the zygosity section because SnpEff reports counts only there.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25747,6 +26065,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The genes carrying the most coding variants, as a gene by callset matrix of variant counts. Clustering the columns says whether the callers separate more than the sequencing depths do.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25789,6 +26108,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per gene and one membership column per caller, over the genes that carry at least one HIGH or MODERATE variant. Reads as \"which callers agree that this gene is hit\", which survives the allele-representation differences a variant-level comparison trips on.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25829,6 +26149,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per gene and callset with the number of variants SnpEff assigned to it in each impact class, summed over the gene's transcripts. The cheapest gene-level view a variant-calling run publishes, and the input of the gene overlap, the burden heatmap and the oncoplot.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25913,6 +26234,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Callset by gene matrix coloured by the most severe impact class each cell carries. On a germline run the x axis is the sample-and-caller pair, so the plot reads as caller agreement on damaging genes rather than as a cohort mutation landscape.",
           "edam_formats": [],
           "edam_operations": [],
@@ -25957,6 +26279,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Coding variants placed at their amino-acid position, one lane per gene, coloured by impact class. Only variants whose HGVS protein change SnpEff could compute are here, which is what makes the positions comparable within a lane.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26016,6 +26339,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per PASS variant and one membership column per caller-and-sample pair, so the intersection bars read as \"how many calls this combination of callers agrees on\". On a run that sequences the same individual twice, the depth axis turns this into a sensitivity comparison rather than a truth comparison.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26067,6 +26391,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Somatic accuracy stratified by allele-fraction bin (caller x AF-bin recall / precision / F1).",
           "edam_formats": [],
           "edam_operations": [],
@@ -26110,6 +26435,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Somatic small-variant accuracy from som.py: precision/recall/F1 per callset with binomial confidence intervals. `caller` is the tool that made the calls, `label` the callset's samplesheet id and `truth_set` the truth set.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26328,6 +26654,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Fusion predictions from the abridged STAR-Fusion table, one row per call. The recipe strips the Ensembl id off each partner gene, sums junction reads and spanning fragments into one evidence count, and derives a log-scaled FFPM plus the fraction of the evidence that crosses the junction itself.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26448,6 +26775,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "SUPPA2 diffSplice on local events, one row per contrast and event: the parsed event id (gene, type, chromosome, span, strand), the delta PSI oriented treatment minus control, its empirical p-value and the significance call.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26556,6 +26884,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Structural-variant accuracy from SVanalyzer svbenchmark (precision/recall/F1). Optional: not produced by the public megatest; tolerant column matching; `caller` and `truth_set` come from the pipeline's `Caller` and `File` columns.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26609,6 +26938,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per reference genome sylph detected in a sample: the adjusted ANI of the containment match next to the taxonomic and sequence abundances and the effective coverage. ANI against abundance separates confident calls from divergent relatives, which read-count profilers cannot express.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26720,6 +27050,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The sylph-tax merged report melted into the canonical long composition shape (sample, rank, taxon, abundance), so one tile can switch between taxonomic ranks instead of needing a collapsed table per rank.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26790,6 +27121,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Bray-Curtis PCoA over every profiling run. One point per sample, profiler and database, so runs that agree on the community land together and the spread reads as profiler disagreement rather than as biological distance.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26848,6 +27180,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The same grain as the cross-profiler abundances, with the seven NCBI ranks widened into their own columns so a hierarchy can be drawn from them. The ancestry is read back out of the indented kraken-style reports the run writes, and reads no profiler could place keep an explicit unclassified lineage rather than dropping out of the rings.",
           "edam_formats": [],
           "edam_operations": [],
@@ -26987,6 +27320,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The top taxa as a wide taxon by profiling-run matrix of relative abundances, with the taxonomic rank as a row annotation and the profiler and platform of each column serialised for the heatmap's column strips.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27030,6 +27364,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per sample and taxon, a 0/1 membership column for every profiler in the run. The intersections show how much of the community the classifiers agree on and how long each profiler's private tail is.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27109,6 +27444,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Every standardised taxpasta table melted into one long frame: one row per profiler, database, sample and taxon, with the raw count and the within-run relative abundance. The hub every cross-profiler comparison is computed from.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27249,6 +27585,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per sample, profiler and database: how many taxa were reported, how many reads were assigned, how concentrated the profile is on its top hit, and Shannon diversity with Pielou evenness.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27398,6 +27735,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Structural-variant accuracy from Truvari (precision/recall/F1). Optional: not produced by the public megatest; recipe uses tolerant column matching; `caller` and `truth_set` come from the pipeline's `Caller` and `File` columns.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27506,6 +27844,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per variant call, read straight out of the caller's own VCF: locus, allele, quality, filter status, genotype, read depth and variant allele fraction. Pipeline-agnostic, and the only collection in a variant-calling template that is granular enough for a caller-against-caller comparison at the variant level rather than at the summary-count level.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27647,6 +27986,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "One row per caller and FILTER value: how many calls carry it, how they split between transitions and transversions, and what share of the callset they are. The per-caller view the pooled MultiQC panel cannot give.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27730,6 +28070,7 @@
         },
         {
           "columns": {},
+          "dc_type": "table",
           "description": "The transition/transversion ratio of the calls above each quality threshold, one curve per sample and caller. Where a curve flattens is where that caller's quality score stops separating real variants from noise, which compares callers on calibration rather than on yield.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27811,6 +28152,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "Per-sample Phylum-level relative abundance, built by joining the SINTAX per-ASV taxonomy to the DADA2 ASV count table written beside it. The classifier publishes taxonomy only, so the counts have to come from the denoiser's table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -27936,6 +28278,7 @@
       "outputs": [
         {
           "columns": {},
+          "dc_type": "table",
           "description": "CNV/SV accuracy from Wittyer (precision/recall/F1) per callset, at the two levels Wittyer scores: per event and per base (`stats_type`). `caller` is the tool that made the calls and `truth_set` the truth set it was compared against. Event-type and size-bin strata are kept when a table carries them. Optional: not produced by the public megatest.",
           "edam_formats": [],
           "edam_operations": [],

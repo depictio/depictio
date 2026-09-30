@@ -37,7 +37,10 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-BioimageFormat = Literal["ome-zarr", "ome-tiff", "spatialdata"]
+BioimageFormat = Literal["ome-zarr", "ome-tiff", "spatialdata", "tiff"]
+# ``image`` stores are shown as pixels; ``labels`` stores are segmentation masks
+# (one integer per cell, 0 = background) drawn over the image of the same sample.
+BioimageKind = Literal["image", "labels"]
 
 OME_ZARR_STORE_SUFFIX = ".zarr"
 OME_TIFF_SUFFIXES = (".ome.tiff", ".ome.tif")
@@ -113,6 +116,11 @@ class DCBioimageConfig(BaseModel):
     """Config for a bioimage data collection."""
 
     format: BioimageFormat = "ome-zarr"
+    kind: BioimageKind = "image"
+    # Regex with one capture group applied to the store name, giving the sample
+    # name when the file name carries more than the sample id (e.g.
+    # ``^(.+?)_mask\\.tif$``). None: the store name without its suffix.
+    sample_pattern: str | None = None
     # OME-Zarr and SpatialData images: the NGFF version the stores must have
     # ("0.4" = zarr v2, "0.5" = zarr v3). None accepts either, per store.
     ngff_version: Literal["0.4", "0.5"] | None = None
