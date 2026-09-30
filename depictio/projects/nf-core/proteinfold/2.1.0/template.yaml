@@ -1,0 +1,485 @@
+# nf-core/proteinfold Template v2.1.0 - Protein structure prediction
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/proteinfold/2.1.0 --data-root /path/to/results \
+#     --var METADATA_FILE=/path/to/samplesheet.csv
+#
+# Tested against nf-core/proteinfold AWS megatest results (2.1.0 development
+# run; the 2.0.0 release run is empty):
+#   s3://nf-core-awsmegatests/proteinfold/results-a414fd1368009500b66761e37e7cde80366a45e9
+#   (see megatest.yaml for the fetch manifest)
+# ============================================================================
+#
+# ONE STRUCTURE PER ENGINE AND TARGET. proteinfold folds every target of the
+# samplesheet with each engine it was asked for (--mode alphafold2,colabfold,
+# esmfold,rosettafold_all_atom,...) and writes each engine to its own
+# directory, AlphaFold2 with one more level for its mode (standard /
+# split_msa_prediction). The unit every structure tile works on is one
+# top-ranked structure, the `entity`: the id the structures collection gives
+# the PDB (`<engine>__<target>`, with the AlphaFold2 mode between them unless
+# it is `standard`, see depictio/recipes/lib/proteinfold.py). Every
+# per-structure table carries it,
+# plus `engine` and `target` columns for the filters.
+#
+# TARGET HUB. proteinfold does not publish its samplesheet (id, fasta), so the
+# hub reads METADATA_FILE (default input/samplesheet.csv under DATA_ROOT, where
+# download_test_data.sh puts the vendored megatest sheet) and adds what the
+# structures say: chain count, length, engines. GROUP_COL defaults to the
+# derived `assembly` (single chain / complex); name any sheet column instead.
+#
+# ABSENT OUTPUTS. ESMFold writes no alignment, no PAE and no TM scores;
+# single-chain targets write empty ipTM / ipSAE files. The alignment, PAE and
+# score collections are optional, and the score scan reads empty files as no
+# rows.
+template:
+  template_id: "nf-core/proteinfold/2.1.0"
+  description: "nf-core/proteinfold structure prediction template: per-model confidence across engines (pLDDT, pTM, ipTM), each top-ranked structure in 3D with its per-residue confidence and the alignment it was folded from, predicted aligned error, and model agreement per engine."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "proteinfold output directory (one directory per engine, e.g. alphafold2/, colabfold/, esmfold/, plus multiqc/ and pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: id, fasta, any extra design columns). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. proteinfold fixes it to id (the target name every output file carries); recorded for auto-detection only."
+      required: false
+      default: "id"
+    - name: "GROUP_COL"
+      description: "Target hub column the dashboard groups and filters targets by. Defaults to assembly (single chain or complex, derived from the structures); any samplesheet column works."
+      required: false
+      default: "assembly"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Assembly"
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "id"
+      GROUP_COL: "assembly"
+      GROUP_COL_DISPLAY: "Assembly"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Engines"
+        key_patterns: ["mode", "use_gpu", "split_fasta", "use_msa_server", "full_dbs", "db"]
+      - group: "AlphaFold2"
+        key_patterns: ["alphafold2_*"]
+      - group: "AlphaFold3"
+        key_patterns: ["alphafold3_*"]
+      - group: "ColabFold"
+        key_patterns: ["colabfold_*"]
+      - group: "ESMFold"
+        key_patterns: ["esmfold_*"]
+      - group: "RoseTTAFold"
+        key_patterns: ["rosettafold*"]
+      - group: "Boltz and HelixFold3"
+        key_patterns: ["boltz_*", "helixfold3_*"]
+      - group: "Structure search"
+        key_patterns: ["foldseek_*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "mode"
+      - "alphafold2_mode"
+      - "alphafold2_model_preset"
+      - "colabfold_num_recycles"
+      - "esmfold_num_recycles"
+      - "use_msa_server"
+      - "full_dbs"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "proteinfold Structure Prediction"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "proteinfold"
+    version: "2.1.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/proteinfold"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per target
+      # ----------------------------------------------------------------
+      - data_collection_tag: "targets"
+        description: "The run's targets: samplesheet rows with chain count, length, assembly and the engines that folded each"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/proteinfold/targets.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "target": "Target id, the samplesheet id every output file is named after"
+              "assembly": "Single chain or complex, from the chain count of the structures"
+              "n_chains": "Chains in the predicted structure"
+              "n_residues": "Residues over all chains"
+              "n_engines": "Engines that produced a top-ranked structure for the target"
+              "engines": "Those engines, comma separated"
+              "sequence": "Sequence as the structure reads it, chains joined by a colon"
+              "fasta": "Input FASTA as given in the samplesheet"
+
+      # ----------------------------------------------------------------
+      # Structures: the top-ranked PDB of every engine and target, uploaded
+      # whole and read by the 3D tile. The object id is the entity every
+      # per-structure table carries (sample_regex below must stay equal to
+      # STRUCTURE_SAMPLE_REGEX in depictio/recipes/lib/proteinfold.py).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "proteinfold_structures"
+        description: "Top-ranked predicted structure (PDB, pLDDT in the B-factor column) per engine and target"
+        config:
+          type: "indexed_file"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*/top_ranked_structures/[^/]+\\.pdb$"
+          dc_specific_properties:
+            format: "pdb"
+            sample_regex: "(?P<engine>[^/]+)/(?:standard/|(?P<mode>split_msa_prediction)/)?top_ranked_structures/(?P<target>[^/]+?)\\.(?:pdb|cif|mmcif)(?:\\.gz)?$"
+            max_file_size_mb: 64
+
+      # ----------------------------------------------------------------
+      # Per-residue confidence of the top-ranked structures
+      # ----------------------------------------------------------------
+      - data_collection_tag: "proteinfold_residues"
+        description: "Per-residue pLDDT of every top-ranked structure, in the structure's own numbering"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfold/residues.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Structure id (engine and target), the id of the PDB in the structures collection"
+              "engine": "Prediction engine, with its mode when not the default"
+              "target": "Target id"
+              "chain": "Chain id"
+              "position": "Residue number in the structure's numbering"
+              "residue": "One-letter amino acid"
+              "value": "pLDDT of the residue (0 to 100), from the CA atom's B-factor"
+              "category": "AlphaFold confidence band: Very high (90+), Confident (70-90), Low (50-70), Very low"
+              "confidently_placed": "100 when pLDDT is 70 or more, else 0; its average is the share of confidently placed residues"
+
+      - data_collection_tag: "proteinfold_engine_plddt"
+        description: "Per-residue pLDDT of each engine's top-ranked structure, one curve per engine and chain; no engine column, so an engine picked on the residues leaves every curve of the target"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfold/engine_plddt.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "target": "Target id"
+              "series": "Curve: the target and the engine, with the chain on a multi-chain structure"
+              "chain": "Chain id"
+              "position": "Residue number (window middle past 200 residues)"
+              "plddt": "pLDDT (window mean past 200 residues)"
+
+      # ----------------------------------------------------------------
+      # Per-model confidence
+      # ----------------------------------------------------------------
+      - data_collection_tag: "proteinfold_scores_raw"
+        description: "Raw pTM, ipTM and ipSAE per model (input of proteinfold_models; empty for single-chain ipTM)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^(?!.*_chainwise_).*_(?:ptm|iptm|ipsae)\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["model", "score"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              raise_if_empty: false
+            columns_description:
+              "model": "Model id as the engine numbers it"
+              "score": "Score of the model"
+              "source_path": "File the row came from; engine, target and metric are derived from it"
+
+      - data_collection_tag: "proteinfold_models"
+        description: "One row per predicted model: rank, mean pLDDT, confident and disordered shares, pTM, ipTM, ipSAE"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfold/models.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "model_id": "Structure id and model rank, one per model"
+              "structure": "Engine and target, the reader-facing name of the structure"
+              "entity": "Structure id (engine and target)"
+              "engine": "Prediction engine"
+              "target": "Target id"
+              "model_rank": "Rank of the model within its engine and target, 1 is the top-ranked"
+              "is_top": "True for the top-ranked model, the one shown in 3D"
+              "n_residues": "Residues in the model"
+              "mean_plddt": "Mean pLDDT over the residues"
+              "confident_pct": "Residues at pLDDT 70 or more, percent"
+              "very_low_pct": "Residues under pLDDT 50, percent"
+              "ptm": "Predicted TM score (AlphaFold2, ColabFold)"
+              "iptm": "Interface predicted TM score, complexes only"
+              "ipsae": "ipSAE interface score, complexes only"
+
+      - data_collection_tag: "proteinfold_plddt_ranks"
+        description: "Per-residue pLDDT of each engine's top-ranked model, with the lowest and highest of its models"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfold/plddt_ranks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Structure id (engine and target)"
+              "engine": "Prediction engine"
+              "target": "Target id"
+              "n_models": "Models the engine produced for the target"
+              "residue_index": "Residue counted from 1 over the chains in order"
+              "plddt": "pLDDT of the top-ranked model (window mean past 200 residues)"
+              "plddt_min": "Lowest pLDDT over the engine's models at the residue"
+              "plddt_max": "Highest pLDDT over the engine's models at the residue"
+
+      # ----------------------------------------------------------------
+      # Predicted aligned error and alignments (not written by ESMFold)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "proteinfold_pae"
+        description: "Predicted aligned error of every top-ranked model, binned to at most 64 x 64"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfold/pae.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Structure id (engine and target)"
+              "engine": "Prediction engine"
+              "target": "Target id"
+              "bin": "Row bin, 1 to 64"
+              "residue_range": "Residues of the row bin, counted from 1 over the chains in order"
+              "mean_pae": "Mean PAE (angstroms) of the row bin over every residue; averaged over the rows, the matrix mean"
+              "b01": "Mean PAE (angstroms) of the row bin against column bin 1"
+              "b02": "Mean PAE (angstroms) of the row bin against column bin 2"
+              "b03": "Mean PAE (angstroms) of the row bin against column bin 3"
+              "b04": "Mean PAE (angstroms) of the row bin against column bin 4"
+              "b05": "Mean PAE (angstroms) of the row bin against column bin 5"
+              "b06": "Mean PAE (angstroms) of the row bin against column bin 6"
+              "b07": "Mean PAE (angstroms) of the row bin against column bin 7"
+              "b08": "Mean PAE (angstroms) of the row bin against column bin 8"
+              "b09": "Mean PAE (angstroms) of the row bin against column bin 9"
+              "b10": "Mean PAE (angstroms) of the row bin against column bin 10"
+              "b11": "Mean PAE (angstroms) of the row bin against column bin 11"
+              "b12": "Mean PAE (angstroms) of the row bin against column bin 12"
+              "b13": "Mean PAE (angstroms) of the row bin against column bin 13"
+              "b14": "Mean PAE (angstroms) of the row bin against column bin 14"
+              "b15": "Mean PAE (angstroms) of the row bin against column bin 15"
+              "b16": "Mean PAE (angstroms) of the row bin against column bin 16"
+              "b17": "Mean PAE (angstroms) of the row bin against column bin 17"
+              "b18": "Mean PAE (angstroms) of the row bin against column bin 18"
+              "b19": "Mean PAE (angstroms) of the row bin against column bin 19"
+              "b20": "Mean PAE (angstroms) of the row bin against column bin 20"
+              "b21": "Mean PAE (angstroms) of the row bin against column bin 21"
+              "b22": "Mean PAE (angstroms) of the row bin against column bin 22"
+              "b23": "Mean PAE (angstroms) of the row bin against column bin 23"
+              "b24": "Mean PAE (angstroms) of the row bin against column bin 24"
+              "b25": "Mean PAE (angstroms) of the row bin against column bin 25"
+              "b26": "Mean PAE (angstroms) of the row bin against column bin 26"
+              "b27": "Mean PAE (angstroms) of the row bin against column bin 27"
+              "b28": "Mean PAE (angstroms) of the row bin against column bin 28"
+              "b29": "Mean PAE (angstroms) of the row bin against column bin 29"
+              "b30": "Mean PAE (angstroms) of the row bin against column bin 30"
+              "b31": "Mean PAE (angstroms) of the row bin against column bin 31"
+              "b32": "Mean PAE (angstroms) of the row bin against column bin 32"
+              "b33": "Mean PAE (angstroms) of the row bin against column bin 33"
+              "b34": "Mean PAE (angstroms) of the row bin against column bin 34"
+              "b35": "Mean PAE (angstroms) of the row bin against column bin 35"
+              "b36": "Mean PAE (angstroms) of the row bin against column bin 36"
+              "b37": "Mean PAE (angstroms) of the row bin against column bin 37"
+              "b38": "Mean PAE (angstroms) of the row bin against column bin 38"
+              "b39": "Mean PAE (angstroms) of the row bin against column bin 39"
+              "b40": "Mean PAE (angstroms) of the row bin against column bin 40"
+              "b41": "Mean PAE (angstroms) of the row bin against column bin 41"
+              "b42": "Mean PAE (angstroms) of the row bin against column bin 42"
+              "b43": "Mean PAE (angstroms) of the row bin against column bin 43"
+              "b44": "Mean PAE (angstroms) of the row bin against column bin 44"
+              "b45": "Mean PAE (angstroms) of the row bin against column bin 45"
+              "b46": "Mean PAE (angstroms) of the row bin against column bin 46"
+              "b47": "Mean PAE (angstroms) of the row bin against column bin 47"
+              "b48": "Mean PAE (angstroms) of the row bin against column bin 48"
+              "b49": "Mean PAE (angstroms) of the row bin against column bin 49"
+              "b50": "Mean PAE (angstroms) of the row bin against column bin 50"
+              "b51": "Mean PAE (angstroms) of the row bin against column bin 51"
+              "b52": "Mean PAE (angstroms) of the row bin against column bin 52"
+              "b53": "Mean PAE (angstroms) of the row bin against column bin 53"
+              "b54": "Mean PAE (angstroms) of the row bin against column bin 54"
+              "b55": "Mean PAE (angstroms) of the row bin against column bin 55"
+              "b56": "Mean PAE (angstroms) of the row bin against column bin 56"
+              "b57": "Mean PAE (angstroms) of the row bin against column bin 57"
+              "b58": "Mean PAE (angstroms) of the row bin against column bin 58"
+              "b59": "Mean PAE (angstroms) of the row bin against column bin 59"
+              "b60": "Mean PAE (angstroms) of the row bin against column bin 60"
+              "b61": "Mean PAE (angstroms) of the row bin against column bin 61"
+              "b62": "Mean PAE (angstroms) of the row bin against column bin 62"
+              "b63": "Mean PAE (angstroms) of the row bin against column bin 63"
+              "b64": "Mean PAE (angstroms) of the row bin against column bin 64"
+
+      - data_collection_tag: "proteinfold_msa"
+        description: "Alignment each MSA-based engine folded from, query first, capped at 500 rows"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfold/msa.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "msa_id": "Alignment id, the id of the structure folded from it"
+              "seq_id": "query for the target sequence, hit_<rank> for the others"
+              "rank": "Row order in the alignment, 0 is the query"
+              "aligned_sequence": "Aligned sequence, gaps as -"
+              "identity": "Identity to the query over the columns both cover, 0 to 1"
+              "coverage": "Share of the query's residues the row covers, 0 to 1"
+              "chains": "Chain layout of a complex's query row (A:1-120,B:1-98, each chain in its own numbering), empty otherwise"
+              "entity": "Structure id, equal to msa_id"
+              "engine": "Prediction engine"
+              "target": "Target id"
+              "depth": "Sequences in the full alignment, before the 500-row cap"
+
+links:
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_residues"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the residue table by target"
+    enabled: true
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_engine_plddt"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the per-engine confidence curves by target"
+    enabled: true
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_models"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the models by target"
+    enabled: true
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_plddt_ranks"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the per-model confidence curves by target"
+    enabled: true
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_pae"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the PAE matrices by target"
+    enabled: true
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_msa"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the alignments by target"
+    enabled: true
+  # A structure picked on the residue table (engine and target, or a residue
+  # selection) keeps every engine's curve of that target on screen: the curves
+  # carry no engine column, so the engine filter cannot reach them by name...
+  - source_dc_tag: "proteinfold_residues"
+    source_column: "target"
+    target_dc_tag: "proteinfold_engine_plddt"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Follow the picked structure's target on the per-engine curves"
+    enabled: true
+  # ...and narrows the alignment and the PAE matrix to that structure.
+  - source_dc_tag: "proteinfold_residues"
+    source_column: "entity"
+    target_dc_tag: "proteinfold_msa"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Narrow the alignment to the picked structure"
+    enabled: true
+  - source_dc_tag: "proteinfold_residues"
+    source_column: "entity"
+    target_dc_tag: "proteinfold_pae"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Narrow the PAE matrix to the picked structure"
+    enabled: true
+  # The Predicted error tab picks its engine and target on the PAE table; the
+  # structure id (engine and target) carries that pick to the pTM and ipTM
+  # cards, which read the models.
+  - source_dc_tag: "proteinfold_pae"
+    source_column: "entity"
+    target_dc_tag: "proteinfold_models"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Follow the picked PAE matrix on the model scores"
+    enabled: true
+  - source_dc_tag: "proteinfold_models"
+    source_column: "entity"
+    target_dc_tag: "proteinfold_plddt_ranks"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Follow the engines and models in scope on the per-engine curves"
+    enabled: true

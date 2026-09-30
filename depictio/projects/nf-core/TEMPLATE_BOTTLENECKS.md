@@ -4,8 +4,10 @@ Companion to `MEGATEST_STATUS.md`. That file records what the **AWS megatest buc
 publishes. This one records what **Depictio itself** lacks, found while building the
 lot-1 templates (differentialabundance 2.0.0, funcscan 4.0.0, airrflow 5.1.0,
 rnafusion 4.1.3, rnaseq 3.26.0, taxprofiler 2.0.1, chipseq 1.2.0, atacseq 1.2.2 and
-cutandrun 3.1) against real runs. Lot 2 and wave 3 appended dated notes and items 13 onwards;
-wave 3 brought the shipped set to 24 templates, 25 once rnasplice lands.
+cutandrun 3.1) against real runs. Lot 2, wave 3 and lot 3 appended dated notes and items 13
+onwards; wave 3 brought the shipped set to 24 templates, and lot 3 (crisprseq, isoseq,
+oncoanalyser, pairgenomealign, proteinannotator, proteinfamilies, proteinfold) to 31, 32 once
+rnasplice lands.
 
 Every item below was hit in this lot, not predicted. Each says what happened, why it
 costs, and the smallest fix that would remove it. Items are ordered by how much they
@@ -111,6 +113,10 @@ own builder: `mirtrace` and `mirtop` (smrnaseq), `sortmerna`, `ribowaltz` and `r
 demultiplex first shipped a bundled parquet for its panels instead; that was removed in favour
 of the stub convention. Every new section still costs a hand-written builder.
 
+**2026-09-30 (lot 3).** Two more sections, `ccs` and `lima` (isoseq), each with its builder.
+pairgenomealign, proteinannotator, proteinfamilies and proteinfold write custom content only,
+and crisprseq and oncoanalyser write no MultiQC parquet, so the other six templates add none.
+
 ## 7. Depictio has no MultiQC version gate, only a filename regex
 
 Depictio reads `multiqc.parquet` and nothing else. That name is MultiQC >= 1.31 (1.30
@@ -188,6 +194,13 @@ because their rows are not coordinate-bound.
 | eager 2.4.5 | profile (preseq complexity curve), `damage_profile` (new) | 3 | nothing for two of the three (mapped-reads and mean-coverage bars are plain); the misincorporation line duplicates the `damage_profile` advanced-viz tile in the same section, display redundancy rather than a missing kind |
 | methylseq 2.3.0 | profile (Bismark M-bias, CpG context) | 3 | nothing, three plain grouped bars (alignment efficiency, dedup rate, per-context methylation) |
 | hic 2.0.0 | `contact_map` (new), profile (distance decay), coverage_track x2 (new `mark` setting: A/B compartment track, insulation score) | 0 | n/a, hic has no plotly-express figure tile at all: every dedicated-tab visualisation is a kind or a MultiQC panel |
+| crisprseq 2.3.0 | scatter_xy x5, profile x6, stacked_taxonomy, complex_heatmap, record_card x2 | 0 | nothing; the per-read indel volume is a data-path gap (item 12), not a missing kind |
+| isoseq 3.0.1 | transcript_structure, scatter_xy x3, profile x2, stacked_taxonomy x2, record_card x3 | 0 | nothing |
+| oncoanalyser 3.0.0 | cnv_profile, oncoplot, genome_view, genome_chord, fusion_structure, lollipop, molecule_3d (resolve by gene), scatter_xy x3, profile x2, complex_heatmap, record_card x8 | 0 | nothing; the CUPPA, SIGS, LILAC, TEAL and Neo summaries are plain grouped bars |
+| pairgenomealign 3.0.4 | scatter_xy x4, complex_heatmap, profile, genome_chord, record_card | 0 | last-dotplot PNGs (no image upload in a template run) |
+| proteinannotator 1.1.0 | molecule_3d (resolve by sequence), sequence_track, complex_heatmap, upset_plot, scatter_xy x3, record_card x2 | 0 | n/a |
+| proteinfamilies 2.5.0 | molecule_3d, msa, sequence_track, profile x2, scatter_xy x2, record_card x2 | 1 | one tree per family: the `phylogenetic` kind reads one Newick file per collection, so the trees are a code figure over a segment table |
+| proteinfold 2.1.0 | molecule_3d (new), sequence_track (new), msa (embedded), profile x2, scatter_xy, complex_heatmap (PAE), record_card | 0 | nothing |
 
 **2026-09-22 update.** The table above is the initial-build snapshot. The remediation wave added five kinds (`genome_view`, `group_compare`, `transcript_structure`, `cnv_profile`, `genome_chord`, see `docs/design/advanced-viz.md` section 7) and rebuilt the lot 2 dashboards around them: sarek 2 to 6 tabs (VCF-level UpSet, lollipop, oncoplot and `genome_view` on mosdepth regions), eager 5 to 8 (scatter_xy x5, profile x4, sankey, `genome_view`), methylseq 3 to 8 (binned methylome: embedding, complex_heatmap, volcano, `genome_view`), nanoseq 3 to 7 (embedding, complex_heatmap, `transcript_structure` gated), hic 4 to 7 (`genome_view` x3, `contact_map` triangle, sankey, profile x2), scrnaseq 8 to 9 (`group_compare` on a cell x marker-gene matrix), mag 2 to 7. Lot 1 gained `genome_view` on peaks and BGC regions (chipseq, atacseq, cutandrun, funcscan), `genome_chord` on Arriba fusions (rnafusion) and the DESeq2 QC sample space (rnaseq, chipseq, atacseq).
 
@@ -372,7 +385,8 @@ features. That is the JBrowse boundary above, and nothing in it should become a 
 ### Still missing, for pipelines outside this lot
 
 V-to-J pairing at scale (airrflow full rearrangement tables), 96-context mutational
-signature and circos (oncoanalyser), jplace reader (phyloplace), assembly graph (bacass).
+signature (oncoanalyser; its rearrangements are bound with `genome_chord` since lot 3),
+jplace reader (phyloplace), assembly graph (bacass).
 The knee plot shipped in lot 2 (`knee_plot`, scrnaseq). The isomiR ladder turned out not to
 need a kind: smrnaseq 2.4.1 draws isomiR composition with `stacked_taxonomy` and the
 per-miRNA landscape with `dot_plot`.
@@ -380,6 +394,46 @@ per-miRNA landscape with `dot_plot`.
 Also: the `phylogenetic` kind has no catalog output binding it, and `upset_plot` and
 `sankey` can only be bound through a dashboard `config:` block because their roles are
 list-valued rather than required.
+
+### Protein module (lot 3)
+
+Lot 3 added three kinds for protein outputs, all fed by ordinary table collections plus
+`indexed_file` structure files (`pdb`, `mmcif`):
+
+- **`molecule_3d`** draws a structure from a file collection (`structure_source: file`) or from
+  the **structure resolver** (`structure_source: resolve`), which tries a UniProt accession
+  (AlphaFold DB), then a gene name (UniProt search, then AlphaFold DB), then a sequence
+  (ESMFold). The resolver is off by default (`DEPICTIO_STRUCTURE_RESOLVER_ENABLED`), because
+  accessions, gene names or sequences leave the server; with it off the tile's request answers
+  403 and the tile shows its empty state. Hits are cached in the bucket, negative answers are
+  not.
+- **`msa`** draws an alignment table (capped at 500 rows per alignment by the recipes), and
+  **`sequence_track`** draws per-residue lanes with domain and variant spans.
+- **`residue_selection`** is the cross-filter the three kinds (and `lollipop`) emit: an entity
+  MultiSelect plus a position RangeSlider, matched by column name, so a click or brush in one
+  tile moves the others when their collections share the entity and position column names.
+- The **highlight bus** carries hover positions between tiles of one dashboard (the same three
+  kinds, `lollipop`, and `profile` when its x column is the position), without filtering.
+
+Where the templates use it: proteinfold (structure files, pLDDT lanes, embedded MSA, PAE),
+proteinannotator (resolve by sequence, domain and secondary-structure lanes), proteinfamilies
+(family MSA, conservation lanes, representative resolved by sequence) and oncoanalyser (the
+driver `lollipop` next to a `molecule_3d` resolved by gene, so network access to the resolver's
+sources is needed at render time).
+
+Known gaps:
+
+- A phylogeny collection serves `files[0]` only, so one tree per family cannot be a
+  `phylogenetic` tile (proteinfamilies draws them as a code figure).
+- MultiQC custom-content sections anchored per sample (`<sample>_before`,
+  `<sample>_cluster_distribution`) cannot be named by a template (proteinannotator,
+  proteinfamilies); the tiles read the source files instead.
+- In resolve mode by sequence, the sequence is repeated on every residue row of the bound
+  collection, so the residue table grows with the proteome.
+- pairgenomealign's synteny ring needs the PSL export (`--export_aln_to psl`); runs with
+  `no_export`, the megatest included, leave the Synteny tab empty.
+- LINX `vis_protein_domain` is in genomic coordinates, so oncoanalyser has no residue domain
+  collection to overlay on its driver `lollipop` and `molecule_3d`.
 
 ## 10b. What is still not a catalog tool, and why
 
@@ -451,6 +505,13 @@ nothing large enters Delta). The same idiom applies to airrflow's `*_db-pass.tsv
 and cutandrun's `deeptools_heatmaps/*.mat.gz`. Remaining gap for methylseq: no
 CpG-island or TSS annotation is bundled, so its feature tab stratifies by
 CpG-density tertile and names the proxy as one.
+
+**2026-09-30 (lot 3).** crisprseq 2.3.0 binds the 6,195-file fan-in through glob recipe
+sources (`read_kwargs.columns`), with no raw collection. The resolver still concatenates about
+18 M per-read indel rows (2.2 GB of tables) before the recipe collapses them into per-library
+and per-guide histograms (about 25 s on the megatest). Remaining gap: a per-file reduction hook
+in the recipe resolver, so a run much larger than the megatest does not hold every per-read
+table in memory at once.
 
 ## 13. A stale API catalog cache corrupts imports silently
 
@@ -770,6 +831,11 @@ Neighbouring gaps in the design path:
   those runs need `--var GROUP_COL=<column>`.
 - The design of a pipeline that does not publish its samplesheet has to be copied into
   `{DATA_ROOT}/input/` or passed as a path, the `SHEET` blocker of `TEST_DATASETS.md`.
+- **2026-09-30 (lot 3).** An explicit `METADATA_FILE` triggers the `GROUP_COL`
+  auto-detection even when the template declares a default, and the detection picks a path
+  column: `fastq_1` on the crisprseq samplesheet, `fasta` on the proteinfamilies one. The
+  crisprseq command passes `GROUP_COL=protospacer`; proteinfamilies relies on its default
+  `METADATA_FILE`. The detection should skip path-like columns.
 
 ## 31. Route flags are still set by hand
 
@@ -779,6 +845,11 @@ must still be passed by hand although `params.json` carries `quantify` and `anno
 as for the airrflow, rnafusion, funcscan and rnaseq flags listed in `TEST_DATASETS.md`
 Annex A. Each new flag is another branch in shared CLI code. A related wart: the CLI prints
 its `SKIP_ANCOM` and `ANNOTATION_COLS` notices on every template, not only on ampliseq.
+
+**2026-09-30 (lot 3).** Five more hand-set flags: `SKIP_CLONALITY` (crisprseq,
+`skip_clonality`), `SKIP_PHYLOGENETIC_INFERENCE` (proteinfamilies), `SKIP_INTERPROSCAN` and
+`SKIP_S4PRED` (proteinannotator) and `SKIP_ASSEMBLY_QC` (pairgenomealign), each mirroring a
+pipeline parameter and none introspected.
 
 **Smallest fix:** let `template.yaml` declare a parameter-to-variable mapping, so a template
 reads its own route flags without a code change.
@@ -805,14 +876,27 @@ worked around in the template and recorded in its `VALIDATION_REPORT.md`:
   of another pipeline's run as an mhcquant table. The run-directory match that would scope it
   is not wired into ingestion yet.
 
+**2026-09-30 (lot 3):**
+
+- isoseq runs no SQANTI, so the template classifies the isoforms itself (SQANTI3-like
+  categories on exact intron chains) against `REFERENCE_GTF`. Novel TAMA genes are per sample
+  (TAMA numbers genes per annotation), and `isoseq_insert_length` reads every FLNC read line of
+  `*.report.csv` at ingestion (a few million per SMRT cell on a production run); only the
+  histogram is stored.
+- pairgenomealign's `last-dotplot` PNGs cannot be shown (no image upload in a template run),
+  and its MultiQC sections name rows by pair and by genome, so two links from the hub reach one
+  MultiQC collection; whether the viewer combines them was not checked live.
+- proteinannotator's MultiQC report holds only SeqFu custom content anchored by sample name,
+  so the template has no MultiQC tab and reads the SeqFu tables.
+- oncoanalyser's `cnv_profile` and `genome_view` annotation accept only hg38 and mm10, so a
+  GRCh37 run (`GENOME=hg19`) must switch the locus annotation off.
+
 ## Pipelines considered and not templated in this lot
 
 | pipeline | why not |
 |---|---|
-| crisprseq | screening arm never published a megatest; 6195-file fan-in needs pre-aggregation |
 | smrnaseq | isomiR views need a kind that does not exist. Templated in wave 3 (2.4.1): existing kinds cover them |
 | scrnaseq | nested `aligner_*` run roots plus a missing knee plot. Templated in lot 2 (4.2.0) with the new `knee_plot` |
-| oncoanalyser | signature and circos kinds missing; run root `HCC1395/` |
 | raredisease, quantms, bacass | no usable megatest run at all |
 | methylseq | no usable megatest on a recent release. Templated in lot 2 on the complete 2.3.0 run |
 | rnasplice | wave 3, pending: the 1.0.4 megatest is a truncated sync with no MultiQC and no splicing output, so the template waits for an EMBL cluster `test_full` run. Fallback if that run fails twice: seqinspector 1.1.2, whose megatest is complete |

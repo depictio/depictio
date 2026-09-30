@@ -1,0 +1,13 @@
+GENERATE_REPORT:
+  python: 3.12.7
+  generate_report.py: Python 3.12.7
+RUN_ALPHAFOLD2:
+  python: 3.11.14
+  alphafold2: e9b68483fc8764e7a1906e74a5d1f0ea2137311d
+  jax: 0.4.26
+  jaxlib: 0.4.26
+  numpy: 1.24.3
+  biopython: 1.79
+Workflow:
+    nf-core/proteinfold: v2.1.0dev-ga414fd1
+    Nextflow: 26.04.6

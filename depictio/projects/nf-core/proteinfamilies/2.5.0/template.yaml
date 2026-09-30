@@ -1,0 +1,599 @@
+# nf-core/proteinfamilies Template v2.5.0 - Protein family generation
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/proteinfamilies/2.5.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/samplesheet.csv]
+#
+# Tested against nf-core/proteinfamilies AWS megatest results:
+#   s3://nf-core-awsmegatests/proteinfamilies/results-f8c0b183e59df3d87c38d0f7c4acc6918593f4f5
+#   (test_full profile, see megatest.yaml for the fetch manifest)
+# ============================================================================
+#
+# DESIGN METADATA. proteinfamilies reads its samplesheet from --input and does
+# not publish it, so the sample hub reads the file named by METADATA_FILE
+# (default: input/samplesheet.csv under DATA_ROOT, where download_test_data.sh
+# puts the vendored megatest sheet). The `samples` recipe derives `mode`
+# (create / update) from whether a row names existing HMMs to update; it is
+# the default GROUP_COL, and any column a user adds to the sheet can replace it.
+#
+# KEYS. Per-family files are laid out <step>/<sample>/<family>.<ext>, so every
+# family collection carries the sample (the directory) and the family (the
+# file name); the families hub fans the family out to the alignment, residue,
+# member and tree collections. Families an update run extended live under
+# update_families/ and carry origin "updated".
+#
+# ALIGNER. The alignment scans read FAMSA (.aln, the default) and MAFFT (.fas)
+# full alignments alike; runs with --skip_sequence_redundancy_removal write
+# HH-suite reformatted .fas.gz under full_msa/filtered/hhsuite_reformat/, which
+# the same scan picks up.
+template:
+  template_id: "nf-core/proteinfamilies/2.5.0"
+  description: "nf-core/proteinfamilies protein family template: how the input sequences clustered, the families built or extended with their seed, model and alignment statistics, each family's alignment, residue conservation, predicted structure and tree, and the members with their identity to the representative."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "proteinfamilies output directory (qc/, mmseqs/, family_reps/, full_msa/, hmm/, phylogeny/, update_families/, multiqc/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: sample, fasta, optional existing_hmms_to_update and existing_msas_to_update, plus any design columns). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. proteinfamilies fixes it to sample; recorded for the metadata auto-detection."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the dashboard groups and filters samples by. Defaults to mode (create or update), derived from the sheet; name any design column added to the sheet instead."
+      required: false
+      default: "mode"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Mode"
+    - name: "SKIP_PHYLOGENETIC_INFERENCE"
+      description: "Set (--var SKIP_PHYLOGENETIC_INFERENCE=true) for a run with --skip_phylogenetic_inference: phylogeny/ is absent, so the tree collections are removed."
+      required: false
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "mode"
+      GROUP_COL_DISPLAY: "Mode"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Preprocessing"
+        key_patterns: ["skip_preprocessing", "min_seq_length", "max_seq_length", "remove_duplicates_on_sequence"]
+      - group: "Initial clustering"
+        key_patterns: ["clustering_tool", "cluster_seq_identity", "cluster_coverage", "cluster_cov_mode", "cluster_size_threshold", "clusters_per_chunk", "save_mmseqs_*"]
+      - group: "Family generation"
+        key_patterns: ["family_generation_algorithm", "alignment_tool", "skip_msa_trimming", "clipkit_out_format", "trim_ends_only", "gap_threshold", "skip_additional_sequence_recruiting", "hmmsearch_*"]
+      - group: "Redundancy removal"
+        key_patterns: ["skip_family_redundancy_removal", "skip_family_merging", "skip_sequence_redundancy_removal", "cluster_*_for_redundancy", "save_non_redundant_*"]
+      - group: "Downstream outputs"
+        key_patterns: ["skip_phylogenetic_inference", "skip_proteinfold_samplesheet", "skip_proteinannotator_samplesheet", "save_update_families_*", "save_iterative_family_metadata"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "clustering_tool"
+      - "cluster_seq_identity"
+      - "cluster_coverage"
+      - "cluster_size_threshold"
+      - "family_generation_algorithm"
+      - "alignment_tool"
+      - "hmmsearch_evalue_cutoff"
+      - "hmmsearch_query_length_threshold"
+      - "cluster_seq_identity_for_redundancy"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_present: "SKIP_PHYLOGENETIC_INFERENCE"
+      remove_dc_tags: ["cmaple_tree_raw", "family_trees"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "proteinfamilies Protein Families"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "proteinfamilies"
+    version: "2.5.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/proteinfamilies"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the samplesheet, one row per sample
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's samplesheet, one row per sample, with the create or update mode derived from it"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/proteinfamilies/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, the directory every per-sample output sits in"
+              "mode": "update when the row names existing family HMMs to extend, else create"
+              "fasta": "Input protein FASTA file name"
+              "existing_hmms_to_update": "Archive of existing family HMMs the sample extends (update mode)"
+              "existing_msas_to_update": "Archive of the matching family alignments (update mode)"
+
+      # ----------------------------------------------------------------
+      # MultiQC: custom content. The SeqFu and cluster-size sections are
+      # named after each sample, so only the family metadata table has a
+      # stable id a template can address.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run: the family metadata table (the per-sample SeqFu and cluster-size sections are read from their source files instead)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "family_metadata"
+            plots:
+              family_metadata: ["family_metadata-section"]
+
+      # ----------------------------------------------------------------
+      # Input sequences and initial clustering
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seqfu_stats_raw"
+        description: "Raw SeqFu statistics of the input sequences before and after preprocessing (input of sequence_stats)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?qc/[^/]+/[^/]+_(?:before|after)\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "File": "Input file SeqFu read"
+              "#Seq": "Sequences in the file"
+              "Total bp": "Residues summed over the sequences"
+              "Avg": "Mean sequence length"
+              "N50": "N50 of the sequence lengths"
+              "N75": "N75 of the sequence lengths"
+              "N90": "N90 of the sequence lengths"
+              "auN": "Area under the Nx curve"
+              "Min": "Shortest sequence"
+              "Max": "Longest sequence"
+              "source_path": "File the row came from; the sample and the stage are derived from its name"
+
+      - data_collection_tag: "sequence_stats"
+        description: "Input protein sequences per sample before and after preprocessing: count, total and mean length, N50 and extremes"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seqfu/stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "stage": "before or after preprocessing (length filter, gap removal, deduplication)"
+              "file": "Input file SeqFu read"
+              "sequences": "Sequences in the file"
+              "total_length": "Residues summed over the sequences"
+              "mean_length": "Mean sequence length, residues"
+              "n50": "N50 of the sequence lengths"
+              "n75": "N75 of the sequence lengths"
+              "n90": "N90 of the sequence lengths"
+              "aun": "Area under the Nx curve"
+              "min_length": "Shortest sequence, residues"
+              "max_length": "Longest sequence, residues"
+
+      - data_collection_tag: "proteinfamilies_cluster_distribution_raw"
+        description: "Raw initial MMseqs2 cluster size distribution per sample (input of cluster_sizes)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_clustering_distribution_mqc\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Id": "Row id (the cluster size)"
+              "Cluster Size": "Members per cluster"
+              "Number of Clusters": "Clusters of that size"
+              "source_path": "File the row came from; the sample is derived from its name"
+
+      - data_collection_tag: "cluster_sizes"
+        description: "Initial MMseqs2 clusters per size and sample, with the sequences they hold"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfamilies/cluster_size_distribution.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "cluster_size": "Members per cluster"
+              "n_clusters": "Clusters of that size"
+              "n_sequences": "Sequences in clusters of that size"
+              "sequence_share": "Share of the sample's clustered sequences, 0 to 1"
+
+      # ----------------------------------------------------------------
+      # Per-family files, read as text (one line per row)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "proteinfamilies_family_meta_raw"
+        description: "Raw family metadata tables of the families built and extended (input of families)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?family_reps/[^/]+/[^/]+_meta_mqc\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Sample Name": "MultiQC row key, the family id"
+              "Family Id": "Family id"
+              "Size": "Member sequences"
+              "Representative Length": "Residues of the representative"
+              "Representative Id": "Id of the representative sequence"
+              "Sequence": "Representative sequence"
+              "source_path": "File the row came from; the sample and the origin are derived from its path"
+
+      - data_collection_tag: "proteinfamilies_family_members_raw"
+        description: "Raw family member rosters (input of family_members)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?family_reps/[^/]+/[^/]+\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "family_id": "Family id"
+              "member_id": "Member sequence id"
+              "source_path": "File the row came from; the sample and the origin are derived from its path"
+
+      - data_collection_tag: "famsa_alignment_raw"
+        description: "Raw full family alignments, one file line per row (input of family_msa, family_residues, families and family_members)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?(?:full_msa/filtered/(?:famsa_align|mafft_align|hhsuite_reformat)|update_families/full_msa/(?:famsa_align|mafft_align))/[^/]+/[^/]+\\.(?:aln|fas)(?:\\.gz)?$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of an aligned FASTA file"
+              "source_path": "File the line came from; the sample and the family are derived from its path"
+
+      - data_collection_tag: "hmmer_hmm_raw"
+        optional: true  # models are read for their header only; the families table fills nulls without them
+        description: "Raw family HMMs, one file line per row (input of families)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?(?:hmm/(?:filtered|raw/[^/]+)|update_families/hmm)/[^/]+/[^/]+\\.hmm\\.gz$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a HMMER3 profile"
+              "source_path": "File the line came from; the family is derived from its name"
+
+      - data_collection_tag: "cmaple_tree_raw"
+        optional: true  # absent with --skip_phylogenetic_inference
+        description: "Raw CMAPLE family trees (Newick), one file line per row (input of family_trees)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.treefile$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              quote_char: null
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a Newick tree"
+              "source_path": "File the line came from; the sample and the family are derived from its path"
+
+      # ----------------------------------------------------------------
+      # Families: the family hub and what hangs off it
+      # ----------------------------------------------------------------
+      - data_collection_tag: "families"
+        description: "One row per family: origin, size, representative, seed and recruited members, HMM length and effective sequences, alignment identity and conservation"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfamilies/family_metadata.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "family": "Family id"
+              "sample": "Sample the family was built from or extended with"
+              "origin": "new (built by this run) or updated (an existing family the run extended)"
+              "size": "Member sequences"
+              "representative_id": "Id of the representative sequence"
+              "representative_length": "Residues of the representative"
+              "sequence": "Representative sequence"
+              "seed_size": "Sequences the family HMM was built from"
+              "recruited": "Members beyond the HMM seed (size minus seed size, floored at 0)"
+              "effective_sequences": "HMMER effective sequence number of the model"
+              "model_length": "Match states of the family HMM"
+              "aligned_members": "Rows of the full family alignment"
+              "alignment_columns": "Columns of the full family alignment"
+              "mean_identity": "Mean identity of the members to the representative, 0 to 1"
+              "mean_coverage": "Mean share of the representative the members cover, 0 to 1"
+              "mean_conservation": "Mean conservation score along the representative, 0 to 1"
+              "conserved_share": "Share of representative residues scored conserved, 0 to 1"
+
+      - data_collection_tag: "family_members"
+        description: "One row per family member, with its identity to the representative, coverage and length"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinfamilies/family_members.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "family": "Family id"
+              "member_id": "Member sequence id"
+              "sample": "Sample the family was built from or extended with"
+              "origin": "new or updated (see families)"
+              "is_representative": "The family's representative sequence"
+              "in_alignment": "The member is a row of the family's full alignment"
+              "identity": "Identity to the representative over shared columns, 0 to 1"
+              "coverage": "Share of the representative's residues the member covers, 0 to 1"
+              "length": "Ungapped member length, residues"
+
+      - data_collection_tag: "family_msa"
+        description: "Full family alignments as the MSA table: one row per aligned sequence, the representative first, capped at 500 rows per family"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "famsa/alignment.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "msa_id": "Family id"
+              "seq_id": "Aligned sequence id"
+              "rank": "Row order, 0 is the family representative"
+              "aligned_sequence": "Aligned row, gaps as -"
+              "identity": "Identity to the representative over shared columns, 0 to 1"
+              "coverage": "Share of the representative's residues the row covers, 0 to 1"
+              "sample": "Sample the family was built from or extended with"
+
+      - data_collection_tag: "family_residues"
+        description: "One row per residue of every family representative: conservation score and class, column consensus and occupancy"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "famsa/conservation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Family id"
+              "sample": "Sample the family was built from or extended with"
+              "position": "Residue number along the representative, 1-based"
+              "residue": "Representative residue"
+              "value": "Conservation score, 0 (as diverse as random sequence) to 1 (invariant, gap-free)"
+              "category": "conserved (0.7 and above), intermediate (0.4 to 0.7) or variable"
+              "consensus": "Most frequent residue of the alignment column"
+              "consensus_share": "Share of the column's residues equal to the consensus"
+              "occupancy": "Share of members with a residue in the column"
+              "n_members": "Aligned members the column is computed over"
+              "sequence": "Ungapped representative sequence"
+
+      - data_collection_tag: "family_trees"
+        optional: true  # absent with --skip_phylogenetic_inference
+        description: "CMAPLE family trees laid out as rectangular tree segments, families stacked"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cmaple/tree_layout.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "family": "Family id"
+              "sample": "Sample the family was built from"
+              "draw_order": "Row order of the drawing"
+              "x": "Distance from the root, substitutions per site (empty on separator rows)"
+              "y": "Vertical slot of the node (empty on separator rows)"
+              "node": "Member id at a tip"
+              "is_tip": "The row ends a branch at a tip"
+              "n_tips": "Tips of the family tree"
+
+links:
+  # Samplesheet hub to every sample-level collection.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC family table by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sequence_stats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the input sequence statistics by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "cluster_sizes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the cluster size distribution by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "families"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the families by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "family_members"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the family members by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "family_msa"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the family alignments by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "family_residues"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the residue conservation by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "family_trees"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the family trees by samplesheet samples"
+    enabled: true
+  # Families hub to every family-level collection.
+  - source_dc_tag: "families"
+    source_column: "family"
+    target_dc_tag: "family_members"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "family"}
+    description: "Filter the members by family"
+    enabled: true
+  - source_dc_tag: "families"
+    source_column: "family"
+    target_dc_tag: "family_msa"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "msa_id"}
+    description: "Filter the alignments by family"
+    enabled: true
+  - source_dc_tag: "families"
+    source_column: "family"
+    target_dc_tag: "family_residues"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the residue conservation by family"
+    enabled: true
+  - source_dc_tag: "families"
+    source_column: "family"
+    target_dc_tag: "family_trees"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "family"}
+    description: "Filter the family trees by family"
+    enabled: true
+  # Reverse: a member selection narrows the family table.
+  - source_dc_tag: "family_members"
+    source_column: "family"
+    target_dc_tag: "families"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "family"}
+    description: "Filter the families by the families of selected members"
+    enabled: true

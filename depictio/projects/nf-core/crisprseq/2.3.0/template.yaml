@@ -1,0 +1,531 @@
+# nf-core/crisprseq Template v2.3.0 - Targeted gene editing analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/crisprseq/2.3.0 --data-root /path/to/results \
+#     --var METADATA_FILE=/path/to/samplesheet.csv --var GROUP_COL=protospacer
+#
+# Tested against nf-core/crisprseq AWS megatest results:
+#   s3://nf-core-awsmegatests/crisprseq/results-0e9f915c4a3c89d02a66ec58e2decbc832323c8b
+#   (test_full profile, targeted analysis; see megatest.yaml for the fetch manifest)
+# ============================================================================
+#
+# SCOPE. The targeted analysis (--analysis targeted): amplicon sequencing of
+# edited loci. The screening analysis writes different outputs (count tables,
+# MAGeCK, BAGEL2) and is not covered.
+#
+# DESIGN METADATA. crisprseq does not publish the samplesheet it ran on, so the
+# sample hub reads the file named by METADATA_FILE (default: input/samplesheet.csv
+# under DATA_ROOT, where download_test_data.sh puts the vendored megatest sheet).
+# The targeted input schema requires only `sample`; the hub derives `guide` from
+# the optional `protospacer` column, which keys every per-guide collection.
+# GROUP_COL names the sheet column the dashboard groups and filters libraries by.
+#
+# LAYOUT. The CIGAR parser writes one small file per library under cigar/
+# (reads summary, edit counts, indel QC, per-read indels, substitution rates,
+# cut site) and the clonality classifier one under clonality/. The recipes read
+# them by glob; nothing is scanned into a raw collection, which keeps a run of
+# thousands of libraries to a handful of tables.
+#
+# ROW COUNTS. Profiles along the amplicon (indel sizes, deletion and insertion
+# position, substitution and gap rates) are summarised per guide in the recipes
+# (median or mean library with its interquartile band) instead of shipped per library
+# and position: on the reference run that is ~24,500 rows per profile instead of
+# 250,000 to 1.1 million. The per-library indel alleles stay a collection: the
+# guide recipes read them and the allele table pages through them.
+#
+# OPTIONAL ROUTE. clonality/ is absent with --skip_clonality: pass
+# SKIP_CLONALITY (see `conditional` below); the collection is also optional.
+template:
+  template_id: "nf-core/crisprseq/2.3.0"
+  description: "nf-core/crisprseq targeted gene editing template: read accounting, edit outcome composition per library and per guide, frameshift and template-based repair rates, the indel size and position signature around the cut site, per-position substitution rates, and the clonality call."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "crisprseq output directory (cigar/, clonality/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: sample, fastq_1, fastq_2, reference, protospacer, template). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. The crisprseq input schema fixes it to sample."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the dashboard groups and filters libraries by. Defaults to protospacer, the guide each library was edited with."
+      required: false
+      default: "protospacer"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Protospacer"
+    - name: "SKIP_CLONALITY"
+      description: "Set (--var SKIP_CLONALITY=true) for a run with --skip_clonality: clonality/ is absent, so the clonality collection is removed."
+      required: false
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "protospacer"
+      GROUP_COL_DISPLAY: "Protospacer"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+          - "genomes"            # the whole iGenomes table
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Analysis"
+        key_patterns: ["analysis", "aligner", "protospacer", "reference_fasta", "template", "overrepresented", "skip_clonality"]
+      - group: "Read preprocessing"
+        key_patterns: ["umi_*", "vsearch_*", "medaka_model", "five_prime_adapter", "three_prime_adapter", "min_reads"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "igenomes_*", "genome"]
+    highlight:
+      - "analysis"
+      - "aligner"
+      - "overrepresented"
+      - "umi_clustering"
+      - "skip_clonality"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_present: "SKIP_CLONALITY"
+      remove_dc_tags: ["crisprseq_clonality"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "crisprseq Gene Editing"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "crisprseq"
+    version: "2.3.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/crisprseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the samplesheet, one row per library
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's samplesheet, one row per library, with the guide key every per-guide collection joins on"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id, the prefix of every per-library output file"
+              "guide": "Protospacer the library was edited with, upper-cased; the key of the per-guide tables"
+              "has_template": "yes when the library has an HDR donor template"
+              "amplicon_length": "Length of the reference amplicon, bp; present only when the sheet has a reference column"
+              "protospacer": "Protospacer sequence as given in the samplesheet"
+
+      # ----------------------------------------------------------------
+      # Per library (catalog recipes over cigar/ and clonality/)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "crisprseq_edit_summary"
+        description: "One row per library: read accounting, reads per outcome class, editing, frameshift, in-frame and template-based rates, and the indel filter counts"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "crisprseq/edit_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id"
+              "raw_reads": "Raw reads of the library"
+              "merged_pct": "Share of raw reads merged from pairs, percent (0 for single-end)"
+              "quality_filtered_pct": "Share of raw reads passing the quality filter, percent"
+              "clustered_reads": "Reads after clustering (UMI or sequence clusters)"
+              "aligned_pct": "Share of reads aligned to the amplicon, percent"
+              "classified_reads": "Reads the CIGAR parser classified: wild type, template-based and indel reads"
+              "wt_reads": "Wild-type reads"
+              "template_based_reads": "Reads carrying the template-based (HDR) edit"
+              "delins_reads": "Reads with a deletion-insertion"
+              "ins_inframe_reads": "Reads with an in-frame insertion"
+              "ins_frameshift_reads": "Reads with a frameshift insertion"
+              "del_inframe_reads": "Reads with an in-frame deletion"
+              "del_frameshift_reads": "Reads with a frameshift deletion"
+              "edited_reads": "Classified reads that are not wild type"
+              "edited_pct": "Edited share of the classified reads, percent"
+              "indel_pct": "Share of classified reads with an insertion, deletion or deletion-insertion, percent"
+              "frameshift_pct": "Share of classified reads with a frameshift insertion or deletion, percent"
+              "inframe_pct": "Share of classified reads with an in-frame insertion or deletion, percent"
+              "template_based_pct": "Share of classified reads with the template-based edit, percent"
+              "frameshift_of_indels_pct": "Frameshift share of the insertion and deletion reads, percent"
+              "wt_failing_filter": "Wild-type reads dropped by the read filters"
+              "indels_failing_filter": "Indel reads dropped by the indel filters"
+              "indels_above_error_in_peak": "Passing indel reads above the sequencing error rate and inside the main indel peak"
+              "indels_above_error_outside_peak": "Passing indel reads above the sequencing error rate and outside the main indel peak"
+              "indels_below_error_in_peak": "Passing indel reads below the sequencing error rate and inside the main indel peak"
+              "indels_below_error_outside_peak": "Passing indel reads below the sequencing error rate and outside the main indel peak"
+
+      - data_collection_tag: "crisprseq_edit_outcomes"
+        description: "Reads per outcome class and library with each class's share of the classified reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "crisprseq/edit_outcomes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id"
+              "outcome": "Outcome class"
+              "level": "Composition level, always Outcome"
+              "reads": "Reads in the class"
+              "pct": "Share of the library's classified reads, percent"
+
+      - data_collection_tag: "crisprseq_clonality"
+        optional: true  # absent with --skip_clonality
+        description: "The clonality classifier's zygosity class, clonality label and peak statistics per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "crisprseq/clonality.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id"
+              "classification": "Zygosity class: homozygous wild type, heterozygous or homozygous edited, or ambiguous"
+              "clonality": "Clonality label from the indel peak structure"
+              "class_confidence": "Classifier confidence in the zygosity class, 0 to 1"
+              "total_reads": "Reads the classifier counted"
+              "wt_pct": "Wild-type share, percent"
+              "deletion_pct": "Deletion share, percent"
+              "insertion_pct": "Insertion share, percent"
+              "delins_pct": "Deletion-insertion share, percent"
+              "inframe_pct": "In-frame indel share, percent"
+              "frameshift_pct": "Frameshift indel share, percent"
+              "indel_peaks": "Indel peaks carrying the edited reads"
+              "max_peak_pct": "Share of the edited reads in the largest peak, percent"
+              "mean_peak_pct": "Mean share of the edited reads per peak, percent"
+              "peak_occupancy": "Share of the edited reads inside any peak"
+
+      - data_collection_tag: "crisprseq_indels"
+        description: "Every distinct indel allele of every library with its position relative to the cut site and its read share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "crisprseq/indels.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id"
+              "allele": "Readable allele label: type, length and offset from the cut site"
+              "indel_type": "Deletion, Insertion or Deletion-insertion"
+              "start": "Start position on the amplicon"
+              "length": "Indel length, bp"
+              "size": "Signed indel size, bp: insertions positive, deletions negative"
+              "offset": "Start position minus the cut site, bp"
+              "frame": "In-frame (length a multiple of 3) or Frameshift"
+              "peak": "Whether the allele is in the library's main indel peak"
+              "reads": "Reads carrying the allele"
+              "pct_reads": "Share of the library's classified reads, percent"
+              "pct_indel_reads": "Share of the library's indel reads, percent"
+              "rank": "Rank of the allele in the library by reads"
+              "cut_site": "Cut site position on the amplicon"
+
+      # ----------------------------------------------------------------
+      # Per guide (pipeline recipes: the hub's guide joined to the above)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "guide_summary"
+        description: "One row per guide: libraries, reads, median editing, frameshift, in-frame and template-based rates, dominant indel size and the clonality mix"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "guide": "Protospacer"
+              "libraries": "Libraries edited with the guide that classified reads"
+              "classified_reads": "Classified reads over the guide's libraries"
+              "median_edited_pct": "Median edited share over the guide's libraries, percent"
+              "median_frameshift_pct": "Median frameshift share, percent"
+              "median_inframe_pct": "Median in-frame share, percent"
+              "median_template_based_pct": "Median template-based share, percent"
+              "median_frameshift_of_indels_pct": "Median frameshift share of the indel reads, percent"
+              "min_edited_pct": "Lowest edited share among the guide's libraries, percent"
+              "max_edited_pct": "Highest edited share among the guide's libraries, percent"
+              "dominant_indel_size": "Signed indel size carrying the most reads over the guide's libraries, bp"
+              "dominant_indel_share_pct": "Share of the guide's indel reads at the dominant size, percent"
+              "classification_mix": "Libraries per clonality class, most frequent first"
+              "edit_class": "Editing level from the median edited share: High (50 percent and up), Moderate (10 and up), Low (1 and up) or Unedited"
+
+      - data_collection_tag: "guide_outcomes"
+        description: "Edit outcome composition per guide, reads pooled over the guide's libraries"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_outcomes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "guide": "Protospacer"
+              "outcome": "Outcome class"
+              "level": "Composition level, always Outcome"
+              "reads": "Reads in the class over the guide's libraries"
+              "pct": "Share of the guide's classified reads, percent"
+
+      - data_collection_tag: "guide_alleles"
+        description: "The most frequent indel alleles of each guide, pooled over its libraries, placed by offset from the cut site"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_alleles.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "guide": "Protospacer"
+              "allele": "Readable allele label: type, length and offset from the cut site"
+              "libraries": "Libraries of the guide carrying the allele"
+              "pct_reads": "Reads of the allele pooled over the guide's libraries, as a share of their classified reads, percent"
+              "reads": "Reads carrying the allele over the guide's libraries"
+              "indel_type": "Deletion, Insertion or Deletion-insertion"
+              "size": "Signed indel size, bp: insertions positive, deletions negative"
+              "offset": "Start position minus the cut site, bp"
+              "frame": "In-frame (length a multiple of 3) or Frameshift"
+              "peak": "Main peak when the allele is in the main indel peak of at least half the libraries carrying it"
+              "median_pct_reads": "Median share of classified reads in the libraries carrying the allele, percent"
+              "rank": "Rank of the allele in the guide by pooled reads"
+
+      - data_collection_tag: "guide_indel_sizes"
+        description: "Share of classified reads at every signed indel size per guide: the median library and its interquartile band"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_indel_sizes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "guide": "Protospacer"
+              "size": "Signed indel size, bp: insertions positive, deletions negative"
+              "median_pct_reads": "Median share of classified reads over the guide's libraries, percent"
+              "q1_pct_reads": "First quartile of that share over the guide's libraries, percent"
+              "q3_pct_reads": "Third quartile of that share over the guide's libraries, percent"
+              "libraries_with_signal": "Libraries with an indel of that size"
+
+      - data_collection_tag: "guide_cut_site_profile"
+        description: "Deletion coverage and insertion rate at every offset from the cut site per guide: the median library and its interquartile band"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_cut_site_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "guide": "Protospacer"
+              "offset": "Position minus the cut site, bp"
+              "median_deletion_pct": "Median share of reads with a deletion covering the position, percent"
+              "q1_deletion_pct": "First quartile of the deletion share over the guide's libraries, percent"
+              "q3_deletion_pct": "Third quartile of the deletion share over the guide's libraries, percent"
+              "median_insertion_pct": "Median share of reads with an insertion starting at the position, percent"
+              "q1_insertion_pct": "First quartile of the insertion share over the guide's libraries, percent"
+              "q3_insertion_pct": "Third quartile of the insertion share over the guide's libraries, percent"
+              "libraries_with_signal": "Libraries with an indel at that offset"
+
+      - data_collection_tag: "guide_substitution_profile"
+        description: "Substitution and gap rate at every offset from the cut site per guide: the mean library, the median and the interquartile band, over the offsets most of the guide's libraries reach"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_substitution_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "profile_guide": "Protospacer. Named apart from guide so the tab's guide picker narrows this profile alone and leaves the guide heatmap whole"
+              "offset": "Position minus the cut site, bp; offsets reached by fewer than 90 percent of the guide's libraries (the amplicon ends) are left out"
+              "mean_substitution_pct": "Mean share of reads with a base other than the dominant one over the guide's libraries, percent"
+              "median_substitution_pct": "Median of the substitution rate over the guide's libraries, percent"
+              "q1_substitution_pct": "First quartile of the substitution rate over the guide's libraries, percent"
+              "q3_substitution_pct": "Third quartile of the substitution rate over the guide's libraries, percent"
+              "mean_gap_pct": "Mean share of reads with a gap at the position over the guide's libraries, percent"
+              "median_gap_pct": "Median of the gap rate over the guide's libraries, percent"
+              "q1_gap_pct": "First quartile of the gap rate over the guide's libraries, percent"
+              "q3_gap_pct": "Third quartile of the gap rate over the guide's libraries, percent"
+              "libraries": "Libraries whose amplicon reaches the offset"
+
+      - data_collection_tag: "guide_substitutions"
+        description: "Mean substitution rate per guide and offset from the cut site, one column per offset"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_substitutions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "guide": "Protospacer"
+              "libraries": "Libraries the means are over"
+              "-20": "Mean substitution rate at 20 bp before the cut site, percent"
+              "-19": "Mean substitution rate at 19 bp before the cut site, percent"
+              "-18": "Mean substitution rate at 18 bp before the cut site, percent"
+              "-17": "Mean substitution rate at 17 bp before the cut site, percent"
+              "-16": "Mean substitution rate at 16 bp before the cut site, percent"
+              "-15": "Mean substitution rate at 15 bp before the cut site, percent"
+              "-14": "Mean substitution rate at 14 bp before the cut site, percent"
+              "-13": "Mean substitution rate at 13 bp before the cut site, percent"
+              "-12": "Mean substitution rate at 12 bp before the cut site, percent"
+              "-11": "Mean substitution rate at 11 bp before the cut site, percent"
+              "-10": "Mean substitution rate at 10 bp before the cut site, percent"
+              "-9": "Mean substitution rate at 9 bp before the cut site, percent"
+              "-8": "Mean substitution rate at 8 bp before the cut site, percent"
+              "-7": "Mean substitution rate at 7 bp before the cut site, percent"
+              "-6": "Mean substitution rate at 6 bp before the cut site, percent"
+              "-5": "Mean substitution rate at 5 bp before the cut site, percent"
+              "-4": "Mean substitution rate at 4 bp before the cut site, percent"
+              "-3": "Mean substitution rate at 3 bp before the cut site, percent"
+              "-2": "Mean substitution rate at 2 bp before the cut site, percent"
+              "-1": "Mean substitution rate at 1 bp before the cut site, percent"
+              "0": "Mean substitution rate at the cut site, percent"
+              "+1": "Mean substitution rate at 1 bp after the cut site, percent"
+              "+2": "Mean substitution rate at 2 bp after the cut site, percent"
+              "+3": "Mean substitution rate at 3 bp after the cut site, percent"
+              "+4": "Mean substitution rate at 4 bp after the cut site, percent"
+              "+5": "Mean substitution rate at 5 bp after the cut site, percent"
+              "+6": "Mean substitution rate at 6 bp after the cut site, percent"
+              "+7": "Mean substitution rate at 7 bp after the cut site, percent"
+              "+8": "Mean substitution rate at 8 bp after the cut site, percent"
+              "+9": "Mean substitution rate at 9 bp after the cut site, percent"
+              "+10": "Mean substitution rate at 10 bp after the cut site, percent"
+              "+11": "Mean substitution rate at 11 bp after the cut site, percent"
+              "+12": "Mean substitution rate at 12 bp after the cut site, percent"
+              "+13": "Mean substitution rate at 13 bp after the cut site, percent"
+              "+14": "Mean substitution rate at 14 bp after the cut site, percent"
+              "+15": "Mean substitution rate at 15 bp after the cut site, percent"
+              "+16": "Mean substitution rate at 16 bp after the cut site, percent"
+              "+17": "Mean substitution rate at 17 bp after the cut site, percent"
+              "+18": "Mean substitution rate at 18 bp after the cut site, percent"
+              "+19": "Mean substitution rate at 19 bp after the cut site, percent"
+              "+20": "Mean substitution rate at 20 bp after the cut site, percent"
+
+# ============================================================================
+# LINKS: the samplesheet fans out to every collection, by library and by guide
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "crisprseq_edit_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-library edit summary by samplesheet libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "crisprseq_edit_outcomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-library outcome composition by samplesheet libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "crisprseq_clonality"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the clonality calls by samplesheet libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "crisprseq_indels"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the indel alleles by samplesheet libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "guide"}
+    description: "Filter the guide summary by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_outcomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "guide"}
+    description: "Filter the guide outcome composition by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_indel_sizes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "guide"}
+    description: "Filter the guide indel size profiles by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_cut_site_profile"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "guide"}
+    description: "Filter the guide cut-site profiles by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_substitutions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "guide"}
+    description: "Filter the guide substitution matrix by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_alleles"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "guide"}
+    description: "Filter the guide alleles by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "guide"
+    target_dc_tag: "guide_substitution_profile"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "profile_guide"}
+    description: "Filter the guide substitution profiles by the guides of the selected libraries"
+    enabled: true

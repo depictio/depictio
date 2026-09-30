@@ -103,6 +103,12 @@ The per-gene burden SnpEff writes: a clustered gene by callset heatmap of coding
 a protein lollipop, and the per-gene table, whose row selection drives the lollipop. A high
 burden on long, repetitive genes is a mappability signal before it is a biological one.
 
+Beside the lollipop, the picked gene's predicted structure carries the same variants as spheres
+on their residues. The structure is fetched by gene symbol from AlphaFold DB when the server runs
+with `DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true` (the gene symbol leaves the server; human by
+default), and the tile explains why it stays empty otherwise. A click on a stem or on a residue
+selects the gene and the residue in both views and in the table below.
+
 ## Selection
 
 Tables and point views select on their entity column, and the selection narrows every tile on the
@@ -116,6 +122,8 @@ tab that reads the same collection or one linked from it:
   the annotated calls.
 - The rainfall plot and the call tables select single calls on `variant_key`; the per-gene table
   selects on `gene_name`, which reaches the protein lollipop.
+- The lollipop and the structure emit a residue selection on `gene` and `aa_pos`, which the
+  other of the two and the coding-variant table follow.
 
 The genome view tracks move the locus through their region links rather than a selection, the
 Ts/Tv quality sweep and the callset QC profile have no sibling tile on their collection, and the

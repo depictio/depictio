@@ -1,0 +1,78 @@
+# Megatest manifest for nf-core/proteinfold 2.1.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the subset of
+# it the template recipes read. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline proteinfold --version 2.1.0 --max-file-mb 50 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored samplesheet
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# fnmatch's `*` crosses `/`, so `*_plddt.tsv` reaches every engine directory.
+#
+# WHY A DEVELOPMENT RUN AND NOT THE RELEASE TAG
+# ---------------------------------------------
+# `results-a414fd13...` is a 2.1.0 development run (software_versions.yml:
+# `nf-core/proteinfold: v2.1.0dev-ga414fd1`), not a release tag sha, so the
+# fetch prints a "not a tag sha" warning; that is expected. The 2.0.0 release
+# run in the bucket is empty. This prefix gathers eleven runs of the test_full
+# profiles (pipeline_info/ has eleven params files): AlphaFold2 in standard and
+# split_msa_prediction mode, ColabFold, ESMFold and RoseTTAFold All-Atom on two
+# monomer targets, AlphaFold2 multimer and ESMFold on one heterodimer. The
+# fetch keeps the latest params file as params.json.
+#
+# proteinfold does not publish its samplesheet: the template ships the union of
+# the two test_full sheets (monomer and multimer) under input/ (METADATA_FILE),
+# and download_test_data.sh copies it into {dest}/input/.
+pipeline: proteinfold
+version: "2.1.0"
+results_sha: "a414fd1368009500b66761e37e7cde80366a45e9"
+run_root: ""
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Top-ranked structure of every engine and target (pLDDT in the B-factor).
+  - "*/top_ranked_structures/*.pdb"
+  # Per-model pLDDT, pTM / ipTM / ipSAE (ipTM and ipSAE empty for one chain).
+  - "*_plddt.tsv"
+  - "*_ptm.tsv"
+  - "*_iptm.tsv"
+  - "*_ipsae.tsv"
+  # Integer-coded alignments of the MSA-based engines.
+  - "*_msa.tsv"
+  # PAE matrices: the recipe reads the top model only (model 0 or 1).
+  - "*/paes/*_0_pae.tsv"
+  - "*/paes/*_1_pae.tsv"
+  #
+  # Deliberately NOT fetched:
+  #   */msa/features.pkl (up to 6 MB each): AlphaFold2 input features, a pickle.
+  #   paes/*_<k>_pae.tsv for k above 1: the lower-ranked models' PAE (1.3 MB each).
+  #   reports/*.html: per-target HTML reports of the pipeline.
+  #   multiqc/<engine>_data/multiqc.parquet: one custom-content section per
+  #     target (a pLDDT bar plot named after the target), the same numbers as
+  #     the residue table; the template has no MultiQC tab (see docs).
+  #   mmseqs/results/*.a3m: the ColabFold search, same rows as colabfold/*_msa.tsv.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - T1024
+  - T1026
+  - H1065
+  - CASP14
+  - CASP
+  - LmrP
+  - Lactococcus
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the pipeline: the template reads
+  # {dest}/input/samplesheet.csv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/proteinfold/2.1.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/proteinfold/2.1.0 --data-root {dest}

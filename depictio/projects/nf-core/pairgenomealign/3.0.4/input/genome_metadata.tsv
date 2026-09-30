@@ -1,0 +1,35 @@
+sample	clade	divergence_mya
+00_Homo_sapiens_GCF_000001405.40	Great apes	0
+06_Pan_paniscus_GCF_029289425.2	Great apes	6
+06_Pan_troglodytes_GCF_028858775.2	Great apes	6
+09_Gorilla_gorilla_gorilla_GCF_029281585.2	Great apes	9
+15_Pongo_abelii_GCF_028885655.2	Great apes	15
+15_Pongo_pygmaeus_GCF_028885625.2	Great apes	15
+19_Hoolock_leuconedys_GCA_047372625.1	Gibbons	19
+19_Hylobates_pileatus_GCA_021498465.1	Gibbons	19
+19_Nomascus_leucogenys_GCF_006542625.1	Gibbons	19
+19_Symphalangus_syndactylus_GCF_028878055.3	Gibbons	19
+29_Chlorocebus_sabaeus_GCF_047675955.1	Old World monkeys	29
+29_Colobus_guereza_GCA_030247045.1	Old World monkeys	29
+29_Macaca_mulatta_GCF_049350105.2	Old World monkeys	29
+29_Miopithecus_talapoin_GCA_028551445.1	Old World monkeys	29
+29_Nasalis_larvatus_GCA_000772465.1	Old World monkeys	29
+29_Papio_anubis_GCA_000264685.2	Old World monkeys	29
+29_Piliocolobus_tephrosceles_GCF_002776525.5	Old World monkeys	29
+29_Theropithecus_gelada_GCA_003255815.1	Old World monkeys	29
+43_Leontopithecus_rosalia_GCA_028533165.1	New World monkeys	43
+43_Pithecia_pithecia_GCA_028551515.1	New World monkeys	43
+43_Plecturocebus_cupreus_GCA_040437455.1	New World monkeys	43
+43_Saguinus_midas_GCA_021498475.1	New World monkeys	43
+43_Saguinus_oedipus_GCA_031835075.1	New World monkeys	43
+43_Saimiri_boliviensis_GCF_048565385.1	New World monkeys	43
+69_Carlito_syrichta_fraterculus_GCA_059932695.1	Tarsiers	69
+74_Eulemur_mongoz_GCA_028534055.1	Lemurs and lorises	74
+74_Eulemur_rufifrons_GCF_041146395.1	Lemurs and lorises	74
+74_Lemur_catta_GCF_020740605.2	Lemurs and lorises	74
+74_Microcebus_murinus_GCA_000165445.3	Lemurs and lorises	74
+74_Nycticebus_bengalensis_GCA_023898255.1	Lemurs and lorises	74
+74_Nycticebus_coucang_GCF_027406575.1	Lemurs and lorises	74
+74_Varecia_variegata_GCA_028533085.1	Lemurs and lorises	74
+79_Cynocephalus_volans_GCA_027409185.1	Colugos	79
+87_Mus_musculus_GCA_964188535.1	Rodents	87

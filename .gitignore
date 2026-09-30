@@ -209,6 +209,16 @@ dump.rdb
 !depictio/projects/nf-core/eager/*/input/*.tsv
 !depictio/projects/nf-core/methylseq/*/input/*.csv
 !depictio/projects/nf-core/hic/*/input/*.csv
+# Lot 3 vendored samplesheets and design tables
+!depictio/projects/nf-core/crisprseq/*/input/*.csv
+!depictio/projects/nf-core/isoseq/*/input/*.tsv
+!depictio/projects/nf-core/oncoanalyser/*/input/*.csv
+!depictio/projects/nf-core/pairgenomealign/*/input/*.csv
+!depictio/projects/nf-core/pairgenomealign/*/input/*.tsv
+!depictio/projects/nf-core/proteinannotator/*/input/*.csv
+!depictio/projects/nf-core/proteinannotator/*/input/*.tsv
+!depictio/projects/nf-core/proteinfamilies/*/input/*.csv
+!depictio/projects/nf-core/proteinfold/*/input/*.csv
 # chipseq is pre-DSL2 and publishes its software versions as CSV, not YAML.
 !depictio/projects/nf-core/chipseq/*/pipeline_info/*.csv
 # atacseq 1.2.2 is pre-DSL2 too and publishes the same CSV shape.

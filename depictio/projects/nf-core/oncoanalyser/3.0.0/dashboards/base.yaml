@@ -1,0 +1,2114 @@
+version: 1
+# nf-core/oncoanalyser 3.0.0 dashboard.
+#
+# Funnel: what the tumor is (purity, ploidy, mutational load, tissue of
+# origin, signatures, HRD) -> whether the sequencing supports it -> the copy
+# number landscape -> the driver catalog -> the somatic small variants -> their
+# protein changes -> structural variants and fusions -> the immune context.
+#
+# oncoanalyser writes no MultiQC report parquet, so the first tab is an
+# Overview built from PURPLE and the tumor-level tools. The pinned glance strip,
+# the Sample filters and the Sample sheet section ride every tab; each tab adds
+# its own open filter section. The protein tab binds the lollipop and the 3D
+# structure to the same protein-change collection, so a residue picked in one
+# is highlighted in the other.
+main_dashboard:
+  title: nf-core/oncoanalyser
+  subtitle: Tumor purity and ploidy, copy number, drivers, somatic variants, structural variants and immune context from the WiGiTS toolkit
+  project_tag: oncoanalyser Cancer Genomics
+  main_tab_name: Overview
+  tab_icon: mdi:view-dashboard-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # Persistent: the sample filters ride every tab. They are sourced on the
+  # samplesheet hub and the template's links fan the selection out to every
+  # sample-level collection.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Samplesheet samples, analysis groups and sample classes, applied to every tab
+    persistent: true
+    pin: top
+  - name: Tumor scope
+    icon: mdi:tune
+    color: blue
+    description: Narrow the overview by fit status and tissue-of-origin classifier
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: Samples, analysis groups, subjects and driver catalog entries in the current scope
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The samplesheet every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Tumor fit
+    icon: mdi:chart-box-outline
+    color: blue
+    description: Purity, ploidy, mutational burden and microsatellite status per tumor
+  - name: Tissue of origin
+    icon: mdi:chart-bar
+    color: blue
+    description: CUPPA's cancer-type probabilities per classifier
+  - name: Mutational processes
+    icon: mdi:waves
+    color: violet
+    description: Mutational signatures and homologous recombination deficiency
+  - name: Tumor detail
+    icon: mdi:table
+    color: gray
+    description: One row per tumor with its full PURPLE fit; select a row to open its record
+  - name: Tumor reference tables
+    icon: mdi:table
+    color: gray
+    description: CUPPA probabilities and the CHORD prediction behind the tiles
+    collapsed: true
+  components:
+  # ----------------------------------------------------------- glance strip
+  - component_type: card
+    tag: oa-glance-samples
+    section: Run at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: "{GROUP_COL}"
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title: Samples
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-glance-groups
+    section: Run at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: group_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: sequence_type
+    display: {icon_name: 'mdi:account-group-outline', title_font_size: xl, value_font_size: xl}
+    title: Analysis groups
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-glance-subjects
+    section: Run at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: subject_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: sample_type
+    display: {icon_name: 'mdi:account-multiple-outline', title_font_size: xl, value_font_size: xl}
+    title: Subjects
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-glance-drivers
+    section: Run at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    aggregation: count
+    column_name: driver_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: driver
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title: Driver catalog entries
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: oa-sheet-intro
+    section: Sample sheet
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    title: The samplesheet the run started from
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample, with the analysis group, subject, tumor or normal
+      role and sequence type every other table joins on. The filters on the
+      left select rows of this table.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: oa-sheet-table
+    section: Sample sheet
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Samplesheet
+    description: Sample, analysis group, subject, role, sequence type and input files of every sample.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # --------------------------------------------------------------- tumor fit
+  - component_type: card
+    tag: oa-ov-card-purity
+    section: Tumor fit
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: median
+    column_name: purity
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1.0
+    display: {icon_name: 'mdi:gauge', title_font_size: xl, value_font_size: xl}
+    title: Tumor purity
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-ov-card-ploidy
+    section: Tumor fit
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: ploidy
+    column_type: float64
+    display: {icon_name: 'mdi:content-duplicate', title_font_size: xl, value_font_size: xl}
+    title: Ploidy
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-ov-card-tmb
+    section: Tumor fit
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: tmb_per_mb
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title: Mutations per Mb
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-ov-card-msi
+    section: Tumor fit
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: ms_indels_per_mb
+    column_type: float64
+    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
+    title: Microsatellite indels per Mb
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: oa-ov-av-purity-ploidy
+    index: oa-ov-av-purity-ploidy
+    section: Tumor fit
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity_ploidy_scatter
+    config:
+      x_title: Ploidy
+      y_title: Tumor purity
+      marker_size: 12
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+      controls_placement: header
+    title: Purity against ploidy, one point per tumor
+    description: PURPLE's chosen fit for every tumor, coloured by fit status. A tumor low on the purity axis has little tumor signal behind every call downstream.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+
+  # -------------------------------------------------------- tissue of origin
+  - component_type: advanced_viz
+    tag: oa-ov-av-cuppa-heatmap
+    index: oa-ov-av-cuppa-heatmap
+    section: Tissue of origin
+    workflow_tag: oncoanalyser
+    data_collection_tag: cuppa_classifier_matrix
+    use: cuppa/classifier_heatmap
+    config:
+      cluster_rows: false
+      cluster_cols: false
+      controls_placement: header
+    title: Cancer-type probability per classifier
+    description: One row per cancer type and one column per CUPPA classifier. The combined column is the final call; the DNA and RNA columns show which evidence drives it.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 8}
+
+  # ---------------------------------------------------- mutational processes
+  - component_type: card
+    tag: oa-ov-card-hrd
+    section: Mutational processes
+    workflow_tag: oncoanalyser
+    data_collection_tag: chord_prediction
+    use: chord/prediction
+    aggregation: max
+    column_name: p_hrd
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1.0
+    display: {icon_name: 'mdi:alert-circle-outline', title_font_size: xl, value_font_size: xl}
+    title: Highest HRD probability
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-ov-card-signature-snvs
+    section: Mutational processes
+    workflow_tag: oncoanalyser
+    data_collection_tag: sigs_allocation
+    use: sigs/allocation
+    aggregation: sum
+    column_name: allocation
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: signature
+    top_n_count: 3
+    display: {icon_name: 'mdi:fingerprint', title_font_size: xl, value_font_size: xl}
+    title: SNVs allocated to signatures
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-ov-card-tml
+    section: Mutational processes
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: tml
+    column_type: int64
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title: Missense load
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-ov-card-sv-burden
+    section: Mutational processes
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: sv_tmb
+    column_type: int64
+    display: {icon_name: 'mdi:vector-link', title_font_size: xl, value_font_size: xl}
+    title: Structural variant burden
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    tag: oa-ov-fig-signatures
+    index: oa-ov-signature-bar
+    section: Mutational processes
+    workflow_tag: oncoanalyser
+    data_collection_tag: sigs_allocation
+    use: sigs/allocation
+    visu_type: bar
+    dict_kwargs: {x: signature, y: percent, color: sample, barmode: group}
+    title: Share of SNVs per mutational signature
+    description: SIGS' allocation of each tumor's SNVs to COSMIC signatures, in percent; MISALLOC is the share no signature explains.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+
+  # ------------------------------------------------------------ tumor detail
+  - component_type: table
+    tag: oa-ov-table-fit
+    section: Tumor detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: PURPLE fit per tumor
+    description: Purity, ploidy, fit, mutational load, microsatellite status and QC of every tumor. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-ov-av-tumor-record
+    index: oa-ov-av-tumor-record
+    section: Tumor detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-ov-table-fit
+      id_col: sample
+      title_col: sample
+      selection_source: table_selection
+      sections:
+        Fit: [purity, ploidy, fit_status, fit_method, fit_score, min_purity, max_purity, min_ploidy, max_ploidy]
+        Genome: [sex, whole_genome_duplication, diploid_fraction, polyclonal_fraction, loh_fraction, cn_segments, unsupported_cn_segments, deleted_genes]
+        Mutational load: [tmb_per_mb, tmb_status, tml, tml_status, ms_indels_per_mb, ms_status, sv_tmb]
+        QC: [qc_status, contamination, tinc_level, amber_mean_depth, germline_aberrations, run_mode]
+    title: Tumor record
+    description: The selected tumor's PURPLE fit, genome state, mutational load and QC.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+
+  # ------------------------------------------------- tumor reference tables
+  - component_type: table
+    tag: oa-ov-table-cuppa
+    section: Tumor reference tables
+    workflow_tag: oncoanalyser
+    data_collection_tag: cuppa_predictions
+    use: cuppa/predictions
+    title: CUPPA probabilities
+    description: Probability and rank of every cancer type under every classifier.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    tag: oa-ov-table-chord
+    section: Tumor reference tables
+    workflow_tag: oncoanalyser
+    data_collection_tag: chord_prediction
+    use: chord/prediction
+    title: CHORD prediction
+    description: Probability of each deficiency type, HR status and HRD type per tumor.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 3}
+
+  # ------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: oa-filter-sample
+    index: oa-sample-filter
+    section: Sample filters
+    group: Samples
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-filter-group-col
+    index: oa-group-col-filter
+    section: Sample filters
+    group: Samples
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: "{GROUP_COL}"
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:account-group-outline'}
+    placement: left
+    title: "{GROUP_COL_DISPLAY}"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-filter-analysis-group
+    index: oa-analysis-group-filter
+    section: Sample filters
+    group: Samples
+    workflow_tag: oncoanalyser
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: group_id
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:folder-outline'}
+    placement: left
+    title: Analysis group
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-ov-filter-fit-status
+    index: oa-ov-fit-status-filter
+    section: Tumor scope
+    group: Tumor
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    interactive_component_type: MultiSelect
+    column_name: fit_status
+    column_type: object
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: PURPLE fit status
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-ov-filter-classifier
+    index: oa-ov-classifier-filter
+    section: Tumor scope
+    group: Tumor
+    workflow_tag: oncoanalyser
+    data_collection_tag: cuppa_predictions
+    interactive_component_type: MultiSelect
+    column_name: classifier
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:sitemap'}
+    placement: left
+    title: CUPPA classifier
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+tabs:
+# =========================================================================
+# Tab 2 - Sequencing QC
+# =========================================================================
+- title: Sequencing QC
+  subtitle: Alignment depth, duplicates, coverage breadth, insert size and QSEE's verdicts per DNA sample
+  tab_order: 2
+  tab_icon: mdi:quality-high
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: QC scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the QC verdicts by status or by the tool they come from
+  grid_sections:
+  - name: Alignment at a glance
+    icon: mdi:counter
+    color: orange
+    description: Depth, read count, duplicate share and coverage breadth per DNA sample
+  - name: Coverage and insert size
+    icon: mdi:chart-line
+    color: orange
+    description: Cumulative coverage and the read-pair insert size distribution
+  - name: QC verdicts
+    icon: mdi:check-decagram
+    color: orange
+    description: QSEE's PASS, WARN and FAIL calls per tool
+  - name: Library detail
+    icon: mdi:table
+    color: gray
+    description: One row per DNA sample with its BamTools summary; select a row to open its record
+  - name: QC reference tables
+    icon: mdi:table
+    color: gray
+    description: Every QSEE check behind the verdict bar
+    collapsed: true
+  components:
+  - component_type: card
+    tag: oa-qc-card-coverage
+    section: Alignment at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_summary
+    use: hmf_bamtools/summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_coverage
+    column_type: float64
+    display: {icon_name: 'mdi:layers-outline', title_font_size: xl, value_font_size: xl}
+    title: Mean coverage
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-qc-card-reads
+    section: Alignment at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_summary
+    use: hmf_bamtools/summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: total_reads
+    column_type: int64
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title: Reads per sample
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-qc-card-duplicates
+    section: Alignment at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_summary
+    use: hmf_bamtools/summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: duplicate_frac
+    column_type: float64
+    display: {icon_name: 'mdi:content-duplicate', title_font_size: xl, value_font_size: xl}
+    title: Highest duplicate share
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-qc-card-breadth
+    section: Alignment at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_summary
+    use: hmf_bamtools/summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: frac_ge_30x
+    column_type: float64
+    display: {icon_name: 'mdi:percent-outline', title_font_size: xl, value_font_size: xl}
+    title: Lowest share at 30x or more
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: oa-qc-av-coverage-curve
+    index: oa-qc-av-coverage-curve
+    section: Coverage and insert size
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_coverage_profile
+    use: hmf_bamtools/cumulative_coverage_curve
+    config:
+      x_title: Read depth
+      y_title: Share of bases at this depth or more
+      legend_pos: bottom
+      controls_placement: header
+    title: Cumulative coverage per sample
+    description: The share of the genome covered at each depth or more. The tumor curve should reach further right than the normal one.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: oa-qc-av-fragment-length
+    index: oa-qc-av-fragment-length
+    section: Coverage and insert size
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_fragment_length
+    use: hmf_bamtools/fragment_length_curve
+    config:
+      x_title: Insert size (bp)
+      y_title: Share of read pairs
+      legend_pos: bottom
+      controls_placement: header
+    title: Insert size distribution per sample
+    description: Read-pair insert size from BamTools. A second peak or a shifted mode points at library preparation differences between samples.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 7}
+  - component_type: card
+    tag: oa-qc-card-checks
+    section: QC verdicts
+    workflow_tag: oncoanalyser
+    data_collection_tag: qsee_status
+    use: qsee/status
+    aggregation: count
+    column_name: check_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: qc_status
+    top_n_count: 3
+    display: {icon_name: 'mdi:check-all', title_font_size: xl, value_font_size: xl}
+    title: QSEE checks
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 5}
+  - component_type: figure
+    tag: oa-qc-fig-status
+    index: oa-qc-status-bar
+    section: QC verdicts
+    workflow_tag: oncoanalyser
+    data_collection_tag: qsee_status
+    use: qsee/status
+    visu_type: bar
+    dict_kwargs:
+      x: source_tool
+      color: qc_status
+      color_discrete_map: '{"PASS": "#40c057", "WARN": "#fd7e14", "FAIL": "#fa5252"}'
+    title: QC verdicts per tool
+    description: QSEE checks per source tool, stacked by PASS, WARN and FAIL.
+    title_size: h3
+    layout: {x: 2, y: 0, w: 6, h: 5}
+  - component_type: table
+    tag: oa-qc-table-bam
+    section: Library detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_summary
+    use: hmf_bamtools/summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: BamTools summary per sample
+    description: Reads, duplicates, coverage statistics and breadth thresholds of every DNA sample. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-qc-av-library-record
+    index: oa-qc-av-library-record
+    section: Library detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: hmf_bamtools_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-qc-table-bam
+      id_col: sample
+      title_col: sample
+      selection_source: table_selection
+      sections:
+        Reads: [total_reads, duplicate_reads, dual_strand_reads, duplicate_frac, unmapped_frac]
+        Coverage: [mean_coverage, median_coverage, sd_coverage, mad_coverage]
+        Breadth: [frac_ge_10x, frac_ge_20x, frac_ge_30x, frac_ge_60x, frac_ge_100x]
+        Filtered bases: [low_map_qual_frac, low_base_qual_frac, overlapping_read_frac, capped_coverage_frac]
+    title: Library record
+    description: The selected sample's reads, coverage, breadth and the bases BamTools filtered out.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    tag: oa-qc-table-qsee
+    section: QC reference tables
+    workflow_tag: oncoanalyser
+    data_collection_tag: qsee_status
+    use: qsee/status
+    row_selection_enabled: true
+    row_selection_column: check_id
+    columns: [sample, sample_type, source_tool, feature, value, qc_status, fail_condition]
+    title: QSEE checks
+    description: Every checked metric with its value, verdict and the condition that fails it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: interactive
+    tag: oa-qc-filter-status
+    index: oa-qc-status-filter
+    section: QC scope
+    group: QC
+    workflow_tag: oncoanalyser
+    data_collection_tag: qsee_status
+    interactive_component_type: MultiSelect
+    column_name: qc_status
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:check-circle-outline'}
+    placement: left
+    title: QC verdict
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-qc-filter-tool
+    index: oa-qc-tool-filter
+    section: QC scope
+    group: QC
+    workflow_tag: oncoanalyser
+    data_collection_tag: qsee_status
+    interactive_component_type: MultiSelect
+    column_name: source_tool
+    column_type: object
+    display: {title_size: md, custom_color: '#F4511E', icon_name: 'mdi:tools'}
+    placement: left
+    title: Source tool
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =========================================================================
+# Tab 3 - Copy number
+# =========================================================================
+- title: Copy number
+  subtitle: PURPLE's allele-specific copy-number segments and the amplifications, deletions and LOH they put on genes
+  tab_order: 3
+  tab_icon: mdi:chart-timeline-variant
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Copy-number scope
+    icon: mdi:tune
+    color: indigo
+    description: Keep genes with a given copy-number event or segments on chosen chromosomes
+  grid_sections:
+  - name: Copy number at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Segments, segment copy number, gene events and loss of heterozygosity
+  - name: Copy-number profile
+    icon: mdi:chart-line
+    color: indigo
+    description: Segment copy number and B-allele frequency along the genome
+  - name: Gene copy number
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Lowest against highest copy number per gene, by event
+  - name: Gene detail
+    icon: mdi:table
+    color: gray
+    description: One row per gene with its copy-number call; select a row to open its record
+  components:
+  - component_type: card
+    tag: oa-cn-card-segments
+    section: Copy number at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_cnv_segments
+    use: purple/cnv_segments
+    aggregation: count
+    column_name: start
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: chrom
+    top_n_count: 3
+    display: {icon_name: 'mdi:vector-line', title_font_size: xl, value_font_size: xl}
+    title: Copy-number segments
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-cn-card-segment-cn
+    section: Copy number at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_cnv_segments
+    use: purple/cnv_segments
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: copy_number
+    column_type: int64
+    display: {icon_name: 'mdi:content-duplicate', title_font_size: xl, value_font_size: xl}
+    title: Segment copy number
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-cn-card-gene-events
+    section: Copy number at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_gene_copy_number
+    use: purple/gene_copy_number
+    aggregation: count
+    column_name: gene
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: cn_event
+    top_n_count: 3
+    filter_expr: "col('cn_event') != 'NEUTRAL'"
+    display: {icon_name: 'mdi:swap-vertical', title_font_size: xl, value_font_size: xl}
+    title: Genes with a copy-number event
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-cn-card-loh
+    section: Copy number at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_purity
+    use: purple/purity
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: loh_fraction
+    column_type: float64
+    display: {icon_name: 'mdi:trending-down', title_font_size: xl, value_font_size: xl}
+    title: Highest LOH share of the genome
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: oa-cn-av-profile
+    index: oa-cn-av-profile
+    section: Copy-number profile
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_cnv_segments
+    use: purple/purple_cn_profile
+    config:
+      minor_copy_number_col: minor_copy_number
+      annotation: "{GENOME}"
+      views: [plotly, locus]
+      show_baf: true
+      facet_by_sample: true
+      controls_placement: header
+    title: Copy-number profile along the genome
+    description: PURPLE's fitted segments as log2 of copy number over 2, with the B-allele frequency underneath. Hover a segment for its major and minor allele copy number.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 8}
+  - component_type: advanced_viz
+    tag: oa-cn-av-gene-scatter
+    index: oa-cn-av-gene-scatter
+    section: Gene copy number
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_gene_copy_number
+    use: purple/gene_cn_scatter
+    config:
+      top_n_labels: 10
+      reference_line: diagonal
+      x_title: Minimum copy number
+      y_title: Maximum copy number
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: gene
+      controls_placement: header
+    title: Lowest against highest copy number per gene
+    description: One point per gene and tumor, its minimum copy number against its maximum, coloured by its call. Points off the diagonal carry a copy-number breakpoint inside the gene.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: oa-cn-table-genes
+    section: Gene detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_gene_copy_number
+    use: purple/gene_copy_number
+    row_selection_enabled: true
+    row_selection_column: gene
+    columns: [gene, sample, chrom, min_copy_number, max_copy_number, min_minor_allele_copy_number, relative_min_copy_number, somatic_regions, cn_event, reported_status, driver_type]
+    title: Copy number per gene
+    description: Copy-number range, minor-allele copy number, event and driver status of every gene. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-cn-av-gene-record
+    index: oa-cn-av-gene-record
+    section: Gene detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_gene_copy_number
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-cn-table-genes
+      id_col: gene
+      title_col: gene
+      selection_source: table_selection
+      sections:
+        Gene: [gene, sample, chrom, chromosome_band, start, end, transcript]
+        Copy number: [min_copy_number, max_copy_number, min_minor_allele_copy_number, relative_min_copy_number, somatic_regions]
+        Call: [cn_event, reported_status, driver_type]
+    title: Gene record
+    description: The selected gene's copy-number range and call, one card per tumor.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: interactive
+    tag: oa-cn-filter-event
+    index: oa-cn-event-filter
+    section: Copy-number scope
+    group: Copy number
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_gene_copy_number
+    interactive_component_type: MultiSelect
+    column_name: cn_event
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:swap-vertical'}
+    placement: left
+    title: Gene copy-number event
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-cn-filter-chrom
+    index: oa-cn-chrom-filter
+    section: Copy-number scope
+    group: Copy number
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_cnv_segments
+    interactive_component_type: MultiSelect
+    column_name: chrom
+    column_type: object
+    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:map-marker-outline'}
+    placement: left
+    title: Chromosome
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =========================================================================
+# Tab 4 - Drivers
+# =========================================================================
+- title: Drivers
+  subtitle: The somatic and germline driver catalog of PURPLE and LINX, by gene, driver type and likelihood
+  tab_order: 4
+  tab_icon: mdi:target
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Driver scope
+    icon: mdi:tune
+    color: red
+    description: The tab opens on the reported drivers; clear Report status to see the whole catalog, or narrow it by driver type, gene role or origin
+  grid_sections:
+  - name: Drivers at a glance
+    icon: mdi:counter
+    color: red
+    description: Catalog entries, reported drivers, genes and likelihood
+  - name: Driver landscape
+    icon: mdi:chart-box-outline
+    color: red
+    description: Which genes carry which driver type, and how the types add up
+  - name: Driver detail
+    icon: mdi:table
+    color: gray
+    description: One row per tumor, gene and driver type; select a row to open its record
+  components:
+  - component_type: card
+    tag: oa-dr-card-reported
+    section: Drivers at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    aggregation: count
+    column_name: driver_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: driver
+    top_n_count: 3
+    filter_expr: "col('reported') == True"
+    display: {icon_name: 'mdi:flag', title_font_size: xl, value_font_size: xl}
+    title: Reported drivers
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-dr-card-genes
+    section: Drivers at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    aggregation: nunique
+    column_name: gene
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: category
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title: Driver genes
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-dr-card-biallelic
+    section: Drivers at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    aggregation: count
+    column_name: driver_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: driver
+    top_n_count: 3
+    filter_expr: "col('biallelic') == True"
+    display: {icon_name: 'mdi:content-duplicate', title_font_size: xl, value_font_size: xl}
+    title: Biallelic drivers
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-dr-card-likelihood
+    section: Drivers at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: driver_likelihood
+    column_type: float64
+    filter_expr: "col('reported') == True"
+    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
+    title: Reported driver likelihood
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: oa-dr-av-oncoplot
+    index: oa-dr-av-oncoplot
+    section: Driver landscape
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/driver_oncoplot
+    config:
+      sort_by_freq: true
+      controls_placement: header
+    title: Driver genes by tumor and driver type
+    description: One column per tumor and one row per driver gene, coloured by driver type. It opens on the reported drivers; clear the Report status filter to add the unreported catalog entries.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 5, h: 8}
+  - component_type: figure
+    tag: oa-dr-fig-types
+    index: oa-dr-type-bar
+    section: Driver landscape
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    visu_type: bar
+    dict_kwargs: {x: driver, color: category}
+    title: Catalog entries per driver type
+    description: Driver catalog entries per driver type, split into oncogenes and tumor suppressors.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 8}
+  - component_type: table
+    tag: oa-dr-table-drivers
+    section: Driver detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    use: purple/drivers
+    row_selection_enabled: true
+    row_selection_column: driver_id
+    columns: [gene, sample, driver, origin, category, report_status, driver_likelihood, biallelic, missense, nonsense, splice, inframe, frameshift, min_copy_number, max_copy_number, chromosome_band]
+    title: Driver catalog
+    description: Gene, driver type, origin, likelihood, variant counts and copy-number range of every catalog entry. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-dr-av-driver-record
+    index: oa-dr-av-driver-record
+    section: Driver detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-dr-table-drivers
+      id_col: driver_id
+      title_col: gene
+      selection_source: table_selection
+      sections:
+        Driver: [gene, sample, driver, origin, source_tool, category, report_status]
+        Likelihood: [driver_likelihood, likelihood_method, biallelic]
+        Variants: [missense, nonsense, splice, inframe, frameshift]
+        Locus: [chrom, chromosome_band, transcript, min_copy_number, max_copy_number]
+    title: Driver record
+    description: The selected catalog entry's driver type, likelihood, supporting variants and locus.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: interactive
+    tag: oa-dr-filter-type
+    index: oa-dr-type-filter
+    section: Driver scope
+    group: Drivers
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    interactive_component_type: MultiSelect
+    column_name: driver
+    column_type: object
+    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:target'}
+    placement: left
+    title: Driver type
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-dr-filter-category
+    index: oa-dr-category-filter
+    section: Driver scope
+    group: Drivers
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    interactive_component_type: MultiSelect
+    column_name: category
+    column_type: object
+    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Gene role
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-dr-filter-origin
+    index: oa-dr-origin-filter
+    section: Driver scope
+    group: Drivers
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    interactive_component_type: MultiSelect
+    column_name: origin
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:source-branch'}
+    placement: left
+    title: Origin
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-dr-filter-report
+    index: oa-dr-report-filter
+    section: Driver scope
+    group: Drivers
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_drivers
+    interactive_component_type: MultiSelect
+    column_name: report_status
+    column_type: object
+    default_value: [REPORTED]
+    display: {title_size: md, custom_color: '#C62828', icon_name: 'mdi:flag'}
+    placement: left
+    title: Report status
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+# =========================================================================
+# Tab 5 - Small variants
+# =========================================================================
+- title: Small variants
+  subtitle: PASS somatic SNVs, MNVs and indels with their purity-adjusted allele frequency, copy number and coding effect
+  tab_order: 5
+  tab_icon: mdi:dna
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Variant scope
+    icon: mdi:tune
+    color: cyan
+    description: Narrow the calls by coding effect, variant type or purity-adjusted allele frequency
+  grid_sections:
+  - name: Variants at a glance
+    icon: mdi:counter
+    color: cyan
+    description: Calls, coding calls, purity-adjusted allele frequency and variant copy number
+  - name: Allele frequency and copy number
+    icon: mdi:chart-bell-curve
+    color: cyan
+    description: How clonal the calls are and on how many copies they sit
+  - name: Along the genome
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Purity-adjusted allele frequency of every call by position
+  - name: Variant detail
+    icon: mdi:table
+    color: gray
+    description: One row per call; select a row to open its record
+  components:
+  - component_type: card
+    tag: oa-sv-card-calls
+    section: Variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: variant_type
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title: Somatic calls
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-sv-card-coding
+    section: Variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: coding_effect
+    top_n_count: 3
+    filter_expr: "col('coding_effect').is_in(['MISSENSE', 'NONSENSE_OR_FRAMESHIFT', 'SPLICE', 'SYNONYMOUS'])"
+    display: {icon_name: 'mdi:molecule', title_font_size: xl, value_font_size: xl}
+    title: Coding calls
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-sv-card-af
+    section: Variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: purple_af
+    column_type: float64
+    display: {icon_name: 'mdi:percent-outline', title_font_size: xl, value_font_size: xl}
+    title: Purity-adjusted allele frequency
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-sv-card-vcn
+    section: Variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: variant_copy_number
+    column_type: float64
+    display: {icon_name: 'mdi:content-duplicate', title_font_size: xl, value_font_size: xl}
+    title: Variant copy number
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    tag: oa-sv-fig-af
+    index: oa-sv-af-histogram
+    section: Allele frequency and copy number
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    visu_type: histogram
+    # Same colour per variant type as the genome track below, which gives its
+    # categories the default categorical palette in alphabetical order.
+    dict_kwargs:
+      x: purple_af
+      color: variant_type
+      color_discrete_map: '{"INDEL": "#1f77b4", "MNV": "#ff7f0e", "SNV": "#2ca02c"}'
+    title: Purity-adjusted allele frequency
+    description: Clonal heterozygous calls pile up near 0.5 once purity is accounted for; a shoulder below it is a subclone.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: figure
+    tag: oa-sv-fig-vcn
+    index: oa-sv-vcn-histogram
+    section: Allele frequency and copy number
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    visu_type: histogram
+    dict_kwargs:
+      x: variant_copy_number
+      color: variant_type
+      color_discrete_map: '{"INDEL": "#1f77b4", "MNV": "#ff7f0e", "SNV": "#2ca02c"}'
+    title: Variant copy number
+    description: Copies of the variant allele; peaks above 1 mark calls on amplified or duplicated regions.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: oa-sv-av-genome
+    index: oa-sv-av-genome
+    section: Along the genome
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variant_genome
+    config:
+      mark: point
+      assembly: "{GENOME}"
+      annotation: "{GENOME}"
+      score_title: purity-adjusted allele frequency
+      point_size: 4
+      region_filter_enabled: true
+      follow_region_filter: true
+      controls_placement: header
+    title: Somatic calls along the genome
+    description: One point per call at its position, raised by its purity-adjusted allele frequency and coloured by variant type. Zoom into a region to see the gene lane.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: oa-sv-table-variants
+    section: Variant detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    use: purple/somatic_variants
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    columns: [gene, hgvs_p, coding_effect, purple_af, variant_copy_number, variant_type, sample, chrom, pos, biallelic, hotspot, reported]
+    title: Somatic small variants
+    description: Gene, protein change, coding effect, purity-adjusted allele frequency, copy number and locus of every PASS call. Select a row to open its record for the alleles, tier and raw allele frequency.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-sv-av-variant-record
+    index: oa-sv-av-variant-record
+    section: Variant detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-sv-table-variants
+      id_col: variant_key
+      title_col: variant_key
+      selection_source: table_selection
+      sections:
+        Call: [variant_key, sample, variant_type, tier, hotspot, reported, kataegis]
+        Impact: [gene, transcript, canonical_effect, coding_effect, worst_coding_effect, hgvs_c, hgvs_p, splice_region]
+        Allele frequency: [tumor_af, tumor_depth, tumor_alt_reads, purple_af, subclonal_likelihood]
+        Copy number: [copy_number, variant_copy_number, minor_allele_copy_number, biallelic, germline_status]
+        Context: [trinucleotide_context, gnomad_frequency, mappability]
+    title: Variant record
+    description: The selected call's impact, allele frequency, copy number and sequence context.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: interactive
+    tag: oa-sv-filter-effect
+    index: oa-sv-effect-filter
+    section: Variant scope
+    group: Variants
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    interactive_component_type: MultiSelect
+    column_name: coding_effect
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:molecule'}
+    placement: left
+    title: Coding effect
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-sv-filter-type
+    index: oa-sv-type-filter
+    section: Variant scope
+    group: Variants
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Variant type
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-sv-filter-af
+    index: oa-sv-af-range
+    section: Variant scope
+    group: Variants
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    interactive_component_type: RangeSlider
+    column_name: purple_af
+    column_type: float64
+    display: {title_size: md, custom_color: '#00838F', icon_name: 'mdi:percent-outline'}
+    placement: left
+    title: Purity-adjusted allele frequency
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+# =========================================================================
+# Tab 6 - Protein changes
+# =========================================================================
+- title: Protein changes
+  subtitle: Protein-changing somatic variants on the protein sequence and on its predicted 3D structure
+  tab_order: 6
+  tab_icon: mdi:molecule
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Protein scope
+    icon: mdi:tune
+    color: grape
+    description: Pick the protein to show and the coding effects to keep
+  grid_sections:
+  - name: Protein changes at a glance
+    icon: mdi:counter
+    color: grape
+    description: Protein changes, proteins hit, hotspots and purity-adjusted allele frequency
+  - name: Protein view
+    icon: mdi:shape-outline
+    color: grape
+    description: The changes along the protein and on its predicted structure, linked residue by residue
+  - name: Protein change detail
+    icon: mdi:table
+    color: gray
+    description: One row per protein change; select a row to open its record
+  components:
+  - component_type: card
+    tag: oa-pr-card-changes
+    section: Protein changes at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_changes
+    aggregation: count
+    column_name: label
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    display: {icon_name: 'mdi:molecule', title_font_size: xl, value_font_size: xl}
+    title: Protein changes
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-pr-card-proteins
+    section: Protein changes at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_changes
+    aggregation: nunique
+    column_name: entity
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: category
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title: Proteins with a change
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-pr-card-hotspots
+    section: Protein changes at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_changes
+    aggregation: count
+    column_name: label
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: category
+    top_n_count: 3
+    filter_expr: "col('hotspot') == True"
+    display: {icon_name: 'mdi:target-arrow', title_font_size: xl, value_font_size: xl}
+    title: Changes at known hotspots
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-pr-card-af
+    section: Protein changes at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_changes
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: value
+    column_type: float64
+    display: {icon_name: 'mdi:percent-outline', title_font_size: xl, value_font_size: xl}
+    title: Purity-adjusted allele frequency
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: text
+    tag: oa-pr-view-intro
+    section: Protein view
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    title: One protein, two views
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Both views open on the protein with the most changes; pick another in the
+      Protein filter on the left. Click a needle or a residue to ring the same
+      residue in the other view.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: oa-pr-av-needles
+    index: oa-pr-av-needles
+    section: Protein view
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_change_needles
+    config:
+      max_subplot_genes: 4
+      gene_sort: count
+      top_n_labels: 5
+      scale_points_by_effect: false
+      selection_enabled: true
+      controls_placement: header
+    title: Protein changes along the sequence
+    description: One needle per changed residue, coloured by coding effect. Without a picked protein, it opens on the protein with the most changes, the one the structure beside shows.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 8}
+  - component_type: advanced_viz
+    tag: oa-pr-av-structure
+    index: oa-pr-av-structure
+    section: Protein view
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_change_structure
+    config:
+      structure_source: resolve
+      gene_col: entity
+      color_mode: plddt
+      show_variants: true
+      show_labels: false
+      selection_enabled: true
+      follow_selection: true
+      controls_placement: header
+    title: Protein changes on the predicted structure
+    description: The predicted structure of the picked protein, or of the one with the most changes, fetched by gene symbol and coloured by prediction confidence, with a sphere on every changed residue.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 8}
+  - component_type: table
+    tag: oa-pr-table-changes
+    section: Protein change detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_changes
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    columns: [entity, label, category, value, hgvs_c, sample, variant_copy_number, biallelic, hotspot, reported]
+    title: Protein changes
+    description: Protein, residue, amino-acid change, coding effect, HGVS notation and allele frequency of every change. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-pr-av-change-record
+    index: oa-pr-av-change-record
+    section: Protein change detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-pr-table-changes
+      id_col: variant_key
+      title_col: label
+      selection_source: table_selection
+      sections:
+        Change: [entity, label, position, ref_aa, alt_aa, category, hgvs_p]
+        Transcript: [transcript, hgvs_c, canonical_effect]
+        Call: [variant_key, sample, chrom, pos, value, variant_copy_number, biallelic, hotspot, reported]
+    title: Protein change record
+    description: The selected change on the protein and the somatic call behind it.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: interactive
+    tag: oa-pr-filter-protein
+    index: oa-pr-protein-filter
+    section: Protein scope
+    group: Protein
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    interactive_component_type: Select
+    column_name: entity
+    column_type: object
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:molecule'}
+    placement: left
+    title: Protein
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-pr-filter-effect
+    index: oa-pr-effect-filter
+    section: Protein scope
+    group: Protein
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    interactive_component_type: MultiSelect
+    column_name: category
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Coding effect
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =========================================================================
+# Tab 7 - Structural variants and fusions
+# =========================================================================
+- title: Structural variants
+  subtitle: LINX's somatic structural variants, the events their clusters resolve to, and the gene fusions they create
+  tab_order: 7
+  tab_icon: mdi:vector-link
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Structural variant scope
+    icon: mdi:tune
+    color: violet
+    description: Narrow the SVs by resolved event and the fusions by phase
+  grid_sections:
+  - name: Structural variants at a glance
+    icon: mdi:counter
+    color: violet
+    description: SVs, clusters, junction copy number and candidate fusions
+  - name: Rearrangement landscape
+    icon: mdi:chart-donut
+    color: violet
+    description: Breakend pairs around the genome and the events they resolve to
+  - name: Fusion structure
+    icon: mdi:relation-many-to-many
+    color: violet
+    description: Kept and lost exons of each candidate fusion, and their phase
+  - name: Fusion detail
+    icon: mdi:table
+    color: gray
+    description: One row per candidate fusion; select a row to open its record
+  - name: Structural variant tables
+    icon: mdi:table
+    color: gray
+    description: Every structural variant with its cluster and breakend genes
+    collapsed: true
+  components:
+  - component_type: card
+    tag: oa-sx-card-svs
+    section: Structural variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    use: linx/svs
+    aggregation: count
+    column_name: sv_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: type
+    top_n_count: 3
+    display: {icon_name: 'mdi:vector-link', title_font_size: xl, value_font_size: xl}
+    title: Structural variants
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-sx-card-clusters
+    section: Structural variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    use: linx/svs
+    aggregation: nunique
+    column_name: cluster_id
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: cluster_category
+    display: {icon_name: 'mdi:family-tree', title_font_size: xl, value_font_size: xl}
+    title: SV clusters
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-sx-card-junction-cn
+    section: Structural variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    use: linx/svs
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: junction_copy_number
+    column_type: float64
+    display: {icon_name: 'mdi:content-duplicate', title_font_size: xl, value_font_size: xl}
+    title: Junction copy number
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-sx-card-fusions
+    section: Structural variants at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_fusions
+    use: linx/fusions
+    aggregation: count
+    column_name: fusion_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: phased
+    top_n_count: 3
+    display: {icon_name: 'mdi:call-split', title_font_size: xl, value_font_size: xl}
+    title: Candidate fusions
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: oa-sx-av-chords
+    index: oa-sx-av-chords
+    section: Rearrangement landscape
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    use: linx/sv_chords
+    config:
+      assembly: "{GENOME}"
+      colour_by: category
+      intra_chromosomal: true
+      max_links: 2000
+      show_labels: false
+      selection_enabled: true
+      selection_column: label
+      controls_placement: header
+    title: Structural variants around the genome
+    description: One chord per SV between its two breakends, coloured by the event its cluster resolves to and weighted by junction copy number. Single breakends have no partner and are left out.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 5, h: 8}
+  - component_type: figure
+    tag: oa-sx-fig-resolved
+    index: oa-sx-resolved-bar
+    section: Rearrangement landscape
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    use: linx/svs
+    visu_type: bar
+    dict_kwargs: {x: resolved_type, color: type}
+    title: SVs per resolved event
+    description: Structural variants by the event LINX resolved their cluster to, split by SV type.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 8}
+  - component_type: advanced_viz
+    tag: oa-sx-av-fusion-exons
+    index: oa-sx-av-fusion-exons
+    section: Fusion structure
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_fusion_structure
+    use: linx/fusion_exon_layout
+    config:
+      top_n: 6
+      show_breakpoint: true
+      controls_placement: header
+    title: Kept and lost exons per fusion
+    description: One panel per candidate fusion, 5' partner then 3' partner along the fused transcript in exon units. Reported and in-frame fusions come first.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 5, h: 8}
+  - component_type: figure
+    tag: oa-sx-fig-phase
+    index: oa-sx-phase-bar
+    section: Fusion structure
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_fusions
+    use: linx/fusions
+    visu_type: bar
+    dict_kwargs: {x: phased}
+    title: Fusions per phase
+    description: Candidate fusions by reading-frame phase; in-frame fusions can make a chimeric protein.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 8}
+  - component_type: table
+    tag: oa-sx-table-fusions
+    section: Fusion detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_fusions
+    use: linx/fusions
+    row_selection_enabled: true
+    row_selection_column: fusion_id
+    columns: [fusion, sample, reported, reported_type, phased, likelihood, fused_exon_up, fused_exon_down, chain_length, domains_kept, domains_lost]
+    title: Candidate fusions
+    description: Partners, phase, fused exons, chain and protein domains of every candidate fusion. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-sx-av-fusion-record
+    index: oa-sx-av-fusion-record
+    section: Fusion detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_fusions
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-sx-table-fusions
+      id_col: fusion_id
+      title_col: fusion
+      selection_source: table_selection
+      sections:
+        Fusion: [fusion, sample, phased, reported, reported_type, likelihood, reportable_reasons]
+        5' partner: [gene_up, transcript_up, region_up, coords_up, fused_exon_up, exons_up_total, skipped_exons_up]
+        3' partner: [gene_down, transcript_down, region_down, coords_down, fused_exon_down, exons_down_total, skipped_exons_down]
+        Chain and domains: [chain_length, chain_links, chain_terminated, domains_kept, domains_lost]
+    title: Fusion record
+    description: The selected fusion's partners, breakends, fused exons and protein domains.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    tag: oa-sx-table-svs
+    section: Structural variant tables
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    use: linx/svs
+    row_selection_enabled: true
+    row_selection_column: label
+    columns: [type, resolved_type, sample, cluster_id, chrom_a, pos_a, orient_a, chrom_b, pos_b, orient_b, length, junction_copy_number, genes_a, genes_b]
+    title: Structural variants
+    description: Breakends, orientation, length, junction copy number, cluster and genes of every SV.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: interactive
+    tag: oa-sx-filter-resolved
+    index: oa-sx-resolved-filter
+    section: Structural variant scope
+    group: Structural variants
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    interactive_component_type: MultiSelect
+    column_name: resolved_type
+    column_type: object
+    display: {title_size: md, custom_color: '#7E57C2', icon_name: 'mdi:vector-link'}
+    placement: left
+    title: Resolved event
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-sx-filter-sv-type
+    index: oa-sx-sv-type-filter
+    section: Structural variant scope
+    group: Structural variants
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_svs
+    interactive_component_type: MultiSelect
+    column_name: type
+    column_type: object
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: SV type
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-sx-filter-phase
+    index: oa-sx-phase-filter
+    section: Structural variant scope
+    group: Fusions
+    workflow_tag: oncoanalyser
+    data_collection_tag: linx_fusions
+    interactive_component_type: MultiSelect
+    column_name: phased
+    column_type: object
+    display: {title_size: md, custom_color: '#9575CD', icon_name: 'mdi:call-split'}
+    placement: left
+    title: Fusion phase
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+# =========================================================================
+# Tab 8 - Immune context
+# =========================================================================
+- title: Immune context
+  subtitle: HLA alleles and their loss in the tumor, candidate neoepitopes and telomere length
+  tab_order: 8
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Immune scope
+    icon: mdi:tune
+    color: pink
+    description: Narrow the alleles by HLA gene and the neoepitopes by the event creating them
+  grid_sections:
+  - name: Immune context at a glance
+    icon: mdi:counter
+    color: pink
+    description: HLA alleles, neoepitopes, their expression and telomere length
+  - name: HLA and telomeres
+    icon: mdi:chart-bar
+    color: pink
+    description: Tumor copy number per HLA allele and telomere length per sample
+  - name: Neoepitopes
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: Expression and source of the candidate neoepitopes
+  - name: Neoepitope detail
+    icon: mdi:table
+    color: gray
+    description: One row per candidate neoepitope; select a row to open its record
+  - name: Immune reference tables
+    icon: mdi:table
+    color: gray
+    description: LILAC's alleles and TEAL's telomere lengths behind the tiles
+    collapsed: true
+  components:
+  - component_type: card
+    tag: oa-im-card-alleles
+    section: Immune context at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: lilac_alleles
+    use: lilac/alleles
+    aggregation: count
+    column_name: allele_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 3
+    display: {icon_name: 'mdi:shield-check-outline', title_font_size: xl, value_font_size: xl}
+    title: HLA alleles
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-im-card-neoepitopes
+    section: Immune context at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    use: neo/neoepitopes
+    aggregation: count
+    column_name: neoepitope_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: variant_type
+    top_n_count: 3
+    display: {icon_name: 'mdi:molecule', title_font_size: xl, value_font_size: xl}
+    title: Candidate neoepitopes
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-im-card-tpm
+    section: Immune context at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    use: neo/neoepitopes
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: effective_tpm
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title: Neoepitope expression (TPM)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: oa-im-card-telomeres
+    section: Immune context at a glance
+    workflow_tag: oncoanalyser
+    data_collection_tag: teal_telomere_length
+    use: teal/telomere_length
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: finalTelomereLength
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title: Telomere length (bp)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    tag: oa-im-fig-allele-cn
+    index: oa-im-allele-cn-bar
+    section: HLA and telomeres
+    workflow_tag: oncoanalyser
+    data_collection_tag: lilac_alleles
+    use: lilac/alleles
+    visu_type: bar
+    dict_kwargs: {x: allele, y: tumor_copy_number, color: gene}
+    title: Tumor copy number per HLA allele
+    description: LILAC's copy number of each allele in the tumor; an allele near zero is lost, which hides its neoepitopes from T cells.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: figure
+    tag: oa-im-fig-telomeres
+    index: oa-im-telomere-bar
+    section: HLA and telomeres
+    workflow_tag: oncoanalyser
+    data_collection_tag: teal_telomere_length
+    use: teal/telomere_length
+    visu_type: bar
+    dict_kwargs:
+      x: sampleId
+      y: finalTelomereLength
+      color: type
+      labels: '{"sampleId": "Sample", "finalTelomereLength": "Telomere length (bp)", "type": "Sample type"}'
+    title: Telomere length per sample
+    description: TEAL's purity and ploidy adjusted telomere length of the tumor and its normal.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: oa-im-av-neo-scatter
+    index: oa-im-av-neo-scatter
+    section: Neoepitopes
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    use: neo/neoepitope_expression_scatter
+    config:
+      top_n_labels: 8
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: neoepitope_id
+      controls_placement: header
+    title: Expected against effective expression
+    description: One point per candidate neoepitope; points high on both axes are expressed and supported by RNA fragments.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: figure
+    tag: oa-im-fig-neo-source
+    index: oa-im-neo-source-bar
+    section: Neoepitopes
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    use: neo/neoepitopes
+    visu_type: bar
+    dict_kwargs: {x: variant_type, color: sample}
+    title: Neoepitopes per source event
+    description: Candidate neoepitopes by the event that creates them, missense, frameshift or fusion.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    tag: oa-im-table-neo
+    section: Neoepitope detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    use: neo/neoepitopes
+    row_selection_enabled: true
+    row_selection_column: neoepitope_id
+    title: Candidate neoepitopes
+    description: Source event, gene, novel amino acids, peptides, RNA support and expression of every candidate. Select a row to open its record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: oa-im-av-neo-record
+    index: oa-im-av-neo-record
+    section: Neoepitope detail
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: oa-im-table-neo
+      id_col: neoepitope_id
+      title_col: gene
+      selection_source: table_selection
+      sections:
+        Source: [gene, sample, variant_type, variant]
+        Sequence: [up_amino_acids, novel_amino_acids, down_amino_acids, peptides]
+        Expression: [rna_fragments, rna_depth, expected_tpm, effective_tpm]
+        Copy number: [variant_copy_number, copy_number, subclonal_likelihood]
+    title: Neoepitope record
+    description: The selected candidate's source event, novel sequence, RNA support and clonality.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    tag: oa-im-table-alleles
+    section: Immune reference tables
+    workflow_tag: oncoanalyser
+    data_collection_tag: lilac_alleles
+    use: lilac/alleles
+    row_selection_enabled: true
+    row_selection_column: allele_id
+    columns: [allele, gene, sample, ref_fragments, tumor_fragments, rna_fragments, tumor_copy_number, lost_in_tumor, somatic_mutations]
+    title: HLA alleles
+    description: Supporting fragments, tumor copy number and somatic variants of every called allele.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    tag: oa-im-table-telomeres
+    section: Immune reference tables
+    workflow_tag: oncoanalyser
+    data_collection_tag: teal_telomere_length
+    use: teal/telomere_length
+    columns: [sampleId, type, rawTelomereLength, finalTelomereLength, fullFragments, cRichPartialFragments, gRichPartialFragments, totalTelomericReads, purity, ploidy, duplicateProportion, meanReadDepth]
+    title: Telomere length
+    description: Raw and adjusted telomere length, telomeric reads and depth per sample.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 3}
+  - component_type: interactive
+    tag: oa-im-filter-hla-gene
+    index: oa-im-hla-gene-filter
+    section: Immune scope
+    group: Immune
+    workflow_tag: oncoanalyser
+    data_collection_tag: lilac_alleles
+    interactive_component_type: MultiSelect
+    column_name: gene
+    column_type: object
+    display: {title_size: md, custom_color: '#EC407A', icon_name: 'mdi:shield-check-outline'}
+    placement: left
+    title: HLA gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: oa-im-filter-neo-source
+    index: oa-im-neo-source-filter
+    section: Immune scope
+    group: Immune
+    workflow_tag: oncoanalyser
+    data_collection_tag: neo_neoepitopes
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:molecule'}
+    placement: left
+    title: Neoepitope source
+    layout: {x: 0, y: 3, w: 1, h: 3}

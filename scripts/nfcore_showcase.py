@@ -166,6 +166,15 @@ SCENARIOS: list[Scenario] = [
         vars=(_DESIGN_IN_DATA_ROOT, ("GENOME", "hg19")),
     ),
     Scenario("chipseq", "1.2.0", "test", note="CI profile; needs the HOMER glob fix"),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh;
+    # an explicit GROUP_COL keeps the metadata auto-detection off fastq_1.
+    Scenario(
+        "crisprseq",
+        "2.3.0",
+        "megatest",
+        note="test_full targeted, 6195 libraries, vendored samplesheet",
+        vars=(("GROUP_COL", "protospacer"),),
+    ),
     Scenario("cutandrun", "3.1", "megatest", note="MultiQC reprocessed"),
     Scenario("cutandrun", "3.1", "test_full_small", note="MultiQC reprocessed"),
     Scenario(
@@ -195,6 +204,13 @@ SCENARIOS: list[Scenario] = [
         "hic", "2.0.0", "megatest", note="MultiQC reprocessed; 2.1.0 megatest is a truncated sync"
     ),
     Scenario(
+        "isoseq",
+        "3.0.1",
+        "megatest",
+        note="vendored design; uLTRA GTF as reference",
+        vars=(_DESIGN_IN_DATA_ROOT, ("GROUP_COL", "tissue")),
+    ),
+    Scenario(
         "mag",
         "5.5.0",
         "megatest",
@@ -216,6 +232,36 @@ SCENARIOS: list[Scenario] = [
         "megatest",
         note="MultiQC reprocessed, vendored design; 3.1.0 megatest is empty",
         vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh.
+    Scenario(
+        "oncoanalyser",
+        "3.0.0",
+        "megatest",
+        note="test_full WGTS; 33 MB of tables from a 272 GB run, vendored samplesheet",
+    ),
+    Scenario(
+        "pairgenomealign",
+        "3.0.4",
+        "megatest",
+        note="test_full profile, vendored samplesheet and design table; no PSL export, synteny tab empty",
+        vars=(("METADATA_FILE", "{data_root}/input/genome_metadata.tsv"),),
+    ),
+    Scenario(
+        "proteinannotator",
+        "1.1.0",
+        "megatest",
+        note="dev run pin, vendored samplesheet and design",
+        vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
+    Scenario(
+        "proteinfamilies", "2.5.0", "megatest", note="test_full profile, vendored samplesheet"
+    ),
+    Scenario(
+        "proteinfold",
+        "2.1.0",
+        "megatest",
+        note="2.1.0dev run a414fd13 (2.0.0 run empty), vendored samplesheet",
     ),
     Scenario(
         "riboseq",

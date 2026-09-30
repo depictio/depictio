@@ -2207,8 +2207,9 @@ tabs:
     alignment: left
     body: >
       Only variants whose protein change snpEff could compute appear here, at
-      their amino-acid position. Several callsets stacking a variant at the
-      same residue is a call they agree on; a lone stem is one caller's own.
+      their amino-acid position, on the sequence and on the gene's predicted
+      structure. Click a stem or a residue to select it in both views and in
+      the table below.
     workflow_tag: sarek
     data_collection_tag: snpeff_protein_lollipop
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2223,10 +2224,30 @@ tabs:
       max_subplot_genes: 4
       point_size: 8
       scale_points_by_effect: true
+      selection_enabled: true
     title: Coding variants along the protein
     description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Above four genes the tile switches to a single-gene picker.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 4, h: 8}
+  - component_type: advanced_viz
+    tag: sk-gn-av-structure
+    index: sk-gn-av-structure
+    section: Along the protein
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/coding_variant_structure
+    config:
+      structure_source: resolve
+      gene_col: gene
+      color_mode: plddt
+      show_variants: true
+      selection_enabled: true
+      follow_selection: true
+      controls_placement: header
+    title: Coding variants on the predicted structure
+    description: The picked gene's predicted structure, fetched by gene symbol when the server's structure resolver is on, with a sphere on every variant coloured by impact class.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 8}
   - component_type: table
     tag: sk-gn-table-lolli
     section: Along the protein
