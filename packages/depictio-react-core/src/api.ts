@@ -1822,19 +1822,6 @@ function sliceRange(body: Uint8Array, range: BioimageRangeQuery): Uint8Array {
   return body.subarray(range.offset, range.offset + range.length);
 }
 
-/**
- * A zarr store over one OME-Zarr store of a DC, fetching through `authFetch`.
- *
- * Auth: every key request carries the standard `Authorization: Bearer` header,
- * with the same proactive refresh and single 401 retry as the rest of the app.
- * That works because viv's `loadOmeZarrFromStore` takes a store object rather
- * than a URL, so nothing forces the credential into the URL.
- *
- * A 404 is a missing key, which zarr readers treat as a fill-value chunk, so
- * it resolves to `undefined`; any other failure throws a `BioimageHttpError`.
- * A ranged read sends one `Range` header (see `bioimageRangeHeader`) and takes
- * the 206 body; a 200 (a server that ignored the header) is sliced here.
- */
 /** Bytes of recently read keys a zarr store keeps, so a chunk asked for by
  *  several tiles in a row is downloaded once. */
 const BIOIMAGE_STORE_CACHE_BYTES = 32 * 1024 * 1024;
@@ -1860,6 +1847,19 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   });
 }
 
+/**
+ * A zarr store over one OME-Zarr store of a DC, fetching through `authFetch`.
+ *
+ * Auth: every key request carries the standard `Authorization: Bearer` header,
+ * with the same proactive refresh and single 401 retry as the rest of the app.
+ * That works because viv's `loadOmeZarrFromStore` takes a store object rather
+ * than a URL, so nothing forces the credential into the URL.
+ *
+ * A 404 is a missing key, which zarr readers treat as a fill-value chunk, so
+ * it resolves to `undefined`; any other failure throws a `BioimageHttpError`.
+ * A ranged read sends one `Range` header (see `bioimageRangeHeader`) and takes
+ * the 206 body; a 200 (a server that ignored the header) is sliced here.
+ */
 export function createBioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
   const root = bioimageStoreUrl(dcId, store);
   const read = async (

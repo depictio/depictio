@@ -41,6 +41,11 @@ from depictio.models.components.types import (
     ComponentType,
     InteractiveType,
 )
+from depictio.models.models.data_collections_types.bioimage import (
+    BioimageFormat,
+    BioimageKind,
+    DCBioimageConfig,
+)
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
 
@@ -488,8 +493,8 @@ class Render(BaseModel):
 class CatalogBioimage(BaseModel):
     """How a `dc_type: bioimage` output is stored: the bioimage DC properties."""
 
-    format: Literal["ome-zarr", "ome-tiff", "spatialdata", "tiff"]
-    kind: Literal["image", "labels"] = "image"
+    format: BioimageFormat
+    kind: BioimageKind = "image"
     image_path: str | None = None  # SpatialData only: the image element
     sample_pattern: str | None = None  # regex, one capture group = sample name
 
@@ -499,22 +504,9 @@ class CatalogBioimage(BaseModel):
     def _check_as_dc(self) -> CatalogBioimage:
         # The block becomes a bioimage DC's `dc_specific_properties` as is, so
         # it is held to that model's rules (spatialdata needs image_path, …)
-        # rather than a re-spelling of them that could drift.
-        from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
-
+        # rather than a re-spelling of them that could drift (a `tiff` mask
+        # needs kind labels, sample_pattern one capture group, ...).
         DCBioimageConfig.model_validate(self.dc_properties())
-        if self.format == "tiff" and self.kind != "labels":
-            raise ValueError("bioimage format 'tiff' is for masks: set kind 'labels'")
-        if self.sample_pattern is not None:
-            try:
-                groups = re.compile(self.sample_pattern).groups
-            except re.error as exc:
-                raise ValueError(f"sample_pattern is not a valid regex: {exc}") from exc
-            if groups != 1:
-                raise ValueError(
-                    f"sample_pattern must have exactly one capture group (the sample name), "
-                    f"got {groups}"
-                )
         return self
 
     def dc_properties(self) -> dict[str, str]:
