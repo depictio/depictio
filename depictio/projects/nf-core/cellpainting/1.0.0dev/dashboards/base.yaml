@@ -769,6 +769,7 @@ tabs:
     workflow_tag: cellpainting
     data_collection_tag: cp-overlays
     image_column: image_path
+    s3_base_folder: "{IMAGES_S3_BASE}"
     thumbnail_size: 220
     columns: 4
     max_images: 48
