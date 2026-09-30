@@ -176,6 +176,9 @@ services:
         DEPICTIO_FEEDBACK_ENABLED: "${DEPICTIO_FEEDBACK_ENABLED:-false}"
         DEPICTIO_FEEDBACK_URL: "${DEPICTIO_FEEDBACK_URL:-}"
         DEPICTIO_FEEDBACK_LABEL: "${DEPICTIO_FEEDBACK_LABEL:-Feedback}"
+        # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
+        # Off by default: accessions, gene names or sequences leave the server.
+        DEPICTIO_STRUCTURE_RESOLVER_ENABLED: "${DEPICTIO_STRUCTURE_RESOLVER_ENABLED:-false}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the

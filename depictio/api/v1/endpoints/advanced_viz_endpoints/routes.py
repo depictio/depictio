@@ -1821,3 +1821,13 @@ def get_phylogeny_newick(
     except Exception as exc:
         logger.warning("phylogeny newick read failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to read phylogeny") from exc
+
+
+# POST /structure/resolve (molecule_3d): lives in its own module, see its docstring.
+from depictio.api.v1.endpoints.advanced_viz_endpoints.structure_resolver import (  # noqa: E402
+    resolve_structure,
+)
+
+advanced_viz_endpoint_router.add_api_route(
+    "/structure/resolve", resolve_structure, methods=["POST"]
+)
