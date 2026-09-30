@@ -457,6 +457,17 @@ class Render(BaseModel):
         return self
 
 
+class CatalogBioimage(BaseModel):
+    """How a `dc_type: bioimage` output is stored: the bioimage DC properties."""
+
+    format: Literal["ome-zarr", "ome-tiff", "spatialdata", "tiff"]
+    kind: Literal["image", "labels"] = "image"
+    image_path: str | None = None  # SpatialData only: the image element
+    sample_pattern: str | None = None  # regex, one capture group = sample name
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class CatalogOutput(BaseModel):
     """One file a tool emits → one or more dashboard renders."""
 
@@ -482,6 +493,11 @@ class CatalogOutput(BaseModel):
     stage: Stage | None = None
 
     find: CatalogFind
+    # What the matched file becomes. `table` (default) is a delta-backed table;
+    # `bioimage` is an image or labels store (OME-TIFF, TIFF mask, OME-Zarr,
+    # SpatialData) read by the bioimage viewer, described by `bioimage`.
+    dc_type: Literal["table", "bioimage"] = "table"
+    bioimage: CatalogBioimage | None = None
     # Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog
     # folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy form still resolves:
     # `nf-core/<pipeline>/<name>.py` (kept for pipeline-version-specific reshapes).
