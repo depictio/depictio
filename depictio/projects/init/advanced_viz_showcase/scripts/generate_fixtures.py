@@ -27,6 +27,7 @@ rather than four hand-crafted scatter plots.
 from __future__ import annotations
 
 import math
+import os
 import random
 import sys
 from pathlib import Path
@@ -47,6 +48,15 @@ from depictio.recipes.lib.dimreduction import (  # noqa: E402 (sys.path tweak mu
     run_pcoa,
     run_tsne,
     run_umap,
+)
+from depictio.recipes.lib.msa import (  # noqa: E402
+    best_alphabet,
+    decode_hhblits_rows,
+    msa_frame,
+)
+from depictio.recipes.lib.protein_structure import (  # noqa: E402
+    residues_from_pdb,
+    sequence_from_pdb,
 )
 
 OUT = Path(__file__).resolve().parent.parent / "data"
@@ -2825,3 +2835,259 @@ def generate_parallel_coordinates_demo() -> None:
 
 
 generate_parallel_coordinates_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Protein structure: one predicted structure with the four tables the
+#     protein tiles read (residues, alignment, domains, variants).
+# files:   demo_protein.pdb (structure, pLDDT in the B-factor column)
+# columns: protein_residues_demo  entity, chain, position, residue, plddt,
+#                                 secondary_structure
+#          protein_msa_demo       msa_id, seq_id, rank, aligned_sequence,
+#                                 identity, coverage, entity
+#          protein_domains_demo   entity, start, end, domain, source
+#          protein_variants_demo  entity, position, ref_aa, alt_aa, consequence,
+#                                 allele_fraction, protein_change
+# ---------------------------------------------------------------------------
+# Only `entity` and `position` are shared between the four tables, on purpose.
+# A dashboard filter applies to every collection that has a column of its
+# name, which is exactly how a residue picked in one tile narrows the others;
+# the contract's generic `value` / `category` / `label` names would make a
+# consequence filter empty the residue table and a variant pick hide the
+# domains. The tiles bind the specific names through their `*_col` fields.
+#
+# The structure and its alignment are real pipeline output rather than a
+# synthetic shape: a 3D tile over a made-up backbone would show nothing a
+# reader recognises. They are our own ColabFold prediction of the 172-residue
+# monomer target of the nf-core/proteinfold 2.1.0 test profile, not a PDB
+# entry, vendored under a neutral entity id. The megatest directory is only
+# read when it exists (set DEPICTIO_PROTEINFOLD_MEGATEST to point elsewhere);
+# without it the committed structure and alignment are kept as they are and
+# the three derived tables are rebuilt from the committed structure.
+#
+# Everything else is derived from that structure, deterministically:
+# - secondary structure from CA geometry alone (helix: i to i+3 and i to i+4
+#   CA distances of an alpha turn; strand: an extended residue with a CA of a
+#   non-local residue at pairing distance). An approximation of DSSP, good
+#   enough to draw the helix and strand glyphs of the sequence track;
+# - domains as the contiguous stretches of confident pLDDT (70 and above),
+#   single-residue dips bridged, 20 residues at least;
+# - twelve variants in the four consequence classes, reference residues read
+#   from the structure. One of them is written one residue off, its reference
+#   residue taken from the next position, the way a caller on a shifted
+#   isoform numbering reports it, so the 3D tile has a numbering mismatch to
+#   flag.
+_PROTEIN_ENTITY = "demo_protein"
+_PROTEINFOLD_MEGATEST = Path(
+    os.environ.get(
+        "DEPICTIO_PROTEINFOLD_MEGATEST",
+        str(Path.home() / "Data" / "depictio-nfcore" / "proteinfold" / "2.1.0" / "megatest"),
+    )
+)
+_PROTEIN_SOURCE_PDB = "colabfold/top_ranked_structures/T1026.pdb"
+_PROTEIN_SOURCE_MSA = "colabfold/T1026/T1026_colabfold_msa.tsv"
+_PROTEIN_MSA_CAP = 150
+_PROTEIN_N_VARIANTS = 12
+# Consequence of each variant, in position order.
+_PROTEIN_CONSEQUENCES = (
+    "missense",
+    "synonymous",
+    "missense",
+    "nonsense",
+    "missense",
+    "frameshift",
+    "missense",
+    "synonymous",
+    "missense",
+    "nonsense",
+    "missense",
+    "frameshift",
+)
+# Index (in position order) of the variant written with a shifted numbering.
+_PROTEIN_MISNUMBERED = 6
+_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+
+
+def _protein_ca_coords(pdb_text: str) -> dict[int, tuple[float, float, float]]:
+    """CA coordinates by residue number, first model only."""
+    coords: dict[int, tuple[float, float, float]] = {}
+    for line in pdb_text.splitlines():
+        if line.startswith("ENDMDL"):
+            break
+        if line.startswith("ATOM") and line[12:16].strip() == "CA":
+            coords[int(line[22:26])] = (
+                float(line[30:38]),
+                float(line[38:46]),
+                float(line[46:54]),
+            )
+    return coords
+
+
+def _runs(values: list) -> list[tuple[int, int, object]]:
+    """``(start, end_exclusive, value)`` of every run of equal values."""
+    out: list[tuple[int, int, object]] = []
+    start = 0
+    for i in range(1, len(values) + 1):
+        if i == len(values) or values[i] != values[start]:
+            out.append((start, i, values[start]))
+            start = i
+    return out
+
+
+def _protein_secondary_structure(coords: dict[int, tuple[float, float, float]]) -> dict[int, str]:
+    """H / E / C per residue from CA distances alone (see the block comment)."""
+    positions = sorted(coords)
+
+    def dist(a: int, b: int) -> float | None:
+        if a in coords and b in coords:
+            return math.dist(coords[a], coords[b])
+        return None
+
+    ss = {p: "C" for p in positions}
+    for p in positions:
+        d3, d4 = dist(p, p + 3), dist(p, p + 4)
+        if d3 is not None and d4 is not None and 4.2 <= d3 <= 5.9 and 5.0 <= d4 <= 7.2:
+            for k in range(p, p + 4):
+                ss[k] = "H"
+    for p in positions:
+        d2 = dist(p, p + 2)
+        if ss[p] == "H" or d2 is None or d2 < 6.2:
+            continue
+        if any(
+            abs(p - q) >= 4 and 4.2 <= math.dist(coords[p], coords[q]) <= 5.5 for q in positions
+        ):
+            ss[p] = "E"
+    # A helix shorter than one turn, or a strand of fewer than three
+    # residues, is geometry noise rather than structure.
+    labels = [ss[p] for p in positions]
+    for start, end, value in _runs(labels):
+        if (value == "H" and end - start < 4) or (value == "E" and end - start < 3):
+            labels[start:end] = ["C"] * (end - start)
+    return dict(zip(positions, labels, strict=True))
+
+
+def _protein_refresh_vendored() -> None:
+    """Copy the structure and decode its alignment from the megatest, if present."""
+    source_pdb = _PROTEINFOLD_MEGATEST / _PROTEIN_SOURCE_PDB
+    source_msa = _PROTEINFOLD_MEGATEST / _PROTEIN_SOURCE_MSA
+    if not (source_pdb.is_file() and source_msa.is_file()):
+        print(
+            f"proteinfold megatest not found under {_PROTEINFOLD_MEGATEST}: "
+            f"keeping the committed {_PROTEIN_ENTITY}.pdb and protein_msa_demo.tsv"
+        )
+        return
+
+    # Trailing blanks carry nothing in PDB records; strip them so the
+    # whitespace hook leaves the committed file alone.
+    pdb_text = "".join(line.rstrip() + "\n" for line in source_pdb.read_text().splitlines())
+    (OUT / f"{_PROTEIN_ENTITY}.pdb").write_text(pdb_text)
+    print(f"wrote {_PROTEIN_ENTITY}.pdb from {_PROTEIN_SOURCE_PDB}")
+
+    lines = source_msa.read_text().splitlines()
+    alphabet = best_alphabet(lines, sequence_from_pdb(pdb_text))
+    sequences = decode_hhblits_rows(lines, alphabet)
+    # The rows carry no names: the query first, then the hits in file order,
+    # named the way the proteinfold MSA recipe names them.
+    records = [("query" if i == 0 else f"hit_{i}", seq) for i, seq in enumerate(sequences)]
+    frame = msa_frame(records, _PROTEIN_ENTITY, cap=_PROTEIN_MSA_CAP).with_columns(
+        pl.col("identity").round(4),
+        pl.col("coverage").round(4),
+        pl.lit(_PROTEIN_ENTITY).alias("entity"),
+    )
+    frame.write_csv(OUT / "protein_msa_demo.tsv", separator="\t")
+    print(f"wrote protein_msa_demo.tsv: {frame.height} rows")
+
+
+def generate_protein_demo() -> None:
+    """Write the protein structure fixtures (see the block comment)."""
+    _protein_refresh_vendored()
+
+    pdb_text = (OUT / f"{_PROTEIN_ENTITY}.pdb").read_text()
+    residues = residues_from_pdb(pdb_text, _PROTEIN_ENTITY)
+    ss = _protein_secondary_structure(_protein_ca_coords(pdb_text))
+    residues = residues.select(
+        "entity",
+        "chain",
+        "position",
+        "residue",
+        pl.col("value").round(2).alias("plddt"),
+        pl.col("position")
+        .replace_strict(ss, default="C", return_dtype=pl.Utf8)
+        .alias("secondary_structure"),
+    )
+    residues.write_csv(OUT / "protein_residues_demo.tsv", separator="\t")
+    print(f"wrote protein_residues_demo.tsv: {residues.height} rows")
+
+    positions = residues["position"].to_list()
+    letters = dict(zip(positions, residues["residue"].to_list(), strict=True))
+    plddt = residues["plddt"].to_list()
+
+    # Domains: confident stretches, one-residue dips bridged.
+    confident = [v >= 70.0 for v in plddt]
+    for i in range(1, len(confident) - 1):
+        if not confident[i] and confident[i - 1] and confident[i + 1]:
+            confident[i] = True
+    domain_rows: list[list] = []
+    for start, end, value in _runs(confident):
+        if value and end - start >= 20:
+            domain_rows.append(
+                [
+                    _PROTEIN_ENTITY,
+                    positions[start],
+                    positions[end - 1],
+                    f"Domain {len(domain_rows) + 1}",
+                    "pLDDT segment",
+                ]
+            )
+    write_tsv(
+        OUT / "protein_domains_demo.tsv",
+        ["entity", "start", "end", "domain", "source"],
+        domain_rows,
+    )
+
+    # Variants: one per 13-residue window past the first residues, so the
+    # stems spread along the whole chain rather than bunching.
+    rng = random.Random(20260930)
+    variant_rows: list[list] = []
+    for index in range(_PROTEIN_N_VARIANTS):
+        position = 8 + index * 13 + rng.randint(0, 5)
+        category = _PROTEIN_CONSEQUENCES[index]
+        ref = letters[position]
+        if index == _PROTEIN_MISNUMBERED:
+            # The next residue's letter, as a caller numbering one residue off
+            # would report it. Moved on until the two letters differ, or the
+            # mismatch would go unnoticed.
+            while letters[position + 1] == letters[position]:
+                position += 1
+            ref = letters[position + 1]
+        if category == "missense":
+            alt = rng.choice([aa for aa in _AMINO_ACIDS if aa != ref])
+            label = f"p.{ref}{position}{alt}"
+        elif category == "nonsense":
+            alt = "*"
+            label = f"p.{ref}{position}*"
+        elif category == "frameshift":
+            alt = "fs"
+            label = f"p.{ref}{position}fs"
+        else:
+            alt = ref
+            label = f"p.{ref}{position}="
+        # Allele fraction: subclonal to clonal, heterozygous at most.
+        vaf = round(rng.uniform(0.05, 0.55), 3)
+        variant_rows.append([_PROTEIN_ENTITY, position, ref, alt, category, vaf, label])
+    write_tsv(
+        OUT / "protein_variants_demo.tsv",
+        [
+            "entity",
+            "position",
+            "ref_aa",
+            "alt_aa",
+            "consequence",
+            "allele_fraction",
+            "protein_change",
+        ],
+        variant_rows,
+    )
+
+
+generate_protein_demo()

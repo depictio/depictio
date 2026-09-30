@@ -1,0 +1,4 @@
+entity	start	end	domain	source
+demo_protein	34	54	Domain 1	pLDDT segment
+demo_protein	59	99	Domain 2	pLDDT segment
+demo_protein	103	171	Domain 3	pLDDT segment
