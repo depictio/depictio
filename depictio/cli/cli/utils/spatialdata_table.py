@@ -627,12 +627,20 @@ def read_spatialdata_table(store_path: str, source: SpatialDataTableSource | dic
             obs[name] = series
 
     _, _, instance_key = _table_region_attrs(table)
+    xy = _coordinates(store_path, table, source, obs, n_obs)
+    if xy is not None:
+        # Some segmenters (Baysor) keep their own x / y in obs; the coordinate
+        # columns win the name and the obs copies stay as obs_x / obs_y.
+        obs = {
+            (f"obs_{name}" if name in ("x", "y") else name): series.rename(
+                f"obs_{name}" if name in ("x", "y") else name
+            )
+            for name, series in obs.items()
+        }
     if instance_key not in obs:
         add(index, "obs index")
     for series in obs.values():
         add(series, "obs")
-
-    xy = _coordinates(store_path, table, source, obs, n_obs)
     if xy is not None:
         add(xy[0], "coordinate")
         add(xy[1], "coordinate")

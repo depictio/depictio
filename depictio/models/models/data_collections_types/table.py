@@ -58,6 +58,16 @@ class SpatialDataTableSource(BaseModel):
             raise ValueError(f"layer must be a plain layer name, got {v!r}")
         return name
 
+    @field_validator("genes", mode="before")
+    @classmethod
+    def _split_genes(cls, v: object) -> object:
+        # A template variable arrives as one string ("A,B"): split it.
+        if isinstance(v, str):
+            v = [v]
+        if isinstance(v, list):
+            return [g.strip() for item in v for g in str(item).split(",") if g.strip()]
+        return v
+
     @field_validator("genes")
     @classmethod
     def _check_genes(cls, v: list[str]) -> list[str]:
