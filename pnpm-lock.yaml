@@ -13,6 +13,9 @@ importers:
 
   depictio/viewer:
     dependencies:
+      3dmol:
+        specifier: ^2.5.5
+        version: 2.5.5
       '@genome-spy/core':
         specifier: 0.88.1
         version: 0.88.1
@@ -244,6 +247,10 @@ importers:
         version: 5.1.4(webpack@5.106.2)
 
   packages/depictio-react-core:
+    dependencies:
+      3dmol:
+        specifier: ^2.5.5
+        version: 2.5.5
     devDependencies:
       '@genome-spy/core':
         specifier: 0.88.1
@@ -428,6 +435,10 @@ importers:
         version: 2.1.9(@types/node@25.6.0)(jsdom@25.0.1)(terser@5.46.2)
 
 packages:
+
+  3dmol@2.5.5:
+    resolution: {integrity: sha512-kqNHouGqq3YfW58174tdERvm0XYTmP0tavQKOqIw1ouc2OJ7epkXEFrtEkVXV0clBZT2Ze2xHRC/qxX0u0qCdw==}
+    engines: {node: '>=16.16.0', npm: '>=8.11'}
 
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
@@ -3095,6 +3106,9 @@ packages:
     resolution: {integrity: sha512-6xwYfHbajpoF0xLW+iwLkhwgvLoZDfjYfoFNu8ftMoXINzwuymNLd9u/KmwtdT2GbR+/Cz66otEGEVVUHX9QLQ==}
     engines: {node: '>=10.13.0'}
 
+  iobuffer@5.4.0:
+    resolution: {integrity: sha512-DRebOWuqDvxunfkNJAlc3IzWIPD5xVxwUNbHr7xKB8E6aLJxIPfNX3CoMJghcFjpv6RWQsrcJbghtEwSPoJqMA==}
+
   is-browser@2.1.0:
     resolution: {integrity: sha512-F5rTJxDQ2sW81fcfOR1GnCXT6sVJC104fCyfj+mjpwNEwaPYSn5fte5jiHmBg3DHsIoL/l8Kvw5VN5SsTRcRFQ==}
 
@@ -3393,6 +3407,9 @@ packages:
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
+  netcdfjs@3.0.0:
+    resolution: {integrity: sha512-LOvT8KkC308qtpUkcBPiCMBtii7ZQCN6LxcVheWgyUeZ6DQWcpSRFV9dcVXLj/2eHZ/bre9tV5HTH4Sf93vrFw==}
+
   next-tick@1.1.0:
     resolution: {integrity: sha512-CXdUiJembsNjuToQvxayPZF9Vqht7hewsvy2sOWafLvi2awflj9mOC6bHIg50orX8IJvWKY9wYQ/zB2kogPslQ==}
 
@@ -3456,6 +3473,9 @@ packages:
 
   pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
+
+  pako@2.2.0:
+    resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
 
   papaparse@5.7.0:
     resolution: {integrity: sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==}
@@ -3701,6 +3721,7 @@ packages:
 
   react-grid-layout@1.5.3:
     resolution: {integrity: sha512-KaG6IbjD6fYhagUtIvOzhftXG+ViKZjCjADe86X1KHl7C/dsBN2z0mi14nbvZKTkp0RKiil9RPcJBgq3LnoA8g==}
+    deprecated: 'Ships stray files that were never in the repo: an ip_fetcher binary and its curl-sample source (1.5.0-1.5.3), plus a yarn-error.log containing local paths (1.5.3). Upgrade to 1.5.4, which is byte-identical apart from removing them. See https://github.com/react-grid-layout/react-grid-layout/issues/2269'
     peerDependencies:
       react: '>= 16.3.0'
       react-dom: '>= 16.3.0'
@@ -4206,6 +4227,9 @@ packages:
   update-diff@1.1.0:
     resolution: {integrity: sha512-rCiBPiHxZwT4+sBhEbChzpO5hYHjm91kScWgdHf4Qeafs6Ba7MBl+d9GlGv72bcTZQO0sLmtQS1pHSWoCLtN/A==}
 
+  upng-js@2.1.0:
+    resolution: {integrity: sha512-d3xzZzpMP64YkjP5pr8gNyvBt7dLk/uGI67EctzDuVp4lCZyVMo0aJO6l/VDlgbInJYDY6cnClLoBp29eKWI6g==}
+
   use-callback-ref@1.3.3:
     resolution: {integrity: sha512-jQL3lRnocaFtu3V00JToYz/4QkNWswxijDaCVNZRiRTO3HQDLsdu1ZtmIUvV4yPp+rvWm5j0y0TG/S61cuijTg==}
     engines: {node: '>=10'}
@@ -4510,6 +4534,13 @@ packages:
         optional: true
 
 snapshots:
+
+  3dmol@2.5.5:
+    dependencies:
+      iobuffer: 5.4.0
+      netcdfjs: 3.0.0
+      pako: 2.2.0
+      upng-js: 2.1.0
 
   '@ampproject/remapping@2.3.0':
     dependencies:
@@ -7395,6 +7426,8 @@ snapshots:
 
   interpret@3.1.1: {}
 
+  iobuffer@5.4.0: {}
+
   is-browser@2.1.0: {}
 
   is-core-module@2.16.1:
@@ -7731,6 +7764,10 @@ snapshots:
 
   neo-async@2.6.2: {}
 
+  netcdfjs@3.0.0:
+    dependencies:
+      iobuffer: 5.4.0
+
   next-tick@1.1.0: {}
 
   node-releases@2.0.38: {}
@@ -7784,6 +7821,8 @@ snapshots:
   pako-esm2@2.0.2: {}
 
   pako@1.0.11: {}
+
+  pako@2.2.0: {}
 
   papaparse@5.7.0: {}
 
@@ -8649,6 +8688,10 @@ snapshots:
       picocolors: 1.1.1
 
   update-diff@1.1.0: {}
+
+  upng-js@2.1.0:
+    dependencies:
+      pako: 1.0.11
 
   use-callback-ref@1.3.3(@types/react@18.3.28)(react@18.3.1):
     dependencies:

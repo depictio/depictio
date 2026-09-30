@@ -4,6 +4,7 @@ Integrated with FastAPI backend for dashboard component generation.
 """
 
 from celery import Celery
+from celery.signals import task_failure
 
 from depictio.api.v1.configs.config import settings
 
@@ -239,6 +240,21 @@ def generate_dashboard_screenshot_dual(
         return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
 
 
+# MultiQC build/prewarm locks hold the owning task id so they can be released
+# on behalf of a task whose worker process died (see _release_lock_of_lost_task).
+_MULTIQC_LOCK_KEYS = {
+    "prewarm_multiqc_dashboard": "multiqc:prewarm_lock:dashboard={}",
+    "build_multiqc_prerender": "multiqc:prerender_build_lock:dc={}",
+    "prewarm_multiqc_dc_all_plots": "multiqc:prerender_build_lock:dc={}",
+}
+
+
+def _release_lock(cache, lock_key: str, owner: str | None) -> None:
+    """Delete ``lock_key`` only while ``owner`` still holds it."""
+    if cache.get(lock_key) == owner:
+        cache.delete(lock_key)
+
+
 def _warm_multiqc_components(
     components: list[dict],
     project_id,
@@ -459,8 +475,9 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
     # in separate worker processes, adding CPU contention and ~20s of
     # wallclock overhead.
     lock_key = f"multiqc:prewarm_lock:dashboard={dashboard_id}"
+    owner = self.request.id or "direct-call"
 
-    if not cache.set_nx(lock_key, "1", ttl=600):
+    if not cache.set_nx(lock_key, owner, ttl=600):
         logger.info(
             f"prewarm_multiqc_dashboard {dashboard_id}: another worker holds the "
             f"lock; skipping duplicate run"
@@ -495,7 +512,7 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
         return {"status": "ok", "dashboard_id": dashboard_id, **counts}
     finally:
         try:
-            cache.delete(lock_key)
+            _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"prewarm_multiqc_dashboard: failed to clear lock {lock_key}: {exc}")
 
@@ -636,8 +653,10 @@ def build_multiqc_prerender(self, dc_id: str) -> dict:
 
     cache = get_cache()
     lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+    owner = self.request.id or "direct-call"
 
-    if not cache.set_nx(lock_key, "1", ttl=600):
+    # TTL matches time_limit: a slow build must not lose its lock mid-run.
+    if not cache.set_nx(lock_key, owner, ttl=1200):
         logger.info(
             f"build_multiqc_prerender {dc_id}: another worker holds the "
             f"lock; skipping duplicate run"
@@ -742,7 +761,7 @@ def build_multiqc_prerender(self, dc_id: str) -> dict:
         return {"status": "failed", "dc_id": str(dc_id), "error": str(exc)}
     finally:
         try:
-            cache.delete(lock_key)
+            _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"build_multiqc_prerender: failed to clear lock {lock_key}: {exc}")
 
@@ -787,8 +806,9 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 
     cache = get_cache()
     lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+    owner = self.request.id or "direct-call"
 
-    if not cache.set_nx(lock_key, "1", ttl=1800):
+    if not cache.set_nx(lock_key, owner, ttl=1800):
         logger.info(
             f"prewarm_multiqc_dc_all_plots {dc_id}: lock held by another "
             "worker; skipping duplicate run"
@@ -948,7 +968,7 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
         return {"status": "failed", "dc_id": str(dc_id), "error": str(exc)}
     finally:
         try:
-            cache.delete(lock_key)
+            _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
 
@@ -966,6 +986,27 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 
 # Background callbacks are registered by flask_dispatcher.py when apps are created
 # Management, Viewer, and Editor apps each have their own callback registry
+
+
+@task_failure.connect
+def _release_lock_of_lost_task(sender=None, task_id=None, args=None, **_kwargs) -> None:
+    """Free the MultiQC lock of a task whose worker died (SIGSEGV, SIGKILL, OOM).
+
+    Such a task never reaches its ``finally``; Celery still reports the failure
+    from the main process, and without this the lock blocks every rebuild and
+    keeps the render endpoints answering 202 until its TTL runs out.
+    """
+    template = _MULTIQC_LOCK_KEYS.get(getattr(sender, "name", ""))
+    if template is None or not args:
+        return
+    from depictio.api.cache import get_cache
+
+    try:
+        _release_lock(get_cache(), template.format(args[0]), task_id)
+    except Exception as exc:
+        from depictio.api.v1.configs.logging_init import logger
+
+        logger.warning(f"failed to release the lock of lost task {task_id}: {exc}")
 
 
 # Register monitoring signal handlers (task lifecycle → MongoDB ledger) and the

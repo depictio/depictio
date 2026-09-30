@@ -32,6 +32,8 @@ class TestDCIndexedFileConfig:
             ("fasta", ".fai"),
             ("bigwig", ""),
             ("bigbed", ""),
+            ("pdb", ""),
+            ("mmcif", ""),
         ],
     )
     def test_default_index_suffix_per_format(self, fmt, suffix):
@@ -42,6 +44,8 @@ class TestDCIndexedFileConfig:
         assert DCIndexedFileConfig(format="bigWig").format == "bigwig"
         assert DCIndexedFileConfig(format="BW").format == "bigwig"
         assert DCIndexedFileConfig(format="gff").format == "gff3"
+        assert DCIndexedFileConfig(format="cif").format == "mmcif"
+        assert DCIndexedFileConfig(format="PDB").format == "pdb"
 
     def test_unknown_format_rejected(self):
         with pytest.raises(ValidationError):
@@ -106,6 +110,15 @@ class TestSampleFromPath:
         assert sample_from_path("/data/run1/S1.bam") == "S1"
         assert sample_from_path("/data/run1/genes.gff3.gz") == "genes"
 
+    def test_structure_suffixes_are_stripped(self):
+        # The sample id of a structure DC is the entity id, so the name must
+        # come out bare whatever the structure file's extension.
+        assert sample_from_path("/data/structures/P04637.pdb") == "P04637"
+        assert sample_from_path("/data/structures/P04637.pdb.gz") == "P04637"
+        assert sample_from_path("/data/structures/P04637.cif") == "P04637"
+        assert sample_from_path("/data/structures/P04637.cif.gz") == "P04637"
+        assert sample_from_path("/data/structures/P04637.mmcif") == "P04637"
+
     def test_regex_named_group_wins(self):
         path = "/data/variant_calling/haplotypecaller/HCC1395T/HCC1395T.filtered.vcf.gz"
         regex = r"variant_calling/[^/]+/(?P<sample>[^/]+)/"
@@ -113,6 +126,19 @@ class TestSampleFromPath:
 
     def test_regex_without_named_group_falls_back(self):
         assert sample_from_path("/data/S9.vcf.gz", r"(S\d+)") == "S9"
+
+    def test_named_groups_without_sample_are_joined_in_order(self):
+        regex = r"(?P<engine>[^/]+)/(?:(?P<mode>split_msa_prediction)/)?top/(?P<target>[^/]+)\.pdb$"
+        assert sample_from_path("/run/colabfold/top/T1024.pdb", regex) == "colabfold__T1024"
+        # An optional group that did not take part is skipped, not joined empty.
+        assert (
+            sample_from_path("/run/alphafold2/split_msa_prediction/top/T1024.pdb", regex)
+            == "alphafold2__split_msa_prediction__T1024"
+        )
+
+    def test_sample_group_wins_over_other_named_groups(self):
+        regex = r"(?P<engine>[^/]+)/(?P<sample>[^/]+)\.pdb$"
+        assert sample_from_path("/run/esmfold/T1024.pdb", regex) == "T1024"
 
     def test_invalid_regex_falls_back(self):
         assert sample_from_path("/data/S9.vcf.gz", r"(?P<sample>[") == "S9"

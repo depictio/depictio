@@ -22,6 +22,11 @@ kinds, tables) and not to:
 
 Any of them can opt back in with ``follow_region_filter: true`` on the component,
 the flag ``genome_view`` already uses for "follow the section's region".
+
+A residue range picked on a protein tile (``source: "residue_selection"``, an
+entity ``MultiSelect`` and a position ``RangeSlider``, see ``residueRangeFilters``
+in packages/depictio-react-core/src/selection.ts) is the same kind of filter on
+protein coordinates, and is scoped by the same rule.
 """
 
 from __future__ import annotations
@@ -30,17 +35,22 @@ from typing import Any
 
 from depictio.api.v1.filter_links import GENOME_SELECTION_SOURCE
 
+# The residue pick of the protein tiles: the same pair shape on protein
+# coordinates. Mirrors `residueRangeFilters` in selection.ts.
+RESIDUE_SELECTION_SOURCE = "residue_selection"
+_LOCUS_SOURCES = frozenset({GENOME_SELECTION_SOURCE, RESIDUE_SELECTION_SOURCE})
+
 # Component types a region never reaches unless they opt in (figures only when
 # they do not encode a region column, see ``_figure_encodes``).
 _SCOPED_TYPES = frozenset({"card", "figure", "interactive"})
 
 
 def is_region_filter(f: Any) -> bool:
-    """True for either half of a genome region pair."""
+    """True for either half of a genome region pair or of a residue range pair."""
     if not isinstance(f, dict):
         return False
     meta = f.get("metadata") or {}
-    return (f.get("source") or meta.get("source")) == GENOME_SELECTION_SOURCE
+    return (f.get("source") or meta.get("source")) in _LOCUS_SOURCES
 
 
 def _filter_column(f: dict) -> str | None:

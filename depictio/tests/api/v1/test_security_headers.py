@@ -22,7 +22,11 @@ from pathlib import Path
 import pytest
 
 from depictio.api.main import _SECURITY_HEADERS
-from depictio.api.v1.configs.security_headers import csp_with_script_nonce
+from depictio.api.v1.configs.security_headers import (
+    csp_with_connect_origins,
+    csp_with_script_nonce,
+    storage_origin,
+)
 from depictio.models.components.constants import MAP_STYLES
 
 CSP = _SECURITY_HEADERS["Content-Security-Policy"]
@@ -101,7 +105,10 @@ class TestNginxMirrorsTheApi:
                     out[parts[0]] = parts[1:]
             return out
 
-        assert parsed(match.group(1)) == parsed(CSP)
+        # The deployment-provided extra origins placeholder is the only token
+        # nginx has on top of the shipped policy (empty by default).
+        nginx_policy = match.group(1).replace("${DEPICTIO_CSP_CONNECT_EXTRA}", "")
+        assert parsed(nginx_policy) == parsed(CSP)
 
 
 def test_script_nonce_variant_only_adds_the_nonce():
@@ -125,3 +132,35 @@ def test_script_nonce_variant_only_adds_the_nonce():
             assert _directive(relaxed, name) == _directive(CSP, name), (
                 f"{name} must be untouched by the nonce variant"
             )
+
+
+class TestStorageOrigin:
+    """Presigned indexed-file URLs are fetched from the S3 endpoint directly."""
+
+    @pytest.mark.parametrize(
+        ("url", "origin"),
+        [
+            ("http://127.0.0.1:9000", "http://127.0.0.1:9000"),
+            ("https://s3.example.org/bucket-prefix", "https://s3.example.org"),
+            ("", None),
+            (None, None),
+            ("minio:9000", None),
+        ],
+    )
+    def test_origin_of_endpoint(self, url, origin) -> None:
+        assert storage_origin(url) == origin
+
+    def test_origin_is_appended_to_connect_src_only(self) -> None:
+        relaxed = csp_with_connect_origins(CSP, ["http://127.0.0.1:9000"])
+        assert _directive(relaxed, "connect-src") == [
+            *_directive(CSP, "connect-src"),
+            "http://127.0.0.1:9000",
+        ]
+        for chunk in CSP.split(";"):
+            name = chunk.split()[0]
+            if name != "connect-src":
+                assert _directive(relaxed, name) == _directive(CSP, name)
+
+    def test_existing_origin_is_not_repeated(self) -> None:
+        relaxed = csp_with_connect_origins(CSP, ["https://tile.openstreetmap.org"])
+        assert _directive(relaxed, "connect-src") == _directive(CSP, "connect-src")

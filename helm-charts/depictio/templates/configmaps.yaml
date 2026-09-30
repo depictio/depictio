@@ -118,6 +118,9 @@ data:
   DEPICTIO_FEEDBACK_ENABLED: {{ .Values.backend.env.DEPICTIO_FEEDBACK_ENABLED | default "false" | quote }}
   DEPICTIO_FEEDBACK_URL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_URL | default "" | quote }}
   DEPICTIO_FEEDBACK_LABEL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_LABEL | default "Feedback" | quote }}
+  # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
+  # Off by default: accessions, gene names or sequences leave the server.
+  DEPICTIO_STRUCTURE_RESOLVER_ENABLED: {{ .Values.backend.env.DEPICTIO_STRUCTURE_RESOLVER_ENABLED | default "false" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
   {{- if .Values.googleAnalytics }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}

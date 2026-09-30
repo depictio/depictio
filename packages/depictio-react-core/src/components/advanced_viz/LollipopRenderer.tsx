@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
 import {
@@ -16,6 +16,16 @@ import {
   StoredMetadata,
 } from '../../api';
 import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import {
+  advancedVizSelectionFilter,
+  filtersExcludingOwn,
+  filtersExcludingOwnResidue,
+  residueRangeFilters,
+  residueRangeFromFilters,
+  withoutResidueRanges,
+} from '../../selection';
+import { useHighlight, usePublishHighlight } from '../../highlight/bus';
+import { overlayShapeToPlotly, residueOverlay } from './lollipopOverlay';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
@@ -51,12 +61,19 @@ interface LollipopConfig {
    *  hover this renderer has always drawn. */
   label_col?: string | null;
   max_subplot_genes?: number;
+  /** Click a stem: emit a `residue_selection` (feature + position) and, when
+   *  a selection column resolves, a point selection. Opt-in. */
+  selection_enabled?: boolean;
+  /** Column of the point selection; null falls back to `label_col`. */
+  selection_column?: string | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: LollipopConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Selection-as-filter callback; absent on read-only hosts. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
   /** Dashboard-wide analysis grouping, recoloured into the built figure.
    *  Colour only: this plot is keyed per feature, so panels would repeat the
    *  same marks. See `splitFigureByGroups`. */
@@ -73,7 +90,13 @@ const TAB20_PALETTE = [
   '#17becf', '#9edae5',
 ] as const;
 
-const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
+const LollipopRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  groupRender,
+}) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -108,8 +131,38 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     // already a role does not send it twice, and so the `< 3` binding guard
     // below still counts the three required roles and nothing else.
     if (config.label_col && !cols.includes(config.label_col)) cols.push(config.label_col);
+    if (config.selection_column && !cols.includes(config.selection_column)) {
+      cols.push(config.selection_column);
+    }
     return cols;
   }, [config]);
+
+  // ---- Residue selection + hover highlight ------------------------------
+  // A stem is a position on a feature, the same (entity, position) pair the
+  // protein tiles pick, so a click here moves them and a pick there rings
+  // the stems here. The point selection rides along only when a column names
+  // the stem (`selection_column`, else `label_col`).
+  const selectionEnabled = Boolean(onFilterChange) && config.selection_enabled === true;
+  const pointSelectionColumn = config.selection_column || config.label_col || null;
+  // Never narrowed by its own pick, and a range picked anywhere is a place to
+  // look rather than a subset: every stem stays and the range is shaded.
+  const filtersForFetch = useMemo(
+    () =>
+      withoutResidueRanges(
+        filtersExcludingOwnResidue(
+          filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+          metadata.index,
+        ),
+        config.position_col,
+      ),
+    [filters, metadata.index, config.position_col],
+  );
+  const pickedRange = useMemo(
+    () => residueRangeFromFilters(filters, config.feature_id_col, config.position_col),
+    [filters, config.feature_id_col, config.position_col],
+  );
+  const highlight = useHighlight(metadata.index);
+  const publishHighlight = usePublishHighlight(metadata.index);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -136,7 +189,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
       wfId: metadata.wf_id,
       dcId: metadata.dc_id,
       columns: requiredCols,
-      filters,
+      filters: filtersForFetch,
       vizKind: 'lollipop',
     })
       .then((res) => {
@@ -153,7 +206,13 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), JSON.stringify(filters), refreshTick]);
+  }, [
+    metadata.wf_id,
+    metadata.dc_id,
+    JSON.stringify(requiredCols),
+    JSON.stringify(filtersForFetch),
+    refreshTick,
+  ]);
 
   useEffect(() => {
     if (!metadata.dc_id || !config.category_col) return;
@@ -378,8 +437,30 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
       }
     }
 
+    // Where each lane sits, and each drawn stem's head, for the selection and
+    // highlight overlay (drawn over the finished figure, so a hover never
+    // rebuilds it).
+    const lanes = genesToShow.map((gene, g) => ({
+      gene,
+      yref: g === 0 ? 'y' : `y${g + 1}`,
+      domain: [1 - (g + 1) / nGenes + 0.04, 1 - g / nGenes] as [number, number],
+    }));
+    const lanesSet = new Set(genesToShow);
+    const stems: { gene: string; position: number; height: number; row: number }[] = [];
+    for (let i = 0; i < gv.length; i++) {
+      const gene = String(gv[i]);
+      if (!lanesSet.has(gene)) continue;
+      const position = Number(pv[i]);
+      if (!Number.isFinite(position)) continue;
+      // The head height the trace above drew (effect, or 1 when none).
+      const height = ev ? Math.max(0, Number(ev[i] ?? 1) || 0) : 1;
+      stems.push({ gene, position, height, row: i });
+    }
+
     const { textColor } = plotlyThemeColors(isDark, theme);
     return {
+      lanes,
+      stems,
       // Subplot lanes on screen, one per gene. Feeds the content demand.
       genesDrawn: genesToShow.length,
       data,
@@ -567,10 +648,138 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
     [groupedFigure, isDark, theme],
   );
-  const plotLayout = useMemo(
+  const themedLayout = useMemo(
     () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
     [groupedFigure, isDark, theme],
   );
+  // The picked range (shaded, stems ringed) and the hovered residue (a dotted
+  // line), over the finished figure.
+  const accent = theme.colors[theme.primaryColor]?.[isDark ? 4 : 6] ?? theme.primaryColor;
+  const overlay = useMemo(
+    () =>
+      figure
+        ? residueOverlay({
+            lanes: figure.lanes,
+            stems: figure.stems,
+            picked: pickedRange,
+            highlight,
+            positionColumn: config.position_col,
+            pointSize,
+          })
+        : null,
+    [figure, pickedRange, highlight, config.position_col, pointSize],
+  );
+  const plotDataWithOverlay = useMemo(() => {
+    if (!plotData || !overlay || overlay.rings.length === 0) return plotData;
+    return [
+      ...plotData,
+      ...overlay.rings.map((ring) => ({
+        type: 'scatter' as const,
+        mode: 'markers' as const,
+        x: ring.x,
+        y: ring.y,
+        xaxis: 'x',
+        yaxis: ring.yref,
+        hoverinfo: 'skip' as const,
+        showlegend: false,
+        marker: {
+          symbol: 'circle-open',
+          size: ring.size,
+          color: accent,
+          line: { width: 2, color: accent },
+        },
+      })),
+    ];
+  }, [plotData, overlay, accent]);
+  const plotLayout = useMemo(() => {
+    if (!themedLayout || !overlay || overlay.shapes.length === 0) return themedLayout;
+    return {
+      ...themedLayout,
+      shapes: [
+        ...((themedLayout as { shapes?: unknown[] }).shapes ?? []),
+        ...overlay.shapes.map((shape) => overlayShapeToPlotly(shape, accent)),
+      ],
+    };
+  }, [themedLayout, overlay, accent]);
+
+  // ---- Stem click -> residue selection; hover -> highlight bus -----------
+  const anchorRef = useRef<{ gene: string; position: number } | null>(null);
+  const handleClick = useCallback(
+    (event: any) => {
+      if (!onFilterChange || !figure) return;
+      const point = event?.points?.[0];
+      const cd = point?.customdata;
+      if (!point || cd == null || typeof cd !== 'object') return;
+      const gene = String((cd as Record<number, unknown>)[0] ?? '');
+      const position = Number(point.x);
+      if (!gene || !Number.isFinite(position)) return;
+      const anchor = anchorRef.current;
+      const extend = Boolean(event?.event?.shiftKey) && anchor?.gene === gene;
+      const start = extend ? Math.min(anchor!.position, position) : position;
+      const end = extend ? Math.max(anchor!.position, position) : position;
+      // Clicking the one picked stem again clears the pick.
+      const clear =
+        !extend &&
+        pickedRange != null &&
+        pickedRange.entity === gene &&
+        pickedRange.start === position &&
+        pickedRange.end === position;
+      if (!extend) anchorRef.current = clear ? null : { gene, position };
+      const selection = {
+        entityColumn: config.feature_id_col,
+        positionColumn: config.position_col,
+        entity: gene,
+        start: clear ? null : start,
+        end: clear ? null : end,
+        dcId: metadata.dc_id,
+      };
+      for (const f of residueRangeFilters(metadata.index, selection)) onFilterChange(f);
+      if (pointSelectionColumn) {
+        const col = (rows?.[pointSelectionColumn] ?? []) as unknown[];
+        const values = clear
+          ? []
+          : Array.from(
+              new Set(
+                figure.stems
+                  .filter((st) => st.gene === gene && st.position >= start && st.position <= end)
+                  .map((st) => col[st.row])
+                  .filter((v) => v != null && v !== '')
+                  .map((v) => String(v)),
+              ),
+            );
+        onFilterChange(advancedVizSelectionFilter(metadata, pointSelectionColumn, values));
+      }
+    },
+    [
+      onFilterChange,
+      figure,
+      pickedRange,
+      config.feature_id_col,
+      config.position_col,
+      metadata,
+      pointSelectionColumn,
+      rows,
+    ],
+  );
+  const handleHover = useCallback(
+    (event: any) => {
+      const point = event?.points?.[0];
+      const cd = point?.customdata;
+      if (!point || cd == null || typeof cd !== 'object') return;
+      const position = Number(point.x);
+      if (!Number.isFinite(position)) return;
+      const label = config.label_col ? (cd as Record<number, unknown>)[3] : undefined;
+      publishHighlight({
+        entity: String((cd as Record<number, unknown>)[0] ?? '') || undefined,
+        start: position,
+        positionColumn: config.position_col,
+        rowKeys: label != null && label !== '' ? [String(label)] : undefined,
+      });
+    },
+    [publishHighlight, config.label_col, config.position_col],
+  );
+  const handleUnhover = useCallback(() => publishHighlight(null), [publishHighlight]);
+
   // Chart annotations, on a single gene only: several genes stack one y
   // axis per gene under the same component. Slot 3 of `customdata` is the
   // label when one is bound, which is what marked points are keyed on;
@@ -578,7 +787,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
   const annotations = usePlotAnnotationLayer({
     componentIndex: String(metadata.index),
     enabled: supportsAdvancedVizAnnotation(metadata) && singleGene,
-    data: plotData,
+    data: plotDataWithOverlay,
     layout: plotLayout,
     pointIdIndex: 3,
     pointIdColumn: config.label_col || undefined,
@@ -607,7 +816,11 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
             useResizeHandler
             style={{ width: '100%', height: '100%' }}
             config={{ displaylogo: false, responsive: true } as any}
-            {...annotations.plotProps()}
+            {...annotations.plotProps({
+              onClick: selectionEnabled ? handleClick : undefined,
+              onHover: handleHover,
+              onUnhover: handleUnhover,
+            })}
           />
           {annotations.toolbar}
         </>

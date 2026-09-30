@@ -22,6 +22,22 @@ from depictio.models.utils import get_config
 
 _UNRESOLVED_VAR_RE = _re.compile(r"\{[A-Z0-9_]+\}")
 
+# The bundled project.yaml files hardcode the container install path. Rewriting it
+# to the real package root is a no-op in the image (where both are /app/depictio)
+# and lets the same seeds load from a pip/uv install.
+_CONTAINER_PACKAGE_ROOT = "/app/depictio/"
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _relocate_container_paths(obj: Any) -> Any:
+    if isinstance(obj, str) and obj.startswith(_CONTAINER_PACKAGE_ROOT):
+        return str(_PACKAGE_ROOT / obj[len(_CONTAINER_PACKAGE_ROOT) :])
+    if isinstance(obj, dict):
+        return {k: _relocate_container_paths(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_relocate_container_paths(item) for item in obj]
+    return obj
+
 
 def _has_unresolved_vars(obj: Any) -> bool:
     """Return True if any string in obj still contains a {VAR} placeholder."""
@@ -220,6 +236,13 @@ STATIC_IDS = {
             "locus_peaks_demo": "646b0f3c1e4a2d7f8e5b8dc1",
             "locus_coverage_demo": "646b0f3c1e4a2d7f8e5b8dc2",
             "somatic_snv_demo": "646b0f3c1e4a2d7f8e5b8dc3",
+            # Protein structure tab (the 8ddx block): the structure file and
+            # the residue, alignment, variant and domain tables beside it.
+            "protein_structure_demo": "646b0f3c1e4a2d7f8e5b8dd1",
+            "protein_residues_demo": "646b0f3c1e4a2d7f8e5b8dd2",
+            "protein_msa_demo": "646b0f3c1e4a2d7f8e5b8dd3",
+            "protein_variants_demo": "646b0f3c1e4a2d7f8e5b8dd4",
+            "protein_domains_demo": "646b0f3c1e4a2d7f8e5b8dd5",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -271,6 +294,9 @@ STATIC_IDS = {
             # genes on one region) opens the 8dcx block; 8dc1 and 8dc2 are its
             # collections, 8dc3 the somatic SNVs of the Manhattan tab.
             "advanced_viz_locus_section": "646b0f3c1e4a2d7f8e5b8dc0",
+            # The protein structure tab opens the 8ddx block; 8dd1 to 8dd5 are
+            # its collections.
+            "advanced_viz_protein_structure": "646b0f3c1e4a2d7f8e5b8dd0",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",
@@ -679,11 +705,10 @@ class ReferenceDatasetRegistry:
 
         if os.path.exists(template_path):
             raw_config = get_config(template_path)
-            # Resolve for Docker init: /app/depictio/projects/<rel_path>
-            data_root = f"/app/depictio/projects/{rel_path}"
+            data_root = str(_PACKAGE_ROOT / "projects" / rel_path)
             project_config = cls.resolve_template_for_init(raw_config, data_root)
         elif os.path.exists(project_yaml_path):
-            project_config = get_config(project_yaml_path)
+            project_config = _relocate_container_paths(get_config(project_yaml_path))
         else:
             raise FileNotFoundError(
                 f"No template.yaml or project.yaml found for dataset '{dataset_name}' in {project_dir}"

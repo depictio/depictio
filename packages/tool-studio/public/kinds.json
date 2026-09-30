@@ -2197,6 +2197,318 @@
     },
     {
       "category": "plot",
+      "description": "A protein structure in 3D, coloured by confidence, chain or a per-residue column, with variants marked on it. Linked to the sequence and alignment tiles of the same protein.",
+      "heavy": false,
+      "icon": "tabler:cube-3d-sphere",
+      "label": "3D structure",
+      "legacy": false,
+      "required_roles": [
+        "position"
+      ],
+      "role_names": {
+        "alt_aa": [
+          "aa_alt",
+          "alt",
+          "alt_aa",
+          "alternate_aa",
+          "mut_aa"
+        ],
+        "category": [
+          "category",
+          "consequence",
+          "domain",
+          "secondary_structure",
+          "ss"
+        ],
+        "chain": [
+          "auth_asym_id",
+          "chain",
+          "chain_id"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "gene": [
+          "gene",
+          "gene_name",
+          "gene_symbol",
+          "symbol"
+        ],
+        "label": [
+          "aa_change",
+          "hgvsp",
+          "label",
+          "name",
+          "protein_change"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "protein_position",
+          "resi",
+          "residue_number",
+          "resnum"
+        ],
+        "ref_aa": [
+          "aa_ref",
+          "ref",
+          "ref_aa",
+          "reference_aa",
+          "wt_aa"
+        ],
+        "sequence": [
+          "aa_sequence",
+          "protein_sequence",
+          "seq",
+          "sequence"
+        ],
+        "uniprot": [
+          "accession",
+          "uniprot",
+          "uniprot_accession",
+          "uniprot_id"
+        ],
+        "value": [
+          "b_factor",
+          "bfactor",
+          "plddt",
+          "score",
+          "vaf",
+          "value"
+        ]
+      },
+      "roles": {
+        "alt_aa": {
+          "description": "Optional alternate amino acid; rows carrying one are marked on the structure.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "category": {
+          "description": "Optional per-residue class (domain, consequence), used by the category colour mode.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chain": {
+          "description": "Optional chain id, for multi-chain structures.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "entity": {
+          "description": "Which structure a row belongs to; the filtered entity is the one shown.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "gene": {
+          "description": "Gene symbol used to fetch a predicted structure (resolve mode).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "label": {
+          "description": "Optional residue or variant label (for example a protein change).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Residue number in the structure numbering (1-based).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "ref_aa": {
+          "description": "Optional reference amino acid of a variant.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sequence": {
+          "description": "Protein sequence folded on demand when no accession resolves (resolve mode).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "uniprot": {
+          "description": "UniProt accession used to fetch a predicted structure (resolve mode).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "value": {
+          "description": "Optional per-residue score, used by the value colour mode.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "molecule_3d"
+    },
+    {
+      "category": "plot",
+      "description": "A multiple sequence alignment, one row per sequence, coloured by residue, with consensus and conservation. A column brush selects residues on the linked structure.",
+      "heavy": false,
+      "icon": "tabler:align-justified",
+      "label": "Sequence alignment",
+      "legacy": false,
+      "required_roles": [
+        "msa_id",
+        "seq_id",
+        "sequence"
+      ],
+      "role_names": {
+        "coverage": [
+          "cov",
+          "coverage",
+          "qcov",
+          "query_coverage"
+        ],
+        "identity": [
+          "identity",
+          "percent_identity",
+          "pident",
+          "seq_identity"
+        ],
+        "msa_id": [
+          "alignment_id",
+          "entity",
+          "family",
+          "msa_id",
+          "query",
+          "target"
+        ],
+        "rank": [
+          "hit_rank",
+          "index",
+          "order",
+          "rank"
+        ],
+        "seq_id": [
+          "accession",
+          "hit",
+          "id",
+          "name",
+          "seq_id",
+          "sequence_id"
+        ],
+        "sequence": [
+          "aligned_seq",
+          "aligned_sequence",
+          "alignment",
+          "aln",
+          "seq",
+          "sequence"
+        ]
+      },
+      "roles": {
+        "identity": {
+          "description": "Optional identity to the reference row, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "msa_id": {
+          "description": "Which alignment a row belongs to (entity or family).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "rank": {
+          "description": "Optional row order; rank 0 is the query or reference row.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "seq_id": {
+          "description": "Name of each aligned sequence: one row of the alignment.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "sequence": {
+          "description": "Aligned sequence with gaps as '-', the same length within one alignment.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "msa"
+    },
+    {
+      "category": "plot",
       "description": "Sample \u00d7 gene mutation matrix with discrete mutation-type colours and frequency strips.",
       "heavy": true,
       "icon": "tabler:grid-pattern",
@@ -3064,6 +3376,116 @@
         }
       },
       "viz_kind": "scatter_xy"
+    },
+    {
+      "category": "plot",
+      "description": "One protein's sequence as a residue ruler with per-residue score and class lanes, domain spans and variant ticks. Brush to select residues.",
+      "heavy": false,
+      "icon": "tabler:ruler-2",
+      "label": "Sequence track",
+      "legacy": false,
+      "required_roles": [
+        "position"
+      ],
+      "role_names": {
+        "category": [
+          "category",
+          "domain",
+          "region",
+          "secondary_structure",
+          "ss"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "protein_position",
+          "resi",
+          "residue_number",
+          "resnum"
+        ],
+        "residue": [
+          "aa",
+          "amino_acid",
+          "residue",
+          "residue_name",
+          "resn"
+        ],
+        "value": [
+          "conservation",
+          "disorder",
+          "plddt",
+          "score",
+          "value"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Optional per-residue class drawn as a coloured lane.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "entity": {
+          "description": "Which protein a row belongs to; the filtered entity is the one drawn.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Residue number (1-based) along the sequence ruler.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "residue": {
+          "description": "Optional one-letter amino acid shown on the ruler.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "value": {
+          "description": "Optional per-residue score drawn as a lane (pLDDT, conservation).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "sequence_track"
     },
     {
       "category": "plot",
