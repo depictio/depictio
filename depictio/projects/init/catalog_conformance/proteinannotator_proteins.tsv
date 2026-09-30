@@ -1,0 +1,4 @@
+entity	sample	description	length	annotation_status	domain_hits	databases_hit	pfam_hits	funfam_hits	nmpfams_hits	metagroot_hits	interproscan_hits	annotated_residues	annotated_pct	top_domain	top_domain_database	top_domain_evalue	helix_pct	strand_pct	coil_pct
+GI|225038609|EFDID|719595|FULL	l_arginase		350	annotated	23	3	0	0	2	20	1	348	99.42857142857143	SFLDS00057	interproscan	0.0	34.285714285714285	12.857142857142856	52.85714285714286
+T1024	T1024	LmrP, , 408 residues|	408	annotated	51	4	2	1	3	45	0	408	100.0	MFS_1	pfam	1.4e-32	75.49019607843137	0.0	24.509803921568626
+T1026	T1026	FBNSV, , 172 residues|	172	annotated	6	4	2	1	1	2	0	171	99.4186046511628	Nanovirus_coat	pfam	6.7e-55	1.1627906976744187	42.44186046511628	56.395348837209305

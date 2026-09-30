@@ -1,0 +1,14 @@
+sample	cluster_size	n_clusters	n_sequences	sequence_share
+mgnifams_create	1	49531	49531	0.991
+mgnifams_create	2	152	304	0.006
+mgnifams_create	3	29	87	0.002
+mgnifams_create	4	8	32	0.001
+mgnifams_create	5	4	20	0.0
+mgnifams_create	8	2	16	0.0
+mgnifams_create	9	1	9	0.0
+mgnifams_update	1	49548	49548	0.993
+mgnifams_update	2	127	254	0.005
+mgnifams_update	3	23	69	0.001
+mgnifams_update	4	3	12	0.0
+mgnifams_update	5	2	10	0.0
+mgnifams_update	6	1	6	0.0
