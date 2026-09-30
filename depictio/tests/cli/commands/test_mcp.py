@@ -258,7 +258,13 @@ def test_token_create_command_prints_the_token(local_home, monkeypatch, tmp_path
 # ---------------------------------------------------------------------------
 
 
-def test_install_prints_both_snippets_by_default(tmp_path, monkeypatch):
+@pytest.fixture
+def depictio_on_path(monkeypatch):
+    """The server package's `depictio` command, whatever PATH the test runs with."""
+    monkeypatch.setattr(mcp_cmd, "cli_executable", lambda: "depictio")
+
+
+def test_install_prints_both_snippets_by_default(tmp_path, monkeypatch, depictio_on_path):
     monkeypatch.delenv("DEPICTIO_LOCAL_HOME")
     result = CliRunner().invoke(
         mcp_cmd.app, ["install", "--desktop-config", str(tmp_path / "d.json")]
@@ -290,7 +296,7 @@ def _desktop_json(stdout: str) -> dict:
     return json.loads(stdout[stdout.index("{") :])["mcpServers"]["depictio"]
 
 
-def test_install_carries_a_non_default_local_home(tmp_path, monkeypatch):
+def test_install_carries_a_non_default_local_home(tmp_path, monkeypatch, depictio_on_path):
     home = tmp_path / "my home"
     monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(home))
     runner = CliRunner()
@@ -313,7 +319,7 @@ def test_install_carries_a_non_default_local_home(tmp_path, monkeypatch):
     assert "-e " not in plain.stdout
 
 
-def test_install_carries_an_explicit_config(tmp_path, monkeypatch):
+def test_install_carries_an_explicit_config(tmp_path, monkeypatch, depictio_on_path):
     cfg = _write_config(tmp_path / "cfg.yaml", API, "t")
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -432,3 +438,14 @@ def test_proxy_only_exposes_upstream_capability_groups():
     offered = server.get_capabilities()
     assert offered.tools is not None
     assert offered.resources is None and offered.prompts is None
+
+
+def test_install_names_depictio_cli_when_only_the_cli_package_is_installed(monkeypatch):
+    """`pip install depictio-cli` has no `depictio` command: the snippets must not use it."""
+    monkeypatch.setattr(
+        mcp_cmd.shutil,
+        "which",
+        lambda name: "/venv/bin/depictio-cli" if name == "depictio-cli" else None,
+    )
+    assert mcp_cmd.claude_code_command().endswith("-- depictio-cli mcp serve")
+    assert mcp_cmd.claude_desktop_entry()["command"] == "/venv/bin/depictio-cli"

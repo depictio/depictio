@@ -596,12 +596,23 @@ def serve_launch(config: Path | None = None) -> ServeLaunch:
     return ServeLaunch(env={}, args=[])
 
 
+def cli_executable() -> str:
+    """The CLI's command name: ``depictio`` from the server package, else ``depictio-cli``.
+
+    ``pip install depictio-cli`` only installs ``depictio-cli``.
+    """
+    for name in ("depictio", "depictio-cli"):
+        if shutil.which(name):
+            return name
+    return "depictio-cli"
+
+
 def claude_code_command(launch: ServeLaunch | None = None) -> str:
     launch = launch or ServeLaunch(env={}, args=[])
     parts = ["claude", "mcp", "add", SERVER_NAME]
     for key, value in launch.env.items():
         parts += ["-e", f"{key}={value}"]
-    return shlex.join([*parts, "--", "depictio", "mcp", "serve", *launch.args])
+    return shlex.join([*parts, "--", cli_executable(), "mcp", "serve", *launch.args])
 
 
 def claude_desktop_config_path() -> Path:
@@ -619,7 +630,8 @@ def claude_desktop_config_path() -> Path:
 def claude_desktop_entry(launch: ServeLaunch | None = None) -> dict:
     # Claude Desktop does not inherit the shell PATH, so point at the executable.
     launch = launch or ServeLaunch(env={}, args=[])
-    command = shutil.which("depictio") or "depictio"
+    name = cli_executable()
+    command = shutil.which(name) or name
     entry: dict[str, Any] = {"command": command, "args": ["mcp", "serve", *launch.args]}
     if launch.env:
         entry["env"] = dict(launch.env)
