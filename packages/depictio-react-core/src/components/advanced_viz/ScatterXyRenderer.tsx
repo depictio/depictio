@@ -18,8 +18,9 @@ import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
   extractScatterSelection,
-  filtersExcludingOwn,
+  filtersForSelector,
   hasOwnSelection,
+  valuesOnColumn,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
@@ -133,6 +134,11 @@ const DEFAULT_DENSITY_THRESHOLD = 0;
 const DEFAULT_DENSITY_BINS = 60;
 // Opacity kept by the points on the side of the guide not being looked at.
 const DIMMED_OPACITY = 0.2;
+// How much bigger a point named by a filter on the selection column is drawn:
+// a diameter factor for fixed-size markers, an area factor when a size column
+// drives them (Plotly scales area there).
+const MARKED_DIAMETER_SCALE = 1.6;
+const MARKED_AREA_SCALE = 2.5;
 
 const PALETTE = TAB10_PALETTE;
 
@@ -245,15 +251,34 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     return cols;
   }, [config.x_col, config.y_col, config.label_col, config.color_col, config.size_col, selectionColumn]);
 
-  // This component must not narrow itself by its own selection: a box select
-  // would redraw the cloud as only the points it caught, and the user could
-  // never widen it again. Every other component still narrows.
+  // Crossfilter rule: this component is narrowed neither by its own selection
+  // (a box select would redraw the cloud as only the points it caught, and the
+  // user could never widen it again) nor by any other filter on the column it
+  // selects on (a protein tile's residue pick on `entity` would otherwise cut
+  // an entity scatter down to one point). It keeps every point and marks the
+  // named ones instead. Every other filter still narrows it.
   const filtersForFetch = useMemo(
-    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
-    [filters, metadata.index],
+    () => filtersForSelector(filters, metadata.index, 'scatter_selection', selectionColumn),
+    [filters, metadata.index, selectionColumn],
   );
-  const selectionRevision = useSelectionRevision(
-    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
+  const ownSelectionActive = hasOwnSelection(filters, metadata.index, 'scatter_selection');
+  const selectionRevision = useSelectionRevision(ownSelectionActive);
+  // Whether the tile's own selection came from a click (no Plotly selection
+  // state to show it) rather than a box or lasso (Plotly draws that one).
+  const [ownByClick, setOwnByClick] = useState(false);
+
+  // The points the dashboard names on the selection column: another tile's
+  // pick, a sidebar picker, or this tile's own click. A box or lasso pick is
+  // left to Plotly's own selected-point styling, so the cloud is not dimmed
+  // twice. Keyed on the sorted values so the figure only rebuilds when they
+  // change.
+  const markedSignature = useMemo(() => {
+    if (!selectionColumn || (ownSelectionActive && !ownByClick)) return '';
+    return JSON.stringify(Array.from(valuesOnColumn(filters, selectionColumn)).sort());
+  }, [filters, selectionColumn, ownSelectionActive, ownByClick]);
+  const markedKeys = useMemo(
+    () => (markedSignature ? new Set<string>(JSON.parse(markedSignature) as string[]) : null),
+    [markedSignature],
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
@@ -368,8 +393,29 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     // Highlighting one side of the guide dims the other to a fifth of its
     // opacity, per point, so colour-by and size stay readable through it.
     const highlighted = densityView ? null : highlightPredicate(refLine, refValue, refHighlight);
+    // Points named by a filter on the selection column stay bright and grow;
+    // the rest dim. Only when at least one of them is on screen, so a filter
+    // naming something this table does not hold never fades the whole cloud.
+    const marked =
+      !densityView && markedKeys && points.some((p) => markedKeys.has(p.key))
+        ? (p: { key: string }) => markedKeys.has(p.key)
+        : null;
     const pointOpacity = (pts: typeof points): number | number[] =>
-      highlighted ? pts.map((p) => (highlighted(p) ? opacity : opacity * DIMMED_OPACITY)) : opacity;
+      highlighted || marked
+        ? pts.map((p) =>
+            (highlighted && !highlighted(p)) || (marked && !marked(p))
+              ? opacity * DIMMED_OPACITY
+              : opacity,
+          )
+        : opacity;
+    const pointSize = (pts: typeof points): number | number[] => {
+      if (sizeref !== undefined) {
+        return pts.map((p) => (p.size ?? 0) * (marked?.(p) ? MARKED_AREA_SCALE : 1));
+      }
+      return marked
+        ? pts.map((p) => (marked(p) ? markerSize * MARKED_DIAMETER_SCALE : markerSize))
+        : markerSize;
+    };
     const highlightedCount = highlighted ? points.filter(highlighted).length : null;
 
     const markerCommon = {
@@ -426,7 +472,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         marker: {
           ...markerCommon,
           opacity: pointOpacity(points),
-          size: sizeref !== undefined ? points.map((p) => p.size ?? 0) : markerSize,
+          size: pointSize(points),
           color: points.map((p) => num(p.colour) ?? 0),
           colorscale: colourScale,
           showscale: true,
@@ -461,7 +507,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             ...markerCommon,
             opacity: pointOpacity(group),
             color: colourMap.get(name),
-            size: sizeref !== undefined ? group.map((p) => p.size ?? 0) : markerSize,
+            size: pointSize(group),
           },
           hovertemplate: `%{text}<br>${config.color_col}: ${name || '(blank)'}<br>${hoverTail}`,
         });
@@ -479,7 +525,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           ...markerCommon,
           opacity: pointOpacity(points),
           color: palette[0],
-          size: sizeref !== undefined ? points.map((p) => p.size ?? 0) : markerSize,
+          size: pointSize(points),
         },
         hovertemplate: `%{text}<br>${hoverTail}`,
         showlegend: false,
@@ -648,6 +694,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     legendPos,
     densityView,
     densityBins,
+    markedKeys,
     selectionActive,
     selectionRevision,
     refHighlight,
@@ -669,11 +716,17 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     [onFilterChange, selectionColumn, metadata],
   );
   const handleSelected = useCallback(
-    (event: any) => emitSelection(extractScatterSelection(event, 0)),
+    (event: any) => {
+      setOwnByClick(false);
+      emitSelection(extractScatterSelection(event, 0));
+    },
     [emitSelection],
   );
   const handleClick = useCallback(
-    (event: any) => emitSelection(extractScatterSelection(event, 0)),
+    (event: any) => {
+      setOwnByClick(true);
+      emitSelection(extractScatterSelection(event, 0));
+    },
     [emitSelection],
   );
   const handleDeselect = useCallback(() => emitSelection([]), [emitSelection]);

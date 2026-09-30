@@ -6,6 +6,7 @@ import {
   type AdvancedVizKind,
   type InteractiveFilter,
 } from '../../../api';
+import { useSharedOpeningEntity } from '../../../highlight/openingEntity';
 import { entitiesByRowCount } from './rendererData';
 
 export interface EntityPicker {
@@ -26,6 +27,12 @@ export interface EntityRowSource {
   /** The tile's filters (its own picks left out): the opening entity is the
    *  largest one still in scope, so the tile follows the dashboard's pickers. */
   filters: InteractiveFilter[];
+  /** Share the opening entity with the dashboard's other protein tiles under
+   *  this key (the entity column name residue picks travel on), so they all
+   *  open on the same one (see `highlight/openingEntity.ts`). */
+  shareKey?: string | null;
+  /** The tile's index, owner of its claim on `shareKey`. */
+  owner?: string;
 }
 
 /**
@@ -37,8 +44,9 @@ export interface EntityRowSource {
  *
  * With `rows`, the tile opens on the entity with the most rows under the
  * current filters (the entity column alone is read for that), as molecule_3d
- * does, so the protein tiles of a dashboard start on the same protein. The
- * list itself stays sorted and unfiltered.
+ * does. With `rows.shareKey`, the first protein tile of the dashboard to know
+ * its opening entity sets it for the others that hold it, so they start on
+ * the same protein. The list itself stays sorted and unfiltered.
  */
 export function useEntityPicker(
   dcId: string | undefined,
@@ -106,10 +114,18 @@ export function useEntityPicker(
     if (followed && entities?.includes(followed)) setPicked(followed);
   }, [followed, entities]);
 
+  // The dashboard's agreed opening when this table holds it, else its own.
+  const agreed = useSharedOpeningEntity(
+    column ? rows?.shareKey : null,
+    rows?.owner ?? '',
+    opening,
+    entities,
+  );
+
   let entity: string | null = null;
   if (column && entities && entities.length) {
     if (picked && entities.includes(picked)) entity = picked;
-    else if (opening && entities.includes(opening)) entity = opening;
+    else if (agreed && entities.includes(agreed)) entity = agreed;
     else entity = entities[0];
   }
   return { entities, entity, setEntity: setPicked, failed };

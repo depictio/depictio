@@ -599,6 +599,50 @@ export function filtersExcludingOwn(
   return filters.filter((f) => !(f.index === componentIndex && f.source === source));
 }
 
+/**
+ * The crossfilter rule for a selector tile: every dashboard filter except its
+ * own selection AND every filter, from any source, on the column it selects
+ * on (`selectionColumn`, see `advancedVizSelectionColumn`).
+ *
+ * Filters match by column name across data collections, so a protein tile's
+ * residue pick (entity half on `entity`) or a sidebar picker on the same
+ * column would otherwise narrow a scatter that selects on `entity` to the one
+ * point it names, and the reader could no longer pick another. The tile keeps
+ * every point and marks the named ones instead (`valuesOnColumn`). Filters on
+ * any other column still narrow it. Without a selection column this is
+ * `filtersExcludingOwn`.
+ */
+export function filtersForSelector(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+  selectionColumn: string | null | undefined,
+): InteractiveFilter[] {
+  const others = filtersExcludingOwn(filters, componentIndex, source);
+  return selectionColumn ? others.filter((f) => filterColumn(f) !== selectionColumn) : others;
+}
+
+/**
+ * Every value the filters name on `column` (any source), as strings. With
+ * `exclude`, the entry that component emitted from that source is skipped.
+ */
+export function valuesOnColumn(
+  filters: readonly InteractiveFilter[],
+  column: string | null | undefined,
+  exclude?: { index: string; source: InteractiveFilterSource },
+): Set<string> {
+  const out = new Set<string>();
+  if (!column) return out;
+  for (const f of filters) {
+    if (filterColumn(f) !== column) continue;
+    if (exclude && f.index === exclude.index && f.source === exclude.source) continue;
+    const v = f.value;
+    const values = Array.isArray(v) ? v : v == null || v === '' ? [] : [v];
+    for (const x of values) if (x != null && x !== '') out.add(String(x));
+  }
+  return out;
+}
+
 /** Whether the dashboard still holds a non-empty selection this component emitted. */
 export function hasOwnSelection(
   filters: InteractiveFilter[],

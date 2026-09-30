@@ -158,6 +158,8 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
     wfId: metadata.wf_id,
     vizKind: 'msa',
     filters: fetchFilters,
+    shareKey: entityCol,
+    owner: index,
   });
 
   const [frame, setFrame] = useState<Record<string, unknown[]> | null>(null);
