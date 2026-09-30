@@ -274,3 +274,47 @@ class TestSelectionIsShared:
         assert [p.name for p in params_files_newest_first(info)] == [
             "params_2026-01-01_00-00-00.json"
         ]
+
+
+class TestRouteFlags:
+    def test_ancom_flag_only_on_runs_that_know_ancombc(self, tmp_path):
+        """A non-ampliseq run has no `ancombc` param: no SKIP_ANCOM leak."""
+        _write_params(tmp_path / "pipeline_info", "params_2026-06-11_16-37-38.json", {"x": 1})
+
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(str(tmp_path), variables)
+
+        assert "SKIP_ANCOM" not in variables
+
+    def test_molkart_segmentation_methods(self, tmp_path):
+        _write_params(
+            tmp_path / "pipeline_info",
+            "params_2026-06-11_16-37-38.json",
+            {"segmentation_method": "stardist, cellpose,mesmer"},
+        )
+        (tmp_path / "input").mkdir()
+        (tmp_path / "input" / "samplesheet.csv").write_text(
+            "sample,nuclear_image,spot_table,membrane_image\ns1,a.tif,a.txt,m.tif\n"
+        )
+
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(str(tmp_path), variables)
+
+        assert variables["PRIMARY_SEGMENTATION"] == "stardist"
+        assert variables["COMPARE_SEGMENTATION"] == "cellpose"
+        assert variables["MEMBRANE_STACK"] == "true"
+        assert "SINGLE_SEGMENTATION" not in variables
+
+    def test_molkart_single_method(self, tmp_path):
+        _write_params(
+            tmp_path / "pipeline_info",
+            "params_2026-06-11_16-37-38.json",
+            {"segmentation_method": "mesmer"},
+        )
+
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(str(tmp_path), variables)
+
+        assert variables["SINGLE_SEGMENTATION"] == "true"
+        assert "COMPARE_SEGMENTATION" not in variables
+        assert "MEMBRANE_STACK" not in variables
