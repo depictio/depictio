@@ -21,6 +21,7 @@ import { Deck, OrthographicView } from '@deck.gl/core';
 import { TileLayer } from '@deck.gl/geo-layers';
 import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import {
+  ImageLayer,
   MultiscaleImageLayer,
   getChannelStats,
   loadOmeTiff,
@@ -153,6 +154,10 @@ export class LoadSupersededError extends Error {
 const STATS_MAX_PIXELS = 2048 * 2048;
 /** Channels whose statistics are computed up front. */
 const STATS_MAX_CHANNELS = 16;
+/** A single-level image up to this many pixels is read whole, not tiled: its
+ *  one chunk is often the whole image (SpatialData's Visium hires image), a
+ *  tile size viv's tiled layer draws nothing with below zoom 0. */
+const WHOLE_IMAGE_MAX_PIXELS = 4096 * 4096;
 /** Screen pixels a lasso has to travel before it records another vertex. */
 const LASSO_MIN_STEP_PX = 3;
 /** Screen pixels a pointer may move between down and up and still click. */
@@ -431,7 +436,13 @@ export async function createBioimageViewer(
           opts.onError?.(err instanceof Error ? err : new Error(String(err)));
         },
       };
-      layers.push(new MultiscaleImageLayer(imageProps as never));
+      const [base] = data;
+      const px = (axis: string) => base.shape[labels.indexOf(axis)] ?? 0;
+      if (data.length === 1 && px('x') * px('y') <= WHOLE_IMAGE_MAX_PIXELS) {
+        layers.push(new ImageLayer({ ...imageProps, loader: base } as never));
+      } else {
+        layers.push(new MultiscaleImageLayer(imageProps as never));
+      }
     }
     const labelsOverlay = labelsLayer();
     if (labelsOverlay) layers.push(labelsOverlay);

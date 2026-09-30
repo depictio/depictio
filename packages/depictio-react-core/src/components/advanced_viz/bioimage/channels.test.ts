@@ -54,6 +54,12 @@ describe('resolveChannels', () => {
     expect(ch[0].domain).toEqual([0, 4095]);
   });
 
+  it('draws an RGB image named r, g, b in its own colours', () => {
+    const rgb = { channels: [{ label: 'r' }, { label: 'g' }, { label: 'b' }] };
+    const ch = resolveChannels({ sizeC: 3, dtype: 'Uint8', omero: rgb });
+    expect(ch.map((c) => c.color)).toEqual(['#ff0000', '#00ff00', '#0000ff']);
+  });
+
   it('lets the component config win over omero, field by field', () => {
     const ch = resolveChannels({
       sizeC: 2,

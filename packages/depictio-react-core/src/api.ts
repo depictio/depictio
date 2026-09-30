@@ -1835,6 +1835,31 @@ function sliceRange(body: Uint8Array, range: BioimageRangeQuery): Uint8Array {
  * A ranged read sends one `Range` header (see `bioimageRangeHeader`) and takes
  * the 206 body; a 200 (a server that ignored the header) is sliced here.
  */
+/** Bytes of recently read keys a zarr store keeps, so a chunk asked for by
+ *  several tiles in a row is downloaded once. */
+const BIOIMAGE_STORE_CACHE_BYTES = 32 * 1024 * 1024;
+
+/** `promise`, or an AbortError as soon as `signal` aborts: a caller that gives
+ *  up stops waiting without cancelling a fetch other callers share. */
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
 export function createBioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
   const root = bioimageStoreUrl(dcId, store);
   const read = async (
@@ -1847,10 +1872,42 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
     if (!res.ok) throw new BioimageHttpError(`OME-Zarr ${store}${path}: ${res.status}`, res.status);
     return { res, path };
   };
+  // One fetch per key at a time, and the last few keys kept: viv asks for the
+  // same chunk once per tile, and the contrast statistics read it again, so a
+  // store whose level is one big chunk (a SpatialData Visium image) would
+  // download it many times at once, which the browser fails part of.
+  const inflight = new Map<string, Promise<Uint8Array | undefined>>();
+  const recent = new Map<string, Uint8Array | undefined>();
+  let recentBytes = 0;
+  const remember = (key: string, bytes: Uint8Array | undefined) => {
+    const size = bytes?.byteLength ?? 0;
+    if (size > BIOIMAGE_STORE_CACHE_BYTES) return;
+    recent.set(key, bytes);
+    recentBytes += size;
+    for (const [oldKey, oldBytes] of recent) {
+      if (recentBytes <= BIOIMAGE_STORE_CACHE_BYTES) break;
+      recent.delete(oldKey);
+      recentBytes -= oldBytes?.byteLength ?? 0;
+    }
+  };
+  const fetchKey = (key: string): Promise<Uint8Array | undefined> => {
+    let pending = inflight.get(key);
+    if (!pending) {
+      pending = read(key, {})
+        .then(async (hit) => hit && new Uint8Array(await hit.res.arrayBuffer()))
+        .then((bytes) => {
+          remember(key, bytes);
+          return bytes;
+        })
+        .finally(() => inflight.delete(key));
+      inflight.set(key, pending);
+    }
+    return pending;
+  };
   return {
     async get(key, opts) {
-      const hit = await read(key, { signal: opts?.signal });
-      return hit && new Uint8Array(await hit.res.arrayBuffer());
+      if (recent.has(key)) return recent.get(key);
+      return abortable(fetchKey(key), opts?.signal);
     },
     async getRange(key, range, opts) {
       if ('length' in range && range.length <= 0) return new Uint8Array(0);
