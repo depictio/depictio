@@ -1,0 +1,1046 @@
+version: 1
+# nf-core/mcmicro 2.0.0 reference dashboard.
+#
+# Funnel: the pipeline's input checks (MultiQC) -> what each slide yielded
+# (cells per sample and segmenter, marker intensities per sample) -> the image
+# itself with its mask and cells -> the marker panel read across cells
+# (distributions, marker by sample heatmap, marker PCA, group comparison) ->
+# how two segmentation modules differ on the same images.
+#
+# Pinned persistent sections ride every tab: `Run at a glance` (4 cards) and the
+# collapsed `Sample sheet` at the top, the collapsed acquisition table at the
+# bottom, and the `Sample filters` panel (sample and the design condition,
+# GROUP_COL of METADATA_FILE). Each tab adds an open filter section of its own.
+#
+# The Image and Markers tabs read the SEGMENTER module's cells (template
+# variable, default mesmer); the Segmentation QC tab reads every module plus the
+# COMPARE_SEGMENTER mask. The viewer tiles spell their config out rather than
+# `use:` a catalog render (see docs/dashboards.md).
+main_dashboard:
+  title: nf-core/mcmicro
+  subtitle: "Whole-slide multiplexed images with their segmentation masks and per-cell marker intensities, on top of the MultiQC input checks"
+  project_tag: Multiplexed Tissue Imaging
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: Input scope
+    icon: mdi:tune
+    color: orange
+    description: Narrows the input checks to samples imaged in a given number of cycles
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:account-group-outline
+    color: teal
+    description: What the run imaged and what it segmented, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The samples every tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Input checks
+    icon: mdi:shield-check-outline
+    color: orange
+    description: The pipeline's consistency checks on every sample's OME-XML and samplesheet
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: Acquisition parameters of every sample and cycle, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ------------------------------------------------------- run at a glance
+  - component_type: card
+    tag: mc-glance-card-samples
+    index: mc-glance-card-samples
+    section: Run at a glance
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: condition
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: mc-glance-card-cells
+    index: mc-glance-card-cells
+    section: Run at a glance
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/cells
+    aggregation: count
+    column_name: cell_uid
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells segmented
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: mc-glance-card-markers
+    index: mc-glance-card-markers
+    section: Run at a glance
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_long
+    aggregation: nunique
+    column_name: marker
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: marker_type
+    display: {icon_name: 'mdi:microscope', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Markers quantified
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: mc-glance-card-area
+    index: mc-glance-card-area
+    section: Run at a glance
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: area
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area (pixels)
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ----------------------------------------------------------- input checks
+  - component_type: text
+    tag: mc-mqc-intro
+    section: Input checks
+    title: Is every sample's input consistent?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Before stitching, the pipeline reads every raw image's OME-XML and the
+      samplesheet and checks tile size, pixel size, channel count, data type
+      and exposure times for consistency. A warning or a failure here explains
+      a stitching or intensity problem further down the funnel.
+    workflow_tag: mcmicro
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: mc-mqc-matrix-summary
+    section: Input checks
+    workflow_tag: mcmicro
+    data_collection_tag: multiqc_data
+    use: multiqc/matrix_summary
+    selected_module: matrix_summary
+    selected_plot: matrix_summary-section
+    title: Input check matrix
+    description: One column per sample, one row per check, pass, warn or fail.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 6}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: mc-meta-intro
+    section: Sample sheet
+    title: The samples behind the run
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample of the cycle samplesheet, with its number of cycles
+      and its design condition. Every sample filter starts from this table;
+      tick a row to carry that sample into every tab.
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: mc-meta-table-samples
+    section: Sample sheet
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Sample sheet
+    description: One row per sample, with its cycle count and design condition.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # -------------------------------------------------------- reference tables
+  - component_type: table
+    tag: mc-ref-table-acquisition
+    section: Reference tables
+    workflow_tag: mcmicro
+    data_collection_tag: mc-acquisition
+    title: Acquisition per sample and cycle
+    description: Pixel size, channels, tiles and the failed or warned input checks of every raw cycle image.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 4}
+
+  # -------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: mc-filter-sample
+    index: mc-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-filter-condition
+    index: mc-condition-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-mqc-filter-cycles
+    index: mc-mqc-cycles-filter
+    section: Input scope
+    group: Input scope
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: n_cycles
+    column_type: int64
+    display: {title_size: md, custom_color: '#F57C00', icon_name: 'mdi:counter'}
+    placement: left
+    title: Cycles imaged
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+# ============================================================================
+# Slide overview
+# ============================================================================
+- title: Slide overview
+  subtitle: How many cells each sample yielded, and how bright each marker is in it
+  advanced_viz_controls: header
+  tab_order: 2
+  tab_icon: mdi:view-dashboard-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Overview filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Segmentation module and marker, on top of the pinned sample filters
+  grid_sections:
+  - name: Cells per sample
+    icon: mdi:counter
+    color: teal
+    description: The cells every segmentation module found in every sample
+  - name: Marker intensities
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: The spread of marker intensity per sample
+  - name: Channel sheet
+    icon: mdi:table
+    color: gray
+    description: The channels of the background-corrected image, when background subtraction ran
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: mc-ov-filter-segmenter
+    index: mc-ov-segmenter-filter
+    section: Overview filters
+    group: Overview scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/segmenter_picker
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Segmentation module
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-ov-filter-marker
+    index: mc-ov-marker-filter
+    section: Overview filters
+    group: Overview scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_picker
+    interactive_component_type: MultiSelect
+    column_name: marker
+    column_type: object
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:microscope'}
+    placement: left
+    title: Marker
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    tag: mc-ov-intro
+    section: Cells per sample
+    title: What each slide yielded
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Cell counts per sample and segmentation module, then the intensity spread
+      of the marker picked on the left in every sample. A sample far below the
+      others in cells or intensity is the first one to open on the Image tab.
+    workflow_tag: mcmicro
+    data_collection_tag: mc-sample-summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: mc-ov-card-segmenters
+    index: mc-ov-card-segmenters
+    section: Cells per sample
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/cells
+    aggregation: nunique
+    column_name: segmenter
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: segmenter
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Segmentation modules
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mc-ov-card-all-cells
+    index: mc-ov-card-all-cells
+    section: Cells per sample
+    workflow_tag: mcmicro
+    data_collection_tag: mc-sample-summary
+    use: mcquant/sample_summary
+    aggregation: sum
+    column_name: n_cells
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: segmenter
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells, every module
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mc-ov-card-dominant
+    index: mc-ov-card-dominant
+    section: Cells per sample
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/cells
+    aggregation: nunique
+    column_name: dominant_marker
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: dominant_marker
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Dominant markers
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mc-ov-card-intensity
+    index: mc-ov-card-intensity
+    section: Cells per sample
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_long
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: log_intensity
+    column_type: float64
+    display: {icon_name: 'mdi:chart-box-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Marker intensity (log1p)
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: mc-ov-fig-cells-per-sample
+    section: Cells per sample
+    workflow_tag: mcmicro
+    data_collection_tag: mc-sample-summary
+    use: mcquant/cells_per_sample
+    visu_type: bar
+    dict_kwargs: {x: sample, y: n_cells, color: segmenter, barmode: group, title: Cells per sample and segmenter}
+    title: Cells per sample and segmentation module
+    description: Each module segments the same image; bars of very different heights for one sample are the first sign of over- or under-segmentation.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 6}
+  - component_type: figure
+    tag: mc-ov-fig-intensity-per-sample
+    section: Marker intensities
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_by_sample
+    visu_type: box
+    dict_kwargs: {x: sample, y: log_intensity, color: sample, title: Marker intensity per sample}
+    title: Marker intensity per sample
+    description: log1p mean intensity over the cells of each sample, for the markers picked on the left (all markers when none is picked).
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    tag: mc-ov-fig-dominant
+    section: Marker intensities
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/dominant_marker_bar
+    visu_type: histogram
+    dict_kwargs: {x: dominant_marker, color: sample, title: Cells per dominant marker}
+    title: Cells per dominant marker
+    description: How many cells each marker dominates, per sample; a marker that dominates in one sample only points at a staining or exposure difference.
+    title_size: h3
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    tag: mc-ov-table-channels
+    section: Channel sheet
+    workflow_tag: mcmicro
+    data_collection_tag: mc-backsub-markers
+    use: backsub/markers
+    title: Channels of the corrected image
+    description: One row per channel Backsub kept, with its cycle, exposure and the background channel subtracted from it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+
+# ============================================================================
+# Image and cells
+# ============================================================================
+- title: Image and cells
+  subtitle: The registered image with its segmentation mask and one point per quantified cell
+  advanced_viz_controls: header
+  tab_order: 3
+  tab_icon: mdi:microscope
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cell filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: Narrows the cells drawn over the image, the table and the cards
+  grid_sections:
+  - name: Cell map
+    icon: mdi:microscope
+    color: indigo
+    description: The image of the sample picked on the left, its mask and its cells; lasso cells to filter the table
+  - name: Cells
+    icon: mdi:table
+    color: gray
+    description: One row per cell of the map; select a row to read the cell below
+  - name: Cell detail
+    icon: mdi:information-outline
+    color: indigo
+    description: The cell picked in the table
+  components:
+  - component_type: interactive
+    tag: mc-img-filter-dominant
+    index: mc-img-dominant-filter
+    section: Cell filters
+    group: Cell scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/dominant_marker_picker
+    interactive_component_type: MultiSelect
+    column_name: dominant_marker
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Dominant marker
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-img-filter-area
+    index: mc-img-area-filter
+    section: Cell filters
+    group: Cell scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/area_filter
+    interactive_component_type: RangeSlider
+    column_name: area
+    column_type: float64
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Cell area (pixels)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-img-filter-eccentricity
+    index: mc-img-eccentricity-filter
+    section: Cell filters
+    group: Cell scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/eccentricity_filter
+    interactive_component_type: RangeSlider
+    column_name: eccentricity
+    column_type: float64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Eccentricity
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: text
+    tag: mc-img-intro
+    section: Cell map
+    title: The image, its mask and its cells
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The viewer shows the first sample picked on the left, with the
+      segmentation mask drawn over it and one point per cell coloured by its
+      dominant marker. Lasso cells to narrow the table below, then select a
+      row to read that cell in full.
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: mc-img-av-viewer
+    index: mc-img-av-viewer
+    section: Cell map
+    workflow_tag: mcmicro
+    data_collection_tag: mc-img-registered
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: mc-img-registered
+      labels_dc_tag: mc-img-mask
+      labels_opacity: 0.4
+      labels_outline: true
+      sample_dc_tag: samples
+      sample_column: sample
+      points_dc_tag: mc-cells-primary
+      cell_id_col: cell_id
+      x_col: x_centroid
+      y_col: y_centroid
+      color_col: dominant_marker
+      points_sample_col: sample
+      point_radius: 3
+      show_scalebar: true
+      selection_enabled: true
+    title: Registered image with mask and cells
+    description: Pyramidal OME-TIFF read tile by tile; switch channels in the viewer controls. The mask and the points come from the same segmentation module.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+  - component_type: table
+    tag: mc-img-table-cells
+    section: Cells
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/cells
+    row_selection_enabled: true
+    row_selection_column: cell_uid
+    title: Cells on the map
+    description: One row per cell, with its marker intensities and morphology. A lasso on the image narrows it to the cells inside.
+    title_size: h3
+    title_align: left
+    page_size: 50
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: mc-img-av-record
+    index: mc-img-av-record
+    section: Cell detail
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: cell_uid
+      title_col: cell_uid
+      selection_source: any
+      linked_component: mc-img-table-cells
+      sections:
+        Cell: [cell_uid, sample, segmenter, cell_id, dominant_marker]
+        Position: [x_centroid, y_centroid]
+        Shape: [area, major_axis_length, minor_axis_length, eccentricity, solidity, extent, orientation]
+        Marker space: [pc_1, pc_2]
+    title: Cell record
+    description: The cell selected in the table, with its position, shape and place on the marker PCA; its marker intensities are the table columns.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+# ============================================================================
+# Markers
+# ============================================================================
+- title: Markers
+  subtitle: The marker panel read across cells, samples and design groups
+  advanced_viz_controls: header
+  tab_order: 4
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Marker filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Markers shown and cells kept, on top of the pinned sample filters
+  grid_sections:
+  - name: Marker distributions
+    icon: mdi:chart-bell-curve
+    color: violet
+    description: Intensity per marker across cells, and per marker and sample
+  - name: Marker space
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: Cells placed by their whole marker profile; lasso a group to compare
+  - name: Compare groups
+    icon: mdi:scale-balance
+    color: violet
+    description: Every marker tested between two groups of cells
+  components:
+  - component_type: interactive
+    tag: mc-mk-filter-marker
+    index: mc-mk-marker-filter
+    section: Marker filters
+    group: Marker scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_picker
+    interactive_component_type: MultiSelect
+    column_name: marker
+    column_type: object
+    display: {title_size: md, custom_color: '#7B1FA2', icon_name: 'mdi:microscope'}
+    placement: left
+    title: Marker
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-mk-filter-marker-type
+    index: mc-mk-marker-type-filter
+    section: Marker filters
+    group: Marker scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_type_picker
+    interactive_component_type: SegmentedControl
+    column_name: marker_type
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Marker or nuclear stain
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-mk-filter-dominant
+    index: mc-mk-dominant-filter
+    section: Marker filters
+    group: Cell scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/dominant_marker_picker
+    interactive_component_type: MultiSelect
+    column_name: dominant_marker
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Dominant marker
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: text
+    tag: mc-mk-intro
+    section: Marker distributions
+    title: Reading the panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each box is one marker's log1p intensity over the cells, and the heatmap
+      its median in each sample. A marker bright in one sample only, or flat
+      everywhere, is worth checking in the viewer before it is read biologically.
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: mc-mk-fig-marker-box
+    section: Marker distributions
+    workflow_tag: mcmicro
+    data_collection_tag: mc-markers-long
+    use: mcquant/marker_box
+    visu_type: box
+    dict_kwargs: {x: marker, y: log_intensity, color: marker_type, title: Marker intensity per marker}
+    title: Intensity per marker
+    description: log1p mean intensity over the cells, one box per marker; nuclear stains are coloured apart.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: advanced_viz
+    tag: mc-mk-av-heatmap
+    index: mc-mk-av-heatmap
+    section: Marker distributions
+    workflow_tag: mcmicro
+    data_collection_tag: mc-marker-matrix
+    use: mcquant/marker_heatmap
+    config: {controls_placement: header}
+    title: Median marker intensity per sample
+    description: One row per marker, one column per sample, median log1p intensity over that sample's cells.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: mc-mk-av-pca
+    index: mc-mk-av-pca
+    section: Marker space
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-primary
+    use: mcquant/marker_pca
+    config: {selection_enabled: true, selection_column: cell_uid, controls_placement: header}
+    title: Cells on the first two marker components
+    description: Principal components of the standardised log1p marker intensities; cells that share a phenotype group together. Colour by any column in the header, lasso a group to compare it below.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 8}
+  - component_type: text
+    tag: mc-cmp-intro
+    section: Compare groups
+    title: Two groups of cells, marker by marker
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      With no saved selection the comparison opens on two levels of the design
+      condition. Lasso cells on the marker map, save them as groups, and the
+      volcano tests every marker between those two groups instead.
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cell-markers
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: mc-mk-av-compare
+    index: mc-mk-av-compare
+    section: Compare groups
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cell-markers
+    viz_kind: group_compare
+    config:
+      viz_kind: group_compare
+      index_col: cell_uid
+      group_col: condition
+      test: wilcoxon
+      log_transform: true
+      min_observations: 3
+      controls_placement: header
+    title: Markers between two groups of cells
+    description: Wilcoxon test per marker on log1p intensity, between two design groups or two saved cell selections.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
+# ============================================================================
+# Segmentation QC
+# ============================================================================
+- title: Segmentation QC
+  subtitle: How the segmentation modules differ on the same images
+  advanced_viz_controls: header
+  tab_order: 5
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Segmentation filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Segmentation module and cell size, on top of the pinned sample filters
+  grid_sections:
+  - name: Module agreement
+    icon: mdi:scale-balance
+    color: cyan
+    description: Cell counts and cell shapes per segmentation module
+  - name: Second segmentation
+    icon: mdi:microscope
+    color: blue
+    description: The same image with the second module's mask and cells
+  - name: Per-sample roll-up
+    icon: mdi:table
+    color: gray
+    description: One row per sample and module; select a row to read it below
+  - name: Segmentation detail
+    icon: mdi:information-outline
+    color: cyan
+    description: The sample and module picked in the roll-up table
+  components:
+  - component_type: interactive
+    tag: mc-seg-filter-segmenter
+    index: mc-seg-segmenter-filter
+    section: Segmentation filters
+    group: Segmentation scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/segmenter_picker
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Segmentation module
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-seg-filter-area
+    index: mc-seg-area-filter
+    section: Segmentation filters
+    group: Segmentation scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/area_filter
+    interactive_component_type: RangeSlider
+    column_name: area
+    column_type: float64
+    display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Cell area (pixels)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: mc-seg-filter-solidity
+    index: mc-seg-solidity-filter
+    section: Segmentation filters
+    group: Segmentation scope
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/solidity_filter
+    interactive_component_type: RangeSlider
+    column_name: solidity
+    column_type: float64
+    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Solidity
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: text
+    tag: mc-seg-intro
+    section: Module agreement
+    title: Do the segmenters agree?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every module segments the same image, so differences in cell count and
+      shape come from the method, not the tissue. Much larger or more elongated
+      cells from one module usually mean merged neighbours, many tiny ones a
+      split nucleus.
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: mc-seg-card-cells
+    index: mc-seg-card-cells
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/cells
+    aggregation: count
+    column_name: cell_uid
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: segmenter
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells per module
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mc-seg-card-area
+    index: mc-seg-card-area
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: area
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area, every module
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mc-seg-card-eccentricity
+    index: mc-seg-card-eccentricity
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: eccentricity
+    column_type: float64
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Eccentricity
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mc-seg-card-solidity
+    index: mc-seg-card-solidity
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: solidity
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Solidity
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: mc-seg-fig-area
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/area_by_segmenter
+    visu_type: box
+    dict_kwargs: {x: segmenter, y: area, color: segmenter, title: Cell area per segmenter}
+    title: Cell area per module
+    description: Area in pixels of every cell, per segmentation module.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 4, h: 6}
+  - component_type: figure
+    tag: mc-seg-fig-eccentricity
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells
+    use: mcquant/eccentricity_by_segmenter
+    visu_type: box
+    dict_kwargs: {x: segmenter, y: eccentricity, color: segmenter, title: Cell eccentricity per segmenter}
+    title: Cell eccentricity per module
+    description: 0 is a round cell, 1 a line; merged neighbours push a module's box up.
+    title_size: h3
+    layout: {x: 4, y: 4, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: mc-seg-av-profiles
+    index: mc-seg-av-profiles
+    section: Module agreement
+    workflow_tag: mcmicro
+    data_collection_tag: mc-sample-summary
+    use: mcquant/segmenter_profiles
+    config:
+      metric_cols: [n_cells, median_area, median_major_axis_length, median_minor_axis_length, median_eccentricity, median_solidity, median_extent]
+      scale: minmax
+      controls_placement: header
+    title: Sample and module profiles
+    description: One line per sample and module across its cell count and median shape; the modules separate on the axes where they disagree.
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 7}
+  - component_type: text
+    tag: mc-seg-viewer-intro
+    section: Second segmentation
+    title: The second module on the same image
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The mask and cells of the second segmentation module over the same image
+      as the Image tab. It stays empty on a run that used a single module.
+    workflow_tag: mcmicro
+    data_collection_tag: mc-cells-compare
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: mc-seg-av-viewer
+    index: mc-seg-av-viewer
+    section: Second segmentation
+    workflow_tag: mcmicro
+    data_collection_tag: mc-img-registered
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: mc-img-registered
+      labels_dc_tag: mc-img-mask-compare
+      labels_opacity: 0.4
+      labels_outline: true
+      sample_dc_tag: samples
+      sample_column: sample
+      points_dc_tag: mc-cells-compare
+      cell_id_col: cell_id
+      x_col: x_centroid
+      y_col: y_centroid
+      color_col: area
+      points_sample_col: sample
+      point_radius: 3
+      show_scalebar: true
+      selection_enabled: false
+    title: Registered image with the second module's mask
+    description: Cells coloured by area, so merged or split cells stand out against their neighbours.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+  - component_type: table
+    tag: mc-seg-table-summary
+    section: Per-sample roll-up
+    workflow_tag: mcmicro
+    data_collection_tag: mc-sample-summary
+    use: mcquant/sample_summary
+    row_selection_enabled: true
+    row_selection_column: summary_id
+    title: Cells and shape per sample and module
+    description: One row per sample and segmentation module, with its cell count and median shape.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: mc-seg-av-record
+    index: mc-seg-av-record
+    section: Segmentation detail
+    workflow_tag: mcmicro
+    data_collection_tag: mc-sample-summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: summary_id
+      title_col: summary_id
+      selection_source: any
+      linked_component: mc-seg-table-summary
+      sections:
+        Sample: [summary_id, sample, segmenter, n_markers]
+        Cells: [n_cells]
+        Median shape: [median_area, median_major_axis_length, median_minor_axis_length, median_eccentricity, median_solidity, median_extent]
+    title: Sample and module record
+    description: The row selected in the roll-up table.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 5}

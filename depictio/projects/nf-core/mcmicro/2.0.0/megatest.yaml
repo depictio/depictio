@@ -1,0 +1,98 @@
+# Megatest manifest for nf-core/mcmicro 2.0.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the subset of
+# it the template reads. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline mcmicro --version 2.0.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# The run is the test_full profile: two samples of two cycles each (the same
+# tonsil CyCIF cycles, shifted by one), BaSiCPy illumination correction,
+# Backsub, and both Mesmer and Cellpose segmentation, quantified by MCQUANT.
+# The whole results prefix is 46 MB, so every image and mask is fetched: the
+# registered OME-TIFFs (3.6 MB each), the background-subtracted ones (14 MB
+# each), the masks and the BaSiCPy profiles.
+#
+# The samplesheet is not published by the run (params.json names the
+# pipeline's assets/samplesheet-test_full.csv); it is vendored in input/ with
+# the marker sheet and a design table. Copy input/ into the destination after
+# fetching (see post_fetch_help).
+#
+# MultiQC: the run wrote MultiQC 1.32 with a parquet, so no reprocessing. Only
+# the pipeline's custom-content input checks (matrix_summary) are in it.
+pipeline: mcmicro
+version: "2.0.0"
+# s3://nf-core-awsmegatests/mcmicro/results-<results_sha>/ == the 2.0.0 release tag_sha.
+results_sha: "f4400001578642e370a72668966c6602fe172ef6"
+run_root: ""
+multiqc:
+  version: "1.32"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+# PORTABILITY. Keys are anchored on the tool directory that identifies the
+# output (registration/ashlar/, segmentation/<module>/, quantification/mcquant/),
+# with a leading `*` so a run published one level deeper still matches.
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  - multiqc/multiqc_data/multiqc.parquet
+  - multiqc/multiqc_data/*.txt
+  - multiqc/multiqc_data/*.json
+  - multiqc/multiqc_data/*.log
+  # The pipeline's input checks (OME-XML and samplesheet), under prelude/ or
+  # summary/ depending on the run mode.
+  - "*_mqc.tsv"
+  - "*_variables.tsv"
+  - "*multi_summary_errors.tsv"
+  - "*bftools/*.xml"
+  # Images: ASHLAR registration, Backsub, BaSiCPy profiles.
+  - "*registration/ashlar/*.ome.tif"
+  - "*backsub/*_backsub.ome.tif"
+  - "*backsub/*_backsub.csv"
+  - "*illumination_correction/basicpy/*.ome.tif"
+  # Segmentation masks (plain integer TIFF labels), one directory per module.
+  - "*segmentation/*/*.tif"
+  # MCQUANT single-cell tables, one directory per module.
+  - "*quantification/mcquant/*/*.csv"
+  # TMA dearraying (absent on this run, --tma_dearray false).
+  - "*tma_dearray/centroidsY-X.txt"
+  - "*tma_dearray/masks/*_mask.tif"
+prefix_keys: []
+# Megatest-specific names the dashboard texts must never carry (lint:
+# depictio/tests/models/test_template_conventions.py, rule e): the sample ids,
+# the tissue and the marker names of the test marker sheet.
+forbidden_terms:
+  - TEST1
+  - TEST2
+  - tonsil
+  - DNA_6
+  - DNA_7
+  - ELANE
+  - ELANE7
+  - CD57
+  - CD45
+  - CD577
+  - CD457
+  - CyCIF
+renames: {}
+post_fetch_help: |
+  === Copy the vendored inputs ===
+
+  The run does not publish its samplesheet; the template's input/ carries it,
+  with the marker sheet and a design table (column `acquisition`):
+
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/mcmicro/2.0.0/input/* {dest}/input/
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/mcmicro/2.0.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/metadata.tsv --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/mcmicro/2.0.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/metadata.tsv
