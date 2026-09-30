@@ -1,0 +1,17 @@
+sample	gene	status	spots	pct_of_sample
+slideA_roi-1	Nppa	kept	1063	42.3169
+slideA_roi-1	Vim	kept	348	13.8535
+slideA_roi-1	Clu	kept	319	12.6990
+slideA_roi-1	Pln	kept	197	7.8424
+slideA_roi-1	Mybpc3	kept	87	3.4634
+slideA_roi-1	Duplicated	duplicated	67	2.6672
+slideA_roi-1	Pecam1	kept	56	2.2293
+slideB_roi-2	Nppa	kept	1061	42.2373
+slideB_roi-2	Vim	kept	347	13.8137
+slideB_roi-2	Clu	kept	316	12.5796
+slideB_roi-2	Pln	kept	195	7.7627
+slideB_roi-2	Mybpc3	kept	87	3.4634
+slideB_roi-2	Duplicated	duplicated	76	3.0255
+slideB_roi-2	Pecam1	kept	55	2.1895
+slideA_roi-1	Duplicated	duplicated	67	2.6672
+slideB_roi-2	Duplicated	duplicated	76	3.0255

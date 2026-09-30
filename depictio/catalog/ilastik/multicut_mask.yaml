@@ -1,0 +1,15 @@
+id: ilastik_multicut_mask
+name: ilastik Multicut mask
+mode: multicut/mask
+description: >-
+  The Multicut segmentation of each image, one integer label per cell, as the
+  module writes it (`<prefix>.tiff`) or as nf-core/molkart publishes it
+  (`<sample>_ilastik_<sample>.tiff`).
+find:
+  path_glob: "**/ilastik/*.tiff"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+?)(?:_ilastik_.+)?\\.tiff$"
+renders_as: []

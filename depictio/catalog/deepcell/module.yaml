@@ -1,0 +1,4 @@
+id: deepcell
+name: DeepCell Mesmer
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/deepcell/mesmer
+homepage: https://github.com/vanvalenlab/deepcell-tf

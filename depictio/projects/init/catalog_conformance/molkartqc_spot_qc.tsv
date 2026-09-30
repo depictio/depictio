@@ -1,0 +1,10 @@
+sample	segmentation_method	total_cells	avg_area	total_spots	spot_assign_per_cell	spot_assign_total	spot_assign_percent	spots_unassigned	duplicated_total	duplicated_percent	labels_total	labels_below_thresh	labels_above_thresh	labels_removed_percent
+fov3	cellpose	52	99.2300	2441	3.0000	156	6.3900	2285	71	2.8264	52	0	0	0.0000
+fov3	mesmer	52	205.1000	2441	6.1000	317	12.9900	2124	71	2.8264	52	0	0	0.0000
+fov3	stardist	52	44.5200	2441	1.3700	71	2.9100	2370	71	2.8264	52	0	0	0.0000
+slideA_roi-1	cellpose	52	99.2300	2445	2.9200	152	6.2200	2293	67	2.6672	52	0	0	0.0000
+slideA_roi-1	mesmer	52	205.1000	2445	5.9600	310	12.6800	2135	67	2.6672	52	0	0	0.0000
+slideA_roi-1	stardist	52	44.5200	2445	1.3700	71	2.9000	2374	67	2.6672	52	0	0	0.0000
+slideB_roi-2	cellpose	52	99.2300	2436	2.9400	153	6.2800	2283	76	3.0255	52	0	0	0.0000
+slideB_roi-2	mesmer	52	205.1000	2436	5.9800	311	12.7700	2125	76	3.0255	52	0	0	0.0000
+slideB_roi-2	stardist	52	44.5200	2436	1.3500	70	2.8700	2366	76	3.0255	52	0	0	0.0000

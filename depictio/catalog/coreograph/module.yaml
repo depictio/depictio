@@ -1,0 +1,4 @@
+id: coreograph
+name: Coreograph
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/coreograph
+homepage: https://github.com/HMS-IDAC/UNetCoreograph

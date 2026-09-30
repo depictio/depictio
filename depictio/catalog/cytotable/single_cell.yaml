@@ -1,0 +1,26 @@
+id: cytotable_single_cell
+name: Single-cell profiles
+mode: profiling/single_cell
+description: >-
+  One row per segmented cell of every imaging site, from the CytoTable Parquet
+  files: the plate, well and site parsed from the file name, the CellProfiler
+  identifiers, the nucleus position and a curated subset of about two dozen
+  morphological features (size and shape, DNA content, stain intensities,
+  texture, granularity, colocalisation, crowding) out of the thousands the
+  analysis pipeline measures. The columns are projected at read time, so a
+  full plate never loads the full measurement width.
+find:
+  path_glob: "**/cytotable/*.parquet"
+recipe: cytotable/single_cell.py
+fixture: single_cell.tsv
+renders_as:
+  - { id: shape_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: nucleus_area, y: cell_area, label: cell_id, color: well} }
+  - { id: dna_content_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: nucleus_dna_integrated, color: well, title: Integrated nuclear DNA intensity} }
+  - { id: cell_area_box, component: figure, visu_type: box, dict_kwargs: {x: well, y: cell_area, title: Cell area per well} }
+  - { component: card, column: cell_id, aggregation: count, secondary_layout: top_n, breakdown_col: well, top_n_count: 3 }
+  - { component: card, column: cell_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: nucleus_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: nucleus_dna_integrated, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: cell_neighbors, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: cell_area_filter, component: interactive, interactive_type: RangeSlider, column_name: cell_area }
+  - { component: table, row_selection_enabled: true, row_selection_column: cell_id }

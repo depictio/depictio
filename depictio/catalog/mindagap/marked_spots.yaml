@@ -1,0 +1,18 @@
+id: mindagap_marked_spots
+name: Spots per gene
+mode: duplicatefinder/marked_spots
+description: >-
+  The marked spot table counted per sample and gene, with the spots set aside
+  as duplicates along the tile grid on their own row: how many transcripts each
+  gene contributes before any segmentation.
+find:
+  path_glob: "**/*_markedDups.txt"
+recipe: mindagap/marked_spots.py
+fixture: marked_spots.tsv
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mindagap/duplicatefinder
+renders_as:
+  - { id: spots_per_gene, component: figure, visu_type: bar, dict_kwargs: {x: gene, y: pct_of_sample, color: sample, barmode: group, title: Spots per gene} }
+  - { id: status_picker, component: interactive, interactive_type: SegmentedControl, column_name: status }
+  - { component: card, column: spots, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: donut, breakdown_col: status }
+  - { component: table }

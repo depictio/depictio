@@ -1,0 +1,16 @@
+id: spatialdata_visium_cluster_composition
+name: Cluster composition
+mode: sdata/table/clusters
+description: >-
+  Spots per cluster of each sample, for the per-sample Leiden clustering and,
+  when integration ran, the integrated one, as counts and as a share of the
+  sample's spots, the twelve largest clusters of each clustering kept and the
+  rest pooled as Other.
+find: { path_glob: "**/integration/data/merged.zarr" }
+recipe: spatialdata/visium_cluster_composition.py
+fixture: visium_cluster_composition.tsv
+renders_as:
+  - { id: composition_bars, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_spots, color: cluster, facet_col: clustering} }
+  - { component: card, column: n_spots, aggregation: sum, secondary_layout: top_n, breakdown_col: cluster, top_n_count: 3 }
+  - { component: interactive, interactive_type: Select, column_name: clustering }
+  - { id: composition_table, component: table }

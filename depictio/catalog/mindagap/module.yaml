@@ -1,0 +1,8 @@
+id: mindagap
+name: Mindagap
+description: >-
+  Fills the empty grid lines of a tiled panorama image and marks transcript
+  spots duplicated across tile borders (Molecular Cartography and similar
+  imaging-based spatial transcriptomics).
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mindagap/duplicatefinder
+homepage: https://github.com/ViriatoII/MindaGap

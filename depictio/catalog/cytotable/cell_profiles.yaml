@@ -1,0 +1,18 @@
+id: cytotable_cell_profiles
+name: Single-cell feature matrix
+mode: profiling/cell_matrix
+description: >-
+  The curated single-cell features as a cell x feature matrix with nothing else
+  numeric, each cell labelled with its well and the well's perturbation group
+  from the plate map: the matrix a two-group comparison tests feature by
+  feature, between two plate-map groups or two saved selections.
+find:
+  path_glob: "**/cytotable/*.parquet"
+recipe: cytotable/cell_profiles.py
+fixture: cell_profiles.tsv
+renders_as:
+  - { id: group_feature_compare, component: advanced_viz, kind: group_compare, roles: {index: cell_id, group: group} }
+  - { id: feature_violin, component: figure, visu_type: violin, dict_kwargs: {x: group, y: cell_area, title: Cell area by group} }
+  - { id: cell_group_filter, component: interactive, interactive_type: MultiSelect, column_name: group }
+  - { component: card, column: cell_id, aggregation: count, secondary_layout: donut, breakdown_col: group }
+  - { component: table, row_selection_enabled: true, row_selection_column: cell_id }

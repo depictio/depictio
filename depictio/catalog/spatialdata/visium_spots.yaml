@@ -1,0 +1,26 @@
+id: spatialdata_visium_spots
+name: Visium spots
+mode: sdata/table
+description: >-
+  One row per spot kept by the pipeline's QC filter: position in the pixels of
+  the tissue image, total counts, genes detected, mitochondrial, ribosomal and
+  haemoglobin fractions, the per-sample Leiden cluster and, when integration
+  ran, the integrated cluster, read from the store's AnnData table.
+find: { path_glob: "**/integration/data/merged.zarr" }
+recipe: spatialdata/visium_spots.py
+fixture: visium_spots.tsv
+renders_as:
+  - { id: spot_map, component: advanced_viz, kind: scatter_xy, roles: {x: x, y: y, color: cluster, label: spot_uid} }
+  - { id: counts_vs_genes, component: advanced_viz, kind: scatter_xy, roles: {x: total_counts, y: n_genes, color: cluster, label: spot_uid} }
+  - { id: counts_by_cluster, component: figure, visu_type: box, dict_kwargs: {x: cluster, y: total_counts, color: cluster} }
+  - { id: cluster_crosstab, component: figure, visu_type: histogram, dict_kwargs: {x: cluster_integrated, color: cluster} }
+  - { component: card, column: spot_uid, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: total_counts, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_genes, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: cluster, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster }
+  - { component: interactive, interactive_type: MultiSelect, column_name: cluster }
+  - { component: interactive, interactive_type: MultiSelect, column_name: cluster_integrated }
+  - { component: interactive, interactive_type: RangeSlider, column_name: total_counts }
+  - { component: interactive, interactive_type: RangeSlider, column_name: n_genes }
+  - { id: spot_record, component: advanced_viz, kind: record_card, roles: {id: spot_uid, title: spot_uid} }
+  - { id: spot_table, component: table, row_selection_enabled: true, row_selection_column: spot_uid }

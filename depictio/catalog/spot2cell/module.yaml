@@ -1,0 +1,19 @@
+# nf-core/molkart's spot-to-cell assignment. A LOCAL module of the pipeline
+# (modules/local/spot2cell, bin/spot2cell.py), not an nf-core/modules entry, so
+# identity is declared in full with `source_url` (the enchantr / cutandrun shape).
+#
+# Spot2cell drops the spots Mindagap marked as duplicated, then counts the
+# remaining transcripts of every gene inside each label of the area-filtered
+# segmentation mask, one wide CSV per sample and segmentation method:
+# `spot2cell/cellxgene_<sample>_<method>.csv` (CellID, one column per gene, the
+# label's regionprops). The masks it read are published by molkart's MASKFILTER
+# step under `segmentation/filtered_masks/`; they are declared here as the
+# `cell_masks` labels output because their label values are this table's CellID.
+id: spot2cell
+name: Spot2cell
+description: >-
+  Assigns deduplicated transcript spots to segmented cells and measures each
+  cell's shape: the cell-by-gene table of an imaging-based spatial
+  transcriptomics run, written by nf-core/molkart.
+source_url: https://github.com/nf-core/molkart/blob/1.2.0/modules/local/spot2cell/main.nf
+homepage: https://github.com/nf-core/molkart/blob/1.2.0/bin/spot2cell.py

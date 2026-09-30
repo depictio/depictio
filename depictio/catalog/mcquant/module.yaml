@@ -1,0 +1,4 @@
+id: mcquant
+name: MCQUANT
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mcquant
+homepage: https://github.com/labsyspharm/quantification

@@ -1,0 +1,28 @@
+id: cytotable_well_profile
+name: Per-well median profiles
+mode: profiling/well_profile
+description: >-
+  One row per well: sites imaged, cells segmented, the median of every curated
+  single-cell feature (the aggregation image-based profiling compares
+  perturbations on) and the same medians as robust z-scores across the run's
+  wells, plus the well's perturbation group from the plate map. The z-scored
+  columns are the well x feature heatmap; the medians feed the per-group box
+  plots and the well record.
+find:
+  path_glob: "**/cytotable/*.parquet"
+recipe: cytotable/well_profile.py
+fixture: well_profile.tsv
+renders_as:
+  - { id: well_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: well_id} }
+  - { id: well_record, component: advanced_viz, kind: record_card, roles: {id: well_id} }
+  - { id: cells_per_well_bar, component: figure, visu_type: bar, dict_kwargs: {x: well_id, y: n_cells, color: group, title: Cells segmented per well} }
+  - { id: group_cell_area_box, component: figure, visu_type: box, dict_kwargs: {x: group, y: cell_area, points: all, title: "Median cell area per well, by group"} }
+  - { id: group_dna_box, component: figure, visu_type: box, dict_kwargs: {x: group, y: nucleus_dna_integrated, points: all, title: "Median nuclear DNA per well, by group"} }
+  - { id: well_group_filter, component: interactive, interactive_type: MultiSelect, column_name: group }
+  - { id: well_cells_filter, component: interactive, interactive_type: RangeSlider, column_name: n_cells }
+  - { component: card, column: n_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: well_id, top_n_count: 3 }
+  - { component: card, column: cells_per_site, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: well_id, aggregation: count, secondary_layout: donut, breakdown_col: group }
+  - { component: card, column: cell_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: nucleus_dna_integrated, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, row_selection_enabled: true, row_selection_column: well_id }

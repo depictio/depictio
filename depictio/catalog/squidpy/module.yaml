@@ -1,0 +1,20 @@
+# Squidpy spatial statistics as nf-core/spatialvi runs them: local modules
+# (modules/local/squidpy/*) calling squidpy on each sample's AnnData, so
+# identity is declared here and the provenance link is `source_url`.
+#
+# Outputs:
+#   * `spatial_autocorr`  the spatially variable genes table the pipeline
+#                         publishes per sample (`<sample>_svg.csv`): Moran's I
+#                         or Geary's C per gene with its p-values.
+#
+# The neighbourhood enrichment and interaction matrices stay in the AnnData
+# `uns` of the per-sample .h5ad (not read) and in the Quarto report.
+id: squidpy
+name: Squidpy
+description: >-
+  Spatial single-cell and spatial transcriptomics analysis: spatial neighbour
+  graphs, neighbourhood enrichment, cluster interaction matrices and spatial
+  autocorrelation (Moran's I, Geary's C) to rank spatially variable genes.
+homepage: https://squidpy.readthedocs.io
+source_url: https://github.com/nf-core/spatialvi/tree/dev/modules/local/squidpy
+biotools_url: https://bio.tools/squidpy

@@ -1,0 +1,23 @@
+id: squidpy_spatial_autocorr
+name: Spatially variable genes
+mode: gr/spatial_autocorr
+description: >-
+  Spatial autocorrelation of every tested gene of every sample (Moran's I or
+  Geary's C over the spot neighbour graph), with its normal-approximation
+  p-value and Benjamini-Hochberg q-value, ranked within the sample so the
+  strongest spatial pattern comes first whatever the statistic.
+find:
+  path_glob: "**/data/*_svg.csv"
+recipe: squidpy/spatial_autocorr.py
+fixture: spatial_autocorr.tsv
+renders_as:
+  - { id: svg_volcano, component: advanced_viz, kind: scatter_xy, roles: {x: spatial_score, y: neg_log10_qval, color: significant, label: gene} }
+  - { id: svg_score_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: spatial_score, color: sample} }
+  - { id: svg_score_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: spatial_score, color: sample} }
+  - { component: card, column: significant_flag, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: spatial_score, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: RangeSlider, column_name: spatial_score }
+  - { component: interactive, interactive_type: Slider, column_name: neg_log10_qval }
+  - { component: interactive, interactive_type: MultiSelect, column_name: significant }
+  - { id: gene_record, component: advanced_viz, kind: record_card, roles: {id: gene_uid, title: gene} }
+  - { id: svg_table, component: table, row_selection_enabled: true, row_selection_column: gene_uid }

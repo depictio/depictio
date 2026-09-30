@@ -1,0 +1,20 @@
+id: cellprofiler_image_quality
+name: Image quality per site and channel
+mode: imaging/image_quality
+description: >-
+  The MeasureImageQuality numbers CellProfiler writes to Image.csv for every
+  raw channel of every analysed site, one row per site and channel: focus
+  score, power log-log slope (more negative is blurrier), share of saturated
+  pixels and mean intensity, next to the cells segmented on the site. The
+  fields to drop before profiling are the out-of-focus or saturated ones.
+find:
+  path_glob: "**/cellprofiler/analysis/**/Image.csv"
+recipe: cellprofiler/image_quality.py
+fixture: image_quality.tsv
+renders_as:
+  - { id: focus_box, component: figure, visu_type: box, dict_kwargs: {x: channel, y: power_log_log_slope, points: all, title: Power log-log slope per channel} }
+  - { id: saturation_box, component: figure, visu_type: box, dict_kwargs: {x: channel, y: percent_saturated, points: all, title: Saturated pixels per channel} }
+  - { id: channel_filter, component: interactive, interactive_type: MultiSelect, column_name: channel }
+  - { component: card, column: power_log_log_slope, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: site_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: well, top_n_count: 3 }
+  - { component: table }

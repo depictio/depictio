@@ -1,0 +1,13 @@
+# nf-core/molkart's own QC sheet. A LOCAL module (modules/local/molkartqc,
+# bin/collect_QC.py), so identity is declared in full with `source_url`.
+# MultiQC renders the same rows as the custom-content table "QC statistics from
+# segmentation"; this entry reads the per-sample CSVs directly so the numbers
+# are typed and the sample id is split from the segmentation method.
+id: molkartqc
+name: MolkartQC
+description: >-
+  Per sample and segmentation method: cells kept, mean cell area, spots, spots
+  assigned to cells and duplicated spots, the headline QC of an imaging-based
+  spatial transcriptomics run in nf-core/molkart.
+source_url: https://github.com/nf-core/molkart/blob/1.2.0/modules/local/molkartqc/main.nf
+homepage: https://github.com/nf-core/molkart/blob/1.2.0/bin/collect_QC.py

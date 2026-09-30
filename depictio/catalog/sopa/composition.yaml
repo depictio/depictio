@@ -1,0 +1,13 @@
+id: sopa_composition
+name: Cluster and cell type composition
+description: >-
+  Share of each sample's cells per cluster and per fluorescence cell type, the
+  twelve most abundant labels of the run kept and the rest pooled as Other.
+find: { path_glob: "**/*.zarr" }
+recipe: sopa/composition.py
+fixture: composition.tsv
+renders_as:
+  - { id: composition_bars, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_cells, color: label, facet_col: annotation} }
+  - { component: card, column: n_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: label, top_n_count: 3 }
+  - { component: interactive, interactive_type: MultiSelect, column_name: label }
+  - { component: table }

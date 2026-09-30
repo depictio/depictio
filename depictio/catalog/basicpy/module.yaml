@@ -1,0 +1,4 @@
+id: basicpy
+name: BaSiCPy
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/basicpy
+homepage: https://github.com/peng-lab/BaSiCPy

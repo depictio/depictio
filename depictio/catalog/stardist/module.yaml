@@ -1,0 +1,7 @@
+id: stardist
+name: StarDist
+description: >-
+  Star-convex polygon detection of nuclei in fluorescence images, with
+  pretrained 2D models; writes one integer label per nucleus.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/stardist
+homepage: https://github.com/stardist/stardist
