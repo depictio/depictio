@@ -554,6 +554,7 @@ tabs:
       sample_column: sample
       points_dc_tag: mc-cells-primary
       cell_id_col: cell_id
+      selection_column: cell_uid
       x_col: x_centroid
       y_col: y_centroid
       color_col: dominant_marker
@@ -999,6 +1000,7 @@ tabs:
       sample_column: sample
       points_dc_tag: mc-cells-compare
       cell_id_col: cell_id
+      selection_column: cell_uid
       x_col: x_centroid
       y_col: y_centroid
       color_col: area
