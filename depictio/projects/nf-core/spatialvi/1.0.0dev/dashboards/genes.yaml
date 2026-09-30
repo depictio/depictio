@@ -1,0 +1,262 @@
+version: 1
+# nf-core/spatialvi 1.0.0dev: Genes on tissue (imported only when GENES is set).
+#
+# One row per spot and gene of the GENES list, read from the normalised X of the
+# IMAGE_SAMPLE table. Pick one gene in the gene filter: the viewer then holds one
+# point per spot, coloured by that gene's expression. With several genes picked,
+# each spot is drawn once per gene and the colours overlap.
+main_dashboard:
+  title: nf-core/spatialvi genes on tissue
+  subtitle: "Expression of the genes chosen for the run, per spot of one sample, on the tissue image and by cluster"
+  advanced_viz_controls: header
+  project_tag: Visium Spatial Transcriptomics
+  main_tab_name: Genes on tissue
+  tab_icon: mdi:dna
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies through the project links
+    persistent: true
+    pin: top
+  - name: Gene filters
+    icon: mdi:tune
+    color: violet
+    description: Pick one gene to colour the spots by it
+  grid_sections:
+  - name: Expression in numbers
+    icon: mdi:counter
+    color: violet
+    description: Spots, genes and expression of the picked genes
+    persistent: true
+    pin: top
+  - name: Expression on tissue
+    icon: mdi:microscope
+    color: violet
+    description: The tissue image with the spots coloured by expression
+  - name: Expression by cluster
+    icon: mdi:chart-box-outline
+    color: grape
+    description: Whether the gene marks a cluster
+  - name: Expression table
+    icon: mdi:table
+    color: gray
+    description: One row per spot and gene
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: sv-ge-filter-sample
+    index: sv-ge-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-ge-filter-group
+    index: sv-ge-group-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: "{GROUP_COL}"
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:account-group-outline'}
+    placement: left
+    title: "{GROUP_COL_DISPLAY}"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-ge-filter-gene
+    index: sv-ge-gene-filter
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    use: spatialdata/visium_gene_expression
+    interactive_component_type: Select
+    column_name: gene
+    column_type: object
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:dna'}
+    placement: left
+    title: Gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-ge-filter-cluster
+    index: sv-ge-cluster-filter
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    interactive_component_type: MultiSelect
+    column_name: cluster
+    column_type: object
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Leiden cluster
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - component_type: text
+    tag: sv-ge-intro
+    section: Expression in numbers
+    title: Where a gene is expressed
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Normalised expression of the genes chosen for the run, per spot of the
+      sample on the image. Pick one gene to colour the tissue by it, then read
+      whether it marks a cluster.
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sv-ge-card-spots
+    index: sv-ge-card-spots
+    section: Expression in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    aggregation: nunique
+    column_name: spot_uid
+    column_type: object
+    display: {icon_name: 'mdi:map-marker-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spots
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-ge-card-genes
+    index: sv-ge-card-genes
+    section: Expression in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    aggregation: nunique
+    secondary_layout: donut
+    breakdown_col: gene
+    column_name: gene
+    column_type: object
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes read
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-ge-card-median
+    index: sv-ge-card-median
+    section: Expression in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    use: spatialdata/visium_gene_expression
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: expression
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median expression
+    description: Normalised log expression, over the spots and genes in view.
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-ge-card-max
+    index: sv-ge-card-max
+    section: Expression in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: expression
+    column_type: float64
+    display: {icon_name: 'mdi:star-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Highest expression
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: advanced_viz
+    tag: sv-ge-av-viewer
+    index: sv-ge-av-viewer
+    section: Expression on tissue
+    workflow_tag: spatialvi
+    data_collection_tag: sv-img-tissue
+    viz_kind: bioimage_viewer
+    use: spatialdata/spot_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: sv-img-tissue
+      points_dc_tag: sv-genes-expression
+      cell_id_col: spot_uid
+      x_col: x
+      y_col: y
+      color_col: expression
+      show_scalebar: false
+      selection_enabled: true
+    title: Expression on the tissue
+    description: The hires tissue image, spots coloured by expression of the gene picked in the gene filter.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 9}
+  - component_type: advanced_viz
+    tag: sv-ge-av-map
+    index: sv-ge-av-map
+    section: Expression on tissue
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    viz_kind: scatter_xy
+    use: spatialdata/expression_map
+    config:
+      viz_kind: scatter_xy
+      x_col: x
+      y_col: y
+      size_col: expression
+      color_col: cluster
+      label_col: spot_uid
+      x_title: Image x (px)
+      y_title: Image y (px)
+      min_size: 2
+      max_size: 12
+      selection_enabled: true
+      selection_column: spot_uid
+    title: Expression map without the image
+    description: The same spots on their own, sized by expression and coloured by cluster, to read expression against the clusters.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 8}
+
+  - component_type: figure
+    tag: sv-ge-fig-by-cluster
+    index: sv-ge-fig-by-cluster
+    section: Expression by cluster
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    use: spatialdata/expression_by_cluster
+    visu_type: box
+    dict_kwargs: {x: cluster, y: expression, color: cluster}
+    title: Expression by Leiden cluster
+    description: A gene high in one cluster only is a candidate marker of that region.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  - component_type: table
+    tag: sv-ge-table
+    section: Expression table
+    workflow_tag: spatialvi
+    data_collection_tag: sv-genes-expression
+    use: spatialdata/expression_table
+    columns: [spot_uid, sample, gene, expression, cluster, x, y]
+    page_size: 50
+    title: Expression per spot
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}

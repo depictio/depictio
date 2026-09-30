@@ -1,0 +1,68 @@
+# Megatest manifest for nf-core/spatialvi 1.0.0dev (read by scripts/nfcore_megatest.py).
+#
+# UNRELEASED PIPELINE, NO MEGATEST. nf-core/spatialvi (formerly
+# spatialtranscriptomics) has no release, so there is no AWS megatest prefix
+# and `results_sha` stays null. The template follows the `dev` branch pinned at
+# 441ded53109f57ecf70555fb0b060546b34b4a2c (2026-09-15, manifest 1.0dev,
+# Nextflow !>=25.10.4). The reference run is the `test` profile on the EMBL
+# cluster (scripts/nfcore_validation_hpc.py, key `spatialvi`, with
+# --publish_dir_mode copy): one CytAssist 11 mm FFPE sample on a chr22 probe
+# set, Space Ranger run by the pipeline. `test_full` points at a sample sheet
+# that no longer exists (404) and is not used.
+#
+# Offline, the template was checked on a synthetic run: the test-dataset Space
+# Ranger outs duplicated into two samples and the pipeline's own module
+# templates (read_data, quality_controls, clustering, svg, integration)
+# executed outside Nextflow, see VALIDATION_REPORT.md.
+#
+# Expected layout below DATA_ROOT (= the run's --outdir):
+#   <sample>/spaceranger/outs/metrics_summary.csv, spatial/tissue_positions.csv
+#   <sample>/data/<sample>_svg.csv
+#   integration/data/merged.zarr, integration/data/<method>.zarr  SpatialData
+#   multiqc/multiqc_data/multiqc.parquet   (MultiQC 1.29 pinned by the module)
+#   pipeline_info/params_*.json, *software*versions*.yml
+#   input/samplesheet.csv                  the --input sheet, copied here
+pipeline: spatialvi
+version: "1.0.0dev"
+results_sha: null
+run_root: ""
+multiqc:
+  version: "1.29"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - input/samplesheet*.csv
+  - multiqc/multiqc_data/multiqc.parquet
+  - "*/spaceranger/outs/metrics_summary.csv"
+  - "*/spaceranger/outs/web_summary.html"
+  - "*/spaceranger/outs/spatial/tissue_positions.csv"
+  - "*/spaceranger/outs/spatial/scalefactors_json.json"
+  - "*/data/*_svg.csv"
+prefix_keys:
+  - integration/data/merged.zarr/
+  - integration/data/harmony.zarr/
+renames: {}
+post_fetch_help: |
+  No megatest (unreleased pipeline): produce the run on the cluster with
+    python scripts/nfcore_validation_hpc.py run --key spatialvi
+  fetch it, copy the --input samplesheet to <DATA_ROOT>/input/, then
+    python -m depictio.cli run --template nf-core/spatialvi/1.0.0dev --data-root <DATA_ROOT> \
+      --var IMAGE_SAMPLE=<sample, as the store spells it> \
+      [--var METADATA_FILE=<DATA_ROOT>/input/samplesheet.csv] [--var GENES=<gene id>,<gene id>]
+# Sample id, slide serial, tissue and reference of the test data, and the gene
+# ids used in the offline checks.
+forbidden_terms:
+  - CytAssist_11mm_FFPE_Human_Glioblastoma_2
+  - CytAssist_11mm_FFPE_Human_Glioblastoma_22
+  - CytAssist
+  - Glioblastoma
+  - glioblastoma
+  - V52Y10-317
+  - V52Y10
+  - FFPE
+  - chr22
+  - ENSG00000117707
+  - ENSG00000135838
+  - ENSG00000198804
