@@ -95,6 +95,12 @@ AdvancedVizKind = Literal[
     # is how a QC table with a dozen columns is read as a whole.
     "record_card",
     "parallel_coordinates",
+    # Protein kinds (lot 3): a 3D structure, a multiple sequence alignment and
+    # a linear per-residue track, linked by the `residue_selection` filter
+    # (an entity column + a residue position range).
+    "molecule_3d",
+    "msa",
+    "sequence_track",
 ]
 
 # Map visualization types

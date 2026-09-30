@@ -130,6 +130,13 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     # See the ``head`` docstring above; ``ParallelCoordinatesConfig.max_rows``
     # is the budget the renderer asks for.
     "parallel_coordinates": "head",
+    # Protein kinds read one entity's residues as an ordered whole (a sampled
+    # residue table leaves holes in the structure colouring and the sequence
+    # ruler). The MSA is capped by ``MsaConfig.max_rows`` at fetch, in rank
+    # order, never sampled.
+    "molecule_3d": "none",
+    "msa": "none",
+    "sequence_track": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

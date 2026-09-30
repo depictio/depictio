@@ -76,7 +76,8 @@ COMPONENT_FORMATS: dict[str, frozenset[ExportFormat]] = {
 #: empty frame and a CSP violation in the host page. Two reasons:
 #:
 #: * the renderer reaches the network on its own, outside ``api.ts``: GenomeSpy
-#:   reads its annotation tracks directly;
+#:   reads its annotation tracks directly, a 3D structure tile fetches its
+#:   structure file from object storage or the structure resolver;
 #: * the renderer computes per interaction, so no precomputed result stands for
 #:   the component: a contact map dispatches one job per zoom window, a group
 #:   comparison one per pair of selections.
@@ -92,6 +93,11 @@ HTML_UNAVAILABLE_KINDS: dict[str, str] = {
     "group_compare": (
         "A group comparison computes on the server for the two groups picked in the "
         "tile, so no offline page can stand for it. Open the dashboard instead."
+    ),
+    "molecule_3d": (
+        "A 3D structure tile fetches its structure file at render time, from object "
+        "storage or the structure resolver, so it cannot be taken offline. Open the "
+        "dashboard instead."
     ),
 }
 
@@ -169,6 +175,11 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "genome_chord": "client_only",
     "record_card": "client_only",
     "parallel_coordinates": "client_only",
+    # Protein kinds. molecule_3d draws with 3Dmol.js, msa and sequence_track on
+    # a canvas: none of them is a Plotly figure.
+    "molecule_3d": "client_only",
+    "msa": "client_only",
+    "sequence_track": "client_only",
 }
 
 
