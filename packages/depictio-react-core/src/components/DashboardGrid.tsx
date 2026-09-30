@@ -12,6 +12,7 @@ import 'react-resizable/css/styles.css';
 import { StoredMetadata, InteractiveFilter } from '../api';
 import type { FilterSectionSpec } from '../api';
 import { ActiveHighlight } from '../highlight';
+import { HighlightProvider } from '../highlight/bus';
 import type { GroupRenderState } from '../selectionGroups';
 import {
   PANEL_RESIZE_END_EVENT,
@@ -929,6 +930,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     );
 
   return (
+    // One hover-highlight bus per dashboard view: the protein tiles (3D
+    // structure, MSA, sequence track, lollipop, profile) point at the same
+    // residues through it without a filter round-trip. See highlight/bus.ts.
+    <HighlightProvider>
     <RecordPanelContext.Provider value={recordPanelState}>
     <div
       ref={wrapperRef}
@@ -971,6 +976,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       {renderSections(ownSections)}
     </div>
     </RecordPanelContext.Provider>
+    </HighlightProvider>
   );
 };
 

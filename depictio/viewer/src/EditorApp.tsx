@@ -99,6 +99,7 @@ import {
   BrandScope,
   AdvancedVizConfigDraftProvider,
   AdvancedVizPlacementDefaultProvider,
+  HighlightProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -1758,6 +1759,9 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    {/* One hover bus for the whole view: pinned sections rendered outside
+        DashboardGrid share it (the grid's own provider reuses this one). */}
+    <HighlightProvider>
     <InspectorProviders control={inspectorControl}>
     {/* Tier-2 viz controls an author touches here are written back onto the
         component's config; the dashboard-wide default decides where every
@@ -2155,6 +2159,7 @@ const EditorApp: React.FC = () => {
     </AdvancedVizPlacementDefaultProvider>
     </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
+    </HighlightProvider>
     </>
   );
 };
