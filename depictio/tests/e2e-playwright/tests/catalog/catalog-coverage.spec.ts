@@ -27,7 +27,7 @@ import { fetchCompose, flattenOffers, CatalogModule } from "../../fixtures/catal
 interface Manifest {
   project_id: string;
   outputs: string[];
-  lanes: Record<string, "recipe" | "raw">;
+  lanes: Record<string, "recipe" | "raw" | "bioimage">;
   coverage_exemptions: string[];
 }
 
@@ -113,7 +113,7 @@ test.describe("catalog coverage", () => {
     // Compose recognises a collection three ways and the reference projects lean
     // almost entirely on the recipe branch. Losing the raw lane here would mean
     // `find.filename` / `find.path_glob` quietly stop being tested end to end.
-    const byLane = { recipe: 0, raw: 0 };
+    const byLane = { recipe: 0, raw: 0, bioimage: 0 };
     for (const mod of modules) {
       for (const m of mod.matches) {
         const lane = manifest!.lanes[m.output_id];
