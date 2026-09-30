@@ -57,7 +57,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "caller": pl.Utf8,
@@ -224,4 +224,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("frac_shared"),
         (pl.col("n_peaks").cast(pl.Float64) + 1.0).log10().alias("log10_n_peaks"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["target", "sample", "caller"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["target", "sample", "caller"])

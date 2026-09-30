@@ -27,6 +27,15 @@ class RecipeError(Exception):
     """Raised when a recipe fails validation."""
 
 
+# Pre-#863 constant names. A recipe still using them fails loudly instead of
+# half-working: the optional schema is read with a ``None`` default, so a module
+# that only renamed the required schema would silently skip optional validation.
+_RENAMED_CONSTANTS = {
+    "EXPECTED_SCHEMA": "OUTPUT_SCHEMA",
+    "OPTIONAL_SCHEMA": "OPTIONAL_OUTPUT_SCHEMA",
+}
+
+
 # ---------------------------------------------------------------------------
 # Path resolution: versioned-then-shared fallback
 # ---------------------------------------------------------------------------
@@ -84,7 +93,8 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
         recipe_name: Pipeline-qualified recipe name (e.g. 'nf-core/ampliseq/alpha_diversity.py').
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
 
-    Validates that the module has SOURCES, EXPECTED_SCHEMA, and a callable transform().
+    Validates that the module has SOURCES, OUTPUT_SCHEMA, and a callable transform(),
+    and rejects the pre-rename constant names (EXPECTED_SCHEMA, OPTIONAL_SCHEMA).
     """
     recipe_path = resolve_recipe_path(recipe_name, pipeline_version)
 
@@ -97,11 +107,18 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
+    # Reject the old constant names before the required-attribute checks, so a
+    # half-renamed recipe gets the migration hint rather than a generic error.
+    legacy = [old for old in _RENAMED_CONSTANTS if hasattr(module, old)]
+    if legacy:
+        renames = " and ".join(f"{old} to {_RENAMED_CONSTANTS[old]}" for old in legacy)
+        raise RecipeError(f"Recipe {recipe_name}: rename {renames}")
+
     # Validate required attributes
     if not hasattr(module, "SOURCES"):
         raise RecipeError(f"Recipe {recipe_name} missing SOURCES")
-    if not hasattr(module, "EXPECTED_SCHEMA"):
-        raise RecipeError(f"Recipe {recipe_name} missing EXPECTED_SCHEMA")
+    if not hasattr(module, "OUTPUT_SCHEMA"):
+        raise RecipeError(f"Recipe {recipe_name} missing OUTPUT_SCHEMA")
     if not callable(getattr(module, "transform", None)):
         raise RecipeError(f"Recipe {recipe_name} missing callable transform()")
 
@@ -233,19 +250,19 @@ def resolve_sources(
 
 def validate_schema(
     result: pl.DataFrame,
-    expected_schema: dict,
+    output_schema: dict,
     recipe_name: str,
-    optional_schema: dict | None = None,
+    optional_output_schema: dict | None = None,
 ) -> None:
-    """Validate that the result DataFrame matches the expected schema.
+    """Validate that the result DataFrame matches the recipe's output schema.
 
     Args:
         result: Output DataFrame from transform().
-        expected_schema: Dict of column_name → polars dtype. All must be present.
+        output_schema: Dict of column_name → polars dtype. All must be present.
         recipe_name: Recipe name used in error messages.
-        optional_schema: Dict of column_name → polars dtype. Validated only if present.
+        optional_output_schema: Dict of column_name → polars dtype. Validated only if present.
     """
-    for col_name, expected_type in expected_schema.items():
+    for col_name, expected_type in output_schema.items():
         if col_name not in result.columns:
             raise RecipeError(
                 f"Recipe {recipe_name}: missing output column '{col_name}'. "
@@ -257,8 +274,8 @@ def validate_schema(
                 f"Recipe {recipe_name}: column '{col_name}' expected {expected_type}, "
                 f"got {actual_type}"
             )
-    if optional_schema:
-        for col_name, expected_type in optional_schema.items():
+    if optional_output_schema:
+        for col_name, expected_type in optional_output_schema.items():
             if col_name in result.columns:
                 actual_type = result[col_name].dtype
                 if actual_type != expected_type:
@@ -321,9 +338,9 @@ def execute_recipe(
     # Checkpoint 4: schema validation (required + optional columns)
     validate_schema(
         result,
-        module.EXPECTED_SCHEMA,
+        module.OUTPUT_SCHEMA,
         recipe_name,
-        getattr(module, "OPTIONAL_SCHEMA", None),
+        getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None),
     )
 
     return result

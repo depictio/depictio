@@ -22,14 +22,14 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "precision": pl.Float64,
     "recall": pl.Float64,
     "f1": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "tp": pl.Int64,
     "fp": pl.Int64,
     "fn": pl.Int64,

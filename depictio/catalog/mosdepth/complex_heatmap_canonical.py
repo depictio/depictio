@@ -16,10 +16,10 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="heatmap", dc_ref="mosdepth_amplicon_heatmap"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

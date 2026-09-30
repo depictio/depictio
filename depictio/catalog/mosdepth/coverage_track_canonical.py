@@ -20,12 +20,12 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="coverage", dc_ref="mosdepth_genome_coverage"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "chromosome": pl.Utf8,
     "position": pl.Int64,
     "value": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "end": pl.Int64,
     "sample": pl.Utf8,
 }

@@ -31,7 +31,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "cds_id": pl.Utf8,
     "contig": pl.Utf8,
@@ -116,4 +116,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("neutral"))
         .alias("charge_class"),
         pl.when(pl.col("cds_dir") < 0).then(pl.lit("-")).otherwise(pl.lit("+")).alias("strand"),
-    ).select(list(EXPECTED_SCHEMA))
+    ).select(list(OUTPUT_SCHEMA))

@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "feature_id": pl.Utf8,
     "num_regions": pl.Int64,
     "total_kmers_mapped": pl.Int64,
@@ -56,4 +56,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("mean_kmer_per_region").cast(pl.Float64, strict=False),
         pl.col("stdv_kmer_per_region").cast(pl.Float64, strict=False),
     )
-    return df.select(list(EXPECTED_SCHEMA.keys()))
+    return df.select(list(OUTPUT_SCHEMA.keys()))

@@ -26,14 +26,14 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "clone": pl.Utf8,
     "subject_id": pl.Utf8,
     "n_samples": pl.Int64,
     "total_sequences": pl.Int64,
 }
 # Plus one Int8 set column per sample; the sample set is discovered from the data.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

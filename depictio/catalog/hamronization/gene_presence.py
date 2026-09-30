@@ -25,7 +25,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene_symbol": pl.Utf8,
     "drug_class": pl.Utf8,
@@ -80,5 +80,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .with_columns((pl.col("n_tools") / max(n_tools_total, 1)).alias("tool_frac"))
         .sort("sample", "gene_symbol")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -3,7 +3,7 @@
 Each test writes a minimal synthetic input file into a temp data_dir, runs
 the recipe via ``execute_recipe``, and asserts:
 
-  1. The recipe's own ``EXPECTED_SCHEMA`` is met (this is enforced by the
+  1. The recipe's own ``OUTPUT_SCHEMA`` is met (this is enforced by the
      recipe engine — checkpoint 4 in depictio/recipes/__init__.py:288).
   2. The result is non-empty.
   3. The canonical viz binding validates against the produced schema via

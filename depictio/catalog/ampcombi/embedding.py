@@ -25,7 +25,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cds_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -84,4 +84,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("charge_class"),
         "aa_length",
     )
-    return coords.join(meta, on="cds_id", how="inner").select(list(EXPECTED_SCHEMA))
+    return coords.join(meta, on="cds_id", how="inner").select(list(OUTPUT_SCHEMA))

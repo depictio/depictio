@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "pc1": pl.Float64,
     "pc2": pl.Float64,
@@ -107,7 +107,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 for c in ("pc1", "pc2", "pc3", "pc1_variance", "pc2_variance")
             ],
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample")
     )
 

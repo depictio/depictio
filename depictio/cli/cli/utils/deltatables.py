@@ -1252,7 +1252,12 @@ def process_recipe_data_collection(
             result_df = recipe_module.transform(sources)
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
-            _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)
+            _validate_schema(
+                result_df,
+                recipe_module.OUTPUT_SCHEMA,
+                recipe_name,
+                getattr(recipe_module, "OPTIONAL_OUTPUT_SCHEMA", None),
+            )
             _print_recipe_preview(recipe_name, sources, result_df)
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}

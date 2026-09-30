@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -36,7 +36,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 
 # The grouping column name is run-dependent (the dashboard's GROUP_COL), so the
 # optional colour column is validated dynamically rather than against a fixed name.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _METADATA_ID_COL = "ID"
 

@@ -50,7 +50,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lengths", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "fragment_length": pl.Int64,
@@ -95,4 +95,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("count") / pl.col("count").sum().over("sample")).alias("fraction"),
     )
     df = df.with_columns(pl.col("fraction").cum_sum().over("sample").alias("cumulative_fraction"))
-    return df.select(list(EXPECTED_SCHEMA))
+    return df.select(list(OUTPUT_SCHEMA))

@@ -40,7 +40,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "depth": pl.Int64,
     "iter": pl.Int64,
@@ -52,7 +52,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "faith_pd": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     # Passthrough metadata columns (locality, platform, ...) are extra and
     # allowed; nothing beyond the metrics is guaranteed.
 }

@@ -62,13 +62,13 @@ _CHANGEO_STAGES: dict[str, tuple[str, ...]] = {
 }
 STAGE_ORDER: list[str] = [*_PRESTO_STAGES, *_CHANGEO_STAGES]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "sequences": pl.Int64,
     "retention": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     name: pl.Int64 for name in STAGE_ORDER if name != "sequences"
 }
 

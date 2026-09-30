@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene_symbol": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -110,4 +110,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # hits reported per ORF and per contig land on the same contig id.
         pl.col("sequence_id").str.replace(r"_\d+$", "").alias("contig"),
         pl.lit(1, dtype=pl.Int64).alias("hits"),
-    ).select(list(EXPECTED_SCHEMA))
+    ).select(list(OUTPUT_SCHEMA))

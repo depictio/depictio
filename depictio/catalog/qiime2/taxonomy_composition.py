@@ -13,7 +13,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "count": pl.Float64,
@@ -21,7 +21,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "Phylum": pl.Utf8,
 }
 # Metadata columns (e.g. habitat) are user-defined and passed through dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

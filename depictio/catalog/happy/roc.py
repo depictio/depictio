@@ -19,7 +19,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "quality": pl.Float64,
     "recall": pl.Float64,
     "precision": pl.Float64,

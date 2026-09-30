@@ -58,13 +58,15 @@ NOT_RUN = "Not run"
 # reported them, so a dashboard can bind the same steps everywhere.
 _PRESTO_MILESTONES = _MILESTONES[:6]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     **{out: pl.Utf8 for out, _, _ in _PRESTO_MILESTONES},
     "reads": pl.Int64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {out: pl.Utf8 for out, _, _ in _MILESTONES[6:]}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    out: pl.Utf8 for out, _, _ in _MILESTONES[6:]
+}
 
 
 def _subject(df: pl.DataFrame) -> pl.Expr:

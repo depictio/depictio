@@ -20,7 +20,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "variant_type": pl.Utf8,
     "filter": pl.Utf8,
     "truth_tp": pl.Float64,

@@ -50,7 +50,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "merged_library": pl.Utf8,
     "group": pl.Utf8,
@@ -93,4 +93,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     samples = samples.with_columns(
         pl.col("group").fill_null(pl.col("sample")),
     )
-    return samples.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return samples.select(list(OUTPUT_SCHEMA)).sort("sample")

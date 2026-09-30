@@ -33,7 +33,7 @@ SOURCES: list[RecipeSource] = [
 # The row-label column is the only fixed one: every other column is a sample of
 # the run, so the schema is declared by the index alone and the rest is checked
 # by `validate_output` against the fixture.
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
 

@@ -74,7 +74,7 @@ The golden rule for schemas — **one home, no duplication**:
 
 | Output | where its columns live |
 |---|---|
-| **has a recipe** | the recipe (`EXPECTED_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
+| **has a recipe** | the recipe (`OUTPUT_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
 | **no recipe** (raw is bindable) | the YAML, via a `columns:` block; `roles` bind to those. |
 
 Each advanced_viz render can carry an **`id`** — a tool-unique handle a
@@ -206,7 +206,7 @@ The conformance project seeds each recipe's *result*, so it proves an output is
 offerable and renderable but never runs the recipe that produces it. `validate`
 has the same blind spot in the other direction: it grounds `renders_as` against
 the fixture when there is one, and only falls back to the recipe's
-`EXPECTED_SCHEMA` when there is not — so a fixture that has drifted ahead of its
+`OUTPUT_SCHEMA` when there is not — so a fixture that has drifted ahead of its
 recipe keeps CI green while a real ingest produces a frame the render cannot
 bind.
 

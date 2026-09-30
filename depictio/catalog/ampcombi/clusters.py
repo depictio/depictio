@@ -22,7 +22,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cluster_id": pl.Int64,
     "representative": pl.Utf8,
     "sample": pl.Utf8,
@@ -45,5 +45,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("total_cluster_members").cast(pl.Int64, strict=False).alias("members"),
         )
         .sort("members", "cluster_id", descending=[True, False])
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

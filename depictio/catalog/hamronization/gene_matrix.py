@@ -23,7 +23,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_symbol": pl.Utf8,
     "drug_class": pl.Utf8,
     "drug_class_primary": pl.Utf8,

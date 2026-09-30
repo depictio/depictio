@@ -46,7 +46,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,
     "read_count": pl.Int64,
@@ -105,6 +105,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             ),
             (pl.col("read_count") + 1).log10().alias("log10_read_count"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "chromosome"])
     )

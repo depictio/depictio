@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="peaks", dc_ref=PEAKS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "threshold_mode": pl.Utf8,
     "num_peaks": pl.Int64,
@@ -75,4 +75,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("max_signal").median().cast(pl.Float64).alias("max_signal_median"),
         pl.col("signal_density").median().cast(pl.Float64).alias("signal_density_median"),
     )
-    return summary.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return summary.select(list(OUTPUT_SCHEMA)).sort("sample")

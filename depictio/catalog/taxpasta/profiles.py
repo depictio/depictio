@@ -38,7 +38,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="names", dc_ref="taxon_names", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "profiler": pl.Utf8,
     "database": pl.Utf8,
     "profiler_db": pl.Utf8,
@@ -51,7 +51,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "rel_abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Report-file suffix -> profiler, longest first so `.kraken2.report` wins over
 # `.report`. This is taxpasta's own input naming, not a pipeline layout.
