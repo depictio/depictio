@@ -18,6 +18,7 @@ from depictio.cli.cli.local_stack import (
     load_state,
     local_home,
     pick_ports,
+    refresh_cli_config_ports,
     reset,
     running_status,
     save_state,
@@ -124,7 +125,7 @@ def up(
             stop_all(paths, log=_info)
             ensure_binaries(paths, log=_info)
             seed_screenshots(paths)
-            ports = pick_ports(port)
+            ports = pick_ports(port, state.get("ports"))
             if screenshots and not chromium_installed():
                 _info("Installing Chromium for dashboard thumbnails")
                 install_chromium()
@@ -139,6 +140,7 @@ def up(
             save_state(paths, state)
             _info(f"Services started (logs in {paths.logs}); waiting for the API")
             wait_for_api(paths, ports, procs["api"])
+            refresh_cli_config_ports(paths, ports)
     except LocalStackError as exc:
         stop_all(paths, log=_info)
         _fail(str(exc))

@@ -5087,8 +5087,9 @@ def _regenerate_component_fields(component: dict) -> None:
 
     # Image component: Regenerate s3_base_folder from DC config if not present
     if comp_type == "image" and not component.get("s3_base_folder"):
-        dc_config = component.get("dc_config", {})
-        dc_specific_props = dc_config.get("dc_specific_properties", {})
+        # dc_config is None when the image DC was not resolved (skipped at ingest).
+        dc_config = component.get("dc_config") or {}
+        dc_specific_props = dc_config.get("dc_specific_properties") or {}
         s3_base_folder = dc_specific_props.get("s3_base_folder")
         if s3_base_folder:
             component["s3_base_folder"] = s3_base_folder

@@ -70,6 +70,17 @@ def test_pick_ports_skips_a_busy_preferred_port(monkeypatch):
     assert len(set(ports.values())) == len(ports)
 
 
+def test_pick_ports_keeps_the_previous_run_ports_when_free():
+    """A restart keeps its URLs, so the CLI config and bookmarks stay valid."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        previous = probe.getsockname()[1]
+
+    ports = pick_ports(None, {"s3": previous})
+
+    assert ports["s3"] == previous
+
+
 def test_pick_ports_rejects_a_busy_explicit_api_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))
@@ -124,3 +135,28 @@ def test_windows_is_rejected_with_a_clear_message(monkeypatch):
     monkeypatch.setattr(local_stack.sys, "platform", "win32")
     with pytest.raises(local_stack.LocalStackError, match="WSL2"):
         local_stack.check_platform_supported()
+
+
+def test_refresh_cli_config_ports_rewrites_api_and_s3_ports(tmp_path):
+    import yaml
+
+    from depictio.cli.cli.local_stack import refresh_cli_config_ports
+
+    paths = Paths(tmp_path)
+    paths.cli_config.parent.mkdir(parents=True)
+    paths.cli_config.write_text(
+        yaml.safe_dump(
+            {
+                "api_base_url": "http://127.0.0.1:1",
+                "s3_storage": {"service_port": 2, "external_port": 2, "bucket": "b"},
+                "user": {"email": "admin@example.com"},
+            }
+        )
+    )
+
+    refresh_cli_config_ports(paths, {"api": 10, "mongo": 11, "redis": 12, "s3": 13})
+
+    config = yaml.safe_load(paths.cli_config.read_text())
+    assert config["api_base_url"] == "http://127.0.0.1:10"
+    assert config["s3_storage"] == {"service_port": 13, "external_port": 13, "bucket": "b"}
+    assert config["user"] == {"email": "admin@example.com"}

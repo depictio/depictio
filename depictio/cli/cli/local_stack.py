@@ -199,9 +199,12 @@ def pick_port(preferred: int, taken: set[int]) -> int:
         return sock.getsockname()[1]
 
 
-def pick_ports(api_port: int | None) -> dict[str, int]:
+def pick_ports(api_port: int | None, previous: dict[str, int] | None = None) -> dict[str, int]:
+    """Ports for each service: ``api_port`` if given, else the previous run's
+    port when still free (a restart keeps its URLs), else the default or any free one."""
     ports: dict[str, int] = {}
-    for name, preferred in DEFAULT_PORTS.items():
+    for name, default in DEFAULT_PORTS.items():
+        preferred = (previous or {}).get(name) or default
         if name == "api" and api_port:
             if not port_is_free(api_port):
                 raise LocalStackError(f"Port {api_port} is already in use")
@@ -519,6 +522,26 @@ def wait_for_api(
         proc,
         paths.logs / "api.log",
     )
+
+
+def refresh_cli_config_ports(paths: Paths, ports: dict[str, int]) -> None:
+    """Point an existing CLI config at this run's ports.
+
+    The API writes the file once, when it creates the admin token; a restart
+    that had to pick new ports (a default taken by another stack) would leave
+    it aimed at the previous ones.
+    """
+    import yaml
+
+    if not paths.cli_config.exists():
+        return
+    config = yaml.safe_load(paths.cli_config.read_text()) or {}
+    config["api_base_url"] = f"http://127.0.0.1:{ports['api']}"
+    s3 = config.get("s3_storage")
+    if isinstance(s3, dict):
+        s3["service_port"] = ports["s3"]
+        s3["external_port"] = ports["s3"]
+    paths.cli_config.write_text(yaml.safe_dump(config, sort_keys=False))
 
 
 def stop_pid(pid: int, timeout: float = 20) -> None:
