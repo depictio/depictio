@@ -35,13 +35,14 @@ def recipe_run(
     ] = None,
     head: Annotated[int, typer.Option("--head", "-n", help="Number of rows to display")] = 20,
 ) -> None:
-    """Run a recipe against local data with all 4 validation checkpoints."""
+    """Run a recipe against local data with all 5 validation checkpoints."""
     from depictio.cli.cli.utils.rich_utils import console
     from depictio.recipes import (
         RecipeError,
         load_recipe,
         resolve_sources,
         validate_schema,
+        validate_sources,
     )
 
     try:
@@ -71,7 +72,13 @@ def recipe_run(
             )
             raise typer.Exit(code=0)
 
-        # Checkpoint 3: transform
+        # Checkpoint 3: input schema
+        checked = validate_sources(module, sources, recipe_name)
+        if checked:
+            console.print(
+                f"  [green]:white_check_mark:[/green] Input schema valid: {', '.join(checked)}"
+            )
+        # Checkpoint 4: transform
         result = module.transform(sources)
         if not isinstance(result, pl.DataFrame):
             console.print(
@@ -85,7 +92,7 @@ def recipe_run(
             f"  [green]:white_check_mark:[/green] Transform produced {result.height} rows x {result.width} columns"
         )
 
-        # Checkpoint 4: schema
+        # Checkpoint 5: output schema
         validate_schema(
             result,
             module.OUTPUT_SCHEMA,
@@ -185,7 +192,15 @@ def recipe_info(
         title=f"Sources ({len(module.SOURCES)})",
     )
 
-    # Schema
+    # Input schema, one table per source that declares one
+    for s in module.SOURCES:
+        if s.input_schema:
+            render_records_table(
+                [{"Column": col, "Type": str(dtype)} for col, dtype in s.input_schema.items()],
+                title=f"Input schema: {s.ref} ({len(s.input_schema)} columns)",
+            )
+
+    # Output schema
     render_records_table(
         [{"Column": col, "Type": str(dtype)} for col, dtype in module.OUTPUT_SCHEMA.items()],
         title=f"Output schema ({len(module.OUTPUT_SCHEMA)} columns)",

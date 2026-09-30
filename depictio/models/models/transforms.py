@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator, model_validator
 
 
 class RecipeSource(BaseModel):
@@ -15,8 +17,16 @@ class RecipeSource(BaseModel):
     format: str = "CSV"  # CSV, TSV, Parquet
     read_kwargs: dict | None = None  # Extra kwargs passed to polars read function
     optional: bool = False  # If True and dc_ref not resolvable, passes None to transform()
+    # Columns transform() reads from this source, as column -> polars dtype. Checked
+    # after the source is read and before transform() runs.
+    input_schema: dict[str, Any] | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_serializer("input_schema", when_used="json")
+    def _dtype_names(self, schema: dict[str, Any] | None) -> dict[str, str] | None:
+        # Polars dtypes are not JSON types; their names are.
+        return None if schema is None else {col: str(dtype) for col, dtype in schema.items()}
 
     @field_validator("format")
     @classmethod
