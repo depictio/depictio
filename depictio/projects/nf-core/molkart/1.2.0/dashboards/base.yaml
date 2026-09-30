@@ -586,6 +586,7 @@ tabs:
       sample_column: sample_id
       points_dc_tag: mk-cells-primary
       cell_id_col: cell_id
+      selection_column: cell_key
       x_col: x_centroid
       y_col: y_centroid
       color_col: dominant_gene
@@ -1094,6 +1095,7 @@ tabs:
       sample_column: sample_id
       points_dc_tag: mk-cells-compare
       cell_id_col: cell_id
+      selection_column: cell_key
       x_col: x_centroid
       y_col: y_centroid
       color_col: dominant_gene
