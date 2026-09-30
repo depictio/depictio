@@ -1,0 +1,400 @@
+# nf-core/sopa Template v1.0.1 - spatial omics segmentation (SpatialData)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/sopa/1.0.1 --data-root /path/to/results
+#
+# Authored OFFLINE: the AWS megatest of 1.0.1 is unusable (its per-sample
+# `.zarr` is a dangling symlink and the explorer TIFF is JPEG 2000), so the
+# layout below comes from the pipeline's docs/output.md, its local modules,
+# the nf-test snapshots of the `test` profile (tests/*.nf.test.snap, which
+# list every file of `<sample>.zarr` including the cell table's obs columns)
+# and a synthetic run of sopa 2.2 on its toy dataset. The reference runs are
+# `-profile test` and `-profile test_full` on the EMBL cluster (see
+# megatest.yaml); nothing here has been ingested from a real run yet.
+# ============================================================================
+#
+# LAYOUT. One SpatialData store per sample, `<sample>.zarr/`, published at the
+# results root (with --publish_dir_mode copy, the default), next to
+# `<sample>.explorer/` (Xenium Explorer files, adata.h5ad, analysis_summary.html)
+# and, on Visium HD only, `<sample>_spaceranger/outs/`. `pipeline_info/`
+# carries params.json and nf_core_sopa_software_versions.yml. Every collection
+# below reads the `.zarr` stores: sopa writes no per-cell table outside them.
+#
+# TECHNOLOGY-AGNOSTIC. The store layout is the same for Xenium, MERSCOPE,
+# CosMx, Visium HD, PhenoCycler or the toy dataset; only the name of the
+# morphology image element differs, set by IMAGE_ELEMENT. The cell table's
+# obs varies with the run's options (Leiden with --use_scanpy_preprocessing,
+# cell_type with --use_fluorescence_annotation, the segmentation method's own
+# columns), which the `sopa/cells` recipe folds onto one schema.
+#
+# GENES. No gene panel is hardcoded: GENES (comma list) names the genes whose
+# per-cell expression the Clusters and genes tab shows. Unset, the three gene
+# collections are pruned and their tiles drop with them.
+#
+# SEGMENTATION AS SHAPES. sopa writes the cell boundaries as shapes
+# (`shapes/<method>_boundaries`), never as a labels element, so the viewer
+# shows the cells as points at their centroids; there is no labels overlay.
+template:
+  template_id: "nf-core/sopa/1.0.1"
+  description: "nf-core/sopa template: the morphology image of each sample's SpatialData store with its segmented cells as points, per-sample cell yield and area, cluster and cell-type composition, per-cluster expression of a chosen gene list, and the segmentation method's own per-cell QC (Proseg)."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Results directory of the run: one SAMPLE.zarr SpatialData store per sample (plus SAMPLE.explorer/ and pipeline_info/)."
+      required: true
+    - name: "IMAGE_ELEMENT"
+      description: "Name of the morphology image element inside each store (images/NAME), set by the technology reader: image for the toy dataset, morphology_focus for Xenium, DATASETID_full_image for Visium HD. The viewer shows it and the cell coordinates are expressed in its pixels."
+      required: false
+      default: "image"
+    - name: "GENES"
+      description: "Optional comma-separated gene names (as in the cell table's var names) whose per-cell expression the Clusters and genes tab shows, e.g. the lineage markers of the tissue. Unset, the gene tiles are left out."
+      required: false
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample name in METADATA_ID_COL, one column per factor. GROUP_COL becomes the condition column of the sample hub; the other factors are carried as extra columns."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table id column. Auto-detected as the first column."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design table factor the run compares, carried as the condition column. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+  # The reference run is `-profile test` (sopa's toy dataset, one sample); the
+  # design table is vendored in input/ so the hub has a condition to show.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
+      IMAGE_ELEMENT: "image"
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "yaml" # JSON is a YAML subset
+        pick: "latest"
+        group: "Pipeline parameters"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+      - group: "Pipeline parameters"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    # No gene list: nothing to read out of X, so the gene collections go and
+    # the tiles of the gene sections drop with them.
+    - if_var_absent: "GENES"
+      remove_dc_tags: ["sopa_cell_genes_raw", "sopa_cell_genes_long", "sp-genes-dotplot"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Spatial Omics Segmentation"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "sopa"
+    version: "1.0.1"
+    engine:
+      name: "nextflow"
+      version: "25.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/sopa"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the sample.
+      # Pruned when METADATA_FILE is absent; the hub joins it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample name as the pipeline names its outputs (SAMPLE.zarr). Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # The morphology image of each store. One File per <sample>.zarr; the
+      # sample filter (or the first store) picks the one the viewer shows.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sp-img-morphology"
+        description: "Morphology image element of each sample's SpatialData store, the image sopa segmented on"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".+\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            image_path: "images/{IMAGE_ELEMENT}"
+
+      # ----------------------------------------------------------------
+      # The cell table of each store, as written (obs + centroids in the
+      # image's pixels). Feeds the normalised `sopa_cells` and the Proseg QC.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sopa_cells_raw"
+        description: "Cell table (tables/table) of every store, one row per segmented cell, as sopa wrote it"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".+\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/table"
+              image: "images/{IMAGE_ELEMENT}"
+            columns_description:
+              "sample": "Store the cell belongs to (store name without .zarr)"
+              "cell_id": "sopa's cell id (instance key), unique within a sample"
+              "region": "Boundaries element the cell comes from (METHOD_boundaries)"
+              "slide": "Image element the cell was aggregated on"
+              "area": "Cell polygon area, in the units of the boundaries element"
+              "x": "Cell centroid column, level-0 pixels of the morphology image"
+              "y": "Cell centroid row, level-0 pixels of the morphology image"
+              "leiden": "Leiden cluster (--use_scanpy_preprocessing only)"
+              "cell_type": "Fluorescence cell type (--use_fluorescence_annotation only)"
+              "cell": "Proseg's cell index (Proseg only)"
+              "original_cell_id": "Prior-segmentation cell Proseg started from (Proseg only)"
+              "centroid_x": "Proseg centroid x, microns (Proseg only)"
+              "centroid_y": "Proseg centroid y, microns (Proseg only)"
+              "centroid_z": "Proseg centroid z (Proseg only)"
+              "component": "Connected component of the transcript graph (Proseg only)"
+              "volume": "Proseg's inferred cell volume (Proseg only)"
+              "surface_area": "Proseg's inferred cell surface area (Proseg only)"
+              "scale": "Proseg's per-cell expression scale factor (Proseg only)"
+
+      - data_collection_tag: "sopa_cells"
+        description: "Segmented cells of every sample on one schema: centroid in image pixels, area, method, cluster, cell type and transcripts when known"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "sopa/cells.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Store the cell belongs to"
+              "cell_id": "sopa's cell id, unique within a sample"
+              "cell_uid": "sample:cell_id, unique over the run; the key a lasso or a table row selects"
+              "x": "Cell centroid column, level-0 pixels of the morphology image"
+              "y": "Cell centroid row, level-0 pixels of the morphology image"
+              "area": "Cell area (image pixels for Cellpose or StarDist, microns for Proseg, Baysor or ComSeg)"
+              "method": "Segmentation method (proseg, cellpose, stardist, baysor, comseg)"
+              "cluster": "Leiden cluster, else the method's own cluster, else empty"
+              "cell_type": "Fluorescence cell type, empty when the run did not annotate"
+              "n_transcripts": "Transcripts assigned to the cell, when the table carries a count"
+
+      # ----------------------------------------------------------------
+      # Hub: one row per sample with its design and cell yield.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: every sample of the run with its condition (design table) and its cell yield"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sopa/samples.py"
+            params:
+              group_col: "{GROUP_COL}"
+              id_col: "{METADATA_ID_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample name (store name without .zarr), the key every collection is linked on"
+              "condition": "GROUP_COL of the design table (METADATA_FILE), else unspecified"
+              "n_cells": "Segmented cells kept by the aggregation filters"
+              "median_area": "Median cell area"
+              "median_transcripts": "Median transcripts per cell, when the table carries a count"
+              "n_clusters": "Distinct clusters among the sample's cells"
+              "method": "Segmentation method(s)"
+
+      - data_collection_tag: "sp-composition"
+        description: "Share of each sample's cells per cluster and per cell type (top 12 labels of the run, the rest as Other)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "sopa/composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "annotation": "cluster or cell type"
+              "label": "Cluster or cell type, Other, or unassigned"
+              "n_cells": "Cells of the sample with that label"
+              "pct_cells": "Share of the sample's cells, percent"
+              "rank": "Label rank over the run (1 = most cells)"
+
+      # ----------------------------------------------------------------
+      # Genes (GENES set): the table again, with the chosen genes read out
+      # of X, then long per cell and summarised per cluster.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sopa_cell_genes_raw"
+        optional: true
+        description: "Cell table of every store with the GENES columns read from X"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".+\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/table"
+              genes: ["{GENES}"]
+            columns_description:
+              "sample": "Store the cell belongs to"
+              "cell_id": "sopa's cell id, unique within a sample"
+
+      - data_collection_tag: "sopa_cell_genes_long"
+        optional: true
+        description: "Per-cell expression of the GENES list, one row per cell and gene, with the cell's cluster and cell type"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "sopa/gene_expression.py"
+            params:
+              genes: "{GENES}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Store the cell belongs to"
+              "cell_id": "sopa's cell id, unique within a sample"
+              "cell_uid": "sample:cell_id, unique over the run"
+              "cluster": "Cluster of the cell"
+              "cell_type": "Cell type of the cell"
+              "gene": "Gene name"
+              "expression": "Value in X (log-normalised after scanpy preprocessing, else counts)"
+
+      - data_collection_tag: "sp-genes-dotplot"
+        optional: true
+        description: "Mean expression and fraction of expressing cells of each GENES entry per cluster"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "sopa/gene_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cluster": "Cluster (or unassigned)"
+              "gene": "Gene name"
+              "mean_expression": "Mean value in X over the cluster's cells"
+              "frac_expressing": "Share of the cluster's cells above zero (0 to 1)"
+              "n_cells": "Cells in the cluster"
+
+      # ----------------------------------------------------------------
+      # Segmentation QC of the method that ran. Proseg is what both test
+      # profiles use; another method leaves this empty and it is skipped.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sp-seg-proseg"
+        optional: true
+        description: "Proseg's per-cell readings: inferred volume, surface area, their ratio, expression scale and graph component"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proseg/cell_metadata.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Store the cell belongs to"
+              "cell_id": "sopa's cell id, unique within a sample"
+              "cell_uid": "sample:cell_id, unique over the run"
+              "area": "2D polygon area"
+              "volume": "Inferred cell volume"
+              "surface_area": "Inferred cell surface area"
+              "surface_to_volume": "surface_area / volume; high for thin or fragmented cells"
+              "scale": "Per-cell expression scale factor"
+              "component": "Connected component of the transcript graph"
+              "centroid_z": "Cell centroid depth"
+
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sopa_cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the cells to the selected samples"
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sp-composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the composition bars to the selected samples"
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sopa_cell_genes_long"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the gene distributions to the selected samples"
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sp-seg-proseg"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the Proseg QC to the selected samples"
+  - source_dc_tag: "sopa_cells"
+    source_column: "cell_uid"
+    target_dc_tag: "sopa_cell_genes_long"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "cell_uid"}
+    description: "Cells picked on the image or filtered by cluster, area or cell type narrow the gene distributions"
+  - source_dc_tag: "sopa_cells"
+    source_column: "cell_uid"
+    target_dc_tag: "sp-seg-proseg"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "cell_uid"}
+    description: "Cells picked on the image or filtered narrow the Proseg QC"
+  - source_dc_tag: "sopa_cells"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Reverse link: a cell filter narrows the sample hub to the samples it keeps"

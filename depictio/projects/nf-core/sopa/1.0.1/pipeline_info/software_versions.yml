@@ -1,0 +1,17 @@
+# nf-core/sopa 1.0.1, `-profile test`: the versions the pipeline's own nf-test
+# snapshot records (tests/default.nf.test.snap). Replace with the HPC run's
+# pipeline_info/nf_core_sopa_software_versions.yml once it has run.
+FLUO_ANNOTATION:
+  sopa: 2.2.9
+PATCH_SEGMENTATION_PROSEG:
+  proseg: 3.1.1
+  sopa: 2.2.9
+SCANPY_PREPROCESS:
+  scanpy: 1.12.2
+  sopa: 2.2.9
+TO_SPATIALDATA:
+  sopa: 2.2.9
+  spatialdata: 0.8.0
+  spatialdata_io: 0.7.0
+Workflow:
+  nf-core/sopa: v1.0.1
