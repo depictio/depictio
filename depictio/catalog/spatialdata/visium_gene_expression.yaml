@@ -1,0 +1,17 @@
+id: spatialdata_visium_gene_expression
+name: Gene expression per spot
+mode: sdata/table/genes
+description: >-
+  Expression of a gene list chosen for the run (a template variable, never a
+  default panel), one row per spot and gene, with the spot's position in the
+  tissue image and its cluster, read from the normalised X matrix of the
+  store's AnnData table.
+find: { path_glob: "**/integration/data/merged.zarr" }
+recipe: spatialdata/visium_gene_expression.py
+fixture: visium_gene_expression.tsv
+renders_as:
+  - { id: expression_map, component: advanced_viz, kind: scatter_xy, roles: {x: x, y: y, size: expression, color: cluster, label: spot_uid} }
+  - { id: expression_by_cluster, component: figure, visu_type: box, dict_kwargs: {x: cluster, y: expression, color: cluster} }
+  - { component: card, column: expression, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: Select, column_name: gene }
+  - { id: expression_table, component: table }

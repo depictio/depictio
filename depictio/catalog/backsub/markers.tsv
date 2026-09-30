@@ -1,0 +1,15 @@
+sample	channel_number	cycle_number	marker_name	exposure	background	background_subtracted
+TEST1	1	1	DNA_6	80.0		false
+TEST1	2	1	ELANE			false
+TEST1	3	1	CD57			false
+TEST1	4	1	CD45			false
+TEST1	5	2	DNA_7	100.0	DNA_6	true
+TEST1	7	2	CD577			false
+TEST1	8	2	CD457			false
+TEST2	1	1	DNA_6	80.0		false
+TEST2	2	1	ELANE			false
+TEST2	3	1	CD57			false
+TEST2	4	1	CD45			false
+TEST2	5	2	DNA_7	100.0	DNA_6	true
+TEST2	7	2	CD577			false
+TEST2	8	2	CD457			false

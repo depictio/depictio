@@ -1,0 +1,29 @@
+id: molkartgarage_clahe_image
+name: Contrast-enhanced image
+mode: clahe/image
+description: >-
+  The CLAHE-enhanced nuclear (or membrane) image of each sample, a pyramidal
+  OME-TIFF the image viewer streams tile by tile. The sample is the file name
+  up to the image name, which nf-core/molkart prefixes with the sample id.
+find:
+  path_glob: "**/*_clahe.tiff"
+  path_glob_alt:
+    - "**/*_clahe.tif"
+dc_type: bioimage
+bioimage:
+  format: ome-tiff
+  kind: image
+  sample_pattern: "^(.+?)_(?:\\1_)?[^_]+(?:_gridfilled)?_clahe\\.tiff?$"
+renders_as:
+  - id: clahe_cells_viewer
+    component: advanced_viz
+    kind: bioimage_viewer
+    roles:
+      image: clahe_image
+      labels: spot2cell/cell_masks
+      points: spot2cell/cells
+      cell_id: cell_id
+      x: x_centroid
+      y: y_centroid
+      color: dominant_gene
+      sample: sample

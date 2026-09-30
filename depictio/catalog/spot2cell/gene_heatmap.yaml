@@ -1,0 +1,14 @@
+id: spot2cell_gene_heatmap
+name: Gene by sample heatmap
+mode: spot2cell/gene_heatmap
+description: >-
+  The panel's most abundant genes against the samples, log1p of the mean
+  transcripts per cell, wide (genes x samples) for a clustered heatmap of the
+  tissue sections.
+find:
+  path_glob: "**/spot2cell/cellxgene_*.csv"
+recipe: spot2cell/gene_heatmap.py
+fixture: gene_heatmap.tsv
+renders_as:
+  - { id: gene_sample_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene} }
+  - { component: table }

@@ -1,0 +1,17 @@
+id: cellprofiler_illumination_profile
+name: Illumination correction profiles
+mode: imaging/illumination
+description: >-
+  The per-plate, per-channel illumination correction functions of the run,
+  each reduced to its radial profile (mean correction factor from the field
+  centre to the corners) and its range (maximum over minimum): how uneven the
+  illumination was that every raw image had to be corrected for.
+find:
+  path_glob: "**/illumination_correction/**/*_Illum*.npy"
+recipe: cellprofiler/illumination_profile.py
+fixture: illumination_profile.tsv
+renders_as:
+  - { id: illumination_radial, component: advanced_viz, kind: profile, roles: {series: series, x: distance, y: correction} }
+  - { id: illumination_range_bar, component: figure, visu_type: bar, dict_kwargs: {x: channel, y: correction_range, color: plate, barmode: group, title: Illumination correction range per channel} }
+  - { component: card, column: correction_range, aggregation: max, secondary_layout: top_n, breakdown_col: channel, top_n_count: 3 }
+  - { component: table }

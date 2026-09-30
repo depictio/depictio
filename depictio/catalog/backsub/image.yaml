@@ -1,0 +1,15 @@
+id: backsub_image
+name: Background-subtracted image
+mode: backsub/image
+description: >-
+  The registered mosaic after Backsub removed, channel by channel, an
+  exposure-scaled background channel (autofluorescence), minus the channels the
+  marker sheet flags for removal. One pyramidal OME-TIFF per sample, the image
+  the segmenters and MCQUANT read when background subtraction is on.
+find:
+  path_glob: "**/backsub/*_backsub.ome.tif"
+dc_type: bioimage
+bioimage:
+  format: ome-tiff
+  kind: image
+  sample_pattern: "^(.+?)_backsub\\.ome\\.tif$"

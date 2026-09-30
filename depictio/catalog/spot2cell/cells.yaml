@@ -1,0 +1,27 @@
+id: spot2cell_cells
+name: Cells, shape and transcripts
+mode: spot2cell/cells
+description: >-
+  One row per segmented cell of every sample and segmentation method: centroid
+  in image pixels, area and shape, transcripts and genes assigned, and the
+  gene that dominates the cell. The cell id is the label value of the filtered
+  mask, so the table colours the labels overlay of the image viewer.
+find:
+  path_glob: "**/spot2cell/cellxgene_*.csv"
+recipe: spot2cell/cells.py
+fixture: cells.tsv
+renders_as:
+  - { id: area_by_method, component: figure, visu_type: box, dict_kwargs: {x: segmentation_method, y: area, color: segmentation_method, title: Cell area per segmentation method} }
+  - { id: counts_by_method, component: figure, visu_type: box, dict_kwargs: {x: segmentation_method, y: total_counts, color: segmentation_method, title: Transcripts per cell per segmentation method} }
+  - { id: counts_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: total_counts, color: sample, title: Transcripts per cell per sample} }
+  - { id: area_vs_counts, component: advanced_viz, kind: scatter_xy, roles: {x: area, y: total_counts, color: segmentation_method} }
+  - { id: cell_record, component: advanced_viz, kind: record_card, roles: {id: cell_key, title: cell_key} }
+  - { id: method_picker, component: interactive, interactive_type: MultiSelect, column_name: segmentation_method }
+  - { id: dominant_gene_picker, component: interactive, interactive_type: MultiSelect, column_name: dominant_gene }
+  - { id: area_filter, component: interactive, interactive_type: RangeSlider, column_name: area }
+  - { id: counts_filter, component: interactive, interactive_type: RangeSlider, column_name: total_counts }
+  - { component: card, column: cell_key, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: total_counts, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_genes, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: cell_table, component: table, row_selection_enabled: true, row_selection_column: cell_key }

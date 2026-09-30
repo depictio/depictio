@@ -1,0 +1,16 @@
+id: spot2cell_cell_genes_long
+name: Transcripts per cell and gene
+mode: spot2cell/cell_genes_long
+description: >-
+  The cell-by-gene tables melted to one row per cell and gene with at least one
+  transcript, so a gene picker narrows the cells and a box shows how many
+  transcripts of a gene the expressing cells hold.
+find:
+  path_glob: "**/spot2cell/cellxgene_*.csv"
+recipe: spot2cell/cell_genes_long.py
+fixture: cell_genes_long.tsv
+renders_as:
+  - { id: counts_by_gene, component: figure, visu_type: box, dict_kwargs: {x: gene, y: count, color: sample, title: Transcripts per expressing cell} }
+  - { id: cell_gene_picker, component: interactive, interactive_type: MultiSelect, column_name: gene }
+  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: gene, top_n_count: 5 }
+  - { component: table }

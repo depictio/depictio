@@ -1,0 +1,21 @@
+# Space Ranger, 10x Genomics' pipeline for Visium spatial gene expression, as
+# the nf-core spaceranger/count module runs it (nf-core/spatialvi, and any
+# pipeline that publishes a Space Ranger `outs/` directory per sample).
+#
+# Outputs:
+#   * `metrics_summary`   the per-sample summary metrics (spots under tissue,
+#                         reads, saturation, mapping, genes per spot);
+#   * `tissue_positions`  every capture spot of the slide area with its
+#                         in-tissue call and full-resolution pixel position.
+#
+# The tissue images (`spatial/tissue_hires_image.png`, `tissue_lowres_image.png`)
+# are PNG, not a bioimage format: a template shows them through the SpatialData
+# image element of the same sample (see the `spatialdata` tool) instead.
+id: spaceranger
+name: Space Ranger
+description: >-
+  10x Genomics Visium spatial gene expression: demultiplexing, alignment
+  (whole transcriptome or probe-based), tissue detection and per-spot counting,
+  one outs/ directory per sample.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/spaceranger/count
+homepage: https://www.10xgenomics.com/support/software/space-ranger

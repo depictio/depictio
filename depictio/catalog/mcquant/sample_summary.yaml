@@ -1,0 +1,18 @@
+id: mcquant_sample_summary
+name: Cells per sample and segmenter
+mode: quantification/sample_summary
+description: >-
+  One row per sample and segmentation module: how many cells MCQUANT
+  quantified, and the median area, axis lengths, eccentricity, solidity and
+  extent of those cells. The table two segmenters are compared on.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/sample_summary.py
+fixture: sample_summary.tsv
+renders_as:
+  - { id: cells_per_sample, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: n_cells, color: segmenter, barmode: group, title: Cells per sample and segmenter} }
+  - { id: segmenter_profiles, component: advanced_viz, kind: parallel_coordinates, roles: {sample: summary_id, group: segmenter} }
+  - { id: summary_record, component: advanced_viz, kind: record_card, roles: {id: summary_id} }
+  - { component: card, column: n_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }
+  - { component: card, column: median_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, row_selection_enabled: true, row_selection_column: summary_id }

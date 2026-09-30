@@ -1,0 +1,20 @@
+id: spatialdata_visium_image
+name: Visium tissue image
+mode: sdata/image
+description: >-
+  The high-resolution tissue image of one sample, the image element of an
+  nf-core/spatialvi SpatialData store, shown in the bioimage viewer with the
+  spots of the same sample as points. The element is named after the sample
+  (images/SAMPLE_hires_image), so a template sets it through a variable.
+find: { path_glob: "**/integration/data/merged.zarr" }
+dc_type: bioimage
+bioimage:
+  format: spatialdata
+  image_path: images/SAMPLE_hires_image
+renders_as:
+  # Points: the spots table of the same store, coloured by Leiden cluster. No
+  # labels overlay: Visium spots are shapes (circles), not a labels element.
+  - id: spot_viewer
+    component: advanced_viz
+    kind: bioimage_viewer
+    roles: {points: spatialdata/visium_spots, cell_id: spot_uid, x: x, y: y, color: cluster}

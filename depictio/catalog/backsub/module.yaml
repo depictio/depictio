@@ -1,0 +1,4 @@
+id: backsub
+name: Backsub
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/backsub
+homepage: https://github.com/SchapiroLabor/Background_subtraction

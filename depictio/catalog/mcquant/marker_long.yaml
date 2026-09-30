@@ -1,0 +1,22 @@
+id: mcquant_marker_long
+name: Marker intensities, long
+mode: quantification/marker_long
+description: >-
+  MCQUANT marker intensities melted to one row per cell and marker, with the
+  log1p intensity and a nuclear-stain flag, for distribution plots of one
+  marker across samples or of the whole panel side by side. Capped at a
+  deterministic stride of cells per sample (max_cells param) on whole-slide runs.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/marker_long.py
+fixture: marker_long.tsv
+renders_as:
+  - { id: marker_box, component: figure, visu_type: box, dict_kwargs: {x: marker, y: log_intensity, color: marker_type, title: Marker intensity per marker} }
+  - { id: marker_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: log_intensity, color: sample, title: Marker intensity per sample} }
+  - { id: marker_violin, component: figure, visu_type: violin, dict_kwargs: {x: marker, y: log_intensity, color: marker_type, title: Marker intensity distribution} }
+  - { id: marker_picker, component: interactive, interactive_type: MultiSelect, column_name: marker }
+  - { id: marker_type_picker, component: interactive, interactive_type: SegmentedControl, column_name: marker_type }
+  - { id: log_intensity_filter, component: interactive, interactive_type: RangeSlider, column_name: log_intensity }
+  - { component: card, column: marker, aggregation: nunique, secondary_layout: donut, breakdown_col: marker_type }
+  - { component: card, column: log_intensity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

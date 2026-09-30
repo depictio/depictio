@@ -1,0 +1,15 @@
+sample	segmenter	cell_id	cell_uid	marker	marker_type	intensity	log_intensity
+TEST1	mesmer	1	TEST1/mesmer/1	DNA_6	nuclear	25326.233333333334	10.139635512132234
+TEST1	mesmer	2	TEST1/mesmer/2	DNA_6	nuclear	23868.41176470588	10.080353075740824
+TEST1	mesmer	1	TEST1/mesmer/1	ELANE	marker	3547.1666666666665	8.174186317147683
+TEST1	mesmer	2	TEST1/mesmer/2	ELANE	marker	3842.3529411764707	8.254100426362502
+TEST1	mesmer	1	TEST1/mesmer/1	CD57	marker	2697.5	7.900451342058697
+TEST1	mesmer	2	TEST1/mesmer/2	CD57	marker	1378.6470588235295	7.2295829909647935
+TEST1	mesmer	1	TEST1/mesmer/1	CD45	marker	7740.3	8.954324911136627
+TEST1	mesmer	2	TEST1/mesmer/2	CD45	marker	2605.1176470588234	7.865616901354527
+TEST1	mesmer	1	TEST1/mesmer/1	DNA_7	nuclear	0.0	0.0
+TEST1	mesmer	2	TEST1/mesmer/2	DNA_7	nuclear	0.0	0.0
+TEST1	mesmer	1	TEST1/mesmer/1	CD577	marker	0.0	0.0
+TEST1	mesmer	2	TEST1/mesmer/2	CD577	marker	0.0	0.0
+TEST1	mesmer	1	TEST1/mesmer/1	CD457	marker	0.0	0.0
+TEST1	mesmer	2	TEST1/mesmer/2	CD457	marker	0.0	0.0

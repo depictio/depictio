@@ -230,6 +230,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 7267732e879b4cdfc160fbbd
+    data_collection_tag: backsub_markers
+    description: Background-corrected marker sheet — recipe output (backsub/markers.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: backsub/markers.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: cae2bfb221036fd6e986a562
     data_collection_tag: bambu_counts_gene
     description: Gene-level quantification — recipe output (bambu/counts_gene.py), seeded from the catalog
@@ -324,6 +338,20 @@ workflows:
       source: transformed
       transform:
         recipe: bambu/top_variable_genes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 8dbee55d48d2e18abfcf6fac
+    data_collection_tag: baysor_cell_metadata
+    description: Baysor cell statistics — recipe output (baysor/cell_metadata.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: baysor/cell_metadata.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -701,6 +729,48 @@ workflows:
       source: transformed
       transform:
         recipe: cellbender/metrics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e9de9f479eb5455015d44def
+    data_collection_tag: cellprofiler_illumination_profile
+    description: Illumination correction profiles — recipe output (cellprofiler/illumination_profile.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cellprofiler/illumination_profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 673976cc11696df467e50dac
+    data_collection_tag: cellprofiler_image_quality
+    description: Image quality per site and channel — recipe output (cellprofiler/image_quality.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cellprofiler/image_quality.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 7e9ba347427c6816c4b1c101
+    data_collection_tag: cellprofiler_object_overlays
+    description: Segmentation overlay images — recipe output (cellprofiler/object_overlays.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cellprofiler/object_overlays.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -1123,6 +1193,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 0e4a150220ef5e70c54d4288
+    data_collection_tag: coreograph_core_centroids
+    description: TMA core centroids — recipe output (coreograph/core_centroids.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: coreograph/core_centroids.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 6a61a5069e63b608a6ec2593
     data_collection_tag: ctatsplicing_cancer_introns
     description: Cancer intron candidates — recipe output (ctatsplicing/cancer_introns.py), seeded from
@@ -1187,6 +1271,90 @@ workflows:
       source: transformed
       transform:
         recipe: cutandrun/samples.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: c6f2136af4c914aa2cb692be
+    data_collection_tag: cytotable_cell_embedding
+    description: Single-cell PCA — recipe output (cytotable/cell_embedding.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cytotable/cell_embedding.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: bb3d692dda4547e3e1272cd8
+    data_collection_tag: cytotable_cell_profiles
+    description: Single-cell feature matrix — recipe output (cytotable/cell_profiles.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cytotable/cell_profiles.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5535693c2a6c8c7f1f79eee6
+    data_collection_tag: cytotable_plate_layout
+    description: Plate layout of cell counts — recipe output (cytotable/plate_layout.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cytotable/plate_layout.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: f55f80932ab4d1a29d781931
+    data_collection_tag: cytotable_single_cell
+    description: Single-cell profiles — recipe output (cytotable/single_cell.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cytotable/single_cell.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 532c7379578a830b257a5f82
+    data_collection_tag: cytotable_site_summary
+    description: Per-site cell counts — recipe output (cytotable/site_summary.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cytotable/site_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 545bccc20c54b45cb480004d
+    data_collection_tag: cytotable_well_profile
+    description: Per-well median profiles — recipe output (cytotable/well_profile.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cytotable/well_profile.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -2174,6 +2342,61 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 0ca869ee70c53c69f1ca9d27
+    data_collection_tag: mcquant_cells
+    description: Single-cell features — recipe output (mcquant/cells.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/cells.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: bc83f0d37cdd0e2c67d89385
+    data_collection_tag: mcquant_marker_long
+    description: Marker intensities, long — recipe output (mcquant/marker_long.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/marker_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3123e749b37d0ee43af8eabb
+    data_collection_tag: mcquant_marker_matrix
+    description: Marker by sample medians — recipe output (mcquant/marker_matrix.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/marker_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 8ce2d3dcc5508f88e69f17df
+    data_collection_tag: mcquant_sample_summary
+    description: Cells per sample and segmenter — recipe output (mcquant/sample_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/sample_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: bd89d37fb5301417e476c957
     data_collection_tag: melon_ranks
     description: Genome-copy composition — recipe output (melon/ranks.py), seeded from the catalog fixture
@@ -2367,6 +2590,19 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: bba3aacdae09f47e2fa5e7bf
+    data_collection_tag: mindagap_marked_spots
+    description: Spots per gene — recipe output (mindagap/marked_spots.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mindagap/marked_spots.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: cef6b14d03022d90fac39217
     data_collection_tag: mirdeep2_novel_precursors
     description: Novel miRNA precursors — recipe output (mirdeep2/novel_precursors.py), seeded from the
@@ -2502,6 +2738,19 @@ workflows:
       source: transformed
       transform:
         recipe: mirtop/top_variable_heatmap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3255766df686207d85d53a06
+    data_collection_tag: molkartqc_spot_qc
+    description: Spot assignment QC — recipe output (molkartqc/spot_qc.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: molkartqc/spot_qc.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -2890,6 +3139,20 @@ workflows:
       source: transformed
       transform:
         recipe: prokka/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: fb7d9160854de480c4c40d7d
+    data_collection_tag: proseg_cell_metadata
+    description: Proseg cell metadata — recipe output (proseg/cell_metadata.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proseg/cell_metadata.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -3656,6 +3919,199 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 19788e36eaf399f08abfb684
+    data_collection_tag: sopa_cells
+    description: Segmented cells — recipe output (sopa/cells.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sopa/cells.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e70e64d00712ee17dc3bd8a1
+    data_collection_tag: sopa_composition
+    description: Cluster and cell type composition — recipe output (sopa/composition.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sopa/composition.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 08a2f8507356caa54247d03e
+    data_collection_tag: sopa_gene_expression
+    description: Per-cell gene expression — recipe output (sopa/gene_expression.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sopa/gene_expression.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 558ab92d661e0c59c1d455e4
+    data_collection_tag: sopa_gene_summary
+    description: Marker dot plot — recipe output (sopa/gene_summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sopa/gene_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 894f39154a024d98d54d51a8
+    data_collection_tag: spaceranger_metrics_summary
+    description: Space Ranger metrics — recipe output (spaceranger/metrics_summary.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spaceranger/metrics_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 890ae5a382e4b7bb4b65b624
+    data_collection_tag: spaceranger_tissue_positions
+    description: Capture spots — recipe output (spaceranger/tissue_positions.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spaceranger/tissue_positions.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5ebc50a75313e39ff920fda9
+    data_collection_tag: spatialdata_visium_cluster_composition
+    description: Cluster composition — recipe output (spatialdata/visium_cluster_composition.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spatialdata/visium_cluster_composition.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5dac40faca3e8b5c30b4733b
+    data_collection_tag: spatialdata_visium_gene_expression
+    description: Gene expression per spot — recipe output (spatialdata/visium_gene_expression.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spatialdata/visium_gene_expression.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 783bbe97aea4d5f45cc073b7
+    data_collection_tag: spatialdata_visium_spots
+    description: Visium spots — recipe output (spatialdata/visium_spots.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spatialdata/visium_spots.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a04cc7e6cdabf74464306bcd
+    data_collection_tag: spot2cell_cell_genes_long
+    description: Transcripts per cell and gene — recipe output (spot2cell/cell_genes_long.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spot2cell/cell_genes_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 4f640e161b68fe65873e3333
+    data_collection_tag: spot2cell_cells
+    description: Cells, shape and transcripts — recipe output (spot2cell/cells.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spot2cell/cells.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 97c115d6601fa4d467c40142
+    data_collection_tag: spot2cell_gene_heatmap
+    description: Gene by sample heatmap — recipe output (spot2cell/gene_heatmap.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spot2cell/gene_heatmap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3aac21b93b87a8f7f865edc7
+    data_collection_tag: spot2cell_gene_summary
+    description: Gene summary per sample — recipe output (spot2cell/gene_summary.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: spot2cell/gene_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 055a39364906ddf8cc48c998
+    data_collection_tag: squidpy_spatial_autocorr
+    description: Spatially variable genes — recipe output (squidpy/spatial_autocorr.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: squidpy/spatial_autocorr.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: b0a8a881d06a3a7a9e364cb8
     data_collection_tag: starfusion_fusions
     description: STAR-Fusion calls — recipe output (starfusion/fusions.py), seeded from the catalog fixture
@@ -4003,6 +4459,7 @@ workflows:
         - kaiju
         - kraken
         - malt
+        - matrix_summary
         - metaphlan
         - mirtop
         - mirtrace
@@ -4122,6 +4579,8 @@ workflows:
           - Top taxa
           malt:
           - Metagenomic Mappability
+          matrix_summary:
+          - matrix_summary-section
           metaphlan:
           - Top taxa
           mirtop:

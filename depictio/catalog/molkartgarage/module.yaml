@@ -1,0 +1,13 @@
+# Contrast-limited adaptive histogram equalisation (CLAHE) from molkart-garage,
+# the nf-core module molkartgarage/clahe. nf-core/molkart 1.2.0 runs a local
+# copy of the same script (modules/local/clahe, bin/apply_clahe.dask.py); both
+# write a tiled, pyramidal OME-TIFF (sub-IFD levels, physical pixel size in the
+# OME-XML) under a plain `.tiff` name: `<prefix>_clahe.tiff`.
+id: molkartgarage
+name: molkart-garage CLAHE
+description: >-
+  Local contrast enhancement (CLAHE) of a stitched fluorescence panorama,
+  written as a pyramidal OME-TIFF: the image a spatial transcriptomics run is
+  segmented on, and the one to look at next to its cells.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/molkartgarage/clahe
+homepage: https://github.com/SchapiroLabor/molkart-local

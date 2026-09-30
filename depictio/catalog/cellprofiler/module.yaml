@@ -1,0 +1,26 @@
+# CellProfiler, as nf-core/cellpainting runs it: illumination correction,
+# assay development (a segmentation overlay per well) and the full analysis
+# (per-site object tables). The pipeline calls it from LOCAL modules
+# (modules/local/cellprofiler/*), not shared nf-core/modules entries, so
+# identity is declared in full here and the provenance link is `source_url`.
+#
+# Outputs:
+#   * `image_quality`         Image.csv of the analysis step, one row per site:
+#                             object counts and the MeasureImageQuality focus and
+#                             saturation metrics per channel;
+#   * `illumination_profile`  the per-plate, per-channel illumination correction
+#                             functions (`*_Illum<channel>.npy`), summarised as a
+#                             centre-line profile and a correction range;
+#   * `object_overlays`       the segmentation overlay and outline PNGs, as an
+#                             image-gallery table (one row per image file).
+id: cellprofiler
+name: CellProfiler
+description: >-
+  Image analysis for high-content screens: illumination correction, object
+  segmentation (nuclei, cells, cytoplasm) and per-object morphological
+  measurement, run by nf-core/cellpainting on every imaging site of a plate.
+homepage: https://cellprofiler.org
+source_url: https://github.com/nf-core/cellpainting/tree/40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3/modules/local/cellprofiler
+edam_topics:
+  - http://edamontology.org/topic_3382 # Imaging
+  - http://edamontology.org/topic_3383 # Bioimaging

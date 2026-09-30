@@ -1,0 +1,17 @@
+id: cytotable_cell_embedding
+name: Single-cell PCA
+mode: profiling/embedding
+description: >-
+  Every cell projected on the first three principal components of its
+  standardised curated features, with its well, its perturbation group from
+  the plate map and four raw features to colour by, and the share of variance
+  each component explains. Shows whether cells separate by group, by well (a
+  plate effect) or by size and DNA content (cell cycle).
+find:
+  path_glob: "**/cytotable/*.parquet"
+recipe: cytotable/cell_embedding.py
+fixture: cell_embedding.tsv
+renders_as:
+  - { id: cell_pca, component: advanced_viz, kind: embedding, roles: {sample_id: cell_id, dim_1: pc_1, dim_2: pc_2, dim_3: pc_3, cluster: group, color: group} }
+  - { component: card, column: cell_id, aggregation: count, secondary_layout: donut, breakdown_col: group }
+  - { component: table }

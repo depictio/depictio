@@ -1,0 +1,40 @@
+# Sopa, technology-agnostic segmentation and aggregation of spatial omics,
+# as nf-core/sopa 1.0.1 runs it. Every step is a LOCAL module
+# (modules/local/*: to_spatialdata, patch_segmentation_*, resolve_*,
+# aggregate, fluo_annotation, scanpy_preprocess, explorer, report) calling the
+# `sopa` CLI on one SpatialData store per sample, so identity is declared in
+# full here and the provenance link is `source_url`.
+#
+# Everything the pipeline computes lands in `<sample>.zarr` (published by the
+# REPORT step): the images, the transcripts (points), the cell boundaries of
+# the segmentation method (shapes/<method>_boundaries) and the cell table
+# (tables/table: one row per cell, obs cell_id / region / slide / area, plus
+# leiden with --use_scanpy_preprocessing and cell_type with
+# --use_fluorescence_annotation, obsm spatial / intensities / X_umap).
+#
+# Outputs:
+#   * `spatialdata_image`  the morphology image element of each store, shown
+#                          by the bioimage viewer with the cells as points;
+#   * `cells`              the cell table, normalised to a fixed schema
+#                          (method, cluster, cell type) whatever the segmentation
+#                          and the optional steps were;
+#   * `composition`        cells per cluster and per cell type, per sample;
+#   * `gene_expression`    per-cell expression of a chosen gene list (long);
+#   * `gene_summary`       mean expression and fraction expressing, per cluster.
+#
+# The table outputs read a `format: spatialdata` table DC (see the recipes'
+# docstrings for the DC each one expects). The explorer files
+# (`<sample>.explorer/`: Xenium Explorer zarr.zip, h5ad, HTML report) carry no
+# table Depictio reads; the HTML report is linked from the template docs.
+id: sopa
+name: Sopa
+description: >-
+  Technology-agnostic segmentation of spatial omics data (Xenium, MERSCOPE,
+  CosMx, Visium HD, PhenoCycler, MACSima, H&E): patch-wise cell segmentation
+  with Cellpose, StarDist, Baysor, ComSeg or Proseg, transcript and channel
+  aggregation per cell, and a SpatialData store per sample.
+homepage: https://github.com/gustaveroussy/sopa
+source_url: https://github.com/nf-core/sopa/tree/1.0.1/modules/local
+edam_topics:
+  - http://edamontology.org/topic_3382 # Imaging
+  - http://edamontology.org/topic_3308 # Transcriptomics

@@ -1,0 +1,17 @@
+id: stardist_mask
+name: StarDist nuclear mask
+mode: stardist/mask
+description: >-
+  The nuclear segmentation of each image, one integer label per nucleus and 0
+  for background, as the module writes it (`<image>.stardist.tif`) or as
+  nf-core/molkart publishes it (`<sample>_stardist_mask.tif`).
+find:
+  path_glob: "**/*.stardist.tif"
+  path_glob_alt:
+    - "**/*_stardist_mask.tif"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+?)(?:_stardist_mask|\\.stardist)\\.tif$"
+renders_as: []

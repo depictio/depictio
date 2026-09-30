@@ -1,0 +1,15 @@
+id: cytotable_plate_layout
+name: Plate layout of cell counts
+mode: profiling/plate_layout
+description: >-
+  Cells segmented per well laid out as the plate, one row per plate row and one
+  column per plate column, wells not imaged left empty: the plate-map view that
+  shows edge effects, a dispensing error along a column or an empty row at a
+  glance.
+find:
+  path_glob: "**/cytotable/*.parquet"
+recipe: cytotable/plate_layout.py
+fixture: plate_layout.tsv
+renders_as:
+  - { id: plate_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: plate_row} }
+  - { component: table }

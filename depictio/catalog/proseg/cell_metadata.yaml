@@ -1,0 +1,16 @@
+id: proseg_cell_metadata
+name: Proseg cell metadata
+description: >-
+  Proseg's per-cell readings as sopa stores them in the cell table: inferred
+  volume and surface area, their ratio, the expression scale and the
+  transcript-graph component of every Proseg-segmented cell.
+find: { path_glob: "**/*.zarr" }
+recipe: proseg/cell_metadata.py
+fixture: cell_metadata.tsv
+renders_as:
+  - { id: volume_vs_surface, component: advanced_viz, kind: scatter_xy, roles: {x: volume, y: surface_area, color: sample, label: cell_id} }
+  - { id: volume_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: volume, color: sample} }
+  - { id: shape_ratio_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: surface_to_volume, color: sample} }
+  - { component: card, column: volume, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: surface_to_volume, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

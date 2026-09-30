@@ -1,0 +1,15 @@
+id: spot2cell_cell_masks
+name: Filtered segmentation masks
+mode: spot2cell/cell_masks
+description: >-
+  The area-filtered segmentation mask of each sample and method, one integer
+  label per cell, the mask spot2cell assigned the spots with: its label values
+  are the cell ids of the spot2cell tables, drawn as the viewer's labels overlay.
+find:
+  path_glob: "**/segmentation/filtered_masks/*_filtered.tif"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+)_(?:mesmer|cellpose|stardist|ilastik)_filtered\\.tif$"
+renders_as: []

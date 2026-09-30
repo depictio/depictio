@@ -1,0 +1,22 @@
+# CytoTable, the CellProfiler-to-Parquet collation step of nf-core/cellpainting.
+# The pipeline calls it from a LOCAL module (modules/local/cytotable/main.nf),
+# not a shared nf-core/modules entry, so identity is declared in full here and
+# the provenance link is `source_url` (the same documented exception as Bambu).
+#
+# Every output here starts from the per-site Parquet files
+# `cytotable/<batch>_<plate>_<well>_<site>.parquet` (one row per segmented
+# cell, one column per CellProfiler measurement: thousands of them). The
+# `single_cell` recipe reads a curated subset of those columns and every other
+# output is derived from it through `dc_ref`, so a plate-scale run never loads
+# the full measurement width.
+id: cytotable
+name: CytoTable
+description: >-
+  Collates the per-object CellProfiler measurement tables of every imaging site
+  into one Parquet file per site, the single-cell morphological profile of a
+  Cell Painting run.
+homepage: https://github.com/cytomining/CytoTable
+source_url: https://github.com/nf-core/cellpainting/blob/40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3/modules/local/cytotable/main.nf
+edam_topics:
+  - http://edamontology.org/topic_3382 # Imaging
+  - http://edamontology.org/topic_2229 # Cell biology

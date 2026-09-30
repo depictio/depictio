@@ -1,0 +1,11 @@
+id: sopa_gene_summary
+name: Marker dot plot
+description: >-
+  Mean expression and fraction of expressing cells of each chosen gene per
+  cluster over the whole run, the scanpy dot-plot reading of markers.
+find: { path_glob: "**/*.zarr" }
+recipe: sopa/gene_summary.py
+fixture: gene_summary.tsv
+renders_as:
+  - { id: marker_dots, component: advanced_viz, kind: dot_plot, roles: {cluster: cluster, gene: gene, mean_expression: mean_expression, frac_expressing: frac_expressing} }
+  - { component: table }

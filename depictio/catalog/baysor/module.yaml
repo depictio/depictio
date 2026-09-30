@@ -1,0 +1,18 @@
+# Baysor, Bayesian cell segmentation from transcript positions. In
+# nf-core/sopa it runs from LOCAL modules (modules/local/
+# patch_segmentation_baysor, resolve_baysor) through `sopa segmentation
+# baysor`, not from the shared nf-core/modules baysor entries, so identity is
+# declared here and the provenance link is `source_url`. sopa copies Baysor's
+# per-cell statistics into the cell table of the sample's SpatialData store,
+# which is where `cell_metadata` reads them.
+id: baysor
+name: Baysor
+description: >-
+  Bayesian segmentation of imaging-based spatial transcriptomics: cells are
+  inferred from transcript positions and local gene composition, optionally
+  guided by a prior segmentation, with a per-cell assignment confidence.
+homepage: https://github.com/kharchenkolab/Baysor
+source_url: https://github.com/nf-core/sopa/tree/1.0.1/modules/local/patch_segmentation_baysor
+edam_topics:
+  - http://edamontology.org/topic_3382 # Imaging
+  - http://edamontology.org/topic_3308 # Transcriptomics

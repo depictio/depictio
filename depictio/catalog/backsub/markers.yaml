@@ -1,0 +1,15 @@
+id: backsub_markers
+name: Background-corrected marker sheet
+mode: backsub/markers
+description: >-
+  The marker sheet Backsub writes next to its image, one row per channel it
+  kept: channel and cycle number, marker name, exposure and the background
+  channel subtracted from it. The channel list of the corrected image.
+find:
+  path_glob: "**/backsub/*.csv"
+recipe: backsub/markers.py
+fixture: markers.tsv
+renders_as:
+  - { id: channels_per_cycle, component: figure, visu_type: histogram, dict_kwargs: {x: cycle_number, color: background_subtracted, title: Channels per cycle} }
+  - { component: card, column: marker_name, aggregation: nunique, secondary_layout: donut, breakdown_col: background_subtracted }
+  - { component: table }

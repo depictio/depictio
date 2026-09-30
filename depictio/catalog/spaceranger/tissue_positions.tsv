@@ -1,0 +1,17 @@
+sample	barcode	spot_uid	in_tissue	under_tissue	tissue_call	array_row	array_col	pxl_row_fullres	pxl_col_fullres
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	AGGTGACCATGACGCT-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:AGGTGACCATGACGCT-1	1	1	under tissue	0	4	328.0	364.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	CAGAGGTGTACGTAGC-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:CAGAGGTGTACGTAGC-1	1	1	under tissue	0	6	328.0	386.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	AGCACTGACCGGCTTA-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:AGCACTGACCGGCTTA-1	1	1	under tissue	0	10	328.0	429.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	ATAACCTAAGGCGTCA-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:ATAACCTAAGGCGTCA-1	1	1	under tissue	0	12	329.0	451.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	TAGAACCTCAGTTAGA-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:TAGAACCTCAGTTAGA-1	1	1	under tissue	0	14	329.0	473.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	GACTACCAACTGGTCC-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:GACTACCAACTGGTCC-1	1	1	under tissue	0	18	329.0	516.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	TAGAGGATTGAAGCTT-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:TAGAGGATTGAAGCTT-1	1	1	under tissue	0	20	329.0	538.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	ACATTCCAATCCGCGT-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:ACATTCCAATCCGCGT-1	1	1	under tissue	0	24	329.0	582.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	GTCTATTACAGGCGCA-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:GTCTATTACAGGCGCA-1	1	1	under tissue	0	26	329.0	604.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	TCACGGCGCCGTAAGC-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:TCACGGCGCCGTAAGC-1	1	1	under tissue	0	28	329.0	625.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	CGAGGATATTCAGAGC-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:CGAGGATATTCAGAGC-1	0	0	outside tissue	0	0	328.0	320.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	TCTGGTACTAATGCGG-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:TCTGGTACTAATGCGG-1	0	0	outside tissue	0	2	328.0	342.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	TAGCTAGAAGATACAT-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:TAGCTAGAAGATACAT-1	0	0	outside tissue	0	8	328.0	407.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	CCGACATAAGTATCAA-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:CCGACATAAGTATCAA-1	0	0	outside tissue	0	16	329.0	495.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	GTAACACTACCGATGC-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:GTAACACTACCGATGC-1	0	0	outside tissue	0	22	329.0	560.0
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	ACTCTAGCGGCCTGCA-1	CytAssist_11mm_FFPE_Human_Glioblastoma_2:ACTCTAGCGGCCTGCA-1	0	0	outside tissue	0	42	330.0	778.0

@@ -1,0 +1,21 @@
+id: sopa_spatialdata_image
+name: Morphology image
+description: >-
+  The morphology image element of each sample's SpatialData store (the image
+  sopa segments on), shown in the bioimage viewer with the segmented cells as
+  points. The element name depends on the technology reader (`image` on the
+  toy dataset, `morphology_focus` on Xenium, `DATASETID_full_image` on
+  Visium HD), so a template sets it through a variable.
+find: { path_glob: "**/*.zarr" }
+dc_type: bioimage
+bioimage:
+  format: spatialdata
+  image_path: images/image
+renders_as:
+  # Points: the normalised cell table (sopa/cells), coloured by cluster. The
+  # table carries no numeric label ids and sopa writes its segmentation as
+  # shapes, never as a labels element, so there is no labels overlay.
+  - id: tissue_viewer
+    component: advanced_viz
+    kind: bioimage_viewer
+    roles: {points: sopa/cells, cell_id: cell_uid, x: x, y: y, color: cluster, sample: sample}

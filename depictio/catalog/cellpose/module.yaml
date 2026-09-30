@@ -1,0 +1,4 @@
+id: cellpose
+name: Cellpose
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cellpose
+homepage: https://github.com/MouseLand/cellpose

@@ -1,0 +1,24 @@
+id: cytotable_site_summary
+name: Per-site cell counts
+mode: profiling/site_summary
+description: >-
+  One row per imaging site: the cells segmented on it and the median cell and
+  nucleus area, nuclear DNA intensity and crowding of those cells. A site out
+  of focus, at the plate edge or on a debris patch stands out as a low count or
+  as abnormal nuclei next to the other sites of its well.
+find:
+  path_glob: "**/cytotable/*.parquet"
+recipe: cytotable/site_summary.py
+fixture: site_summary.tsv
+renders_as:
+  - { id: cells_per_site_box, component: figure, visu_type: box, dict_kwargs: {x: well, y: n_cells, points: all, title: "Cells per site, by well"} }
+  - { id: site_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: n_cells, y: median_nucleus_area, label: site_id, color: well} }
+  - { id: site_record, component: advanced_viz, kind: record_card, roles: {id: site_id} }
+  - { component: card, column: site_id, aggregation: count, secondary_layout: top_n, breakdown_col: well, top_n_count: 3 }
+  - { component: card, column: n_cells, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_nucleus_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_cell_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_nucleus_dna, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_neighbors, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: site_cells_filter, component: interactive, interactive_type: RangeSlider, column_name: n_cells }
+  - { component: table, row_selection_enabled: true, row_selection_column: site_id }

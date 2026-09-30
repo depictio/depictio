@@ -1,0 +1,22 @@
+id: molkartqc_spot_qc
+name: Spot assignment QC
+mode: molkartqc/spot_qc
+description: >-
+  One row per sample and segmentation method: cells kept after the area filter,
+  mean area, spots and the share assigned to cells, duplicated spots and labels
+  removed by the size filter.
+find:
+  path_glob: "**/molkartqc/*.spot_QC.csv"
+recipe: molkartqc/spot_qc.py
+fixture: spot_qc.tsv
+renders_as:
+  - { id: assigned_by_method, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: spot_assign_percent, color: segmentation_method, barmode: group, title: Spots assigned to cells} }
+  - { id: cells_by_method, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: total_cells, color: segmentation_method, barmode: group, title: Cells per sample and method} }
+  - { id: cells_vs_assigned, component: advanced_viz, kind: scatter_xy, roles: {x: total_cells, y: spot_assign_percent, label: sample, color: segmentation_method} }
+  - { id: method_picker, component: interactive, interactive_type: MultiSelect, column_name: segmentation_method }
+  - { id: assigned_filter, component: interactive, interactive_type: RangeSlider, column_name: spot_assign_percent }
+  - { component: card, column: total_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: segmentation_method, top_n_count: 4 }
+  - { component: card, column: spot_assign_percent, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: avg_area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: labels_removed_percent, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: qc_table, component: table }

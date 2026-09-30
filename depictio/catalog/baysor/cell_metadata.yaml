@@ -1,0 +1,15 @@
+id: baysor_cell_metadata
+name: Baysor cell statistics
+description: >-
+  Baysor's per-cell statistics as sopa stores them in the cell table:
+  transcripts, density, elongation and the molecule and assignment
+  confidences of every Baysor-segmented cell.
+find: { path_glob: "**/*.zarr" }
+recipe: baysor/cell_metadata.py
+fixture: cell_metadata.tsv
+renders_as:
+  - { id: confidence_vs_transcripts, component: advanced_viz, kind: scatter_xy, roles: {x: n_transcripts, y: avg_assignment_confidence, color: sample, label: cell_id} }
+  - { id: transcripts_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: n_transcripts, color: sample} }
+  - { component: card, column: n_transcripts, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: avg_assignment_confidence, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

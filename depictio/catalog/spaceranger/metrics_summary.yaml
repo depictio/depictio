@@ -1,0 +1,26 @@
+id: spaceranger_metrics_summary
+name: Space Ranger metrics
+mode: count/metrics
+description: >-
+  Space Ranger count's per-sample summary metrics: spots under tissue,
+  sequencing depth and saturation, barcode and read quality, mapping rates and
+  genes and UMIs per spot, as numbers, on one schema for probe-based and whole
+  transcriptome runs.
+find:
+  path_glob: "**/spaceranger/outs/metrics_summary.csv"
+  path_glob_alt:
+    - "**/outs/metrics_summary.csv"
+recipe: spaceranger/metrics_summary.py
+fixture: metrics_summary.tsv
+renders_as:
+  - { component: card, column: spots_under_tissue, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: number_of_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: median_genes_per_spot, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_umi_per_spot, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: sequencing_saturation_pct, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fraction_spots_under_tissue_pct, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: depth_vs_genes, component: advanced_viz, kind: scatter_xy, roles: {x: mean_reads_under_tissue_per_spot, y: median_genes_per_spot, label: sample} }
+  - { id: mapping_bars, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: reads_mapped_confidently_pct, color: sample} }
+  - { component: interactive, interactive_type: RangeSlider, column_name: spots_under_tissue }
+  - { id: sample_record, component: advanced_viz, kind: record_card, roles: {id: sample, title: sample} }
+  - { id: metrics_table, component: table, row_selection_enabled: true, row_selection_column: sample }

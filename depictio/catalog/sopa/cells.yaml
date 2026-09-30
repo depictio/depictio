@@ -1,0 +1,23 @@
+id: sopa_cells
+name: Segmented cells
+description: >-
+  One row per segmented cell of every sample: centroid in the pixels of the
+  morphology image, area, segmentation method, cluster (Leiden, else the
+  method's own) and fluorescence cell type, read from the store's cell table
+  and folded onto one schema whatever optional steps the run took.
+find: { path_glob: "**/*.zarr" }
+recipe: sopa/cells.py
+fixture: cells.tsv
+renders_as:
+  - { id: cell_map, component: advanced_viz, kind: scatter_xy, roles: {x: x, y: y, color: cell_type, label: cell_uid} }
+  - { id: area_by_sample, component: figure, visu_type: box, dict_kwargs: {x: sample, y: area, color: sample} }
+  - { id: area_by_cluster, component: figure, visu_type: box, dict_kwargs: {x: cluster, y: area, color: cluster} }
+  - { id: transcripts_vs_area, component: advanced_viz, kind: scatter_xy, roles: {x: area, y: n_transcripts, color: method, label: cell_uid} }
+  - { component: card, column: cell_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_transcripts, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: cluster, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster }
+  - { component: interactive, interactive_type: MultiSelect, column_name: cluster }
+  - { component: interactive, interactive_type: MultiSelect, column_name: cell_type }
+  - { component: interactive, interactive_type: RangeSlider, column_name: area }
+  - { component: table, row_selection_enabled: true, row_selection_column: cell_uid }

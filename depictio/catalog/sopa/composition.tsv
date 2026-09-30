@@ -1,0 +1,19 @@
+sample	annotation	label	n_cells	pct_cells	rank
+sample_1	cell type	Tumoral cell	143	35.75	1
+sample_2	cell type	Tumoral cell	144	36.0	1
+sample_3	cell type	Tumoral cell	121	30.25	1
+sample_1	cell type	B cell	124	31.0	2
+sample_2	cell type	B cell	124	31.0	2
+sample_3	cell type	B cell	151	37.75	2
+sample_1	cell type	T cell	133	33.25	3
+sample_2	cell type	T cell	132	33.0	3
+sample_3	cell type	T cell	128	32.0	3
+sample_1	cluster	1	131	32.75	1
+sample_2	cluster	1	133	33.25	1
+sample_3	cluster	1	126	31.5	1
+sample_1	cluster	2	111	27.75	2
+sample_2	cluster	2	124	31.0	2
+sample_3	cluster	2	141	35.25	2
+sample_1	cluster	0	137	34.25	3
+sample_2	cluster	0	9	2.25	3
+sample_3	cluster	0	112	28.0	3

@@ -1,0 +1,14 @@
+id: basicpy_flatfield
+name: Flat-field profile
+mode: illumination/flatfield
+description: >-
+  The flat-field illumination profile BaSiCPy estimated for one sample and
+  cycle (one OME-TIFF, one plane per channel), the multiplicative shading the
+  tiles were corrected for before stitching. A strong vignette or a
+  channel-specific pattern here explains uneven intensities across tiles.
+find:
+  path_glob: "**/basicpy/*-ffp.ome.tif"
+dc_type: bioimage
+bioimage:
+  format: ome-tiff
+  kind: image

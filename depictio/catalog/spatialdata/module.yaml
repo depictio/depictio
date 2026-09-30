@@ -1,0 +1,36 @@
+# SpatialData stores of Visium runs, as nf-core/spatialvi writes them: local
+# modules (modules/local/sdata/*) calling spatialdata-io and spatialdata, so
+# identity is declared here and the provenance link is `source_url`.
+#
+# spatialvi reads each sample's Space Ranger outs with spatialdata_io.visium
+# (dataset_id = the sample id stripped to letters, digits, `_` and `-`), so a
+# store names its elements after the sample:
+#   images/<sample>_hires_image, images/<sample>_lowres_image   (NGFF, zarr v3)
+#   shapes/<sample>                                            (spot circles)
+#   tables/<sample>_table   obs: in_tissue, array_row, array_col, spot_id
+#                           (instance key), region (region key, = <sample>),
+#                           scanpy QC (total_counts, n_genes_by_counts,
+#                           pct_counts_mt / ribo / hb), clusters (Leiden);
+#                           the integrated store adds clusters_<method>.
+# `integration/data/merged.zarr` holds every sample's elements side by side,
+# `integration/data/<method>.zarr` the same with the integrated clusters.
+#
+# obsm["spatial"] of those tables is already in the hires image's pixels (the
+# pipeline writes it through to_legacy_anndata), not in the spot shapes'
+# coordinates, so a table DC reads x / y from the shapes (`coordinates:
+# region`), which the reader converts to the image's pixels exactly.
+#
+# Outputs:
+#   * `visium_image`              the hires tissue image of one sample;
+#   * `visium_spots`              the spots of that sample, x / y in the image's
+#                                 pixels, QC, per-sample and integrated clusters;
+#   * `visium_gene_expression`    a chosen gene list per spot (long);
+#   * `visium_cluster_composition` spots per cluster, per sample and clustering.
+id: spatialdata
+name: SpatialData
+description: >-
+  An open, language-independent format for spatial omics: images, labels,
+  points, shapes and AnnData tables of one or more samples in a single zarr
+  store, with coordinate transformations between them.
+homepage: https://spatialdata.scverse.org
+source_url: https://github.com/nf-core/spatialvi/tree/dev/modules/local/sdata

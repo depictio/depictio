@@ -1,0 +1,18 @@
+# Proseg, probabilistic cell segmentation from transcript positions. In
+# nf-core/sopa it runs from a LOCAL module (modules/local/
+# patch_segmentation_proseg) through `sopa segmentation proseg`, not from the
+# shared nf-core/modules proseg entry, so identity is declared here and the
+# provenance link is `source_url`. Its per-cell metadata is not published as a
+# file: sopa copies it into the cell table of the sample's SpatialData store,
+# which is where `cell_metadata` reads it.
+id: proseg
+name: Proseg
+description: >-
+  Probabilistic cell segmentation of imaging-based spatial transcriptomics:
+  cells are inferred from the transcript positions, optionally seeded by a
+  prior segmentation, and each cell gets a polygon, a volume and expected counts.
+homepage: https://github.com/dcjones/proseg
+source_url: https://github.com/nf-core/sopa/tree/1.0.1/modules/local/patch_segmentation_proseg
+edam_topics:
+  - http://edamontology.org/topic_3382 # Imaging
+  - http://edamontology.org/topic_3308 # Transcriptomics

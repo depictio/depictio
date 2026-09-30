@@ -1,0 +1,8 @@
+id: ilastik
+name: ilastik
+description: >-
+  Interactive machine-learning segmentation: pixel classification into
+  probability maps, then boundary-based Multicut into one label per cell, run
+  headless from a project trained in the ilastik GUI.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ilastik/multicut
+homepage: https://www.ilastik.org

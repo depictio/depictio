@@ -1,0 +1,15 @@
+id: deepcell_mesmer_mask
+name: Mesmer segmentation mask
+mode: segmentation/mesmer
+description: >-
+  The label image DeepCell Mesmer writes for one sample: one integer per
+  segmented cell (0 is background) on the pixel grid of the registered image.
+  The label value is the CellID of the MCQUANT table quantified on it, so the
+  mask is drawn over the image with each cell coloured by its table row.
+find:
+  path_glob: "**/segmentation/deepcell_mesmer/*_mask.tif"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+?)_mask\\.tif$"

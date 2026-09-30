@@ -1,0 +1,14 @@
+id: cellpose_mccellpose_mask
+name: MCCellpose segmentation mask
+mode: segmentation/mccellpose
+description: >-
+  The label image of MCCellpose, the memory-efficient Cellpose wrapper
+  nf-core/mcmicro runs by default, one integer per segmented cell. The label
+  value is the CellID of the MCQUANT table quantified on it.
+find:
+  path_glob: "**/segmentation/mccellpose/*.tif"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+?)(?:_backsub)?(?:\\.ome)?(?:_cp_masks|_mask)(?:\\.ome)?\\.tif$"

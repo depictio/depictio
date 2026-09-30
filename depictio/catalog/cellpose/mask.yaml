@@ -1,0 +1,15 @@
+id: cellpose_mask
+name: Cellpose segmentation mask
+mode: segmentation/cellpose
+description: >-
+  The label image Cellpose writes for one sample, one integer per segmented
+  cell (0 is background). nf-core/mcmicro publishes it as `<sample>_mask.tif`,
+  or keeps Cellpose's own `<image>_cp_masks.tif` name; both give the sample. The
+  label value is the CellID of the MCQUANT table quantified on it.
+find:
+  path_glob: "**/segmentation/cellpose/*.tif"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+?)(?:_backsub)?(?:\\.ome)?(?:_cp_masks|_mask)\\.tif$"

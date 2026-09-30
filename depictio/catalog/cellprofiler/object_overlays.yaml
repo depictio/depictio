@@ -1,0 +1,21 @@
+id: cellprofiler_object_overlays
+name: Segmentation overlay images
+mode: imaging/overlays
+description: >-
+  The segmentation images CellProfiler writes, one row per PNG: the
+  assay-development object overlay of every well (outlines drawn over the
+  stains) and the per-site cell and nuclei outlines of the analysis step, with
+  the plate, well and site each one shows, for an image gallery filtered like
+  any other table.
+find:
+  path_glob: "**/*_ObjectOverlay.png"
+  path_glob_alt: ["**/*--cell_outlines.png"]
+recipe: cellprofiler/object_overlays.py
+fixture: object_overlays.tsv
+renders_as:
+  - { id: overlay_kind_filter, component: interactive, interactive_type: SegmentedControl, column_name: image_kind }
+  - { component: card, column: image_id, aggregation: count, secondary_layout: donut, breakdown_col: image_kind }
+  - { component: card, column: well_id, aggregation: nunique, secondary_layout: uniqueness }
+  - { component: card, column: site_id, aggregation: nunique, secondary_layout: completeness }
+  - { component: card, column: plate, aggregation: nunique, secondary_layout: uniqueness }
+  - { component: table }
