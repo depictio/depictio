@@ -53,6 +53,24 @@ def _absolutize_path_var(var: str) -> str:
     return var
 
 
+def _parse_env_overrides(items: list[str], managed: dict[str, str]) -> dict[str, str]:
+    """``--env KEY=VALUE`` items -> settings, refusing keys the local stack sets itself.
+
+    The shell's ``DEPICTIO_*`` variables are dropped on purpose (they usually point at a
+    Docker stack), so this is the one way to turn on an opt-in setting for local runs.
+    """
+    overrides: dict[str, str] = {}
+    for item in items:
+        key, sep, value = item.partition("=")
+        key = key.strip()
+        if not sep or not key.startswith("DEPICTIO_"):
+            _fail(f"--env expects DEPICTIO_KEY=VALUE, got {item!r}")
+        if key in managed:
+            _fail(f"--env {key} is managed by the local stack and cannot be overridden")
+        overrides[key] = value
+    return overrides
+
+
 @app.command()
 def up(
     template: Annotated[
@@ -95,6 +113,15 @@ def up(
             help="Dashboard thumbnails via Playwright; installs Chromium (~150 MB) if needed.",
         ),
     ] = False,
+    server_env_overrides: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--env",
+            help="Extra DEPICTIO_* setting KEY=VALUE for the API and the worker (repeatable), "
+            "e.g. --env DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true. Settings the local stack "
+            "manages itself (ports, hosts, credentials, paths) cannot be overridden.",
+        ),
+    ] = None,
 ):
     """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
     if (template is None) != (data_root is None):
@@ -129,6 +156,7 @@ def up(
             seed = examples or ("none" if template else "iris,penguins")
             secret_values = load_secrets(paths)
             env = server_env(paths, ports, secret_values, seed, screenshots)
+            env.update(_parse_env_overrides(server_env_overrides or [], managed=env))
             url = f"http://127.0.0.1:{ports['api']}"
             state = {"pids": {}, "ports": ports, "url": url, "home": str(paths.home)}
             save_state(paths, state)

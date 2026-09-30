@@ -1,9 +1,10 @@
 import socket
 
 import pytest
+import typer
 
 from depictio.cli.cli import local_stack
-from depictio.cli.cli.commands.local import _absolutize_path_var
+from depictio.cli.cli.commands.local import _absolutize_path_var, _parse_env_overrides
 from depictio.cli.cli.local_stack import Paths, pick_ports, port_is_free, server_env
 
 
@@ -116,3 +117,18 @@ def test_windows_is_rejected_with_a_clear_message(monkeypatch):
     monkeypatch.setattr(local_stack.sys, "platform", "win32")
     with pytest.raises(local_stack.LocalStackError, match="WSL2"):
         local_stack.check_platform_supported()
+
+
+def test_env_overrides_accept_opt_in_settings():
+    managed = {"DEPICTIO_S3_SERVICE_PORT": "9000"}
+    assert _parse_env_overrides(["DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true"], managed) == {
+        "DEPICTIO_STRUCTURE_RESOLVER_ENABLED": "true"
+    }
+
+
+@pytest.mark.parametrize(
+    "item", ["DEPICTIO_S3_SERVICE_PORT=1", "NOT_DEPICTIO=1", "DEPICTIO_NO_EQUALS"]
+)
+def test_env_overrides_refuse_managed_foreign_or_malformed_keys(item):
+    with pytest.raises(typer.Exit):
+        _parse_env_overrides([item], {"DEPICTIO_S3_SERVICE_PORT": "9000"})
