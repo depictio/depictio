@@ -1,0 +1,45 @@
+# Megatest manifest for nf-core/sopa 1.0.1 (read by scripts/nfcore_megatest.py).
+#
+# NO USABLE MEGATEST. The AWS megatest of 1.0.1 publishes `<sample>.zarr` as a
+# dangling symlink (the REPORT step re-publishes its staged input, which the
+# megatest's publish mode leaves as a link into the deleted work dir) and the
+# explorer's morphology TIFF is JPEG 2000, so nothing can be fetched from it.
+# `results_sha` stays null until a run is repatriated. The reference data is
+# produced on the EMBL cluster instead (scripts/nfcore_validation_hpc.py, keys
+# `sopa-test` and `sopa-full`, with --publish_dir_mode copy):
+#
+#   * `-profile test`: sopa's toy dataset (one sample, 4-channel image with an
+#     H&E companion, 5 genes), Proseg on transcript patches, channel
+#     aggregation, fluorescence annotation and scanpy preprocessing. Exercises
+#     every tile of the dashboard except the gene tiles (set --var GENES=...).
+#   * `-profile test_full`: Visium HD human lung cancer (Space Ranger count,
+#     then StarDist + Proseg on the bins). No Leiden and no cell types: the
+#     composition reads `unassigned`, and IMAGE_ELEMENT must name the
+#     `<dataset_id>_full_image` element of the store.
+#
+# Offline, the template was validated on a synthetic run of sopa 2.2.11 on
+# its toy dataset (3 samples, Proseg replaced by the toy cells, the obs
+# columns Proseg writes added), under ~/Data/depictio-nfcore/sopa/1.0.1/synthetic/.
+pipeline: sopa
+version: "1.0.1"
+results_sha: null
+run_root: ""
+keys:
+  - "*.zarr/**"
+  - pipeline_info/params*.json
+  - pipeline_info/*software*versions*.yml
+  - "*.explorer/analysis_summary.html"
+# Sample ids and markers of the test profiles, and the toy dataset's genes.
+forbidden_terms:
+  - sample_name
+  - Visium_HD_Human_Lung_Cancer_HD_Only_Experiment2
+  - lung
+  - CK
+  - CD3
+  - CD20
+  - Tumoral
+  - EPCAM
+  - CD3E
+  - CXCL4
+  - CXCL10
+  - DAPI
