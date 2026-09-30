@@ -46,6 +46,11 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 IMPACT_ORDER: list[str] = ["HIGH", "MODERATE", "LOW"]
 
 
+def _distinct_variants(impact: str) -> pl.Expr:
+    """Distinct variants of one impact class on the gene."""
+    return pl.col("variant_key").filter(pl.col("impact") == impact).n_unique().cast(pl.Int64)
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Fold the coding variants per gene, with the caller agreement of its calls."""
     df = sources["variants"]
@@ -68,16 +73,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("aa_pos").n_unique().cast(pl.Int64).alias("positions"),
         pl.col("sample").n_unique().cast(pl.Int64).alias("samples"),
         pl.col("caller").n_unique().cast(pl.Int64).alias("callers"),
-        pl.col("variant_key")
-        .filter(pl.col("impact") == "HIGH")
-        .n_unique()
-        .cast(pl.Int64)
-        .alias("high_variants"),
-        pl.col("variant_key")
-        .filter(pl.col("impact") == "MODERATE")
-        .n_unique()
-        .cast(pl.Int64)
-        .alias("moderate_variants"),
+        _distinct_variants("HIGH").alias("high_variants"),
+        _distinct_variants("MODERATE").alias("moderate_variants"),
         pl.col("impact").sort_by(rank).first().alias("worst_impact"),
         pl.col("vaf").median().cast(pl.Float64).alias("median_vaf"),
     )
