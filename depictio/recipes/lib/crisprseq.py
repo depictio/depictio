@@ -147,7 +147,10 @@ def cut_site_per_library(indels: pl.DataFrame) -> pl.DataFrame:
                 dtype=pl.Int64,
             ).alias("offset"),
         )
-        .explode("offset", empty_as_null=False)
+        # An empty range explodes to a null row on polars < 2; drop it (the CI polars
+        # has no `empty_as_null`).
+        .explode("offset")
+        .drop_nulls("offset")
         .group_by("sample", "offset")
         .agg(pl.col("pct_reads").sum().alias("deletion_pct"))
     )
