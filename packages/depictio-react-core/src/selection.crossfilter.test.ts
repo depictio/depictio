@@ -98,3 +98,30 @@ describe('valuesOnColumn', () => {
     expect(valuesOnColumn(filters, 'entity').size).toBe(0);
   });
 });
+
+describe('mergeFiltersBySource: a new entity drops the residue pick on the old one', () => {
+  const pickOn = (entity: string, filters: InteractiveFilter[]) =>
+    residuePick(entity).reduce(mergeFiltersBySource, filters);
+
+  it('scatter X, residue on X, scatter Y: only Y is left', () => {
+    let filters: InteractiveFilter[] = [advancedVizSelectionFilter(scatter, 'entity', ['X'])];
+    filters = pickOn('X', filters);
+    expect(filters).toHaveLength(3);
+    filters = mergeFiltersBySource(filters, advancedVizSelectionFilter(scatter, 'entity', ['Y']));
+    expect(filters.map((f) => f.index)).toEqual(['sc']);
+    expect(Array.from(valuesOnColumn(filters, 'entity'))).toEqual(['Y']);
+  });
+
+  it('keeps the pick when the new values still include its entity', () => {
+    let filters = pickOn('X', []);
+    filters = mergeFiltersBySource(filters, advancedVizSelectionFilter(scatter, 'entity', ['X', 'Y']));
+    expect(filters.map((f) => f.index).sort()).toEqual(['mol', 'mol::res', 'sc']);
+  });
+
+  it('keeps the pick on a clear, and on filters of other columns', () => {
+    let filters = pickOn('X', []);
+    filters = mergeFiltersBySource(filters, advancedVizSelectionFilter(scatter, 'entity', []));
+    filters = mergeFiltersBySource(filters, sidebar('engine', ['esmfold']));
+    expect(filters.map((f) => f.index).sort()).toEqual(['mol', 'mol::res', 'side-engine']);
+  });
+});
