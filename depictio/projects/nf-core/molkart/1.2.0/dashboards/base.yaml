@@ -1,0 +1,1121 @@
+version: 1
+# nf-core/molkart 1.2.0 reference dashboard.
+#
+# Funnel: QC (how many cells each segmentation kept and how many spots they
+# caught) -> Tissue (the contrast-enhanced image, the PRIMARY_SEGMENTATION
+# labels and cells over it, lasso to the cell table and a cell record) ->
+# Cell x gene (which genes the cells carry, per sample) -> Segmentation
+# comparison (cell counts and shapes per method, and a second viewer on
+# COMPARE_SEGMENTATION's labels).
+#
+# There is no MultiQC tab: molkart's MultiQC report holds a single custom
+# section, the molkartqc table, which the QC tab reads directly (typed, one
+# row per sample and method).
+#
+# Pinned on every tab: the four-card glance strip, the sample sheet and the
+# Sample / {GROUP_COL_DISPLAY} filters. Each tab adds an open filter section on
+# its own collections. The viewers show one sample at a time: the first sample
+# picked in the Sample filter (the first store otherwise).
+main_dashboard:
+  title: nf-core/molkart
+  subtitle: "nf-core/molkart 1.2.0: spot assignment QC per segmentation method, the tissue image with its cells, per-gene counts and a comparison of two segmentations"
+  advanced_viz_controls: header
+  project_tag: Molecular Cartography Spatial Transcriptomics
+  main_tab_name: QC
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links; the first sample picked is the one the image viewers open
+    persistent: true
+    pin: top
+  - name: QC filters
+    icon: mdi:tune
+    color: cyan
+    description: Segmentation method and assignment rate on the QC table
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The run and its design in four numbers, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The sample hub every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Spot assignment
+    icon: mdi:shield-check-outline
+    color: cyan
+    description: How many cells each segmentation kept and how many spots fell inside them
+  - name: Spot detection
+    icon: mdi:chart-bar
+    color: blue
+    description: What the spot tables hold before any segmentation, duplicates included
+  - name: QC table
+    icon: mdi:table
+    color: gray
+    description: One row per sample and segmentation method
+    collapsed: true
+  components:
+  # ------------------------------------------------------------- at a glance
+  - component_type: card
+    tag: mk-glance-card-samples
+    index: mk-glance-card-samples
+    section: Run at a glance
+    workflow_tag: molkart
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples by {GROUP_COL_DISPLAY}
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: mk-glance-card-spots
+    index: mk-glance-card-spots
+    section: Run at a glance
+    workflow_tag: molkart
+    data_collection_tag: mk-spots
+    use: mindagap/marked_spots
+    aggregation: sum
+    column_name: spots
+    column_type: int64
+    filter_expr: "col('status') == 'kept'"
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:map-marker-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spots kept
+    description: Transcript spots of the spot tables once grid-line duplicates are set aside.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: mk-glance-card-cells
+    index: mk-glance-card-cells
+    section: Run at a glance
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/cells
+    aggregation: count
+    column_name: cell_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells ({PRIMARY_SEGMENTATION})
+    description: Cells kept by the primary segmentation after the area filter.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: mk-glance-card-genes
+    index: mk-glance-card-genes
+    section: Run at a glance
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    use: spot2cell/gene_summary
+    aggregation: nunique
+    column_name: gene
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: sample
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes in the panel
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: mk-sheet-intro
+    section: Sample sheet
+    title: The samples behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample: its nuclear image, its spot table, its optional
+      membrane image and the design factors of the table the run was ingested
+      with. The Sample and {GROUP_COL_DISPLAY} filters read it, so it narrows
+      every other tab.
+    workflow_tag: molkart
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: mk-sheet-table-samples
+    section: Sample sheet
+    workflow_tag: molkart
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Sample hub
+    description: One row per sample, with its inputs and its design factors.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 3}
+
+  # --------------------------------------------------------- sample filters
+  - component_type: interactive
+    tag: mk-filter-sample
+    index: mk-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: molkart
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mk-filter-group
+    index: mk-group-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: molkart
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # -------------------------------------------------------------- QC filters
+  - component_type: interactive
+    tag: mk-qc-filter-method
+    index: mk-qc-method-filter
+    section: QC filters
+    group: QC scope
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/method_picker
+    interactive_component_type: MultiSelect
+    column_name: segmentation_method
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Segmentation method
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mk-qc-filter-assigned
+    index: mk-qc-assigned-range
+    section: QC filters
+    group: QC scope
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/assigned_filter
+    interactive_component_type: RangeSlider
+    column_name: spot_assign_percent
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-bar'}
+    placement: left
+    title: Spots assigned (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # --------------------------------------------------------- spot assignment
+  - component_type: text
+    tag: mk-qc-intro
+    section: Spot assignment
+    title: Cells kept, spots caught
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      For every sample and segmentation method: how many cells survived the
+      area filter and what share of the sample's spots fell inside one. Read
+      the methods side by side; a method that keeps many cells but catches few
+      spots draws cells smaller than the transcripts around them.
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: mk-qc-card-assigned
+    index: mk-qc-card-assigned
+    section: Spot assignment
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/spot_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: spot_assign_percent
+    column_type: float64
+    filter_expr: "col('segmentation_method') == '{PRIMARY_SEGMENTATION}'"
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spots assigned (%)
+    description: Median over the samples, primary segmentation; the strip shows their spread.
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-qc-card-per-cell
+    index: mk-qc-card-per-cell
+    section: Spot assignment
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/spot_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: spot_assign_per_cell
+    column_type: float64
+    filter_expr: "col('segmentation_method') == '{PRIMARY_SEGMENTATION}'"
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Transcripts per cell
+    description: Median over the samples of their mean, primary segmentation.
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-qc-card-area
+    index: mk-qc-card-area
+    section: Spot assignment
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/spot_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: avg_area
+    column_type: float64
+    filter_expr: "col('segmentation_method') == '{PRIMARY_SEGMENTATION}'"
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean cell area (px)
+    description: Median over the samples of their mean cell area, primary segmentation.
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-qc-card-duplicated
+    index: mk-qc-card-duplicated
+    section: Spot assignment
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/spot_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: duplicated_percent
+    column_type: float64
+    filter_expr: "col('segmentation_method') == '{PRIMARY_SEGMENTATION}'"
+    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Duplicated spots (%)
+    description: Spots Mindagap set aside along tile borders, median over the samples.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: mk-qc-fig-assigned
+    section: Spot assignment
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/assigned_by_method
+    visu_type: bar
+    dict_kwargs: {x: sample, y: spot_assign_percent, color: segmentation_method, barmode: group}
+    title: Spots assigned to cells
+    description: Share of each sample's spots that fell inside a cell, one bar per segmentation method.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: mk-qc-av-cells-vs-assigned
+    index: mk-qc-av-cells-vs-assigned
+    section: Spot assignment
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/cells_vs_assigned
+    config: {x_title: Cells kept, y_title: Spots assigned (%)}
+    title: Cells kept against spots assigned
+    description: One point per sample and method. Points to the upper right keep many cells and catch most spots.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 7}
+
+  # ----------------------------------------------------------- spot detection
+  - component_type: text
+    tag: mk-sd-intro
+    section: Spot detection
+    title: Spots before segmentation
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The genes that dominate each sample's spot table, as a share of all its
+      spots, with the grid-line duplicates Mindagap set aside as their own
+      bar. A gene that dominates here dominates every cell-level view.
+    workflow_tag: molkart
+    data_collection_tag: mk-spots
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: mk-sd-fig-genes
+    section: Spot detection
+    workflow_tag: molkart
+    data_collection_tag: mk-spots
+    use: mindagap/spots_per_gene
+    mode: code
+    visu_type: bar
+    code_content: |
+      # the 12 genes with the most spots over the selected samples, plus the
+      # duplicates, as a share of each sample's spots
+      totals = df.group_by("gene").agg(pl.col("spots").sum()).sort("spots", descending=True)
+      top = [g for g in totals["gene"].to_list() if g != "Duplicated"][:12]
+      order = top + (["Duplicated"] if "Duplicated" in totals["gene"].to_list() else [])
+      df_modified = df.filter(pl.col("gene").is_in(order))
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x="gene",
+          y="pct_of_sample",
+          color="sample",
+          barmode="group",
+          category_orders={"gene": order},
+          labels={"pct_of_sample": "Share of the sample's spots (%)", "gene": "Gene"},
+      )
+    title: Most detected genes
+    description: The 12 genes with the most spots, and the duplicated spots, as a percentage of each sample's spots.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  # ---------------------------------------------------------------- QC table
+  - component_type: table
+    tag: mk-qc-table
+    section: QC table
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/qc_table
+    title: Spot assignment QC
+    description: One row per sample and segmentation method, as molkartqc wrote it, with the derived shares.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+tabs:
+# =============================================================================
+# Tissue: the image, its labels and its cells.
+# =============================================================================
+- title: Tissue
+  subtitle: The contrast-enhanced image with the {PRIMARY_SEGMENTATION} labels and cells over it
+  advanced_viz_controls: header
+  tab_order: 2
+  tab_icon: mdi:microscope
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cell filters
+    icon: mdi:tune
+    color: blue
+    description: Dominant gene, area and transcripts of the cells drawn over the image and listed below it
+  grid_sections:
+  - name: Cells in numbers
+    icon: mdi:counter
+    color: blue
+    description: The cells of the selected samples, primary segmentation
+  - name: Image
+    icon: mdi:microscope
+    color: blue
+    description: One sample at a time, labels and cells over the image; lasso cells to narrow the table
+  - name: Cell detail
+    icon: mdi:information-outline
+    color: blue
+    description: The cell picked in the table
+  components:
+  - component_type: interactive
+    tag: mk-ts-filter-gene
+    index: mk-ts-gene-filter
+    section: Cell filters
+    group: Cell scope
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/dominant_gene_picker
+    interactive_component_type: MultiSelect
+    column_name: dominant_gene
+    column_type: object
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:dna'}
+    placement: left
+    title: Dominant gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mk-ts-filter-area
+    index: mk-ts-area-range
+    section: Cell filters
+    group: Cell scope
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/area_filter
+    interactive_component_type: RangeSlider
+    column_name: area
+    column_type: float64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Cell area (px)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: mk-ts-filter-counts
+    index: mk-ts-counts-range
+    section: Cell filters
+    group: Cell scope
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/counts_filter
+    interactive_component_type: RangeSlider
+    column_name: total_counts
+    column_type: int64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:counter'}
+    placement: left
+    title: Transcripts per cell
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: mk-ts-intro
+    section: Cells in numbers
+    title: The tissue, cell by cell
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The image of the first selected sample, its segmentation labels and one
+      point per cell coloured by the gene that dominates it. Lasso cells on the
+      image to narrow the table, then pick a row to read the cell's record.
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: mk-ts-card-counts
+    index: mk-ts-card-counts
+    section: Cells in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: total_counts
+    column_type: int64
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Transcripts per cell
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-ts-card-genes
+    index: mk-ts-card-genes
+    section: Cells in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n_genes
+    column_type: int64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes per cell
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-ts-card-area
+    index: mk-ts-card-area
+    section: Cells in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: area
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area (px)
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-ts-card-dominant
+    index: mk-ts-card-dominant
+    section: Cells in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    aggregation: nunique
+    column_name: dominant_gene
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: dominant_gene
+    top_n_count: 5
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Dominant genes
+    description: Distinct genes that dominate at least one cell; the donut shows the five most frequent.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: advanced_viz
+    tag: mk-ts-av-viewer
+    index: mk-ts-av-viewer
+    section: Image
+    workflow_tag: molkart
+    data_collection_tag: mk-img
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: mk-img
+      labels_dc_tag: mk-lbl-primary
+      sample_dc_tag: samples
+      sample_column: sample_id
+      points_dc_tag: mk-cells-primary
+      cell_id_col: cell_id
+      x_col: x_centroid
+      y_col: y_centroid
+      color_col: dominant_gene
+      points_sample_col: sample
+      show_scalebar: true
+      selection_enabled: true
+    title: Image, labels and cells
+    description: CLAHE-enhanced image of the first selected sample, the primary segmentation's labels and one point per cell coloured by its dominant gene.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 9}
+  - component_type: table
+    tag: mk-ts-table-cells
+    section: Image
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/cell_table
+    row_selection_enabled: true
+    row_selection_column: cell_key
+    columns: [cell_key, sample, cell_id, dominant_gene, total_counts, n_genes, area, eccentricity, x_centroid, y_centroid]
+    page_size: 50
+    title: Cells
+    description: One row per cell of the selected samples; a lasso on the image narrows it. Pick a row to read its record below.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+  - component_type: advanced_viz
+    tag: mk-ts-av-record
+    index: mk-ts-av-record
+    section: Cell detail
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-primary
+    use: spot2cell/cell_record
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: cell_key
+      title_col: cell_key
+      selection_source: table_selection
+      linked_component: mk-ts-table-cells
+      sections:
+        Position: [sample, segmentation_method, cell_id, x_centroid, y_centroid]
+        Shape: [area, major_axis_length, minor_axis_length, eccentricity, solidity, extent, orientation]
+        Transcripts: [total_counts, n_genes, dominant_gene, dominant_gene_frac]
+      labels:
+        x_centroid: Centroid x (px)
+        y_centroid: Centroid y (px)
+        area: Area (px)
+        total_counts: Transcripts
+        n_genes: Genes
+        dominant_gene_frac: Dominant gene share
+    title: Cell record
+    description: The cell picked in the table above, where it sits, its shape and its transcripts.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+# =============================================================================
+# Cell x gene: which genes the cells carry, per sample.
+# =============================================================================
+- title: Cell x gene
+  subtitle: Transcripts per gene in the {PRIMARY_SEGMENTATION} cells, per sample
+  advanced_viz_controls: header
+  tab_order: 3
+  tab_icon: mdi:dna
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gene filters
+    icon: mdi:tune
+    color: grape
+    description: Genes of the panel, and the transcripts a cell holds of them
+  grid_sections:
+  - name: Panel in numbers
+    icon: mdi:counter
+    color: grape
+    description: The panel's transcripts in the cells of the selected samples
+  - name: Top genes
+    icon: mdi:chart-bar
+    color: grape
+    description: Which genes carry the transcripts, and in how many cells
+  - name: Expression per cell
+    icon: mdi:chart-box-outline
+    color: violet
+    description: How many transcripts of a gene an expressing cell holds, and the samples side by side
+  - name: Gene table
+    icon: mdi:table
+    color: gray
+    description: One row per sample and gene
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: mk-cg-filter-gene
+    index: mk-cg-gene-filter
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    use: spot2cell/panel_gene_picker
+    interactive_component_type: MultiSelect
+    column_name: gene
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mk-cg-filter-count
+    index: mk-cg-count-range
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: molkart
+    data_collection_tag: mk-cell-genes
+    interactive_component_type: RangeSlider
+    column_name: count
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:counter'}
+    placement: left
+    title: Transcripts of the gene per cell
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - component_type: text
+    tag: mk-cg-intro
+    section: Panel in numbers
+    title: The panel, gene by gene
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Which genes of the panel the segmented cells carry, how broadly and at
+      what level, per sample. Pick genes on the left to follow them through
+      every tile, and lasso cells on the Tissue tab to restrict the per-cell
+      counts to them.
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: mk-cg-card-transcripts
+    index: mk-cg-card-transcripts
+    section: Panel in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cell-genes
+    use: spot2cell/cell_genes_long
+    aggregation: sum
+    column_name: count
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 5
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Transcripts in cells
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-cg-card-breadth
+    index: mk-cg-card-breadth
+    section: Panel in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: frac_cells_expressing
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells expressing a gene
+    description: Median over genes and samples of the fraction of cells expressing the gene, 0 to 1.
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-cg-card-level
+    index: mk-cg-card-level
+    section: Panel in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_per_expressing_cell
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Transcripts per expressing cell
+    description: Median over genes and samples of the mean count in the cells that express the gene.
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-cg-card-cells-expressing
+    index: mk-cg-card-cells-expressing
+    section: Panel in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cell-genes
+    aggregation: nunique
+    column_name: cell_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: sample
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells with transcripts
+    description: Cells holding at least one transcript of the selected genes.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: figure
+    tag: mk-cg-fig-top
+    section: Top genes
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    use: spot2cell/top_genes_bar
+    mode: code
+    visu_type: bar
+    code_content: |
+      # the 12 genes with the most transcripts over the selected samples, as a
+      # share of each sample's assigned transcripts
+      top = (
+          df.group_by("gene")
+          .agg(pl.col("total_counts").sum())
+          .sort(["total_counts", "gene"], descending=[True, False])
+          .head(12)["gene"]
+          .to_list()
+      )
+      df_modified = df.filter(pl.col("gene").is_in(top))
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x="gene",
+          y="share_of_counts_pct",
+          color="sample",
+          barmode="group",
+          category_orders={"gene": top},
+          labels={"share_of_counts_pct": "Share of assigned transcripts (%)", "gene": "Gene"},
+      )
+    title: Most abundant genes in cells
+    description: The 12 genes with the most transcripts in cells, as a percentage of each sample's assigned transcripts.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: mk-cg-av-dotplot
+    index: mk-cg-av-dotplot
+    section: Top genes
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    use: spot2cell/gene_dot_plot
+    config: {max_dot_size: 18}
+    title: Breadth and level per sample
+    description: Dot size is the fraction of a sample's cells expressing the gene, colour the mean transcripts per expressing cell.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 9}
+
+  - component_type: figure
+    tag: mk-cg-fig-counts
+    section: Expression per cell
+    workflow_tag: molkart
+    data_collection_tag: mk-cell-genes
+    use: spot2cell/counts_by_gene
+    mode: code
+    visu_type: box
+    code_content: |
+      # per-cell counts of the 12 genes expressed in the most cells
+      top = (
+          df.group_by("gene")
+          .agg(pl.len().alias("cells"))
+          .sort(["cells", "gene"], descending=[True, False])
+          .head(12)["gene"]
+          .to_list()
+      )
+      df_modified = df.filter(pl.col("gene").is_in(top))
+      fig = px.box(
+          df_modified.to_pandas(),
+          x="gene",
+          y="count",
+          color="sample",
+          category_orders={"gene": top},
+          labels={"count": "Transcripts per expressing cell", "gene": "Gene"},
+      )
+    title: Transcripts per expressing cell
+    description: For the 12 genes expressed in the most cells, the spread of their count over the cells that carry them.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: mk-cg-av-heatmap
+    index: mk-cg-av-heatmap
+    section: Expression per cell
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-heatmap
+    use: spot2cell/gene_sample_heatmap
+    config: {normalize: row_z, cluster_method: ward}
+    title: Genes against samples
+    description: log1p of the mean transcripts per cell of the panel's most abundant genes, scaled per gene, rows and samples clustered.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 9}
+
+  - component_type: table
+    tag: mk-cg-table-genes
+    section: Gene table
+    workflow_tag: molkart
+    data_collection_tag: mk-gene-summary
+    use: spot2cell/gene_summary
+    title: Gene summary
+    description: One row per sample and gene, ranked by transcripts within the sample.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+# =============================================================================
+# Segmentation comparison: the methods side by side.
+# =============================================================================
+- title: Segmentation comparison
+  subtitle: Cell counts and shapes per method, and {COMPARE_SEGMENTATION}'s labels on the image
+  advanced_viz_controls: header
+  tab_order: 4
+  tab_icon: mdi:set-merge
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Method filters
+    icon: mdi:tune
+    color: orange
+    description: Segmentation methods and cell area, on the cells of every method
+  grid_sections:
+  - name: Methods in numbers
+    icon: mdi:counter
+    color: orange
+    description: The cells of every segmentation method of the run
+  - name: Counts and shapes
+    icon: mdi:chart-box-outline
+    color: orange
+    description: How many cells each method draws, how large, and how many transcripts they catch
+  - name: Second segmentation
+    icon: mdi:microscope
+    color: yellow
+    description: The same image with the comparison method's labels and cells
+  components:
+  - component_type: interactive
+    tag: mk-sc-filter-method
+    index: mk-sc-method-filter
+    section: Method filters
+    group: Method scope
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/method_picker
+    interactive_component_type: MultiSelect
+    column_name: segmentation_method
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Segmentation method
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: mk-sc-filter-area
+    index: mk-sc-area-range
+    section: Method filters
+    group: Method scope
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/area_filter
+    interactive_component_type: RangeSlider
+    column_name: area
+    column_type: float64
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Cell area (px)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - component_type: text
+    tag: mk-sc-intro
+    section: Methods in numbers
+    title: One tissue, several segmentations
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every segmentation method the run used, side by side: how many cells it
+      draws, how large, and how many transcripts each cell catches. The viewer
+      at the bottom puts the comparison method's labels on the same image.
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: mk-sc-card-cells
+    index: mk-sc-card-cells
+    section: Methods in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/cells
+    aggregation: count
+    column_name: cell_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: segmentation_method
+    top_n_count: 4
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells, all methods
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-sc-card-area
+    index: mk-sc-card-area
+    section: Methods in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: area
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area (px)
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-sc-card-counts
+    index: mk-sc-card-counts
+    section: Methods in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: total_counts
+    column_type: int64
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Transcripts per cell
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: mk-sc-card-removed
+    index: mk-sc-card-removed
+    section: Methods in numbers
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    aggregation: sum
+    column_name: labels_below_thresh
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: segmentation_method
+    top_n_count: 4
+    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Labels removed as too small
+    description: Labels under the minimum area the area filter dropped, per method.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: figure
+    tag: mk-sc-fig-cells
+    section: Counts and shapes
+    workflow_tag: molkart
+    data_collection_tag: mk-qc
+    use: molkartqc/cells_by_method
+    visu_type: bar
+    dict_kwargs: {x: sample, y: total_cells, color: segmentation_method, barmode: group}
+    title: Cells per sample and method
+    description: Cells kept after the area filter, one bar per segmentation method.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: figure
+    tag: mk-sc-fig-area
+    section: Counts and shapes
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/area_by_method
+    visu_type: box
+    dict_kwargs: {x: segmentation_method, y: area, color: segmentation_method}
+    title: Cell area per method
+    description: A whole-cell method draws larger cells than a nuclear one; two nuclear methods should agree.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: figure
+    tag: mk-sc-fig-counts
+    section: Counts and shapes
+    workflow_tag: molkart
+    data_collection_tag: mk-cells
+    use: spot2cell/counts_by_method
+    visu_type: box
+    dict_kwargs: {x: segmentation_method, y: total_counts, color: segmentation_method}
+    title: Transcripts per cell per method
+    description: Larger cells catch more of the spots around the nucleus; many empty cells point to over-segmentation.
+    title_size: h3
+    layout: {x: 0, y: 14, w: 8, h: 7}
+
+  - component_type: advanced_viz
+    tag: mk-sc-av-viewer
+    index: mk-sc-av-viewer
+    section: Second segmentation
+    workflow_tag: molkart
+    data_collection_tag: mk-img
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: mk-img
+      labels_dc_tag: mk-lbl-compare
+      sample_dc_tag: samples
+      sample_column: sample_id
+      points_dc_tag: mk-cells-compare
+      cell_id_col: cell_id
+      x_col: x_centroid
+      y_col: y_centroid
+      color_col: dominant_gene
+      points_sample_col: sample
+      show_scalebar: true
+      selection_enabled: true
+    title: Image with the comparison labels
+    description: The same image as the Tissue tab, with the comparison method's labels and cells; lasso cells to narrow the table below.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 9}
+  - component_type: table
+    tag: mk-sc-table-cells
+    section: Second segmentation
+    workflow_tag: molkart
+    data_collection_tag: mk-cells-compare
+    use: spot2cell/cell_table
+    row_selection_enabled: true
+    row_selection_column: cell_key
+    columns: [cell_key, sample, cell_id, dominant_gene, total_counts, n_genes, area, eccentricity]
+    page_size: 50
+    title: Cells of the comparison method
+    description: One row per cell of the comparison method in the selected samples; a lasso on the image above narrows it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 9, w: 8, h: 7}
