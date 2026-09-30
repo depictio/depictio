@@ -45,6 +45,11 @@ export default defineConfig({
         replacement: path.resolve(__dirname, '../../packages/depictio-react-core/src'),
       },
       { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
+      // Same stub as the catalog preview: the single-file build inlines every
+      // dynamic import, so the real 3Dmol.js would ride along in every embed.
+      // No embed draws a 3D structure anyway (molecule_3d fetches its structure
+      // at render time and is in HTML_UNAVAILABLE_KINDS on the server).
+      { find: /^3dmol$/, replacement: path.resolve(__dirname, 'src/catalog-preview/threeDmolStub.ts') },
     ],
     dedupe: [
       'react',

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { InteractiveFilter } from './api';
 import {
   cardScopedFilters,
+  chainSelectionFilterIndex,
   clearedSelectionFilters,
   filtersExcludingOwnResidue,
   mergeFiltersBySource,
@@ -11,6 +12,7 @@ import {
   residueRangeFilters,
   residueRangeFromFilters,
 } from './selection';
+import { chainSelectionFilter } from './components/advanced_viz/protein/rendererData';
 
 const pick = (start: number | null, end?: number, entity: string | null = 'P1') =>
   residueRangeFilters('mol', {
@@ -161,6 +163,19 @@ describe('residue selection in the shared selection helpers', () => {
     expect(own.filters).toHaveLength(2);
     expect(own.count).toBe(1);
     expect(apply(filters, clearedSelectionFilters(own.filters))).toEqual([other]);
+  });
+
+  it('ownSelection takes the chain half of a pick on a complex, and clearing drops it', () => {
+    const chain = chainSelectionFilter('mol', 'dc1', 'chain', 'B');
+    const theirs = chainSelectionFilter('msa', 'dc1', 'chain', 'A');
+    expect(ownSelection([...pick(1, 2), theirs], 'mol').filters).not.toContain(theirs);
+    const filters = [...pick(1, 2), chain, other];
+    const own = ownSelection(filters, 'mol');
+    expect(own.filters.map((f) => f.index)).toEqual(['mol', 'mol::res', chainSelectionFilterIndex('mol')]);
+    expect(own.count).toBe(1);
+    expect(apply(filters, clearedSelectionFilters(own.filters))).toEqual([other]);
+    // A chain pick left on its own is still something to clear.
+    expect(ownSelection([chain], 'mol')).toEqual({ filters: [chain], count: 1 });
   });
 
   it('ownSelection counts a range with no entity half as one selection', () => {
