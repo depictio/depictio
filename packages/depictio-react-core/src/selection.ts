@@ -636,8 +636,7 @@ export function valuesOnColumn(
   for (const f of filters) {
     if (filterColumn(f) !== column) continue;
     if (exclude && f.index === exclude.index && f.source === exclude.source) continue;
-    const v = f.value;
-    const values = Array.isArray(v) ? v : v == null || v === '' ? [] : [v];
+    const values = Array.isArray(f.value) ? f.value : [f.value];
     for (const x of values) if (x != null && x !== '') out.add(String(x));
   }
   return out;
@@ -785,6 +784,37 @@ export function extractRowSelection(
   return out;
 }
 
+/** The component index a residue pick's half belongs to (its entity half's index). */
+function residuePickIndex(index: string): string {
+  for (const suffix of [RESIDUE_RANGE_INDEX_SUFFIX, CHAIN_SELECTION_INDEX_SUFFIX]) {
+    if (index.endsWith(suffix)) return index.slice(0, -suffix.length);
+  }
+  return index;
+}
+
+/**
+ * Residue picks whose entity `next` no longer allows: `next` is another
+ * source's pick of values on the entity column of the pick, and the pick's
+ * entity is not among them. Returns their component indices.
+ */
+function residuePicksLeftBehind(
+  filters: InteractiveFilter[],
+  next: InteractiveFilter,
+): Set<string> {
+  const stale = new Set<string>();
+  const column = filterColumn(next);
+  const type = next.interactive_component_type ?? next.metadata?.interactive_component_type;
+  if (isResidueFilter(next) || column == null || type === 'RangeSlider') return stale;
+  if (!Array.isArray(next.value) || next.value.length === 0) return stale;
+  const allowed = new Set(next.value.map(String));
+  for (const f of filters) {
+    if (!isResidueFilter(f) || filterColumn(f) !== column || !Array.isArray(f.value)) continue;
+    if (residuePickIndex(f.index) !== f.index) continue;
+    if (f.value.some((v) => !allowed.has(String(v)))) stale.add(f.index);
+  }
+  return stale;
+}
+
 /**
  * Add or replace a filter, deduping by ``(index, source)``.
  *
@@ -799,6 +829,10 @@ export function extractRowSelection(
  * column: the protein tiles of a tab share one residue range, so the last
  * gesture wins instead of intersecting with an older pick (a click on residue
  * 22 in 3D then a brush over 40-70 in the alignment would match nothing).
+ *
+ * A filter that moves the entity column elsewhere drops the residue picks made
+ * on the old entity: after residue 30 of gene X, a click on gene Y in a gene
+ * scatter would otherwise keep `gene=[X]` alongside `gene=[Y]` and match nothing.
  */
 export function mergeFiltersBySource(
   filters: InteractiveFilter[],
@@ -809,9 +843,11 @@ export function mergeFiltersBySource(
     isResidueFilter(f) &&
     filterColumn(f) != null &&
     filterColumn(f) === filterColumn(next);
+  const stalePicks = residuePicksLeftBehind(filters, next);
   const matches = (f: InteractiveFilter) =>
     (f.index === next.index && (f.source ?? null) === (next.source ?? null)) ||
-    sameResidueColumn(f);
+    sameResidueColumn(f) ||
+    (isResidueFilter(f) && stalePicks.has(residuePickIndex(f.index)));
 
   const cleared =
     next.value === null ||
