@@ -213,6 +213,20 @@ What changed in the manifests of the reworked templates:
 - **genomeassembler** fetches a flagstat file that no collection reads; left in the manifest
   for now.
 
+### 2026-09-30 imaging lot (bioimage viewer templates)
+
+Five imaging and spatial pipelines, built on the bioimage data collection (OME-TIFF, OME-Zarr,
+SpatialData, labels masks). Two megatests are usable as they stand; the three others are
+authored offline and wait for EMBL cluster runs (`scripts/nfcore_validation_hpc.py`).
+
+| pipeline | version | results_sha | run_root | MultiQC | status |
+|---|---|---|---|---|---|
+| mcmicro | 2.0.0 | `f4400001578642e370a72668966c6602fe172ef6` | `.` | 1.32 (custom content only: matrix_summary) | megatest (`test_full`), 2 samples |
+| cellpainting | 1.0.0dev | `40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3` | `.` | run metadata only, no MultiQC tab | **unreleased dev.** 1 JUMP ORF plate, 4 wells x 9 sites x 8 channels, 323 MB. The analysis step publishes one site flat (`cellprofiler/analysis/analysis/`); CytoTable has every site. Plate map vendored under `input/`. |
+| molkart | 1.2.0 | none | | none (repeats the molkartqc table) | megatest holds `pipeline_info` and two stray CLAHE images only; HPC `test_full` (`molkart-full`, fetched with `rsync -L`), offline validated on a synthetic tree |
+| sopa | 1.0.1 | none | | | megatest unusable (dangling `.zarr` symlink, JPEG 2000 TIFF); authored on a synthetic toy run; HPC `sopa-test` then `sopa-full` |
+| spatialvi | 1.0.0dev | none | | 1.29 (to confirm on the run) | **unreleased dev** (`441ded53`, 2026-09-15), no release and no megatest; authored on a synthetic tree built from the test-dataset Space Ranger outputs; HPC `spatialvi-test` |
+
 ## How to use
 
 ```bash

@@ -995,6 +995,57 @@ MultiQC parquet, and the reason is recorded in its report.
 
 ---
 
+## mcmicro 2.0.0
+
+- **Megatest (`test_full`):** 2 samples x 2 cycles, BaSiCPy, backsub, Mesmer and Cellpose.
+  `SEGMENTER=mesmer`, `COMPARE_SEGMENTER=cellpose`.
+- **Further, not run:** the default profile (`--segmentation mccellpose`, needs
+  `--var SEGMENTER=mccellpose`); `--tma_dearray` (the Coreograph collections); a single-segmenter
+  run (the comparison viewer stays empty).
+
+---
+
+## cellpainting 1.0.0dev (unreleased)
+
+- **Megatest, default plate map (`GROUP_COL=pert_type`):** 3 treated wells and 1 negative control.
+- **`--var GROUP_COL=perturbation`:** one group per gene; the heatmap strip, box plots and group
+  comparison follow.
+- **No plate map** (`METADATA_FILE` pointing at a missing file): the samples collection is
+  skipped and the groups fall back to "All wells".
+- **Images:** `depictio images push DATA_ROOT s3://depictio-bucket/nf-core-cellpainting/ --extensions .png`
+  before the run; the gallery stays empty without it.
+
+---
+
+## molkart 1.2.0 (cluster)
+
+- **`test_full`, three segmenters:** the first method of `segmentation_method` feeds the Tissue
+  viewer (`PRIMARY_SEGMENTATION`), the second the comparison viewer (`COMPARE_SEGMENTATION`);
+  both are read from the run's params.
+- **Single segmenter:** `SINGLE_SEGMENTATION` prunes the comparison tab.
+- **Membrane images in the samplesheet:** `MEMBRANE_STACK` repoints the image collection at the
+  two-channel stack.
+
+---
+
+## sopa 1.0.1 (cluster)
+
+- **`test` (toy):** Proseg, fluorescence annotation and scanpy: every tile but the gene ones.
+- **`test_full` (Visium HD lung):** Space Ranger, StarDist and Proseg; ingest with
+  `--var IMAGE_ELEMENT=<dataset_id>_full_image`.
+
+---
+
+## spatialvi 1.0.0dev (unreleased, cluster)
+
+- **`test`:** one CytAssist FFPE sample; the viewer, spots and integration tabs show
+  `IMAGE_SAMPLE`.
+- **`GENES` set:** adds the gene expression dashboard; the ids are Ensembl ids, the var names of
+  the pipeline's AnnData.
+- **No design table:** the groups fall back to "all samples".
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

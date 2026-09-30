@@ -268,6 +268,19 @@ SCENARIOS: list[Scenario] = [
     # which is worth recording and not worth showing.
     Scenario("variantbenchmarking", "1.4.0", "germline_small", note="germline route only"),
     Scenario(
+        "mcmicro",
+        "2.0.0",
+        "megatest",
+        note="test_full: mesmer+cellpose, backsub, basicpy; samplesheet + design vendored in input/",
+        vars=(("METADATA_FILE", "{data_root}/input/metadata.tsv"),),
+    ),
+    Scenario(
+        "cellpainting",
+        "1.0.0dev",
+        "megatest",
+        note="unreleased dev 40423f0, vendored plate map; push PNGs first",
+    ),
+    Scenario(
         "variantbenchmarking",
         "1.4.0",
         "germline_sv",

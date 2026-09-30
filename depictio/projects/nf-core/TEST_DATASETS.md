@@ -360,6 +360,20 @@ With these, 24 templates ship, 25 once rnasplice lands.
 
 ---
 
+## 4. Imaging lot
+
+Built on 2026-09-30 for the bioimage viewer: an image next to its per-cell or per-spot table,
+with labels masks drawn over it and the lasso selection feeding the tables. Designs are
+vendored under `input/` and passed as `METADATA_FILE`, the ampliseq convention.
+
+| pipeline | template version | latest nf-core | `-r` needed | reference megatest | MultiQC written | structure | DCs (optional) | dataset and design |
+|---|---|---|---|---|---|---|---|---|
+| mcmicro | 2.0.0 | 2.0.0 | no | `f4400001` | **1.32** | flat | 18 (8) | `test_full`: 2 samples x 2 cycles, BaSiCPy, backsub, Mesmer and Cellpose; samplesheet, markers and design vendored |
+| cellpainting | 1.0.0dev | unreleased | yes (sha) | `40423f0d` | run metadata only | flat | see template | 1 plate, 4 wells x 9 sites; plate map vendored; images pushed as PNG before the ingest |
+| molkart | 1.2.0 | 1.2.0 | no | empty | none | flat | see template | `test_full` on the cluster (Zenodo 8413573), 2 samples, Mesmer, Cellpose and StarDist |
+| sopa | 1.0.1 | 1.0.1 | no | unusable | | flat | see template | `test` (toy) then `test_full` (Visium HD lung) on the cluster |
+| spatialvi | 1.0.0dev | unreleased | yes (sha) | none | to confirm | flat | see template | `test` on the cluster (CytAssist FFPE, chr22 probe set); `test_full` samplesheet URL is a 404 |
+
 ## Annex A - why the codes exist
 
 **`VER`** - `depictio.config` forwards `--pipeline-id <manifest.name>/<manifest.version>`
