@@ -9,8 +9,20 @@ A `bioimage` DC is file-backed, and its ``format`` says what each store is:
   image element at ``image_path`` (e.g. ``images/he``) is shown, and it is an
   NGFF image itself, so it is served like an OME-Zarr store rooted at
   ``<store>/<image_path>``. The CLI uploads that subtree only.
-* ``ome-tiff``: one pyramidal ``*.ome.tif`` / ``*.ome.tiff`` file, read by the
+* ``ome-tiff``: one pyramidal ``*.ome.tif(f)`` (or plain ``*.tif(f)``) file, read by the
   viewer with HTTP Range requests.
+* ``tiff``: one plain ``*.tif`` / ``*.tiff`` segmentation mask (``kind:
+  labels`` only), the form most segmentation tools write. The CLI converts it
+  at ingest to a multiscale OME-Zarr (NGFF 0.4) labels image and uploads that
+  under the store's S3 prefix, so the API serves it as a key tree named after
+  the TIFF (``<sample>_mask.tif/.zattrs``). Upload is required: there is no
+  converted copy on disk for the API to fall back to.
+
+``kind`` says what the pixels are: ``image`` (intensities, the default) or
+``labels`` (a segmentation mask: one integer per cell, 0 = background). A
+labels store is drawn over the image store of the same sample, so both DCs
+must name their stores so that they yield the same sample name; that is what
+``sample_pattern`` is for (``^(.+?)_mask\\.tif$``).
 
 Where a store lives:
 
@@ -32,6 +44,7 @@ OME-Zarr and SpatialData images may be NGFF 0.4 (zarr v2: ``.zattrs``,
 from __future__ import annotations
 
 import posixpath
+import re
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -44,6 +57,10 @@ BioimageKind = Literal["image", "labels"]
 
 OME_ZARR_STORE_SUFFIX = ".zarr"
 OME_TIFF_SUFFIXES = (".ome.tiff", ".ome.tif")
+TIFF_SUFFIXES = (".tiff", ".tif")
+# Formats a labels DC accepts: an NGFF labels image, or a plain mask TIFF
+# converted to one at ingest.
+LABELS_FORMATS = ("tiff", "ome-zarr")
 
 # Schemes a remote store URL may use; the host / bucket allow-list is a server
 # setting, checked at read time (see ``settings.bioimage``).
@@ -51,8 +68,16 @@ REMOTE_STORE_SCHEMES = ("s3", "https")
 
 
 def bioimage_store_suffixes(fmt: str) -> tuple[str, ...]:
-    """Name suffixes a store of ``fmt`` must carry."""
-    return OME_TIFF_SUFFIXES if fmt == "ome-tiff" else (OME_ZARR_STORE_SUFFIX,)
+    """Name suffixes a store of ``fmt`` must carry.
+
+    An OME-TIFF may be named plain ``*.tif(f)`` (nf-core molkart writes its
+    CLAHE pyramid so): ingest checks the OME-XML header, not the name.
+    """
+    if fmt == "ome-tiff":
+        return (*OME_TIFF_SUFFIXES, *TIFF_SUFFIXES)
+    if fmt == "tiff":
+        return TIFF_SUFFIXES
+    return (OME_ZARR_STORE_SUFFIX,)
 
 
 def is_bioimage_store_name(name: str, fmt: str = "ome-zarr") -> bool:
@@ -63,8 +88,18 @@ def is_bioimage_store_name(name: str, fmt: str = "ome-zarr") -> bool:
 
 
 def is_single_file_format(fmt: str) -> bool:
-    """Whether a store of ``fmt`` is one file (served with Range) rather than a key tree."""
+    """Whether a store of ``fmt`` is served as one file (with Range) rather than a key tree.
+
+    A ``tiff`` mask is one file on disk but a key tree once converted, so it
+    is not: see ``is_file_store_format`` for the on-disk shape.
+    """
     return fmt == "ome-tiff"
+
+
+def is_file_store_format(fmt: str) -> bool:
+    """Whether a local store of ``fmt`` is one file on disk (OME-TIFF, mask TIFF)
+    rather than a ``*.zarr`` directory: what the scanner and the folder listing look for."""
+    return fmt in ("ome-tiff", "tiff")
 
 
 def bioimage_s3_prefix(dc_id: str, store_name: str | None = None) -> str:
@@ -87,13 +122,54 @@ def bioimage_s3_object_key(dc_id: str, store_name: str) -> str:
     return f"bioimage/{dc_id}/{store_name}"
 
 
-def bioimage_sample_name(store_name: str) -> str:
-    """Sample name of a store: its basename without the ``.zarr`` / ``.ome.tif(f)`` suffix."""
+def check_sample_pattern(pattern: str) -> str:
+    """``pattern`` if it compiles with exactly one capture group, else a ValueError."""
+    try:
+        compiled = re.compile(pattern)
+    except re.error as e:
+        raise ValueError(f"sample_pattern {pattern!r} is not a valid regex: {e}") from e
+    if compiled.groups != 1:
+        raise ValueError(
+            f"sample_pattern {pattern!r} must have exactly one capture group "
+            f"(the sample name), found {compiled.groups}"
+        )
+    return pattern
+
+
+def bioimage_sample_name(store_name: str, sample_pattern: str | None = None) -> str:
+    """Sample name of a store.
+
+    With ``sample_pattern``, its capture group searched in the store name
+    (e.g. ``^(.+?)_mask\\.tif$`` turns ``s1_mask.tif`` into ``s1``); a name
+    the pattern does not match, or an empty capture, falls back to the default.
+    The default is the name without its store suffix (``.zarr``,
+    ``.ome.tif(f)``, ``.tif(f)``).
+    """
     name = store_name.rstrip("/")
-    for suffix in (*OME_TIFF_SUFFIXES, OME_ZARR_STORE_SUFFIX):
+    if sample_pattern:
+        match = re.search(sample_pattern, name)
+        if match and match.group(1):
+            return match.group(1)
+    for suffix in (*OME_TIFF_SUFFIXES, OME_ZARR_STORE_SUFFIX, *TIFF_SUFFIXES):
         if name.endswith(suffix) and name != suffix:
             return name[: -len(suffix)]
     return name
+
+
+def duplicate_samples(
+    store_names: list[str], sample_pattern: str | None = None
+) -> dict[str, list[str]]:
+    """Samples named by more than one store, with those stores.
+
+    The viewer pairs an image with its labels, and a store with the points of
+    its sample, by sample name, so two stores of one DC giving the same sample
+    (``a.ome.tif`` and ``a.ome.tiff``, or two files the ``sample_pattern``
+    folds together) are ambiguous.
+    """
+    by_sample: dict[str, list[str]] = {}
+    for name in store_names:
+        by_sample.setdefault(bioimage_sample_name(name, sample_pattern), []).append(name)
+    return {sample: names for sample, names in by_sample.items() if len(set(names)) > 1}
 
 
 def remote_store_name(url: str) -> str:
@@ -135,6 +211,11 @@ class DCBioimageConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("sample_pattern")
+    @classmethod
+    def _check_sample_pattern(cls, v: str | None) -> str | None:
+        return None if v is None else check_sample_pattern(v)
+
     @field_validator("image_path")
     @classmethod
     def _check_image_path(cls, v: str | None) -> str | None:
@@ -163,6 +244,26 @@ class DCBioimageConfig(BaseModel):
             raise ValueError("format 'spatialdata' needs image_path (e.g. 'images/<name>')")
         if self.format != "spatialdata" and self.image_path is not None:
             raise ValueError("image_path only applies to format 'spatialdata'")
+        if self.kind == "labels" and self.format not in LABELS_FORMATS:
+            raise ValueError(
+                f"kind 'labels' takes format 'tiff' or 'ome-zarr', not {self.format!r}"
+            )
+        if self.format == "tiff":
+            if self.kind != "labels":
+                raise ValueError(
+                    "format 'tiff' is for segmentation masks: set kind 'labels' "
+                    "(images use 'ome-tiff' or 'ome-zarr')"
+                )
+            if not self.upload:
+                raise ValueError(
+                    "format 'tiff' needs upload: a mask TIFF is converted to OME-Zarr "
+                    "at ingest and served from S3, so it cannot be reference-only"
+                )
+            if self.remote_stores:
+                raise ValueError(
+                    "format 'tiff' cannot use remote_stores: a mask TIFF is converted "
+                    "at ingest, and remote stores are read in place"
+                )
         names = [remote_store_name(url) for url in self.remote_stores]
         for url, name in zip(self.remote_stores, names):
             if not is_bioimage_store_name(name, self.format):
@@ -173,4 +274,7 @@ class DCBioimageConfig(BaseModel):
         duplicates = sorted({n for n in names if names.count(n) > 1})
         if duplicates:
             raise ValueError(f"remote stores share a name: {', '.join(duplicates)}")
+        shared = duplicate_samples(names, self.sample_pattern)
+        if shared:
+            raise ValueError(f"remote stores share a sample: {', '.join(sorted(shared))}")
         return self

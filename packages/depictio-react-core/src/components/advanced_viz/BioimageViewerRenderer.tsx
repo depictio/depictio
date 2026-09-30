@@ -13,6 +13,7 @@ import {
   Select,
   Slider,
   Stack,
+  Switch,
   Text,
   Tooltip,
   useMantineColorScheme,
@@ -22,6 +23,7 @@ import { Icon } from '@iconify/react';
 
 import {
   createBioimageSource,
+  createBioimageZarrStore,
   fetchAdvancedVizData,
   fetchBioimageStores,
   InteractiveFilter,
@@ -47,6 +49,14 @@ import {
   type Rgb,
 } from './bioimage/channels';
 import { pointsInPolygon, scaleBarLength, type Polygon } from './bioimage/geometry';
+import {
+  buildLabelLut,
+  cellColouring,
+  pairLabelsStore,
+  rampColor,
+  rampGradient,
+  type LabelStyle,
+} from './bioimage/labels';
 // Types only: the adapter module pulls deck.gl + viv and is imported lazily.
 import type {
   BioimageInfo,
@@ -75,6 +85,10 @@ interface BioimageViewerConfig {
   point_radius?: number;
   points_sample_col?: string | null;
   selection_enabled?: boolean;
+  labels_wf_id?: string | null;
+  labels_dc_id?: string | null;
+  labels_opacity?: number;
+  labels_outline?: boolean;
 }
 
 interface Props {
@@ -229,6 +243,12 @@ function OverlayButton({ label, icon, active, onClick }: OverlayButtonProps): Re
  * or rectangle over it emits the enclosed cell ids as a `scatter_selection`
  * on the points DC, so it cross-filters and can become an analysis group.
  *
+ * An optional labels DC (segmentation masks, one store per sample) draws the
+ * mask of the shown sample over the image: each cell filled and outlined in
+ * its points colour (label value = `cell_id_col`), faded where the filters
+ * exclude it, ringed in the accent when selected; a click on a cell selects
+ * it. Its centroids then stay undrawn, but the lasso still selects on them.
+ *
  * WebGL budget: one slot via useWebglSlot. A tile denied one renders a
  * placeholder and never creates a deck context.
  */
@@ -328,6 +348,36 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     return stores.find((s) => s.name === pickedStore) ?? stores[0];
   }, [stores, sampleValue, pickedStore]);
 
+  // ---- Labels stores --------------------------------------------------------
+  // A labels DC (segmentation masks) holds one store per sample; the one of
+  // the shown image's sample is drawn over it.
+  const labelsDcId = config.labels_dc_id ?? null;
+  const [labelStores, setLabelStores] = useState<BioimageStoreInfo[] | null>(null);
+  const [labelStoresError, setLabelStoresError] = useState<string | null>(null);
+  useEffect(() => {
+    setLabelStoresError(null);
+    if (!labelsDcId) {
+      setLabelStores(null);
+      return;
+    }
+    let cancelled = false;
+    fetchBioimageStores(labelsDcId)
+      .then((list) => {
+        if (!cancelled) setLabelStores((prev) => (sameStores(prev, list) ? prev : list));
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLabelStoresError(errorText(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [labelsDcId, refreshTick]);
+  const pairedLabels = useMemo(
+    () => pairLabelsStore(labelStores, activeStore, stores?.length ?? 0),
+    [labelStores, activeStore, stores],
+  );
+  const pairedLabelsName = pairedLabels?.name ?? null;
+
   // ---- Viewer lifecycle ---------------------------------------------------
   // The host is tracked as state (callback ref), so the viewer is created when
   // the node mounts and torn down when it unmounts, e.g. behind an error.
@@ -338,6 +388,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const [drawn, setDrawn] = useState(false);
   const [zoom, setZoom] = useState(0);
   const roiRef = useRef<(polygon: Polygon) => void>(() => {});
+  const labelClickRef = useRef<(label: number) => void>(() => {});
+  const [labelsDrawn, setLabelsDrawn] = useState(false);
+  const [labelsError, setLabelsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!glGranted || !hostEl) return;
@@ -350,6 +403,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             setDrawn(true);
             setImageLoading(false);
           },
+          onLabelsLoad: () => setLabelsDrawn(true),
+          onLabelClick: (label) => labelClickRef.current(label),
           onZoomChange: (z) => setZoom(Math.round(z * 100) / 100),
           onRoi: (polygon) => roiRef.current(polygon),
           onError: (err) => console.warn('[bioimage_viewer]', err),
@@ -370,6 +425,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       disposed = true;
       setViewer(null);
       setDrawn(false);
+      setLabelsDrawn(false);
       created?.dispose();
     };
   }, [glGranted, hostEl]);
@@ -540,11 +596,18 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     () => resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark)),
     [theme, isDark],
   );
+  // A numeric measurement gets a colour ramp over its range, anything else
+  // one palette swatch per value.
+  const colouring = useMemo(
+    () => (colorCol && pointRows ? cellColouring(pointRows[colorCol] ?? []) : null),
+    [colorCol, pointRows],
+  );
+  const continuous = colouring?.kind === 'continuous' ? colouring : null;
   const colorScale = useMemo(() => {
-    if (!colorCol || !pointRows) return null;
+    if (!colorCol || !pointRows || continuous) return null;
     const values = (pointRows[colorCol] ?? []).map((v) => (v == null ? '' : String(v)));
     return stableColorMap(values, palette);
-  }, [colorCol, pointRows, palette]);
+  }, [colorCol, pointRows, palette, continuous]);
 
   const overlay = useMemo<OverlayPoint[]>(() => {
     if (!pointRows || !xCol || !yCol || !activeStore) return [];
@@ -565,8 +628,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       const id = ids ? String(ids[i] ?? '') : String(i);
       const cat = cats ? String(cats[i] ?? '') : null;
-      const color =
-        cat != null && colorScale ? (hexToRgb(colorScale.get(cat)) ?? base) : base;
+      const color = continuous
+        ? (rampColor(continuous, cats?.[i]) ?? base)
+        : cat != null && colorScale
+          ? (hexToRgb(colorScale.get(cat)) ?? base)
+          : base;
       out.push({ id, x, y, color, faded: keptIds ? !keptIds.has(id) : false });
     }
     return out;
@@ -583,15 +649,82 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     config.points_offset_x,
     config.points_offset_y,
     colorScale,
+    continuous,
     keptIds,
     accentKey,
     palette,
   ]);
 
+  // ---- Labels overlay -----------------------------------------------------
+  const [labelsVisible, setLabelsVisible] = useState(true);
+  const [labelsOutline, setLabelsOutline] = useState(config.labels_outline ?? true);
+  const [labelsOpacity, setLabelsOpacity] = useState(config.labels_opacity ?? 0.5);
+  useEffect(() => setLabelsOutline(config.labels_outline ?? true), [config.labels_outline]);
+  useEffect(() => setLabelsOpacity(config.labels_opacity ?? 0.5), [config.labels_opacity]);
+  const [labelsSize, setLabelsSize] = useState<{ width: number; height: number } | null>(null);
+
+  // Open the paired store once the image is up; drop it when unpaired. Hiding
+  // the labels keeps the store open (the layer just stops drawing).
+  const labelsWanted = Boolean(labelsDcId && pairedLabelsName);
+  useEffect(() => {
+    if (!viewer || !info) return;
+    let cancelled = false;
+    setLabelsDrawn(false);
+    setLabelsError(null);
+    setLabelsSize(null);
+    const store =
+      labelsWanted && labelsDcId && pairedLabelsName
+        ? createBioimageZarrStore(labelsDcId, pairedLabelsName)
+        : null;
+    viewer
+      .setLabels(store)
+      .then((opened) => {
+        if (!cancelled && opened) setLabelsSize({ width: opened.width, height: opened.height });
+      })
+      .catch((err: unknown) => {
+        if (cancelled || (err instanceof Error && err.name === 'LoadSupersededError')) return;
+        setLabelsError(`Could not open the labels of ${pairedLabelsName}: ${errorText(err)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `info` is a new object on every load, including a refresh of the same image.
+  }, [viewer, info, labelsWanted, labelsDcId, pairedLabelsName, refreshTick]);
+
+  const labelsShown = labelsVisible && labelsWanted && labelsSize !== null && !labelsError;
+  // Masks share the image's pixel grid; another size would draw misaligned.
+  const labelsMisaligned =
+    labelsSize !== null &&
+    info !== null &&
+    (labelsSize.width !== info.width || labelsSize.height !== info.height);
+  // Cells join the table on `cell_id_col` (label value = cell id). Labels the
+  // table does not list draw in the accent, faded once a table is joined.
+  const joinable = Boolean(pointsEnabled && cellIdCol && pointRows);
+  const ownSelectionSet = useMemo(() => new Set(ownSelection), [ownSelection]);
+  const labelLut = useMemo(() => {
+    const neutral: Rgb = accent ?? hexToRgb(palette[0]) ?? [128, 128, 128];
+    const unknown: LabelStyle = { color: neutral, faded: joinable, selected: false };
+    return buildLabelLut(joinable ? overlay : [], ownSelectionSet, unknown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlay, ownSelectionSet, joinable, accentKey, palette]);
+  useEffect(() => {
+    if (!viewer) return;
+    viewer.setLabelsStyle({
+      lut: labelLut,
+      opacity: labelsOpacity,
+      outline: labelsOutline,
+      accent: accent ?? [128, 128, 128],
+      visible: labelsVisible,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, labelLut, labelsOpacity, labelsOutline, labelsVisible, accentKey]);
+
+  // The masks show the cells, so their centroids stay undrawn (a lasso still
+  // selects on them).
   const pointRadius = config.point_radius ?? 6;
   useEffect(() => {
-    if (viewer && info) viewer.setPoints(overlay, pointRadius);
-  }, [viewer, info, overlay, pointRadius]);
+    if (viewer && info) viewer.setPoints(labelsShown ? [] : overlay, pointRadius);
+  }, [viewer, info, overlay, pointRadius, labelsShown]);
 
   const ownSelectionKey = ownSelection.join('\u0000');
   useEffect(() => {
@@ -600,6 +733,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   }, [viewer, ownSelectionKey]);
 
   const legend = useMemo(() => {
+    if (continuous) return null;
     if (!colorScale || !colorCol || overlay.length === 0 || !pointRows) return null;
     const present = new Set<string>();
     const cats = pointRows[colorCol] ?? [];
@@ -610,7 +744,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     }
     const entries = colorScale.universe.filter((v) => present.has(v));
     return { entries: entries.slice(0, LEGEND_MAX), more: Math.max(0, entries.length - LEGEND_MAX) };
-  }, [colorScale, colorCol, overlay.length, pointRows, sampleCol, activeStore]);
+  }, [colorScale, colorCol, overlay.length, pointRows, sampleCol, activeStore, continuous]);
 
   // ---- ROI selection ------------------------------------------------------
   const roiEnabled = Boolean(selectionColumn && pointsDcId && overlay.length > 0);
@@ -629,6 +763,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     onFilterChange(
       advancedVizSelectionFilter({ ...metadata, dc_id: pointsDcId }, selectionColumn, ids),
     );
+  };
+  // A click on a cell selects it (a second click on the only selected cell
+  // clears); background and cells missing from the table do nothing.
+  labelClickRef.current = (label: number) => {
+    if (!roiEnabled || !labelsShown || label === 0) return;
+    const id = labelLut.ids.get(label);
+    if (id === undefined || labelLut.styles.get(label)?.faded) return;
+    const only = ownSelection.length === 1 && ownSelection[0] === id;
+    emitSelection(only ? [] : [id]);
   };
   // Faded cells are ones the dashboard already excludes; a lasso catches the
   // cells it is showing, as the scatter lassos do.
@@ -739,6 +882,65 @@ const BioimageViewerRenderer: React.FC<Props> = ({
           </Stack>
         </div>
       ) : null}
+      {labelsDcId ? (
+        <div>
+          <Text size="xs" fw={500} mb={4}>
+            Cell masks
+          </Text>
+          <Stack gap={6}>
+            <Switch
+              size="xs"
+              label="Show masks"
+              checked={labelsVisible}
+              disabled={!labelsWanted}
+              onChange={(e) => setLabelsVisible(e.currentTarget.checked)}
+            />
+            <Switch
+              size="xs"
+              label="Outlines"
+              checked={labelsOutline}
+              disabled={!labelsWanted || !labelsVisible}
+              onChange={(e) => {
+                const next = e.currentTarget.checked;
+                setLabelsOutline(next);
+                writeConfig({ labels_outline: next });
+              }}
+            />
+            <div>
+              <Text size="xs" mb={2}>
+                Fill opacity
+              </Text>
+              <Slider
+                size="xs"
+                min={0}
+                max={1}
+                step={0.05}
+                value={labelsOpacity}
+                disabled={!labelsWanted || !labelsVisible}
+                label={(v) => `${Math.round(v * 100)}%`}
+                onChange={setLabelsOpacity}
+                onChangeEnd={(v) => writeConfig({ labels_opacity: v })}
+              />
+            </div>
+            {labelStores && !labelsWanted && activeStore ? (
+              <Text size="xs" c="dimmed">
+                No mask for sample "{activeStore.sample}"
+              </Text>
+            ) : null}
+            {labelsMisaligned && labelsSize && info ? (
+              <Text size="xs" c="orange">
+                Mask is {labelsSize.width} x {labelsSize.height} px, the image {info.width} x{' '}
+                {info.height} px: they should share one pixel grid.
+              </Text>
+            ) : null}
+            {labelStoresError || labelsError ? (
+              <Text size="xs" c="red">
+                {labelStoresError ? `Labels: ${labelStoresError}` : labelsError}
+              </Text>
+            ) : null}
+          </Stack>
+        </div>
+      ) : null}
       {pointsError ? (
         <Text size="xs" c="red">
           Points overlay: {pointsError}
@@ -746,7 +948,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       ) : null}
     </Stack>
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [stores, activeStore, sampleValue, config.sample_column, info, plane, channels, integerDtype, pointsError]);
+  ), [stores, activeStore, sampleValue, config.sample_column, info, plane, channels, integerDtype, pointsError, labelsDcId, labelStores, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, labelsSize, labelsMisaligned, labelStoresError, labelsError]);
 
   // ---- Overlay chrome -----------------------------------------------------
   const physical = config.show_scalebar === false ? null : (info?.physicalSize ?? null);
@@ -768,11 +970,19 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       : undefined;
 
   const frameError = storesError ?? imageError;
+  // A bound labels DC holds the thumbnail until its tiles are drawn too, unless
+  // it has no mask for this sample or failed (the image alone is then final).
+  const labelsPending =
+    Boolean(labelsDcId) &&
+    labelsVisible &&
+    !labelStoresError &&
+    !labelsError &&
+    (labelStores === null || (labelsWanted && !labelsDrawn));
   const ready: ReadyState = frameError
     ? 'error'
     : !glGranted || noStoreMessage
       ? 'skipped'
-      : drawn
+      : drawn && !labelsPending
         ? 'true'
         : 'false';
 
@@ -863,6 +1073,36 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                       +{legend.more} more
                     </Text>
                   ) : null}
+                </Stack>
+              </Paper>
+            ) : null}
+            {continuous && colorCol && overlay.length ? (
+              <Paper
+                p={6}
+                radius="sm"
+                shadow="xs"
+                style={{ position: 'absolute', bottom: 8, left: 8, maxWidth: '45%', opacity: 0.92 }}
+              >
+                <Stack gap={2}>
+                  <Text size="xs" lineClamp={1}>
+                    {colorCol}
+                  </Text>
+                  <div
+                    style={{
+                      width: 120,
+                      height: 8,
+                      borderRadius: 'var(--mantine-radius-xs)',
+                      background: rampGradient(continuous.scale),
+                    }}
+                  />
+                  <Group justify="space-between" gap={8} wrap="nowrap">
+                    <Text size="xs" c="dimmed">
+                      {continuous.min.toLocaleString(undefined, { maximumSignificantDigits: 3 })}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {continuous.max.toLocaleString(undefined, { maximumSignificantDigits: 3 })}
+                    </Text>
+                  </Group>
                 </Stack>
               </Paper>
             ) : null}

@@ -2,7 +2,8 @@
 # NGFF 0.4 stores (multichannel 2D, Visium-like spatial, 3D + time,
 # multi-sample), a pyramidal OME-TIFF, a SpatialData store (zarr v3) and an
 # OME-Zarr NGFF 0.5 store with sharded arrays, each with the table its points
-# overlay and its filters read. Images come from scikit-image sample data;
+# overlay and its filters read. The multi-sample images also have segmentation
+# masks (a labels DC of plain TIFFs) drawn over them. Images come from scikit-image sample data;
 # tables are derived from the pixels. See data/README.md, and
 # dev/bioimage/make_examples.py to regenerate.
 #
@@ -175,6 +176,27 @@ workflows:
             ngff_version: "0.4"
             upload: true
 
+      # Segmentation masks of the three samples: plain uint16 TIFFs, as
+      # segmentation tools write them, converted to OME-Zarr labels images at
+      # ingest. `sample_pattern` names each mask's sample, so the viewer draws
+      # the mask of the sample it shows; a mask value is the cells table's
+      # `label`.
+      - id: "646b0f3c1e4a2d7f8e5b8f17"
+        data_collection_tag: "multi_sample_labels"
+        description: "Nucleus segmentation masks of the three samples, one TIFF per sample"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "sample_[A-Za-z0-9]+_mask\\.tif"
+          dc_specific_properties:
+            format: "tiff"
+            kind: "labels"
+            sample_pattern: "^(.+?)_mask\\.tif$"
+            upload: true
+
       - id: "646b0f3c1e4a2d7f8e5b8f09"
         data_collection_tag: "multi_sample_cells"
         description: "Nuclei of the three samples, with a heuristic mitotic call"
@@ -191,6 +213,7 @@ workflows:
               separator: ","
             columns_description:
               cell_id: "Nucleus identifier"
+              label: "Nucleus id in the segmentation masks, unique across samples"
               sample: "Sample (store name without .zarr)"
               x: "Centroid column, level-0 pixels of the sample's store"
               y: "Centroid row, level-0 pixels of the sample's store"
