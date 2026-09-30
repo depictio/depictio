@@ -127,6 +127,9 @@ class RunSpec:
     # viralrecon is the only `sequencing-runs` template: its DATA_ROOT must be the
     # PARENT of run_* directories, so the output lands under <dest>/run_1/.
     run_subdir: str | None = None
+    # rsync -L: some modules publish symlinks even with `publish_dir_mode copy`
+    # (molkart's publishDirs set no mode), which come back as dangling links.
+    copy_links: bool = False
     note: str = ""
 
     @property
@@ -428,6 +431,60 @@ RUNS: list[RunSpec] = [
         nxf_ver="25.10.7",
         samples=8,
         note="the real test_full, 8 samples on iGenomes GRCh37, rather than the megatest",
+    ),
+    # --- imaging lot -------------------------------------------------------------
+    # Their AWS megatests are empty (molkart) or unreadable (sopa: a dangling
+    # SpatialData symlink), so these runs are what the imaging templates are
+    # validated on.
+    RunSpec(
+        key="molkart-full",
+        pipeline="molkart",
+        version="1.2.0",
+        profile="test_full",
+        nxf_ver="25.10.7",
+        samples=2,
+        extra_args=[
+            "--publish_dir_mode",
+            "copy",
+            "--segmentation_method",
+            "mesmer,cellpose,stardist",
+        ],
+        copy_links=True,
+        note="Zenodo 8413573, 2 samples, three segmenters for the comparison tab",
+    ),
+    RunSpec(
+        key="sopa-test",
+        pipeline="sopa",
+        version="1.0.1",
+        profile="test",
+        nxf_ver="25.10.7",
+        samples=1,
+        extra_args=["--publish_dir_mode", "copy"],
+        inject_samplesheet=False,
+        note="toy dataset, Proseg + fluorescence annotation + scanpy: every tile but the gene ones",
+    ),
+    RunSpec(
+        key="sopa-full",
+        pipeline="sopa",
+        version="1.0.1",
+        profile="test_full",
+        nxf_ver="25.10.7",
+        samples=1,
+        extra_args=["--publish_dir_mode", "copy"],
+        inject_samplesheet=False,
+        note="Visium HD lung: Space Ranger + StarDist + Proseg; ingest with --var IMAGE_ELEMENT=<dataset_id>_full_image",
+    ),
+    RunSpec(
+        key="spatialvi-test",
+        pipeline="spatialvi",
+        version="1.0.0dev",
+        profile="test",
+        # Unreleased: the dev head of 2026-09-15; test_full's samplesheet URL is a 404.
+        revision="441ded53109f57ecf70555fb0b060546b34b4a2c",
+        nxf_ver="25.10.7",
+        samples=1,
+        extra_args=["--publish_dir_mode", "copy"],
+        note="CytAssist 11 mm FFPE chr22 probe set; ingest with --var IMAGE_SAMPLE=<the test sample id>",
     ),
 ]
 
@@ -739,6 +796,8 @@ def _rsync(spec: RunSpec, *, dry_run: bool) -> int:
     dest = spec.local_payload_dir
     dest.mkdir(parents=True, exist_ok=True)
     argv = ["rsync", "-az", "--partial", "--human-readable", "--delete"]
+    if spec.copy_links:
+        argv.append("-L")
     # --delete, because a re-run is not always a superset of the previous one. A
     # chipseq run redone with --narrow_peak writes macs/narrowPeak/ and stops
     # writing macs/broadPeak/, but a merging rsync leaves the stale broadPeak
