@@ -24,17 +24,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="presto",
         path="parsed_logs/Table_sequences_process.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "Sequences": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
     RecipeSource(
         ref="changeo",
         path="repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembled.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
         optional=True,
     ),
@@ -62,6 +70,7 @@ _CHANGEO_STAGES: dict[str, tuple[str, ...]] = {
 }
 STAGE_ORDER: list[str] = [*_PRESTO_STAGES, *_CHANGEO_STAGES]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,

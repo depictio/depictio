@@ -25,21 +25,27 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 # File-based sources: the three QIIME2 CSVs are read straight from the run
 # directory. They used to be `dc_ref`s to intermediate DCs that no template
 # ever declared, which made this recipe seed-only — every fresh ingestion
 # skipped the DC and the rarefaction advanced viz with it.
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the sample column is read by position, then one per depth.
     RecipeSource(ref="shannon", path="qiime2/alpha-rarefaction/shannon.csv", format="CSV"),
+    # No input_schema: the sample column is read by position, then one per depth.
     RecipeSource(
         ref="observed_features",
         path="qiime2/alpha-rarefaction/observed_features.csv",
         format="CSV",
     ),
+    # No input_schema: the sample column is read by position, then one per depth.
     RecipeSource(ref="faith_pd", path="qiime2/alpha-rarefaction/faith_pd.csv", format="CSV"),
+    # No input_schema: the id column is `ID` or `sample`, the rest is run-specific.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "depth": pl.Int64,

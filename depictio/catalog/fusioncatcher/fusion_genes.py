@@ -29,15 +29,30 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusion_genes",
         glob_pattern="fusioncatcher/*.fusion-genes.txt",
         format="TSV",
+        input_schema={
+            "Gene_1_symbol(5end_fusion_partner)": pl.Utf8,
+            "Gene_2_symbol(3end_fusion_partner)": pl.Utf8,
+            "Fusion_description": pl.Utf8,
+            "Counts_of_common_mapping_reads": pl.Int64,
+            "Spanning_pairs": pl.Int64,
+            "Spanning_unique_reads": pl.Int64,
+            "Longest_anchor_found": pl.Int64,
+            "Fusion_finding_method": pl.Utf8,
+            "Fusion_point_for_gene_1(5end_fusion_partner)": pl.Utf8,
+            "Fusion_point_for_gene_2(3end_fusion_partner)": pl.Utf8,
+            "Predicted_effect": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,

@@ -17,15 +17,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summary",
         path="reports/combgc/combgc_complete_summary.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "contig_id": pl.Utf8,
+            "Prediction_tool": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""], "quote_char": None},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contig": pl.Utf8,
     "sample": pl.Utf8,

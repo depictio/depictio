@@ -23,31 +23,37 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.lineage import parent_rank
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the lineage column is read by position, then one per sample.
     RecipeSource(
         ref="phylum",
         path="qiime2/rel_abundance_tables/rel-table-2.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
     ),
+    # No input_schema: the lineage column is read by position, then one per sample.
     RecipeSource(
         ref="class_",
         path="qiime2/rel_abundance_tables/rel-table-3.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
     ),
+    # No input_schema: the lineage column is read by position, then one per sample.
     RecipeSource(
         ref="order",
         path="qiime2/rel_abundance_tables/rel-table-4.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
     ),
+    # No input_schema: the lineage column is read by position, then one per sample.
     RecipeSource(
         ref="family",
         path="qiime2/rel_abundance_tables/rel-table-5.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
     ),
+    # No input_schema: the lineage column is read by position, then one per sample.
     RecipeSource(
         ref="genus",
         path="qiime2/rel_abundance_tables/rel-table-6.tsv",
@@ -61,6 +67,7 @@ SOURCES: list[RecipeSource] = [
         # deeper and this last one simply drops out.
         optional=True,
     ),
+    # No input_schema: `habitat` and the id column are read behind presence checks.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
@@ -69,6 +76,7 @@ _METADATA_ID_COL = "sample"  # `Metadata_full.tsv` calls the sample col "sample"
 # measurement, not something an annotation strip can colour legibly.
 _MAX_STRIP_CATEGORIES = 25
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "taxon": pl.Utf8,

@@ -19,11 +19,19 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rel_abundance",
         dc_ref="taxonomy_rel_abundance",
+        input_schema={
+            "sample": pl.Utf8,
+            "Phylum": pl.Utf8,
+            "Kingdom": pl.Utf8,
+            "rel_abundance": pl.Float64,
+        },
     ),
+    # No input_schema: every metadata column is read behind a presence check.
     RecipeSource(
         ref="metadata",
         dc_ref="metadata",
@@ -31,6 +39,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "Phylum": pl.Utf8,
     "Kingdom": pl.Utf8,

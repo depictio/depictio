@@ -9,14 +9,17 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="faith_pd",
         path="qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv",
         format="TSV",
+        input_schema={"id": pl.Utf8, "faith_pd": pl.Utf8},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "faith_pd": pl.Float64,

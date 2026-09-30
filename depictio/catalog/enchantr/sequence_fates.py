@@ -24,17 +24,24 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="presto",
         path="parsed_logs/Table_sequences_process.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
     RecipeSource(
         ref="changeo",
         path="repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembled.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
         optional=True,
     ),
@@ -58,6 +65,7 @@ NOT_RUN = "Not run"
 # reported them, so a dashboard can bind the same steps everywhere.
 _PRESTO_MILESTONES = _MILESTONES[:6]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,

@@ -11,14 +11,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="happy_roc",
         glob_pattern="*/*/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz",
         format="CSV",
+        input_schema={
+            "QQ": pl.Float64,
+            "METRIC.Recall": pl.Float64,
+            "METRIC.Precision": pl.Float64,
+            "METRIC.F1_Score": pl.Float64,
+        },
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "quality": pl.Float64,
     "recall": pl.Float64,

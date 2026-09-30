@@ -52,7 +52,9 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.sample_ids import strip_stage_suffixes
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: headers are matched after case and punctuation folding.
     RecipeSource(
         ref="metrics",
         glob_pattern="**/*.plotFingerprint.qcmetrics.txt",
@@ -61,6 +63,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "auc": pl.Float64,

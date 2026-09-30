@@ -19,10 +19,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profile", glob_pattern="sylph/*/*.sylph.tsv", format="tsv"),
+    RecipeSource(
+        ref="profile",
+        glob_pattern="sylph/*/*.sylph.tsv",
+        format="tsv",
+        input_schema={
+            "Sample_file": pl.Utf8,
+            "Genome_file": pl.Utf8,
+            "Taxonomic_abundance": pl.Float64,
+            "Adjusted_ANI": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "genome": pl.Utf8,

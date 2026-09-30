@@ -4,7 +4,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: every column is matched by name pattern, none is required.
     RecipeSource(
         ref="summary_raw",
         path="multiqc/summary_variants_metrics_mqc.csv",
@@ -12,6 +14,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "num_reads_mapped": pl.Float64,

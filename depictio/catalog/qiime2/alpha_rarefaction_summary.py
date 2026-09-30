@@ -16,11 +16,21 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="rarefaction", dc_ref="alpha_rarefaction"),
+    RecipeSource(
+        ref="rarefaction",
+        dc_ref="alpha_rarefaction",
+        input_schema={
+            "sample": pl.Utf8,
+            "depth": pl.Int64,
+        },
+    ),
+    # No input_schema: the id column is `ID` or `sample`, the rest is run-specific.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "depth": pl.Int64,

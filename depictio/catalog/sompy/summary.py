@@ -9,14 +9,26 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="sompy_summary",
         glob_pattern="*/summary/tables/sompy/sompy.summary.csv",
         format="CSV",
+        input_schema={
+            "Tool": pl.Utf8,
+            "Type": pl.Utf8,
+            "TP_comp": pl.Int64,
+            "FP": pl.Int64,
+            "FN": pl.Int64,
+            "Recall": pl.Float64,
+            "Precision": pl.Float64,
+            "F1": pl.Float64,
+        },
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 # som.py always emits the binomial confidence intervals, so they are required
 # output columns — the `metric_ci_bars` render (catalog/sompy/summary.yaml) binds them.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {

@@ -59,10 +59,24 @@ from depictio.models.models.transforms import RecipeSource
 #: scan its per-sample SEACR beds into a DC with this tag (see module docstring).
 RAW_DC_TAG = "seacr_peaks_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "total_signal": pl.Utf8,
+            "max_signal": pl.Utf8,
+            "max_signal_region": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,

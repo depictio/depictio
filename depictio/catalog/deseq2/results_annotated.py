@@ -44,10 +44,13 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "deseq2_results_annotated_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: columns are resolved through an alias table, not a fixed spelling.
     RecipeSource(ref="annotated", dc_ref=RAW_DC_TAG),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,

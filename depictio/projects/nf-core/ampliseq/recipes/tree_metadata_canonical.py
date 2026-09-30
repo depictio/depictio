@@ -36,11 +36,13 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="asv_tax",
         path="qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv",
         format="TSV",
+        input_schema={"ID": pl.Utf8, "Phylum": pl.Utf8},
         # Read every column as text and cast at the point of use. A sample
         # column whose first few thousand ASVs are all absent looks like an
         # integer column until a relative abundance in scientific notation
@@ -50,15 +52,18 @@ SOURCES: list[RecipeSource] = [
         read_kwargs={"infer_schema_length": 0},
         optional=True,
     ),
+    # No input_schema: the id and lineage columns are found among several names.
     RecipeSource(
         ref="taxonomy",
         path="qiime2/taxonomy/taxonomy.tsv",
         format="TSV",
         optional=True,
     ),
+    # No input_schema: the sample id and group columns are found by name or position.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxon": pl.Utf8,
 }

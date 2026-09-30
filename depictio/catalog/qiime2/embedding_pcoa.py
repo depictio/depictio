@@ -23,11 +23,15 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.dimreduction import run_pcoa
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: one column per sample, with `Phylum` and/or `Kingdom`.
     RecipeSource(ref="taxonomy_heatmap", dc_ref="taxonomy_heatmap"),
+    # No input_schema: the id column is `ID`, `sample` or the first column.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,
