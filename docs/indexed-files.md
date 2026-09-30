@@ -1,4 +1,4 @@
-# Indexed files (VCF, BAM, bigWig, GFF3)
+# Indexed files (VCF, BAM, bigWig, GFF3, PDB, mmCIF)
 
 Some genomic outputs are too dense to become a table. A sarek run publishes a
 filtered VCF per sample with its tabix index; chipseq, atacseq, cutandrun,
@@ -10,6 +10,11 @@ copied to object storage as they are, and the browser reads only the window the
 reader is looking at, with HTTP range requests through the file's own index.
 That is what GenomeSpy's lazy data sources do, and a `genome_view` component
 with `source: file` is what draws them.
+
+Protein structures take the same path for a different reason: a PDB or mmCIF
+model is read whole, not by range, but it is a file the 3D viewer parses, not
+rows. The `pdb` and `mmcif` formats store one structure per entity, and a
+`molecule_3d` component with `structure_source: file` draws them.
 
 ## Declaring the collection
 
@@ -26,7 +31,7 @@ data_collections:
           regex_config:
             pattern: .*\.filtered\.vcf\.gz$
       dc_specific_properties:
-        format: vcf          # vcf | bam | bigwig | bigbed | gff3 | fasta | tabix
+        format: vcf          # vcf | bam | bigwig | bigbed | gff3 | fasta | tabix | pdb | mmcif
         assembly: hg38
         sample_regex: variant_calling/[^/]+/(?P<sample>[^/]+)/
         max_file_size_mb: 512
@@ -40,12 +45,20 @@ Notes:
   vcf, gff3 and tabix, `.bai` for bam, `.fai` for fasta. bigWig and bigBed carry
   their index inside the file. Override with `index_suffix` (`.csi`, for
   example); set it to an empty string to declare a self-indexed format.
+- `pdb` (alias `ent`) and `mmcif` (alias `cif`) hold protein structures:
+  `.pdb`, `.ent`, `.cif` or `.mmcif`, gzip allowed. They carry no index, so
+  nothing is looked for beside them, and `assembly` does not apply.
 - One object per sample. `sample_regex` names the sample from the file path
-  through a named `sample` group; without it the file name is used, with its
-  format and compression suffixes stripped. A file whose sample is already taken
-  is skipped rather than silently overwriting the first one.
+  through a named `sample` group; a regex with named groups but no `sample`
+  group joins them with `__` in declaration order (empty groups skipped).
+  Without a regex the file name is used, with its format and compression
+  suffixes stripped. A file whose sample is already taken is skipped rather
+  than silently overwriting the first one. For structures the sample id is the
+  entity id, so it must equal the `entity` value of the residue tables the 3D
+  tile reads.
 - `max_file_size_mb` (default 512) caps what ingest will push.
 - A file with no index beside it is skipped, with the reason in the CLI log.
+  An empty file is skipped too.
 
 ## Where the objects land
 
@@ -67,10 +80,12 @@ data-collection routes:
   for a single object.
 
 Presigned URLs live 15 minutes. They are signed against the storage endpoint the
-*browser* can reach (`DEPICTIO_MINIO_PUBLIC_URL`, or
-`DEPICTIO_MINIO_EXTERNAL_HOST` and `DEPICTIO_MINIO_EXTERNAL_PORT`), because a
-SigV4 signature covers the host: a URL signed for the in-cluster endpoint is
-rejected when a browser uses it, even if the bytes are reachable another way.
+*browser* can reach (`DEPICTIO_S3_PUBLIC_URL`, or `DEPICTIO_S3_EXTERNAL_HOST`
+and `DEPICTIO_S3_EXTERNAL_PORT`; the legacy `DEPICTIO_MINIO_*` names are still
+accepted), because a SigV4 signature covers the host: a URL signed for the
+in-cluster endpoint is rejected when a browser uses it, even if the bytes are
+reachable another way. Models fetched by the structure resolver are served the
+same way, from the same endpoint.
 
 ## CORS on the storage
 
@@ -96,6 +111,23 @@ viewer's origin, pass the flag explicitly. Equivalent settings elsewhere:
 A deployment that does not set any of this simply does not show file tracks:
 `genome_view` falls back to `source: table`.
 
+## CSP on the viewer
+
+CORS lets the storage answer; the page's Content-Security-Policy decides
+whether the browser may ask. A presigned fetch goes to the storage origin, so
+when storage is not served under the app's own host that origin has to be in
+`connect-src`, or the fetch is blocked before it leaves the browser.
+
+- **API (and the SPA it serves):** nothing to do. The API appends the origin
+  (`scheme://host[:port]`) of the browser-facing S3 endpoint,
+  `settings.minio.external_url`, which is `DEPICTIO_S3_PUBLIC_URL` when set,
+  to `connect-src` on every response.
+- **nginx viewer image:** it sends its own policy, so set
+  `DEPICTIO_CSP_CONNECT_EXTRA` on the viewer container to the same origin, for
+  example `https://s3.example.org` (space separated for several). It is empty
+  by default. Compose and the Helm chart do not forward it yet: add it to the
+  viewer service's `environment:` or the viewer deployment.
+
 ## Drawing them
 
 Bind a `genome_view` component to the collection and set `source: file`. The
@@ -113,6 +145,12 @@ coverage or pileup.
 A file-backed tile loads the full GenomeSpy bundle (the format parsers), through
 a dynamic import taken only when a tile declares `source: file`. Table-backed
 tiles keep the lean bundle and their current download size.
+
+Structures are drawn by `molecule_3d` with `structure_source: file` and
+`structure_dc_tag` (or `structure_dc_id`) naming the collection; its own bound
+collection is the residue or variant table that colours the model. It fetches
+the manifest, picks the object of the entity it shows and downloads it whole.
+See `docs/design/protein-structure.md`.
 
 ## Gene annotation for file-backed tracks
 

@@ -452,9 +452,34 @@ x alone and a `genome_view` track stacked above shares the axis; `max_separation
 apex. The pure helper `contactMapTriangle.ts` does the rotation and fills the odd-parity lattice
 gaps from horizontal neighbours.
 
+The third lot added a protein module of three kinds, linked by residue rather than by locus.
+Details, data contract and resolver settings are in `docs/design/protein-structure.md`.
+
+**`molecule_3d`.** A protein structure in 3D (3Dmol.js, loaded in its own chunk only when a tile
+mounts), coloured by pLDDT, chain, N-to-C spectrum or a column of the bound residue or variant
+table, with variants as spheres on the alpha carbon. The structure comes from an `indexed_file`
+collection of `pdb` / `mmcif` objects, one per entity (`structure_source: file`), or from the
+opt-in structure resolver (`resolve`: AlphaFold DB by accession or gene, ESMFold by sequence).
+Only `position` is required. A variant whose `ref_aa` disagrees with the model is listed as a
+numbering mismatch instead of drawn. `layout: structure_sequence | structure_msa` puts a sequence
+strip or the alignment in the same tile.
+
+**`msa`.** A multiple sequence alignment on a virtualised canvas: one row per sequence (`msa_id`,
+`seq_id`, `aligned_sequence` required, `rank` and `identity` optional), Clustal, Zappo,
+hydrophobicity or identity colours, consensus and conservation rows, capped at `max_rows` in rank
+order. A column brush emits a `residue_selection` in the reference row's numbering.
+
+**`sequence_track`.** One protein's sequence as a residue ruler with lanes: a value lane (the
+AlphaFold confidence bands when the value is pLDDT), a category lane (helix and strand glyphs when
+it holds secondary-structure classes), domain spans and variant ticks from two companion
+collections. A brush emits a `residue_selection`.
+
+The three kinds use the `none` sampling policy and, unlike every other kind, default
+`selection_enabled` to true.
+
 ## 8. When a new kind is justified
 
-Thirty-nine kinds is enough to have learned what a kind costs. Each one is seven registry
+Forty-two kinds is enough to have learned what a kind costs. Each one is seven registry
 entries, a renderer, a showcase tab, a pair of alignment tests and a line in every snapshot
 that enumerates kinds, and none of that is paid back by a kind that draws the same marks as
 its neighbour with different column names. This section is the rule the next one is measured
@@ -705,6 +730,23 @@ source's selection next appears or clears. The fold is a derived layout
 and the editor always shows the stored layout unfolded. This pairing is also the one
 exception to the full-width table rule of the shipped-template lint: a table may be narrower
 than the grid when its linked record card fills the rest of the row.
+
+### Proteins: structure, alignment and sequence
+
+`molecule_3d`, `msa` and `sequence_track` (section 7) are the protein counterpart of the genomic
+axis substrate. The shared coordinate is a residue: collections that carry the same `entity` and
+`position` column names are linked with no project link. A pick is a filter pair with source
+`residue_selection` (an entity `MultiSelect` and a position `RangeSlider` under the index suffix
+`::res`), read back by column name from any source, and a new pick replaces every other tile's
+pick on the same column, so the last gesture wins. A hover is not a filter: it travels on an
+in-memory highlight bus (`HighlightProvider`, `useHighlight`, `usePublishHighlight`), coalesced to
+one event per animation frame, and a publisher ignores its own events. `lollipop` joins both
+channels (`selection_enabled`, opt-in), and `profile` with `residue_axis` shades the picked range
+and draws the hovered residue. Cards ignore a residue range unless `follow_region_filter` is set,
+as for a genome region. File-backed structures are fetched by the browser from presigned URLs, so
+the storage origin must be in the CSP `connect-src` (see `docs/indexed-files.md`). The full design,
+including the opt-in structure resolver and its privacy trade-off, is in
+`docs/design/protein-structure.md`.
 
 ---
 
