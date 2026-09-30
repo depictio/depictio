@@ -232,6 +232,7 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
               data={[
                 { value: 'structure', label: 'Structure only' },
                 { value: 'structure_sequence', label: 'Structure and sequence' },
+                { value: 'structure_text', label: 'Structure and written sequence' },
                 { value: 'structure_msa', label: 'Structure and alignment' },
               ]}
               value={layout}

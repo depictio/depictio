@@ -17,20 +17,52 @@ const SWATCH: React.CSSProperties = {
   flex: '0 0 auto',
 };
 
-export const MoleculeLegend: React.FC<{ legend: LegendSpec }> = ({ legend }) => {
+/**
+ * `compact` (a tile at half width or about 400 px high): the swatches flow in
+ * rows instead of one per line and the gradient is shorter, so the legend
+ * covers a corner of the structure rather than a side of it.
+ */
+export const MoleculeLegend: React.FC<{ legend: LegendSpec; compact?: boolean }> = ({
+  legend,
+  compact = false,
+}) => {
   if (!legend) return null;
   return (
     <Paper
       withBorder
       shadow="xs"
-      p={6}
+      p={compact ? 4 : 6}
       radius="sm"
-      style={{ position: 'absolute', left: 6, bottom: 6, maxWidth: '55%', opacity: 0.92, zIndex: 2 }}
+      style={{
+        position: 'absolute',
+        left: 6,
+        bottom: 6,
+        maxWidth: compact ? '70%' : '55%',
+        opacity: 0.92,
+        zIndex: 2,
+        pointerEvents: 'none',
+      }}
     >
-      <Text size="xs" fw={600} mb={2}>
+      <Text size="xs" fw={600} mb={compact ? 0 : 2}>
         {legend.title}
       </Text>
-      {legend.kind === 'swatches' ? (
+      {legend.kind === 'swatches' && compact ? (
+        <Group gap={8} wrap="wrap" style={{ rowGap: 0 }}>
+          {legend.items.map((item) => (
+            <Group key={item.label} gap={4} wrap="nowrap">
+              <span style={{ ...SWATCH, background: item.colour }} />
+              <Text size="xs" lineClamp={1}>
+                {item.label}
+              </Text>
+            </Group>
+          ))}
+          {legend.more ? (
+            <Text size="xs" c="dimmed">
+              {`+${legend.more}`}
+            </Text>
+          ) : null}
+        </Group>
+      ) : legend.kind === 'swatches' ? (
         <Stack gap={1}>
           {legend.items.map((item) => (
             <Group key={item.label} gap={6} wrap="nowrap">
@@ -51,7 +83,7 @@ export const MoleculeLegend: React.FC<{ legend: LegendSpec }> = ({ legend }) => 
           <Text size="xs">{legend.min}</Text>
           <span
             style={{
-              width: 80,
+              width: compact ? 56 : 80,
               height: 8,
               borderRadius: 2,
               background: `linear-gradient(to right, ${legend.stops.join(', ')})`,
