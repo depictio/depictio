@@ -6,9 +6,10 @@
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
 #
-# The whole protein module in one section: the 3D structure beside its
-# alignment, the sequence track, a standalone alignment, a lollipop of the
-# same variants, and the variant table with its record card. They read four
+# The whole protein module in one section, in the compact protein-tab layout:
+# a selector (the variant lollipop) on half the width beside the 3D structure
+# over its written sequence, then the sequence track and the alignment full
+# width, then the variant table with its record card. They read four
 # collections that share only the `entity` and `position` column names, which
 # is what carries a residue pick (`residue_selection`) from any tile to every
 # other one. Companion collections are bound by id, as the seed generator
@@ -52,12 +53,11 @@ components:
     vertical_alignment: top
     section: 'Structure, sequence and alignment'
     body: >
-      A predicted structure coloured by pLDDT beside the alignment it was folded from, its
-      sequence with confidence, secondary structure, domains and variants, a standalone
-      alignment, a lollipop of the same variants and the variant table with its record card,
-      all joined on the entity and position columns. Click a residue in 3D, brush the sequence
-      track or alignment columns, or click a lollipop stem to select that range in every tile;
-      hovering a residue highlights it everywhere, and picking a table row opens its record.
+      A predicted structure over its written sequence beside a lollipop of its variants, then
+      the sequence track, the alignment and the variant table, all joined on the entity and
+      position columns. Click a stem, a residue in 3D or a letter of the sequence, or brush the
+      track or alignment columns, to select that range in every tile (shift-click extends it);
+      hovering a residue highlights it everywhere.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-protein-structure
@@ -65,13 +65,13 @@ components:
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'protein_variants_demo'
-    title: 'Structure beside its alignment'
-    description: 'The model coloured by per-residue confidence, variants as spheres coloured by consequence, next to the alignment it was folded from. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.'
+    title: 'Structure and its sequence'
+    description: 'The model coloured by per-residue confidence, variants as spheres coloured by consequence, the picked site in red ball and stick, over its written sequence with the variant letters in red. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.'
     section: 'Structure, sequence and alignment'
     viz_kind: 'molecule_3d'
     config:
       viz_kind: "molecule_3d"
-      controls_placement: "header"
+      controls_placement: popover
       structure_source: "file"
       structure_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
       structure_dc_id: "646b0f3c1e4a2d7f8e5b8dd1"
@@ -84,13 +84,16 @@ components:
       label_col: "protein_change"
       color_mode: "plddt"
       representation: "cartoon"
+      representations: ["cartoon"]
+      highlight_site: true
+      spin: false
       show_variants: true
-      layout: "structure_msa"
+      layout: "structure_text"
       msa_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
       msa_dc_id: "646b0f3c1e4a2d7f8e5b8dd3"
       selection_enabled: true
       follow_selection: true
-    layout: { x: 0, y: 2, w: 8, h: 11 }
+    layout: { x: 4, y: 2, w: 4, h: 5 }
 
   - tag: viz-protein-sequence
     index: 'prot-sequence'
@@ -122,7 +125,7 @@ components:
       variant_category_col: "consequence"
       selection_enabled: true
       follow_selection: true
-    layout: { x: 0, y: 13, w: 8, h: 5 }
+    layout: { x: 0, y: 6, w: 8, h: 5 }
 
   - tag: viz-protein-msa
     index: 'prot-msa'
@@ -151,7 +154,7 @@ components:
       position_col_for_selection: "position"
       selection_enabled: true
       follow_selection: true
-    layout: { x: 0, y: 18, w: 4, h: 8 }
+    layout: { x: 0, y: 11, w: 8, h: 6 }
 
   - tag: viz-protein-lollipop
     index: 'prot-lollipop'
@@ -164,7 +167,7 @@ components:
     viz_kind: 'lollipop'
     config:
       viz_kind: "lollipop"
-      controls_placement: "header"
+      controls_placement: popover
       feature_id_col: "entity"
       position_col: "position"
       category_col: "consequence"
@@ -173,7 +176,7 @@ components:
       top_n_labels: 4
       selection_enabled: true
       selection_column: "protein_change"
-    layout: { x: 4, y: 18, w: 4, h: 8 }
+    layout: { x: 0, y: 2, w: 4, h: 5 }
 
   - tag: table-protein-variants
     index: 'prot-table'
@@ -185,7 +188,7 @@ components:
     section: 'Structure, sequence and alignment'
     row_selection_enabled: true
     row_selection_column: 'protein_change'
-    layout: { x: 0, y: 26, w: 5, h: 7 }
+    layout: { x: 0, y: 17, w: 5, h: 7 }
 
   - tag: viz-protein-variant-record
     index: 'prot-record'
@@ -205,7 +208,7 @@ components:
         Change: ["ref_aa", "position", "alt_aa", "consequence"]
         Frequency: ["allele_fraction"]
         Protein: ["entity"]
-    layout: { x: 5, y: 26, w: 3, h: 7 }
+    layout: { x: 5, y: 17, w: 3, h: 7 }
 
   - tag: filter-protein-position
     index: prot-f-position

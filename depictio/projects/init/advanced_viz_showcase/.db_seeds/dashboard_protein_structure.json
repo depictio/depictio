@@ -29,13 +29,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "A predicted structure coloured by pLDDT beside the alignment it was folded from, its sequence with confidence, secondary structure, domains and variants, a standalone alignment, a lollipop of the same variants and the variant table with its record card, all joined on the entity and position columns. Click a residue in 3D, brush the sequence track or alignment columns, or click a lollipop stem to select that range in every tile; hovering a residue highlights it everywhere, and picking a table row opens its record.\n",
+      "body": "A predicted structure over its written sequence beside a lollipop of its variants, then the sequence track, the alignment and the variant table, all joined on the entity and position columns. Click a stem, a residue in 3D or a letter of the sequence, or brush the track or alignment columns, to select that range in every tile (shift-click extends it); hovering a residue highlights it everywhere.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "prot-structure",
       "component_type": "advanced_viz",
-      "title": "Structure beside its alignment",
+      "title": "Structure and its sequence",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "protein_variants_demo",
       "wf_id": {
@@ -57,13 +57,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "The model coloured by per-residue confidence, variants as spheres coloured by consequence, next to the alignment it was folded from. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.",
+      "description": "The model coloured by per-residue confidence, variants as spheres coloured by consequence, the picked site in red ball and stick, over its written sequence with the variant letters in red. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Structure, sequence and alignment",
       "viz_kind": "molecule_3d",
       "config": {
-        "controls_placement": "header",
+        "controls_placement": "popover",
         "viz_kind": "molecule_3d",
         "structure_source": "file",
         "structure_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
@@ -84,9 +84,14 @@
         "color_mode": "plddt",
         "colour_scale": null,
         "representation": "cartoon",
+        "representations": [
+          "cartoon"
+        ],
+        "highlight_site": true,
+        "spin": false,
         "show_variants": true,
         "show_labels": false,
-        "layout": "structure_msa",
+        "layout": "structure_text",
         "msa_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
         "msa_dc_id": "646b0f3c1e4a2d7f8e5b8dd3",
         "msa_dc_tag": null,
@@ -234,7 +239,7 @@
       "section": "Structure, sequence and alignment",
       "viz_kind": "lollipop",
       "config": {
-        "controls_placement": "header",
+        "controls_placement": "popover",
         "viz_kind": "lollipop",
         "feature_id_col": "entity",
         "position_col": "position",
@@ -529,10 +534,10 @@
     },
     {
       "i": "box-prot-structure",
-      "x": 0,
+      "x": 4,
       "y": 2,
-      "w": 8,
-      "h": 11,
+      "w": 4,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -545,7 +550,7 @@
     {
       "i": "box-prot-sequence",
       "x": 0,
-      "y": 13,
+      "y": 6,
       "w": 8,
       "h": 5,
       "static": false,
@@ -560,9 +565,9 @@
     {
       "i": "box-prot-msa",
       "x": 0,
-      "y": 18,
-      "w": 4,
-      "h": 8,
+      "y": 11,
+      "w": 8,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -574,10 +579,10 @@
     },
     {
       "i": "box-prot-lollipop",
-      "x": 4,
-      "y": 18,
+      "x": 0,
+      "y": 2,
       "w": 4,
-      "h": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -590,7 +595,7 @@
     {
       "i": "box-prot-table",
       "x": 0,
-      "y": 26,
+      "y": 17,
       "w": 5,
       "h": 7,
       "static": false,
@@ -605,7 +610,7 @@
     {
       "i": "box-prot-record",
       "x": 5,
-      "y": 26,
+      "y": 17,
       "w": 3,
       "h": 7,
       "static": false,
