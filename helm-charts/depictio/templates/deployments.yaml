@@ -729,6 +729,8 @@ spec:
             #    cluster.local (EMBL ops-k1 uses ops-k1.embl.de).
             - name: DEPICTIO_API_UPSTREAM
               value: "{{ .Release.Name }}-depictio-backend.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain | default "cluster.local" }}:{{ .Values.backend.service.httpPort }}"
+            - name: DEPICTIO_CSP_CONNECT_EXTRA
+              value: {{ .Values.viewer.cspConnectExtra | default "" | quote }}
           ports:
             - containerPort: 8080
           resources:

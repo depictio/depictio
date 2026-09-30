@@ -71,6 +71,12 @@ COPY docker-images/nginx.conf.template /etc/nginx/templates/default.conf.templat
 # k8s to `<release>-depictio-backend:80` (the backend Service port).
 ENV DEPICTIO_API_UPSTREAM=depictio-backend:8058
 
+# Extra `connect-src` origins, space separated. Set it to the browser-facing S3
+# endpoint (DEPICTIO_S3_PUBLIC_URL's origin) when storage is on another host:
+# indexed-file tiles (3D structures, GenomeSpy tracks) fetch presigned URLs
+# from it directly. The API adds the same origin to its own policy.
+ENV DEPICTIO_CSP_CONNECT_EXTRA=""
+
 # Auto-detect the DNS resolver from /etc/resolv.conf at container start
 # (base image's 15-local-resolvers.envsh exports $NGINX_LOCAL_RESOLVERS,
 # consumed by the `resolver` directive in nginx.conf.template). Required so

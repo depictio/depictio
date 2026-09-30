@@ -19,7 +19,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.security_headers import SECURITY_HEADERS
+from depictio.api.v1.configs.security_headers import (
+    SECURITY_HEADERS,
+    csp_with_connect_origins,
+    storage_origin,
+)
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
@@ -132,6 +136,16 @@ _logger = logging.getLogger(__name__)
 # route can derive a nonce-bearing variant without importing this module (which
 # imports every router). Re-exported here under its historical name.
 _SECURITY_HEADERS = SECURITY_HEADERS
+# The shipped policy plus the S3 endpoint the browser fetches presigned
+# indexed-file URLs from (it is another origin in every deployment where
+# storage is not proxied under the app's host).
+_RESPONSE_SECURITY_HEADERS = {
+    **SECURITY_HEADERS,
+    "Content-Security-Policy": csp_with_connect_origins(
+        SECURITY_HEADERS["Content-Security-Policy"],
+        [storage_origin(settings.minio.external_url)],
+    ),
+}
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -139,7 +153,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         response = await call_next(request)
-        for header, value in _SECURITY_HEADERS.items():
+        for header, value in _RESPONSE_SECURITY_HEADERS.items():
             response.headers.setdefault(header, value)
         # HSTS only meaningful behind TLS; relying on X-Forwarded-Proto from
         # the nginx viewer / ingress to avoid emitting it on plain-HTTP dev.

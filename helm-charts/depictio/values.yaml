@@ -355,6 +355,10 @@ backend:
     DEPICTIO_FEEDBACK_URL: ""
     DEPICTIO_FEEDBACK_LABEL: "Feedback"
 
+    # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
+    # Off by default: accessions, gene names or sequences leave the server.
+    DEPICTIO_STRUCTURE_RESOLVER_ENABLED: "false"
+
     # Which view /dashboards opens in for someone who never picked one
     # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
     # the CSS viewport the dashboard is laid out at, times a pixel density that
@@ -458,6 +462,10 @@ viewer:
     tag: "1.11.2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Extra CSP connect-src origins (space separated). Set it to the browser-facing
+  # S3 origin when storage is served from another host than the viewer:
+  # file-backed tiles (3D structures, genome tracks) fetch presigned URLs from it.
+  cspConnectExtra: ""
   # Deployment update strategy. Default "Recreate" matches the other
   # workloads (and is required where a single pod holds a ReadWriteOnce PVC).
   # The viewer is stateless (no PVC), so environments that run >1 replica can

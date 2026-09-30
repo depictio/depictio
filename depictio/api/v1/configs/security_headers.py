@@ -10,6 +10,8 @@ to agree in ``depictio/tests/api/v1/test_security_headers.py``.
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 SECURITY_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
@@ -69,3 +71,29 @@ def csp_with_script_nonce(nonce: str) -> str:
     """
     policy = SECURITY_HEADERS["Content-Security-Policy"]
     return policy.replace("script-src 'self'", f"script-src 'self' 'nonce-{nonce}'", 1)
+
+
+def storage_origin(url: str | None) -> str | None:
+    """``scheme://host[:port]`` of the browser-facing S3 endpoint, or None.
+
+    Presigned indexed-file URLs (structures, BAM/VCF tracks) are signed against
+    this endpoint and fetched by the browser directly, so it must be allowed by
+    ``connect-src`` whenever it is not the app's own origin.
+    """
+    if not url:
+        return None
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def csp_with_connect_origins(policy: str, origins: list[str | None]) -> str:
+    """``policy`` with ``origins`` appended to ``connect-src`` (deduplicated, None skipped)."""
+    directives = [chunk.strip() for chunk in policy.split(";")]
+    for i, chunk in enumerate(directives):
+        parts = chunk.split()
+        if parts and parts[0] == "connect-src":
+            extra = [o for o in origins if o and o not in parts[1:]]
+            directives[i] = " ".join([*parts, *extra])
+    return "; ".join(directives)
