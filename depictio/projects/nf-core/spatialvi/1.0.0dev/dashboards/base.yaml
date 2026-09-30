@@ -1,0 +1,1341 @@
+version: 1
+# nf-core/spatialvi 1.0.0dev reference dashboard (dev branch, unreleased).
+#
+# Funnel: MultiQC (raw reads, Space Ranger curves, spots removed by the QC
+# filter) -> Space Ranger QC (per-sample capture and sequencing metrics, the
+# capture area) -> Tissue & spots (the hires tissue image with the spots the
+# QC kept, coloured by Leiden cluster; lasso to the spot table and a spot
+# record) -> Spatially variable genes (ranked per sample, score distributions,
+# samples side by side; gene record) -> Integration (integrated clusters:
+# composition per sample, agreement with the per-sample clusters, on tissue).
+#
+# Pinned on every tab: the four-card glance strip, the sample sheet and the
+# Sample / {GROUP_COL_DISPLAY} filters. Each tab adds an open filter section on
+# its own collections. The image and the spot tables read one sample, the
+# IMAGE_SAMPLE template variable: the stores name their elements after the
+# sample, and a collection reads one element path. The viewer takes no sample
+# binding for that reason (its store is the merged one, not a per-sample one).
+main_dashboard:
+  title: nf-core/spatialvi
+  subtitle: "nf-core/spatialvi (dev): Visium QC, the tissue image with its spots and clusters, spatially variable genes and integrated clusters"
+  advanced_viz_controls: header
+  project_tag: Visium Spatial Transcriptomics
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The run in four numbers, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The sample hub every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Space Ranger curves
+    icon: mdi:chart-line
+    color: indigo
+    description: Space Ranger count's genes and saturation curves, as MultiQC reports them
+  - name: Read quality
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: FastQC on the raw reads
+  - name: Spot filtering
+    icon: mdi:filter-variant
+    color: cyan
+    description: Spots and genes the pipeline's QC filter removed, per sample
+  components:
+  # ------------------------------------------------------------- at a glance
+  - component_type: card
+    tag: sv-glance-card-samples
+    index: sv-glance-card-samples
+    section: Run at a glance
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sv-glance-card-spots
+    index: sv-glance-card-spots
+    section: Run at a glance
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    column_name: spots_under_tissue
+    column_type: int64
+    display: {icon_name: 'mdi:map-marker-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spots under tissue
+    description: Spots Space Ranger called under tissue, summed over the samples it ran on.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sv-glance-card-reads
+    index: sv-glance-card-reads
+    section: Run at a glance
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    column_name: number_of_reads
+    column_type: int64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads sequenced
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sv-glance-card-svg
+    index: sv-glance-card-svg
+    section: Run at a glance
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    column_name: significant_flag
+    column_type: int64
+    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spatially variable genes
+    description: Genes with a spatial autocorrelation q-value below 0.05, summed over the samples.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: sv-sheet-intro
+    section: Sample sheet
+    title: Samples of the run
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample, with how it entered the pipeline and the design
+      columns of the sample sheet. Picking samples or a group here narrows
+      every tab.
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: sv-sheet-table
+    section: Sample sheet
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    title: Sample sheet
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 5}
+
+  # ---------------------------------------------------------- sample filters
+  - component_type: interactive
+    tag: sv-filter-sample
+    index: sv-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-filter-group
+    index: sv-group-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: spatialvi
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: "{GROUP_COL}"
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:account-group-outline'}
+    placement: left
+    title: "{GROUP_COL_DISPLAY}"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # ------------------------------------------------------ space ranger curves
+  - component_type: text
+    tag: sv-mqc-intro
+    section: Space Ranger curves
+    title: From reads to spots
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      MultiQC's view of the run: Space Ranger's genes and saturation curves,
+      the raw-read quality and the spots the QC filter removed. The Space
+      Ranger QC tab reads the per-sample metrics as a table.
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sv-mqc-sr-genes
+    section: Space Ranger curves
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: spaceranger
+    selected_plot: "Count - Median genes"
+    use: multiqc/spaceranger
+    title: Median genes per spot
+    description: Median genes per spot against downsampled depth; a curve still climbing means more reads would find more genes.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sv-mqc-sr-saturation
+    section: Space Ranger curves
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: spaceranger
+    selected_plot: "Count - Saturation plot"
+    use: multiqc/spaceranger
+    title: Sequencing saturation
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sv-mqc-sr-gdna
+    section: Space Ranger curves
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: spaceranger
+    selected_plot: "Count - UMIs from Genomic DNA"
+    use: multiqc/spaceranger
+    title: UMIs from genomic DNA
+    description: Probe-based assays only; the share of UMIs Space Ranger attributes to genomic DNA rather than RNA.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 7, w: 8, h: 5}
+
+  # ------------------------------------------------------------- read quality
+  - component_type: multiqc
+    tag: sv-mqc-fastqc-counts
+    section: Read quality
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    use: multiqc/fastqc
+    title: Sequence counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sv-mqc-fastqc-quality
+    section: Read quality
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence Quality Scores
+    use: multiqc/fastqc
+    title: Per-sequence quality scores
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sv-mqc-fastqc-gc
+    section: Read quality
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    use: multiqc/fastqc
+    title: GC content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 5, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sv-mqc-fastqc-dup
+    section: Read quality
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    use: multiqc/fastqc
+    title: Sequence duplication levels
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 5, w: 4, h: 5}
+
+  # ----------------------------------------------------------- spot filtering
+  - component_type: multiqc
+    tag: sv-mqc-quality-controls
+    section: Spot filtering
+    workflow_tag: spatialvi
+    data_collection_tag: multiqc_data
+    selected_module: quality_controls
+    selected_plot: quality_controls-section
+    title: Spots and genes removed by the QC filter
+    description: Per sample, the spots outside tissue or below the count, gene and content thresholds of the run, and the genes seen in too few spots.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+
+tabs:
+# =============================================================================
+# Space Ranger QC: capture and sequencing, per sample.
+# =============================================================================
+- title: Space Ranger QC
+  subtitle: Capture, sequencing and mapping metrics of every sample Space Ranger ran on
+  advanced_viz_controls: header
+  tab_order: 2
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Space Ranger filters
+    icon: mdi:tune
+    color: indigo
+    description: Spots under tissue and assay on the metrics, tissue call on the capture spots
+  grid_sections:
+  - name: Capture and sequencing
+    icon: mdi:shield-check-outline
+    color: indigo
+    description: Genes, UMIs, saturation and tissue coverage per sample
+  - name: Depth and mapping
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Whether the samples were sequenced deeply enough and mapped well
+  - name: Capture area
+    icon: mdi:map-marker-outline
+    color: blue
+    description: The capture array of each sample, spots under and outside tissue
+  - name: Space Ranger metrics
+    icon: mdi:table
+    color: gray
+    description: One row per sample, every metric
+  - name: Sample detail
+    icon: mdi:information-outline
+    color: gray
+    description: The sample picked in the metrics table
+  components:
+  - component_type: interactive
+    tag: sv-sr-filter-spots
+    index: sv-sr-spots-range
+    section: Space Ranger filters
+    group: Space Ranger scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    interactive_component_type: RangeSlider
+    column_name: spots_under_tissue
+    column_type: int64
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:map-marker-outline'}
+    placement: left
+    title: Spots under tissue
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-sr-filter-assay
+    index: sv-sr-assay-filter
+    section: Space Ranger filters
+    group: Space Ranger scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    interactive_component_type: MultiSelect
+    column_name: assay
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:dna'}
+    placement: left
+    title: Assay
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-sr-filter-tissue
+    index: sv-sr-tissue-filter
+    section: Space Ranger filters
+    group: Space Ranger scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-spots
+    use: spaceranger/tissue_positions
+    interactive_component_type: MultiSelect
+    column_name: tissue_call
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Tissue call
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: sv-sr-intro
+    section: Capture and sequencing
+    title: Did each capture area work?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Genes and UMIs per spot under tissue, saturation and the share of the
+      capture area the tissue covers, one strip per sample. Read depth
+      against genes below, then the capture array itself.
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sv-sr-card-genes
+    index: sv-sr-card-genes
+    section: Capture and sequencing
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_genes_per_spot
+    column_type: float64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median genes per spot
+    description: Median of the per-sample medians; the strip shows their spread.
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-sr-card-umis
+    index: sv-sr-card-umis
+    section: Capture and sequencing
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_umi_per_spot
+    column_type: float64
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median UMIs per spot
+    description: Median of the per-sample medians; the strip shows their spread.
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-sr-card-saturation
+    index: sv-sr-card-saturation
+    section: Capture and sequencing
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: sequencing_saturation_pct
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Sequencing saturation (%)
+    description: Lowest sample; the strip shows the spread across samples.
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-sr-card-tissue
+    index: sv-sr-card-tissue
+    section: Capture and sequencing
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_summary
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: fraction_spots_under_tissue_pct
+    column_type: float64
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Capture area under tissue (%)
+    description: Lowest sample; the strip shows the spread across samples.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: advanced_viz
+    tag: sv-sr-av-depth
+    index: sv-sr-av-depth
+    section: Depth and mapping
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    viz_kind: scatter_xy
+    use: spaceranger/depth_vs_genes
+    config:
+      viz_kind: scatter_xy
+      x_col: mean_reads_under_tissue_per_spot
+      y_col: median_genes_per_spot
+      label_col: sample
+      x_title: Mean reads per spot under tissue
+      y_title: Median genes per spot
+      selection_enabled: true
+      selection_column: sample
+    title: Depth against genes per spot
+    description: One point per sample. A sample far below the others at the same depth captured less RNA per spot.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: figure
+    tag: sv-sr-fig-mapping
+    index: sv-sr-fig-mapping
+    section: Depth and mapping
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/mapping_bars
+    visu_type: bar
+    dict_kwargs: {x: sample, y: reads_mapped_confidently_pct, color: sample}
+    title: Reads mapped confidently (%)
+    description: To the probe set on a probe-based assay, to the transcriptome otherwise.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
+
+  - component_type: advanced_viz
+    tag: sv-sr-av-capture
+    index: sv-sr-av-capture
+    section: Capture area
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-spots
+    viz_kind: scatter_xy
+    use: spaceranger/capture_area_map
+    config:
+      viz_kind: scatter_xy
+      x_col: array_col
+      y_col: array_row
+      color_col: tissue_call
+      label_col: spot_uid
+      x_title: Capture array column
+      y_title: Capture array row
+      marker_size: 3
+    title: Capture array
+    description: Every spot of the capture area, coloured by Space Ranger's tissue call. Pick one sample in the sample filter to read one array.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 9}
+
+  - component_type: table
+    tag: sv-sr-table-metrics
+    section: Space Ranger metrics
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/metrics_table
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Space Ranger metrics
+    description: One row per sample. Pick a row to read it below.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+  - component_type: advanced_viz
+    tag: sv-sr-av-record
+    index: sv-sr-av-record
+    section: Sample detail
+    workflow_tag: spatialvi
+    data_collection_tag: sv-qc-metrics
+    use: spaceranger/sample_record
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: sample
+      title_col: sample
+      selection_source: table_selection
+      linked_component: sv-sr-table-metrics
+      sections:
+        Capture: [assay, spots_under_tissue, fraction_spots_under_tissue_pct, fraction_reads_in_spots_under_tissue_pct]
+        Sequencing: [number_of_reads, mean_reads_per_spot, mean_reads_under_tissue_per_spot, sequencing_saturation_pct, valid_barcodes_pct, valid_umis_pct]
+        Quality: [q30_barcode_pct, q30_read_pct, q30_umi_pct, reads_mapped_pct, reads_mapped_confidently_pct]
+        Spots: [median_genes_per_spot, median_umi_per_spot, genes_detected]
+      labels:
+        spots_under_tissue: Spots under tissue
+        fraction_spots_under_tissue_pct: Capture area under tissue (%)
+        fraction_reads_in_spots_under_tissue_pct: Reads in spots under tissue (%)
+        number_of_reads: Reads
+        mean_reads_per_spot: Mean reads per spot
+        mean_reads_under_tissue_per_spot: Mean reads per spot under tissue
+        sequencing_saturation_pct: Sequencing saturation (%)
+        valid_barcodes_pct: Valid barcodes (%)
+        valid_umis_pct: Valid UMIs (%)
+        q30_barcode_pct: Q30 barcode (%)
+        q30_read_pct: Q30 RNA or probe read (%)
+        q30_umi_pct: Q30 UMI (%)
+        reads_mapped_pct: Reads mapped (%)
+        reads_mapped_confidently_pct: Reads mapped confidently (%)
+        median_genes_per_spot: Median genes per spot
+        median_umi_per_spot: Median UMIs per spot
+        genes_detected: Genes detected
+    title: Sample record
+    description: The sample picked in the metrics table, every Space Ranger metric grouped.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+# =============================================================================
+# Tissue & spots: the tissue image with the spots the QC kept.
+# =============================================================================
+- title: Tissue & spots
+  subtitle: The tissue image of one sample with the spots the QC filter kept, coloured by Leiden cluster
+  advanced_viz_controls: header
+  tab_order: 3
+  tab_icon: mdi:microscope
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Spot filters
+    icon: mdi:tune
+    color: grape
+    description: Cluster, UMIs and genes per spot; the viewer, the table and the cards follow
+  grid_sections:
+  - name: Spots in numbers
+    icon: mdi:counter
+    color: grape
+    description: The spots of the image after the pipeline's QC filter
+  - name: Tissue
+    icon: mdi:microscope
+    color: grape
+    description: The hires tissue image with one point per spot; a lasso narrows the table below
+  - name: Spot QC
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Counts, genes and clusters of the spots on the image
+  - name: Spot detail
+    icon: mdi:information-outline
+    color: gray
+    description: The spot picked in the spot table
+  components:
+  - component_type: interactive
+    tag: sv-ts-filter-cluster
+    index: sv-ts-cluster-filter
+    section: Spot filters
+    group: Spot scope
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    interactive_component_type: MultiSelect
+    column_name: cluster
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Leiden cluster
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-ts-filter-counts
+    index: sv-ts-counts-range
+    section: Spot filters
+    group: Spot scope
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    interactive_component_type: RangeSlider
+    column_name: total_counts
+    column_type: float64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:counter'}
+    placement: left
+    title: UMIs per spot
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-ts-filter-genes
+    index: sv-ts-genes-range
+    section: Spot filters
+    group: Spot scope
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    interactive_component_type: RangeSlider
+    column_name: n_genes
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Genes per spot
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: sv-ts-intro
+    section: Spots in numbers
+    title: Where the clusters sit in the tissue
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The spots the QC filter kept, over the tissue they were captured from and
+      coloured by Leiden cluster. Lasso spots on the image to list them, then
+      pick one to read its record at the end of the tab.
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sv-ts-card-spots
+    index: sv-ts-card-spots
+    section: Spots in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    aggregation: count
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    column_name: spot_uid
+    column_type: object
+    display: {icon_name: 'mdi:map-marker-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spots kept
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-ts-card-umis
+    index: sv-ts-card-umis
+    section: Spots in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: total_counts
+    column_type: float64
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: UMIs per spot
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-ts-card-genes
+    index: sv-ts-card-genes
+    section: Spots in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n_genes
+    column_type: int64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes per spot
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-ts-card-clusters
+    index: sv-ts-card-clusters
+    section: Spots in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    aggregation: nunique
+    secondary_layout: donut
+    breakdown_col: cluster
+    top_n_count: 5
+    column_name: cluster
+    column_type: object
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Leiden clusters
+    description: Clusters of the sample on the image; the donut shows the five largest.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: advanced_viz
+    tag: sv-ts-av-viewer
+    index: sv-ts-av-viewer
+    section: Tissue
+    workflow_tag: spatialvi
+    data_collection_tag: sv-img-tissue
+    viz_kind: bioimage_viewer
+    use: spatialdata/spot_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: sv-img-tissue
+      points_dc_tag: spatialdata_visium_spots
+      cell_id_col: spot_uid
+      x_col: x
+      y_col: y
+      color_col: cluster
+      show_scalebar: false
+      selection_enabled: true
+    title: Tissue and spots
+    description: The hires tissue image and one point per spot kept by the QC filter, coloured by Leiden cluster.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 9}
+  - component_type: table
+    tag: sv-ts-table-spots
+    section: Tissue
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/spot_table
+    row_selection_enabled: true
+    row_selection_column: spot_uid
+    columns: [spot_uid, sample, cluster, cluster_integrated, total_counts, n_genes, pct_counts_mt, pct_counts_ribo, pct_counts_hb, array_row, array_col, x, y]
+    page_size: 50
+    title: Spots
+    description: One row per spot; a lasso on the image narrows it. Pick a row to read its record below.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+  - component_type: advanced_viz
+    tag: sv-ts-av-counts-genes
+    index: sv-ts-av-counts-genes
+    section: Spot QC
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    viz_kind: scatter_xy
+    use: spatialdata/counts_vs_genes
+    config:
+      viz_kind: scatter_xy
+      x_col: total_counts
+      y_col: n_genes
+      color_col: cluster
+      label_col: spot_uid
+      log_x: true
+      x_title: UMIs per spot
+      y_title: Genes per spot
+      marker_size: 4
+      selection_enabled: true
+      selection_column: spot_uid
+    title: UMIs against genes per spot
+    description: One point per spot, coloured by cluster. A cluster sitting low on both axes may be a sparse or damaged region rather than a cell type.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: figure
+    tag: sv-ts-fig-counts-cluster
+    index: sv-ts-fig-counts-cluster
+    section: Spot QC
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/counts_by_cluster
+    visu_type: box
+    dict_kwargs: {x: cluster, y: total_counts, color: cluster}
+    title: UMIs per spot by cluster
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
+
+  - component_type: advanced_viz
+    tag: sv-ts-av-record
+    index: sv-ts-av-record
+    section: Spot detail
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/spot_record
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: spot_uid
+      title_col: spot_uid
+      selection_source: table_selection
+      linked_component: sv-ts-table-spots
+      sections:
+        Position: [sample, spot_id, array_row, array_col, x, y]
+        Counts: [total_counts, n_genes, pct_counts_mt, pct_counts_ribo, pct_counts_hb]
+        Clusters: [cluster, cluster_integrated, integration_method]
+      labels:
+        spot_id: Spot id
+        array_row: Array row
+        array_col: Array column
+        x: Image x (px)
+        y: Image y (px)
+        total_counts: UMIs
+        n_genes: Genes
+        pct_counts_mt: Mitochondrial (%)
+        pct_counts_ribo: Ribosomal (%)
+        pct_counts_hb: Haemoglobin (%)
+        cluster: Leiden cluster
+        cluster_integrated: Integrated cluster
+        integration_method: Integration method
+    title: Spot record
+    description: The spot picked in the table above, where it sits, its counts and its clusters.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+# =============================================================================
+# Spatially variable genes: ranked per sample, and compared.
+# =============================================================================
+- title: Spatially variable genes
+  subtitle: Genes whose expression follows the tissue layout, ranked per sample by spatial autocorrelation
+  advanced_viz_controls: header
+  tab_order: 4
+  tab_icon: mdi:waves
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gene filters
+    icon: mdi:tune
+    color: cyan
+    description: Spatial score, significance and q-value on the ranked genes
+  grid_sections:
+  - name: Genes in numbers
+    icon: mdi:counter
+    color: cyan
+    description: Tested and spatially variable genes per sample
+  - name: Score distributions
+    icon: mdi:chart-box-outline
+    color: cyan
+    description: How strong the spatial patterns are, and the samples side by side
+  - name: Ranked genes
+    icon: mdi:table
+    color: blue
+    description: One row per sample and gene, strongest spatial pattern first
+  - name: Gene detail
+    icon: mdi:information-outline
+    color: gray
+    description: The gene picked in the ranked table
+  components:
+  - component_type: interactive
+    tag: sv-svg-filter-significant
+    index: sv-svg-significant-filter
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    interactive_component_type: MultiSelect
+    column_name: significant
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Significance
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-svg-filter-score
+    index: sv-svg-score-range
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    interactive_component_type: RangeSlider
+    column_name: spatial_score
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:waves'}
+    placement: left
+    title: Spatial score
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-svg-filter-q
+    index: sv-svg-q-threshold
+    section: Gene filters
+    group: Gene scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    interactive_component_type: Slider
+    column_name: neg_log10_qval
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:filter-variant'}
+    placement: left
+    title: Minimum -log10 q-value
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: sv-svg-intro
+    section: Genes in numbers
+    title: Which genes follow the tissue?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Spatial autocorrelation of every tested gene over the spot neighbour
+      graph, as a score where higher means a stronger spatial pattern. Compare
+      the samples, then pick a gene in the ranked table to read its record.
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sv-svg-card-tested
+    index: sv-svg-card-tested
+    section: Genes in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    aggregation: count
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    column_name: gene_uid
+    column_type: object
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes tested
+    description: Sample and gene pairs tested, the highly variable genes of each sample.
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-svg-card-best
+    index: sv-svg-card-best
+    section: Genes in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: spatial_score
+    column_type: float64
+    display: {icon_name: 'mdi:star-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Strongest spatial score
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-svg-card-median
+    index: sv-svg-card-median
+    section: Genes in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/spatial_autocorr
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: spatial_score
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median spatial score
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-svg-card-methods
+    index: sv-svg-card-methods
+    section: Genes in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    aggregation: nunique
+    secondary_layout: donut
+    breakdown_col: method
+    column_name: method
+    column_type: object
+    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Statistic
+    description: Moran's I or Geary's C, as the run chose; the score folds both onto one direction.
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: advanced_viz
+    tag: sv-svg-av-volcano
+    index: sv-svg-av-volcano
+    section: Score distributions
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    viz_kind: scatter_xy
+    use: squidpy/svg_volcano
+    config:
+      viz_kind: scatter_xy
+      x_col: spatial_score
+      y_col: neg_log10_qval
+      color_col: significant
+      label_col: gene
+      x_title: Spatial score
+      y_title: -log10 q-value
+      marker_size: 5
+      selection_enabled: true
+      selection_column: gene_uid
+    title: Spatial score against significance
+    description: One point per sample and gene. The upper right holds the strong and well supported spatial patterns.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: figure
+    tag: sv-svg-fig-by-sample
+    index: sv-svg-fig-by-sample
+    section: Score distributions
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/svg_score_by_sample
+    visu_type: box
+    dict_kwargs: {x: sample, y: spatial_score, color: sample}
+    title: Spatial score per sample
+    description: The samples side by side; a sample with uniformly low scores has little spatial structure or too few spots.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
+
+  - component_type: table
+    tag: sv-svg-table-genes
+    section: Ranked genes
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/svg_table
+    row_selection_enabled: true
+    row_selection_column: gene_uid
+    columns: [gene_uid, sample, gene, rank, spatial_score, statistic, method, qval, pval, significant]
+    page_size: 50
+    title: Ranked genes
+    description: One row per sample and gene, ranked within the sample. Pick a row to read it below.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  - component_type: advanced_viz
+    tag: sv-svg-av-record
+    index: sv-svg-av-record
+    section: Gene detail
+    workflow_tag: spatialvi
+    data_collection_tag: sv-svg-genes
+    use: squidpy/gene_record
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: gene_uid
+      title_col: gene
+      selection_source: table_selection
+      linked_component: sv-svg-table-genes
+      sections:
+        Gene: [sample, gene, rank]
+        Autocorrelation: [method, statistic, spatial_score]
+        Significance: [pval, qval, neg_log10_qval, significant]
+      labels:
+        rank: Rank in the sample
+        method: Statistic
+        statistic: Value as written
+        spatial_score: Spatial score
+        pval: p-value
+        qval: q-value (BH)
+        neg_log10_qval: -log10 q-value
+    title: Gene record
+    description: The gene picked in the ranked table, its rank, statistic and significance in that sample.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+# =============================================================================
+# Integration: the integrated clusters.
+# =============================================================================
+- title: Integration
+  subtitle: Leiden clusters on the batch-corrected embedding, against the per-sample clusters and on the tissue
+  advanced_viz_controls: header
+  tab_order: 5
+  tab_icon: mdi:set-merge
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cluster filters
+    icon: mdi:tune
+    color: teal
+    description: Clustering on the composition, integrated cluster on the spots
+  grid_sections:
+  - name: Clusters in numbers
+    icon: mdi:counter
+    color: teal
+    description: Integrated and per-sample clusters of the spots on the image
+  - name: Composition
+    icon: mdi:chart-bar
+    color: teal
+    description: Share of each sample's spots per cluster
+  - name: Integrated clusters on tissue
+    icon: mdi:microscope
+    color: green
+    description: The tissue image with the spots coloured by integrated cluster
+  - name: Cluster agreement
+    icon: mdi:relation-many-to-many
+    color: green
+    description: How the per-sample clusters split across the integrated ones
+  - name: Composition table
+    icon: mdi:table
+    color: gray
+    description: One row per sample, clustering and cluster
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: sv-int-filter-clustering
+    index: sv-int-clustering-filter
+    section: Cluster filters
+    group: Cluster scope
+    workflow_tag: spatialvi
+    data_collection_tag: sv-int-composition
+    use: spatialdata/visium_cluster_composition
+    interactive_component_type: Select
+    column_name: clustering
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Clustering
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sv-int-filter-cluster
+    index: sv-int-cluster-filter
+    section: Cluster filters
+    group: Cluster scope
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/visium_spots
+    interactive_component_type: MultiSelect
+    column_name: cluster_integrated
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Integrated cluster
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - component_type: text
+    tag: sv-int-intro
+    section: Clusters in numbers
+    title: Clusters shared across samples
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Integrated clusters are comparable across samples, per-sample clusters
+      are not. Read the composition, then how each per-sample cluster maps
+      onto the integrated ones, empty when the run skipped integration.
+    workflow_tag: spatialvi
+    data_collection_tag: sv-int-composition
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sv-int-card-integrated
+    index: sv-int-card-integrated
+    section: Clusters in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    aggregation: nunique
+    secondary_layout: donut
+    breakdown_col: cluster_integrated
+    top_n_count: 5
+    column_name: cluster_integrated
+    column_type: object
+    display: {icon_name: 'mdi:set-merge', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Integrated clusters
+    description: Integrated clusters among the spots on the image; the donut shows the five largest.
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-int-card-per-sample
+    index: sv-int-card-per-sample
+    section: Clusters in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    aggregation: nunique
+    column_name: cluster
+    column_type: object
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Per-sample clusters
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-int-card-spots
+    index: sv-int-card-spots
+    section: Clusters in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: sv-int-composition
+    use: spatialdata/visium_cluster_composition
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: cluster
+    top_n_count: 3
+    column_name: n_spots
+    column_type: int64
+    display: {icon_name: 'mdi:map-marker-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Spots per cluster
+    description: Spots counted for the clustering picked in the filter (both clusterings otherwise); the strip shows the largest clusters.
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sv-int-card-method
+    index: sv-int-card-method
+    section: Clusters in numbers
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    aggregation: nunique
+    secondary_layout: donut
+    breakdown_col: integration_method
+    column_name: integration_method
+    column_type: object
+    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Integration method
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: figure
+    tag: sv-int-fig-composition
+    index: sv-int-fig-composition
+    section: Composition
+    workflow_tag: spatialvi
+    data_collection_tag: sv-int-composition
+    use: spatialdata/composition_bars
+    visu_type: bar
+    dict_kwargs: {x: sample, y: pct_spots, color: cluster, facet_col: clustering}
+    title: Spots per cluster (%)
+    description: Share of each sample's spots per cluster, the twelve largest clusters of each clustering and the rest as Other.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  - component_type: advanced_viz
+    tag: sv-int-av-viewer
+    index: sv-int-av-viewer
+    section: Integrated clusters on tissue
+    workflow_tag: spatialvi
+    data_collection_tag: sv-img-tissue
+    viz_kind: bioimage_viewer
+    use: spatialdata/spot_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: sv-img-tissue
+      points_dc_tag: spatialdata_visium_spots
+      cell_id_col: spot_uid
+      x_col: x
+      y_col: y
+      color_col: cluster_integrated
+      show_scalebar: false
+      selection_enabled: false
+    title: Integrated clusters on the tissue
+    description: The same image, spots coloured by integrated cluster, to set against the per-sample clusters on the Tissue tab.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 9}
+
+  - component_type: figure
+    tag: sv-int-fig-agreement
+    index: sv-int-fig-agreement
+    section: Cluster agreement
+    workflow_tag: spatialvi
+    data_collection_tag: spatialdata_visium_spots
+    use: spatialdata/cluster_crosstab
+    visu_type: histogram
+    dict_kwargs: {x: cluster_integrated, color: cluster}
+    title: Per-sample clusters across integrated clusters
+    description: Spots per integrated cluster, split by per-sample cluster. A per-sample cluster spread over many integrated ones was not a stable group.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  - component_type: table
+    tag: sv-int-table-composition
+    section: Composition table
+    workflow_tag: spatialvi
+    data_collection_tag: sv-int-composition
+    use: spatialdata/composition_table
+    title: Cluster composition
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}

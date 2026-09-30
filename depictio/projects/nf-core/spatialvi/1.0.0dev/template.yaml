@@ -1,0 +1,549 @@
+# nf-core/spatialvi Template 1.0.0dev - Visium spatial transcriptomics
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/spatialvi/1.0.0dev --data-root /path/to/results \
+#     --var IMAGE_SAMPLE=<sample id> [--var METADATA_FILE=/path/to/samplesheet.csv] \
+#     [--var GENES=<gene id>,<gene id>]
+#
+# UNRELEASED PIPELINE. nf-core/spatialvi (formerly spatialtranscriptomics) has
+# no release: this template follows the `dev` branch pinned at
+# 441ded53109f57ecf70555fb0b060546b34b4a2c (2026-09-15, manifest version
+# 1.0dev, Nextflow !>=25.10.4). There is no AWS megatest; the `test` profile
+# (one CytAssist 11 mm FFPE sample, chr22 probe reference) is the validation
+# run, see megatest.yaml. The template was authored offline from the dev docs,
+# modules and templates, and checked on a synthetic run: the pipeline's own
+# module scripts executed outside Nextflow on the test-dataset Space Ranger
+# outs (VALIDATION_REPORT.md).
+#
+# LAYOUT (DATA_ROOT = the pipeline's --outdir):
+#   <sample>/spaceranger/outs/            Space Ranger count (only for samples
+#                                         the pipeline ran Space Ranger on)
+#   <sample>/data/<sample>_svg.csv        spatially variable genes (squidpy)
+#   <sample>/data/<sample>.h5ad, -raw.h5ad  AnnData, not read (no h5ad reader)
+#   integration/data/merged.zarr          every sample's SpatialData elements
+#   integration/data/<method>.zarr        the same with the integrated clusters
+#   multiqc/multiqc_data/multiqc.parquet  MultiQC (FastQC, Space Ranger, spot
+#                                         filtering custom content)
+#
+# ONE SAMPLE ON THE IMAGE. The SpatialData stores name their elements after the
+# sample (images/<sample>_hires_image, tables/<sample>_table), and a bioimage
+# or spatialdata DC reads one fixed element path. IMAGE_SAMPLE picks the sample
+# the Tissue & spots and Integration tabs read, as the store spells it (the
+# sample id with every character other than letters, digits, `_` and `-`
+# dropped). The per-sample Space Ranger and spatially variable gene tables
+# cover every sample.
+#
+# COORDINATES. The stores' obsm["spatial"] is already in hires pixels, so the
+# spot tables read x / y from the spot shapes (`coordinates: region`), which
+# the reader maps to the hires image's pixels exactly.
+#
+# GENES (optional) lists the var names to pull from X, comma separated. The
+# stores carry the reference's gene ids as var names (Ensembl ids on a Space
+# Ranger reference), not symbols. Without it the gene collections are pruned
+# and only dashboards/base.yaml is imported; with it dashboards/genes.yaml
+# adds the spots coloured by expression.
+template:
+  template_id: "nf-core/spatialvi/1.0.0dev"
+  description: "nf-core/spatialvi (dev, unreleased) template: Space Ranger QC per sample, the tissue image with its spots coloured by cluster, spatially variable genes and the integrated clusters, on top of the MultiQC report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "The pipeline's --outdir: SAMPLE/spaceranger/, SAMPLE/data/, integration/data/*.zarr and multiqc/."
+      required: true
+    - name: "IMAGE_SAMPLE"
+      description: "Sample whose tissue image and spots the Tissue and Integration tabs read from integration/data/*.zarr, spelt as the store names it (letters, digits, _ and - only)."
+      required: true
+    - name: "INTEGRATION_METHOD"
+      description: "Integration method of the run (--integration_method): names the integrated store METHOD.zarr the integrated clusters are read from."
+      required: false
+      default: "harmony"
+    - name: "GENES"
+      description: "Optional comma-separated var names (gene ids of the reference) to read from X; adds the Genes on tissue dashboard. Unset: pruned."
+      required: false
+    - name: "METADATA_FILE"
+      description: "Optional design table (CSV): the pipeline's sample sheet or any table whose METADATA_ID_COL column holds the sample ids. Adds the design columns to the sample hub; pruned when absent."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design-table sample id column (links join on it)."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Design column the group filter reads (the Visium slide serial by default); a hub without it gets one group, all samples."
+      required: false
+      default: "slide"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Title-cased GROUP_COL for display."
+      required: false
+      default: "Slide"
+  reference:
+    vars:
+      IMAGE_SAMPLE: "CytAssist_11mm_FFPE_Human_Glioblastoma_2"
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "slide"
+      GROUP_COL_DISPLAY: "Slide"
+      INTEGRATION_METHOD: "harmony"
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "yaml" # params.json parses fine as YAML (JSON is a YAML subset)
+        pick: "latest"
+        group: "Pipeline parameters"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+      - group: "Pipeline parameters"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+    - if_var_absent: "GENES"
+      remove_dc_tags: ["spatialdata_visium_genes_raw", "sv-genes-expression"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "GENES"
+      dashboards: ["dashboards/base.yaml", "dashboards/genes.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Visium Spatial Transcriptomics"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "spatialvi"
+    version: "1.0.0dev"
+    engine:
+      name: "nextflow"
+      version: "25.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/spatialvi"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design and hub. spatialvi publishes no validated sample sheet: the
+      # hub is the union of the samples the per-sample outputs name, plus
+      # the optional design table's columns.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Optional design table (--var METADATA_FILE=...): one row per sample, one column per factor, e.g. the pipeline's sample sheet"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+              infer_schema_length: 0
+            columns_description:
+              "{METADATA_ID_COL}": "Sample identifier, as the run names its directories. Every other column is a design factor and is passed through."
+
+      - data_collection_tag: "samples"
+        description: "One row per sample: how it entered the pipeline and the design table's columns when given"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/spatialvi/samples.py"
+            params:
+              id_col: "{METADATA_ID_COL}"
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, the key every link joins on"
+              "input_route": "Whether the pipeline ran Space Ranger on the sample or was given its Space Ranger outs"
+              "{GROUP_COL}": "Design group the group filter reads (all samples when the design table lacks it)"
+
+      # ----------------------------------------------------------------
+      # MultiQC: FastQC, Space Ranger count and the per-sample spot
+      # filtering statistics (custom content `quality_controls`).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report: FastQC on the raw reads, Space Ranger count's summary and curves, and the spots and genes the QC filter removed per sample"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "spaceranger"
+              - "quality_controls"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Sequence Duplication Levels"
+              spaceranger:
+                - "Count - Summary stats"
+                - "Count - UMIs from Genomic DNA"
+                - "Count - Median genes"
+                - "Count - Saturation plot"
+              quality_controls:
+                - "quality_controls-section"
+
+      # ----------------------------------------------------------------
+      # Space Ranger (samples the pipeline ran Space Ranger on).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "spaceranger_metrics_raw"
+        optional: true
+        description: "Raw per-sample Space Ranger metrics_summary.csv (input of sv-qc-metrics and the sample hub)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*/spaceranger/outs/metrics_summary\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+
+      - data_collection_tag: "sv-qc-metrics"
+        optional: true
+        description: "Space Ranger count's summary metrics, one row per sample, typed, on one schema for probe-based and whole transcriptome runs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spaceranger/metrics_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "assay": "probe-based or whole transcriptome"
+              "spots_under_tissue": "Spots Space Ranger called under tissue"
+              "number_of_reads": "Reads sequenced"
+              "mean_reads_per_spot": "Reads over all spots of the capture area"
+              "mean_reads_under_tissue_per_spot": "Reads per spot under tissue"
+              "fraction_spots_under_tissue_pct": "Share of the capture area's spots under tissue, percent"
+              "valid_barcodes_pct": "Reads with a valid spot barcode, percent"
+              "valid_umis_pct": "Reads with a valid UMI, percent"
+              "sequencing_saturation_pct": "Sequencing saturation, percent"
+              "q30_barcode_pct": "Barcode bases at Q30 or above, percent"
+              "q30_read_pct": "RNA or probe read bases at Q30 or above, percent"
+              "q30_umi_pct": "UMI bases at Q30 or above, percent"
+              "reads_mapped_pct": "Reads mapped to the probe set or the genome, percent"
+              "reads_mapped_confidently_pct": "Reads mapped confidently to the probe set or the transcriptome, percent"
+              "fraction_reads_in_spots_under_tissue_pct": "Share of the confidently mapped reads in spots under tissue, percent"
+              "median_genes_per_spot": "Median genes detected per spot under tissue"
+              "median_umi_per_spot": "Median UMI counts per spot under tissue"
+              "genes_detected": "Genes detected in at least one spot"
+
+      - data_collection_tag: "spaceranger_tissue_positions_raw"
+        optional: true
+        description: "Raw per-sample Space Ranger spatial/tissue_positions.csv (input of sv-qc-spots)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*/spaceranger/outs/spatial/tissue_positions\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+
+      - data_collection_tag: "sv-qc-spots"
+        optional: true
+        description: "Every capture spot of every sample: in-tissue call, position on the capture array and full-resolution pixel centre"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spaceranger/tissue_positions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "barcode": "Spot barcode"
+              "spot_uid": "Sample and barcode, unique over the run"
+              "in_tissue": "1 under tissue, 0 outside"
+              "under_tissue": "Same as in_tissue"
+              "tissue_call": "under tissue or outside tissue"
+              "array_row": "Row on the capture array"
+              "array_col": "Column on the capture array"
+              "pxl_row_fullres": "Spot centre row, full-resolution image pixels"
+              "pxl_col_fullres": "Spot centre column, full-resolution image pixels"
+
+      # ----------------------------------------------------------------
+      # Spatially variable genes (squidpy), every analysed sample.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "squidpy_svg_raw"
+        optional: true
+        description: "Raw per-sample spatially variable genes table SAMPLE_svg.csv (input of sv-svg-genes and the sample hub)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*/data/[^/]+_svg\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              include_file_paths: "source_path"
+
+      - data_collection_tag: "sv-svg-genes"
+        optional: true
+        description: "Spatial autocorrelation of every tested gene of every sample, with p- and q-values and a within-sample rank"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "squidpy/spatial_autocorr.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "gene": "Var name of the gene (the reference's gene id)"
+              "gene_uid": "Sample and gene, unique over the run"
+              "method": "moran or geary"
+              "statistic": "Moran's I or Geary's C as squidpy wrote it"
+              "spatial_score": "Moran's I, or 1 - Geary's C: higher means a stronger spatial pattern"
+              "pval": "Normal-approximation p-value"
+              "qval": "Benjamini-Hochberg q-value"
+              "neg_log10_qval": "-log10 of the q-value"
+              "rank": "Rank within the sample, 1 = strongest spatial pattern"
+              "significant": "q below 0.05, or not significant"
+              "significant_flag": "1 when the q-value is below 0.05"
+
+      # ----------------------------------------------------------------
+      # SpatialData stores (integration/data/). One sample: IMAGE_SAMPLE.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sv-img-tissue"
+        description: "High-resolution tissue image of the IMAGE_SAMPLE sample, the image element of the merged SpatialData store"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "merged\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            image_path: "images/{IMAGE_SAMPLE}_hires_image"
+
+      - data_collection_tag: "spatialdata_visium_spots_raw"
+        description: "The IMAGE_SAMPLE sample's AnnData table of the merged store: spots kept by the QC filter, obs columns, x / y in the hires image's pixels (input of spatialdata_visium_spots)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "merged\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/{IMAGE_SAMPLE}_table"
+              image: "images/{IMAGE_SAMPLE}_hires_image"
+              coordinates: "region"
+
+      - data_collection_tag: "spatialdata_visium_integrated_raw"
+        optional: true
+        description: "The same table in the integrated store METHOD.zarr, carrying the integrated clusters (input of spatialdata_visium_spots)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "{INTEGRATION_METHOD}\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/{IMAGE_SAMPLE}_table"
+              image: "images/{IMAGE_SAMPLE}_hires_image"
+              coordinates: "region"
+
+      - data_collection_tag: "spatialdata_visium_spots"
+        description: "The IMAGE_SAMPLE sample's spots: position in the tissue image, QC, per-sample and integrated Leiden clusters"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spatialdata/visium_spots.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, as the store spells it"
+              "spot_id": "Spot id within the sample"
+              "spot_uid": "Sample and spot id, unique over the run"
+              "x": "Spot centre column, pixels of the hires tissue image"
+              "y": "Spot centre row, pixels of the hires tissue image"
+              "array_row": "Row on the capture array"
+              "array_col": "Column on the capture array"
+              "total_counts": "UMIs of the spot"
+              "n_genes": "Genes with at least one count"
+              "pct_counts_mt": "Mitochondrial share of the counts, percent"
+              "pct_counts_ribo": "Ribosomal share of the counts, percent"
+              "pct_counts_hb": "Haemoglobin share of the counts, percent"
+              "cluster": "Per-sample Leiden cluster"
+              "cluster_integrated": "Leiden cluster on the integrated embedding (empty without integration)"
+              "integration_method": "harmony or scanorama (empty without integration)"
+
+      - data_collection_tag: "sv-int-composition"
+        description: "Spots per cluster, per clustering (per sample, integrated), as counts and shares of the sample's spots"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spatialdata/visium_cluster_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "clustering": "per sample or integrated"
+              "cluster": "Cluster label, or Other past the twelve largest"
+              "n_spots": "Spots of the sample in the cluster"
+              "pct_spots": "Share of the sample's spots, percent"
+
+      - data_collection_tag: "spatialdata_visium_genes_raw"
+        description: "The IMAGE_SAMPLE sample's table with the GENES columns pulled from X (input of sv-genes-expression; pruned without GENES)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "merged\\.zarr"
+          dc_specific_properties:
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/{IMAGE_SAMPLE}_table"
+              image: "images/{IMAGE_SAMPLE}_hires_image"
+              coordinates: "region"
+              genes: ["{GENES}"]
+
+      - data_collection_tag: "sv-genes-expression"
+        description: "Expression of the GENES list per spot, one row per spot and gene, with the spot's position and cluster"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spatialdata/visium_gene_expression.py"
+            params:
+              genes: "{GENES}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, as the store spells it"
+              "spot_uid": "Sample and spot id, unique over the run"
+              "x": "Spot centre column, pixels of the hires tissue image"
+              "y": "Spot centre row, pixels of the hires tissue image"
+              "cluster": "Per-sample Leiden cluster"
+              "gene": "Var name of the gene"
+              "expression": "log1p-normalised expression (X)"
+
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the sample filters"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sv-qc-metrics"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Space Ranger metrics by the samples picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sv-qc-spots"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the capture spots by the samples picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sv-svg-genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the spatially variable genes by the samples picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "spatialdata_visium_spots"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the spots of the image by the samples picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sv-int-composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the cluster composition by the samples picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sv-genes-expression"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-spot gene expression by the samples picked"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the sample hub by design-table selection"
+    enabled: true
+  # Spots -> gene expression: a lasso or a cluster filter on the spots
+  # narrows the per-gene rows of the same spots.
+  - source_dc_tag: "spatialdata_visium_spots"
+    source_column: "spot_uid"
+    target_dc_tag: "sv-genes-expression"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "spot_uid"}
+    description: "Filter the per-spot gene expression by the spots selected"
+    enabled: true
