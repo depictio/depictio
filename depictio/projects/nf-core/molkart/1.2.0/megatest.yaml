@@ -1,0 +1,84 @@
+# Megatest manifest for nf-core/molkart 1.2.0 (read by scripts/nfcore_megatest.py).
+#
+# NO USABLE MEGATEST. The AWS megatest prefix of 1.2.0 holds pipeline_info
+# only (params, software versions, execution trace): no image, mask or table
+# was published there, so nothing can be fetched and `results_sha` stays null
+# until a run is repatriated. The reference data is produced on the EMBL
+# cluster instead (scripts/nfcore_validation_hpc.py, key `molkart`):
+# `-profile test_full`, two Molecular Cartography samples from Zenodo, with
+# segmentation_method mesmer,cellpose,stardist.
+#
+# SYMLINKS. molkart 1.2.0 publishes MOLKARTQC, MINDAGAP_MINDAGAP, STARDIST,
+# DEEPCELL_MESMER, CELLPOSE and the ILASTIK processes without a `mode` in
+# their publishDir, so `--publish_dir_mode copy` does not reach them: they are
+# published as symlinks into the work dir. Fetch the results with `rsync -L`
+# (or run with a `-c` config setting `mode: 'copy'` on those processes) before
+# the work dir is cleaned, or the masks and the QC sheets come back dangling.
+#
+# Expected layout below DATA_ROOT (= the run's --outdir):
+#   <sample>_<image>_gridfilled_clahe.tiff    pyramidal OME-TIFF, .tiff name
+#                                             (at the outdir root in 1.2.0)
+#   mindagap/<sample>_<spots>_markedDups.txt  spot table, duplicates marked
+#   segmentation/filtered_masks/<sample>_<method>_filtered.tif
+#   spot2cell/cellxgene_<sample>_<method>.csv
+#   molkartqc/<sample>.<method>.spot_QC.csv
+#   pipeline_info/params_*.json, nf_core_molkart_software_mqc_versions.yml
+#   input/samplesheet*.csv                    the --input sheet, copied here
+#
+# No MultiQC: the 1.2.0 report holds a single custom-content section that is
+# the concatenation of the molkartqc sheets, which the template reads typed.
+#
+# Offline, the template was validated on a synthetic tree built from the
+# test-datasets molkart branch (3 samples, 3 methods, stand-in segmentation).
+pipeline: molkart
+version: "1.2.0"
+results_sha: null
+run_root: ""
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  - input/samplesheet*.csv
+  - "*_clahe.tiff"
+  - "*mindagap/*_markedDups.txt"
+  - "*segmentation/filtered_masks/*_filtered.tif"
+  - "*spot2cell/cellxgene_*.csv"
+  - "*molkartqc/*.spot_QC.csv"
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  No AWS megatest data: produce the run on the cluster with
+    python scripts/nfcore_validation_hpc.py run --key molkart
+  fetch it with rsync -L (symlinked publishDirs), copy the --input samplesheet
+  to <DATA_ROOT>/input/, then
+    python -m depictio.cli run --template nf-core/molkart/1.2.0 --data-root <DATA_ROOT>
+  Pass --var METADATA_FILE=<design table> for the {GROUP_COL} tiles, and
+  --var PRIMARY_SEGMENTATION / COMPARE_SEGMENTATION when the run did not use
+  mesmer and cellpose.
+# Sample ids, slide / well names and panel genes of the test_full data.
+forbidden_terms:
+  - 32830-Slide1_A2-2
+  - 32830-Slide1_B1-2
+  - "32830"
+  - Slide1
+  - A2-2
+  - B1-2
+  - Nppa
+  - Nppb
+  - Vim
+  - Clu
+  - Pln
+  - Mybpc3
+  - Pecam1
+  - Col1a1
+  - Fn1
+  - Ryr2
+  - Acta2
+  - mouse
+  - heart
+  - liver
+  - Fragment-seq

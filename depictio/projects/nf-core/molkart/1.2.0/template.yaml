@@ -1,0 +1,561 @@
+# nf-core/molkart Template v1.2.0 - Molecular Cartography spatial transcriptomics
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/molkart/1.2.0 --data-root /path/to/results
+#
+# Authored OFFLINE: the AWS megatest of 1.2.0
+# (s3://nf-core-awsmegatests/molkart/results-4ec0790d80cf77f2428d33b1a8571ccb498e2170/)
+# published no per-sample output (its module publishDirs default to symlink
+# mode, which an S3 outdir drops), so the layout below follows the pipeline's
+# conf/modules.config, docs/output.md and bin/ scripts, and is exercised on a
+# synthetic tree built from the `test` profile inputs. The real check is the
+# HPC `test_full` run (see megatest.yaml and download_test_data.sh).
+# ============================================================================
+#
+# LAYOUT (publish paths of conf/modules.config; <m> = segmentation method):
+#   clahe/<sample>_<image>_gridfilled_clahe.tiff   pyramidal OME-TIFF (CLAHE)
+#   stack/<sample>_stack.ome.tif                   2-channel stack, membrane runs only
+#   segmentation/filtered_masks/<sample>_<m>_filtered.{tif,csv}
+#   segmentation/<m>/<sample>_<m>_mask.tif         raw masks (symlink publish)
+#   spot2cell/cellxgene_<sample>_<m>.csv           cell x gene + regionprops
+#   molkartqc/<sample>.<m>.spot_QC.csv             per-sample QC (symlink publish)
+#   mindagap/<sample>_<spots>_markedDups.txt       spots, duplicates marked
+#   anndata/<sample>_<m>.adata                     not read (AnnData binary)
+#   multiqc/                                       not read: its only section is
+#                                                  the molkartqc table itself
+#
+# CELL IDS. spot2cell's CellID is the label value of the FILTERED mask (the
+# MASKFILTER step zeroes labels outside the area limits but never relabels), so
+# the labels DCs scan segmentation/filtered_masks/ rather than the raw masks:
+# that is what lets the viewer colour a label by its row of the cells table.
+# A cell id is unique within one (sample, method) pair only; `cell_key` joins
+# the three for links and record cards.
+#
+# SEGMENTATION METHODS. `--segmentation_method` takes a comma list
+# (mesmer, cellpose, stardist, ilastik). Every method lands in the QC table and
+# in `mk-cells` (one row per cell, per method). The image tabs need ONE method
+# per viewer, because label ids of two methods collide: PRIMARY_SEGMENTATION
+# (default mesmer, the pipeline default) drives the Tissue and Cell x gene
+# tabs, COMPARE_SEGMENTATION (default cellpose) the second viewer of the
+# Segmentation comparison tab. SINGLE_SEGMENTATION prunes the comparison
+# collections on a one-method run.
+#
+# IMAGE. CLAHE writes a pyramidal OME-TIFF under a plain `.tiff` name; the
+# `mk-img` DC reads it as `format: ome-tiff` (needs the platform to accept an
+# OME `.tiff` name, see VALIDATION_REPORT.md). A run with membrane images
+# (`membrane_image` column) gets a 2-channel `stack/<sample>_stack.ome.tif`;
+# MEMBRANE_STACK repoints the image DC at it, and the default
+# IMAGE_SAMPLE_PATTERN names both shapes after the samplesheet sample.
+template:
+  template_id: "nf-core/molkart/1.2.0"
+  description: "nf-core/molkart template: spot assignment QC per segmentation method, the contrast-enhanced tissue image with its segmentation labels and cells, per-cell and per-gene transcript counts, and a side-by-side comparison of two segmentation methods."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root of the nf-core/molkart results (clahe/, segmentation/, spot2cell/, molkartqc/, mindagap/, pipeline_info/), plus input/ holding the samplesheet the run was launched with (samplesheet*.csv)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample id in a column named sample or in the first column, one column per factor. Enables the design filter and colouring."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design-table sample id column. Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards filter and colour by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "PRIMARY_SEGMENTATION"
+      description: "Segmentation method (mesmer, cellpose, stardist or ilastik) whose labels and cells the Tissue and Cell x gene tabs show. Must be one of the run's --segmentation_method values."
+      required: false
+      default: "mesmer"
+    - name: "COMPARE_SEGMENTATION"
+      description: "Second segmentation method, shown in the Segmentation comparison tab's viewer. Must be another of the run's --segmentation_method values."
+      required: false
+      default: "cellpose"
+    - name: "SINGLE_SEGMENTATION"
+      description: "Set (any value) when the run used a single segmentation method: prunes the comparison viewer's collections."
+      required: false
+    - name: "MEMBRANE_STACK"
+      description: "Set (any value) when the samples carry a membrane image: the viewer then shows the 2-channel stack/<sample>_stack.ome.tif instead of the per-channel CLAHE images."
+      required: false
+    - name: "IMAGE_SAMPLE_PATTERN"
+      description: "Regex with one capture group giving the sample from an image file name. The default reads <sample>_<image>_gridfilled_clahe.tiff when the image name has no underscore or starts with the sample id, and <sample>_stack.ome.tif."
+      required: false
+      default: "^(.+?)(?:_stack\\.ome\\.tif|_(?:\\1_)?[^_]+(?:_gridfilled)?_clahe\\.tiff?)$"
+  # Variables for the bundled reference dataset (the HPC test_full run with the
+  # vendored design table). Mirrors the defaults above.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "well"
+      GROUP_COL_DISPLAY: "Well"
+      PRIMARY_SEGMENTATION: "mesmer"
+      COMPARE_SEGMENTATION: "cellpose"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Segmentation"
+        key_patterns: ["segmentation_*", "cellpose_*", "mesmer_*", "stardist_*", "ilastik_*"]
+      - group: "Image preprocessing"
+        key_patterns: ["skip_mindagap", "mindagap_*", "skip_clahe", "clahe_*"]
+      - group: "Training subset"
+        key_patterns: ["create_training_subset", "crop_*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "publish_dir_mode", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path", "modules_testdata_base_path", "trace_report_suffix", "validate_params", "multiqc_*", "max_multiqc_email_size", "email*", "plaintext_email", "monochrome_logs", "help*", "show_hidden", "version"]
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # No design table: nothing to filter or colour by beyond the sample.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
+    # One segmentation method: no second viewer to feed.
+    - if_var_present: "SINGLE_SEGMENTATION"
+      remove_dc_tags: ["mk-lbl-compare", "mk-cells-compare"]
+      dashboards: ["dashboards/base.yaml"]
+    # Membrane runs: the 2-channel stack is the image the cells were segmented on.
+    - if_var_present: "MEMBRANE_STACK"
+      override_dcs:
+        - data_collection_tag: "mk-img"
+          scan_pattern: ".+_stack\\.ome\\.tif$"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Molecular Cartography Spatial Transcriptomics"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "molkart"
+    version: "1.2.0"
+    engine:
+      name: "nextflow"
+      version: "25.04.8"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/molkart"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional), joined into the hub below.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "sample": "Sample identifier, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # Hub: one row per sample of the samplesheet (input/samplesheet*.csv).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: the samplesheet sample every molkart output is named after, its images and spot table, and the run's design factors"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/molkart/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Samplesheet sample name, the prefix of every per-sample output file"
+              "nuclear_image": "Nuclear stain image the run was given"
+              "spot_table": "Transcript spot table the run was given"
+              "membrane_image": "Membrane image, empty when the sample has none"
+              "has_membrane": "yes when segmentation saw a nuclear plus membrane stack"
+
+      # ----------------------------------------------------------------
+      # Images and masks (bioimage stores, one per sample).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mk-img"
+        description: "Contrast-enhanced (CLAHE) nuclear image of each sample, a pyramidal OME-TIFF; the 2-channel stack on membrane runs (MEMBRANE_STACK)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".+_clahe\\.tiff$"
+          dc_specific_properties:
+            format: "ome-tiff"
+            kind: "image"
+            sample_pattern: "{IMAGE_SAMPLE_PATTERN}"
+
+      - data_collection_tag: "mk-lbl-primary"
+        description: "Area-filtered segmentation mask of each sample, PRIMARY_SEGMENTATION method: one integer label per cell, equal to the cell id of mk-cells-primary"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".+_{PRIMARY_SEGMENTATION}_filtered\\.tif$"
+          dc_specific_properties:
+            format: "tiff"
+            kind: "labels"
+            sample_pattern: "^(.+)_{PRIMARY_SEGMENTATION}_filtered\\.tif$"
+
+      - data_collection_tag: "mk-lbl-compare"
+        optional: true
+        description: "Area-filtered segmentation mask of each sample, COMPARE_SEGMENTATION method, for the second viewer"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".+_{COMPARE_SEGMENTATION}_filtered\\.tif$"
+          dc_specific_properties:
+            format: "tiff"
+            kind: "labels"
+            sample_pattern: "^(.+)_{COMPARE_SEGMENTATION}_filtered\\.tif$"
+
+      # ----------------------------------------------------------------
+      # QC per sample and method (molkartqc).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mk-qc"
+        description: "molkartqc per sample and segmentation method: cells kept, mean area, spots and the share assigned to cells, duplicated spots, labels removed by the area filter"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "molkartqc/spot_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "segmentation_method": "Segmentation method of the row"
+              "total_cells": "Cells kept after the area filter"
+              "avg_area": "Mean cell area, pixels"
+              "total_spots": "Non-duplicated spots of the sample (repeats on every method row)"
+              "spot_assign_per_cell": "Mean transcripts assigned per cell"
+              "spot_assign_total": "Spots that fell inside a cell"
+              "spot_assign_percent": "Share of the sample's spots assigned to a cell, percent"
+              "spots_unassigned": "Spots outside every cell"
+              "duplicated_total": "Spots Mindagap marked as duplicated along tile borders (repeats on every method row)"
+              "duplicated_percent": "Duplicated spots over all spots, percent"
+              "labels_total": "Labels the segmentation produced, before the area filter"
+              "labels_below_thresh": "Labels removed as smaller than the minimum area"
+              "labels_above_thresh": "Labels removed as larger than the maximum area"
+              "labels_removed_percent": "Labels removed by the area filter, percent"
+
+      - data_collection_tag: "mk-spots"
+        description: "Mindagap's marked spot tables counted per sample and gene, duplicates on their own row"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mindagap/marked_spots.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "gene": "Gene, or Duplicated for the spots set aside along tile borders"
+              "status": "kept or duplicated"
+              "spots": "Spots of that gene in the sample"
+              "pct_of_sample": "Share of the sample's spots, percent"
+
+      # ----------------------------------------------------------------
+      # Cells (spot2cell). mk-cells: every method; -primary / -compare: one
+      # method each, the points overlay of a viewer.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mk-cells"
+        description: "One row per segmented cell of every sample and segmentation method: centroid, shape, transcripts, genes and dominant gene"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spot2cell/cells.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "segmentation_method": "Segmentation method the cell comes from"
+              "cell_id": "Label value of the cell in the filtered mask, unique within a sample and method"
+              "cell_key": "sample:method:cell_id, unique across the run"
+              "x_centroid": "Centroid column, level-0 image pixels"
+              "y_centroid": "Centroid row, level-0 image pixels"
+              "area": "Cell area, pixels"
+              "major_axis_length": "Major axis of the fitted ellipse, pixels"
+              "minor_axis_length": "Minor axis of the fitted ellipse, pixels"
+              "eccentricity": "Eccentricity of the fitted ellipse, 0 round to 1 elongated"
+              "solidity": "Area over convex hull area"
+              "extent": "Area over bounding box area"
+              "orientation": "Angle of the major axis, radians"
+              "total_counts": "Transcripts assigned to the cell"
+              "n_genes": "Genes with at least one transcript in the cell"
+              "dominant_gene": "Gene with the most transcripts in the cell, none when empty"
+              "dominant_gene_frac": "Share of the cell's transcripts from its dominant gene, 0 to 1"
+
+      - data_collection_tag: "mk-cells-primary"
+        description: "The cells of the PRIMARY_SEGMENTATION method only: the points of the Tissue viewer, one per label of mk-lbl-primary"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spot2cell/cells.py"
+            source_overrides:
+              cellxgene:
+                glob_pattern: "**/cellxgene_*_{PRIMARY_SEGMENTATION}.csv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "segmentation_method": "Segmentation method the cell comes from"
+              "cell_id": "Label value of the cell in the filtered mask, unique within a sample and method"
+              "cell_key": "sample:method:cell_id, unique across the run"
+              "x_centroid": "Centroid column, level-0 image pixels"
+              "y_centroid": "Centroid row, level-0 image pixels"
+              "area": "Cell area, pixels"
+              "major_axis_length": "Major axis of the fitted ellipse, pixels"
+              "minor_axis_length": "Minor axis of the fitted ellipse, pixels"
+              "eccentricity": "Eccentricity of the fitted ellipse, 0 round to 1 elongated"
+              "solidity": "Area over convex hull area"
+              "extent": "Area over bounding box area"
+              "orientation": "Angle of the major axis, radians"
+              "total_counts": "Transcripts assigned to the cell"
+              "n_genes": "Genes with at least one transcript in the cell"
+              "dominant_gene": "Gene with the most transcripts in the cell, none when empty"
+              "dominant_gene_frac": "Share of the cell's transcripts from its dominant gene, 0 to 1"
+
+
+      - data_collection_tag: "mk-cells-compare"
+        optional: true
+        description: "The cells of the COMPARE_SEGMENTATION method only: the points of the comparison viewer"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spot2cell/cells.py"
+            source_overrides:
+              cellxgene:
+                glob_pattern: "**/cellxgene_*_{COMPARE_SEGMENTATION}.csv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "segmentation_method": "Segmentation method the cell comes from"
+              "cell_id": "Label value of the cell in the filtered mask, unique within a sample and method"
+              "cell_key": "sample:method:cell_id, unique across the run"
+              "x_centroid": "Centroid column, level-0 image pixels"
+              "y_centroid": "Centroid row, level-0 image pixels"
+              "area": "Cell area, pixels"
+              "major_axis_length": "Major axis of the fitted ellipse, pixels"
+              "minor_axis_length": "Minor axis of the fitted ellipse, pixels"
+              "eccentricity": "Eccentricity of the fitted ellipse, 0 round to 1 elongated"
+              "solidity": "Area over convex hull area"
+              "extent": "Area over bounding box area"
+              "orientation": "Angle of the major axis, radians"
+              "total_counts": "Transcripts assigned to the cell"
+              "n_genes": "Genes with at least one transcript in the cell"
+              "dominant_gene": "Gene with the most transcripts in the cell, none when empty"
+              "dominant_gene_frac": "Share of the cell's transcripts from its dominant gene, 0 to 1"
+
+
+      # ----------------------------------------------------------------
+      # Genes (spot2cell, PRIMARY_SEGMENTATION).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mk-cell-genes"
+        description: "Transcripts per cell and gene, non-zero only, PRIMARY_SEGMENTATION cells"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spot2cell/cell_genes_long.py"
+            source_overrides:
+              cellxgene:
+                glob_pattern: "**/cellxgene_*_{PRIMARY_SEGMENTATION}.csv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "segmentation_method": "Segmentation method of the cell"
+              "cell_id": "Label value of the cell in the filtered mask"
+              "cell_key": "sample:method:cell_id"
+              "gene": "Gene of the panel"
+              "count": "Transcripts of the gene assigned to the cell"
+              "frac_of_cell": "Share of the cell's transcripts, 0 to 1"
+
+      - data_collection_tag: "mk-gene-summary"
+        description: "Per sample and gene: transcripts assigned to cells, cells expressing, mean per cell and rank, PRIMARY_SEGMENTATION cells"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spot2cell/gene_summary.py"
+            source_overrides:
+              cellxgene:
+                glob_pattern: "**/cellxgene_*_{PRIMARY_SEGMENTATION}.csv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Samplesheet sample id"
+              "segmentation_method": "Segmentation method of the cells"
+              "gene": "Gene of the panel"
+              "total_counts": "Transcripts of the gene assigned to cells"
+              "cells_expressing": "Cells with at least one transcript of the gene"
+              "n_cells": "Cells of the sample"
+              "frac_cells_expressing": "Fraction of the sample's cells expressing the gene, 0 to 1"
+              "mean_per_cell": "Transcripts per cell, over all cells"
+              "mean_per_expressing_cell": "Transcripts per expressing cell"
+              "share_of_counts_pct": "Share of the sample's assigned transcripts, percent"
+              "rank": "Rank of the gene by transcripts within the sample, 1 = most"
+
+      - data_collection_tag: "mk-gene-heatmap"
+        description: "The panel's most abundant genes against the samples, log1p mean transcripts per cell, PRIMARY_SEGMENTATION cells"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "spot2cell/gene_heatmap.py"
+            source_overrides:
+              cellxgene:
+                glob_pattern: "**/cellxgene_*_{PRIMARY_SEGMENTATION}.csv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene": "Gene of the panel; every other column is one sample, log1p of its mean transcripts per cell"
+
+links:
+  # Hub -> everything keyed on the sample.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the QC table by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-spots"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the spot counts by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the cells of every method by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-cells-primary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Tissue viewer's cells by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-cells-compare"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the comparison viewer's cells by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-cell-genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-cell gene counts by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mk-gene-summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the gene summary by the samples picked in the left panel"
+    enabled: true
+  # Cells -> their genes: a lasso or a row pick on the Tissue viewer's cells
+  # narrows the per-cell gene counts to those cells.
+  - source_dc_tag: "mk-cells-primary"
+    source_column: "cell_key"
+    target_dc_tag: "mk-cell-genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "cell_key"}
+    description: "Narrow the per-cell gene counts to the cells selected on the image or in the cell table"
+    enabled: true
+  # Gene picks compose across the gene tables.
+  - source_dc_tag: "mk-gene-summary"
+    source_column: "gene"
+    target_dc_tag: "mk-cell-genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene"}
+    description: "Narrow the per-cell gene counts to the genes picked"
+    enabled: true
+  - source_dc_tag: "mk-gene-summary"
+    source_column: "gene"
+    target_dc_tag: "mk-gene-heatmap"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene"}
+    description: "Narrow the gene heatmap to the genes picked"
+    enabled: true
+  - source_dc_tag: "mk-gene-summary"
+    source_column: "gene"
+    target_dc_tag: "mk-spots"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene"}
+    description: "Narrow the spot counts to the genes picked"
+    enabled: true
+  # Method picks compose between the QC table and the cells of every method.
+  - source_dc_tag: "mk-cells"
+    source_column: "segmentation_method"
+    target_dc_tag: "mk-qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmentation_method"}
+    description: "Narrow the QC table to the segmentation methods picked"
+    enabled: true
+  - source_dc_tag: "mk-qc"
+    source_column: "segmentation_method"
+    target_dc_tag: "mk-cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmentation_method"}
+    description: "Narrow the cells to the segmentation methods picked"
+    enabled: true
