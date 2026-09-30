@@ -180,6 +180,8 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     wfId: metadata.wf_id,
     vizKind: 'sequence_track',
     filters: fetchFilters,
+    shareKey: entityCol,
+    owner: index,
   });
   // The picker decides which protein is on screen, in every table it reads.
   const scoped = useCallback(

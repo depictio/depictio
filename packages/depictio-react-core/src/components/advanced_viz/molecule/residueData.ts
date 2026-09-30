@@ -124,8 +124,10 @@ export function distinctEntities(rows: readonly ResidueRow[]): string[] {
  *
  * In order: the one entity the dashboard filters name on the entity column
  * (another tile's pick, a sidebar selector), the one the reader picked in the
- * tile, the entity of the fetched rows with the most rows that has a structure
- * (`distinctEntities` order), the first entity with a structure. `available`
+ * tile, the dashboard's agreed `opening` entity (see
+ * `highlight/openingEntity.ts`), the entity of the fetched rows with the most
+ * rows that has a structure (`distinctEntities` order), the first entity with
+ * a structure. `available`
  * is the universe of entities that can be drawn (the indexed_file samples in
  * file mode, the row entities in resolve mode); an entity outside it is never
  * returned.
@@ -135,11 +137,13 @@ export function chooseEntity(args: {
   picked: string | null;
   rowEntities: readonly string[];
   available: readonly string[];
+  opening?: string | null;
 }): string | null {
-  const { fromFilters, picked, rowEntities, available } = args;
+  const { fromFilters, picked, rowEntities, available, opening = null } = args;
   const has = (e: string | null): e is string => e !== null && available.includes(e);
   if (has(fromFilters)) return fromFilters;
   if (has(picked)) return picked;
+  if (has(opening)) return opening;
   for (const e of rowEntities) if (has(e)) return e;
   return available[0] ?? null;
 }

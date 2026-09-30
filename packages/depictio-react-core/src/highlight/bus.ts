@@ -27,6 +27,8 @@ import {
   type ReactNode,
 } from 'react';
 
+import { createOpeningEntityStore, OpeningEntityContext } from './openingEntity';
+
 export type HighlightEvent = {
   /** Index of the tile that published it; a tile ignores its own events. */
   sourceIndex: string;
@@ -169,9 +171,17 @@ const HighlightContext = createContext<HighlightBus | null>(null);
  */
 export function HighlightProvider({ children }: { children?: ReactNode }) {
   const parent = useContext(HighlightContext);
+  const parentOpening = useContext(OpeningEntityContext);
   const [own] = useState(() => (parent ? null : createHighlightBus()));
+  // The protein tiles' opening-entity agreement shares the bus's scope.
+  const [ownOpening] = useState(() => (parentOpening ? null : createOpeningEntityStore()));
   useEffect(() => () => own?.dispose(), [own]);
-  return createElement(HighlightContext.Provider, { value: parent ?? own }, children);
+  useEffect(() => () => ownOpening?.dispose(), [ownOpening]);
+  return createElement(
+    HighlightContext.Provider,
+    { value: parent ?? own },
+    createElement(OpeningEntityContext.Provider, { value: parentOpening ?? ownOpening }, children),
+  );
 }
 
 const noopSubscribe = () => () => {};
