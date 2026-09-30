@@ -1,4 +1,4 @@
-"""Recipe loader and executor with 4 automatic validation checkpoints."""
+"""Recipe loader and executor with 5 automatic validation checkpoints."""
 
 from __future__ import annotations
 
@@ -128,6 +128,12 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
     for s in sources:
         if not isinstance(s, RecipeSource):
             raise RecipeError(f"Recipe {recipe_name} SOURCES must contain RecipeSource instances")
+        for col_name, dtype in (s.input_schema or {}).items():
+            if not _is_polars_dtype(dtype):
+                raise RecipeError(
+                    f"Recipe {recipe_name}: source '{s.ref}' input_schema column "
+                    f"'{col_name}' is not a polars dtype: {dtype!r}"
+                )
 
     return module
 
@@ -244,8 +250,65 @@ def resolve_sources(
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint 3 & 4: Execute transform and validate output
+# Checkpoints 3 to 5: check inputs, execute transform, validate output
 # ---------------------------------------------------------------------------
+
+
+def _is_polars_dtype(dtype: object) -> bool:
+    return isinstance(dtype, pl.DataType) or (
+        isinstance(dtype, type) and issubclass(dtype, pl.DataType)
+    )
+
+
+def _dtype_compatible(actual: pl.DataType, declared: pl.DataType) -> bool:
+    """Whether a column read as ``actual`` can feed a recipe that expects ``declared``.
+
+    Readers infer types from the data, so the check is deliberately loose: a text
+    or all-null column may still hold what the recipe casts itself, and one numeric
+    type stands for another (a count column of whole numbers reads as Int64 even
+    where the recipe declares Float64). A structural mismatch, such as a list
+    where a number is expected, still fails.
+    """
+    if actual == declared or actual in (pl.String, pl.Null):
+        return True
+    if actual.is_numeric() and declared.is_numeric():
+        return True
+    return declared == pl.String and not actual.is_nested()
+
+
+def validate_sources(
+    module: ModuleType, sources: dict[str, pl.DataFrame | None], recipe_name: str
+) -> list[str]:
+    """Check every resolved source against its ``input_schema``.
+
+    Runs between resolving the sources and ``transform()``, so a pipeline output
+    that lacks a column names the source and the column instead of failing inside
+    the transform. Sources without an ``input_schema``, optional sources resolved
+    to ``None`` and empty ``dc_ref`` frames (an upstream DC with no rows, which the
+    recipe handles itself; empty files already fail while resolving) are skipped.
+
+    Returns the refs of the sources that were checked.
+    """
+    checked: list[str] = []
+    for source in module.SOURCES:
+        df = sources.get(source.ref)
+        if not source.input_schema or df is None or df.is_empty():
+            continue
+        missing = [c for c in source.input_schema if c not in df.columns]
+        if missing:
+            raise RecipeError(
+                f"Recipe {recipe_name}: source '{source.ref}' lacks input column(s) "
+                f"{missing}. Got columns: {df.columns}"
+            )
+        for col_name, declared in source.input_schema.items():
+            actual = df[col_name].dtype
+            if not _dtype_compatible(actual, declared):
+                raise RecipeError(
+                    f"Recipe {recipe_name}: source '{source.ref}' input column "
+                    f"'{col_name}' expected {declared}, got {actual}"
+                )
+        checked.append(source.ref)
+    return checked
 
 
 def validate_schema(
@@ -325,7 +388,10 @@ def execute_recipe(
                     f"If it uses dc_ref, provide it via extra_sources."
                 )
 
-    # Checkpoint 3: transform
+    # Checkpoint 3: input schema
+    validate_sources(module, sources, recipe_name)
+
+    # Checkpoint 4: transform
     result = module.transform(sources)
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
@@ -335,7 +401,7 @@ def execute_recipe(
     if result.is_empty():
         raise RecipeError(f"Recipe {recipe_name}: transform() produced empty DataFrame")
 
-    # Checkpoint 4: schema validation (required + optional columns)
+    # Checkpoint 5: output schema (required + optional columns)
     validate_schema(
         result,
         module.OUTPUT_SCHEMA,

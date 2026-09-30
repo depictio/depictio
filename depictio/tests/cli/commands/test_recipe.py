@@ -24,6 +24,7 @@ class _Source:
     def __init__(self, ref, dc_ref=None):
         self.ref = ref
         self.dc_ref = dc_ref
+        self.input_schema = None
 
 
 def _patch_recipes(monkeypatch, sources, *, transform=None, schema=None):
