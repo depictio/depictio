@@ -23,6 +23,8 @@ from depictio.models.models.data_collections_types.bioimage import (
     DCBioimageConfig,
     bioimage_s3_object_key,
     bioimage_s3_prefix,
+    bioimage_sample_name,
+    duplicate_samples,
     is_single_file_format,
     remote_store_name,
 )
@@ -1359,6 +1361,7 @@ def upload_zarr_store(
     workers: int | None = None,
     force: bool = False,
     image_path: str | None = None,
+    store_hash: str | None = None,
 ) -> int:
     """Mirror a local store under ``bioimage_s3_prefix(dc_id, store_name)``.
 
@@ -1377,6 +1380,8 @@ def upload_zarr_store(
     ``bioimage_upload_marker_key``. When that marker already matches the local
     store (and ``force`` is False) nothing is uploaded. The marker is removed
     before a re-upload starts, so an interrupted upload never looks complete.
+    ``store_hash`` replaces the hash of the local tree, for a store converted
+    into a temporary directory (a labels TIFF): keyed on its source instead.
 
     Returns:
         Number of objects uploaded (0 when the marker matched).
@@ -1386,7 +1391,8 @@ def upload_zarr_store(
     store_name = os.path.basename(store_path.rstrip("/"))
     prefix = bioimage_s3_prefix(dc_id, store_name)
     marker_key = bioimage_upload_marker_key(dc_id, store_name)
-    store_hash = zarr_store_hash(store_path, image_path)
+    if store_hash is None:
+        store_hash = zarr_store_hash(store_path, image_path)
     source = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
 
     marker = _read_bioimage_upload_marker(s3_client, bucket, marker_key)
@@ -1462,20 +1468,78 @@ def upload_ome_tiff(
     return 1
 
 
+def upload_labels_tiff(
+    s3_client,
+    bucket: str,
+    dc_id: str,
+    tiff_path: str,
+    *,
+    sample_pattern: str | None = None,
+    workers: int | None = None,
+    force: bool = False,
+) -> int:
+    """Convert a mask TIFF to an OME-Zarr labels store and mirror it on S3.
+
+    The store keeps the TIFF's name (``<name>.tif`` is the prefix the API
+    serves keys under), is written to a temporary directory, validated as
+    NGFF 0.4 and uploaded with ``upload_zarr_store``. The marker hash is the
+    source file's (name, size, mtime) plus ``LABELS_CONVERSION_VERSION``, so
+    an unchanged mask is neither converted nor uploaded again.
+
+    Returns:
+        Number of objects uploaded (0 when the marker matched).
+    """
+    import tempfile
+
+    from depictio.cli.cli.utils.labels_tiff import (
+        LABELS_CONVERSION_VERSION,
+        convert_labels_tiff,
+    )
+
+    name = os.path.basename(tiff_path)
+    source_hash = f"labels-v{LABELS_CONVERSION_VERSION}:{single_file_store_hash(tiff_path)}"
+    marker = _read_bioimage_upload_marker(
+        s3_client, bucket, bioimage_upload_marker_key(dc_id, name)
+    )
+    if not force and marker is not None and marker.get("hash") == source_hash:
+        logger.info(f"Labels TIFF unchanged since last upload, skipping: {tiff_path}")
+        return 0
+    with tempfile.TemporaryDirectory(prefix="depictio-labels-") as tmp:
+        store = convert_labels_tiff(
+            tiff_path, os.path.join(tmp, name), bioimage_sample_name(name, sample_pattern)
+        )
+        validate_ome_zarr_store(store, "0.4")
+        return upload_zarr_store(
+            s3_client, bucket, dc_id, store, workers=workers, force=True, store_hash=source_hash
+        )
+
+
+def _store_name(path: str) -> str:
+    return remote_store_name(path) if "://" in path else os.path.basename(path.rstrip("/"))
+
+
 def _duplicate_store_names(store_paths: Iterable[str]) -> dict[str, list[str]]:
     """Store names shared by more than one path or remote URL, with the clashes."""
     by_name: dict[str, list[str]] = {}
     for path in store_paths:
-        name = remote_store_name(path) if "://" in path else os.path.basename(path.rstrip("/"))
-        by_name.setdefault(name, []).append(path)
+        by_name.setdefault(_store_name(path), []).append(path)
     return {name: paths for name, paths in by_name.items() if len(paths) > 1}
 
 
-_FORMAT_LABELS = {"ome-zarr": "OME-Zarr", "spatialdata": "SpatialData", "ome-tiff": "OME-TIFF"}
+_FORMAT_LABELS = {
+    "ome-zarr": "OME-Zarr",
+    "spatialdata": "SpatialData",
+    "ome-tiff": "OME-TIFF",
+    "tiff": "labels TIFF",
+}
 
 
 def _validate_bioimage_store(store_path: str, props: DCBioimageConfig) -> None:
-    if props.format == "ome-tiff":
+    if props.format == "tiff":
+        from depictio.cli.cli.utils.labels_tiff import inspect_labels_tiff
+
+        inspect_labels_tiff(store_path)
+    elif props.format == "ome-tiff":
         validate_ome_tiff(store_path)
     elif props.format == "spatialdata":
         validate_spatialdata_store(store_path, props.image_path or "", props.ngff_version)
@@ -1491,10 +1555,12 @@ def process_bioimage_data_collection(
     """Validate a bioimage DC's local stores and upload them to S3.
 
     Every registered File is one store of the DC's ``format``: a ``*.zarr``
-    directory (OME-Zarr, SpatialData) or an ``*.ome.tif(f)`` file (OME-TIFF).
+    directory (OME-Zarr, SpatialData), a ``*.tif(f)`` file (OME-TIFF) or
+    a ``*.tif(f)`` mask (labels TIFF, converted to OME-Zarr on upload, see
+    ``upload_labels_tiff``; such a DC is never reference-only).
     Stores are keyed by their name (S3 prefix, stores listing, viewer), so two
     stores sharing a name, local or remote, are rejected before anything is
-    uploaded. Each store is validated for its format; unless the DC is
+    uploaded, as are two stores giving one sample name (``sample_pattern``). Each store is validated for its format; unless the DC is
     reference-only (``upload: false``), a key-tree store is then mirrored under
     ``bioimage_s3_prefix(dc_id, store_name)`` (a SpatialData store: its
     ``image_path`` subtree only) and an OME-TIFF copied to
@@ -1549,6 +1615,20 @@ def process_bioimage_data_collection(
                 f"(stores are addressed by name): {clashes}"
             ),
         }
+    shared = duplicate_samples(
+        [_store_name(p) for p in [*store_paths, *remote]], props.sample_pattern
+    )
+    if shared:
+        clashes = "; ".join(
+            f"{sample}: {', '.join(names)}" for sample, names in sorted(shared.items())
+        )
+        return {
+            "result": "error",
+            "message": (
+                f"{label} stores must name distinct samples within a data collection "
+                f"(the viewer pairs images, labels and cells by sample): {clashes}"
+            ),
+        }
 
     for store_path in store_paths:
         try:
@@ -1563,7 +1643,17 @@ def process_bioimage_data_collection(
         for store_path in store_paths:
             try:
                 logger.info(f"Uploading {label} store to S3: {store_path}")
-                if is_single_file_format(props.format):
+                if props.format == "tiff":
+                    count = upload_labels_tiff(
+                        s3_client,
+                        bucket,
+                        dc_id,
+                        store_path,
+                        sample_pattern=props.sample_pattern,
+                        workers=workers,
+                        force=overwrite,
+                    )
+                elif is_single_file_format(props.format):
                     count = upload_ome_tiff(s3_client, bucket, dc_id, store_path, force=overwrite)
                 else:
                     count = upload_zarr_store(

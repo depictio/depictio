@@ -393,7 +393,7 @@ class TestFormatScan:
         folder = tmp_path / "images"
         make_ome_tiff(folder / "sample_A.ome.tif")
         make_ome_tiff(folder / "nested" / "sample_B.ome.tiff")
-        make_ome_tiff(folder / "plain.tif")
+        make_ome_tiff(folder / "plain.tif", "a mask")
         make_ome_tiff(make_store(folder, "sample_C.zarr") / "inside.ome.tif")
 
         results = self._single(folder, _dc(format="ome-tiff"))
@@ -422,7 +422,18 @@ class TestFormatScan:
         assert result.file.filename == "sample_A.zarr"
 
     def test_non_ome_tiff_single_path_registers_nothing(self, tmp_path):
-        assert self._single(make_ome_tiff(tmp_path / "plain.tif"), _dc(format="ome-tiff")) == []
+        assert (
+            self._single(make_ome_tiff(tmp_path / "plain.tif", "a mask"), _dc(format="ome-tiff"))
+            == []
+        )
+
+    def test_plain_tif_name_with_ome_header_is_an_ome_tiff(self, tmp_path):
+        """nf-core molkart names its CLAHE pyramid `*.tiff`: the header decides."""
+        path = make_ome_tiff(tmp_path / "s1_clahe.tiff")
+
+        (result,) = self._single(path, _dc(format="ome-tiff"))
+
+        assert result.file.filename == "s1_clahe.tiff"
 
     def test_spatialdata_store_is_one_file_at_its_root(self, tmp_path):
         root = make_spatialdata(tmp_path, "slide.zarr")
@@ -435,7 +446,7 @@ class TestFormatScan:
     def test_recursive_ome_tiff_matches_tiff_files_only(self, tmp_path):
         run_dir = tmp_path / "run_1"
         tiff = make_ome_tiff(run_dir / "a" / "sample_A.ome.tiff")
-        make_ome_tiff(run_dir / "plain.tif")
+        make_ome_tiff(run_dir / "plain.tif", "a mask")
         make_store(run_dir, "sample_B.zarr")
 
         files = TestRecursiveScan()._scan(

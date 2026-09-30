@@ -1739,19 +1739,26 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
 }
 
 /** What a `bioimage` DC's stores are (`DCBioimageConfig.format`). A
- *  `spatialdata` store is served rooted at its image element, so it reads as
- *  plain OME-Zarr here. */
-export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata';
+ *  `spatialdata` store is served rooted at its image element, and a `tiff`
+ *  (segmentation mask) as the OME-Zarr labels image the CLI converted it to,
+ *  so both read as plain OME-Zarr here. */
+export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata' | 'tiff';
 
-/** One image store registered under a `bioimage` DC. `sample` is the store
- *  name without its suffix (`.zarr`, `.ome.tif`), the value an upstream sample
- *  filter selects on. `remote` stores are read in place from an allow-listed
- *  host or bucket, proxied by the API. */
+/** What a store's pixels are: intensities, or cell ids (a segmentation mask). */
+export type BioimageKind = 'image' | 'labels';
+
+/** One image store registered under a `bioimage` DC. `sample` is the DC's
+ *  `sample_pattern` capture on the store name, else the name without its
+ *  suffix (`.zarr`, `.ome.tif`, `.tif`): the value an upstream sample filter
+ *  selects on, and what pairs a labels store with its image. `remote` stores
+ *  are read in place from an allow-listed host or bucket, proxied by the API. */
 export interface BioimageStoreInfo {
   name: string;
   sample: string;
   file_id: string | null;
   format: BioimageFormat;
+  /** Absent from an API older than the labels overlay: read it as 'image'. */
+  kind?: BioimageKind;
   remote: boolean;
 }
 
@@ -1914,8 +1921,8 @@ export function createBioimageTiffSource(dcId: string, store: string): BioimageT
   };
 }
 
-/** What the viewer opens: a zarr key tree (OME-Zarr, and SpatialData served
- *  rooted at its image) or a single OME-TIFF file. */
+/** What the viewer opens: a zarr key tree (OME-Zarr, SpatialData served
+ *  rooted at its image, a converted labels TIFF) or a single OME-TIFF file. */
 export type BioimageSource =
   | { kind: 'zarr'; store: BioimageZarrStore }
   | { kind: 'tiff'; tiff: BioimageTiffSource };

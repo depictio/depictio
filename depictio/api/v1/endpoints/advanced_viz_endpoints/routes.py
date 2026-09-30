@@ -1838,13 +1838,16 @@ def get_phylogeny_newick(
 # * key-tree formats (ome-zarr, spatialdata): the CLI upload under
 #   ``bioimage_s3_prefix``, then the registered store on disk, where a
 #   SpatialData store is read at ``<store>/<image_path>``;
+# * tiff (labels masks): the OME-Zarr labels image the CLI converted the mask
+#   to, under ``bioimage_s3_prefix`` like ome-zarr; never on disk (the
+#   registered path is the TIFF itself, and such a DC always uploads);
 # * ome-tiff: one file, at ``bioimage_s3_object_key`` or on disk, by byte range;
 # * remote stores (the DC's ``remote_stores``): proxied from their URL, only when
 #   the bucket or host is allow-listed in ``settings.bioimage``.
 
 _BIOIMAGE_CACHE_TTL_S = 60.0
 _BIOIMAGE_CACHE_MAX = 2048
-_BIOIMAGE_FORMATS = ("ome-zarr", "ome-tiff", "spatialdata")
+_BIOIMAGE_FORMATS = ("ome-zarr", "ome-tiff", "spatialdata", "tiff")
 # zarr v2 (NGFF 0.4) and v3 (NGFF 0.5) metadata documents.
 _ZARR_JSON_KEYS = frozenset({".zattrs", ".zgroup", ".zarray", ".zmetadata", "zarr.json"})
 # Metadata is revalidated on every read (a re-upload may change it); chunks are
@@ -1955,9 +1958,11 @@ def _bioimage_dc_properties(dc_oid: ObjectId) -> tuple[dict[str, Any], str | Non
 def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
     """Stores of a bioimage DC with its format and ``upload`` flag, cached briefly.
 
-    Returns ``{"format": str, "upload": bool, "image_path": str | None,
+    Returns ``{"format": str, "kind": "image" | "labels", "upload": bool,
+    "image_path": str | None, "sample_pattern": str | None,
     "stores": {name: {"file_id": str | None, "roots": [path, ...]}},
-    "remote": {name: url}}``. Local stores come from the CLI scan
+    "remote": {name: url}}``. A ``tiff`` (labels) store is registered as its
+    mask file but served as the OME-Zarr key tree the CLI converted it to. Local stores come from the CLI scan
     (``files_collection``, one File per store) and, for DCs never CLI-scanned,
     from the project's ``scan_parameters.filename`` (a store, or a folder of
     stores). A root is the store directory, or the file of an OME-TIFF store,
@@ -1974,9 +1979,11 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
 
     from depictio.api.v1.db import files_collection
     from depictio.models.models.data_collections_types.bioimage import (
+        OME_TIFF_SUFFIXES,
         bioimage_store_suffixes,
+        check_sample_pattern,
         is_bioimage_store_name,
-        is_single_file_format,
+        is_file_store_format,
         normalize_image_path,
         remote_store_name,
     )
@@ -1999,7 +2006,15 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
             image_path = normalize_image_path(str(props.get("image_path") or ""))
         except ValueError as exc:
             logger.warning("Bioimage DC %s: %s", dc_oid, exc)
-    single_file = is_single_file_format(fmt)
+    # On disk, a file store (OME-TIFF, labels TIFF) is a file, else a directory.
+    file_store = is_file_store_format(fmt)
+    kind = "labels" if props.get("kind") == "labels" else "image"
+    sample_pattern: str | None = None
+    if props.get("sample_pattern"):
+        try:
+            sample_pattern = check_sample_pattern(str(props["sample_pattern"]))
+        except ValueError as exc:
+            logger.warning("Bioimage DC %s: %s", dc_oid, exc)
 
     stores: dict[str, dict[str, Any]] = {}
     # The path each store name is bound to; a second path with that name is a clash.
@@ -2050,7 +2065,11 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
                     continue
                 try:
                     for entry in sorted(os.scandir(folder), key=lambda e: e.name):
-                        is_store = entry.is_file() if single_file else entry.is_dir()
+                        is_store = entry.is_file() if file_store else entry.is_dir()
+                        # A plain `*.tif` passes as OME-TIFF only after the CLI scan's
+                        # header check (a file document); here, only OME names.
+                        if fmt == "ome-tiff" and not entry.name.endswith(OME_TIFF_SUFFIXES):
+                            continue
                         if is_store and is_bioimage_store_name(entry.name, fmt):
                             add_root(entry.path)
                 except OSError:
@@ -2068,8 +2087,10 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
 
     info = {
         "format": fmt,
+        "kind": kind,
         "upload": props.get("upload") is not False,
         "image_path": image_path,
+        "sample_pattern": sample_pattern,
         "stores": stores,
         "remote": remote,
     }
@@ -2502,9 +2523,10 @@ def list_bioimage_stores(
 ) -> list[dict[str, Any]]:
     """List the image stores of a bioimage DC, sorted by name.
 
-    Each entry is ``{name, sample, file_id, format, remote}``. ``sample`` is the
-    store name without its suffix; the viewer matches it against upstream filter
-    values. ``file_id`` is None for a store only found on S3 or remote.
+    Each entry is ``{name, sample, file_id, format, kind, remote}``. ``sample``
+    is the DC's ``sample_pattern`` capture on the store name, else the name
+    without its suffix; the viewer matches it against upstream filter values,
+    and pairs a labels store (``kind: labels``) with the image of its sample. ``file_id`` is None for a store only found on S3 or remote.
     ``format`` is the DC's format. ``remote`` marks a store read in place from
     its URL; it is listed even when its host is not allow-listed, so the tile
     can say why it cannot open it.
@@ -2526,9 +2548,10 @@ def list_bioimage_stores(
     return [
         {
             "name": name,
-            "sample": bioimage_sample_name(name),
+            "sample": bioimage_sample_name(name, info["sample_pattern"]),
             "file_id": file_id,
             "format": fmt,
+            "kind": info["kind"],
             "remote": remote,
         }
         for name, file_id, remote in sorted(listed)

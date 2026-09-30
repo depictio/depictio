@@ -143,3 +143,33 @@ def test_binding_validation_is_a_no_op():
 def test_suggester_never_recommends_it_for_a_table():
     by_kind = {s.viz_kind: s for s in suggest_viz_kinds({"a": "Float64"}, dc_type="table")}
     assert by_kind["bioimage_viewer"].score == 0.0
+
+
+class TestLabelsBinding:
+    def test_defaults(self):
+        config = BioimageViewerConfig()
+        assert config.labels_dc_tag is None
+        assert config.labels_opacity == 0.5
+        assert config.labels_outline is True
+
+    def test_labels_need_an_image_dc(self):
+        with pytest.raises(ValidationError, match="drawn over an image"):
+            BioimageViewerConfig(labels_dc_tag="masks")
+        config = BioimageViewerConfig(image_dc_tag="img", labels_dc_tag="masks")
+        assert config.labels_dc_tag == "masks"
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"image_dc_tag": "img", "labels_dc_tag": "img"},
+            {"image_dc_id": "abc", "labels_dc_id": "abc"},
+        ],
+    )
+    def test_labels_are_a_separate_dc(self, kwargs):
+        with pytest.raises(ValidationError, match="name the same DC"):
+            BioimageViewerConfig(**kwargs)
+
+    @pytest.mark.parametrize("opacity", [-0.1, 1.5])
+    def test_opacity_is_bounded(self, opacity):
+        with pytest.raises(ValidationError):
+            BioimageViewerConfig(image_dc_tag="i", labels_dc_tag="m", labels_opacity=opacity)

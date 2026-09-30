@@ -36,7 +36,7 @@ grid_sections:
   - name: 'Image'
     icon: 'mdi:microscope'
     color: 'blue'
-    description: 'The selected sample, with one point per nucleus; lasso nuclei to filter the table'
+    description: 'The selected sample with its nucleus masks; click or lasso nuclei to filter the table'
   - name: 'Sample sheet'
     icon: 'mdi:table-account'
     color: 'blue'
@@ -131,7 +131,7 @@ components:
     workflow_tag: python/bioimage_demo
     data_collection_tag: multi_sample_images
     title: 'Selected sample'
-    description: 'One 256 x 256 store per sample (nominal 0.65 um pixels). Points are nuclei of the store on screen, coloured by phase.'
+    description: 'One 256 x 256 store per sample (nominal 0.65 um pixels). Nuclei are drawn from their segmentation masks, coloured by phase and faded when filtered out.'
     section: 'Image'
     viz_kind: bioimage_viewer
     config:
@@ -147,12 +147,19 @@ components:
       points_dc_tag: multi_sample_cells
       points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
       points_dc_id: '646b0f3c1e4a2d7f8e5b8f09'
-      cell_id_col: cell_id
+      # The mask value of a nucleus: how its colour, filter state and
+      # selection reach its pixels.
+      cell_id_col: label
       x_col: x
       y_col: y
       color_col: phase
       points_sample_col: sample
       point_radius: 5
+      labels_dc_tag: multi_sample_labels
+      labels_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      labels_dc_id: '646b0f3c1e4a2d7f8e5b8f17'
+      labels_opacity: 0.45
+      labels_outline: true
       show_scalebar: true
       selection_enabled: true
     layout: { x: 0, y: 0, w: 8, h: 9 }

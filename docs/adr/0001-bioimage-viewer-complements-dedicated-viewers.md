@@ -69,3 +69,15 @@ to become an image-analysis application:
 - A hand-off to Vitessce, MoBIE, napari or TissUUMaps needs the store to be reachable by
   that tool (public URL, presigned URL or CORS on the API); it is designed with
   the remote-location work, not in this PR.
+
+## Labels (segmentation masks)
+
+Segmentation masks are now a `bioimage` DC of `kind: labels` (a plain mask
+TIFF, converted to a multiscale OME-Zarr labels image at ingest, or an NGFF
+labels image), drawn over the image of the same sample. This keeps the
+decision above: masks are shown for context, each cell filled and outlined in
+the colour its table row gives it, faded when the dashboard filters exclude
+it, and a click or lasso selects cells through the same `scatter_selection`.
+There is no label editing, painting, merging or proofreading: Depictio is not
+an annotation tool, and curating a segmentation stays with napari, QuPath or
+the pipeline that produced it.

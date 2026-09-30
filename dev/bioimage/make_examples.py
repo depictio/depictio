@@ -316,6 +316,29 @@ def kmeans(features: np.ndarray, k: int, rng: np.random.Generator, iters: int = 
     return assign
 
 
+def write_labels_mask(
+    folder: Path, sample: str, labels: np.ndarray, offset: int = 0
+) -> tuple[Path, np.ndarray]:
+    """Write ``labels`` as the segmentation mask TIFF of ``sample``.
+
+    Labels are renumbered 1..n in ``regionprops`` order (returned), and
+    written as ``offset + 1 .. offset + n``: the n-th nucleus of the sample is
+    ``offset + n`` in the mask and in the cells table's ``label`` column, an
+    id unique across samples that the viewer joins colour, filters and
+    selection on.
+    A plain uint16 TIFF, zlib compressed, like segmentation tools write; the
+    CLI converts it to an OME-Zarr labels image at ingest.
+    """
+    import tifffile
+
+    relabelled, _, _ = segmentation.relabel_sequential(labels)
+    ids = np.where(relabelled > 0, relabelled + offset, 0).astype(np.uint16)
+    path = folder / "labels" / f"{sample}_mask.tif"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tifffile.imwrite(path, ids, compression="zlib")
+    return path, relabelled
+
+
 def write_csv(path: Path, header: list[str], rows: list[list]) -> None:
     with path.open("w", newline="") as fh:
         writer = csv.writer(fh, lineterminator="\n")
@@ -573,7 +596,11 @@ def example_volume_timelapse(out: Path, args, comp) -> dict:
 
 
 def example_multi_sample(out: Path, args, comp) -> list[dict]:
-    """Three crops of ``human_mitosis``, one store each, plus cells and samples tables."""
+    """Three crops of ``human_mitosis``, one store each, plus cells and samples tables.
+
+    Each crop's nuclei are also written as a segmentation mask TIFF under
+    ``multi_sample/labels/`` (see ``write_labels_mask``) for the labels overlay.
+    """
     folder = out / "multi_sample"
     folder.mkdir(parents=True, exist_ok=True)
     mitosis = data.human_mitosis()  # (y, x) uint8
@@ -608,6 +635,7 @@ def example_multi_sample(out: Path, args, comp) -> list[dict]:
             windows=[window],
         )
         labels = segment_nuclei(tile, min_size=15, min_distance=4)
+        _, labels = write_labels_mask(folder, sample, labels, offset=len(cell_rows))
         props = measure.regionprops(labels, intensity_image=tile)
         # Mitotic nuclei are condensed: small and bright. A heuristic, not a classifier.
         means = np.array([p.intensity_mean for p in props], dtype=float)
@@ -622,6 +650,7 @@ def example_multi_sample(out: Path, args, comp) -> list[dict]:
             cell_rows.append(
                 [
                     f"{sample}_{i:04d}",
+                    len(cell_rows) + 1,
                     sample,
                     round(float(x), 2),
                     round(float(y), 2),
@@ -650,6 +679,7 @@ def example_multi_sample(out: Path, args, comp) -> list[dict]:
         folder / "cells.csv",
         [
             "cell_id",
+            "label",
             "sample",
             "x",
             "y",

@@ -384,6 +384,7 @@ STATIC_IDS = {
             # Not contiguous: 8f10 to 8f15 are this project's dashboards.
             "lily_sharded_image": "646b0f3c1e4a2d7f8e5b8f0f",
             "lily_sharded_cells": "646b0f3c1e4a2d7f8e5b8f16",
+            "multi_sample_labels": "646b0f3c1e4a2d7f8e5b8f17",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).

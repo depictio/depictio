@@ -1062,6 +1062,19 @@ class BioimageViewerConfig(_BaseVizConfig):
             raise ValueError("a points DC needs both x_col and y_col")
         if self.sample_column and not (self.sample_dc_id or self.sample_dc_tag):
             raise ValueError("sample_column needs a sample DC: set sample_dc_id or sample_dc_tag")
+        if self.labels_dc_id or self.labels_dc_tag:
+            # Masks are drawn over the image of their sample, never on their own.
+            if not (self.image_dc_id or self.image_dc_tag):
+                raise ValueError(
+                    "a labels DC is drawn over an image: set image_dc_id or image_dc_tag"
+                )
+            same_id = self.labels_dc_id is not None and self.labels_dc_id == self.image_dc_id
+            same_tag = self.labels_dc_tag is not None and self.labels_dc_tag == self.image_dc_tag
+            if same_id or same_tag:
+                raise ValueError(
+                    "labels_dc and image_dc name the same DC: the labels are a separate "
+                    "bioimage DC with kind 'labels'"
+                )
         return self
 
 
