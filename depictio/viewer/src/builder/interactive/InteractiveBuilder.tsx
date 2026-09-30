@@ -120,6 +120,8 @@ interface InteractiveConfig {
   show_marks?: boolean;
   /** RangeSlider only: draw the column's histogram above the slider. */
   show_histogram?: boolean;
+  /** Select only: the filter always holds one value (see alwaysSelected.ts). */
+  always_selected?: boolean;
 }
 
 /** Variants whose renderers read `show_marks`. */
@@ -310,6 +312,7 @@ const InteractiveBuilder: React.FC = () => {
   const supportsTop = TOP_PLACEMENT_VARIANTS.includes(selected ?? '');
   const supportsMarks = MARKS_VARIANTS.includes(selected ?? '');
   const supportsHistogram = HISTOGRAM_VARIANTS.includes(selected ?? '');
+  const supportsAlwaysSelected = selected === 'Select';
 
   // Switching an existing top-placed Timeline to another variant would leave
   // `placement: 'top'` on a type the model rejects, so drop it here as well as
@@ -455,6 +458,14 @@ const InteractiveBuilder: React.FC = () => {
                 description="Draw the column's distribution above the slider handles"
                 checked={config.show_histogram === true}
                 onChange={(e) => patchConfig({ show_histogram: e.currentTarget.checked })}
+              />
+            )}
+            {supportsAlwaysSelected && (
+              <Switch
+                label="Always hold a value"
+                description="Start on the first option and replace the pick instead of clearing it"
+                checked={config.always_selected === true}
+                onChange={(e) => patchConfig({ always_selected: e.currentTarget.checked })}
               />
             )}
           </Stack>

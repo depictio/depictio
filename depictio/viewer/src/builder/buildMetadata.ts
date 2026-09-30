@@ -202,6 +202,7 @@ function buildInteractive(
     placement?: string;
     show_marks?: boolean;
     show_histogram?: boolean;
+    always_selected?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -238,6 +239,10 @@ function buildInteractive(
     // `loadExisting` seeds the config bag from the stored metadata, and
     // without this line saving an edit would silently drop the setting.
     show_histogram: c.show_histogram,
+    // Also YAML-authored and carried through the same way, but only while the
+    // control is still a Select: the model rejects the flag on anything else.
+    always_selected:
+      c.interactive_component_type === 'Select' && c.always_selected === true ? true : undefined,
   };
 }
 

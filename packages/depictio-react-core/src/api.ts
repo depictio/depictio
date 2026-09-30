@@ -302,6 +302,9 @@ export interface StoredMetadata {
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Slider only: comparison with the value (gte when absent). */
   slider_mode?: string;
+  /** Select only: the filter always holds one value, the first option when
+   *  empty (see `components/interactive/alwaysSelected.ts`). */
+  always_selected?: boolean;
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
