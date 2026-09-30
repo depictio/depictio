@@ -588,7 +588,11 @@ export function buildColouring(
       const helix = rgbCss(SECONDARY_STRUCTURE_COLOURS.helix);
       const strand = rgbCss(SECONDARY_STRUCTURE_COLOURS.strand);
       return {
-        colourOf: (_c, _p, _b, ss) => (ss === 'h' ? helix : ss === 's' ? strand : neutral),
+        colourOf: (_c, _p, _b, ss) => {
+          if (ss === 'h') return helix;
+          if (ss === 's') return strand;
+          return neutral;
+        },
         legend: {
           kind: 'swatches',
           title: 'Secondary structure',

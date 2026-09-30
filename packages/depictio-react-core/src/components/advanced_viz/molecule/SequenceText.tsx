@@ -25,7 +25,7 @@ import {
   type TextLine,
   type TextResidue,
 } from './sequenceLines';
-import type { ResidueSpan } from './viewer';
+import { spanKey, type ResidueSpan } from './viewer';
 
 export interface SequenceTextProps {
   residues: readonly TextResidue[];
@@ -175,7 +175,7 @@ const SequenceText: React.FC<SequenceTextProps> = ({
   );
 
   // A pick made elsewhere scrolls into view when it is out of sight.
-  const selectedKey = selected ? `${selected.chain ?? ''}:${selected.start}-${selected.end}` : '';
+  const selectedKey = spanKey(selected);
   useEffect(() => {
     if (!followSelection || !selected) return;
     const box = scroller.current;
@@ -191,16 +191,23 @@ const SequenceText: React.FC<SequenceTextProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKey, followSelection, residues, perLine]);
 
+  // The residue of the letter under an event, read from its `data-i`.
+  const residueOfEvent = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-i]');
+      return residueAtIndex(residues, el?.dataset.i);
+    },
+    [residues],
+  );
   const lastHover = useRef<TextResidue | null>(null);
   const onMouseOver = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-i]');
-      const r = residueAtIndex(residues, el?.dataset.i);
+      const r = residueOfEvent(e);
       if (r === lastHover.current) return;
       lastHover.current = r;
       onHover(r);
     },
-    [residues, onHover],
+    [residueOfEvent, onHover],
   );
   const onMouseLeave = useCallback(() => {
     if (lastHover.current === null) return;
@@ -210,11 +217,10 @@ const SequenceText: React.FC<SequenceTextProps> = ({
   const onClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!onPick) return;
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-i]');
-      const r = residueAtIndex(residues, el?.dataset.i);
+      const r = residueOfEvent(e);
       if (r) onPick(r, e.shiftKey);
     },
-    [residues, onPick],
+    [residueOfEvent, onPick],
   );
 
   return (

@@ -47,6 +47,11 @@ export interface ResidueSpan {
   end: number;
 }
 
+/** Content key of a span, for effect dependencies and memo comparisons. */
+export function spanKey(span: ResidueSpan | null): string {
+  return span ? `${span.chain ?? ''}:${span.start}-${span.end}` : '';
+}
+
 export interface OverlayState {
   marks: MarkSpec[];
   showLabels: boolean;
@@ -196,7 +201,9 @@ export function frameSelection(span: ResidueSpan): Selection {
 export function normaliseRepresentations(
   reps: Representation | readonly Representation[] | null | undefined,
 ): Representation[] {
-  const list = reps == null ? [] : typeof reps === 'string' ? [reps] : reps;
+  let list: readonly Representation[] = [];
+  if (typeof reps === 'string') list = [reps];
+  else if (reps) list = reps;
   const order: Representation[] = ['cartoon', 'trace', 'stick', 'sphere', 'surface'];
   const out = order.filter((r) => list.includes(r));
   if (out.length === 0) return ['cartoon'];
@@ -300,9 +307,7 @@ export function overlayLayerKeys(overlay: OverlayState): {
       .filter((m) => m.emphasised)
       .map(markKey)
       .join('\u0001')}`,
-    highlight: highlight
-      ? `${highlight.chain ?? ''}:${highlight.start}-${highlight.end}`
-      : '',
+    highlight: spanKey(highlight),
   };
 }
 
