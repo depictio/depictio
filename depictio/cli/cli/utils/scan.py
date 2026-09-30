@@ -161,6 +161,11 @@ def scan_single_file(
     creation_time_iso = format_timestamp(creation_time_float)
     modification_time_iso = format_timestamp(modification_time_float)
     filesize = os.path.getsize(file_location)
+    if filesize == 0:
+        # Pipelines write empty placeholders (e.g. ipTM files for monomer targets);
+        # they carry no rows, so skip them instead of failing the whole scan.
+        logger.warning(f"Skipping empty file {file_location}.")
+        return None
     file_hash = generate_file_hash(file_name, filesize, creation_time_iso, modification_time_iso)
     logger.debug(f"File Hash for {file_name}: {file_hash}")
 
