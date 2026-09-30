@@ -1,0 +1,24 @@
+id: proteinannotator_residues
+name: Residue table (sequence, structure, domains)
+mode: protein/residues
+description: >-
+  One row per residue of every protein: the amino acid, the S4PRED state as
+  the category and its probability as the value, the best domain covering the
+  residue and how many domains overlap there, and the protein's full sequence.
+  The structure tile folds the shown protein from the sequence column and
+  colours it by domain; the sequence track draws the state and domain lanes.
+find:
+  path_glob: "**/qc/*/*.fasta"
+  path_glob_alt:
+    - "**/s4pred/*/ss2/*.ss2"
+recipe: proteinannotator/residues.py
+fixture: residues.tsv
+renders_as:
+  - { id: residue_sequence_track, component: advanced_viz, kind: sequence_track,
+      roles: {position: position, entity: entity, residue: residue, category: category, value: value} }
+  - { id: predicted_structure, component: advanced_viz, kind: molecule_3d,
+      roles: {position: position, entity: entity, category: domain, sequence: sequence} }
+  - { id: residue_count, component: card, column: position, aggregation: count,
+      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: domains_here, color: category} }
+  - { component: table, columns: [entity, sample, position, residue, category, value, domain, domain_database, domains_here] }

@@ -1,0 +1,22 @@
+id: interproscan_matches
+name: InterPro signature matches
+mode: protein/domains
+description: >-
+  One row per signature match: the protein, the member database (analysis),
+  the signature and its description, the matched span, the match E-value or
+  score, and the InterPro entry, GO terms and pathways it is integrated into.
+  Spans follow the domain table convention (start, end, label, source), so a
+  sequence track can draw them.
+find:
+  path_glob: "**/interproscan/*/*.tsv"
+  path_glob_alt:
+    - "**/interproscan/*.tsv"
+recipe: interproscan/matches.py
+fixture: matches.tsv
+renders_as:
+  - { id: signature_matches, component: card, column: entity, aggregation: count,
+      secondary_layout: top_n, breakdown_col: source, top_n_count: 4 }
+  - { id: interpro_entries, component: card, column: interpro_accession, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: source }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: source, color: source} }
+  - { component: table }

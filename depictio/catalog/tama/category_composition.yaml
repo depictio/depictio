@@ -1,0 +1,15 @@
+id: tama_category_composition
+name: Structural category composition
+mode: long-read/isoforms
+description: >-
+  Share of each sample's isoforms, and of its FLNC reads, in every structural
+  category, stacked to 100 % per sample; the level switches between the two.
+find:
+  path_glob: "**/09_GSTAMA_MERGE/*.bed"
+recipe: tama/category_composition.py
+fixture: category_composition.tsv
+renders_as:
+  - { id: category_bars, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: sample, taxon: structural_category, rank: level, abundance: pct} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: level }
+  - { component: table }

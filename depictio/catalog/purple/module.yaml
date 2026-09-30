@@ -1,0 +1,9 @@
+# PURPLE (hmftools): purity, ploidy and absolute copy-number fitting for
+# tumor/normal or tumor-only whole-genome and panel data, plus the somatic and
+# germline driver catalog and the purity-adjusted somatic variants. nf-core/
+# oncoanalyser runs it from a pipeline-local module and publishes its tables
+# under <group_id>/purple/, one set per tumor named <tumor_id>.purple.*.
+id: purple
+name: PURPLE
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/purple
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/purple

@@ -1,0 +1,9 @@
+# LINX (hmftools): clusters PURPLE's structural variants into events, chains
+# them, and annotates the genes they disrupt and the fusions they create.
+# nf-core/oncoanalyser publishes the somatic tables under
+# <group_id>/linx/somatic_annotations/ and the germline ones under
+# linx/germline_annotations/, named <tumor_id>.linx.*.
+id: linx
+name: LINX
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/linx
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/linx

@@ -1,0 +1,23 @@
+id: purple_purity
+name: Tumor purity, ploidy and QC
+mode: purple
+description: >-
+  PURPLE's fit for each tumor, one row per tumor: purity, ploidy, fit status
+  and sex, the genome-wide mutational load (microsatellite indels per Mb and
+  MSI status, tumor mutational burden and load, structural-variant burden,
+  whole-genome duplication), joined with the checks of the .purple.qc file
+  (QC status, copy-number segments, deleted genes, contamination, LOH
+  fraction, TINC level). Every copy number and allele frequency downstream is
+  read against this fit.
+find:
+  path_glob: "**/purple/*.purple.purity.tsv"
+recipe: purple/purity.py
+fixture: purity.tsv
+renders_as:
+  - { id: purity_gauge, component: card, column: purity, aggregation: median, secondary_layout: gauge, coverage_max: 1.0 }
+  - { id: ploidy_spread, component: card, column: ploidy, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: tmb_spread, component: card, column: tmb_per_mb, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: msi_spread, component: card, column: ms_indels_per_mb, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: purity_ploidy_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: ploidy, y: purity, label: sample, color: fit_status} }
+  - { id: tumor_record, component: advanced_viz, kind: record_card, roles: {id: sample} }
+  - { id: fit_table, component: table, row_selection_enabled: true, row_selection_column: sample }

@@ -1,0 +1,6 @@
+# seqtk: FASTA/FASTQ toolkit. Only `seqtk cutN -g` is catalogued here: the
+# poly-N runs (assembly gaps) of a genome as a 3-column BED.
+id: seqtk
+name: seqtk
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/seqtk/cutn
+homepage: https://github.com/lh3/seqtk

@@ -1,0 +1,19 @@
+id: crisprseq_clonality
+name: Clonality call per library
+mode: gene-editing/clonality
+description: >-
+  The crisprseq clonality classifier's verdict per library: a zygosity class
+  (homozygous wild type, heterozygous or homozygous edited, ambiguous) with its
+  confidence, a clonality label from the indel peak structure, the outcome
+  shares it was based on and the peak statistics.
+find: { path_glob: "**/*_edits_classified.csv" }
+recipe: crisprseq/clonality.py
+fixture: clonality.tsv
+renders_as:
+  - { id: classification_mix, component: card, column: sample, aggregation: nunique, secondary_layout: donut, breakdown_col: classification }
+  - { id: clonality_mix, component: card, column: sample, aggregation: nunique, secondary_layout: donut, breakdown_col: clonality }
+  - { id: class_confidence, component: card, column: class_confidence, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: peak_share, component: card, column: max_peak_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: classification }
+  - { component: interactive, interactive_type: MultiSelect, column_name: clonality }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

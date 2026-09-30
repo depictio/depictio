@@ -1,0 +1,17 @@
+sample	allele	indel_type	start	length	size	offset	frame	peak	reads	pct_reads	pct_indel_reads	rank	cut_site
+SRR3696724	Deletion 6 bp at -17	Deletion	403	6	-6	-17	In-frame	Main peak	1054	10.899689762150983	13.036487322201609	1	420
+SRR3696724	Deletion 7 bp at -15	Deletion	405	7	-7	-15	Frameshift	Main peak	817	8.448810754912099	10.10513296227582	2	420
+SRR3696724	Deletion 6 bp at -19	Deletion	401	6	-6	-19	In-frame	Main peak	579	5.987590486039297	7.161410018552876	3	420
+SRR3696724	Deletion 10 bp at -15	Deletion	405	10	-10	-15	Frameshift	Main peak	411	4.250258531540848	5.083487940630798	4	420
+SRR3696724	Deletion 4 bp at -13	Deletion	407	4	-4	-13	Frameshift	Main peak	252	2.605997931747673	3.116883116883117	5	420
+SRR3696724	Deletion 18 bp at -20	Deletion	400	18	-18	-20	In-frame	Main peak	216	2.233712512926577	2.6716141001855287	6	420
+SRR3696724	Deletion 2 bp at -14	Deletion	406	2	-2	-14	Frameshift	Main peak	215	2.2233712512926576	2.6592455163883737	7	420
+SRR3696724	Deletion 10 bp at -20	Deletion	400	10	-10	-20	Frameshift	Main peak	180	1.861427094105481	2.226345083487941	8	420
+SRR3696709	Deletion 47 bp at -106	Deletion	314	47	-47	-106	Frameshift	Main peak	78	21.428571428571427	60.0	1	420
+SRR3696709	Deletion 35 bp at -94	Deletion	326	35	-35	-94	Frameshift	Main peak	12	3.2967032967032965	9.23076923076923	2	420
+SRR3696709	Deletion 31 bp at -105	Deletion	315	31	-31	-105	Frameshift	Main peak	9	2.4725274725274726	6.923076923076923	3	420
+SRR3696709	Deletion 35 bp at -101	Deletion	319	35	-35	-101	Frameshift	Main peak	5	1.3736263736263736	3.8461538461538463	4	420
+SRR3696709	Deletion 1 bp at +73	Deletion	493	1	-1	73	Frameshift	Outside the main peak	3	0.8241758241758241	2.3076923076923075	5	420
+SRR3696709	Deletion 36 bp at -106	Deletion	314	36	-36	-106	In-frame	Main peak	3	0.8241758241758241	2.3076923076923075	6	420
+SRR3696709	Deletion 1 bp at +70	Deletion	490	1	-1	70	Frameshift	Outside the main peak	3	0.8241758241758241	2.3076923076923075	7	420
+SRR3696709	Deletion 1 bp at +77	Deletion	497	1	-1	77	Frameshift	Outside the main peak	2	0.5494505494505495	1.5384615384615385	8	420

@@ -1,0 +1,13 @@
+# HMMER searches a sequence database with profile HMMs. `hmmsearch --domtblout`
+# writes one line per domain hit: the whole-sequence E-value and score, then the
+# domain's own conditional and independent E-values, its HMM span, the
+# alignment span and the envelope span on the target sequence. The table is
+# space-aligned with a free-text description as its last field, so it is read
+# as whole lines and split on runs of spaces (depictio/catalog/hmmer/*.py).
+id: hmmer
+name: HMMER
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/hmmer/hmmsearch
+homepage: http://hmmer.org/
+description: >-
+  Profile hidden Markov model searches: which protein families each sequence
+  carries, where on the sequence each domain sits, and how confident the hit is.

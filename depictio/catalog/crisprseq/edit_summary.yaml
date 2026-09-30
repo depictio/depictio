@@ -1,0 +1,43 @@
+id: crisprseq_edit_summary
+name: Editing outcome per library
+mode: gene-editing/summary
+description: >-
+  One row per library: read accounting from the CIGAR parser (raw, clustered
+  and classified reads, aligned share), reads per outcome class, the editing,
+  frameshift, in-frame and template-based rates as shares of the classified
+  reads, and the reads the indel filters dropped or placed outside the main
+  indel peak.
+find: { path_glob: "**/*_edits.csv" }
+recipe: crisprseq/edit_summary.py
+fixture: edit_summary.tsv
+renders_as:
+  - { id: editing_rate, component: card, column: edited_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: frameshift_rate, component: card, column: frameshift_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: inframe_rate, component: card, column: inframe_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: template_rate, component: card, column: template_based_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: frameshift_of_indels, component: card, column: frameshift_of_indels_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: aligned_rate, component: card, column: aligned_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: raw_reads_per_library, component: card, column: raw_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: raw_reads_total, component: card, column: raw_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { id: read_attrition, component: card, column: raw_reads, aggregation: sum, secondary_layout: attrition, attrition_cols: [raw_reads, clustered_reads, classified_reads] }
+  - { id: filtered_indels, component: card, column: indels_failing_filter, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # Editing against depth: low-depth libraries with extreme rates are the ones
+  # to distrust.
+  - id: editing_vs_depth
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: classified_reads, y: edited_pct, label: sample }
+  # Depth against alignment: libraries whose reads do not align to the
+  # amplicon carry too little signal to call an editing rate.
+  - id: depth_vs_alignment
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: raw_reads, y: aligned_pct, label: sample }
+  # Of the edited reads, how many disrupt the reading frame: the knockout view.
+  - id: frameshift_vs_editing
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: edited_pct, y: frameshift_of_indels_pct, label: sample, size: classified_reads }
+  - { component: interactive, interactive_type: RangeSlider, column_name: edited_pct }
+  - { component: interactive, interactive_type: RangeSlider, column_name: classified_reads }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

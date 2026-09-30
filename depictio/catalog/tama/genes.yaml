@@ -1,0 +1,17 @@
+id: tama_genes
+name: Isoforms per gene
+mode: long-read/isoforms
+description: >-
+  One row per sample and gene of the TAMA merge transcriptome: isoform count,
+  read support, isoforms per structural category and the read share of the
+  dominant isoform.
+find:
+  path_glob: "**/09_GSTAMA_MERGE/*.bed"
+recipe: tama/genes.py
+fixture: genes.tsv
+renders_as:
+  - { id: gene_isoform_plane, component: advanced_viz, kind: scatter_xy,
+      roles: {x: read_support, y: isoforms, label: gene_name, color: top_category} }
+  - { component: card, column: gene_id, aggregation: count, secondary_layout: top_n, breakdown_col: gene_status, top_n_count: 2 }
+  - { component: card, column: isoforms, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -1,0 +1,16 @@
+id: sigs_allocation
+name: Mutational signature allocation
+mode: sigs
+description: >-
+  The number and share of the tumor's SNVs SIGS allocates to each COSMIC
+  signature, one row per tumor and signature. Clock-like, APOBEC,
+  homologous-recombination and mismatch-repair signatures each point at a
+  different mutational process.
+find:
+  path_glob: "**/*.sig.allocation.tsv"
+recipe: sigs/allocation.py
+fixture: allocation.tsv
+renders_as:
+  - { id: signature_share_bar, component: figure, visu_type: bar, dict_kwargs: {x: signature, y: percent, color: sample} }
+  - { id: signature_snv_total, component: card, column: allocation, aggregation: sum, secondary_layout: top_n, breakdown_col: signature, top_n_count: 3 }
+  - { component: table }

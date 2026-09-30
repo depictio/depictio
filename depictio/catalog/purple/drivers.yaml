@@ -1,0 +1,22 @@
+id: purple_drivers
+name: Driver catalog
+mode: purple
+description: >-
+  The run's somatic and germline driver catalog, one row per tumor, gene and
+  driver type: point mutations, amplifications, deletions, loss of
+  heterozygosity and germline variants from PURPLE, plus the structural
+  disruptions LINX adds. Each row carries PURPLE's driver likelihood, whether it
+  is reported, the variant counts behind a mutation driver, biallelic status
+  and the gene's copy-number range.
+find:
+  path_glob: "**/purple/*.purple.driver.catalog.somatic.tsv"
+recipe: purple/drivers.py
+fixture: drivers.tsv
+renders_as:
+  - { id: driver_count, component: card, column: driver_id, aggregation: count, secondary_layout: top_n, breakdown_col: driver, top_n_count: 3 }
+  - { id: driver_likelihood_spread, component: card, column: driver_likelihood, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: driver_oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: gene, mutation_type: driver} }
+  - { id: driver_type_bar, component: figure, visu_type: bar, dict_kwargs: {x: driver, color: category} }
+  - { id: driver_record, component: advanced_viz, kind: record_card, roles: {id: driver_id, title: gene} }
+  - { id: driver_type_filter, component: interactive, interactive_type: MultiSelect, column_name: driver }
+  - { id: driver_table, component: table, row_selection_enabled: true, row_selection_column: driver_id }

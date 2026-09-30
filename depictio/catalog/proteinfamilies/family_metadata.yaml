@@ -1,0 +1,37 @@
+id: proteinfamilies_family_metadata
+name: Protein families
+mode: families/summary
+description: >-
+  One row per family of every sample: whether the run built it or extended an
+  existing one, its member count and representative (id, length, sequence),
+  the seed its HMM was built from and the members recruited beyond it, the HMM
+  length and effective sequence number, and the full alignment's width, mean
+  identity and coverage of the members to the representative and mean residue
+  conservation.
+find:
+  path_glob: "**/family_reps/*/*_meta_mqc.csv"
+  path_glob_alt:
+    - "**/update_families/family_reps/*/*_meta_mqc.csv"
+recipe: proteinfamilies/family_metadata.py
+fixture: family_metadata.tsv
+renders_as:
+  # Big families spread left to right; a low point is a family whose members
+  # agree on few residues, a candidate for a second look or a split.
+  - { id: family_landscape, component: advanced_viz, kind: scatter_xy,
+      roles: {x: size, y: mean_conservation, label: family, color: origin, size: representative_length} }
+  - { id: families_total, component: card, column: family, aggregation: count,
+      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { id: members_total, component: card, column: size, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { id: family_size, component: card, column: size, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: representative_length, component: card, column: representative_length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: family_identity, component: card, column: mean_identity, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: family_conservation, component: card, column: mean_conservation, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: recruited_total, component: card, column: recruited, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: size, color: origin} }
+  - { component: table }

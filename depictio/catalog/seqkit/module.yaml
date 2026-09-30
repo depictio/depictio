@@ -1,0 +1,11 @@
+# SeqKit manipulates FASTA / FASTQ files. Pipelines use `seqkit seq`,
+# `seqkit rmdup` and `seqkit replace` to filter, deduplicate and rename the
+# sequences they are given, and the file they publish is the set every later
+# step ran on. The recipes read that FASTA back into one row per sequence.
+id: seqkit
+name: SeqKit
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/seqkit/seq
+homepage: https://bioinf.shenwei.me/seqkit/
+description: >-
+  FASTA and FASTQ toolkit; here the filtered sequence set a pipeline hands to
+  its annotation steps, one row per sequence.
