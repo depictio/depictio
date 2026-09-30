@@ -70,6 +70,7 @@ import {
   planScopedRequests,
   sectionFilterScopes,
   AdvancedVizPlacementDefaultProvider,
+  HighlightProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -1702,6 +1703,9 @@ const App: React.FC = () => {
       }
     >
       <DashboardLoadingProvider>
+      {/* One hover bus for the whole view: pinned sections rendered outside
+          DashboardGrid share it (the grid's own provider reuses this one). */}
+      <HighlightProvider>
       <InspectorProviders control={inspectorControl}>
       {/* Dashboard-wide default for where advanced-viz tiles draw their
           controls. No config sink in the viewer: a reader can still pin a
@@ -1815,6 +1819,7 @@ const App: React.FC = () => {
       </SaveGroupContext.Provider>
       </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
+      </HighlightProvider>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>
     </DataVersionProvider>

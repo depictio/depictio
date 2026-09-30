@@ -129,6 +129,7 @@ import {
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
+  HighlightProvider,
 } from 'depictio-react-core';
 import type {
   DataVersionGoneDetail,
@@ -2946,6 +2947,9 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    {/* One hover bus for the whole view: pinned sections rendered outside
+        DashboardGrid share it (the grid's own provider reuses this one). */}
+    <HighlightProvider>
     {/* Renderers read their pin from here, as in the viewer's preview. */}
     <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins} dashboardId={dashboardId}>
     <InspectorProviders control={inspectorControl}>
@@ -3057,6 +3061,7 @@ const EditorApp: React.FC = () => {
     </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
     </DataVersionProvider>
+    </HighlightProvider>
     </>
   );
 };

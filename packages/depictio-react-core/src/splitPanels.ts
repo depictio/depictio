@@ -257,6 +257,11 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   // splitting would redraw the same axes beside each other; the kind colours by
   // its own `group_col` rather than taking the dashboard's groups.
   parallel_coordinates: 'none',
+  // One entity's structure, alignment or residue ruler: a residue axis shared
+  // with the linked protein tiles, which per-group copies would break.
+  molecule_3d: 'none',
+  msa: 'none',
+  sequence_track: 'none',
 };
 
 /** The policy for `vizKind`.

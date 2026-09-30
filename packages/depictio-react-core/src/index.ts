@@ -1280,3 +1280,11 @@ export type {
   AnnotationFormProps,
   InlineAnnotationEditorProps,
 } from './components/annotations';
+export { HighlightProvider, useHighlight, usePublishHighlight } from './highlight/bus';
+export type { HighlightEvent } from './highlight/bus';
+export {
+  residueRangeFilters,
+  residueRangeFromFilters,
+  residueEntityFromFilters,
+  isResidueFilter,
+} from './selection';
