@@ -1301,6 +1301,8 @@ def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str])
         reconstructed into one cross-region feature table under ``sidle/``)
       - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``
         set); the path of the grafted tree under ``pplace/``, the route's only Newick
+      - ``PRIMARY_SEGMENTATION`` / ``COMPARE_SEGMENTATION`` / ``SINGLE_SEGMENTATION``
+        / ``MEMBRANE_STACK``: molkart's ``segmentation_method`` list and samplesheet
       - ``PHYLUM_LEVEL``: ampliseq's QIIME2 collapse depth of the Phylum (see
         ``_infer_phylum_level``), with ``CLASS_LEVEL``, ``ORDER_LEVEL``,
         ``FAMILY_LEVEL`` and ``GENUS_LEVEL`` one depth deeper each; the ranks also
@@ -1377,7 +1379,8 @@ def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str])
     # ANCOM-BC is opt-in (positive `ancombc` flag, default false) — there is no
     # `skip_ancom` param. When it didn't run, no qiime2/ancombc/ output exists, so
     # prune the differential-abundance DCs.
-    if not flag("ancombc"):
+    # Only on ampliseq runs (their params.json lists `ancombc` even when false).
+    if "ancombc" in params and not flag("ancombc"):
         variables.setdefault("SKIP_ANCOM", "true")
     # ampliseq multiregion/SIDLE: the route is keyed by a regions reference AND a
     # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
@@ -1392,6 +1395,19 @@ def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str])
         if grafts:
             variables.setdefault("PPLACE_TREE_FILE", root.url(grafts[0]))
 
+    # molkart: the first segmentation method feeds the main viewer, the second
+    # the comparison one; a single method prunes the comparison tab.
+    methods = [m.strip() for m in str(params.get("segmentation_method") or "").split(",")]
+    methods = [m for m in methods if m]
+    if methods:
+        variables.setdefault("PRIMARY_SEGMENTATION", methods[0])
+        if len(methods) > 1:
+            variables.setdefault("COMPARE_SEGMENTATION", methods[1])
+        else:
+            variables.setdefault("SINGLE_SEGMENTATION", "true")
+        if _samplesheet_has_values(root, "membrane_image"):
+            variables.setdefault("MEMBRANE_STACK", "true")
+
     # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
     # (params 'metadata' is the source URL; the copy lands in input/).
     if "METADATA_FILE" not in variables and params.get("metadata"):
@@ -1399,6 +1415,21 @@ def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str])
         if metadata_file:
             variables["METADATA_FILE"] = metadata_file
             logger.info(f"METADATA_FILE auto-detected from params + input/: {metadata_file}")
+
+
+def _samplesheet_has_values(root: DataRoot, column: str) -> bool:
+    """Whether a samplesheet under ``input/`` fills ``column`` on any row."""
+    import csv
+    import io
+
+    for sheet in sorted(root.glob("input/samplesheet*.csv")):
+        try:
+            text = root.read_bytes(sheet).decode("utf-8", errors="replace")
+            if any((row.get(column) or "").strip() for row in csv.DictReader(io.StringIO(text))):
+                return True
+        except (OSError, ValueError, csv.Error):
+            continue
+    return False
 
 
 def _read_header_line(location: str, root: DataRoot | None) -> str | None:
