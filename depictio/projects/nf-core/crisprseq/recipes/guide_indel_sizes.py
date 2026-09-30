@@ -50,7 +50,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     keys = (
         seen.group_by("guide")
         .agg(pl.int_ranges(pl.col("size").min(), pl.col("size").max() + 1).first().alias("size"))
-        .explode("size", empty_as_null=False)
+        .explode("size")
         .with_columns(pl.col("size").cast(pl.Int64))
     )
     out = guide_quartiles(sizes, libs, "size", ["pct_reads"], fill_zero=True, keys=keys)
