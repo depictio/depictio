@@ -30,6 +30,7 @@ REPO = Path(__file__).resolve().parents[3]
 CATALOG = REPO / "depictio" / "catalog" / "proteinfold"
 TEMPLATE = REPO / "depictio" / "projects" / "nf-core" / "proteinfold" / "2.1.0" / "template.yaml"
 HUB = REPO / "depictio" / "projects" / "nf-core" / "proteinfold" / "recipes" / "targets.py"
+STRUCTURES = HUB.parent / "structures.py"
 
 
 def _load(path: Path) -> ModuleType:
@@ -95,7 +96,8 @@ def run_dir(tmp_path: Path) -> Path:
 
 
 def _run(name: str, run_dir: Path, extra: dict[str, pl.DataFrame] | None = None) -> pl.DataFrame:
-    module = _load(CATALOG / f"{name}.py") if name != "targets" else _load(HUB)
+    local = {"targets": HUB, "structures": STRUCTURES}
+    module = _load(local.get(name, CATALOG / f"{name}.py"))
     sources = resolve_sources(module, run_dir)
     sources.update(extra or {})
     out = module.transform(sources)
@@ -261,3 +263,20 @@ def test_chain_layout_refuses_what_would_not_line_up() -> None:
     gapped = pl.DataFrame({"chain": ["A", "A", "B"], "position": [1, 3, 1]})
     assert chain_layout_from_residues(gapped) is None
     assert chain_layout_from_residues(residues.filter(pl.col("chain") == "A")) is None
+
+
+def test_structures_one_row_per_uploaded_pdb(run_dir: Path) -> None:
+    out = _run("structures", run_dir, {"scores": _scores_scan(run_dir)})
+    rows = {r["entity"]: r for r in out.to_dicts()}
+    # One row per top-ranked PDB, keyed like the structures collection keys it.
+    assert set(rows) == {ENTITY_CPX, ENTITY_MONO}
+    cpx, mono = rows[ENTITY_CPX], rows[ENTITY_MONO]
+    assert (cpx["n_chains"], cpx["n_residues"], cpx["n_models"]) == (2, 5, 2)
+    assert (cpx["ptm"], cpx["iptm"]) == (0.8, 0.7)
+    assert cpx["structure"] == "alphafold2 / CPX"
+    # Confidence comes from the PDB (B-factor 0-1 rescaled), not the model tables.
+    assert (mono["mean_plddt"], mono["confident_pct"], mono["very_low_pct"]) == (60.0, 0.0, 0.0)
+    assert (mono["ptm"], mono["iptm"]) == (0.6, None)
+    # Without the optional score scan the scores are null, not an error.
+    bare = _run("structures", run_dir, {"scores": None})
+    assert bare["ptm"].null_count() == bare.height

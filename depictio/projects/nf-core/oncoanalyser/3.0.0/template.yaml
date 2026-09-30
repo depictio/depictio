@@ -356,6 +356,31 @@ workflows:
               "hotspot": "True at a known hotspot"
               "reported": "True when the variant is in the driver catalog"
 
+      # One row per tumor and gene with a protein change: the Protein changes
+      # tab's scatter, whose click emits `entity` and so moves the lollipop and
+      # the 3D structure to that gene.
+      - data_collection_tag: "purple_protein_genes"
+        description: "One row per tumor and gene with a protein change: how many changes, their highest allele frequency and worst effect, and PURPLE's driver likelihood for the gene"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/oncoanalyser/protein_genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Gene symbol, the same values as the protein changes' entity column"
+              "sample": "Tumor sample id"
+              "changes": "Protein changes on the gene in that tumor"
+              "hotspots": "Of those, changes at a known hotspot"
+              "max_af": "Highest purity-adjusted allele frequency among the changes"
+              "worst_effect": "Most severe coding effect among the changes"
+              "driver_likelihood": "PURPLE's likelihood that the gene's point mutations are a driver, 0 when the driver catalog has no MUTATION row for it"
+              "gene_role": "ONCO or TSG from the driver catalog, unlisted when the gene is not in it"
+              "driver_types": "Somatic driver types the catalog lists for the gene in that tumor"
+              "reported": "True when PURPLE reports one of those drivers"
+
       # ----------------------------------------------------------------
       # LINX: structural variants and fusions
       # ----------------------------------------------------------------
@@ -776,6 +801,13 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Filter the protein changes by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_protein_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the genes with a protein change by samplesheet samples"
     enabled: true
   - source_dc_tag: "samples"
     source_column: "sample_id"

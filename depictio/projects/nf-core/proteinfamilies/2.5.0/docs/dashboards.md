@@ -67,11 +67,13 @@ first non-id sheet column (`fasta` on a bare nf-core sheet), so pass `GROUP_COL`
 - **Trees.** A phylogeny collection serves one Newick file and the pipeline writes one per
   family, so each tree is laid out as a table instead: tips one slot apart in Newick order,
   internal nodes at the mean of their children, x the branch length summed from the root. A code
-  figure joins the segments; the Family alignment tab always holds one family, so it draws one
-  tree.
+  figure joins the segments; once a family is clicked on the Family alignment tab it draws that
+  family's tree (every family in scope, stacked, before).
 - **Structure.** The 3D tile folds the representative sequence on demand through the structure
   resolver (ESMFold for a sequence without an accession) and colours it by the conservation
-  score. It needs the resolver enabled on the server.
+  score, over the representative written out one clickable letter per residue
+  (`layout: structure_text`); picked residues are drawn red on both (`highlight_site`). It needs
+  the resolver enabled on the server.
 
 ## Tabs
 
@@ -84,13 +86,17 @@ first non-id sheet column (`fasta` on a bare nf-core sheet), so pass `GROUP_COL`
    conservation; input sequences before and after preprocessing; the initial cluster size
    distribution on log axes; family size per sample; and every family by size against
    conservation, with the record of a lassoed family beside it.
-3. **Family alignment.** One family at a time: the Family picker always holds a value, starts on
-   the first family and follows through links to the alignment, residue and tree collections,
-   so every tile shows the same family. Aligned sequences, identity to the
-   representative, residue conservation and column occupancy; the conservation profile along the
-   representative; the sequence track, the predicted structure and the alignment in one section,
-   linked by residue (brush the track or alignment columns, click a residue on the structure);
-   the member tree; the residue table.
+3. **Family alignment.** One family at a time, picked by a click on the families plot (size
+   against mean conservation, one point per family) that sits beside the predicted structure of
+   the family's representative, written out under it. The click follows the family links to the
+   alignment, residue and tree collections, so every tile shows the same family; before a click
+   the aggregate tiles cover every family in scope and each protein tile opens on the largest one
+   it holds. Aligned sequences, identity to the representative, residue conservation and column
+   occupancy; the conservation profile along the representative; the plot and the structure side
+   by side, then the sequence track and the alignment full width, linked by residue (click a
+   residue on the structure or a letter of its sequence, brush the track or alignment columns);
+   the member tree; the residue table. The tab-local filter narrows the alignment by identity to
+   the representative.
 4. **Members.** Members, identity, coverage and length; identity to the representative per
    family; every member by coverage against identity, with the record of a lassoed member beside
    it; the member table.

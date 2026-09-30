@@ -716,7 +716,7 @@ tabs:
   - name: Structure and sequence
     icon: mdi:shape-outline
     color: indigo
-    description: The predicted 3D structure over the sequence lanes of the same protein
+    description: Pick a protein on the scatter, then read its predicted structure, its written sequence and its sequence lanes, linked residue by residue
   - name: Residue tables
     icon: mdi:table
     color: gray
@@ -860,11 +860,28 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The structure is predicted on demand from the protein's sequence and
-      coloured by the best domain on each residue. Click a residue in 3D or
-      brush a stretch of the sequence track to select it in both, and hover
-      either one to highlight the same residues in the other.
+      Click a protein on the scatter to fold it from its sequence, coloured by
+      the best domain on each residue. Click a residue in 3D or a letter of the
+      sequence, or brush the sequence track, to select it in all three.
     layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: pa-st-av-length-cover
+    index: pa-st-av-length-cover
+    section: Structure and sequence
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/length_vs_cover
+    config:
+      x_title: Length (residues)
+      y_title: Residues covered by a domain (%)
+      selection_enabled: true
+      selection_column: entity
+      legend_pos: bottom
+      controls_placement: popover
+    title: Proteins to fold
+    description: One point per protein within the length range on the left, coloured by the database of its best domain. Click one to show it beside.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: advanced_viz
     tag: pa-st-av-structure
     index: pa-st-av-structure
@@ -879,16 +896,17 @@ tabs:
       position_col: position
       category_col: domain
       color_mode: category
-      representation: cartoon
+      representations: [cartoon]
       show_variants: false
-      layout: structure
+      highlight_site: true
+      layout: structure_text
       selection_enabled: true
       follow_selection: true
-      controls_placement: header
+      controls_placement: popover
     title: Predicted structure
-    description: The picked protein folded from its sequence, one colour per domain; residues outside any domain stay grey.
+    description: The picked protein folded from its sequence over its written sequence, one colour per domain; residues outside any domain stay grey and the picked residue turns red.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 9}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: advanced_viz
     tag: pa-st-av-sequence
     index: pa-st-av-sequence
@@ -913,7 +931,7 @@ tabs:
     title: Sequence, secondary structure and domains
     description: The same protein along its chain, with the predicted state, its probability and every domain span.
     title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 5}
+    layout: {x: 0, y: 6, w: 8, h: 5}
   # ------------------------------------------------------------ residue tables
   - component_type: table
     tag: pa-st-table-residues

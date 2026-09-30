@@ -503,10 +503,11 @@ tabs:
     layout: {x: 0, y: 6, w: 1, h: 3}
 
 # =========================================================================
-# Tab 3 - Family alignment: one family's alignment, conservation, structure and tree
+# Tab 3 - Family alignment: families on a plot, the clicked one's structure,
+# sequence, alignment and tree
 # =========================================================================
 - title: Family alignment
-  subtitle: One family at a time, its alignment, the conservation of every representative residue on the sequence and the predicted structure, and the member tree
+  subtitle: Families by size and conservation; the clicked family's predicted structure over its sequence, its conservation, alignment and member tree
   tab_order: 3
   tab_icon: mdi:dna
   tab_icon_color: violet
@@ -515,10 +516,10 @@ tabs:
   workflow_system: nf-core
   advanced_viz_controls: header
   filter_sections:
-  - name: Family choice
+  - name: Alignment scope
     icon: mdi:tune
     color: violet
-    description: The family every tile shows, the first one until you pick another, and its alignment narrowed by identity to the representative
+    description: The aligned members kept, by identity to the representative
   grid_sections:
   - name: Alignment at a glance
     icon: mdi:counter
@@ -531,7 +532,7 @@ tabs:
   - name: Structure, sequence and alignment
     icon: mdi:dna
     color: violet
-    description: The representative's predicted structure, its sequence track and the family alignment, linked by residue
+    description: Families on a plot, the clicked one's predicted structure over its sequence, its sequence track and alignment, linked by residue
   - name: Family tree
     icon: mdi:family-tree
     color: violet
@@ -553,10 +554,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Every tile shows one family, numbered along its representative sequence;
-      the tab opens on the first family and the Family picker on the left
-      switches to another. Conservation is 1 for an invariant, gap-free column
-      and falls toward 0 as residues diverge or members gap.
+      Click a family on the plot to open its structure, sequence and alignment;
+      clicking a residue in 3D or a letter of its sequence, brushing the track or
+      brushing alignment columns then selects the same residues in every tile.
+      Conservation is 1 for an invariant, gap-free column and falls toward 0 as
+      residues diverge or members gap.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: pf-aln-card-rows
@@ -632,25 +634,32 @@ tabs:
       y_title: Conservation score
       legend_pos: bottom
     title: Conservation per residue of the representative
-    description: The picked family's representative, residue by residue. Runs of high scores are the conserved core the family HMM is built on; dips are variable loops or termini the members disagree on.
+    description: The clicked family's representative, residue by residue (every family in scope until one is clicked). Runs of high scores are the conserved core the family HMM is built on; dips are variable loops or termini the members disagree on.
     title_size: h3
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: text
-    tag: pf-aln-linked-intro
+  # The plot and the 3D tile share the section width: a click on a family
+  # narrows the residue and alignment tables to it through the family links,
+  # and the structure, track and alignment follow.
+  - component_type: advanced_viz
+    tag: pf-aln-av-families
+    index: pf-aln-av-families
     section: Structure, sequence and alignment
     workflow_tag: proteinfamilies
-    data_collection_tag: family_residues
-    title: Three views of the same residues
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Brush the sequence track or a range of alignment columns, or click a
-      residue on the structure, and the other two move to the same residues.
-      The structure is predicted from the representative sequence on demand and
-      coloured by conservation.
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    data_collection_tag: families
+    use: proteinfamilies/family_landscape
+    config:
+      controls_placement: popover
+      x_title: Members (log)
+      y_title: Mean residue conservation
+      log_x: true
+      top_n_labels: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: family
+    title: Families by size and conservation
+    description: One point per family, sized by representative length. Click a family to open its structure, sequence and alignment.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     tag: pf-aln-av-track
     index: pf-aln-av-track
@@ -665,7 +674,7 @@ tabs:
     title: Representative sequence with conservation
     description: The representative's residues, a conservation lane and its conserved, intermediate or variable class.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 3}
+    layout: {x: 0, y: 4, w: 8, h: 3}
   - component_type: advanced_viz
     tag: pf-aln-av-structure
     index: pf-aln-av-structure
@@ -674,17 +683,19 @@ tabs:
     data_collection_tag: family_residues
     use: famsa/conservation_structure
     config:
+      controls_placement: popover
       structure_source: resolve
       color_mode: value
-      representation: cartoon
+      representations: [cartoon]
+      highlight_site: true
       show_variants: false
-      layout: structure
+      layout: structure_text
       selection_enabled: true
       follow_selection: true
     title: Predicted structure of the representative
-    description: Folded from the representative sequence and coloured by residue conservation, so conserved patches read as surfaces of the fold.
+    description: Folded on demand from the clicked family's representative sequence and coloured by residue conservation, so conserved patches read as surfaces of the fold. Picked residues are drawn red on the structure and its sequence.
     title_size: h3
-    layout: {x: 0, y: 5, w: 8, h: 8}
+    layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     tag: pf-aln-av-msa
     index: pf-aln-av-msa
@@ -705,7 +716,7 @@ tabs:
     title: Family alignment
     description: The representative on the first row, the members below it in file order. Brushing columns selects the same residues on the track and the structure.
     title_size: h3
-    layout: {x: 0, y: 13, w: 8, h: 8}
+    layout: {x: 0, y: 7, w: 8, h: 7}
   - component_type: figure
     tag: pf-aln-fig-tree
     index: pf-aln-tree
@@ -731,7 +742,7 @@ tabs:
       fig.update_yaxes(visible=False, autorange='reversed')
     selection_enabled: false
     title: Member tree of the family
-    description: CMAPLE maximum-likelihood tree of the picked family's aligned members, one tip per member.
+    description: CMAPLE maximum-likelihood tree of the clicked family's aligned members, one tip per member (every family in scope, stacked, until one is clicked).
     title_size: h3
     layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
@@ -742,30 +753,15 @@ tabs:
     use: famsa/conservation
     columns: [position, residue, value, category, consensus, consensus_share, occupancy, n_members]
     title: Residue conservation
-    description: Every residue of the picked family's representative with its conservation score and class, the column consensus and occupancy.
+    description: Every residue of the clicked family's representative with its conservation score and class, the column consensus and occupancy.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: interactive
-    tag: pf-aln-filter-family
-    index: pf-aln-family-filter
-    section: Family choice
-    group: Family
-    workflow_tag: proteinfamilies
-    data_collection_tag: families
-    interactive_component_type: Select
-    column_name: family
-    column_type: object
-    always_selected: true
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Family
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
     tag: pf-aln-filter-identity
     index: pf-aln-identity-range
-    section: Family choice
-    group: Family
+    section: Alignment scope
+    group: Alignment
     workflow_tag: proteinfamilies
     data_collection_tag: family_msa
     interactive_component_type: RangeSlider
@@ -774,7 +770,7 @@ tabs:
     display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:relation-many-to-many'}
     placement: left
     title: Identity to the representative
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
 # =========================================================================
 # Tab 4 - Members: who is in each family, and how close to the representative

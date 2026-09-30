@@ -1409,11 +1409,12 @@ tabs:
   - name: Protein view
     icon: mdi:shape-outline
     color: grape
-    description: The changes along the protein and on its predicted structure, linked residue by residue
+    description: Pick a gene on the scatter, then read its changes on the predicted structure, its written sequence and the lollipop, linked residue by residue
   - name: Protein change detail
     icon: mdi:table
     color: gray
     description: One row per protein change; select a row to open its record
+    collapsed: true
   components:
   - component_type: card
     tag: oa-pr-card-changes
@@ -1487,16 +1488,67 @@ tabs:
     section: Protein view
     workflow_tag: oncoanalyser
     data_collection_tag: purple_protein_changes
-    title: One protein, two views
+    title: One gene, three linked views
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      Both views open on the protein with the most changes; pick another in the
-      Protein filter on the left. Click a needle or a residue to ring the same
-      residue in the other view.
+      Click a gene on the scatter to load its predicted structure, its written
+      sequence and its lollipop; click a residue, a letter or a needle to mark
+      that residue in all three.
     layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: oa-pr-av-gene-scatter
+    index: oa-pr-av-gene-scatter
+    section: Protein view
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_genes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: max_af
+      y_col: driver_likelihood
+      label_col: entity
+      color_col: worst_effect
+      size_col: changes
+      min_size: 6
+      max_size: 16
+      x_title: Highest purity-adjusted allele frequency
+      y_title: Driver likelihood
+      top_n_labels: 0
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: entity
+      controls_placement: popover
+    title: Genes with a protein change
+    description: One point per tumor and gene, sized by its number of changes and coloured by its worst coding effect. Clonal driver candidates sit top right; genes outside the driver catalog sit at a likelihood of 0.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: advanced_viz
+    tag: oa-pr-av-structure
+    index: oa-pr-av-structure
+    section: Protein view
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_changes
+    use: purple/protein_change_structure
+    config:
+      structure_source: resolve
+      gene_col: entity
+      entity_col: entity
+      color_mode: plddt
+      representations: [cartoon]
+      show_variants: true
+      show_labels: false
+      highlight_site: true
+      layout: structure_text
+      selection_enabled: true
+      follow_selection: true
+      controls_placement: popover
+    title: Protein changes on the predicted structure
+    description: The picked gene's predicted structure over its written sequence, fetched by gene symbol and coloured by prediction confidence, with a sphere on every changed residue and the picked residue in red.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: advanced_viz
     tag: oa-pr-av-needles
     index: oa-pr-av-needles
@@ -1512,29 +1564,9 @@ tabs:
       selection_enabled: true
       controls_placement: header
     title: Protein changes along the sequence
-    description: One needle per changed residue, coloured by coding effect. Without a picked protein, it opens on the protein with the most changes, the one the structure beside shows.
+    description: One needle per changed residue, coloured by coding effect. Without a picked gene, it opens on the gene with the most changes, the one the structure above shows.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 8}
-  - component_type: advanced_viz
-    tag: oa-pr-av-structure
-    index: oa-pr-av-structure
-    section: Protein view
-    workflow_tag: oncoanalyser
-    data_collection_tag: purple_protein_changes
-    use: purple/protein_change_structure
-    config:
-      structure_source: resolve
-      gene_col: entity
-      color_mode: plddt
-      show_variants: true
-      show_labels: false
-      selection_enabled: true
-      follow_selection: true
-      controls_placement: header
-    title: Protein changes on the predicted structure
-    description: The predicted structure of the picked protein, or of the one with the most changes, fetched by gene symbol and coloured by prediction confidence, with a sphere on every changed residue.
-    title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 8}
+    layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: table
     tag: oa-pr-table-changes
     section: Protein change detail

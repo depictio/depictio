@@ -14,6 +14,7 @@ matrices and, for the MSA-based engines, the alignment it folded from.
 | `targets` | the samplesheet (`METADATA_FILE`, default `input/samplesheet.csv`) plus the structures | target |
 | `proteinfold_structures` | `<engine>[/<mode>]/top_ranked_structures/<target>.pdb` (indexed file) | structure |
 | `proteinfold_residues` | the same PDBs, pLDDT from the CA B-factor | structure and residue |
+| `proteinfold_structure_scores` | the same PDBs, plus the model count and top-model pTM / ipTM | structure |
 | `proteinfold_engine_plddt` | the same PDBs, one curve per engine and chain | target, engine curve, residue |
 | `proteinfold_models` | `<target>_plddt.tsv`, `_ptm.tsv`, `_iptm.tsv`, `_ipsae.tsv` | structure and model rank |
 | `proteinfold_plddt_ranks` | `<target>_plddt.tsv`, top model plus the lowest and highest model | structure and residue |
@@ -50,23 +51,34 @@ compares engines over all their models.
 
 ### Structure
 
-The structure picker's engine and target are `always_selected`: the tab opens on the first
-engine and the first target of their lists, so every tile shows one structure, and the reader
-changes either on the left. The 3D tile
-(`molecule_3d`, `layout: structure_msa`) draws the top-ranked PDB coloured by pLDDT from its
-B-factor column, beside the alignment the engine folded it from; the sequence track below
-draws the pLDDT lane, each residue coloured by its AlphaFold confidence band. The three tiles share the
-`entity` and `position` column names, so a click on a residue in 3D, a brush on the sequence
-track or a column brush on the alignment emits one `residue_selection` that moves the other
-two; hovering highlights the same residue everywhere, including a vertical line on the
-per-engine profile (`residue_axis: true`). On a complex the alignment's query is the chains
-concatenated; its `chains` layout translates a column into one chain's own residue number, and
-picks and hovers carry that chain.
+The target picker is `always_selected`: the tab opens on the first target of its list, so
+every tile reads one sequence, and the reader changes it on the left. The engine is picked on
+the plot instead: `proteinfold_structure_scores` holds one row per top-ranked structure (read
+from the same PDBs, so every point has a file to open), and the scatter puts each engine's
+mean pLDDT against its share of residues under pLDDT 50. Its click selection is on `entity`,
+the column the 3D tile names its structure by, so a click opens that structure; the sequence
+track and the alignment follow the same column. An engine picker on the left would narrow the
+plot to one point, so the tab has none. Until a point is clicked, the 3D tile and the sequence
+track open on the first structure of the target, and the alignment on the target's deepest
+alignment, which can belong to another engine.
+
+The plot and the 3D tile share the section width, the lanes run full width below. The 3D tile
+(`molecule_3d`, `layout: structure_text`) draws the top-ranked PDB coloured by pLDDT from its
+B-factor column over its sequence written out, one clickable letter per residue; picked
+residues are drawn red on both (`highlight_site`). The sequence track draws the pLDDT lane,
+each residue coloured by its AlphaFold confidence band, and the alignment tile shows the
+alignment the engine folded the structure from. The three share the `entity` and `position`
+column names, so a click on a residue or a letter in 3D, a brush on the sequence track or a
+column brush on the alignment emits one `residue_selection` that moves the other two; hovering
+highlights the same residue everywhere, including a vertical line on the per-engine profile
+(`residue_axis: true`). On a complex the alignment's query is the chains concatenated; its
+`chains` layout translates a column into one chain's own residue number, and picks and hovers
+carry that chain.
 
 The per-engine profile reads its own collection (`proteinfold_engine_plddt`), which carries
 no `engine` column (the engine is in the curve label). A dashboard filter narrows every
-collection that has its column, so the picker's target narrows the curves while its engine
-cannot: every engine's top-ranked curve of the picked target stays on screen. On a complex
+collection that has its column, so the picker's target narrows the curves while the clicked
+structure cannot: every engine's top-ranked curve of the picked target stays on screen. On a complex
 each chain draws its own curve in its own numbering.
 
 A lone query row in the alignment is the data, not a filter: the engine found or used no

@@ -19,6 +19,7 @@ template reads their tables; it reads no BAM and no MultiQC report (the pipeline
 | `purple_drivers` | `purple/*.driver.catalog.*.tsv` and the LINX driver catalogs | tumor, gene, driver type |
 | `purple_somatic_variants` | `purple/*.purple.somatic.vcf.gz` (PASS only) | somatic call |
 | `purple_protein_changes` | derived from `purple_somatic_variants` | protein change |
+| `purple_protein_genes` | derived from `purple_protein_changes` and `purple_drivers` | tumor and gene |
 | `linx_svs` | `linx/somatic_annotations/*.linx.svs.tsv` and `*.linx.clusters.tsv` | SV |
 | `linx_fusions`, `linx_fusion_structure` | `*.linx.fusion.tsv` and `*.linx.breakend.tsv` | fusion, fusion exon span |
 | `cuppa_predictions`, `cuppa_classifier_matrix` | `cuppa/*.cuppa.vis_data.tsv` | classifier and cancer type |
@@ -71,11 +72,13 @@ example `tumor_dna`), so the default works on any sheet; any sheet column can be
 5. **Small variants.** PASS calls, coding calls, purity-adjusted allele frequency and variant
    copy number; their histograms (variant types keep the genome track's colours); every call along the genome (GenomeSpy, with a gene lane);
    the variant table with a variant record card.
-6. **Protein changes.** Protein-changing calls in residue form: a lollipop along the protein and
-   a 3D structure resolved from the gene symbol (AlphaFold DB, ESMFold fallback) in one
-   section, both opening on the protein with the most changes, driven by the Protein filter and
-   linked residue by residue; the protein change
-   table with a record card.
+6. **Protein changes.** Protein-changing calls in residue form. A scatter of the genes with a
+   change (highest purity-adjusted allele frequency against PURPLE's driver likelihood, sized by
+   change count, coloured by worst coding effect) sits on half the section; clicking a gene loads,
+   on the other half, its 3D structure resolved from the gene symbol (UniProt
+   accession, then the AlphaFold DB model) above its written sequence, and narrows the full-width lollipop below to it. Without
+   a pick, the views open on the protein with the most changes; the Protein filter drives them
+   too. The protein change table with a record card is collapsed at the end.
 7. **Structural variants.** SVs, clusters, junction copy number and candidate fusions; a chord
    diagram of breakend pairs and SVs per resolved event; kept and lost exons per fusion and
    fusions per phase; the fusion table with a fusion record card; the SV table (collapsed).
@@ -92,8 +95,11 @@ open tab-local filter section.
   column (`sampleId` for TEAL).
 - A driver selection narrows the protein changes to its genes (`gene` to `entity`); a gene
   selected in the gene copy-number table or scatter narrows the driver catalog.
-- The lollipop and the 3D structure read the same collection, so a residue picked in one rings
-  the same residue in the other.
+- The gene scatter selects on `entity`, the column the protein changes, the lollipop and the 3D
+  structure read, so a click moves all three to that gene.
+- The lollipop and the 3D structure read the same collection, so a residue picked in one (a
+  needle, a residue in 3D or a letter of the written sequence) rings the same residue in the
+  other and is drawn red on the structure.
 - Each record card sits beside the table that drives it (`linked_component`) and opens on the
   selected row.
 
@@ -106,6 +112,11 @@ open tab-local filter section.
 - **Protein changes.** The three-letter residues of each HGVS protein change are converted to
   a residue number and one-letter reference and alternate amino acids; synonymous changes keep
   the reference residue and frameshifts carry no alternate residue.
+- **Genes with a protein change.** One row per tumor and gene: the change count, hotspot count,
+  highest purity-adjusted allele frequency and worst coding effect of its changes, with the
+  likelihood of the gene's `MUTATION` row in the somatic driver catalog. Genes without such a
+  row (outside the driver panel, or with changes that do not qualify) get a likelihood of 0 so
+  every gene keeps its point.
 - **Copy-number events.** Gene events follow PURPLE's driver cut-offs: AMP when the lowest copy
   number is above three times the ploidy, DEL below 0.5 copies, LOH when the minor allele is
   below 0.5 copies, PARTIAL_* when only part of the gene qualifies.

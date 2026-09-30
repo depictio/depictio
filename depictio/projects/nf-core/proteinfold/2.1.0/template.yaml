@@ -268,6 +268,32 @@ workflows:
               "iptm": "Interface predicted TM score, complexes only"
               "ipsae": "ipSAE interface score, complexes only"
 
+      # One row per structure the 3D tile can open (read from the same PDBs),
+      # so a click on the Structure tab's plot always names an uploaded file.
+      - data_collection_tag: "proteinfold_structure_scores"
+        description: "One row per top-ranked structure: chains, length, mean pLDDT, confident and disordered shares, model count, pTM and ipTM of the top model"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/proteinfold/structures.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Structure id (engine and target), the id of the PDB in the structures collection"
+              "structure": "Engine and target, the reader-facing name of the structure"
+              "engine": "Prediction engine, with its mode when not the default"
+              "target": "Target id"
+              "n_chains": "Chains in the structure"
+              "n_residues": "Residues over all chains"
+              "mean_plddt": "Mean pLDDT over the residues, from the B-factor column"
+              "confident_pct": "Residues at pLDDT 70 or more, percent"
+              "very_low_pct": "Residues under pLDDT 50, percent"
+              "n_models": "Models the engine produced for the target"
+              "ptm": "Predicted TM score of the top model (AlphaFold2, ColabFold)"
+              "iptm": "Interface predicted TM score of the top model, complexes only"
+
       - data_collection_tag: "proteinfold_plddt_ranks"
         description: "Per-residue pLDDT of each engine's top-ranked model, with the lowest and highest of its models"
         config:
@@ -419,6 +445,13 @@ links:
     target_type: "table"
     link_config: {resolver: "direct"}
     description: "Filter the models by target"
+    enabled: true
+  - source_dc_tag: "targets"
+    source_column: "target"
+    target_dc_tag: "proteinfold_structure_scores"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Filter the structure table by target"
     enabled: true
   - source_dc_tag: "targets"
     source_column: "target"

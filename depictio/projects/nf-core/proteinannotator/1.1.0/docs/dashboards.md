@@ -77,10 +77,13 @@ column written for the demo from the test dataset's provenance) next to the test
    plot which databases agree on which proteins. Significance against span separates whole
    families from motifs and borderline calls. The domain table opens a domain record with a
    link to its family entry; the raw hmmsearch hits are collapsed at the end.
-3. **Structure.** Pick one protein in the left panel. The predicted structure is coloured by
-   the best domain on each residue, and the sequence track below draws the S4PRED state, its
-   probability and every domain span. Clicking a residue in 3D or brushing the track selects
-   the same residues in both; hovering one highlights them in the other.
+3. **Structure.** A length against annotated share scatter of the proteins in the length range
+   sits on half the section; clicking a protein (or picking one in the left panel) folds it on
+   the other half, where the predicted structure, coloured by the best domain on each residue,
+   stands above its written sequence. The full-width sequence track below draws the S4PRED
+   state, its probability and every domain span. Clicking a residue in 3D, a letter of the
+   sequence or brushing the track selects the same residues in all three and draws them red on
+   the structure; hovering one highlights them in the others. The residue table is collapsed.
 
 Every tab filters through the persistent sample filters; the Overview adds protein length,
 annotated share and status, the Domains tab database, family, significance and span, the

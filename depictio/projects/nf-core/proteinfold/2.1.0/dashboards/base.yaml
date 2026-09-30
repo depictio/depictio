@@ -334,10 +334,11 @@ main_dashboard:
 
 tabs:
 # =========================================================================
-# Tab 2 - Structure: one top-ranked structure, its residues and alignment
+# Tab 2 - Structure: every engine's structure of one target on a plot, the
+# clicked one in 3D over its written sequence, its residues and alignment
 # =========================================================================
 - title: Structure
-  subtitle: One top-ranked structure in 3D with its per-residue confidence and the alignment it was folded from
+  subtitle: Every engine's top-ranked structure of a target on one plot, the clicked one in 3D with its per-residue confidence and the alignment it was folded from
   tab_order: 2
   tab_icon: mdi:molecule
   tab_icon_color: violet
@@ -348,7 +349,7 @@ tabs:
   - name: Structure picker
     icon: mdi:tune
     color: violet
-    description: The engine and the target of the structure shown, and a residue range
+    description: The target whose structures the tab compares, and a residue range
   grid_sections:
   - name: Structure confidence
     icon: mdi:check-decagram
@@ -357,7 +358,7 @@ tabs:
   - name: Structure, sequence and alignment
     icon: mdi:microscope
     color: violet
-    description: The picked structure, its sequence confidence lane and every engine's curve for its target
+    description: The target's structures on a plot, the clicked one in 3D over its sequence, its pLDDT lane, its alignment and every engine's curve
   - name: Residue table
     icon: mdi:table
     color: gray
@@ -375,9 +376,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The tab opens on one engine's structure of one target; change either on
-      the left. Clicking a residue in 3D, brushing the sequence track or brushing
-      alignment columns selects the same residues in all three.
+      Click a point on the plot to open that engine's structure of the target
+      picked on the left. Clicking a residue in 3D or a letter of its sequence,
+      brushing the sequence track or brushing alignment columns selects the same
+      residues in every tile.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: pf-st-card-plddt
@@ -444,6 +446,33 @@ tabs:
     title_size: sm
     title_align: left
     layout: {x: 6, y: 2, w: 2, h: 2}
+  # The plot and the 3D tile share the section width: a click on a point
+  # emits that structure's entity, which the 3D tile, the sequence track and
+  # the alignment follow by column name.
+  - component_type: advanced_viz
+    tag: pf-st-av-structures
+    index: pf-st-av-structures
+    section: Structure, sequence and alignment
+    workflow_tag: proteinfold
+    data_collection_tag: proteinfold_structure_scores
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mean_plddt
+      y_col: very_low_pct
+      label_col: structure
+      color_col: engine
+      marker_size: 12
+      x_title: Mean pLDDT
+      y_title: Residues under pLDDT 50 (%)
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: entity
+      controls_placement: popover
+    title: Structures of the target, one point per engine
+    description: Mean confidence against the share of likely disordered residues. Bottom right is confident throughout; a high mean with a raised share is a confident core with loose ends. Click a point to open its structure.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     tag: pf-st-av-structure
     index: pf-st-av-structure
@@ -454,18 +483,18 @@ tabs:
     config:
       structure_source: file
       structure_dc_tag: proteinfold_structures
-      layout: structure_msa
-      msa_dc_tag: proteinfold_msa
+      layout: structure_text
       color_mode: plddt
-      representation: cartoon
+      representations: [cartoon]
+      highlight_site: true
       show_variants: false
       selection_enabled: true
       follow_selection: true
-      controls_placement: header
-    title: Top-ranked structure coloured by pLDDT, beside its alignment
-    description: The structure of the picked engine and target, coloured by per-residue confidence, next to the alignment the engine folded it from (none for ESMFold; a lone query row means the engine found or used no homologs).
+      controls_placement: popover
+    title: Picked structure coloured by pLDDT
+    description: The structure clicked on the plot (the first of the target until then), coloured by per-residue confidence, over its written sequence. Picked residues are drawn red on both.
     title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 11}
+    layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     tag: pf-st-av-sequence
     index: pf-st-av-sequence
@@ -481,7 +510,29 @@ tabs:
     title: Sequence with its pLDDT lane
     description: The picked structure's sequence, its pLDDT per residue and its confidence band. Brush a stretch to select it in 3D.
     title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 4}
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: pf-st-av-msa
+    index: pf-st-av-msa
+    section: Structure, sequence and alignment
+    workflow_tag: proteinfold
+    data_collection_tag: proteinfold_msa
+    use: proteinfold/folding_msa
+    config:
+      color_scheme: clustal
+      max_rows: 200
+      sort_by: rank
+      show_consensus: true
+      show_conservation: true
+      entity_col_for_selection: entity
+      position_col_for_selection: position
+      selection_enabled: true
+      follow_selection: true
+      controls_placement: header
+    title: Alignment the structure was folded from
+    description: The query on the first row, then the hits by rank. ESMFold folds without one; a lone query row means the engine found or used no homologs. Brushing columns selects the same residues on the structure and the track.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: advanced_viz
     tag: pf-st-av-engine-profile
     index: pf-st-av-engine-profile
@@ -496,9 +547,9 @@ tabs:
       residue_axis: true
       controls_placement: header
     title: pLDDT per residue of every engine's top-ranked structure
-    description: Every engine's top-ranked structure of the picked target, whichever engine is picked on the left, one curve per chain on a complex. Regions where the engines part are the least settled.
+    description: Every engine's top-ranked structure of the picked target, whichever structure is clicked, one curve per chain on a complex. Regions where the engines part are the least settled.
     title_size: h3
-    layout: {x: 0, y: 15, w: 8, h: 7}
+    layout: {x: 0, y: 13, w: 8, h: 6}
   - component_type: table
     tag: pf-st-table-residues
     section: Residue table
@@ -512,21 +563,8 @@ tabs:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: interactive
-    tag: pf-st-filter-engine
-    index: pf-st-engine-filter
-    section: Structure picker
-    group: Structure
-    workflow_tag: proteinfold
-    data_collection_tag: proteinfold_residues
-    interactive_component_type: Select
-    always_selected: true
-    column_name: engine
-    column_type: object
-    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:tools'}
-    placement: left
-    title: Engine
-    layout: {x: 0, y: 0, w: 1, h: 3}
+  # The target stays always selected so every tile reads one sequence; the
+  # plot is the engine picker (a Select on engine would narrow it to one point).
   - component_type: interactive
     tag: pf-st-filter-target
     index: pf-st-target-filter
@@ -541,7 +579,7 @@ tabs:
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:test-tube'}
     placement: left
     title: Target
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: pf-st-filter-position
     index: pf-st-position-filter
@@ -555,7 +593,7 @@ tabs:
     display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:ruler'}
     placement: left
     title: Residue range
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 3, w: 1, h: 3}
 
 # =========================================================================
 # Tab 3 - Predicted aligned error
