@@ -1,0 +1,24 @@
+id: teal_telomere_length
+name: Telomere length
+mode: teal
+description: >-
+  TEAL's telomere length estimate, one row per DNA sample (tumor and normal):
+  the raw and purity-adjusted final length, the telomeric fragments behind it
+  and the purity, ploidy and depth it was normalised with. A tumor far above
+  its normal suggests telomerase or ALT activity.
+find:
+  path_glob: "**/*.teal.tellength.tsv"
+columns:
+  sampleId: String
+  type: String
+  rawTelomereLength: Float64
+  finalTelomereLength: Float64
+  fullFragments: Int64
+  totalTelomericReads: Int64
+  purity: Float64
+  ploidy: Float64
+fixture: telomere_length.tsv
+renders_as:
+  - { id: telomere_length_bar, component: figure, visu_type: bar, dict_kwargs: {x: sampleId, y: finalTelomereLength, color: type} }
+  - { id: telomere_length_spread, component: card, column: finalTelomereLength, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: telomere_table, component: table }

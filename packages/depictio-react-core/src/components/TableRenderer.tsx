@@ -220,14 +220,20 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         // Optional YAML `columns` allowlist ("Columns to display"). When
         // non-empty, restrict the grid to exactly those columns (the
         // /render_table endpoint still returns every column). Combined with
-        // the per-column cols_json[].hide flag from the builder.
-        const allowList =
+        // the per-column cols_json[].hide flag from the builder. The grid
+        // follows the allowlist's order, so authors list the key columns first.
+        const allowOrder =
           Array.isArray(metadata.columns) && metadata.columns.length > 0
-            ? new Set(metadata.columns)
+            ? new Map((metadata.columns as string[]).map((c, i) => [c, i]))
             : null;
         const visibleColumns = res.columns.filter(
-          (c) => colsJson[c.field]?.hide !== true && (!allowList || allowList.has(c.field)),
+          (c) => colsJson[c.field]?.hide !== true && (!allowOrder || allowOrder.has(c.field)),
         );
+        if (allowOrder) {
+          visibleColumns.sort(
+            (a, b) => (allowOrder.get(a.field) ?? 0) - (allowOrder.get(b.field) ?? 0),
+          );
+        }
         // Default sort: prefer whatever column the server picked (it does
         // its own ``acquisition*`` lookup so ingest order matches the image
         // grid). Fall back to the same heuristic client-side in case an

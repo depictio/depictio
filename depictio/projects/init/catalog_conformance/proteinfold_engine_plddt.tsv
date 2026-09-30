@@ -1,0 +1,17 @@
+target	series	chain	position	plddt
+T1024	T1024 alphafold2	A	2	81.99
+T1024	T1024 alphafold2	A	4	94.39
+T1024	T1024 alphafold2	A	6	96.64
+T1024	T1024 alphafold2	A	8	97.8
+T1024	T1024 colabfold	A	2	75.71
+T1024	T1024 colabfold	A	4	87.28
+T1024	T1024 colabfold	A	6	90.62
+T1024	T1024 colabfold	A	8	92.46
+T1024	T1024 esmfold	A	2	87.6
+T1024	T1024 esmfold	A	4	93.55
+T1024	T1024 esmfold	A	6	95.59
+T1024	T1024 esmfold	A	8	96.82
+T1024	T1024 rosettafold_all_atom	A	2	69.0
+T1024	T1024 rosettafold_all_atom	A	4	74.0
+T1024	T1024 rosettafold_all_atom	A	6	77.5
+T1024	T1024 rosettafold_all_atom	A	8	76.0

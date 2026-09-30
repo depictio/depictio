@@ -1,0 +1,14 @@
+# TAMA (Transcriptome Annotation by Modular Algorithms): poly(A) clean-up of
+# FLNC reads, collapse of mapped reads into transcript models, and merge of
+# several collapsed annotations into one.
+#
+# The recipes read TAMA's own file shapes: the poly(A) report of
+# `tama_flnc_polya_cleanup.py` (`*_polya_flnc_report.txt[.gz]`), the per-model
+# read counts of TAMA collapse (`*_trans_report.txt`), and TAMA merge's BED12
+# annotation with its `*_merge.txt` membership table. Chaining the last three
+# gives every final isoform its FLNC read support; comparing its intron chain
+# with a reference GTF gives its SQANTI-style structural category.
+id: tama
+name: TAMA
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gstama/merge
+source_url: https://github.com/GenomeRIK/tama

@@ -2071,7 +2071,12 @@ tabs:
   - name: Along the protein
     icon: mdi:chart-timeline-variant
     color: indigo
-    description: Coding variants at their amino-acid position
+    description: Pick a gene on the scatter, then read its coding variants on the predicted structure, its written sequence and the lollipop
+  - name: Coding variant table
+    icon: mdi:table
+    color: gray
+    description: The coding variants behind the protein views, one row per call
+    collapsed: true
   - name: Gene table
     icon: mdi:table
     color: gray
@@ -2206,12 +2211,37 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Only variants whose protein change snpEff could compute appear here, at
-      their amino-acid position. Several callsets stacking a variant at the
-      same residue is a call they agree on; a lone stem is one caller's own.
+      Only variants whose protein change snpEff could compute appear here.
+      Click a gene on the scatter to load its structure, written sequence and
+      lollipop, then click a residue, a letter or a stem to mark it in all three.
     workflow_tag: sarek
     data_collection_tag: snpeff_protein_lollipop
     layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-gn-av-gene-scatter
+    index: sk-gn-av-gene-scatter
+    section: Along the protein
+    workflow_tag: sarek
+    data_collection_tag: protein_genes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: variants
+      y_col: shared_pct
+      label_col: gene
+      color_col: worst_impact
+      log_x: true
+      x_title: Distinct coding variants
+      y_title: Calls made by two or more callers (%)
+      top_n_labels: 0
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: gene
+      controls_placement: popover
+    title: Genes with coding variants
+    description: One point per gene of the lollipop, coloured by its worst impact class, over the whole run. Genes low on the axis carry variants one caller sees, often a mapping artefact.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: advanced_viz
     tag: sk-gn-av-lolli
     index: sk-gn-av-lolli
@@ -2223,13 +2253,37 @@ tabs:
       max_subplot_genes: 4
       point_size: 8
       scale_points_by_effect: true
+      selection_enabled: true
     title: Coding variants along the protein
     description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Above four genes the tile switches to a single-gene picker.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 6, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: sk-gn-av-structure
+    index: sk-gn-av-structure
+    section: Along the protein
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/coding_variant_structure
+    config:
+      structure_source: resolve
+      gene_col: gene
+      entity_col: gene
+      color_mode: plddt
+      representations: [cartoon]
+      show_variants: true
+      highlight_site: true
+      layout: structure_text
+      selection_enabled: true
+      follow_selection: true
+      controls_placement: popover
+    title: Coding variants on the predicted structure
+    description: The picked gene's predicted structure over its written sequence, fetched by gene symbol when the server's structure resolver is on, with a sphere on every variant coloured by impact class and the picked residue in red.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: table
     tag: sk-gn-table-lolli
-    section: Along the protein
+    section: Coding variant table
     workflow_tag: sarek
     data_collection_tag: snpeff_protein_lollipop
     use: snpeff/protein_lollipop
@@ -2239,7 +2293,7 @@ tabs:
     description: Gene, amino-acid position, impact, consequence and protein change, one row per call.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 0, w: 8, h: 7}
 
   - component_type: text
     tag: sk-gn-table-intro

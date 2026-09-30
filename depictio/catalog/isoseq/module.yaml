@@ -1,0 +1,14 @@
+# PacBio Iso-Seq `isoseq refine`: poly(A) trimming and chimera removal on
+# full-length reads, the step that turns lima's full-length (FL) reads into
+# full-length non-chimeric (FLNC) reads.
+#
+# refine writes a pbcopper JSON report (`*.filter_summary.report.json`, id
+# `isoseq_refine`) with the FL / FLNC / FLNC-with-poly(A) counts and a per-read
+# CSV (`*.report.csv`) with the primer, poly(A) and insert length of every FLNC
+# read. The recipes below read those two file shapes, summed per library and
+# per sample when a run is chunked.
+id: isoseq
+name: Iso-Seq refine
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/isoseq/refine
+homepage: https://isoseq.how
+source_url: https://github.com/PacificBiosciences/IsoSeq

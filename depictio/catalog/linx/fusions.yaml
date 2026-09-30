@@ -1,0 +1,19 @@
+id: linx_fusions
+name: Predicted gene fusions
+mode: linx
+description: >-
+  LINX's candidate gene fusions, one row per fusion, with both partners
+  resolved from the breakend table: genes, transcripts and region types, the
+  reportability and why, the phasing (in frame, skipped exons, out of frame),
+  the fused exons against each transcript's exon count, the SV chain behind the
+  fusion, and the protein domains kept and lost.
+find:
+  path_glob: "**/*.linx.fusion.tsv"
+recipe: linx/fusions.py
+fixture: fusions.tsv
+renders_as:
+  - { id: fusion_count, component: card, column: fusion_id, aggregation: count, secondary_layout: top_n, breakdown_col: phased, top_n_count: 3 }
+  - { id: fusion_phase_bar, component: figure, visu_type: bar, dict_kwargs: {x: phased, color: reported_type} }
+  - { id: fusion_record, component: advanced_viz, kind: record_card, roles: {id: fusion_id, title: fusion} }
+  - { id: fusion_phase_filter, component: interactive, interactive_type: MultiSelect, column_name: phased }
+  - { id: fusion_table, component: table, row_selection_enabled: true, row_selection_column: fusion_id }

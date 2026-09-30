@@ -1,0 +1,31 @@
+id: proteinfold_models
+name: Model confidence scores
+mode: protein/models
+description: >-
+  One row per predicted model of every target and engine: its rank (1 is the
+  top-ranked model), mean pLDDT, the share of residues placed confidently
+  (pLDDT 70 or more) and likely disordered (under 50), and, when the engine
+  writes them, the predicted TM score (pTM) and for a complex the interface TM
+  score (ipTM) and ipSAE.
+find:
+  path_glob: "**/*_plddt.tsv"
+recipe: proteinfold/models.py
+fixture: models.tsv
+renders_as:
+  - { id: plddt_vs_ptm, component: advanced_viz, kind: scatter_xy,
+      roles: {x: mean_plddt, y: ptm, label: model_id, color: engine, size: n_residues} }
+  - { id: model_plddt, component: card, column: mean_plddt, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: model_confident_share, component: card, column: confident_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: model_ptm, component: card, column: ptm, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: model_iptm, component: card, column: iptm, aggregation: max,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: model_count, component: card, column: model_id, aggregation: count,
+      secondary_layout: top_n, breakdown_col: engine, top_n_count: 3 }
+  - { component: figure, visu_type: box, dict_kwargs: {x: engine, y: mean_plddt, color: engine} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: model_rank, y: mean_plddt, color: structure} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: engine }
+  - { component: interactive, interactive_type: RangeSlider, column_name: model_rank }
+  - { component: table, row_selection_enabled: true, row_selection_column: model_id }

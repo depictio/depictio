@@ -1,0 +1,32 @@
+id: famsa_conservation
+name: Residue conservation
+mode: protein/residues
+description: >-
+  The protein module's residue table for every family: one row per residue of
+  the family representative, numbered along its ungapped sequence, with a
+  0-1 conservation score (entropy of the alignment column over the 20 amino
+  acids, discounted by gaps), its class (conserved, intermediate, variable),
+  the column consensus and its occupancy. The representative sequence rides on
+  every row, which is what a 3D tile folds in resolve mode.
+find:
+  path_glob: "**/full_msa/filtered/famsa_align/*/*.aln"
+  path_glob_alt:
+    - "**/update_families/full_msa/famsa_align/*/*.aln"
+    - "**/full_msa/filtered/mafft_align/*/*.fas"
+recipe: famsa/conservation.py
+fixture: conservation.tsv
+renders_as:
+  # The representative's sequence with a conservation lane and a class lane;
+  # brushing it emits the residue_selection the structure and the MSA follow.
+  - { id: conservation_track, component: advanced_viz, kind: sequence_track,
+      roles: {position: position, entity: entity, residue: residue, value: value, category: category} }
+  # The representative folded on demand (resolve mode, by sequence) and
+  # coloured by the same score, so conserved patches read as surfaces.
+  - { id: conservation_structure, component: advanced_viz, kind: molecule_3d,
+      roles: {position: position, entity: entity, value: value, category: category, sequence: sequence} }
+  - { id: conservation_profile, component: advanced_viz, kind: profile,
+      roles: {series: entity, x: position, y: value} }
+  - { id: residue_conservation, component: card, column: value, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: value, color: category} }
+  - { component: table }

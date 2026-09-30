@@ -1,0 +1,104 @@
+# Megatest manifest for nf-core/oncoanalyser 3.0.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline oncoanalyser --version 3.0.0 --max-file-mb 100 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# test_full profile: one WGTS subject (a tumor/normal DNA pair plus tumor RNA)
+# through the WiGiTS toolkit (hmftools). The whole run is 272 GB, almost all of
+# it BAMs (alignments/, esvee prep BAMs, CIDER/TEAL BAMs), so the keys below
+# are an explicit selection of tables and small VCFs, about 33 MB in total.
+# Outputs are published per group under <group_id>/<tool>/, so the keys start
+# with */ and the destination mirrors the pipeline outdir: DATA_ROOT is the
+# outdir (one sub-directory per group), which is what a multi-patient run
+# looks like too. The pipeline has no MultiQC parquet (only an HTML report).
+#
+# The pipeline does not publish its samplesheet, so the template ships it
+# under input/ (METADATA_FILE); download_test_data.sh copies it into
+# {dest}/input/. It carries one row per sample (sample_id, sample_type,
+# sequence_type), the tumor/normal design the dashboards group by.
+pipeline: oncoanalyser
+version: "3.0.0"
+# s3://nf-core-awsmegatests/oncoanalyser/results-<results_sha>/, the 3.0.0 release run.
+results_sha: "7c74c87a43749952b38c9a18915947570f0595a0"
+run_root: ""
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # --- PURPLE: purity and ploidy, copy number, drivers, purity-adjusted somatic VCF
+  - "*/purple/*.purple.purity.tsv"
+  - "*/purple/*.purple.qc"
+  - "*/purple/*.purple.cnv.somatic.tsv"
+  - "*/purple/*.purple.cnv.gene.tsv"
+  - "*/purple/*.purple.driver.catalog.*.tsv"
+  # PAVE-annotated, PURPLE-enriched somatic small variants (IMPACT= carries the
+  # gene, consequence and HGVS protein change). The PAVE and SAGE twins are the
+  # same calls before enrichment and are not fetched.
+  - "*/purple/*.purple.somatic.vcf.gz"
+  # --- LINX: structural variants, clusters, fusions, drivers
+  - "*/linx/somatic_annotations/*.linx.svs.tsv"
+  - "*/linx/somatic_annotations/*.linx.clusters.tsv"
+  - "*/linx/somatic_annotations/*.linx.fusion.tsv"
+  - "*/linx/somatic_annotations/*.linx.breakend.tsv"
+  - "*/linx/somatic_annotations/*.linx.driver.catalog.tsv"
+  - "*/linx/germline_annotations/*.linx.germline.driver.catalog.tsv"
+  # --- sequencing QC
+  - "*/bamtools/*/*.bam_metric.summary.tsv"
+  - "*/bamtools/*/*.bam_metric.coverage.tsv"
+  - "*/bamtools/*/*.bam_metric.frag_length.tsv"
+  - "*/qsee/*.qsee.status.tsv.gz"
+  # --- tumor characteristics and immune context
+  - "*/chord/*.chord.prediction.tsv"
+  - "*/cuppa/*.cuppa.vis_data.tsv"
+  - "*/sigs/*.sig.allocation.tsv"
+  - "*/lilac/*.lilac.tsv"
+  - "*/teal/*.teal.tellength.tsv"
+  - "*/neo/scorer/*.neo.neoepitope.tsv"
+  #
+  # Deliberately NOT fetched:
+  #   alignments/*.bam (86 to 170 GB), esvee/*.prep.bam, cider/*.bam, teal/*.bam:
+  #     reads, no tile needs them.
+  #   pave/, sage/, sage_append/: the same somatic calls as the PURPLE VCF before
+  #     PURPLE adds purity-adjusted VAF, copy number and clonality (20 to 80 MB each).
+  #   amber/, cobalt/: per-window BAF and read depth; PURPLE's segment and copy
+  #     number tables are the summarised form.
+  #   esvee/: assembler internals; LINX's SV table is the annotated form.
+  #   isofox/, cider/, peach/, virusbreakend/, virusinterpreter/, orange/: no tile
+  #     reads them yet (the megatest virus table is header-only).
+  #   linx vis_* tables: plot inputs in genomic coordinates.
+  #   neo/scorer/*.peptide_scores.tsv (20 MB): every scored peptide.
+  #   PNG / PDF / HTML reports (LINX plots, PURPLE plots, ORANGE PDF, SAGE visualiser).
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - HCC1395
+  - HCC1395.tumor_dna
+  - HCC1395.normal_dna
+  - HCC1395.tumor_rna
+  - breast cancer
+  - Breast
+  - TP53
+  - BRCA2
+  - PIK3CB
+  - FGFR1
+  - Homo sapiens
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the pipeline: the template reads
+  # {dest}/input/samplesheet.csv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/oncoanalyser/3.0.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/oncoanalyser/3.0.0 --data-root {dest}

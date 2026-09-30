@@ -1,0 +1,21 @@
+id: chord_prediction
+name: Homologous recombination deficiency
+mode: chord
+description: >-
+  CHORD's prediction, one row per tumor: the probability of a BRCA1-type and
+  a BRCA2-type deficiency, their sum as the HRD probability, the HR status
+  call (proficient, deficient, or cannot be determined) with its HRD subtype
+  and the remarks that explain an undetermined call.
+find:
+  path_glob: "**/*.chord.prediction.tsv"
+columns:
+  sample: String
+  p_BRCA1: Float64
+  p_BRCA2: Float64
+  p_hrd: Float64
+  hr_status: String
+  hrd_type: String
+fixture: prediction.tsv
+renders_as:
+  - { id: hrd_probability_gauge, component: card, column: p_hrd, aggregation: max, secondary_layout: gauge, coverage_max: 1.0 }
+  - { id: hrd_table, component: table }

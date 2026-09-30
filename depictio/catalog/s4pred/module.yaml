@@ -1,0 +1,12 @@
+# S4PRED predicts protein secondary structure from the single sequence (no
+# alignment), one state per residue with the probability of coil, helix and
+# strand. The ss2 output is PSIPRED's VFORMAT: a comment line, a blank line,
+# then `position residue state P(C) P(H) P(E)` per residue. The pipeline names
+# each ss2 file after the sequence id, so the file name is the protein.
+id: s4pred
+name: S4PRED
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/s4pred/runmodel
+homepage: https://github.com/psipred/s4pred
+description: >-
+  Single-sequence protein secondary structure prediction: helix, strand or coil
+  for every residue, with the probability of each state.

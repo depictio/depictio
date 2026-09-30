@@ -1,0 +1,17 @@
+# FAMSA aligns large protein sets progressively and writes an aligned FASTA
+# (`.aln`): every row the same length, gaps as `-`. The recipes read any
+# aligned FASTA the same way (MAFFT `.fas` included), so a pipeline that picks
+# the other aligner lands on the same tables. The first row of a family
+# alignment is its representative, which is the reference the MSA table
+# ranks from and the numbering the conservation table uses.
+id: famsa
+name: FAMSA
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/famsa/align
+homepage: https://github.com/refresh-bio/FAMSA
+description: >-
+  Progressive multiple sequence alignment for large protein families: the
+  aligned rows of every family, and how conserved each residue of the
+  family representative is across its members.
+edam_topics:
+  - http://edamontology.org/topic_0182 # Sequence alignment
+  - http://edamontology.org/topic_0623 # Gene and protein families

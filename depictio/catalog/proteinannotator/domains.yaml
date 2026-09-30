@@ -1,0 +1,30 @@
+id: proteinannotator_domains
+name: Protein domains, all databases
+mode: protein/domains
+description: >-
+  One row per domain span from every database the run searched: the four HMM
+  libraries through hmmsearch (domains passing HMMER's default inclusion
+  E-value) and the InterProScan member databases. Spans follow the domain
+  table convention (entity, start, end, label, source), so a sequence track
+  draws them as a domain lane and a 3D structure colours by them.
+find:
+  path_glob: "**/domain_annotation/*/*.domtbl.gz"
+  path_glob_alt:
+    - "**/functional_annotation/interproscan/*/*.tsv"
+recipe: proteinannotator/domains.py
+fixture: domains.tsv
+renders_as:
+  - { id: domain_record, component: advanced_viz, kind: record_card, roles: {id: domain_id, title: label} }
+  # Significance against span length: long confident spans are whole-protein
+  # families, short confident ones are motifs, weak ones of any length are
+  # borderline calls worth checking in a second database.
+  - { id: domain_significance, component: advanced_viz, kind: scatter_xy,
+      roles: {x: span, y: neg_log10_evalue, label: label, color: database} }
+  - { id: domain_count, component: card, column: domain_id, aggregation: count,
+      secondary_layout: top_n, breakdown_col: database, top_n_count: 5 }
+  - { id: domain_families, component: card, column: label, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: database }
+  - { id: domain_span, component: card, column: span, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: box, dict_kwargs: {x: database, y: span, color: database} }
+  - { component: table, row_selection_enabled: true, row_selection_column: domain_id }

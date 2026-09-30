@@ -1,0 +1,16 @@
+id: isoseq_insert_length
+name: FLNC insert length distribution
+mode: pacbio/read-length
+description: >-
+  Share of each sample's full-length non-chimeric reads per 100 bp of insert
+  length, from the per-read isoseq refine report: the library's size
+  selection, and the first sign of degraded RNA.
+find:
+  path_glob: "**/*.report.csv"
+recipe: isoseq/insert_length.py
+fixture: insert_length.tsv
+renders_as:
+  - { id: insert_length_profile, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: length_bp, y: pct} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: length_bp, y: pct, color: sample} }
+  - { component: table }

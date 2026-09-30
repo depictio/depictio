@@ -1,0 +1,22 @@
+id: linx_svs
+name: Clustered structural variants
+mode: linx
+description: >-
+  LINX's somatic structural variants, one row per SV, joined with the event
+  its cluster resolves to (simple deletion or duplication, reciprocal
+  translocation, LINE insertion, complex event), the breakends split into
+  chromosome, position and orientation columns, the junction copy number and
+  the genes at each breakend. A single breakend has no partner locus, so a
+  chord diagram skips it while counts and tables keep it.
+find:
+  path_glob: "**/*.linx.svs.tsv"
+recipe: linx/svs.py
+fixture: svs.tsv
+renders_as:
+  - { id: sv_chords, component: advanced_viz, kind: genome_chord, roles: {chrom_a: chrom_a, pos_a: pos_a, chrom_b: chrom_b, pos_b: pos_b, label: label, weight: junction_copy_number, category: resolved_type, sample: sample} }
+  - { id: sv_count, component: card, column: sv_key, aggregation: count, secondary_layout: top_n, breakdown_col: type, top_n_count: 3 }
+  - { id: sv_cluster_count, component: card, column: cluster_id, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster_category }
+  - { id: junction_cn_spread, component: card, column: junction_copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: resolved_type_bar, component: figure, visu_type: bar, dict_kwargs: {x: resolved_type, color: type} }
+  - { id: sv_type_filter, component: interactive, interactive_type: MultiSelect, column_name: resolved_type }
+  - { id: sv_table, component: table, row_selection_enabled: true, row_selection_column: label }

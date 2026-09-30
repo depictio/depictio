@@ -1,0 +1,20 @@
+# nf-core/proteinfold's prediction outputs, read across engines. Every engine
+# (AlphaFold2, ColabFold, ESMFold, RoseTTAFold All-Atom, Boltz, ...) is a
+# pipeline-local module that writes the same shapes: the top-ranked PDB with
+# pLDDT in its B-factor column, a per-model pLDDT table, pTM / ipTM / ipSAE
+# per model, one PAE matrix per model and, for MSA-based engines, the
+# integer-coded alignment. The recipes here put them on one table per grain
+# (residue, model, alignment row, PAE bin), so there is no single nf-core
+# module to derive identity from, the same documented exception as mhcquant.
+id: proteinfold
+name: nf-core/proteinfold
+description: >-
+  Protein structure prediction summaries of nf-core/proteinfold: per-residue
+  confidence of every top-ranked structure, per-model confidence scores (pLDDT,
+  pTM, ipTM, ipSAE) across engines, predicted aligned error matrices and the
+  multiple sequence alignments the MSA-based engines folded from.
+homepage: https://nf-co.re/proteinfold
+source_url: https://github.com/nf-core/proteinfold
+edam_topics:
+  - http://edamontology.org/topic_1317 # Structural biology
+  - http://edamontology.org/topic_0082 # Structure prediction

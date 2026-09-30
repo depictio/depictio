@@ -174,3 +174,41 @@ class TestCardFollowRegionFilter:
         comp = back.components[0]
         comp = comp if isinstance(comp, dict) else comp.model_dump()
         assert comp.get("follow_region_filter", False) is follow
+
+
+class TestAlwaysSelected:
+    """A Select that always holds a value: the first option of its own list."""
+
+    def _select(self, **extra):
+        return {
+            **BASE_FILTER,
+            "component_type": "interactive",
+            "interactive_component_type": "Select",
+            **extra,
+        }
+
+    def test_defaults_to_false_and_stays_out_of_stored_metadata(self):
+        assert InteractiveLiteComponent(**self._select()).always_selected is False
+        dash = DashboardDataLite(title="t", components=[self._select()])
+        assert "always_selected" not in dash.to_full()["stored_metadata"][0]
+
+    def test_select_flag_reaches_stored_metadata_and_round_trips(self):
+        dash = DashboardDataLite(title="t", components=[self._select(always_selected=True)])
+        assert dash.to_full()["stored_metadata"][0]["always_selected"] is True
+        back = DashboardDataLite.from_full(dash.to_full())
+        comp = back.components[0]
+        comp = comp if isinstance(comp, dict) else comp.model_dump()
+        assert comp["always_selected"] is True
+
+    @pytest.mark.parametrize(
+        ("kind", "column_type"),
+        [("MultiSelect", None), ("SegmentedControl", None), ("RangeSlider", "float64")],
+    )
+    def test_rejected_on_anything_but_a_select(self, kind, column_type):
+        with pytest.raises(ValidationError, match="only valid for a Select"):
+            InteractiveLiteComponent(
+                **BASE_FILTER,
+                interactive_component_type=kind,
+                column_type=column_type,
+                always_selected=True,
+            )

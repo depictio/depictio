@@ -1,0 +1,17 @@
+id: isoseq_refine_summary
+name: Full-length read yield
+mode: pacbio/isoseq-refine
+description: >-
+  Full-length (FL), full-length non-chimeric (FLNC) and FLNC-with-poly(A)
+  read counts per library, with the non-chimeric and poly(A) shares, from the
+  isoseq refine filter summary report.
+find:
+  path_glob: "**/*.filter_summary.report.json"
+recipe: isoseq/refine_summary.py
+fixture: refine_summary.tsv
+renders_as:
+  - { component: card, column: flnc_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: library, top_n_count: 3 }
+  - { component: card, column: pct_flnc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_polya, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: library, y: flnc_reads, color: sample} }
+  - { component: table }

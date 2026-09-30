@@ -1,0 +1,19 @@
+id: purple_gene_copy_number
+name: Copy number per gene
+mode: purple
+description: >-
+  PURPLE's minimum and maximum copy number across each gene's canonical
+  transcript, its minimum minor-allele copy number and its copy number relative
+  to the sample ploidy, with a call derived from PURPLE's driver cut-offs:
+  amplification (above 3 times ploidy), homozygous deletion (below 0.5
+  copies), their partial forms, loss of heterozygosity, or neutral.
+find:
+  path_glob: "**/purple/*.purple.cnv.gene.tsv"
+recipe: purple/gene_copy_number.py
+fixture: gene_copy_number.tsv
+renders_as:
+  - { id: gene_event_count, component: card, column: gene, aggregation: count, secondary_layout: top_n, breakdown_col: cn_event, top_n_count: 3, filter_expr: "pl.col('cn_event') != 'NEUTRAL'" }
+  - { id: gene_cn_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: min_copy_number, y: max_copy_number, label: gene, color: cn_event} }
+  - { id: gene_cn_record, component: advanced_viz, kind: record_card, roles: {id: gene} }
+  - { id: gene_cn_event_filter, component: interactive, interactive_type: MultiSelect, column_name: cn_event }
+  - { id: gene_cn_table, component: table, row_selection_enabled: true, row_selection_column: gene }

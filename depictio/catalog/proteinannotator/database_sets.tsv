@@ -1,0 +1,4 @@
+entity	sample	pfam	funfam	nmpfams	metagroot	interproscan
+GI|225038609|EFDID|719595|FULL	l_arginase	0	0	1	1	1
+T1024	T1024	1	1	1	1	0
+T1026	T1026	1	1	1	1	0

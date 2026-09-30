@@ -1,0 +1,14 @@
+# CMAPLE infers a maximum-likelihood tree per family alignment and writes it
+# as Newick (`.treefile`). A phylogeny collection serves one tree file, and a
+# family run writes one tree per family, so the recipe lays every tree out as
+# drawable segments instead: one table, filterable by family like the rest of
+# the dashboard.
+id: cmaple
+name: CMAPLE
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cmaple
+homepage: https://github.com/iqtree/cmaple
+description: >-
+  Maximum-likelihood phylogenetic trees of protein family members, laid out as
+  rectangular tree segments per family.
+edam_topics:
+  - http://edamontology.org/topic_3293 # Phylogenetics

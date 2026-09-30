@@ -1,0 +1,34 @@
+id: proteinannotator_proteins
+name: Protein annotation summary
+mode: protein/summary
+description: >-
+  One row per protein of the filtered FASTA: its length, domain hits per
+  database and how many databases annotate it, the share of its residues
+  covered by at least one domain, the best domain by E-value, and the helix,
+  strand and coil shares S4PRED predicts. Unannotated proteins keep their row.
+find:
+  path_glob: "**/qc/*/*.fasta"
+  path_glob_alt:
+    - "**/qc/*/*.faa"
+recipe: proteinannotator/proteins.py
+fixture: proteins.tsv
+renders_as:
+  - { id: protein_record, component: advanced_viz, kind: record_card, roles: {id: entity, title: top_domain} }
+  # Length against annotated share: short, fully covered proteins are single
+  # domain; long, poorly covered ones carry regions no database describes.
+  - { id: length_vs_cover, component: advanced_viz, kind: scatter_xy,
+      roles: {x: length, y: annotated_pct, label: entity, color: top_domain_database} }
+  - { id: protein_count, component: card, column: entity, aggregation: count,
+      secondary_layout: top_n, breakdown_col: annotation_status, top_n_count: 2 }
+  - { id: protein_length, component: card, column: length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: annotated_cover, component: card, column: annotated_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: databases_per_protein, component: card, column: databases_hit, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: helix_share, component: card, column: helix_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: strand_share, component: card, column: strand_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: length, color: annotation_status} }
+  - { component: table, row_selection_enabled: true, row_selection_column: entity }

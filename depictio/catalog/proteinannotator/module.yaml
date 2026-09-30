@@ -1,0 +1,20 @@
+# nf-core/proteinannotator's own summary tables. The pipeline itself publishes
+# per-tool files (hmmsearch domain tables per database, InterProScan matches,
+# S4PRED secondary structure, SeqFu statistics, the filtered FASTA); the
+# recipes here join them per protein and per sample: one domain table across
+# every database, the residue table a structure and a sequence track read, the
+# protein x database coverage matrix and membership sets, and the per-sample
+# hub. They combine outputs of several modules, so there is no single nf-core
+# module to derive identity from, the same documented exception as mhcquant.
+id: proteinannotator
+name: nf-core/proteinannotator
+description: >-
+  Protein annotation summaries of nf-core/proteinannotator: domains from every
+  searched database in one table, per-residue secondary structure and domain
+  cover, per-protein and per-sample annotation rates, and which databases
+  annotate which proteins.
+homepage: https://nf-co.re/proteinannotator
+source_url: https://github.com/nf-core/proteinannotator
+edam_topics:
+  - http://edamontology.org/topic_0736 # Protein folds and structural domains
+  - http://edamontology.org/topic_0078 # Proteins

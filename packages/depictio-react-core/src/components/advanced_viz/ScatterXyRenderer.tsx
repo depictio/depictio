@@ -73,6 +73,8 @@ interface ScatterXyConfig {
   top_n_labels?: number;
   color_scale?: string;
   legend_pos?: LegendPos;
+  /** Category to colour overrides for a categorical color_col. */
+  category_palette?: Record<string, string> | null;
   selection_enabled?: boolean;
   selection_column?: string | null;
   density?: boolean;
@@ -492,7 +494,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         else groups.set(k, [p]);
       }
       const names = Array.from(groups.keys()).sort();
-      const colourMap = stableColorMap(names, palette);
+      const colourMap = stableColorMap(names, palette, config.category_palette ?? null);
       for (const name of names) {
         const group = groups.get(name) as typeof points;
         data.push({
@@ -677,6 +679,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     config.y_col,
     config.label_col,
     config.color_col,
+    config.category_palette,
     config.x_title,
     config.y_title,
     refValue,

@@ -1,0 +1,24 @@
+id: tama_transcripts
+name: Isoforms with read support and structural category
+mode: long-read/isoforms
+description: >-
+  One row per TAMA merge isoform: position, exon count, length, the FLNC reads
+  TAMA collapsed into it and, against a reference GTF, its SQANTI-style
+  structural category (FSM, ISM, NIC, NNC, genic, antisense, intergenic) and
+  reference gene.
+find:
+  path_glob: "**/09_GSTAMA_MERGE/*.bed"
+  path_glob_alt:
+    - "**/*_merge.txt"
+recipe: tama/transcripts.py
+fixture: transcripts.tsv
+renders_as:
+  # Length against support, coloured by category: the novel isoforms worth a
+  # look are the well supported ones, top of the plot.
+  - { id: isoform_support_plane, component: advanced_viz, kind: scatter_xy,
+      roles: {x: transcript_length, y: read_support, label: transcript_id, color: structural_category} }
+  - { component: figure, visu_type: box, dict_kwargs: {x: structural_category, y: transcript_length, color: structural_category} }
+  - { component: card, column: transcript_id, aggregation: count, secondary_layout: top_n, breakdown_col: structural_category, top_n_count: 4 }
+  - { component: card, column: read_support, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: structural_category }
+  - { component: table }

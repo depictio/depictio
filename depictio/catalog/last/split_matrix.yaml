@@ -1,0 +1,31 @@
+id: last_split_matrix
+name: Substitution matrix and distances
+mode: genome-alignment/divergence
+description: >-
+  The substitution table last-split counts over the one-to-one alignment,
+  summarised per genome pair: alignment blocks, identical and substituted
+  columns, transitions against transversions, gap columns on either side, the
+  p-distance with its JC69, F81, K80 and T92 corrections, and the substitution
+  spectrum (the share of each of the 12 directed substitutions). Distances rank
+  the queries by divergence from the target; the spectrum shows whether the
+  substitution process looks alike across them.
+find:
+  path_glob: "**/*.o2o.matrix.txt"
+recipe: last/split_matrix.py
+fixture: split_matrix.tsv
+renders_as:
+  - { id: substitution_spectrum, component: advanced_viz, kind: complex_heatmap,
+      roles: {index: query,
+              value_columns: [A_to_C_pct, A_to_G_pct, A_to_T_pct, C_to_A_pct, C_to_G_pct, C_to_T_pct,
+                              G_to_A_pct, G_to_C_pct, G_to_T_pct, T_to_A_pct, T_to_C_pct, T_to_G_pct]} }
+  - { id: saturation_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: p_distance, y: ts_tv_ratio, label: query, size: blocks} }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: query, y: k80_distance, title: K80 distance to the target} }
+  - { component: card, column: k80_distance, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: ts_tv_ratio, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: blocks, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: query, top_n_count: 3 }
+  - { component: table, row_selection_enabled: true, row_selection_column: query }

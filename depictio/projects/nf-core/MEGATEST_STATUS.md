@@ -5,7 +5,8 @@ pipelines depictio templates or considered templating, taken on 2026-09-05 with
 `scripts/nfcore_megatest.py` and re-surveyed on 2026-09-16 for the lot 2 pipelines
 (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic, scdownstream), then on 2026-09-23 for
 the wave 3 pipelines (riboseq, smrnaseq, genomeassembler, mhcquant, demultiplex, rnasplice,
-seqinspector). Every release of a pipeline is expected at
+seqinspector) and on 2026-09-30 for the lot 3 pipelines (crisprseq, isoseq, pairgenomealign,
+proteinannotator, proteinfamilies, proteinfold, oncoanalyser). Every release of a pipeline is expected at
 `<pipeline>/results-<tag_sha>/`, where `tag_sha` is the release's sha in
 <https://nf-co.re/pipelines.json>. In practice many release prefixes are empty
 (only `pipeline_info/` plus zero-byte directory markers), truncated syncs (a few
@@ -37,10 +38,10 @@ and are lower bounds for the big runs.
 | taxprofiler | 2.0.1 | `70ecc15e` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Selected.** 680 files / 3.1 GB, MultiQC 1.34 with 16 modules plus raw profiler txt outputs. 2.0.0 is complete too; 1.2.x predate the parquet. |
 | chipseq | 2.1.0 | `76e2382b` | empty | | no | 2.1.0 (29 files / 199 GB, 1 small) and 2.0.0 (9 files / 51 GB) are truncated syncs of BAMs. **Selected run is 1.2.0** (`048fd685`, 871 files / 79.7 GB, run root `bwa/mergedLibrary/...`), which wrote **MultiQC 1.9** (`multiqc/{broadPeak,narrowPeak}/multiqc_data/multiqc_data.json`, no parquet) and must be reprocessed with 1.35. 1.2.1 (`0f487ed7`) exists and is a complete structural twin of 1.2.0 (same 871 files, same sizes, same layout); the selection stays on 1.2.0. The run's design is not published: copy the vendored `input/sample_metadata.tsv` into `{DATA_ROOT}/input/` and ingest with `--var GENOME=hg19`. |
 | sarek | 3.10.0 | `8ccac7ad` | ok | `test_full_germline_ncbench_agilent/` (also `test_full_germline_aws/`) | yes (`test_full_germline_ncbench_agilent/multiqc/multiqc_data/`) | **Selected (lot 2).** 563 files / 104 GB; somatic profiles absent from the megatest, so ASCAT / ControlFREEC / MSIsensor outputs do not exist. 3.9.0 complete; 3.8.x and older predate the parquet. |
-| crisprseq | 2.3.0 | `0e9f915c` | ok | `.` | not seen | Not in this lot. Flat layout with thousands of per-sample files at the prefix root (listing capped at 3000 keys, no parquet among them); screening workflow never published. Every 2.0.0 to 2.2.1 prefix is empty. |
+| crisprseq | 2.3.0 | `0e9f915c` | ok | `.` | no | **Templated (lot 3).** test_full targeted: 6,195 amplicon libraries, 122 protospacers. 43,206 small per-library files (2.2 GB) fetched; BAMs and per-library HTML (~74 GB) skipped. No MultiQC; samplesheet vendored under `input/`. Screening arm unpublished. Every 2.0.0 to 2.2.1 prefix is empty. |
 | scrnaseq | 4.2.0 | `3fc17b4f` | ok | `aligner_*/` (`cellranger`, `kallisto`, `simpleaf`, `star`) | yes (per aligner `multiqc/multiqc_data/`) | **Selected (lot 2), run root `aligner_cellranger/`.** 421 files / 137 GB; three of the four aligner roots carry a parquet (`aligner_star/` has no MultiQC). No marker-gene table is published. 2.x prefixes are empty or a single BAM. |
 | smrnaseq | 2.4.1 | `cb0af579` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 3).** 163 files / 1.6 GB. The template reads the mirtop joined table, the miRDeep2 `result_*.csv` at the run root and the MultiQC 1.33 parquet; no mature / hairpin count matrices and no edgeR tables are published. Every older prefix (2.2.3 to 2.4.0) is empty. |
-| oncoanalyser | 3.0.0 | `7c74c87a` | ok | `HCC1395/` (sample-named) | none (no MultiQC) | Not in this lot. 604 files / 272 GB; 2.3.0 and 2.2.0 complete, 2.1.0 and older empty. |
+| oncoanalyser | 3.0.0 | `7c74c87a` | ok | `.` (outdir; one `<group_id>/` per tumor) | none (no MultiQC) | **Templated (lot 3).** 604 files / 272 GB, almost all BAMs; the selective fetch is 29 tables and VCFs / 33 MB (`--max-file-mb 100`). The samplesheet is not published and is vendored under `input/`. 2.3.0 and 2.2.0 complete, 2.1.0 and older empty. |
 | methylseq | 4.2.0 | `5aa56467` | empty | | no | 5 intermediates (3 BAM, 2 `txt.gz`, 37.6 GB) and nine restart `params_*.json`; 4.0.0 empty, 3.0.0 truncated (9 BAMs / 92 GB). **Selected run is 2.3.0** (`93bc5811`, 2022, 1283 files, run root `bismark/`, pre-parquet MultiQC reprocessed with 1.35). `PRESEQ_LCEXTRAP` FAILED for 6 of the 7 samples in this run (only `SRR7961103` completed), so no Preseq collection is built into the template. The `results-<sha>-bismark-CPU` / `-ARM` / `-GPU` benchmark prefixes hold at most 5 data objects and are invisible to the resolver (bare 40-hex sha required). The run's design is not published: copy the vendored `input/sample_metadata.tsv` into `{DATA_ROOT}/input/`. |
 | atacseq | 2.1.2 | `1a1dbe52` | empty | | no | 2.1.2 and 2.1.1 hold a single 12 GB object each. Last complete run is 1.2.2 (2022, 488 files, pre-parquet). |
 | cutandrun | 3.2.2 | `6e1125d4` | empty | | no | 3.2.2, 3.2.1 and 3.2 hold directory markers only. Last complete run is 3.1 (2023, 415 files, pre-parquet). |
@@ -59,6 +60,11 @@ and are lower bounds for the big runs.
 | demultiplex | 1.8.0 | `daade37c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 3).** bcl2fastq route; 183 files / 34.6 MB without the FASTQ. The run-level `multiqcsav/` report holds no SAV sections (the MultiQC `sav` module found no `RunInfo.xml` next to `InterOp/`). |
 | rnasplice | 1.0.4 | `1d0494ae` | partial | `.` | no | **Pending.** 494 objects, only 80 with data (95.9 GB, mostly alignments); no MultiQC and none of the differential splicing directories. The template waits for an EMBL cluster `test_full` run. |
 | seqinspector | 1.1.2 | `6aa08aab` | ok | `.` | yes (`multiqc/global_report/multiqc_data/`, plus one per group under `multiqc/group_reports/`) | Fallback for rnasplice if its cluster run fails twice. 1899 objects / 678 MB, every data file under 50 MB. |
+| isoseq | 3.0.1 | `6c944831` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (lot 3).** 286 MB fetched (BAMs skipped, 234 MB is the uLTRA GTF). Reads the CCS/refine reports, TAMA polyA, collapse and merge outputs, the indexed GTF and the MultiQC 1.33 parquet (ccs, lima). |
+| pairgenomealign | 3.0.4 | `8ee09a1c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (lot 3).** `test_full` profile, 34 query genomes against one target. 42.8 GB, almost all MAF alignments and a merged CRAM; tables-only fetch 173 files / 20 MB (`--max-file-mb 50`). MultiQC 1.33, custom content only. Ran with `--export_aln_to no_export`, so the synteny collection is empty. Samplesheet not published: vendored under `input/` with a design table. |
+| proteinannotator | 1.1.0 | `cbf78d47` | ok (dev) | `.` | yes, not read | **Templated (lot 3).** Development run `v1.2.0dev-gb8fac19` (outdir `results-dev`) synced under a non-tag sha; the template directory stays at 1.1.0, the latest release. 36 files / 84 KB fetched. MultiQC 1.33 holds only SeqFu custom content anchored by sample name, so it is not read. Samplesheet and design vendored under `input/`. |
+| proteinfamilies | 2.5.0 | `f8c0b183` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (lot 3).** `test_full` profile, release run. MultiQC 1.35 parquet with custom content only (family metadata; SeqFu and cluster-size sections named after each sample). 49 files / 273 KB fetched with `--max-file-mb 5`; the samplesheet is not published and is vendored under `input/`. |
+| proteinfold | 2.1.0 | `a414fd13` | ok (dev) | `.` | per engine, custom content only | **Templated (lot 3).** Development run `v2.1.0dev-ga414fd1` (the 2.0.0 release run is empty): 11 test_full runs under one prefix (AlphaFold2 standard and split-MSA, ColabFold, ESMFold, RoseTTAFold All-Atom; 2 monomers + 1 heterodimer). 36 MB fetched; samplesheet vendored under `input/`. |
 
 ## Selected runs for this lot
 
@@ -213,6 +219,44 @@ What changed in the manifests of the reworked templates:
 - **genomeassembler** fetches a flagstat file that no collection reads; left in the manifest
   for now.
 
+### 2026-09-30 lot 3 (protein module, seven new templates)
+
+Seven pipelines were templated from their AWS megatest in lot 3, together with the protein
+module (`molecule_3d`, `msa` and `sequence_track` kinds, `residue_selection` filters). Each
+`VALIDATION_REPORT.md` records an offline validation (recipes on the real files, template lint,
+CLI dry run); none was ingested live in this lot.
+
+| pipeline | version | results_sha | run_root | MultiQC |
+|---|---|---|---|---|
+| crisprseq | 2.3.0 | `0e9f915c4a3c89d02a66ec58e2decbc832323c8b` | `.` | none published |
+| isoseq | 3.0.1 | `6c944831289d4d6e33497026f6b18e8c671705bd` | `.` | 1.33 |
+| oncoanalyser | 3.0.0 | `7c74c87a43749952b38c9a18915947570f0595a0` | `.` | none |
+| pairgenomealign | 3.0.4 | `8ee09a1cdc920fc90cd62358952045e5019e1fe0` | `.` | 1.33, custom content only |
+| proteinannotator | 1.1.0 (dev run) | `cbf78d471f62d91af666e8c77bcd580b4743c6be` | `.` | 1.33, SeqFu custom content anchored by sample name; not read |
+| proteinfamilies | 2.5.0 | `f8c0b183e59df3d87c38d0f7c4acc6918593f4f5` | `.` | 1.35, custom content only |
+| proteinfold | 2.1.0 (dev run) | `a414fd1368009500b66761e37e7cde80366a45e9` | `.` | per-engine custom content (per-target pLDDT plots), not bound |
+
+Two of them are pinned to **development runs**, not release tag shas, so `fetch` prints a
+"not a tag sha" warning for both and keeps the pin:
+
+- **proteinfold** lives in a `2.1.0/` template directory and reads the development run
+  `a414fd13` (`software_versions.yml`: `v2.1.0dev-ga414fd1`), which gathers eleven
+  `test_full` runs under one prefix. The 2.0.0 release run in the bucket is empty, so no
+  release run backs the template.
+- **proteinannotator** lives in a `1.1.0/` template directory (the latest release) but the
+  run synced under `cbf78d47` is a development run (`v1.2.0dev-gb8fac19`, outdir
+  `results-dev`).
+
+The other five pin their release tag sha. None of the seven publishes its samplesheet or a
+design table. Six vendor the samplesheet under `input/`; isoseq, pairgenomealign and
+proteinannotator also vendor a design table (isoseq ships the design table only), and
+`download_test_data.sh` copies both into `{DATA_ROOT}/input/`.
+pairgenomealign ran with `--export_aln_to no_export`, so its synteny collection is skipped as
+optional on the megatest. crisprseq's screening workflow has never been published.
+oncoanalyser's run root is the outdir itself, with one `<group_id>/` directory per tumor
+below it (not a nested run root): the template reads 29 tables and VCFs (33 MB) out of a
+272 GB run.
+
 ## How to use
 
 ```bash
@@ -255,7 +299,7 @@ version gate, seeding, missing visualisation kinds) are in
   variantbenchmarking 1.3.0 and 1.4.0, differentialabundance 1.2.0 to 1.5.0,
   funcscan 2.x / 3.0.0, smrnaseq 2.2.3 to 2.4.0, scrnaseq 2.x, crisprseq 2.0.0 to
   2.2.1, taxprofiler 1.2.2 / 1.2.4, airrflow 4.1.0 / 4.2.0, oncoanalyser 1.0.0 to
-  2.1.0, mag 5.2.0 / 5.3.0.
+  2.1.0, mag 5.2.0 / 5.3.0, proteinfold 2.0.0.
 - **Missing runs** (no prefix for the release sha): airrflow 5.1.1, phyloplace
   2.1.0, bacass 2.6.1. viralrecon 3.0.0 has a prefix but no MultiQC parquet.
 - **Partial runs**: mag 5.5.0 tag run `56abab5b` (crashed after read QC; the 5.5.0 release candidate `171cf369` is complete and is the pin),
@@ -269,9 +313,11 @@ version gate, seeding, missing visualisation kinds) are in
 - **Nested run roots**: rnaseq `aligner_star_salmon/` (and `aligner_star_rsem/`),
   scrnaseq `aligner_{cellranger,kallisto,simpleaf,star}/`, sarek
   `test_full_germline_ncbench_agilent/` and `test_full_germline_aws/`,
-  oncoanalyser `HCC1395/`, differentialabundance `tables/<paramset>/` with commas
+  differentialabundance `tables/<paramset>/` with commas
   in directory names (URLs must be quoted; `fetch` does). The manifest `run_root`
   plus `prefix_keys` (for `pipeline_info/` outside the root) cover these.
+  oncoanalyser writes one sample-named `<group_id>/` directory per tumor, but its template
+  keeps the prefix root as `run_root` and globs below it.
 - **MultiQC layout and version variance**: rnaseq writes
   `multiqc/star_salmon/multiqc_report_data/multiqc.parquet`, which no shipped
   scan regex or catalog `**/multiqc/multiqc_data/multiqc.parquet` glob matches;

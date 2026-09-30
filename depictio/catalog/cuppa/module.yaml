@@ -1,0 +1,9 @@
+# CUPPA (hmftools): cancer of unknown primary prediction. Classifiers trained on
+# the Hartwig cohort score each cancer type from the tumor's mutational profile,
+# the genomic positions of its mutations, its drivers and SVs and, with RNA,
+# its expression and alternative splicing. nf-core/oncoanalyser publishes
+# <group_id>/cuppa/<tumor_id>.cuppa.* from a pipeline-local module.
+id: cuppa
+name: CUPPA
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/cuppa
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/cuppa

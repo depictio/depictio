@@ -1,0 +1,6 @@
+# QSEE (hmftools): collects the QC metrics of a WiGiTS run and checks each
+# against its threshold. nf-core/oncoanalyser publishes <group_id>/qsee/.
+id: qsee
+name: QSEE
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/qsee
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/qsee

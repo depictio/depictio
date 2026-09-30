@@ -1,0 +1,1340 @@
+# nf-core/crisprseq 2.3.0 dashboard (targeted analysis).
+#
+# The pipeline writes no MultiQC report, so the landing tab is an Overview. Two
+# units carry every tile: the library (one amplicon sequencing library, the
+# `sample` of the samplesheet) and the guide (its protospacer). The tabs are a
+# funnel:
+#   Overview        how much editing each guide achieved and what kind;
+#   Read QC         whether each library had the depth and alignment to call it;
+#   Edit outcomes   frameshift against editing and the clonality call, per library;
+#   Indel spectrum  the size and position signature of one guide's repair;
+#   Substitutions   substitution rates over the guides, then one guide's profile;
+#   Guides          the guides side by side, with a record per guide.
+# Two pinned persistent sections ride every tab: the four run cards and the
+# collapsed sample sheet; the per-library summary table is pinned at the bottom.
+# The library filters are persistent; the design column they group on is
+# GROUP_COL (default `protospacer`). Guide-level collections follow them through
+# the samplesheet's `guide` link. Profiles along the amplicon are drawn per guide
+# (median library and interquartile band) behind a tab-local Guide picker that
+# always holds one guide: one curve per library does not read at thousands of
+# libraries.
+version: 1
+main_dashboard:
+  title: nf-core/crisprseq
+  subtitle: "Targeted gene editing: how often each guide edits its amplicon, which repair outcomes it leaves and whether the libraries support the call"
+  advanced_viz_controls: header
+  project_tag: crisprseq Gene Editing
+  main_tab_name: Overview
+  tab_icon: mdi:view-dashboard-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Samplesheet libraries and groups, applied to every tab through the samplesheet links
+    persistent: true
+    pin: top
+  - name: Overview scope
+    icon: mdi:tune
+    color: teal
+    description: Keep libraries inside an editing band
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: Libraries, guides by editing level, and reads in the current scope with their spread per library
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The samplesheet every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Editing at a glance
+    icon: mdi:chart-box-outline
+    color: teal
+    description: Editing and frameshift rates over the libraries, and the edited reads behind them
+  - name: Outcome composition per guide
+    icon: mdi:chart-bar
+    color: teal
+    description: Share of each guide's reads per repair outcome
+  - name: Editing against depth
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Editing rate of every library against its classified reads
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The per-library summary behind the tiles, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ----------------------------------------------------------- glance strip
+  - component_type: card
+    tag: cs-glance-libraries
+    section: Run at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: has_template
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title: Libraries
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cs-glance-guides
+    section: Run at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: nunique
+    column_name: guide
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: edit_class
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title: Guides
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cs-glance-raw-reads
+    section: Run at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: raw_reads
+    column_type: int64
+    display: {icon_name: 'mdi:file-document-outline', title_font_size: xl, value_font_size: xl}
+    title: Raw reads
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cs-glance-classified
+    section: Run at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: classified_reads
+    column_type: int64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Classified reads
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: cs-sheet-intro
+    section: Sample sheet
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    title: The samplesheet the run started from
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per library, with the guide it was edited with and whether it had
+      a donor template. The filters on the left select rows of this table.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: cs-sheet-table
+    section: Sample sheet
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Samplesheet
+    description: Library, guide and donor template of every library, plus the other samplesheet columns.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # ------------------------------------------------------- reference tables
+  - component_type: table
+    tag: cs-ref-summary
+    section: Reference tables
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Editing outcome per library
+    description: Read accounting, reads per outcome class and the editing rates, one row per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 4}
+
+  # ------------------------------------------------------ editing at a glance
+  - component_type: text
+    tag: cs-ov-intro
+    section: Editing at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    title: How much editing, and of which kind
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Rates are shares of each library's classified reads, and the rate cards
+      give their median over the libraries in scope. Frameshift edits are the
+      ones that knock a coding gene out; template-based repair from a donor
+      shows as its own class in the composition bars.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cs-ov-card-edited
+    section: Editing at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: edited_pct
+    column_type: float64
+    display: {icon_name: 'mdi:target', title_font_size: xl, value_font_size: xl}
+    title: Edited reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-ov-card-frameshift
+    section: Editing at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: frameshift_pct
+    column_type: float64
+    display: {icon_name: 'mdi:arrow-expand-horizontal', title_font_size: xl, value_font_size: xl}
+    title: Frameshift reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-ov-card-frameshift-of-indels
+    section: Editing at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: frameshift_of_indels_pct
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title: Frameshift share of indels (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-ov-card-edited-reads
+    section: Editing at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: edited_reads
+    column_type: int64
+    display: {icon_name: 'mdi:content-cut', title_font_size: xl, value_font_size: xl}
+    title: Edited reads (count)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # --------------------------------------------- outcome composition per guide
+  - component_type: advanced_viz
+    tag: cs-ov-av-guide-outcomes
+    index: cs-ov-av-guide-outcomes
+    section: Outcome composition per guide
+    workflow_tag: crisprseq
+    data_collection_tag: guide_outcomes
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: guide
+      taxon_col: outcome
+      rank_col: level
+      abundance_col: pct
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: first_taxon
+    title: Repair outcomes per guide
+    description: Share of each guide's classified reads per outcome, reads pooled over the guide's libraries. Guides are ordered by the share of the run's most common outcome; hover a bar for its guide.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 8}
+
+  # ---------------------------------------------------- editing against depth
+  - component_type: advanced_viz
+    tag: cs-ov-av-editing-depth
+    index: cs-ov-av-editing-depth
+    section: Editing against depth
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/editing_vs_depth
+    config:
+      x_title: Classified reads
+      y_title: Edited reads (%)
+      log_x: true
+      density_threshold: 8000
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    title: Editing rate against library depth
+    description: One point per library. Extreme rates at low depth rest on few reads; lasso a group to filter the other tiles.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+  # ------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: cs-filter-sample
+    index: cs-sample-filter
+    section: Library filters
+    group: Libraries
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Library
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-filter-group
+    index: cs-group-filter
+    section: Library filters
+    group: Libraries
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: "{GROUP_COL}"
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:account-group-outline'}
+    placement: left
+    title: "{GROUP_COL_DISPLAY}"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-filter-template
+    index: cs-template-filter
+    section: Library filters
+    group: Libraries
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: has_template
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:file-document-outline'}
+    placement: left
+    title: Donor template
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-ov-filter-edited
+    index: cs-ov-edited-range
+    section: Overview scope
+    group: Editing
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    interactive_component_type: RangeSlider
+    column_name: edited_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:target'}
+    placement: left
+    title: Edited reads (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+# =========================================================================
+# Tab 2 - Read QC: depth and alignment per library
+# =========================================================================
+- title: Read QC
+  subtitle: Whether each library had the reads and the alignment to support an editing call
+  tab_order: 2
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Read scope
+    icon: mdi:tune
+    color: blue
+    description: Keep libraries inside a depth or alignment band
+  grid_sections:
+  - name: Reads at a glance
+    icon: mdi:counter
+    color: blue
+    description: Depth, alignment and filtering over the libraries
+  - name: Depth and alignment
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Raw reads against the aligned share, per library
+  components:
+  - component_type: text
+    tag: cs-qc-intro
+    section: Reads at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    title: Can each library be trusted
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The funnel follows the reads from sequencing to classification; a library
+      that loses most of them on the way, or aligns poorly to its amplicon, gives
+      a noisy editing rate. Read the depth scatter before the outcome tabs.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cs-qc-card-raw
+    section: Reads at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: raw_reads
+    column_type: int64
+    display: {icon_name: 'mdi:file-document-outline', title_font_size: xl, value_font_size: xl}
+    title: Raw reads per library
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-qc-card-funnel
+    section: Reads at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: sum
+    column_name: raw_reads
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [raw_reads, clustered_reads, classified_reads]
+    display: {icon_name: 'mdi:filter-variant', title_font_size: xl, value_font_size: xl}
+    title: Read funnel
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-qc-card-aligned
+    section: Reads at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: aligned_pct
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', title_font_size: xl, value_font_size: xl}
+    title: Aligned reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-qc-card-filtered-indels
+    section: Reads at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: indels_failing_filter
+    column_type: int64
+    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
+    title: Indel reads filtered out
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: cs-qc-av-depth-alignment
+    index: cs-qc-av-depth-alignment
+    section: Depth and alignment
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/depth_vs_alignment
+    config:
+      x_title: Raw reads
+      y_title: Aligned reads (%)
+      log_x: true
+      density_threshold: 8000
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    title: Depth against alignment per library
+    description: One point per library. Libraries low on either axis carry too few amplicon reads to call an editing rate.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: interactive
+    tag: cs-qc-filter-raw
+    index: cs-qc-raw-range
+    section: Read scope
+    group: Reads
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    interactive_component_type: RangeSlider
+    column_name: raw_reads
+    column_type: int64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:file-document-outline'}
+    placement: left
+    title: Raw reads
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-qc-filter-aligned
+    index: cs-qc-aligned-range
+    section: Read scope
+    group: Reads
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    interactive_component_type: RangeSlider
+    column_name: aligned_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Aligned reads (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =========================================================================
+# Tab 3 - Edit outcomes: frameshift, clonality, one record per library
+# =========================================================================
+- title: Edit outcomes
+  subtitle: Which libraries carry disruptive edits, and how the clonality classifier called them
+  tab_order: 3
+  tab_icon: mdi:target
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Outcome scope
+    icon: mdi:tune
+    color: grape
+    description: Narrow by clonality call or by the frameshift share of the indels
+  grid_sections:
+  - name: Outcomes at a glance
+    icon: mdi:counter
+    color: grape
+    description: In-frame edits and the clonality calls over the libraries
+  - name: Library detail
+    icon: mdi:file-document-outline
+    color: grape
+    description: Pick a library in the scatter to read its record
+  - name: Outcome tables
+    icon: mdi:table
+    color: gray
+    description: Clonality calls and outcome counts per library
+    collapsed: true
+  components:
+  - component_type: text
+    tag: cs-out-intro
+    section: Outcomes at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    title: Disruptive edits and zygosity
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A knockout needs edits that shift the reading frame, so compare the
+      frameshift share of the indels with the editing rate. Click a library in
+      the scatter to open its record beside it.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cs-out-card-inframe
+    section: Outcomes at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: inframe_pct
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title: In-frame reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-out-card-classification
+    section: Outcomes at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    use: crisprseq/clonality
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: classification
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title: Libraries by zygosity class
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-out-card-clonality
+    section: Outcomes at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    use: crisprseq/clonality
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: clonality
+    display: {icon_name: 'mdi:family-tree', title_font_size: xl, value_font_size: xl}
+    title: Libraries by clonality
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-out-card-confidence
+    section: Outcomes at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    use: crisprseq/clonality
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: class_confidence
+    column_type: float64
+    display: {icon_name: 'mdi:shield-check-outline', title_font_size: xl, value_font_size: xl}
+    title: Classifier confidence
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: cs-out-av-frameshift
+    index: cs-out-av-frameshift
+    section: Library detail
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/frameshift_vs_editing
+    config:
+      x_title: Edited reads (%)
+      y_title: Frameshift share of the indels (%)
+      density_threshold: 8000
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    title: Frameshift share against editing
+    description: One point per library, sized by classified reads. The upper right holds the libraries edited often and disruptively.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: cs-out-av-library-record
+    index: cs-out-av-library-record
+    section: Library detail
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: cs-out-av-frameshift
+      id_col: sample
+      selection_source: scatter_selection
+      sections:
+        Reads: [raw_reads, clustered_reads, aligned_pct, classified_reads]
+        Rates: [edited_pct, frameshift_pct, inframe_pct, template_based_pct, frameshift_of_indels_pct]
+        Outcome reads: [wt_reads, template_based_reads, delins_reads, ins_inframe_reads, ins_frameshift_reads, del_inframe_reads, del_frameshift_reads]
+        Indel filters: [indels_failing_filter, indels_above_error_in_peak, indels_above_error_outside_peak, indels_below_error_in_peak, indels_below_error_outside_peak]
+    title: Library record
+    description: Read accounting, outcome rates and indel filter counts of the selected library.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    tag: cs-out-table-clonality
+    section: Outcome tables
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    use: crisprseq/clonality
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Clonality call per library
+    description: Zygosity class, clonality label, confidence and peak statistics of every library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    tag: cs-out-table-outcomes
+    section: Outcome tables
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_outcomes
+    use: crisprseq/edit_outcomes
+    columns: [sample, outcome, reads, pct]
+    title: Reads per outcome class
+    description: Reads and share of the classified reads per outcome class, one row per library and class.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 5}
+  - component_type: interactive
+    tag: cs-out-filter-classification
+    index: cs-out-classification-filter
+    section: Outcome scope
+    group: Outcomes
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    interactive_component_type: MultiSelect
+    column_name: classification
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Zygosity class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-out-filter-clonality
+    index: cs-out-clonality-filter
+    section: Outcome scope
+    group: Outcomes
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_clonality
+    interactive_component_type: MultiSelect
+    column_name: clonality
+    column_type: object
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:family-tree'}
+    placement: left
+    title: Clonality
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-out-filter-frameshift
+    index: cs-out-frameshift-range
+    section: Outcome scope
+    group: Outcomes
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    interactive_component_type: RangeSlider
+    column_name: frameshift_of_indels_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#7B1FA2', icon_name: 'mdi:arrow-expand-horizontal'}
+    placement: left
+    title: Frameshift share of indels (%)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+# =========================================================================
+# Tab 4 - Indel spectrum: one guide's size and position signature
+# =========================================================================
+# A run has thousands of libraries, so the tab shows one guide at a time: the
+# tab-local Guide picker (always holding one guide) narrows the samplesheet,
+# which narrows every collection of the tab through the samplesheet links. The
+# curves are the median library with the interquartile band of the guide's
+# libraries, summarised in the recipes.
+- title: Indel spectrum
+  subtitle: The repair signature of one guide, as indel sizes, positions around the cut site and alleles
+  tab_order: 4
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Guide picker
+    icon: mdi:dna
+    color: orange
+    description: The guide the tab shows; it opens on the first guide of the run
+  - name: Indel scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the alleles by type, frame or peak membership, and the size axis
+  grid_sections:
+  - name: Size signature
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: Share of reads at every signed indel size, median library of the guide with its interquartile band
+  - name: Position around the cut site
+    icon: mdi:chart-line
+    color: orange
+    description: Deletion coverage and insertion rate at every offset from the cut site, median library with its interquartile band
+  - name: Allele map
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: The guide's most frequent indel alleles by position and size
+  - name: Indel tables
+    icon: mdi:table
+    color: gray
+    description: The guide's alleles pooled over its libraries, and the alleles of each library
+    collapsed: true
+  components:
+  - component_type: text
+    tag: cs-ind-intro
+    section: Size signature
+    workflow_tag: crisprseq
+    data_collection_tag: guide_indel_sizes
+    title: How the cut is repaired
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The tab shows one guide, opening on the first guide of the run; pick
+      another in the Guide picker on the left. Each curve is the guide's median
+      library with a band over its middle half of libraries, and offsets are
+      relative to the cut site the pipeline reports.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cs-ind-av-guide-sizes
+    index: cs-ind-av-guide-sizes
+    section: Size signature
+    workflow_tag: crisprseq
+    data_collection_tag: guide_indel_sizes
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: guide
+      x_col: size
+      y_col: median_pct_reads
+      lower_col: q1_pct_reads
+      upper_col: q3_pct_reads
+      reference_x: 0
+      reference_label: Deletions left, insertions right
+      x_title: Indel size (bp)
+      y_title: Share of classified reads (%)
+      legend_pos: none
+    title: Indel size distribution of the guide
+    description: Median share of the classified reads at every signed indel size over the guide's libraries, with the band from the first to the third quartile. A narrow band means the libraries repair the cut the same way.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: cs-ind-av-guide-deletions
+    index: cs-ind-av-guide-deletions
+    section: Position around the cut site
+    workflow_tag: crisprseq
+    data_collection_tag: guide_cut_site_profile
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: guide
+      x_col: offset
+      y_col: median_deletion_pct
+      lower_col: q1_deletion_pct
+      upper_col: q3_deletion_pct
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with a deletion covering the position (%)
+      legend_pos: none
+    title: Deletion coverage around the cut site
+    description: Median share of reads whose deletion spans each position, with the interquartile band of the guide's libraries. A nuclease cut shows as a peak straddling offset 0.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: cs-ind-av-guide-insertions
+    index: cs-ind-av-guide-insertions
+    section: Position around the cut site
+    workflow_tag: crisprseq
+    data_collection_tag: guide_cut_site_profile
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: guide
+      x_col: offset
+      y_col: median_insertion_pct
+      lower_col: q1_insertion_pct
+      upper_col: q3_insertion_pct
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with an insertion at the position (%)
+      legend_pos: none
+    title: Insertion position around the cut site
+    description: Median share of reads with an insertion starting at each position, with the interquartile band of the guide's libraries.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: cs-ind-av-allele-map
+    index: cs-ind-av-allele-map
+    section: Allele map
+    workflow_tag: crisprseq
+    data_collection_tag: guide_alleles
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: offset
+      y_col: size
+      label_col: allele
+      color_col: indel_type
+      size_col: pct_reads
+      x_title: Offset from the cut site (bp)
+      y_title: Indel size (bp)
+      top_n_labels: 0
+      legend_pos: bottom
+    title: Indel alleles of the guide by position and size
+    description: One point per allele of the guide, pooled over its libraries, sized by its share of the guide's classified reads and coloured by type. Alleles at offset 0 sit at the cut; a trail along one size is a deletion placed at shifting offsets.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: cs-ind-table-guide-alleles
+    section: Indel tables
+    workflow_tag: crisprseq
+    data_collection_tag: guide_alleles
+    columns: [allele, libraries, pct_reads, reads, indel_type, size, offset, frame, peak, median_pct_reads, rank]
+    title: Indel alleles of the guide
+    description: The guide's most frequent alleles pooled over its libraries, with how many libraries carry each, its share of the guide's classified reads and its median share where present.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    tag: cs-ind-table-alleles
+    section: Indel tables
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_indels
+    use: crisprseq/indels
+    row_selection_enabled: true
+    row_selection_column: allele
+    title: Indel alleles per library
+    description: Every distinct allele of the guide's libraries with type, size, offset, frame, peak membership and read share, ranked within its library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: interactive
+    tag: cs-ind-filter-guide
+    index: cs-ind-guide-filter
+    section: Guide picker
+    group: Guide
+    workflow_tag: crisprseq
+    data_collection_tag: samples
+    interactive_component_type: Select
+    always_selected: true
+    column_name: guide
+    column_type: object
+    display: {title_size: md, custom_color: '#EF6C00', icon_name: 'mdi:dna'}
+    placement: left
+    title: Guide
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-ind-filter-type
+    index: cs-ind-type-filter
+    section: Indel scope
+    group: Alleles
+    workflow_tag: crisprseq
+    data_collection_tag: guide_alleles
+    interactive_component_type: MultiSelect
+    column_name: indel_type
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:dna'}
+    placement: left
+    title: Indel type
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-ind-filter-frame
+    index: cs-ind-frame-filter
+    section: Indel scope
+    group: Alleles
+    workflow_tag: crisprseq
+    data_collection_tag: guide_alleles
+    interactive_component_type: MultiSelect
+    column_name: frame
+    column_type: object
+    display: {title_size: md, custom_color: '#F4511E', icon_name: 'mdi:arrow-expand-horizontal'}
+    placement: left
+    title: Frame
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-ind-filter-peak
+    index: cs-ind-peak-filter
+    section: Indel scope
+    group: Alleles
+    workflow_tag: crisprseq
+    data_collection_tag: guide_alleles
+    interactive_component_type: MultiSelect
+    column_name: peak
+    column_type: object
+    display: {title_size: md, custom_color: '#EF6C00', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Main indel peak
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-ind-filter-size
+    index: cs-ind-size-range
+    section: Indel scope
+    group: Size axis
+    workflow_tag: crisprseq
+    data_collection_tag: guide_indel_sizes
+    interactive_component_type: RangeSlider
+    column_name: size
+    column_type: int64
+    display: {title_size: md, custom_color: '#E65100', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Indel size (bp)
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+# =========================================================================
+# Tab 5 - Substitutions: the guides side by side, then one guide's profile
+# =========================================================================
+# The heatmap compares every guide; the Guide picker (always holding one guide)
+# sits on the per-guide profile collection alone, whose guide column is named
+# `profile_guide` so the pick matches no other collection's column: it narrows
+# the two curves and their table, while the heatmap, the glance cards and the
+# pinned tables stay at the scope of the library filters.
+- title: Substitutions
+  subtitle: Base substitution and gap rates around the cut site, over the guides and for one guide
+  tab_order: 5
+  tab_icon: mdi:waves
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Guide picker
+    icon: mdi:dna
+    color: cyan
+    description: The guide the profile section shows; it opens on the first guide of the run and leaves the heatmap and the cards whole
+  - name: Position scope
+    icon: mdi:tune
+    color: cyan
+    description: Narrow the guide profiles to a band of offsets
+  grid_sections:
+  - name: Substitutions per guide
+    icon: mdi:chart-box-outline
+    color: cyan
+    description: Mean substitution rate per guide and offset from the cut site
+  - name: Guide profile
+    icon: mdi:chart-line
+    color: cyan
+    description: Substitution and gap rate along the amplicon, mean library of the picked guide with its interquartile band
+  - name: Substitution tables
+    icon: mdi:table
+    color: gray
+    description: The picked guide's rates per offset
+    collapsed: true
+  components:
+  - component_type: text
+    tag: cs-sub-intro
+    section: Substitutions per guide
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitutions
+    title: Base changes near the cut
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A base editor leaves a band of substitutions a few bases upstream of the
+      cut, a nuclease leaves the matrix flat and a gap peak at the cut. The
+      heatmap and the cards cover every guide in scope; the Guide picker on the
+      left changes only the profile below, which opens on the first guide.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cs-sub-av-heatmap
+    index: cs-sub-av-heatmap
+    section: Substitutions per guide
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitutions
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: guide
+      value_columns_pattern: "^[-+]?[0-9]+$"
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: log1p
+      colorscale: Blues
+    title: Substitution rate per guide and offset
+    description: Mean share of reads with a substituted base, one row per guide and one column per offset from the cut site, on a log(1 + rate) colour scale so a few hot positions do not wash out the rest; rows cluster by profile.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+  - component_type: advanced_viz
+    tag: cs-sub-av-guide-subs
+    index: cs-sub-av-guide-subs
+    section: Guide profile
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitution_profile
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: profile_guide
+      x_col: offset
+      y_col: mean_substitution_pct
+      lower_col: q1_substitution_pct
+      upper_col: q3_substitution_pct
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with a substituted base (%)
+      legend_pos: none
+    title: Substitution rate around the cut site
+    description: Mean share of reads carrying a base other than the dominant one at each offset over the picked guide's libraries, with their interquartile band; a curve above its band means a minority of libraries carries the substitution. Offsets most libraries do not reach are left out.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: cs-sub-av-guide-gaps
+    index: cs-sub-av-guide-gaps
+    section: Guide profile
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitution_profile
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: profile_guide
+      x_col: offset
+      y_col: mean_gap_pct
+      lower_col: q1_gap_pct
+      upper_col: q3_gap_pct
+      reference_x: 0
+      reference_label: Cut site
+      x_title: Offset from the cut site (bp)
+      y_title: Reads with a gap (%)
+      legend_pos: none
+    title: Gap rate around the cut site
+    description: Mean share of reads with a gap at each offset over the picked guide's libraries, with their interquartile band; a nuclease cut shows as a peak at offset 0. Offsets most libraries do not reach, the amplicon ends where the alignment leaves gaps, are left out.
+    title_size: h3
+    layout: {x: 4, y: 0, w: 4, h: 7}
+  - component_type: table
+    tag: cs-sub-table
+    section: Substitution tables
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitution_profile
+    columns: [offset, mean_substitution_pct, median_substitution_pct, q1_substitution_pct, q3_substitution_pct, mean_gap_pct, median_gap_pct, q1_gap_pct, q3_gap_pct, libraries]
+    title: Substitution and gap rate per offset
+    description: Mean, median and quartiles of the substitution and gap rates at every offset of the profile window, for the picked guide.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: interactive
+    tag: cs-sub-filter-guide
+    index: cs-sub-guide-filter
+    section: Guide picker
+    group: Guide
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitution_profile
+    interactive_component_type: Select
+    always_selected: true
+    column_name: profile_guide
+    column_type: object
+    display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:dna'}
+    placement: left
+    title: Guide
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-sub-filter-offset
+    index: cs-sub-offset-range
+    section: Position scope
+    group: Positions
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitution_profile
+    interactive_component_type: RangeSlider
+    column_name: offset
+    column_type: int64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Offset from the cut site (bp)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+# =========================================================================
+# Tab 6 - Guides: side by side, one record per guide
+# =========================================================================
+- title: Guides
+  subtitle: Every guide's editing, frameshift share and repair signature side by side
+  tab_order: 6
+  tab_icon: mdi:scale-balance
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Guide scope
+    icon: mdi:tune
+    color: indigo
+    description: Narrow by editing level or by the number of libraries behind a guide
+  grid_sections:
+  - name: Guides at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Guide editing, frameshift share, repair predictability and the libraries behind them
+  - name: Guide comparison
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Median editing against the median frameshift share, per guide
+  - name: Guide detail
+    icon: mdi:file-document-outline
+    color: indigo
+    description: Pick a guide in the table to read its record
+  components:
+  - component_type: text
+    tag: cs-gd-intro
+    section: Guides at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    title: Which guides work
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each guide is summarised by the median over its libraries, so one failed
+      library does not move it. Select a guide in the table to open its record
+      beside it.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cs-gd-card-dominant-share
+    section: Guides at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: dominant_indel_share_pct
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title: Dominant indel size share (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-gd-card-edited
+    section: Guides at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_edited_pct
+    column_type: float64
+    display: {icon_name: 'mdi:target', title_font_size: xl, value_font_size: xl}
+    title: Guide editing (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-gd-card-frameshift
+    section: Guides at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_frameshift_of_indels_pct
+    column_type: float64
+    display: {icon_name: 'mdi:arrow-expand-horizontal', title_font_size: xl, value_font_size: xl}
+    title: Guide frameshift share (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cs-gd-card-libraries
+    section: Guides at a glance
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: libraries
+    column_type: int64
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title: Libraries per guide
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: cs-gd-av-comparison
+    index: cs-gd-av-comparison
+    section: Guide comparison
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: median_edited_pct
+      y_col: median_frameshift_of_indels_pct
+      label_col: guide
+      color_col: edit_class
+      size_col: libraries
+      x_title: Median edited reads (%)
+      y_title: Median frameshift share of the indels (%)
+      top_n_labels: 0
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: guide
+    title: Editing against frameshift share per guide
+    description: One point per guide, sized by its libraries and coloured by editing level. The upper right holds the efficient knockout guides.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    tag: cs-gd-table
+    section: Guide detail
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    columns: [guide, edit_class, libraries, median_edited_pct, median_frameshift_of_indels_pct]
+    row_selection_enabled: true
+    row_selection_column: guide
+    title: Guides
+    description: Editing level, libraries and the median editing and frameshift shares of every guide. Select a row to open its full record.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: cs-gd-av-guide-record
+    index: cs-gd-av-guide-record
+    section: Guide detail
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: cs-gd-table
+      id_col: guide
+      selection_source: table_selection
+      sections:
+        Guide: [guide, edit_class, libraries, classified_reads]
+        Editing: [median_edited_pct, min_edited_pct, max_edited_pct, median_frameshift_pct, median_inframe_pct, median_template_based_pct, median_frameshift_of_indels_pct]
+        Repair signature: [dominant_indel_size, dominant_indel_share_pct, classification_mix]
+    title: Guide record
+    description: Editing rates, repair signature and clonality mix of the selected guide.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: interactive
+    tag: cs-gd-filter-class
+    index: cs-gd-class-filter
+    section: Guide scope
+    group: Guides
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    interactive_component_type: MultiSelect
+    column_name: edit_class
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:target'}
+    placement: left
+    title: Editing level
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-gd-filter-libraries
+    index: cs-gd-libraries-range
+    section: Guide scope
+    group: Guides
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    interactive_component_type: RangeSlider
+    column_name: libraries
+    column_type: int64
+    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Libraries per guide
+    layout: {x: 0, y: 3, w: 1, h: 3}

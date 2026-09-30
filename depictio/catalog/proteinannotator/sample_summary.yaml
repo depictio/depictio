@@ -1,0 +1,29 @@
+id: proteinannotator_sample_summary
+name: Sample summary
+mode: protein/sample-hub
+description: >-
+  One row per sample of the run: sequences given and kept by the length and
+  duplicate filter, residues kept, mean length and N50, and, once annotated,
+  how many proteins carry at least one domain, the total domain hits and the
+  median share of each protein a domain covers.
+find:
+  path_glob: "**/qc/*/*_after.tsv"
+recipe: proteinannotator/sample_summary.py
+fixture: sample_summary.tsv
+renders_as:
+  - { id: kept_proteins, component: card, column: kept_sequences, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
+  - { id: kept_residues, component: card, column: kept_residues, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
+  - { id: removed_sequences, component: card, column: removed_sequences, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
+  - { id: annotated_proteins, component: card, column: annotated_proteins, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
+  - { id: annotated_share, component: card, column: annotated_protein_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: sample_mean_length, component: card, column: mean_length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: sample_domain_hits, component: card, column: domain_hits, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: kept_sequences} }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }

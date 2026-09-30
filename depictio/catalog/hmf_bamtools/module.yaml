@@ -1,0 +1,9 @@
+# BamTools from hmftools (bam-tools), not the Pezmaster31 BamTools suite: one
+# pass over each DNA BAM for coverage, duplicate and read-quality metrics.
+# nf-core/oncoanalyser publishes <group_id>/bamtools/<sample_id>/ with
+# <sample_id>.bam_metric.* tables. The id carries the hmf_ prefix so the
+# unrelated BamTools can take the plain name.
+id: hmf_bamtools
+name: BamTools (hmftools)
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/bam-tools
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/bamtools

@@ -2314,6 +2314,68 @@ def falco(sample: str) -> dict[str, str]:
     }
 
 
+def ccs(sample: str) -> dict[str, str]:
+    zmws = _vary(sample, 5_000, 6_000)
+    passed = _vary(sample, 3_800, 4_200)
+    few = zmws - passed - 100
+    attrs = [
+        ("ccs_processing.zmw_input", "ZMWs input", zmws),
+        ("ccs_processing.zmw_passed_yield", "ZMWs pass filters", passed),
+        ("ccs_processing.zmw_filtered_yield", "ZMWs fail filters", zmws - passed),
+        ("ccs_processing.zmw_filtered_poor_snr", "Below SNR threshold", 100),
+        ("ccs_processing.zmw_filtered_too_few_passes", "Lacking full passes", few),
+    ]
+    report = {
+        "_comment": "Created by pbcopper v2.0.0",
+        "attributes": [{"id": i, "name": n, "value": v} for i, n, v in attrs],
+        "dataset_uuids": [],
+        "id": "ccs_processing",
+        "plotGroups": [],
+        "tables": [],
+        "title": "CCS Processing Report",
+        "version": "1.0.1",
+    }
+    return {f"{sample}.ccs.report.json": json.dumps(report, indent=4)}
+
+
+def lima(sample: str) -> dict[str, str]:
+    zmws = _vary(sample, 3_800, 4_200)
+    kept = zmws - _vary(sample, 150, 300)
+    lost = zmws - kept
+    summary = f"""ZMWs input                (A) : {zmws}
+ZMWs above all thresholds (B) : {kept} ({100 * kept / zmws:.2f}%)
+ZMWs below any threshold  (C) : {lost} ({100 * lost / zmws:.2f}%)
+
+ZMW marginals for (C):
+Below min length              : 0 (0.00%)
+Below min score               : 0 (0.00%)
+Below min end score           : {lost // 2} ({50.0:.2f}%)
+Below min passes              : 0 (0.00%)
+Below min score lead          : 0 (0.00%)
+Below min ref span            : {lost - lost // 2} ({50.0:.2f}%)
+Without SMRTbell adapter      : 0 (0.00%)
+Undesired 5p--5p pairs        : 0 (0.00%)
+Undesired 3p--3p pairs        : 0 (0.00%)
+
+ZMWs for (B):
+With different pair           : {kept} (100.00%)
+Coefficient of correlation    : 0.00%
+
+ZMWs for (A):
+Allow diff pair               : {zmws} (100.00%)
+Allow same pair               : {zmws} (100.00%)
+
+Reads for (B):
+Above length                  : {kept} (100.00%)
+Below length                  : 0 (0.00%)
+"""
+    counts = (
+        "IdxFirst\tIdxCombined\tIdxFirstNamed\tIdxCombinedNamed\tCounts\tMeanScore\n"
+        f"0\t1\tprimer_5p\tprimer_3p\t{kept}\t98\n"
+    )
+    return {f"{sample}.lima.summary": summary, f"{sample}.lima.counts": counts}
+
+
 STUB_BUILDERS = {
     "adapterremoval": adapterremoval,
     "ataqv": ataqv,
@@ -2322,6 +2384,7 @@ STUB_BUILDERS = {
     "bismark": bismark,
     "bowtie2": bowtie2,
     "bracken": bracken,
+    "ccs": ccs,
     "cellranger": cellranger,
     "centrifuge": centrifuge,
     "checkm2": checkm2,
@@ -2342,6 +2405,7 @@ STUB_BUILDERS = {
     "ivar": ivar,
     "kaiju": kaiju,
     "kraken": kraken,
+    "lima": lima,
     "malt": malt,
     "metaphlan": metaphlan,
     "mirtop": mirtop,

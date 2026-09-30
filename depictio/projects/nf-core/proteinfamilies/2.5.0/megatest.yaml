@@ -1,0 +1,86 @@
+# Megatest manifest for nf-core/proteinfamilies 2.5.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the subset of
+# it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline proteinfamilies --version 2.5.0 --max-file-mb 5 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored samplesheet
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# test_full profile: two samples of 50,000 metagenomic protein sequences each,
+# one creating families from scratch and one updating an existing family
+# library (existing_hmms_to_update / existing_msas_to_update) before creating
+# new families from its unmatched sequences. The pipeline reads its samplesheet
+# from a URL and does not publish it, so the template ships it under input/
+# (METADATA_FILE); download_test_data.sh copies it into {dest}/input/.
+pipeline: proteinfamilies
+version: "2.5.0"
+# s3://nf-core-awsmegatests/proteinfamilies/results-<results_sha>/ is the 2.5.0
+# release run (software_versions.yml: v2.5.0-gf8c0b18).
+results_sha: "f8c0b183e59df3d87c38d0f7c4acc6918593f4f5"
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet: custom content only (per-sample SeqFu and cluster-size
+  # sections named after the sample, plus the family metadata table).
+  - multiqc/multiqc_data/multiqc.parquet
+  # SeqFu statistics of the input sequences before and after preprocessing.
+  - qc/*/*_before.tsv
+  - qc/*/*_after.tsv
+  # Initial MMseqs2 cluster size distribution per sample.
+  - mmseqs/initial_clustering/*_clustering_distribution_mqc.csv
+  # Family metadata and member rosters: families the run built, and the
+  # existing families an update sample extended.
+  - family_reps/*/*_meta_mqc.csv
+  - family_reps/*/*.tsv
+  - update_families/family_reps/*/*_meta_mqc.csv
+  - update_families/family_reps/*/*.tsv
+  # Full family alignments (FAMSA, after in-family redundancy removal).
+  - full_msa/filtered/famsa_align/*/*.aln
+  - update_families/full_msa/famsa_align/*/*.aln
+  # Family HMMs (header: model length, seed size, effective sequences).
+  - hmm/filtered/*/*.hmm.gz
+  - update_families/hmm/*/*.hmm.gz
+  # CMAPLE trees of the new families.
+  - phylogeny/cmaple/*/*.treefile
+  #
+  # Deliberately NOT fetched:
+  #   qc/<sample>/<sample>.fasta (11 MB each): the preprocessed input sequences.
+  #   mmseqs/initial_clustering/mmseqs_createtsv/*.tsv: the full cluster
+  #     membership of every input sequence; the size distribution summarises it.
+  #   seed_msa/, full_msa/raw/, hmm/raw/, hmm/library/: seed alignments and the
+  #     models before redundancy removal; the filtered set is what the families are.
+  #   fasta/, update_families/fasta/, proteinfold/, proteinannotator/: sequence
+  #     files and downstream samplesheets.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - mgnifams
+  - mgnifams_create
+  - mgnifams_update
+  - mgnifams_test
+  - mgnifams_input_small
+  - mgnifams_extra
+  - MGnify
+  - MGnifams
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the pipeline: the template reads
+  # {dest}/input/samplesheet.csv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/proteinfamilies/2.5.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/proteinfamilies/2.5.0 --data-root {dest}

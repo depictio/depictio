@@ -1,0 +1,14 @@
+id: hmf_bamtools_fragment_length
+name: Fragment length distribution
+mode: bam_metrics
+description: >-
+  Read-pair insert sizes per DNA sample, grouped into equal windows and
+  normalised to the sample's pairs so libraries of different depth overlay.
+  A shifted or bimodal curve points at a library preparation problem.
+find:
+  path_glob: "**/*.bam_metric.frag_length.tsv"
+recipe: hmf_bamtools/fragment_length.py
+fixture: fragment_length.tsv
+renders_as:
+  - { id: fragment_length_curve, component: advanced_viz, kind: profile, roles: {series: sample, x: fragment_length, y: fraction} }
+  - { component: table }

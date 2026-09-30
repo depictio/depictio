@@ -351,6 +351,9 @@ then removed from the list so the rule turns strict).
   (pinned persistent + a tab-local section, open). One `record_card` per key (no hardcoded
   default) in a "<unit> detail" section at the tab end.
 - A single-value `Slider` filters `>=` (a threshold); use `RangeSlider` for a band.
+- A tab-local `Select` feeding a one-unit view (one engine, one structure) takes
+  `always_selected: true`: it opens on the first option of its own list and cannot be
+  cleared. Never a run-specific `default_value`; never on the pinned persistent section.
 - Composition bars: percentages, `top_n: 12`, sorted by abundance. One sankey per template.
 - Locus: a dedicated tab (or a section on the comparison tab when the navigator reads that
   DC); never the same tracks on two tabs; no lateral chromosome filter.
