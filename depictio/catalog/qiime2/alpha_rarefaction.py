@@ -4,14 +4,19 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="faith_pd_csv",
         path="qiime2/alpha-rarefaction/faith_pd.csv",
         format="CSV",
+        input_schema={
+            "sample-id": pl.Utf8,
+        },
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "depth": pl.Int64,

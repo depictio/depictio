@@ -18,11 +18,29 @@ from depictio.models.models.transforms import RecipeSource
 
 _TABLES = "clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="overlap", path=f"{_TABLES}/clonal_overlap.tsv", format="TSV"),
-    RecipeSource(ref="num_clones", path=f"{_TABLES}/num_clones_table.tsv", format="TSV"),
+    RecipeSource(
+        ref="overlap",
+        path=f"{_TABLES}/clonal_overlap.tsv",
+        format="TSV",
+        input_schema={
+            "sampleA": pl.Utf8,
+            "sampleB": pl.Utf8,
+            "overlap_clone_id": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="num_clones",
+        path=f"{_TABLES}/num_clones_table.tsv",
+        format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,

@@ -47,6 +47,7 @@ from depictio.recipes import (  # noqa: E402
     load_recipe,
     resolve_sources,
     validate_schema,
+    validate_sources,
 )
 
 DATA_ROOT = Path(__file__).resolve().parent
@@ -183,6 +184,10 @@ def build_seeds(raw_root: Path, only: set[str] | None = None) -> dict[str, pl.Da
                 )
             sources[source.ref] = frame  # type: ignore[assignment]
 
+        try:
+            validate_sources(module, sources, recipe)
+        except RecipeError as exc:
+            raise RecipeError(f"{tag} ({recipe}): {exc}") from exc
         result = module.transform(sources)
         if not isinstance(result, pl.DataFrame) or result.is_empty():
             raise RecipeError(f"{tag} ({recipe}): transform() produced no rows")

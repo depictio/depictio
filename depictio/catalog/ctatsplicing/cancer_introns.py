@@ -29,15 +29,27 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="cancer_introns",
         glob_pattern="ctatsplicing/*.cancer.introns",
         format="TSV",
+        input_schema={
+            "intron": pl.Utf8,
+            "strand": pl.Utf8,
+            "genes": pl.Utf8,
+            "uniq_mapped": pl.Int64,
+            "multi_mapped": pl.Int64,
+            "TCGA_sample_counts": pl.Utf8,
+            "GTEx_sample_counts": pl.Utf8,
+            "variant_name": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "intron": pl.Utf8,
     "chrom": pl.Utf8,

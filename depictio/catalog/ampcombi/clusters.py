@@ -13,15 +13,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="representatives",
         path="reports/ampcombi2/Ampcombi_summary_cluster_representative_seq.tsv",
         format="TSV",
+        input_schema={
+            "seq_headers": pl.Utf8,
+            "index": pl.Int64,
+            "total_cluster_members": pl.Int64,
+        },
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cluster_id": pl.Int64,
     "representative": pl.Utf8,

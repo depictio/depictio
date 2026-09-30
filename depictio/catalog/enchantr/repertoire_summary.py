@@ -26,10 +26,33 @@ from depictio.models.models.transforms import RecipeSource
 
 _TABLES = "clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="num_clones", path=f"{_TABLES}/num_clones_table.tsv", format="TSV"),
     RecipeSource(
-        ref="diversity", path=f"{_TABLES}/clonal_diversity.tsv", format="TSV", optional=True
+        ref="num_clones",
+        path=f"{_TABLES}/num_clones_table.tsv",
+        format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "sequences": pl.Int64,
+            "number_of_clones": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="diversity",
+        path=f"{_TABLES}/clonal_diversity.tsv",
+        format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "q": pl.Float64,
+            "d": pl.Float64,
+            "d_lower": pl.Float64,
+            "d_upper": pl.Float64,
+            "e": pl.Float64,
+            "e_lower": pl.Float64,
+            "e_upper": pl.Float64,
+        },
+        optional=True,
     ),
 ]
 
@@ -43,6 +66,7 @@ _DIVERSITY_COLS: list[str] = [
 ]
 _SIZE_COLS = ["clone_size_count_min", "clone_size_count_median", "clone_size_count_max"]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,

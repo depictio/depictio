@@ -21,7 +21,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the label column is taken by position, then one column per sample.
     RecipeSource(
         ref="matrix",
         glob_pattern="**/*.plotCorrelation.mat.tab",
@@ -30,6 +32,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 # The row-label column is the only fixed one: every other column is a sample of
 # the run, so the schema is declared by the index alone and the rest is checked
 # by `validate_output` against the fixture.

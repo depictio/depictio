@@ -53,11 +53,21 @@ _BED_COLUMNS = [
     "num_peaks",
 ]
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="consensus",
         glob_pattern="**/*.consensus.peak_counts.bed",
         format="TSV",
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "member_total_signals": pl.Utf8,
+            "member_max_signals": pl.Utf8,
+            "member_files": pl.Utf8,
+            "num_peaks": pl.Utf8,
+        },
         read_kwargs={
             "has_header": False,
             "new_columns": _BED_COLUMNS,
@@ -66,6 +76,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "target": pl.Utf8,

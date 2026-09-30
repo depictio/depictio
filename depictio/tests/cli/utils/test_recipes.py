@@ -31,6 +31,7 @@ from depictio.recipes import (
     load_recipe,
     resolve_sources,
     validate_schema,
+    validate_sources,
 )
 
 # ---------------------------------------------------------------------------
@@ -723,6 +724,78 @@ class TestExecuteRecipe:
                 recipes_mod.PROJECTS_DIR = original_dir
 
 
+class TestValidateSources:
+    """Checkpoint between reading the sources and transform()."""
+
+    def _module(self, **source_kwargs) -> ModuleType:
+        module = MagicMock(spec=ModuleType)
+        module.SOURCES = [RecipeSource(ref="data", path="data.csv", **source_kwargs)]
+        return module
+
+    def test_missing_column_names_source_and_column(self) -> None:
+        module = self._module(input_schema={"sample": pl.Utf8, "count": pl.Int64})
+        df = pl.DataFrame({"sample": ["a"]})
+        with pytest.raises(RecipeError, match=r"source 'data' lacks input column\(s\) \['count'\]"):
+            validate_sources(module, {"data": df}, "t/r.py")
+
+    @pytest.mark.parametrize(
+        ("actual", "declared"),
+        [
+            (pl.Series([1]), pl.Int64),
+            (pl.Series(["1"]), pl.Int64),  # text the recipe casts itself
+            (pl.Series([None]), pl.Float64),  # all-null column
+            (pl.Series([1]), pl.Float64),  # one numeric type for another
+            (pl.Series([1.5]), pl.Utf8),
+        ],
+    )
+    def test_compatible_dtypes_pass(self, actual: pl.Series, declared: type) -> None:
+        module = self._module(input_schema={"x": declared})
+        validate_sources(module, {"data": actual.alias("x").to_frame()}, "t/r.py")
+
+    def test_structural_mismatch_fails(self) -> None:
+        module = self._module(input_schema={"x": pl.Int64})
+        df = pl.DataFrame({"x": [[1, 2]]})
+        with pytest.raises(RecipeError, match="input column 'x' expected Int64"):
+            validate_sources(module, {"data": df}, "t/r.py")
+
+    def test_sources_without_schema_or_resolved_to_none_are_skipped(self) -> None:
+        validate_sources(self._module(), {"data": pl.DataFrame({"a": [1]})}, "t/r.py")
+        module = self._module(input_schema={"a": pl.Int64}, optional=True)
+        validate_sources(module, {"data": None}, "t/r.py")
+        validate_sources(module, {"data": pl.DataFrame()}, "t/r.py")
+
+    def test_execute_recipe_checks_inputs_before_transform(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import depictio.recipes as recipes_mod
+
+        code = _MINIMAL_RECIPE.replace(
+            "format='csv')", "format='csv', input_schema={'value': pl.Int64})"
+        )
+        projects_dir = _make_fake_projects_dir(str(tmp_path), "vendor/pipe/r.py", code)
+        monkeypatch.setattr(recipes_mod, "PROJECTS_DIR", projects_dir)
+        (tmp_path / "data.csv").write_text("other\n1\n")
+        with pytest.raises(RecipeError, match=r"lacks input column\(s\) \['value'\]"):
+            execute_recipe("vendor/pipe/r.py", tmp_path)
+
+    def test_input_schema_serialises_to_dtype_names(self) -> None:
+        source = RecipeSource(ref="data", path="d.csv", input_schema={"n": pl.Int64})
+        assert '"input_schema":{"n":"Int64"}' in source.model_dump_json()
+
+    def test_load_recipe_rejects_non_dtype_schema(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import depictio.recipes as recipes_mod
+
+        code = _MINIMAL_RECIPE.replace(
+            "format='csv')", "format='csv', input_schema={'value': int})"
+        )
+        projects_dir = _make_fake_projects_dir(str(tmp_path), "vendor/pipe/r.py", code)
+        monkeypatch.setattr(recipes_mod, "PROJECTS_DIR", projects_dir)
+        with pytest.raises(RecipeError, match="is not a polars dtype"):
+            load_recipe("vendor/pipe/r.py")
+
+
 @pytest.mark.parametrize("recipe_name", list_recipes())
 def test_bundled_recipe_structure(recipe_name: str) -> None:
     """Every bundled recipe on disk has SOURCES, OUTPUT_SCHEMA, and a callable transform."""
@@ -736,3 +809,6 @@ def test_bundled_recipe_structure(recipe_name: str) -> None:
         assert isinstance(src, RecipeSource), (
             f"{recipe_name}: SOURCES must contain RecipeSource instances"
         )
+    source_text = Path(module.__file__).read_text()
+    assert "# INPUT SCHEMA:" in source_text, f"{recipe_name}: no '# INPUT SCHEMA:' line"
+    assert "# OUTPUT SCHEMA:" in source_text, f"{recipe_name}: no '# OUTPUT SCHEMA:' line"
