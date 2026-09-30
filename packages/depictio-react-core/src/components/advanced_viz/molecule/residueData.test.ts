@@ -222,6 +222,49 @@ describe('colouring', () => {
     expect(buildColouring('uniform', args).colourOf('A', 1, 10)).toBe('#123456');
     expect(buildColouring('chain', args).legend).toBeNull();
   });
+
+  it('colours secondary structure from the model, helix, strand and coil', () => {
+    const ss = buildColouring('secondary_structure', args);
+    const helix = ss.colourOf('A', 1, null, 'h');
+    const strand = ss.colourOf('A', 1, null, 's');
+    expect(helix).not.toBe(strand);
+    expect(ss.colourOf('A', 1, null, null)).toBe('#999999');
+    expect(ss.colourOf('A', 1, null)).toBe('#999999');
+    expect(ss.legend).toMatchObject({
+      kind: 'swatches',
+      items: [
+        { label: 'Helix', colour: helix },
+        { label: 'Strand', colour: strand },
+        { label: 'Coil', colour: '#999999' },
+      ],
+    });
+    expect(ss.scheme).toBeUndefined();
+  });
+
+  it('hands residue type to the 3Dmol amino scheme, without a legend', () => {
+    const rt = buildColouring('residue_type', args);
+    expect(rt.scheme).toBe('amino');
+    expect(rt.legend).toBeNull();
+  });
+
+  it('colours hydrophobicity per residue on the Kyte-Doolittle ramp', () => {
+    const h = buildColouring('hydrophobicity', {
+      ...args,
+      residues: [residue('A', 1, 'I'), residue('A', 2, 'R'), residue('A', 3, 'X')],
+    });
+    // Isoleucine is the hydrophobic end, arginine the hydrophilic one.
+    expect(h.colourOf('A', 1, null)).toBe('rgb(255,0,0)');
+    expect(h.colourOf('A', 2, null)).toBe('rgb(0,0,255)');
+    expect(h.colourOf('A', 3, null)).toBe('#999999');
+    expect(h.colourOf('B', 1, null)).toBe('#999999');
+    expect(h.legend).toEqual({
+      kind: 'gradient',
+      title: 'Hydrophobicity (Kyte-Doolittle)',
+      min: '-4.5',
+      max: '4.5',
+      stops: ['rgb(0,0,255)', 'rgb(255,0,0)'],
+    });
+  });
 });
 
 describe('distinctEntities', () => {

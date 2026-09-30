@@ -12,6 +12,7 @@ import {
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { useHighlight, usePublishHighlight } from '../../highlight/bus';
+import { useSharedOpeningEntity } from '../../highlight/openingEntity';
 import {
   residueEntityFromFilters,
   residueRangeFilterIndex,
@@ -20,7 +21,7 @@ import {
 } from '../../selection';
 import { useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
-import { VizControlGroup, VizSelect, VizSwitch } from './controls/VizControls';
+import { VizControlGroup, VizMultiSelect, VizSelect, VizSwitch } from './controls/VizControls';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { MsaPanel, SequenceStrip } from './protein';
@@ -72,11 +73,13 @@ import {
   type TooltipLine,
 } from './molecule/Overlays';
 import { SplitView, splitOrientation } from './molecule/SplitView';
+import SequenceText from './molecule/SequenceText';
+import { textKey, type TextResidue } from './molecule/sequenceLines';
 import { plddtIsFractional } from './protein/residueColours';
 import { chainRangeToConcat, concatRangeToChain } from './protein/alignment';
 import { chainSelectionFilter, withoutOwnChainPick } from './protein/rendererData';
 
-type Layout = 'structure' | 'structure_sequence' | 'structure_msa';
+type Layout = 'structure' | 'structure_sequence' | 'structure_msa' | 'structure_text';
 
 /** Mirrors `Molecule3DConfig` in depictio/models/components/advanced_viz/configs.py.
  *  Every key read here has a field there (`test_advanced_viz_config_alignment`). */
@@ -99,6 +102,9 @@ interface Molecule3DConfig {
   color_mode?: ColourMode;
   colour_scale?: ColourScale | null;
   representation?: Representation;
+  representations?: Representation[] | null;
+  highlight_site?: boolean;
+  spin?: boolean;
   show_variants?: boolean;
   show_labels?: boolean;
   layout?: Layout;
@@ -122,6 +128,9 @@ const COLOUR_MODES: { value: ColourMode; label: string }[] = [
   { value: 'spectrum', label: 'N to C' },
   { value: 'value', label: 'Value' },
   { value: 'category', label: 'Category' },
+  { value: 'secondary_structure', label: 'Secondary structure' },
+  { value: 'residue_type', label: 'Residue type' },
+  { value: 'hydrophobicity', label: 'Hydrophobicity' },
   { value: 'uniform', label: 'Uniform' },
 ];
 
@@ -137,7 +146,12 @@ const REPRESENTATIONS: { value: Representation; label: string }[] = [
 const DEFAULT_SPLIT: Record<Exclude<Layout, 'structure'>, number> = {
   structure_sequence: 0.75,
   structure_msa: 0.55,
+  structure_text: 0.7,
 };
+
+/** Below this body size the tile is compact: the legend flows in rows. */
+const COMPACT_WIDTH = 560;
+const COMPACT_HEIGHT = 440;
 
 const MAX_TOOLTIP_VARIANTS = 4;
 
@@ -175,15 +189,20 @@ function msaPlaceholder(loading: boolean, error: string | null): string {
  *   ESMFold). The entity shown is the one the dashboard filters name on
  *   `entity_col`, else the reader's pick, else the first.
  * - Colour: pLDDT bands, chain, N-to-C spectrum, the table's value or
- *   category, or one colour. Variants are spheres on the alpha carbon, and a
+ *   category, secondary structure, residue type, hydrophobicity, or one
+ *   colour. Representations combine (a cartoon under a surface). The picked
+ *   residue or range is drawn as red ball and stick (`highlight_site`), and the
+ *   structure can spin. Variants are spheres on the alpha carbon, and a
  *   variant whose reference residue disagrees with the structure is listed as
  *   a numbering mismatch rather than drawn on the wrong residue.
  * - Links: a click emits a `residue_selection` (shift-click extends it), an
  *   incoming one is ringed and zoomed onto (`follow_selection`), a hover goes
  *   out on the highlight bus and one from another tile is ringed. Row
  *   selections on the table's position or label column emphasise their marks.
- * - Layouts: the structure alone, over its sequence strip, or beside the
- *   alignment of `msa_dc_id`, sharing hover and selection inside the tile.
+ * - Layouts: the structure alone, over its sequence strip, over its written
+ *   sequence (one clickable letter per residue: a letter click picks and
+ *   zooms like a 3D click, shift extends), or beside the alignment of
+ *   `msa_dc_id`, sharing hover and selection inside the tile.
  *
  * WebGL: one slot (`useWebglSlot`). A tile without one says so and keeps its
  * sequence or alignment panel; the viewer is disposed, and its context
@@ -207,10 +226,10 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     'colour_scale',
     config.colour_scale ?? 'Viridis',
   );
-  const [representation, setRepresentation] = usePersistedVizControl<Representation>(
+  const [representations, setRepresentations] = usePersistedVizControl<Representation[]>(
     metadata,
-    'representation',
-    'cartoon',
+    'representations',
+    [config.representation ?? 'cartoon'],
   );
   const [layout, setLayout] = usePersistedVizControl<Layout>(metadata, 'layout', 'structure');
   const [showVariants, setShowVariants] = usePersistedVizControl<boolean>(
@@ -228,7 +247,8 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     'follow_selection',
     true,
   );
-  const [spinning, setSpinning] = useState(false);
+  const [spinning, setSpinning] = useState(Boolean(config.spin));
+  const highlightSite = config.highlight_site !== false;
   const [pickedEntity, setPickedEntity] = useState<string | null>(null);
   const [splits, setSplits] = useState(DEFAULT_SPLIT);
 
@@ -340,7 +360,31 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => residueEntityFromFilters(filters, entityCol),
     [filters, entityCol],
   );
-  const entity = chooseEntity({ fromFilters, picked: pickedEntity, rowEntities, available });
+  // What this tile opens on by itself, once both its rows and its structure
+  // list are in (null before: nothing is shared while half loaded), agreed
+  // with the dashboard's other protein tiles under the entity column name so
+  // they all open on the same entity. A filter or the reader's pick wins.
+  const openingReady = !rowsLoading && (!fileMode || previewOnly || !manifest.loading);
+  const ownOpening = useMemo(
+    () =>
+      openingReady
+        ? chooseEntity({ fromFilters: null, picked: null, rowEntities, available })
+        : null,
+    [openingReady, rowEntities, available],
+  );
+  const opening = useSharedOpeningEntity(
+    entityCol,
+    index,
+    ownOpening,
+    openingReady ? available : null,
+  );
+  const entity = chooseEntity({
+    fromFilters,
+    picked: pickedEntity,
+    rowEntities,
+    available,
+    opening,
+  });
   // A dashboard filter naming an entity with no structure must not silently
   // show another protein instead.
   const missingEntity =
@@ -418,6 +462,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => ({
       background: isDark ? theme.colors.dark[7] : theme.white,
       selection: theme.colors.grape[isDark ? 4 : 6],
+      site: theme.colors.red[isDark ? 5 : 7],
       highlight: theme.colors.pink[isDark ? 3 : 5],
       labelText: isDark ? theme.colors.dark[0] : theme.black,
       labelBackground: isDark ? theme.colors.dark[5] : theme.colors.gray[0],
@@ -550,6 +595,8 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
   // ---- Gestures -------------------------------------------------------------------
   const anchor = useRef<number | null>(null);
+  // Set by a pick in the written sequence: the next selection zooms onto it.
+  const zoomOwnPick = useRef(false);
   // A shift-click extends a range on the protein it started on only.
   useEffect(() => {
     anchor.current = null;
@@ -693,21 +740,34 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     if (viewerReady && structure.data) viewerRef.current?.setColours(viewerColours);
   }, [viewerReady, structure.data, viewerColours]);
 
+  const repsKey = representations.join(',');
   useEffect(() => {
     if (viewerReady && structure.data) {
-      viewerRef.current?.setStyle(colouring.colourOf, representation);
+      viewerRef.current?.setStyle(
+        { colourOf: colouring.colourOf, scheme: colouring.scheme },
+        representations,
+      );
     }
-  }, [viewerReady, structure.data, colouring, representation]);
+    // `repsKey` carries `representations`' content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerReady, structure.data, colouring, repsKey]);
 
-  const selectionKey = drawnSelection ? `${drawnSelection.start}-${drawnSelection.end}` : '';
+  const selectionKey = drawnSelection
+    ? `${drawnSelection.chain ?? ''}:${drawnSelection.start}-${drawnSelection.end}`
+    : '';
   useEffect(() => {
     if (!viewerReady || !structure.data) return;
-    viewerRef.current?.setSelection(drawnSelection);
-    // Zoom onto another tile's pick; the tile's own click leaves the camera be.
-    if (followSelection && !selectionIsOwn) viewerRef.current?.focus(drawnSelection);
+    viewerRef.current?.setSelection(drawnSelection, highlightSite);
+    // Zoom onto another tile's pick, and onto a letter picked in the written
+    // sequence; a click in 3D leaves the camera where the reader put it.
+    const zoomOwn = zoomOwnPick.current && drawnSelection !== null;
+    zoomOwnPick.current = false;
+    if ((followSelection && !selectionIsOwn) || zoomOwn) {
+      viewerRef.current?.focus(drawnSelection);
+    }
     // `selectionKey` carries `drawnSelection`'s content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewerReady, structure.data, selectionKey, selectionIsOwn, followSelection]);
+  }, [viewerReady, structure.data, selectionKey, selectionIsOwn, followSelection, highlightSite]);
 
   const highlightKey = highlightSpan
     ? `${highlightSpan.chain ?? ''}:${highlightSpan.start}-${highlightSpan.end}`
@@ -855,8 +915,55 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     [emitRange, msaChains, stripChain],
   );
 
+  // The written sequence: every chain of the structure, in its own numbering.
+  const textResidues = useMemo<TextResidue[]>(
+    () =>
+      effectiveLayout === 'structure_text'
+        ? residues.map((r) => ({ chain: r.chain, position: r.position, letter: r.aa }))
+        : [],
+    [effectiveLayout, residues],
+  );
+  const textVariants = useMemo(
+    () => new Set(variantCheck.drawn.map((m) => textKey(m.chain, m.position))),
+    [variantCheck],
+  );
+  // What the letters outline: the residue under the pointer in 3D or in the
+  // text, else another tile's hover.
+  const textHighlight: ResidueSpan | null = hover
+    ? { chain: hover.residue.chain || null, start: hover.residue.position, end: hover.residue.position }
+    : highlightSpan;
+  const onTextHover = useCallback(
+    (r: TextResidue | null) => onPanelHover(r ? r.chain || null : null, r ? r.position : null),
+    [onPanelHover],
+  );
+  const onTextPick = useCallback(
+    (r: TextResidue, extend: boolean) => {
+      zoomOwnPick.current = true;
+      pickResidue(r.position, extend, r.chain || null);
+    },
+    [pickResidue],
+  );
+
   let panel: React.ReactNode | null = null;
-  if (effectiveLayout === 'structure_sequence') {
+  if (effectiveLayout === 'structure_text') {
+    panel = textResidues.length ? (
+      <SequenceText
+        residues={textResidues}
+        selected={selectionSpan}
+        highlight={textHighlight}
+        variants={textVariants}
+        followSelection={followSelection}
+        onHover={onTextHover}
+        onPick={selectionEnabled ? onTextPick : undefined}
+      />
+    ) : (
+      <Center h="100%">
+        <Text size="xs" c="dimmed">
+          No sequence to show yet
+        </Text>
+      </Center>
+    );
+  } else if (effectiveLayout === 'structure_sequence') {
     panel = stripResidues.length ? (
       <SequenceStrip
         residues={stripResidues}
@@ -899,10 +1006,14 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   }
   // The sequence strip is a horizontal band, so it always goes below; the
   // alignment goes beside the structure in a wide tile, below in a tall one.
+  // The written sequence reads as lines under the structure, like a figure
+  // caption.
   const orientation =
-    effectiveLayout === 'structure_sequence'
+    effectiveLayout === 'structure_sequence' || effectiveLayout === 'structure_text'
       ? 'column'
       : splitOrientation(bodySize.width, bodySize.height);
+  const compact =
+    bodySize.width > 0 && (bodySize.width < COMPACT_WIDTH || bodySize.height < COMPACT_HEIGHT);
   const splitKey = effectiveLayout === 'structure' ? null : effectiveLayout;
 
   // ---- Tooltip --------------------------------------------------------------------
@@ -1053,6 +1164,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const layoutOptions = [
     { value: 'structure', label: 'Structure' },
     { value: 'structure_sequence', label: 'With sequence' },
+    { value: 'structure_text', label: 'With written sequence' },
     ...(hasMsa ? [{ value: 'structure_msa', label: 'With alignment' }] : []),
   ];
   const primaryControls = (
@@ -1076,12 +1188,14 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         data={colourOptions}
         allowDeselect={false}
       />
-      <VizSelect
+      <VizMultiSelect
         label="Style"
-        value={representation}
-        onChange={(v) => setRepresentation((v as Representation) || 'cartoon')}
+        value={representations}
+        // Drawing nothing is not a style: the last one stays.
+        onChange={(v) => {
+          if (v.length) setRepresentations(v as Representation[]);
+        }}
         data={REPRESENTATIONS}
-        allowDeselect={false}
       />
       <VizSelect
         label="Layout"
@@ -1150,7 +1264,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       />
       {drawn ? (
         <>
-          <MoleculeLegend legend={colouring.legend} />
+          <MoleculeLegend legend={colouring.legend} compact={compact} />
           <MoleculeCredit text={credit} />
           <MoleculeViewButtons
             onReset={() => viewerRef.current?.resetView()}

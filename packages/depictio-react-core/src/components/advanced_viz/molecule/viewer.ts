@@ -4,7 +4,8 @@
  * Adapted from PR #980's adapter and extended with what the dashboard needs:
  * residue hover and click callbacks, variant marks as spheres, a selection
  * drawn as side-chain sticks, a hover highlight as translucent spheres, labels,
- * a surface, spin and a disposal that releases the WebGL context.
+ * representations drawn together (a cartoon under a surface), a picked site
+ * as red ball and stick, spin and a disposal that releases the WebGL context.
  *
  * The module is loaded with `import('3dmol')` only, so the library stays in
  * its own chunk. The catalog preview aliases `3dmol` to a stub whose
@@ -55,21 +56,43 @@ export interface OverlayState {
 export interface ViewerColours {
   background: string;
   selection: string;
+  /** The picked site's ball and stick (`highlight_site`). */
+  site: string;
   highlight: string;
   labelText: string;
   labelBackground: string;
 }
 
-/** Colour of one residue (chain, author number, B-factor). */
-export type ResidueColourFn = (chain: string, position: number, b: number | null) => string;
+/** Colour of one residue (chain, author number, B-factor, and the secondary
+ *  structure 3Dmol assigned it: `h` helix, `s` strand, null coil). */
+export type ResidueColourFn = (
+  chain: string,
+  position: number,
+  b: number | null,
+  ss?: string | null,
+) => string;
+
+/**
+ * How residues are painted: a colour per residue, or one of 3Dmol's built-in
+ * schemes (the `amino` residue-type table) when `scheme` is set.
+ */
+export interface ResiduePaint {
+  colourOf: ResidueColourFn;
+  scheme?: string | null;
+}
+
+/** The residues of a site drawn as ball and stick at most; a longer range
+ *  keeps the plain selection sticks, a red wall of atoms says nothing. */
+export const SITE_MAX_RESIDUES = 50;
 
 export interface StructureViewer {
   /** Replace the model and fit the camera to it. */
   load(text: string, format: StructureFormat): void;
-  /** Base style: how every residue is coloured and drawn. */
-  setStyle(colourOf: ResidueColourFn, rep: Representation): void;
-  /** Selected residues, drawn as sticks over the base style. */
-  setSelection(span: ResidueSpan | null): void;
+  /** Base style: how every residue is coloured, and the representations drawn. */
+  setStyle(paint: ResiduePaint, reps: Representation | readonly Representation[]): void;
+  /** Selected residues, drawn as sticks over the base style, or as the red
+   *  ball and stick of a picked site when `asSite` (short spans only). */
+  setSelection(span: ResidueSpan | null, asSite?: boolean): void;
   /** Marks, labels and hover highlight (shapes only, no restyle). */
   setOverlay(overlay: OverlayState): void;
   /** Zoom onto a span, or back onto the whole model with `null`. */
@@ -79,6 +102,8 @@ export interface StructureViewer {
   resetView(): void;
   /** PNG data URL of the current view, or null if the canvas cannot be read. */
   snapshot(): string | null;
+  /** Follow the host's new size. The camera is re-fitted (to the focused
+   *  span, else the whole model) until the reader moves it by hand. */
   resize(): void;
   dispose(): void;
 }
@@ -99,6 +124,7 @@ interface Atom {
   resn?: string;
   atom?: string;
   b?: number;
+  ss?: string;
   x: number;
   y: number;
   z: number;
@@ -149,6 +175,78 @@ export function spanSelection(span: ResidueSpan): Selection {
   const sel: Selection = { resi: `${span.start}-${span.end}` };
   if (span.chain) sel.chain = span.chain;
   return sel;
+}
+
+/** Residues framed around a short pick, so zooming onto one residue keeps its
+ *  neighbourhood in view instead of filling the canvas with a single side chain. */
+export const FRAME_MIN_RESIDUES = 13;
+
+/** The selection the camera fits for a focused span: the span itself, widened
+ *  around its centre to at least `FRAME_MIN_RESIDUES` residues. */
+export function frameSelection(span: ResidueSpan): Selection {
+  const width = span.end - span.start + 1;
+  if (width >= FRAME_MIN_RESIDUES) return spanSelection(span);
+  const pad = Math.ceil((FRAME_MIN_RESIDUES - width) / 2);
+  return spanSelection({ ...span, start: Math.max(1, span.start - pad), end: span.end + pad });
+}
+
+/** Representations to draw, in a fixed order, without repeats: an empty list
+ *  is a cartoon, and a surface alone keeps a cartoon under it so the model
+ *  stays pickable (3Dmol does not hover or click a surface). */
+export function normaliseRepresentations(
+  reps: Representation | readonly Representation[] | null | undefined,
+): Representation[] {
+  const list = reps == null ? [] : typeof reps === 'string' ? [reps] : reps;
+  const order: Representation[] = ['cartoon', 'trace', 'stick', 'sphere', 'surface'];
+  const out = order.filter((r) => list.includes(r));
+  if (out.length === 0) return ['cartoon'];
+  if (out.length === 1 && out[0] === 'surface') return ['cartoon', 'surface'];
+  return out;
+}
+
+/**
+ * The 3Dmol style of a set of representations with one colouring, and
+ * whether a surface goes on top (a surface is not a style, it is added apart).
+ * `colour` is the colour half of every sub-style: `{colorfunc}` or
+ * `{colorscheme}`.
+ */
+export function representationStyle(
+  reps: Representation | readonly Representation[] | null | undefined,
+  colour: Record<string, unknown>,
+): { style: Record<string, unknown>; surface: boolean } {
+  const list = normaliseRepresentations(reps);
+  const style: Record<string, unknown> = {};
+  // A thin backbone line under the ribbons keeps a structure visible when no
+  // cartoon geometry is produced (very short peptides, CA-only models).
+  if (list.includes('cartoon')) {
+    style.cartoon = { arrows: true, ...colour };
+    style.line = { ...colour };
+  } else if (list.includes('trace')) {
+    style.cartoon = { style: 'trace', thickness: 0.5, ...colour };
+    style.line = { ...colour };
+  }
+  // Sticks drawn with spheres are ball and stick: thinner sticks, smaller balls.
+  const both = list.includes('stick') && list.includes('sphere');
+  if (list.includes('stick')) style.stick = { radius: both ? 0.12 : 0.15, ...colour };
+  if (list.includes('sphere')) style.sphere = { scale: both ? 0.22 : 0.28, ...colour };
+  if (Object.keys(style).length === 0) style.line = { ...colour };
+  return { style, surface: list.includes('surface') };
+}
+
+/** The style a selection is drawn with over the base style. */
+export function selectionStyle(
+  span: ResidueSpan,
+  asSite: boolean,
+  colours: Pick<ViewerColours, 'selection' | 'site'>,
+): Record<string, unknown> {
+  const length = span.end - span.start + 1;
+  if (asSite && length <= SITE_MAX_RESIDUES) {
+    return {
+      stick: { radius: 0.2, color: colours.site },
+      sphere: { scale: 0.3, color: colours.site },
+    };
+  }
+  return { stick: { radius: 0.22, color: colours.selection } };
 }
 
 function residueOf(atom: Atom | null | undefined): ResidueRef | null {
@@ -234,9 +332,10 @@ export async function createStructureViewer(
 
   let current = colours;
   let model: GlModel | null = null;
-  let colourOf: ResidueColourFn = () => current.selection;
-  let rep: Representation = 'cartoon';
+  let paint: ResiduePaint = { colourOf: () => current.selection };
+  let reps: Representation | readonly Representation[] = 'cartoon';
   let selection: ResidueSpan | null = null;
+  let selectionAsSite = false;
   // One list of shapes and labels per overlay layer, with the key it was drawn from.
   interface Layer {
     key: string | null;
@@ -249,27 +348,56 @@ export async function createStructureViewer(
     highlight: { key: null, shapes: [], labels: [] },
   };
   let disposed = false;
-
-  const atomColour = (a: Atom) =>
-    colourOf(a.chain ?? '', a.resi ?? 0, typeof a.b === 'number' ? a.b : null);
-
-  const baseStyle = (): Record<string, unknown> => {
-    const c = { colorfunc: atomColour };
-    // A thin backbone line under the ribbons keeps a structure visible when no
-    // cartoon geometry is produced (very short peptides, CA-only models).
-    switch (rep) {
-      case 'trace':
-        return { cartoon: { style: 'trace', thickness: 0.5, ...c }, line: { ...c } };
-      case 'stick':
-        return { stick: { radius: 0.15, ...c } };
-      case 'sphere':
-        return { sphere: { scale: 0.28, ...c } };
-      case 'surface':
-      case 'cartoon':
-      default:
-        return { cartoon: { arrows: true, ...c }, line: { ...c } };
+  // The camera fit (whole model, or `focusSpan`) goes stale when the canvas
+  // changes size after it (autofit tile height, the text split, the legend),
+  // so `resize` re-fits it, until the reader drags or wheels the view by
+  // hand. `load` and `resetView` hand the camera back to the fit.
+  let userMoved = false;
+  let focusSpan: ResidueSpan | null = null;
+  // A drag, not a click: picking a residue must not count as moving the view.
+  const DRAG_THRESHOLD_PX = 4;
+  let pressAt: { x: number; y: number } | null = null;
+  const onPointerDown = (e: PointerEvent) => {
+    pressAt = { x: e.clientX, y: e.clientY };
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    if (!pressAt || !e.buttons) return;
+    if (Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) >= DRAG_THRESHOLD_PX) {
+      userMoved = true;
     }
   };
+  const onPointerUp = () => {
+    pressAt = null;
+  };
+  const onWheel = () => {
+    userMoved = true;
+  };
+  const hostListeners: [string, EventListener][] = [
+    ['pointerdown', onPointerDown as EventListener],
+    ['pointermove', onPointerMove as EventListener],
+    ['pointerup', onPointerUp],
+    ['pointercancel', onPointerUp],
+    ['wheel', onWheel],
+  ];
+  const canListen = typeof container.addEventListener === 'function';
+  if (canListen) {
+    for (const [type, fn] of hostListeners) {
+      container.addEventListener(type, fn, { passive: true, capture: true });
+    }
+  }
+  const fitCamera = () => {
+    viewer.zoomTo(focusSpan ? frameSelection(focusSpan) : {}, 0);
+  };
+
+  const atomColour = (a: Atom) =>
+    paint.colourOf(
+      a.chain ?? '',
+      a.resi ?? 0,
+      typeof a.b === 'number' ? a.b : null,
+      a.ss === 'h' || a.ss === 's' ? a.ss : null,
+    );
+  const colourSpec = (): Record<string, unknown> =>
+    paint.scheme ? { colorscheme: paint.scheme } : { colorfunc: atomColour };
 
   const caOf = (chain: string, position: number): Atom | null => {
     const sel: Selection = { resi: position, atom: 'CA' };
@@ -279,15 +407,14 @@ export async function createStructureViewer(
 
   const restyle = () => {
     if (!model) return;
-    viewer.setStyle({}, baseStyle());
+    const { style, surface } = representationStyle(reps, colourSpec());
+    viewer.setStyle({}, style);
     if (selection) {
-      viewer.addStyle(spanSelection(selection), {
-        stick: { radius: 0.22, color: current.selection },
-      });
+      viewer.addStyle(spanSelection(selection), selectionStyle(selection, selectionAsSite, current));
     }
     viewer.removeAllSurfaces();
-    if (rep === 'surface') {
-      viewer.addSurface('VDW', { opacity: 0.85, colorfunc: atomColour }, {});
+    if (surface) {
+      viewer.addSurface('VDW', { opacity: 0.85, ...colourSpec() }, {});
     }
     viewer.render();
   };
@@ -333,18 +460,21 @@ export async function createStructureViewer(
       viewer.setHoverable({}, true, onAtomHover, onAtomUnhover);
       viewer.setClickable({}, true, onAtomClick);
       restyle();
+      focusSpan = null;
+      userMoved = false;
       viewer.zoomTo();
       viewer.render();
     },
 
-    setStyle(nextColourOf, nextRep) {
-      colourOf = nextColourOf;
-      rep = nextRep;
+    setStyle(nextPaint, nextReps) {
+      paint = nextPaint;
+      reps = nextReps;
       restyle();
     },
 
-    setSelection(span) {
+    setSelection(span, asSite = false) {
       selection = span;
+      selectionAsSite = asSite;
       restyle();
     },
 
@@ -425,7 +555,10 @@ export async function createStructureViewer(
 
     focus(span, animate = true) {
       if (!model) return;
-      viewer.zoomTo(span ? spanSelection(span) : {}, animate ? 500 : 0);
+      // A programmatic fit: later resizes keep this span in frame.
+      focusSpan = span;
+      userMoved = false;
+      viewer.zoomTo(span ? frameSelection(span) : {}, animate ? 500 : 0);
     },
 
     setColours(next) {
@@ -443,6 +576,8 @@ export async function createStructureViewer(
     },
 
     resetView() {
+      focusSpan = null;
+      userMoved = false;
       viewer.zoomTo();
       viewer.render();
     },
@@ -459,12 +594,18 @@ export async function createStructureViewer(
     resize() {
       if (disposed) return;
       viewer.resize();
+      if (model && !userMoved) fitCamera();
       viewer.render();
     },
 
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (canListen) {
+        for (const [type, fn] of hostListeners) {
+          container.removeEventListener(type, fn, { capture: true });
+        }
+      }
       try {
         viewer.spin(false);
         viewer.clear();

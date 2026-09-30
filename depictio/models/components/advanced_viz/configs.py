@@ -2841,11 +2841,23 @@ class Molecule3DConfig(_BaseVizConfig):
     label_col: str | None = Field(
         default=None, description="Residue or variant label column (for example a protein change)"
     )
-    color_mode: Literal["plddt", "chain", "spectrum", "value", "category", "uniform"] = Field(
+    color_mode: Literal[
+        "plddt",
+        "chain",
+        "spectrum",
+        "value",
+        "category",
+        "uniform",
+        "secondary_structure",
+        "residue_type",
+        "hydrophobicity",
+    ] = Field(
         default="plddt",
         description=(
             "How residues are coloured: `plddt` reads the structure's B-factor "
-            "column, `value` / `category` read the bound collection"
+            "column, `value` / `category` read the bound collection, "
+            "`secondary_structure`, `residue_type` and `hydrophobicity` read the "
+            "structure itself"
         ),
     )
     colour_scale: ColourScale | None = Field(
@@ -2855,16 +2867,33 @@ class Molecule3DConfig(_BaseVizConfig):
     representation: Literal["cartoon", "trace", "stick", "sphere", "surface"] = Field(
         default="cartoon", description="Molecular representation"
     )
+    representations: list[Literal["cartoon", "trace", "stick", "sphere", "surface"]] | None = Field(
+        default=None,
+        description=(
+            "Representations drawn together (for example cartoon and surface); "
+            "when set it replaces `representation`"
+        ),
+    )
+    highlight_site: bool = Field(
+        default=True,
+        description=(
+            "Draw the picked residue or residue range as red ball and stick, "
+            "and mark it in the written sequence"
+        ),
+    )
+    spin: bool = Field(default=False, description="Start with the structure spinning")
     show_variants: bool = Field(
         default=True,
         description="Draw a sphere on the CA atom of every row carrying an alternate residue or a category",
     )
     show_labels: bool = Field(default=False, description="Label the marked residues")
-    layout: Literal["structure", "structure_sequence", "structure_msa"] = Field(
+    layout: Literal["structure", "structure_sequence", "structure_msa", "structure_text"] = Field(
         default="structure",
         description=(
             "What the tile holds: the structure alone, the structure over its "
-            "sequence strip, or the structure beside the alignment of `msa_dc_id`"
+            "sequence strip, the structure beside the alignment of `msa_dc_id`, "
+            "or the structure over its written sequence, one clickable letter "
+            "per residue"
         ),
     )
     msa_wf_id: str | None = Field(

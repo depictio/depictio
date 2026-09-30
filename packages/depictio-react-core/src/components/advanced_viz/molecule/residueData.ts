@@ -10,7 +10,15 @@ import { sampleColorscale } from '../../../utils/colorScale';
 import { filtersExcludingOwnResidue } from '../../../selection';
 import { residueKey, toOneLetter, type StructureResidue } from './structureText';
 import { entitiesByRowCount } from '../protein/rendererData';
-import { PLDDT_BANDS, plddtColour, plddtIsFractional, rgbCss } from '../protein/residueColours';
+import {
+  hydrophobicityColour,
+  KYTE_DOOLITTLE,
+  PLDDT_BANDS,
+  plddtColour,
+  plddtIsFractional,
+  rgbCss,
+  SECONDARY_STRUCTURE_COLOURS,
+} from '../protein/residueColours';
 
 // ---------------------------------------------------------------------------
 // Bound rows
@@ -124,8 +132,10 @@ export function distinctEntities(rows: readonly ResidueRow[]): string[] {
  *
  * In order: the one entity the dashboard filters name on the entity column
  * (another tile's pick, a sidebar selector), the one the reader picked in the
- * tile, the entity of the fetched rows with the most rows that has a structure
- * (`distinctEntities` order), the first entity with a structure. `available`
+ * tile, the dashboard's agreed `opening` entity (see
+ * `highlight/openingEntity.ts`), the entity of the fetched rows with the most
+ * rows that has a structure (`distinctEntities` order), the first entity with
+ * a structure. `available`
  * is the universe of entities that can be drawn (the indexed_file samples in
  * file mode, the row entities in resolve mode); an entity outside it is never
  * returned.
@@ -135,11 +145,13 @@ export function chooseEntity(args: {
   picked: string | null;
   rowEntities: readonly string[];
   available: readonly string[];
+  opening?: string | null;
 }): string | null {
-  const { fromFilters, picked, rowEntities, available } = args;
+  const { fromFilters, picked, rowEntities, available, opening = null } = args;
   const has = (e: string | null): e is string => e !== null && available.includes(e);
   if (has(fromFilters)) return fromFilters;
   if (has(picked)) return picked;
+  if (has(opening)) return opening;
   for (const e of rowEntities) if (has(e)) return e;
   return available[0] ?? null;
 }
@@ -378,7 +390,16 @@ export function clickRange(
 // Colouring
 // ---------------------------------------------------------------------------
 
-export type ColourMode = 'plddt' | 'chain' | 'spectrum' | 'value' | 'category' | 'uniform';
+export type ColourMode =
+  | 'plddt'
+  | 'chain'
+  | 'spectrum'
+  | 'value'
+  | 'category'
+  | 'uniform'
+  | 'secondary_structure'
+  | 'residue_type'
+  | 'hydrophobicity';
 
 export type LegendSpec =
   | { kind: 'swatches'; title: string; items: { label: string; colour: string }[]; more?: number }
@@ -386,9 +407,21 @@ export type LegendSpec =
   | null;
 
 export interface Colouring {
-  colourOf(chain: string, position: number, bfactor: number | null): string;
+  /** `ss` is the secondary structure 3Dmol assigned the residue (`h`, `s`,
+   *  null for coil); only `secondary_structure` reads it. */
+  colourOf(chain: string, position: number, bfactor: number | null, ss?: string | null): string;
   legend: LegendSpec;
+  /** A 3Dmol built-in colour scheme that paints the model instead of
+   *  `colourOf` (`residue_type`: the `amino` table). */
+  scheme?: string;
 }
+
+/** 3Dmol's residue-type table, the RasMol `amino` colours. */
+export const RESIDUE_TYPE_SCHEME = 'amino';
+
+/** Kyte-Doolittle bounds: arginine -4.5, isoleucine 4.5. */
+const KD_MIN = KYTE_DOOLITTLE.R;
+const KD_MAX = KYTE_DOOLITTLE.I;
 
 const MAX_LEGEND_ITEMS = 8;
 /** Where a gradient legend samples its scale. */
@@ -548,6 +581,47 @@ export function buildColouring(
           return v === null ? neutral : map.get(v);
         },
         legend: map.universe.length ? swatchLegend(args.categoryLabel || 'Category', map) : null,
+      };
+    }
+    case 'secondary_structure': {
+      // The RasMol structure colours the sequence track's glyphs use too.
+      const helix = rgbCss(SECONDARY_STRUCTURE_COLOURS.helix);
+      const strand = rgbCss(SECONDARY_STRUCTURE_COLOURS.strand);
+      return {
+        colourOf: (_c, _p, _b, ss) => (ss === 'h' ? helix : ss === 's' ? strand : neutral),
+        legend: {
+          kind: 'swatches',
+          title: 'Secondary structure',
+          items: [
+            { label: 'Helix', colour: helix },
+            { label: 'Strand', colour: strand },
+            { label: 'Coil', colour: neutral },
+          ],
+        },
+      };
+    }
+    case 'residue_type':
+      // Twenty colours make no legend worth its room; the tooltip names the residue.
+      return { colourOf: () => neutral, legend: null, scheme: RESIDUE_TYPE_SCHEME };
+    case 'hydrophobicity': {
+      // Kyte-Doolittle per residue on the ramp the alignment's hydrophobicity
+      // scheme uses, so a residue has one colour in both tiles.
+      const aaOf = new Map<string, string>();
+      for (const r of residues) aaOf.set(residueKey(r.chain, r.position), r.aa);
+      const colourOfAa = (aa: string | undefined) => {
+        const rgb = aa ? hydrophobicityColour(aa) : null;
+        return rgb ? rgbCss(rgb) : neutral;
+      };
+      return {
+        colourOf: (c, p) => colourOfAa(aaOf.get(residueKey(c, p))),
+        legend: {
+          kind: 'gradient',
+          title: 'Hydrophobicity (Kyte-Doolittle)',
+          min: formatValue(KD_MIN),
+          max: formatValue(KD_MAX),
+          // The ramp is linear between its two ends, as a CSS gradient is.
+          stops: [colourOfAa('R'), colourOfAa('I')],
+        },
       };
     }
     case 'uniform':
