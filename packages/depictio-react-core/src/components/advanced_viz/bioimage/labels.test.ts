@@ -79,6 +79,16 @@ describe('buildLabelLut', () => {
     expect(lut.styles.get(5)).toEqual({ color: BLUE, faded: true, selected: true });
     expect(lut.ids.get(5)).toBe('5');
   });
+
+  it('keys by the mask label but selects by the id when they differ', () => {
+    const lut = buildLabelLut(
+      [{ id: 's1:7', label: '7', color: RED, faded: false }],
+      new Set(['s1:7']),
+      null,
+    );
+    expect(lut.styles.get(7)).toEqual({ color: RED, faded: false, selected: true });
+    expect(lut.ids.get(7)).toBe('s1:7');
+  });
 });
 
 describe('colorizeLabels', () => {

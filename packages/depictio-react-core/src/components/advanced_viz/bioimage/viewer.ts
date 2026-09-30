@@ -74,7 +74,10 @@ export interface BioimageInfo {
 }
 
 export interface OverlayPoint {
+  /** The id the selection filters on (`selection_column`, else the cell id). */
   id: string;
+  /** The cell id, the mask value, when it differs from `id`. */
+  label?: string;
   /** Level-0 image pixel coordinates. */
   x: number;
   y: number;
@@ -373,6 +376,11 @@ export async function createBioimageViewer(
           if (isBoundsError(err) || signal?.aborted) return null;
           throw err;
         }
+      },
+      // Keep the picking map to the tiles deck still caches, so panning a
+      // large mask does not hold every tile (and its bitmap) ever fetched.
+      onTileUnload: ({ index: { x, y, z } }) => {
+        if (token === labelsToken) labelTiles.delete(labelTileKey(Math.round(-z), x, y));
       },
       renderSubLayers: (props) => {
         const tile = props.data as LabelTile | null;

@@ -2070,6 +2070,9 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
                         # header check (a file document); here, only OME names.
                         if fmt == "ome-tiff" and not entry.name.endswith(OME_TIFF_SUFFIXES):
                             continue
+                        # An OME image beside the masks is not a mask.
+                        if fmt == "tiff" and entry.name.endswith(OME_TIFF_SUFFIXES):
+                            continue
                         if is_store and is_bioimage_store_name(entry.name, fmt):
                             add_root(entry.path)
                 except OSError:

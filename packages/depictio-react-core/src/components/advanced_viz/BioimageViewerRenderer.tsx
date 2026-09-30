@@ -85,6 +85,7 @@ interface BioimageViewerConfig {
   point_radius?: number;
   points_sample_col?: string | null;
   selection_enabled?: boolean;
+  selection_column?: string | null;
   labels_wf_id?: string | null;
   labels_dc_id?: string | null;
   labels_opacity?: number;
@@ -269,6 +270,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const pointsDcId = config.points_dc_id ?? null;
   const pointsWfId = config.points_wf_id ?? null;
   const cellIdCol = config.cell_id_col ?? null;
+  // What a cell is selected, faded and highlighted by: a sample:cell key when
+  // the cell id is unique only per sample; labels still join on the cell id.
+  const keyCol = cellIdCol ? (config.selection_column || cellIdCol) : null;
   const xCol = config.x_col ?? null;
   const yCol = config.y_col ?? null;
   const colorCol = config.color_col ?? null;
@@ -526,9 +530,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const pointCols = useMemo(
     () =>
       Array.from(
-        new Set([cellIdCol, xCol, yCol, colorCol, sampleCol].filter((c): c is string => !!c)),
+        new Set(
+          [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol].filter((c): c is string => !!c),
+        ),
       ),
-    [cellIdCol, xCol, yCol, colorCol, sampleCol],
+    [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol],
   );
   const pointColsKey = pointCols.join('|');
   const [pointRows, setPointRows] = useState<Record<string, unknown[]> | null>(null);
@@ -567,7 +573,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   // The cells the dashboard filters keep, by id. Null means nothing filters.
   const [keptIds, setKeptIds] = useState<Set<string> | null>(null);
   useEffect(() => {
-    if (!pointsEnabled || !pointsWfId || !pointsDcId || !cellIdCol || !activeFetchFilters.length) {
+    if (!pointsEnabled || !pointsWfId || !pointsDcId || !keyCol || !activeFetchFilters.length) {
       setKeptIds(null);
       return;
     }
@@ -575,13 +581,13 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     fetchAdvancedVizData({
       wfId: pointsWfId,
       dcId: pointsDcId,
-      columns: [cellIdCol],
+      columns: [keyCol],
       filters: activeFetchFilters,
       vizKind: 'bioimage_viewer',
     })
       .then((res) => {
         if (cancelled) return;
-        setKeptIds(new Set((res.rows[cellIdCol] ?? []).map((v) => String(v))));
+        setKeptIds(new Set((res.rows[keyCol] ?? []).map((v) => String(v))));
       })
       .catch(() => {
         // Best effort: without the filtered set every cell draws unfaded.
@@ -590,7 +596,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [pointsEnabled, pointsWfId, pointsDcId, cellIdCol, activeFetchFilters, refreshTick]);
+  }, [pointsEnabled, pointsWfId, pointsDcId, keyCol, activeFetchFilters, refreshTick]);
 
   const palette = useMemo(
     () => resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark)),
@@ -614,6 +620,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     const xs = pointRows[xCol] ?? [];
     const ys = pointRows[yCol] ?? [];
     const ids = cellIdCol ? (pointRows[cellIdCol] ?? []) : null;
+    const keys = keyCol && keyCol !== cellIdCol ? (pointRows[keyCol] ?? []) : null;
     const cats = colorCol ? (pointRows[colorCol] ?? []) : null;
     const samples = sampleCol ? (pointRows[sampleCol] ?? []) : null;
     const scale = config.points_scale ?? 1;
@@ -626,12 +633,20 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       const x = Number(xs[i]) * scale + ox;
       const y = Number(ys[i]) * scale + oy;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      const id = ids ? String(ids[i] ?? '') : String(i);
+      const cellId = ids ? String(ids[i] ?? '') : String(i);
+      const id = keys ? String(keys[i] ?? '') : cellId;
       const cat = cats ? String(cats[i] ?? '') : null;
       let color = base;
       if (continuous) color = rampColor(continuous, cats?.[i]) ?? base;
       else if (cat != null && colorScale) color = hexToRgb(colorScale.get(cat)) ?? base;
-      out.push({ id, x, y, color, faded: keptIds ? !keptIds.has(id) : false });
+      out.push({
+        id,
+        ...(keys ? { label: cellId } : {}),
+        x,
+        y,
+        color,
+        faded: keptIds ? !keptIds.has(id) : false,
+      });
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -640,6 +655,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     xCol,
     yCol,
     cellIdCol,
+    keyCol,
     colorCol,
     sampleCol,
     activeStore,
