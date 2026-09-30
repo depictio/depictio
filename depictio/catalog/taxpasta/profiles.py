@@ -31,13 +31,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profiles", glob_pattern="taxpasta/*.tsv", format="tsv"),
+    RecipeSource(
+        ref="profiles",
+        glob_pattern="taxpasta/*.tsv",
+        format="tsv",
+        input_schema={
+            "taxonomy_id": pl.Int64,
+        },
+    ),
+    # No input_schema: the name and tool columns are picked from a list of aliases.
     RecipeSource(ref="databases", dc_ref="database_sheet", optional=True),
+    # No input_schema: the sample and platform columns are picked from a list of aliases.
     RecipeSource(ref="samples", dc_ref="samplesheet", optional=True),
+    # No input_schema: every column is read only when present.
     RecipeSource(ref="names", dc_ref="taxon_names", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "profiler": pl.Utf8,
     "database": pl.Utf8,

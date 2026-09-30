@@ -30,16 +30,24 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
         glob_pattern="fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
         format="TSV",
+        input_schema={
+            "#FusionName": pl.Utf8,
+            "PROT_FUSION_TYPE": pl.Utf8,
+            "PFAM_LEFT": pl.Utf8,
+            "PFAM_RIGHT": pl.Utf8,
+        },
         # `annots` embeds JSON-ish double quotes, so quoting must stay off.
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fusion": pl.Utf8,
     "partner": pl.Utf8,

@@ -31,15 +31,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="boolean",
         glob_pattern="**/*.consensus_peaks.boolean.txt",
         format="TSV",
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "interval_id": pl.Utf8,
+            "num_peaks": pl.Utf8,
+            "num_samples": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "consensus_set": pl.Utf8,

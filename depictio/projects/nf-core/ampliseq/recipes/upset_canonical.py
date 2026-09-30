@@ -15,11 +15,18 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="rel_abundance", dc_ref="taxonomy_rel_abundance"),
+    RecipeSource(
+        ref="rel_abundance",
+        dc_ref="taxonomy_rel_abundance",
+        input_schema={"rel_abundance": pl.Float64},
+    ),
+    # No input_schema: the sample id and group columns are found by name or position.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxon": pl.Utf8,
 }

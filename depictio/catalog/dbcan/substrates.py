@@ -15,7 +15,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: every column is read through a presence-guarded helper.
     RecipeSource(
         ref="substrates",
         glob_pattern="cazyme/dbcan/substrate/*/*_substrate_prediction.tsv",
@@ -24,6 +26,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "cgc_id": pl.Utf8,

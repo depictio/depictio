@@ -17,14 +17,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="v_gene",
         path="repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "locus": pl.Utf8,
+            "gene": pl.Utf8,
+            "seq_freq": pl.Float64,
+        },
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "row_id": pl.Utf8,
     "sample_id": pl.Utf8,

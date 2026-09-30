@@ -16,10 +16,13 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: mosdepth or canonical column names are both accepted.
     RecipeSource(ref="coverage", dc_ref="mosdepth_genome_coverage"),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "chromosome": pl.Utf8,
     "position": pl.Int64,

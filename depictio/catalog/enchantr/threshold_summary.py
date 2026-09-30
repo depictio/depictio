@@ -15,6 +15,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summary",
@@ -23,11 +24,16 @@ SOURCES: list[RecipeSource] = [
             "all_reps_threshold-summary.tsv"
         ),
         format="TSV",
+        input_schema={
+            "model": pl.Utf8,
+            "cutoff": pl.Utf8,
+        },
     ),
 ]
 
 _FLOAT_COLS = ["loglk", "threshold", "sensitivity", "specificity", "pvalue", "mean_threshold"]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "subject_id": pl.Utf8,
     "model": pl.Utf8,

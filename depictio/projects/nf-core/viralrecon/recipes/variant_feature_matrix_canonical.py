@@ -17,12 +17,20 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="variants", dc_ref="variants_long"),
+    RecipeSource(
+        ref="variants",
+        dc_ref="variants_long",
+        input_schema={"sample": pl.Utf8, "mutation_label": pl.Utf8},
+    ),
+    # No input_schema: sample and lineage are read only when present.
     RecipeSource(ref="pangolin", dc_ref="pangolin_lineages", optional=True),
+    # No input_schema: sample and clade are read only when present.
     RecipeSource(ref="nextclade", dc_ref="nextclade_results", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
 }

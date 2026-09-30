@@ -16,7 +16,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the metric columns are matched by a tolerant name lookup.
     RecipeSource(
         ref="wittyer_summary",
         glob_pattern="*/summary/tables/wittyer/wittyer.summary.csv",
@@ -24,6 +26,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "precision": pl.Float64,

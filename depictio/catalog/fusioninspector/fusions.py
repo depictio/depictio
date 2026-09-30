@@ -30,16 +30,39 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
         glob_pattern="fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
         format="TSV",
+        input_schema={
+            "#FusionName": pl.Utf8,
+            "JunctionReadCount": pl.Int64,
+            "SpanningFragCount": pl.Int64,
+            "LeftGene": pl.Utf8,
+            "LeftBreakpoint": pl.Utf8,
+            "RightGene": pl.Utf8,
+            "RightBreakpoint": pl.Utf8,
+            "SpliceType": pl.Utf8,
+            "LargeAnchorSupport": pl.Utf8,
+            "NumCounterFusionLeft": pl.Int64,
+            "NumCounterFusionRight": pl.Int64,
+            "FAR_left": pl.Float64,
+            "FAR_right": pl.Float64,
+            "FFPM": pl.Float64,
+            "CDS_LEFT_ID": pl.Utf8,
+            "CDS_RIGHT_ID": pl.Utf8,
+            "PROT_FUSION_TYPE": pl.Utf8,
+            "PFAM_LEFT": pl.Utf8,
+            "PFAM_RIGHT": pl.Utf8,
+        },
         # `annots` embeds JSON-ish double quotes, so quoting must stay off.
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,

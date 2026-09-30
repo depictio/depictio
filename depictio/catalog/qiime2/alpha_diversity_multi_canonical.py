@@ -30,33 +30,47 @@ from depictio.models.models.transforms import RecipeSource
 # the metric column numeric instead of poisoning dtype inference to String.
 _VECTOR_KWARGS = {"skip_rows_after_header": 1}
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="shannon",
         path="qiime2/diversity/alpha_diversity/shannon_vector/metadata.tsv",
         format="TSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
         read_kwargs=_VECTOR_KWARGS,
     ),
     RecipeSource(
         ref="observed_features",
         path="qiime2/diversity/alpha_diversity/observed_features_vector/metadata.tsv",
         format="TSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
         read_kwargs=_VECTOR_KWARGS,
     ),
     RecipeSource(
         ref="faith_pd",
         path="qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv",
         format="TSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
         read_kwargs=_VECTOR_KWARGS,
     ),
     RecipeSource(
         ref="evenness",
         path="qiime2/diversity/alpha_diversity/evenness_vector/metadata.tsv",
         format="TSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
         read_kwargs=_VECTOR_KWARGS,
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
 }

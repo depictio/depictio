@@ -14,7 +14,9 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.lineage import CANONICAL_RANKS, UNCLASSIFIED, asv_table_to_ranks
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the rank columns are read only when present.
     RecipeSource(
         ref="asv_tax",
         path="qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv",
@@ -25,6 +27,7 @@ SOURCES: list[RecipeSource] = [
         read_kwargs={"infer_schema_length": 0},
         optional=True,
     ),
+    # No input_schema: the lineage is the first column, read by position.
     RecipeSource(
         ref="genus",
         path="qiime2/rel_abundance_tables/rel-table-6.tsv",
@@ -36,9 +39,11 @@ SOURCES: list[RecipeSource] = [
         # which is why the ASV table above is preferred when present.
         optional=True,
     ),
+    # No input_schema: habitat and the sample id column are read only when present.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "Kingdom": pl.Utf8,
     "Phylum": pl.Utf8,

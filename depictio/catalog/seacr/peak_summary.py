@@ -30,10 +30,22 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads: the output of `seacr/peaks.py`.
 PEAKS_DC_TAG = "seacr_peaks"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=PEAKS_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=PEAKS_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "width": pl.Int64,
+            "total_signal": pl.Float64,
+            "max_signal": pl.Float64,
+            "signal_density": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "threshold_mode": pl.Utf8,

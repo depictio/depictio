@@ -10,13 +10,16 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.lineage import kingdom_phylum
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rel_table",
         path="qiime2/rel_abundance_tables/rel-table-2.tsv",
         format="TSV",
+        input_schema={"#OTU ID": pl.Utf8},
         read_kwargs={"skip_rows": 1},
     ),
+    # No input_schema: the sample id column is found by name or position.
     RecipeSource(
         ref="metadata",
         dc_ref="metadata",  # Reference the metadata DC (optional)
@@ -24,6 +27,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,

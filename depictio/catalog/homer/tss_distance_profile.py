@@ -41,10 +41,19 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads: the tidy per-peak annotation table.
 SOURCE_DC_TAG = "homer_annotated_peaks"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=SOURCE_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=SOURCE_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "distance_to_tss": pl.Int64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "distance_to_tss": pl.Int64,

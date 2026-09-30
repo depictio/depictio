@@ -5,14 +5,19 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.lineage import kingdom_phylum
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="barplot_csv",
         path="qiime2/barplot/level-2.csv",
         format="CSV",
+        input_schema={
+            "index": pl.Utf8,
+        },
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,

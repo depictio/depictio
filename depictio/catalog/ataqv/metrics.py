@@ -57,15 +57,20 @@ _LINE_READ_KWARGS = {
     "infer_schema_length": 0,
 }
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="reports",
         glob_pattern="**/*.ataqv.json",
         format="CSV",
+        input_schema={
+            "raw": pl.Utf8,
+        },
         read_kwargs=_LINE_READ_KWARGS,
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "tss_enrichment": pl.Float64,

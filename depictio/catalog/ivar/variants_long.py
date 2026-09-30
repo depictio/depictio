@@ -4,6 +4,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="variants_raw",
@@ -14,9 +15,16 @@ SOURCES: list[RecipeSource] = [
         # intersect/ don't), so exactly the active caller's table is picked up.
         glob_pattern="variants/*/variants_long_table.csv",
         format="CSV",
+        input_schema={
+            "GENE": pl.Utf8,
+            "REF": pl.Utf8,
+            "POS": pl.Int64,
+            "ALT": pl.Utf8,
+        },
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "CHROM": pl.Utf8,
