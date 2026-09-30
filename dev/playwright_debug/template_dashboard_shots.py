@@ -385,7 +385,9 @@ async def run_one(
         # Seed auth and theme before first paint: the SPA reads both in initialisers.
         await context.add_init_script(build_localstorage_init_script(payload, theme))
         page = await context.new_page()
-        await page.goto(f"{viewer_url}/dashboard/{dashboard_id}", wait_until="domcontentloaded")
+        await page.goto(
+            f"{viewer_url}/dashboard/{dashboard_id}?no-walkthrough=1", wait_until="domcontentloaded"
+        )
         await page.wait_for_timeout(settle_ms * 2)
         await shoot_tabs(page, out_dir, width, height, max_height, settle_ms, panel_timeout_ms)
         await browser.close()
@@ -432,7 +434,8 @@ async def run_project(
             page = await context.new_page()
             try:
                 await page.goto(
-                    f"{viewer_url}/dashboard/{dashboard_id}", wait_until="domcontentloaded"
+                    f"{viewer_url}/dashboard/{dashboard_id}?no-walkthrough=1",
+                    wait_until="domcontentloaded",
                 )
                 await page.add_style_tag(content=HIDE_TOASTS_CSS)
                 await page.wait_for_timeout(settle_ms)
