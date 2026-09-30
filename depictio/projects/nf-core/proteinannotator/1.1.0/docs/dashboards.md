@@ -46,6 +46,8 @@ table) and read as no rows.
 - **Structure.** The pipeline predicts no 3D structure. The structure tile folds the picked
   protein from its sequence through the Depictio structure resolver (ESMFold, cached), so the
   resolver must be enabled on the server. The model's B-factor holds ESMFold's pLDDT.
+  ESMFold takes sequences of up to 400 residues, so the tab's length slider opens capped at
+  400; widen it to annotate longer proteins, whose structure tile then explains why it is empty.
 
 ## Variables
 

@@ -738,6 +738,23 @@ tabs:
     title: Protein
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
+    tag: pa-st-filter-length
+    index: pa-st-length-filter
+    section: Protein pick
+    group: Protein
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    interactive_component_type: RangeSlider
+    column_name: length
+    column_type: int64
+    # The structure is folded on demand by ESMFold, which takes sequences of
+    # up to 400 residues: the tab opens on the proteins it can fold.
+    default_range: [1, 400]
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:arrow-expand-horizontal'}
+    placement: left
+    title: Protein length (residues)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
     tag: pa-st-filter-position
     index: pa-st-position-filter
     section: Protein pick
@@ -750,7 +767,7 @@ tabs:
     display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:ruler'}
     placement: left
     title: Residue range
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
     tag: pa-st-filter-state
     index: pa-st-state-filter
@@ -764,7 +781,7 @@ tabs:
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:waves'}
     placement: left
     title: Secondary structure
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 9, w: 1, h: 3}
   # ------------------------------------------------------- structure at a glance
   - component_type: card
     tag: pa-st-card-helix
