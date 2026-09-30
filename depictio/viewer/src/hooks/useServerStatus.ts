@@ -15,6 +15,9 @@ export interface ServerFeatures {
   /** Whole-dashboard generation (POST /ai/generate-dashboard). The server
    *  already folds `ai` into this flag, so it is never true while `ai` is off. */
   ai_generate_dashboard: boolean;
+  /** Agent-team runs (/ai/agent-runs*), which add the Team mode to the
+   *  analyze panel. Absent on servers without them, read as false. */
+  ai_agents: boolean;
 }
 
 export interface ServerStatus {
@@ -27,6 +30,7 @@ const NO_FEATURES: ServerFeatures = {
   ai: false,
   ai_user_keys: false,
   ai_generate_dashboard: false,
+  ai_agents: false,
 };
 
 const STATUS_URL = '/depictio/api/v1/utils/status';
@@ -69,6 +73,7 @@ export function useServerStatus(): ServerStatus {
             ai: data.features?.ai === true,
             ai_user_keys: data.features?.ai_user_keys === true,
             ai_generate_dashboard: data.features?.ai_generate_dashboard === true,
+            ai_agents: data.features?.ai_agents === true,
           },
         });
       } catch {

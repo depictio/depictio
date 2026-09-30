@@ -267,6 +267,20 @@ def start_agent_audit_indexes(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Agent audit index setup failed: {exc}")
 
 
+def sweep_orphan_agent_runs(should_initialize: bool) -> None:
+    """Mark agent-team runs a previous process left ``running`` as failed. Never fails boot."""
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.agents.runs import sweep_orphans
+
+        swept = sweep_orphans()
+        if swept:
+            logger.warning(f"Worker {WORKER_ID}: marked {swept} interrupted agent run(s) failed")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Agent run sweep failed: {exc}")
+
+
 async def start_mcp_server(app: FastAPI, stack: AsyncExitStack) -> None:
     """Run the MCP session manager when ``main.py`` mounted the endpoint."""
     mcp_app = getattr(app.state, "mcp", None)
@@ -390,6 +404,7 @@ async def lifespan(_app: FastAPI):
     start_monitoring_storage(should_initialize)
     start_comment_indexes(should_initialize)
     start_agent_audit_indexes(should_initialize)
+    sweep_orphan_agent_runs(should_initialize)
     start_multiqc_prewarm(should_initialize)
     start_installation_telemetry()
     mcp_stack = AsyncExitStack()

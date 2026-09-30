@@ -25,7 +25,7 @@ from depictio.api.v1.agents.registry import ensure_tools_loaded, invoke, tools_f
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.token_scopes import current_token_scopes
-from depictio.api.v1.mcp import resources
+from depictio.api.v1.mcp import prompts, resources
 from depictio.api.v1.mcp.auth import resolve_context
 
 CTX_STATE_KEY = "depictio_tool_ctx"
@@ -179,6 +179,8 @@ def build_mcp_app() -> MCPApp:
         on_list_resources=_list_resources,
         on_list_resource_templates=_list_resource_templates,
         on_read_resource=_read_resource,
+        on_list_prompts=prompts.list_prompts,
+        on_get_prompt=prompts.get_prompt,
     )
     session_manager = StreamableHTTPSessionManager(app=server, json_response=True, stateless=True)
     return MCPApp(server=server, session_manager=session_manager, asgi=MCPAuthApp(session_manager))

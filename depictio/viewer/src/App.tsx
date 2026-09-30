@@ -117,7 +117,11 @@ import GroupingHeaderControl, {
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
-import { CommentsHeaderButton, CommentsProvider } from './components/comments';
+import {
+  CommentsHeaderButton,
+  CommentsProvider,
+  openCommentThread,
+} from './components/comments';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
@@ -1551,6 +1555,8 @@ const App: React.FC = () => {
                     activeFilters={deferredFilters}
                     serverKeyAvailable={aiServerKeyAvailable}
                     onApplyActions={handleApplyAIActions}
+                    agentsEnabled={serverFeatures.ai_agents}
+                    onOpenThread={openCommentThread}
                   />
                   {(aiFilterCount > 0 || aiFigureOverrideCount > 0) && (
                     <Group gap={6} mb={6}>

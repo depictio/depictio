@@ -13,12 +13,16 @@ const CommentsHeaderButton: React.FC = () => {
   const open = sum(control.openCounts);
   const proposed = sum(control.proposedCounts);
   const stale = sum(control.staleCounts);
-  const tooltip =
-    open || proposed
-      ? `${open} open thread${open === 1 ? '' : 's'}${proposed ? `, ${proposed} awaiting review` : ''}${
-          stale ? `, ${stale} with changed data` : ''
-        }`
-      : 'Comment on this dashboard';
+  // The badge and the tooltip count the same threads: open plus proposed.
+  const pending = open + proposed;
+  const parts = [
+    open ? `${open} open` : '',
+    proposed ? `${proposed} awaiting review` : '',
+    stale ? `${stale} with changed data` : '',
+  ].filter(Boolean);
+  const tooltip = pending
+    ? `${pending} thread${pending === 1 ? '' : 's'} to follow: ${parts.join(', ')}`
+    : 'Comment on this dashboard';
   return (
     <Tooltip label={tooltip} withArrow openDelay={400}>
       <Button
@@ -28,9 +32,9 @@ const CommentsHeaderButton: React.FC = () => {
         color="blue"
         leftSection={<Icon icon="mdi:comment-text-multiple-outline" width={14} height={14} />}
         rightSection={
-          open > 0 || proposed > 0 ? (
+          pending > 0 ? (
             <Badge size="xs" variant="filled" color={open > 0 ? 'blue' : 'violet'} circle>
-              {open > 0 ? open : proposed}
+              {pending}
             </Badge>
           ) : undefined
         }

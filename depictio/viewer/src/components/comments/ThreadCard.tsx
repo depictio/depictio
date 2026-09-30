@@ -377,9 +377,24 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
       </Badge>
     ) : null;
 
-  // Staleness first (it changes how the thread should be read), then what
-  // the thread captured of the view.
+  // A question first, then staleness (both change how the thread should be
+  // read), then what the thread captured of the view.
   const contextBadges: React.ReactNode[] = [];
+  if (thread.kind === 'question') {
+    contextBadges.push(
+      <Tooltip key="question" label="Asks for an answer rather than stating a finding" {...DRAWER_TOOLTIP}>
+        <Badge
+          size="xs"
+          color="orange"
+          variant="light"
+          leftSection={<Icon icon="mdi:help-circle-outline" width={11} />}
+          data-testid="thread-question-badge"
+        >
+          Question
+        </Badge>
+      </Tooltip>,
+    );
+  }
   if (staleness?.component_missing) {
     contextBadges.push(
       <Tooltip key="missing" label="The component was removed from the dashboard" {...DRAWER_TOOLTIP}>

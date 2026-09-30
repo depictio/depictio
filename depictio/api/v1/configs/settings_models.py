@@ -271,6 +271,8 @@ class MongoDBConfig(ServiceConfig):
         agent_tool_calls_collection: str = Field(default="agent_tool_calls")
         # Daily per-token write counters for agents (threads, reports), kept two days by a TTL index.
         agent_quotas_collection: str = Field(default="agent_quotas")
+        # One document per agent-team run (question, team, tool calls, findings, outputs).
+        ai_agent_runs_collection: str = Field(default="ai_agent_runs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1043,6 +1045,35 @@ class AIConfig(BaseSettings):
         ge=1,
         le=12,
         description="Data collections described to the planner (the rest are left out with a warning)",
+    )
+    # Agent teams: routed specialist analysts, a skeptic, an annotator, a
+    # questioner and a reporter working through the agent tool registry.
+    # Opt-in on top of `enabled`. Every run shares one budget pool: tool
+    # calls are the hard ceiling, cost the money lever (only enforced when
+    # the provider reports a cost), tokens the fallback when it does not.
+    agents_enabled: bool = Field(
+        default=False,
+        description="Enable the /ai/agent-runs team flow. Requires enabled; off by default.",
+    )
+    agents_max_tool_calls: int = Field(
+        default=60, ge=1, le=500, description="Tool calls one agent-team run may make in total"
+    )
+    agents_max_cost_usd: float = Field(
+        default=0.50,
+        gt=0,
+        description="Cost ceiling of one agent-team run in USD (a request may ask for less)",
+    )
+    agents_max_tokens_total: int = Field(
+        default=400_000,
+        ge=1_000,
+        description="Total LLM tokens (prompt + completion) one agent-team run may spend",
+    )
+    agents_max_parallel: int = Field(
+        default=3, ge=1, le=8, description="Analysts of one run working at the same time"
+    )
+    agents_model: str | None = Field(
+        default=None,
+        description="LiteLLM model for agent teams; None uses default_model",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")

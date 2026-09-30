@@ -9,8 +9,10 @@ import {
   Drawer,
   Group,
   Loader,
+  Modal,
   Pill,
   ScrollArea,
+  Select,
   Stack,
   Tabs,
   Text,
@@ -23,8 +25,20 @@ import { notifications } from '@mantine/notifications';
 import {
   componentTypeVisual,
   createCommentThread,
+  reviewCommentThread,
   Z_LAYERS,
 } from 'depictio-react-core';
+import {
+  acceptableThreads,
+  agentRunId,
+  agentRunLabel,
+  fetchAgentRun,
+  fetchAgentRuns,
+  filterThreads,
+  runIdsOf,
+  threadRunId,
+} from 'depictio-react-ai';
+import type { AgentRun, AgentRunSummary } from 'depictio-react-ai';
 import type {
   AnnotationStats,
   CommentThread,
@@ -202,6 +216,13 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   const scrollRequest = useUiStore((s) => s.threadScrollRequest);
 
   const [statuses, setStatuses] = useState<StatusFilter[]>(DEFAULT_STATUSES);
+  // Agent-team filters: the threads of one run, and questions only.
+  const [runFilter, setRunFilter] = useState<string | null>(null);
+  const [questionsOnly, setQuestionsOnly] = useState(false);
+  const [runs, setRuns] = useState<AgentRunSummary[]>([]);
+  const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
+  const [confirmAccept, setConfirmAccept] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
 
@@ -218,16 +239,78 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
     if (opened) void onReload();
   }, [opened, onReload]);
 
+  // Agent-team runs name the run filter's options. Agent teams off (404) or
+  // an older API simply leaves the run ids unnamed.
+  useEffect(() => {
+    if (!opened) return;
+    let cancelled = false;
+    fetchAgentRuns(dashboardId)
+      .then((r) => {
+        if (!cancelled) setRuns(r);
+      })
+      .catch(() => {
+        if (!cancelled) setRuns([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [opened, dashboardId]);
+
+  // The stored run says which finding each thread came from, so "Accept all
+  // confirmed" can leave out threads of weakened or refuted findings.
+  useEffect(() => {
+    setSelectedRun(null);
+    if (!runFilter) return;
+    let cancelled = false;
+    fetchAgentRun(runFilter)
+      .then((r) => {
+        if (!cancelled) setSelectedRun(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [runFilter]);
+
   const effectiveScope = scope === 'component' && componentIndex ? 'component' : 'tab';
   const targetIndex = effectiveScope === 'component' ? componentIndex : null;
   const targetMeta = targetIndex ? metaByIndex.get(targetIndex) : undefined;
 
-  const inScope = useMemo(
+  const inComponent = useMemo(
     () =>
       (threads ?? []).filter(
         (t) => effectiveScope === 'tab' || t.anchor.component_index === componentIndex,
       ),
     [threads, effectiveScope, componentIndex],
+  );
+  const inScope = useMemo(
+    () => filterThreads(inComponent, { runId: runFilter, questionsOnly }),
+    [inComponent, runFilter, questionsOnly],
+  );
+
+  const runIds = useMemo(() => runIdsOf(threads ?? []), [threads]);
+  const runOptions = useMemo(() => {
+    const byId = new Map(runs.map((r) => [agentRunId(r), r]));
+    return runIds.map((id) => {
+      const r = byId.get(id);
+      return { value: id, label: r ? agentRunLabel(r) : `Run ${id.slice(0, 8)}` };
+    });
+  }, [runIds, runs]);
+  // A run whose threads were all deleted leaves the filter.
+  useEffect(() => {
+    if (runFilter && threads && !runIds.includes(runFilter)) setRunFilter(null);
+  }, [runFilter, runIds, threads]);
+  // Counted within the selected run, like the list the chip narrows.
+  const questionCount = useMemo(
+    () =>
+      filterThreads(inComponent, { runId: runFilter }).filter(
+        (t) => t.kind === 'question' && t.status !== 'rejected',
+      ).length,
+    [inComponent, runFilter],
+  );
+  const toAccept = useMemo(
+    () => (runFilter ? acceptableThreads(threads ?? [], runFilter, selectedRun) : []),
+    [threads, runFilter, selectedRun],
   );
 
   // Figure annotations and plain comments are listed apart; the view counts
@@ -260,6 +343,30 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
     handledFocus.current = focusedThreadId;
     setView(thread.annotation ? 'annotations' : 'comments');
   }, [focusedThreadId, threads, setView]);
+
+  // A thread opened from outside (a team run's trace, a `?thread=` link)
+  // must not be hidden by the agent filters or the status chips; one the tab
+  // has not loaded yet (just written by an agent) triggers a reload, once.
+  const reloadedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!opened || !focusedThreadId || threads === null) return;
+    const thread = threads.find((t) => t.id === focusedThreadId);
+    if (!thread) {
+      if (reloadedFor.current !== focusedThreadId) {
+        reloadedFor.current = focusedThreadId;
+        void onReload();
+      }
+      return;
+    }
+    if (runFilter && threadRunId(thread) !== runFilter) setRunFilter(null);
+    if (questionsOnly && thread.kind !== 'question') setQuestionsOnly(false);
+    const status = thread.status;
+    if (status !== 'rejected' && !statuses.includes(status as StatusFilter)) {
+      setStatuses((prev) => [...prev, status as StatusFilter]);
+    }
+    // Only a new focus widens the filters; later chip changes stick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, focusedThreadId, threads]);
 
   // An annotation opened for editing from a chart must not be hidden by the
   // status chips (a resolved one, say).
@@ -393,6 +500,29 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
     return () => cancelAnimationFrame(frame);
   }, [scrollRequest, opened, focusedThreadId, visible, view]);
 
+  const acceptAll = async () => {
+    setAccepting(true);
+    let done = 0;
+    const failed: string[] = [];
+    // One at a time through the regular review route: each accept is the
+    // same audited decision a person makes on a single card.
+    for (const t of toAccept) {
+      try {
+        onChanged(await reviewCommentThread(t.id, 'accepted'));
+        done += 1;
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : String(err));
+      }
+    }
+    setAccepting(false);
+    setConfirmAccept(false);
+    notifications.show({
+      color: failed.length ? 'orange' : 'teal',
+      title: `Accepted ${done} proposal${done === 1 ? '' : 's'}`,
+      message: failed.length ? `${failed.length} failed: ${failed[0]}` : undefined,
+    });
+  };
+
   const renderThreads = (list: CommentThread[]) =>
     list.map((t) => (
       <ThreadCard
@@ -522,6 +652,61 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
       </Chip.Group>
     </Group>
   );
+
+  const agentFilter =
+    runIds.length > 0 || questionCount > 0 ? (
+      <Stack gap={6} data-testid="comments-agent-filter">
+        {runIds.length > 0 && (
+          <Select
+            size="xs"
+            placeholder="All runs"
+            aria-label="Agent-team run"
+            data={runOptions}
+            value={runFilter}
+            onChange={setRunFilter}
+            clearable
+            leftSection={<Icon icon="mdi:robot-outline" width={14} />}
+            comboboxProps={{ zIndex: Z_LAYERS.overlay + 1 }}
+            w="100%"
+            data-testid="comments-run-filter"
+          />
+        )}
+        <Group gap={6} wrap="wrap">
+          <Chip
+            size="xs"
+            variant="light"
+            color="orange"
+            checked={questionsOnly}
+            onChange={setQuestionsOnly}
+            icon={<Icon icon="mdi:help-circle-outline" width={12} />}
+            data-testid="comments-questions-filter"
+          >
+            <Group gap={4} wrap="nowrap" component="span">
+              {!questionsOnly && <Icon icon="mdi:help-circle-outline" width={12} />}
+              <span>Questions</span>
+              {questionCount > 0 && (
+                <Text span size="xs" c="dimmed">
+                  {questionCount}
+                </Text>
+              )}
+            </Group>
+          </Chip>
+          {runFilter && (
+            <Button
+              size="compact-xs"
+              variant="light"
+              color="teal"
+              disabled={toAccept.length === 0}
+              leftSection={<Icon icon="mdi:check-all" width={14} />}
+              onClick={() => setConfirmAccept(true)}
+              data-testid="comments-accept-confirmed"
+            >
+              Accept all confirmed ({toAccept.length})
+            </Button>
+          )}
+        </Group>
+      </Stack>
+    ) : null;
 
   const list = loadError ? (
     <Alert color="red" variant="light" title="Could not load comments">
@@ -666,6 +851,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
         </Tabs>
 
         {statusFilter}
+        {agentFilter}
 
         <ScrollArea
           style={{ flex: 1, minHeight: 0 }}
@@ -683,6 +869,42 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
           {footer}
         </Box>
       </Stack>
+
+      <Modal
+        opened={confirmAccept}
+        onClose={() => !accepting && setConfirmAccept(false)}
+        title="Accept all confirmed proposals?"
+        zIndex={Z_LAYERS.overlay + 1}
+        centered
+        size="sm"
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            {toAccept.length} proposed thread{toAccept.length === 1 ? '' : 's'} of this run will be
+            accepted and become open threads. Threads of findings the skeptic weakened or refuted
+            are left for review.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="default"
+              size="xs"
+              onClick={() => setConfirmAccept(false)}
+              disabled={accepting}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="teal"
+              size="xs"
+              loading={accepting}
+              onClick={() => void acceptAll()}
+              data-testid="comments-accept-confirmed-go"
+            >
+              Accept {toAccept.length}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Drawer>
   );
 };

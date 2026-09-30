@@ -1,0 +1,61 @@
+# Microbiome / amplicon and shotgun taxonomic profiling (ampliseq-like).
+id: microbiome
+kind: topic
+name: Microbiome profiling
+version: 1
+description: Taxonomic composition, alpha and beta diversity, and differential abundance of microbial communities.
+applies_to:
+  template_ids:
+    - nf-core/ampliseq*
+    - nf-core/taxprofiler*
+    - nf-core/mag*
+  catalog_modules:
+    - qiime2
+    - qiime2/*
+    - metaphlan
+    - taxpasta
+    - sylph
+    - vsearch
+    - sidle
+    - melon
+  # Not 'species' alone: plain tables (penguins, iris) use it too.
+  columns:
+    - kingdom
+    - phylum
+    - genus
+    - "asv*"
+    - "otu*"
+    - "*shannon*"
+    - "*simpson*"
+    - "*observed_features*"
+    - "*faith_pd*"
+    - "*relative_abundance*"
+    - "*taxonomy*"
+  keywords:
+    - taxa
+    - taxonomy
+    - microbiome
+    - diversity
+    - alpha diversity
+    - beta diversity
+    - abundance
+    - asv
+    - otu
+    - rarefaction
+    - composition
+context_md: |
+  Topic: microbial community profiling.
+  - Composition: dominant taxa per group at the rank the dashboard shows; taxa
+    present in one group only; samples dominated by a single taxon.
+  - Alpha diversity: compare groups with group sizes, and check sequencing depth
+    first, since shallow samples have lower observed richness.
+  - Beta diversity: whether samples separate by the grouping variable in the
+    ordination, and which samples sit away from their group.
+  - Differential abundance: significant taxa with their direction and effect
+    size; compositional data make raw proportions misleading.
+  - Controls and contamination: blanks or negative controls with high read
+    counts or shared taxa.
+checks:
+  - Name the taxonomic rank of every composition claim.
+  - Mention sequencing depth when comparing richness.
+tools: []

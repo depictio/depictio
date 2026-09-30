@@ -38,9 +38,11 @@
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "typescript": "^5.3.0",
+    "vitest": "^2.1.9",
     "zustand": "^5.0.0"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   }
 }
