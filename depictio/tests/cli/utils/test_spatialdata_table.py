@@ -624,7 +624,19 @@ class TestColumns:
         with pytest.raises(ValueError, match="tables/other"):
             read_spatialdata_table(str(store), {"table": "tables/other"})
 
-    @pytest.mark.parametrize("column", ["sample", "x"])
+    def test_obs_x_y_are_kept_as_obs_x_obs_y(self, tmp_path):
+        store = make_table(
+            tmp_path / "s.zarr",
+            index=["a"],
+            obs={"x": np.array([7.0]), "y": np.array([8.0])},
+            obsm_spatial=[[1, 2]],
+        )
+
+        df = read_spatialdata_table(str(store), {})
+
+        assert df.select("x", "y", "obs_x", "obs_y").row(0) == (1.0, 2.0, 7.0, 8.0)
+
+    @pytest.mark.parametrize("column", ["sample"])
     def test_obs_column_colliding_with_an_output_column(self, tmp_path, column):
         store = make_table(
             tmp_path / "s.zarr",

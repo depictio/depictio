@@ -137,6 +137,18 @@ class TestSpatialDataTableConfig:
         assert source.table == "tables/spots"
         assert source.image == "images/he"
 
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("gene_A, gene_B", ["gene_A", "gene_B"]),
+            (["gene_A,gene_B", "gene_C"], ["gene_A", "gene_B", "gene_C"]),
+            ("", []),
+        ],
+    )
+    def test_genes_split_on_commas(self, value, expected):
+        """A template variable reaches the block as one comma-separated string."""
+        assert SpatialDataTableSource(genes=value).genes == expected
+
     def test_block_is_required(self):
         with pytest.raises(ValidationError, match="needs a spatialdata block"):
             DCTableConfig(format="spatialdata")
@@ -159,7 +171,7 @@ class TestSpatialDataTableConfig:
             ("layer", ".."),
             ("coordinates", "centroid"),
             ("genes", ["a", "a"]),
-            ("genes", [""]),
+            ("genes", "a, a"),
             ("unknown", 1),
         ],
     )
