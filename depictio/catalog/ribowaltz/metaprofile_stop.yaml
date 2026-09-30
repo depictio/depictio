@@ -1,0 +1,16 @@
+id: ribowaltz_metaprofile_stop
+name: Metagene profile at the stop codon
+mode: riboseq/metagene
+description: >-
+  P-site signal summed over all transcripts at each nucleotide around the
+  annotated stop codon, per library. The 3-nt saw-tooth should run up to the
+  stop codon and fade after it, where ribosomes release.
+find: { path_glob: "**/*.ribowaltz.metaprofile_psite.tsv" }
+recipe: ribowaltz/metaprofile_stop.py
+fixture: metaprofile_stop.tsv
+renders_as:
+  - id: stop_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: position, y: signal }
+  - { component: table }

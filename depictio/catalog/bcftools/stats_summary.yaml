@@ -1,0 +1,19 @@
+id: bcftools_stats_summary
+name: Per-caller variant counts
+mode: stats-summary
+description: >-
+  Per-sample, per-caller variant record counts (SNPs, indels, multiallelic
+  sites) from `bcftools stats`. Pipeline-agnostic: any workflow that runs
+  `bcftools stats` per caller per sample, with the caller and sample in the
+  path rather than in the file, lands in the same collection.
+find:
+  path_glob: "**/*.bcftools_stats.txt"
+recipe: bcftools/stats_summary.py
+fixture: stats_summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: n_snps, color: sample, barmode: group} }
+  - { component: card, column: n_snps, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }
+  - { component: card, column: n_indels, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }
+  - { component: card, column: n_multiallelic_sites, aggregation: sum, secondary_layout: donut, breakdown_col: caller }
+  - { id: caller_yield_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: caller, mean_expression: log10_n_records, frac_expressing: snp_fraction} }
+  - { component: table }

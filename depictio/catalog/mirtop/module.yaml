@@ -1,0 +1,10 @@
+# mirtop: annotates reads aligned to miRBase (or MirGeneDB) precursors with the
+# isomiR they represent, in the miRNA community's GFF3 standard: the 5' and 3'
+# end shifts against the reference mature sequence, non-templated 3' additions
+# and nucleotide changes. nf-core/smrnaseq exports the per-sample GFFs as one
+# joined table (one row per isomiR sequence, one count column per sample); the
+# outputs here aggregate that table to the miRNA and to the isomiR class.
+id: mirtop
+name: mirtop
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mirtop/export
+homepage: https://github.com/miRTop/mirtop

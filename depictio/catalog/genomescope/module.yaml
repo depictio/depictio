@@ -1,0 +1,10 @@
+# GenomeScope: genome size, heterozygosity and repeat content estimated from the
+# k-mer spectrum of the reads, before any assembly. Its estimate is the yardstick
+# an assembly's total length is read against. One output, the summary table,
+# read from both the GenomeScope 1 and GenomeScope 2 layouts; the model plots
+# (PNG) are not read. The spectrum itself is `depictio/catalog/jellyfish/`.
+id: genomescope
+name: GenomeScope
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/genomescope2
+homepage: https://github.com/tbenavi1/genomescope2.0
+description: Genome size, heterozygosity and repeat content from a read k-mer spectrum.

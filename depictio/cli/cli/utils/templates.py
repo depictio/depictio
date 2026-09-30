@@ -301,6 +301,21 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         return config
 
 
+def apply_variable_defaults(
+    variables: dict[str, str], template_metadata: TemplateMetadata
+) -> dict[str, str]:
+    """Fill every declared variable that has a ``default`` and no value yet.
+
+    Explicit values (``--var``, params.json introspection, metadata auto-detect)
+    always win. Mutates and returns ``variables``. Shared by the CLI resolver and
+    the boot-time reference resolver so a template variable such as ``GENOME``
+    resolves to the same value on both paths.
+    """
+    for name, default in template_metadata.get_variable_defaults().items():
+        variables.setdefault(name, default.replace("{DATA_ROOT}", variables.get("DATA_ROOT", "")))
+    return variables
+
+
 def _prune_missing_optional_single_file_dcs(
     config: dict[str, Any],
 ) -> tuple[dict[str, Any], list[str]]:
@@ -1109,6 +1124,7 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         ``--ancombc``), so qiime2/ancombc/ is absent
       - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
       - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
+      - ``IS_BCLCONVERT``  — demultiplex runs using BCL Convert instead of bcl2fastq
       - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
         reconstructed into one cross-region feature table under ``sidle/``)
       - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``
@@ -1170,6 +1186,8 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         variables.setdefault("IS_NANOPORE", "true")
     if (params.get("protocol") or "").lower() == "metagenomic":
         variables.setdefault("IS_METAGENOMIC", "true")
+    if (params.get("demultiplexer") or "").lower() == "bclconvert":
+        variables.setdefault("IS_BCLCONVERT", "true")
     if params.get("skip_qiime") is True:
         variables.setdefault("SKIP_QIIME", "true")
     # ampliseq output-suppressing skip flags: each removes a subtree of qiime2/
@@ -1354,6 +1372,15 @@ def resolve_template(
                 variables["SAMPLESHEET_FILE"] = str(candidates[0])
                 logger.info(f"Samplesheet auto-detected: {candidates[0]}")
 
+    # 3d. Declared defaults (e.g. GENOME: hg38, GROUP_COL: Condition) fill whatever
+    # the run left unset. They run BEFORE the generic sentinels below so a template's
+    # own default wins over them, and they are excluded from `provided_vars`: a
+    # default must not fire an `if_var_present` conditional, it only resolves
+    # `{NAME}` placeholders in template.yaml and the dashboard YAMLs.
+    _before_defaults = set(variables)
+    apply_variable_defaults(variables, template_metadata)
+    defaulted_vars = set(variables) - _before_defaults
+
     # Metadata ID column defaults to "sample" (megatest convention) when no
     # metadata file is present; the metadata→* links are pruned in that case, so
     # the placeholder simply resolves harmlessly.
@@ -1368,7 +1395,7 @@ def resolve_template(
     variables.setdefault("GROUP_COL", "__no_group__")
     variables.setdefault("GROUP_COL_DISPLAY", "Group")
 
-    provided_vars: set[str] = set(variables.keys())
+    provided_vars: set[str] = set(variables.keys()) - defaulted_vars
 
     # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
@@ -1532,7 +1559,12 @@ def import_dashboards_from_template(
                         parsed["main_dashboard"]["title"] = dashboard_name
                     elif "title" in parsed:
                         parsed["title"] = dashboard_name
-                yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
+                # sort_keys=False: PyYAML sorts mapping keys by default, which
+                # re-ordered every dict-shaped config on import (record_card
+                # sections came out alphabetical, review P18).
+                yaml_content = yaml.dump(
+                    parsed, default_flow_style=False, allow_unicode=True, sort_keys=False
+                )
 
             params: dict[str, str | bool] = {}
             if project_id:

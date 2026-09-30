@@ -15,7 +15,9 @@ renders_as:
   - { id: seacr_fragment_curve, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction, color: sample, title: Fragment length distribution} }
   - { id: seacr_fragment_cumulative, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: cumulative_fraction, color: sample, title: Cumulative fragment length} }
   - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # No median card on `fragment_length`: the table has one row per length, so
+  # a median over it is the middle of the x axis. The per-sample median is
+  # `seacr/fragment_classes.sample_median_length`.
   - { component: card, column: fraction, aggregation: max, secondary_layout: histogram }
   - { component: card, column: target, aggregation: count, secondary_layout: donut, breakdown_col: target }
   - { component: table }

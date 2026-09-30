@@ -26,6 +26,7 @@ import {
   FunnelView,
   TopPanel,
   mergeFiltersBySource,
+  withInteractiveDefaults,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -55,6 +56,7 @@ import {
   SaveGroupContext,
   BrandScope,
   Z_LAYERS,
+  AdvancedVizPlacementDefaultProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -323,6 +325,10 @@ const App: React.FC = () => {
     Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
       .then(([dash, all]) => {
         setDashboard(dash);
+        // Declared filter defaults (`default_value` / `default_range`) land in
+        // the same batch as the dashboard, so the first render is already
+        // filtered. Values hydrated from storage keep precedence.
+        setFilters((prev) => withInteractiveDefaults(prev, dash.stored_metadata));
         setAllDashboards(all);
       })
       .catch((err) => {
@@ -518,12 +524,14 @@ const App: React.FC = () => {
   );
 
   const handleResetAllFilters = useCallback(() => {
-    setFilters([]);
+    // "Reset all" returns to the author's initial view: declared defaults
+    // come back, everything else is cleared.
+    setFilters(withInteractiveDefaults([], dashboard?.stored_metadata));
     // Group filters live outside the filter list but narrow the dashboard all
     // the same — "Reset all" must release them too or the data stays filtered
     // with no visible chip explaining why.
     groupsApi.deactivateAllGroupFilters();
-  }, [groupsApi.deactivateAllGroupFilters]);
+  }, [groupsApi.deactivateAllGroupFilters, dashboard?.stored_metadata]);
 
   // The dashboard-wide map panel: the tab family's floating maps, its own
   // hidden/floating/docked state, shared by the header control and the panel
@@ -770,6 +778,7 @@ const App: React.FC = () => {
         refreshTick={refreshTick}
         groupRender={groupRender}
         bulkOptions={groupsApi.bulkOptions}
+        autofit={dashboard?.autofit !== false}
       />
     ) : null;
 
@@ -891,6 +900,10 @@ const App: React.FC = () => {
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
+      {/* Dashboard-wide default for where advanced-viz tiles draw their
+          controls. No config sink in the viewer: a reader can still pin a
+          tile's controls open, and it stays local to their session. */}
+      <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
@@ -1250,6 +1263,7 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    autofit={dashboard?.autofit !== false}
                   />
                 )}
               </Box>
@@ -1263,6 +1277,7 @@ const App: React.FC = () => {
                   refreshTick={refreshTick}
                   groupRender={groupRender}
                   bulkOptions={groupsApi.bulkOptions}
+                  autofit={dashboard?.autofit !== false}
                 />
               )}
             </Box>
@@ -1368,6 +1383,7 @@ const App: React.FC = () => {
     </AppShell>
       </BrandScope>
       </SaveGroupContext.Provider>
+      </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

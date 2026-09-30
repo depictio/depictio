@@ -480,6 +480,62 @@
       "breakdown_col": "run",
       "aggregation": "nunique",
       "top_n_count": 4
+    },
+    {
+      "name": "breakdown_lineage_average",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "average",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_lineage_median",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "median",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_lineage_min",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "min",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_lineage_max",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "max",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_lineage_range",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "range",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_lineage_variance",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "variance",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_lineage_std_dev",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "std_dev",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_run_max",
+      "column": "coverage",
+      "breakdown_col": "run",
+      "aggregation": "max",
+      "top_n_count": 3
     }
   ],
   "breakdowns": {
@@ -597,6 +653,276 @@
       "unique_values": 6,
       "breakdown_kind": "nunique",
       "evenness": 1.0
+    },
+    "breakdown_lineage_average": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "(null)",
+          "count": 136.366666667,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 66.925,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 65.1777777778,
+          "percent": null
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 62.9,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 35.9666666667,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "average",
+      "evenness": null
+    },
+    "breakdown_lineage_median": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "(null)",
+          "count": 92.6,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 72.8,
+          "percent": null
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 70.1,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 62.25,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 36.1,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "median",
+      "evenness": null
+    },
+    "breakdown_lineage_min": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "B.1.617.2",
+          "count": 12.5,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 29.9,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 33.4,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 55.25,
+          "percent": null
+        },
+        {
+          "name": "(null)",
+          "count": 66.5,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "min",
+      "evenness": null
+    },
+    "breakdown_lineage_max": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "(null)",
+          "count": 250,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 98.4,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 94.3,
+          "percent": null
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 90,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 41.9,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "max",
+      "evenness": null
+    },
+    "breakdown_lineage_range": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "(null)",
+          "count": 183.5,
+          "percent": null
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 77.5,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 65,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 39.05,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 12,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "range",
+      "evenness": null
+    },
+    "breakdown_lineage_variance": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "(null)",
+          "count": 9854.70333333,
+          "percent": null
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 722.343333333,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 542.071944444,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 200.96375,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 36.0133333333,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "variance",
+      "evenness": null
+    },
+    "breakdown_lineage_std_dev": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "(null)",
+          "count": 99.2708584295,
+          "percent": null
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 26.8764456975,
+          "percent": null
+        },
+        {
+          "name": "B.1.1.7",
+          "count": 23.2824385416,
+          "percent": null
+        },
+        {
+          "name": "P.1",
+          "count": 14.1761683822,
+          "percent": null
+        },
+        {
+          "name": "AY.4",
+          "count": 6.00111100825,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 5,
+      "breakdown_kind": "std_dev",
+      "evenness": null
+    },
+    "breakdown_run_max": {
+      "column": "run",
+      "total": 30,
+      "top": [
+        {
+          "name": "3",
+          "count": 250,
+          "percent": null
+        },
+        {
+          "name": "1",
+          "count": 98.4,
+          "percent": null
+        },
+        {
+          "name": "4",
+          "count": 90,
+          "percent": null
+        }
+      ],
+      "top_share": null,
+      "unique_values": 6,
+      "breakdown_kind": "max",
+      "evenness": null
     }
   },
   "aggregations": {

@@ -1,11 +1,11 @@
-# Signal matrix — one tab of the advanced-visualisation showcase.
+# Signal matrix: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Signal matrix'
+title: 'Signal around peak summits'
 subtitle: 'The heatmap half of a metagene plot: one row per ATAC-seq peak, one column per 50 bp offset from the summit, panelled by peak class.'
 icon: 'mdi:grid'
 icon_color: 'teal'
@@ -38,18 +38,18 @@ components:
   - tag: text-signal_matrix
     index: sigm-text
     component_type: text
-    title: 'Signal matrix'
+    title: 'Signal around peak summits'
     order: 3
     alignment: left
     vertical_alignment: top
     section: 'Signal matrix'
     body: >
-      One row per ATAC-seq peak, one column per 50 bp offset from the summit, cell colour is
-      the normalised signal. Rows are ordered by total signal and split into a panel per peak
-      class, so the banding is the reading: promoters give a narrow bright stripe with faint
-      nucleosome shoulders either side, enhancers a broad low mound, background peaks almost
-      nothing. Columns are positions and are never reordered; past the row budget rows are
-      averaged into bins rather than truncated, so the weak half never disappears.
+      One row per ATAC-seq peak, one column per 50 bp offset from the summit, colour the
+      normalised signal, rows split into a panel per peak class with the mean profile on top.
+      Promoters give a narrow bright stripe with nucleosome shoulders, enhancers a broad low
+      mound, background peaks almost nothing. Row order and the colour scale are in the header;
+      past the row budget rows are averaged, never dropped. Input: the deepTools
+      computeMatrix output of nf-core/atacseq, chipseq or cutandrun, in long form.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-signal_matrix
@@ -58,11 +58,12 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'signal_matrix_demo'
     title: 'ATAC-seq signal around peak summits'
-    description: '300 peaks × 41 offsets (-1000 to +1000 bp, 50 bp bins), panelled on the peak class with the mean profile drawn above. Colour scale, row order, row budget and the profile toggle all live in the Settings ⚙ popover; the colour range is a robust 2nd-98th percentile so one saturated peak cannot flatten the rest.'
+    description: '300 peaks by 41 offsets (-1000 to +1000 bp, 50 bp bins), panelled on the peak class with the mean profile drawn above. The colour range is the 2nd to 98th percentile, so one saturated peak cannot flatten the rest.'
     section: 'Signal matrix'
     viz_kind: 'signal_matrix'
     config:
       viz_kind: "signal_matrix"
+      controls_placement: "header"
       region_id_col: "region_id"
       position_col: "position"
       value_col: "value"
@@ -89,7 +90,6 @@ components:
     group: 'Matrix filters'
     display:
       title_size: md
-      custom_color: '#12B886'
       icon_name: 'mdi:form-select'
     layout: { x: 0, y: 0, w: 1, h: 3 }
 
@@ -103,11 +103,11 @@ components:
     column_type: 'float64'
     title: 'Signal'
     placement: left
+    show_histogram: true
     section: 'Matrix scope'
     group: 'Matrix filters'
     display:
       title_size: md
-      custom_color: '#00BCD4'
       icon_name: 'mdi:chart-line'
     layout: { x: 0, y: 3, w: 1, h: 3 }
 
@@ -125,6 +125,5 @@ components:
     group: 'Matrix filters'
     display:
       title_size: md
-      custom_color: '#45B8AC'
       icon_name: 'mdi:map-marker-path'
     layout: { x: 0, y: 6, w: 1, h: 3 }

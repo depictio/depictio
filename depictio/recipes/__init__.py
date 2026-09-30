@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import re
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import polars as pl
 
@@ -120,18 +123,38 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
 # ---------------------------------------------------------------------------
 
 
-def _read_source_file(file_path: Path, source: RecipeSource) -> pl.DataFrame:
-    """Read a single source file into a DataFrame."""
+def _read_source_file(
+    file_path: Path, source: RecipeSource, data_dir: Path | None = None
+) -> pl.DataFrame:
+    """Read a single source file into a DataFrame.
+
+    When the source declares ``source_path``, a column of that name is added
+    holding the file's path relative to ``data_dir`` (absolute when the file is
+    outside it), so the recipe can derive a key the content lacks.
+    """
     kwargs = source.read_kwargs or {}
 
     if source.format == "csv":
-        return pl.read_csv(file_path, **kwargs)
+        df = pl.read_csv(file_path, **kwargs)
     elif source.format == "tsv":
-        return pl.read_csv(file_path, separator="\t", **kwargs)
+        df = pl.read_csv(file_path, separator="\t", **kwargs)
     elif source.format == "parquet":
-        return pl.read_parquet(file_path, **kwargs)
+        df = pl.read_parquet(file_path, **kwargs)
     else:
         raise RecipeError(f"Unsupported format: {source.format}")
+
+    if source.source_path:
+        if source.source_path in df.columns:
+            raise RecipeError(
+                f"Source '{source.ref}': source_path column '{source.source_path}' "
+                f"already exists in {file_path}"
+            )
+        try:
+            rel = file_path.relative_to(data_dir) if data_dir is not None else file_path
+        except ValueError:
+            rel = file_path
+        df = df.with_columns(pl.lit(rel.as_posix(), dtype=pl.Utf8).alias(source.source_path))
+    return df
 
 
 def _resolve_glob_source(
@@ -153,7 +176,7 @@ def _resolve_glob_source(
 
     frames: list[pl.DataFrame] = []
     for file_path in matched_files:
-        df = _read_source_file(file_path, source)
+        df = _read_source_file(file_path, source, data_dir)
         if not df.is_empty():
             frames.append(df)
 
@@ -217,7 +240,7 @@ def resolve_sources(
                 continue
             raise RecipeError(f"Source '{source.ref}': file not found: {file_path}")
 
-        df = _read_source_file(file_path, source)
+        df = _read_source_file(file_path, source, data_dir)
         if df.is_empty():
             raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_path}")
 
@@ -268,12 +291,33 @@ def validate_schema(
                     )
 
 
+_UNRESOLVED_PLACEHOLDER = re.compile(r"^\{[A-Z0-9_]+\}$")
+
+
+def call_transform(module: Any, sources: dict, params: dict[str, str] | None = None) -> Any:
+    """Call ``module.transform``, passing template ``params`` when the recipe takes them.
+
+    A recipe opts in by declaring a ``params`` keyword. Values that are still an
+    unresolved ``{VAR}`` placeholder (the template variable was not set) are dropped,
+    so the recipe sees the parameter as absent and uses its own fallback.
+    """
+    if params is not None and "params" in inspect.signature(module.transform).parameters:
+        clean = {
+            k: v
+            for k, v in params.items()
+            if v is not None and not _UNRESOLVED_PLACEHOLDER.match(str(v).strip())
+        }
+        return module.transform(sources, params=clean)
+    return module.transform(sources)
+
+
 def execute_recipe(
     recipe_name: str,
     data_dir: str | Path,
     overrides: dict[str, str] | None = None,
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
+    params: dict[str, str] | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -283,6 +327,8 @@ def execute_recipe(
         overrides: Optional source path overrides.
         extra_sources: Optional pre-loaded DataFrames for dc_ref sources.
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
+        params: Optional template parameters, passed to ``transform(sources, params=...)``
+            when the recipe accepts them (see ``call_transform``).
 
     Returns:
         Validated output DataFrame.
@@ -309,7 +355,7 @@ def execute_recipe(
                 )
 
     # Checkpoint 3: transform
-    result = module.transform(sources)
+    result = call_transform(module, sources, params)
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "

@@ -1,0 +1,21 @@
+id: bambu_sample_pca
+name: Sample structure and library readings
+mode: exploratory/pca
+description: >-
+  One row per sample: the first three principal components of the log-CPM gene
+  matrix, restricted to the 500 most variable genes the way DESeq2 plotPCA
+  does, next to the library size, the number of genes detected and the share of
+  the library its 50 top genes take.
+find: { path_glob: "**/bambu/counts_gene.txt" }
+recipe: bambu/sample_pca.py
+fixture: sample_pca.tsv
+renders_as:
+  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3, color: condition} }
+  - { id: depth_vs_complexity, component: advanced_viz, kind: scatter_xy, roles: {x: total_counts, y: n_genes_detected, label: sample_id, color: condition, size: top50_share_pct} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: total_counts, color: condition, title: Reads assigned per library} }
+  - { component: card, column: total_counts, aggregation: sum, secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }
+  - { component: card, column: n_genes_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_protein_coding, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: top50_share_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: condition }
+  - { component: table }

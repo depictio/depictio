@@ -1,0 +1,32 @@
+id: bcftools_stats_sections
+name: Variant distributions per caller
+mode: stats-sections
+description: >-
+  The distribution blocks of `bcftools stats`, melted into one long frame so
+  a single `section` filter drives every tile instead of five separate
+  collections. `section` is one of `indel_length` (insertion and
+  deletion length, deletions negative), `substitution` (the A to C, A to G,
+  ... substitution spectrum), `depth` (read depth), `allele_frequency` (non-reference allele frequency) and
+  `singleton_stats` (variants seen in exactly one allele copy). The key
+  column differs per section, which is the price of melting: a numeric
+  distribution puts its x value in `bin` and leaves `label` null, a
+  categorical one puts its x value in `label` and leaves `bin` null, and
+  `depth` fills both because bcftools writes its open-ended top bucket under
+  a non-numeric bin name. `count` is always a count of variant records, but
+  of a different kind per section (sites for indel length and depth, SNPs
+  for allele frequency, substitutions or singletons for the two
+  categorical ones), so summing it within a filtered section is meaningful
+  and summing it across sections is not. Sample and caller are read off the
+  report's own `ID` line, so any layout a pipeline publishes the reports
+  under works. The quality block is left out: it is most of the rows of a
+  real callset, and the VCFtools Ts/Tv-by-quality sweep answers its question.
+find:
+  path_glob: "**/*.bcftools_stats.txt"
+recipe: bcftools/stats_sections.py
+fixture: stats_sections.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: bin, y: count, color: caller} }
+  # Which distribution a filtered view is looking at, and how the total
+  # splits across the sections still in scope.
+  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: section, top_n_count: 3 }
+  - { component: table }

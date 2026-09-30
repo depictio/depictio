@@ -1,0 +1,4 @@
+id: cooltools
+name: cooltools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cooltools/eigscis
+homepage: https://cooltools.readthedocs.io/

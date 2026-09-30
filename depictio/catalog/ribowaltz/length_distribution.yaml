@@ -1,0 +1,17 @@
+id: ribowaltz_length_distribution
+name: Footprint length distribution
+mode: riboseq/read-length
+description: >-
+  Share of each library's reads at every read length riboWaltz kept for
+  P-site assignment. Ribosome-protected fragments form a narrow peak; a broad
+  or shifted distribution points at digestion or contamination problems.
+find: { path_glob: "**/*.ribowaltz.length_distribution.tsv" }
+recipe: ribowaltz/length_distribution.py
+fixture: length_distribution.tsv
+renders_as:
+  - id: length_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: length, y: pct }
+  - { component: figure, visu_type: line, dict_kwargs: { x: length, y: pct, color: sample } }
+  - { component: table }

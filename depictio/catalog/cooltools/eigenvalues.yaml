@@ -1,0 +1,12 @@
+id: cooltools_eigenvalues
+name: Compartment eigenvalues
+mode: eigs-cis
+description: Per-chromosome eigenvalues behind the A/B compartment track, how much of the intra-chromosomal structure each eigenvector explains.
+find:
+  path_glob: "**/*.cis.lam.txt"
+recipe: cooltools/eigenvalues.py
+fixture: eigenvalues.tsv
+renders_as:
+  - { component: card, column: eigval1, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: eigval2, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

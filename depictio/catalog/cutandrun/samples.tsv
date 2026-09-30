@@ -1,0 +1,7 @@
+sample_id	target	replicate	replicate_label	role	is_control	control_target	n_libraries	library_ids	single_end
+h3k27me3_R1	h3k27me3	1	R1	target	false	igg_ctrl	1	h3k27me3_R1_T1	false
+h3k27me3_R2	h3k27me3	2	R2	target	false	igg_ctrl	1	h3k27me3_R2_T1	false
+h3k4me3_R1	h3k4me3	1	R1	target	false	igg_ctrl	1	h3k4me3_R1_T1	false
+h3k4me3_R2	h3k4me3	2	R2	target	false	igg_ctrl	1	h3k4me3_R2_T1	false
+igg_ctrl_R1	igg_ctrl	1	R1	IgG control	true		1	igg_ctrl_R1_T1	false
+igg_ctrl_R2	igg_ctrl	2	R2	IgG control	true		1	igg_ctrl_R2_T1	false

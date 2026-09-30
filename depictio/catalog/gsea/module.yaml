@@ -1,0 +1,15 @@
+# GSEA ships as a folder because the pipeline publishes several report tables per
+# run, one per contrast and phenotype, and more of them (the per-set details) can
+# be bound later without moving the identity.
+#
+# nf-core/differentialabundance runs the Broad's GSEA in pre-ranked mode over the
+# DESeq2 statistics and publishes one report table per phenotype under
+# `tables/gsea/<contrast>/`. The report is the only machine-readable artefact of
+# that step: the rest of the module's output is HTML.
+id: gsea
+name: GSEA
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gsea/gsea
+homepage: https://www.gsea-msigdb.org/gsea
+edam_topics:
+  - http://edamontology.org/topic_3308 # Transcriptomics
+  - http://edamontology.org/topic_2269 # Statistics and probability

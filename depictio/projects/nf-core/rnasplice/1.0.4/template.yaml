@@ -1,0 +1,641 @@
+# nf-core/rnasplice Template v1.0.4 - alternative splicing analysis of RNA-seq
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/rnasplice/1.0.4 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv] [--var QUANT_ROUTE=salmon]
+#
+# Validated against an EMBL cluster run of the pipeline's `test_full` profile
+# (the AWS megatest prefix is a truncated sync with no splicing output); see
+# megatest.yaml and VALIDATION_REPORT.md. MultiQC 1.18 wrote no parquet, so the
+# report is re-parsed with the pinned MultiQC (depictio.dev_scripts.multiqc_reprocess).
+#
+# What a run publishes, and so what this template reads:
+#   - multiqc/multiqc_data/multiqc.parquet: FastQC (raw and trimmed), Trim
+#     Galore (cutadapt), STAR, samtools, featureCounts, Salmon.
+#   - pipeline_info/samplesheet.valid.csv: the validated sheet, whose
+#     mandatory `condition` column is the design every contrast is built on.
+#   - contrastsheet/contrastsheet.valid.csv: contrast, treatment, control.
+#   - <route>/tximport/salmon.merged.gene_tpm.tsv: the expression matrix of
+#     the sample-space tab (catalog salmon/*).
+#   - five differential splicing tools, each optional (--dexseq_exon,
+#     --edger_exon, --dexseq_dtu, --rmats, --suppa): catalog dexseq/exon_genes,
+#     edger/diffsplice_genes, dexseq/dtu, rmats/events, suppa/local_events.
+#     DEXSeq exon, edgeR and rMATS need the STAR alignments; DEXSeq DTU and
+#     SUPPA2 run on Salmon TPMs and are written once per quantification route.
+#
+# Route. `--aligner star_salmon` writes everything under star_salmon/;
+# `--pseudo_aligner salmon` writes a second, alignment-free copy of the
+# Salmon-based outputs under salmon/. QUANT_ROUTE (default star_salmon) picks
+# the route the expression and Salmon-based splicing collections read; a
+# pseudo-alignment-only run sets --var QUANT_ROUTE=salmon, and the
+# alignment-only tools are then absent and pruned as optional collections.
+#
+# Design. The sample sheet always carries `condition`, so the hub and the
+# GROUP_COL default (condition) work without a design table. METADATA_FILE
+# (optional, ampliseq convention) adds factors: first column the sample id,
+# the others annotations, GROUP_COL its first annotation column.
+#
+# Thresholds are variables with generic defaults: SPLICING_FDR (0.05) on every
+# tool's adjusted p-value (SUPPA2's empirical p-value), MIN_DPSI (0.1) on the
+# event-level PSI change of rMATS and SUPPA2, RMATS_MIN_READS (10) mean
+# junction reads per replicate an rMATS event needs in both conditions.
+# ============================================================================
+template:
+  template_id: "nf-core/rnasplice/1.0.4"
+  description: "nf-core/rnasplice template: MultiQC funnel, sample space, cross-tool differential splicing (DEXSeq exon and DTU, edgeR, rMATS, SUPPA2) with per-tool volcanoes and event types"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one rnasplice run (multiqc/, pipeline_info/, contrastsheet/, star_salmon/ and/or salmon/)"
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV or CSV): sample id in the first column, one column per factor. Adds the design factors to the sample hub and colours the sample space; pruned when absent."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design-table sample id column (links join on it). Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the group filter, cards and colouring read. Auto-detected as the first annotation column of METADATA_FILE, else the sample sheet's condition."
+      required: false
+      default: "condition"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Title-cased GROUP_COL for display; auto-populated with METADATA_FILE."
+      required: false
+      default: "Condition"
+    - name: "QUANT_ROUTE"
+      description: "Quantification route the expression, DEXSeq DTU and SUPPA2 collections read: star_salmon (default) or salmon (pseudo-alignment)."
+      required: false
+      default: "star_salmon"
+    - name: "GENOME"
+      description: "UCSC assembly name the event loci link out to (the genome the run aligned to)."
+      required: false
+      default: "hg38"
+    - name: "SPLICING_FDR"
+      description: "Significance cut-off on the adjusted p-values of every splicing tool (SUPPA2: its empirical p-value)."
+      required: false
+      default: "0.05"
+    - name: "MIN_DPSI"
+      description: "Minimal absolute change in percent spliced-in (0 to 1) for an rMATS or SUPPA2 event to be called."
+      required: false
+      default: "0.1"
+    - name: "RMATS_MIN_READS"
+      description: "Mean junction reads per replicate an rMATS event needs in both conditions to be kept."
+      required: false
+      default: "10"
+  # Variables for the BUNDLED reference dataset: the test_full run with the
+  # design table vendored in input/ and the assembly the run aligned to.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
+      QUANT_ROUTE: "star_salmon"
+      GENOME: "hg19"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"    # the whole iGenomes catalogue
+          - "hook_url"   # nf-core runs may put a live webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Differential splicing"
+        key_patterns: ["contrasts", "dexseq_*", "save_dexseq_*", "n_dexseq_plot", "gff_dexseq", "edger_*", "save_edger_plot", "n_edger_plot", "dtu_txi", "rmats*", "suppa*", "generateevents_*", "diffsplice_*", "clusterevents_*", "psiperevent_*"]
+      - group: "Sashimi plots"
+        key_patterns: ["sashimi_plot", "miso_*"]
+      - group: "Alignment & quantification"
+        key_patterns: ["aligner", "pseudo_aligner", "salmon_*", "star_*", "skip_alignment", "seq_center", "save_unaligned", "save_align_intermeds", "skip_bigwig"]
+      - group: "Read trimming"
+        key_patterns: ["clip_r*", "three_prime_clip_r*", "trim_nextseq", "skip_trimming", "save_trimmed", "min_trimmed_reads"]
+      - group: "Annotation & references"
+        key_patterns: ["genome", "fasta", "gtf*", "gff", "transcript_fasta", "gencode", "igenomes_*", "save_reference", "star_index", "salmon_index", "source"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "email*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "publish_dir_mode", "validate_params", "version", "help*", "show_hidden*", "config_profile_*", "custom_config_*", "max_*", "validationFailUnrecognisedParams", "validationLenientMode", "validationShowHiddenParams", "validationSchemaIgnoreParams"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "contrasts"
+      - "aligner"
+      - "pseudo_aligner"
+      - "genome"
+      - "dexseq_exon"
+      - "edger_exon"
+      - "dexseq_dtu"
+      - "rmats"
+      - "suppa"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # No design table: drop the metadata DC and its links. The hub keeps the
+    # sample sheet's condition, which GROUP_COL defaults to.
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "METADATA_FILE"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "RNA-seq Alternative Splicing Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "rnasplice"
+    version: "1.0.4"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/rnasplice"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC: the QC funnel of the run, read from the parquet. FastQC
+      # holds the raw and the trimmed passes in one module (the trimmed
+      # libraries carry the Trim Galore `_val_<n>` suffix).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data: FastQC raw and trimmed, Trim Galore, STAR, samtools, featureCounts, Salmon"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc(?:_report)?_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "fastqc"
+              - "cutadapt"
+              - "star"
+              - "samtools"
+              - "featurecounts"
+              - "salmon"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                - "Sequence Duplication Levels"
+                - "Adapter Content"
+                - "Status Checks"
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (3')":
+                    - "Counts"
+              star:
+                - "Summary Statistics"
+                - "Alignment Scores"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+                - "Flagstat"
+              featurecounts:
+                - "Assignments"
+              salmon:
+                - "salmon-section-1"
+
+      # ----------------------------------------------------------------
+      # Sample hub and design.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Optional design table (--var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              infer_schema_length: 0
+            columns_description:
+              "{METADATA_ID_COL}": "Sample identifier, as the run names its outputs. Every other column is a design factor and is passed through."
+
+      - data_collection_tag: "samples"
+        description: "One row per sample: the validated sample sheet with sequencing runs merged, plus the design table's factors when given"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnasplice/samples.py"
+            params:
+              id_col: "{METADATA_ID_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, the key every link joins on"
+              "condition": "Condition the contrasts compare (the sample sheet's, or the design table's when it has one)"
+              "read_type": "paired-end or single-end, from the sheet"
+              "strandedness": "Library strandedness declared in the sheet"
+              "runs": "Sequencing runs the pipeline merged into this sample"
+
+      - data_collection_tag: "contrasts"
+        description: "The run's contrasts: one row per comparison with its treatment and control condition"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "contrastsheet\\.valid\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              infer_schema_length: 0
+            columns_description:
+              "contrast": "Contrast name, the key the splicing collections carry"
+              "treatment": "Condition every effect is oriented towards (treatment minus control)"
+              "control": "Reference condition of the contrast"
+
+      # ----------------------------------------------------------------
+      # Expression (tximport matrices of the chosen route).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sample_pca"
+        description: "Per-sample PCA of the log2(TPM + 1) gene matrix and the library summary (genes detected and expressed)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "salmon/sample_pca.py"
+            source_overrides:
+              matrix:
+                path: "{QUANT_ROUTE}/tximport/salmon.merged.gene_tpm.tsv"
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "First principal component of the log2(TPM + 1) matrix over the most variable genes"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "group": "The design table's most factor-like column, used to colour the samples"
+              "genes_detected": "Genes with TPM above zero in this sample"
+              "genes_expressed": "Genes with TPM at or above 1 in this sample"
+              "median_tpm": "Median TPM over the genes the sample detects"
+
+      - data_collection_tag: "expression_heatmap"
+        description: "Most variable genes x samples on the log2(TPM + 1) scale, with the design factors as column annotations"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "salmon/top_variable_genes.py"
+            source_overrides:
+              matrix:
+                path: "{QUANT_ROUTE}/tximport/salmon.merged.gene_tpm.tsv"
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_name": "Gene identifier, the heatmap row; every numeric column is one sample's log2(TPM + 1)"
+              "_col_annotations_json": "Design factors as heatmap column annotations"
+
+      # ----------------------------------------------------------------
+      # Differential splicing, one collection per tool (each optional: a run
+      # enables the tools it wants). Effects are treatment minus control.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "dexseq_exon_genes"
+        optional: true
+        description: "DEXSeq differential exon usage per contrast and gene: gene q-value, bins tested and called, the most significant bin's log2 fold change"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "dexseq/exon_genes.py"
+            params:
+              fdr: "{SPLICING_FDR}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast name"
+              "gene_id": "Ensembl gene id (DEXSeq joins overlapping genes it cannot separate with '+')"
+              "bins_tested": "Exonic bins DEXSeq tested in this gene"
+              "bins_significant": "Bins with an adjusted p-value under the cut-off"
+              "top_bin": "The gene's most significant exonic bin"
+              "log2fc": "Usage log2 fold change of that bin, treatment over control"
+              "abs_log2fc": "Absolute value of log2fc"
+              "bin_padj": "Adjusted p-value of that bin"
+              "padj": "DEXSeq gene-level q-value (some bin of the gene is used differently)"
+              "neg_log10_padj": "-log10 of the gene q-value (300 when it is 0)"
+              "significant": "Gene q-value under SPLICING_FDR"
+              "direction": "up (more usage in treatment), down, or not significant"
+
+      - data_collection_tag: "edger_genes"
+        optional: true
+        description: "edgeR diffSpliceDGE per contrast and gene: gene F-test and Simes FDRs, exons tested and called, the most significant exon's relative log2 fold change"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "edger/diffsplice_genes.py"
+            params:
+              fdr: "{SPLICING_FDR}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast name"
+              "gene_id": "Ensembl gene id"
+              "chrom": "Chromosome"
+              "strand": "Strand"
+              "exons": "Exons edgeR tested in this gene"
+              "exons_significant": "Exons with an FDR under the cut-off"
+              "top_exon": "The gene's most significant exon (chrom:start-end)"
+              "log2fc": "That exon's log2 fold change relative to its gene, treatment over control"
+              "abs_log2fc": "Absolute value of log2fc"
+              "f_stat": "Gene-level F statistic"
+              "fdr": "Gene-level F-test FDR"
+              "simes_fdr": "Simes-combined gene-level FDR"
+              "neg_log10_fdr": "-log10 of the gene FDR (300 when it is 0)"
+              "significant": "Gene F-test FDR under SPLICING_FDR"
+              "direction": "up, down or not significant"
+
+      - data_collection_tag: "dexseq_dtu"
+        optional: true
+        description: "DEXSeq differential transcript usage per contrast and transcript, with the gene-level q-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "dexseq/dtu.py"
+            params:
+              fdr: "{SPLICING_FDR}"
+            source_overrides:
+              transcripts:
+                glob_pattern: "{QUANT_ROUTE}/**/DEXSeqResults.*.tsv"
+              genes:
+                glob_pattern: "{QUANT_ROUTE}/**/perGeneQValue.*.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast name"
+              "gene_id": "Ensembl gene id"
+              "transcript_id": "Ensembl transcript id"
+              "base_mean": "Mean normalised count of the transcript"
+              "log2fc": "Transcript usage log2 fold change, treatment over control"
+              "pvalue": "DEXSeq p-value"
+              "padj": "DEXSeq adjusted p-value of the transcript"
+              "neg_log10_padj": "-log10 of the adjusted p-value (300 when it is 0)"
+              "gene_padj": "DEXSeq gene-level q-value"
+              "significant": "Transcript adjusted p-value under SPLICING_FDR"
+              "gene_significant": "Gene q-value under SPLICING_FDR"
+              "direction": "up, down or not significant"
+
+      - data_collection_tag: "rmats_events"
+        optional: true
+        description: "rMATS events of the five types per contrast (JCEC counts): PSI per condition, the difference, FDR and the call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "rmats/events.py"
+            params:
+              fdr: "{SPLICING_FDR}"
+              min_dpsi: "{MIN_DPSI}"
+              min_reads: "{RMATS_MIN_READS}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast name (the rMATS output directory)"
+              "event_id": "Event type and rMATS event id"
+              "event_type": "Skipped exon, retained intron, mutually exclusive exons, alternative 3' or 5' splice site"
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol"
+              "chrom": "Chromosome"
+              "strand": "Strand"
+              "start": "Start of the alternative region (1-based)"
+              "end": "End of the alternative region"
+              "locus": "chrom:start-end of the alternative region"
+              "psi_treatment": "Mean inclusion level (PSI) in the treatment replicates"
+              "psi_control": "Mean inclusion level in the control replicates"
+              "dpsi": "PSI difference, treatment minus control"
+              "abs_dpsi": "Absolute PSI difference"
+              "pvalue": "rMATS likelihood-ratio p-value"
+              "fdr": "rMATS FDR"
+              "neg_log10_fdr": "-log10 FDR (300 when it is 0)"
+              "reads_treatment": "Mean inclusion plus skipping junction reads per treatment replicate"
+              "reads_control": "Mean inclusion plus skipping junction reads per control replicate"
+              "significant": "FDR under SPLICING_FDR and absolute dPSI at or above MIN_DPSI"
+              "direction": "up (more inclusion in treatment), down, or not significant"
+
+      - data_collection_tag: "suppa_events"
+        optional: true
+        description: "SUPPA2 local events per contrast: parsed event, delta PSI (treatment minus control), empirical p-value and the call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "suppa/local_events.py"
+            params:
+              pvalue: "{SPLICING_FDR}"
+              min_dpsi: "{MIN_DPSI}"
+            source_overrides:
+              events:
+                glob_pattern: "{QUANT_ROUTE}/**/*_local_diffsplice.dpsi"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast name"
+              "event_id": "SUPPA2 event id (gene;type:chrom:coordinates:strand)"
+              "event_type": "Skipped exon, retained intron, mutually exclusive exons, alternative 3' or 5' splice site, alternative first or last exon"
+              "gene_id": "Ensembl gene id (SUPPA2 joins overlapping genes with _and_)"
+              "chrom": "Chromosome"
+              "strand": "Strand"
+              "start": "First coordinate of the event"
+              "end": "Last coordinate of the event"
+              "dpsi": "Delta PSI, treatment minus control"
+              "abs_dpsi": "Absolute delta PSI"
+              "pvalue": "SUPPA2 empirical p-value"
+              "neg_log10_pvalue": "-log10 p-value (300 when it is 0)"
+              "significant": "p-value under SPLICING_FDR and absolute delta PSI at or above MIN_DPSI"
+              "direction": "up (more inclusion in treatment), down, or not significant"
+
+      - data_collection_tag: "splicing_genes"
+        description: "One row per contrast and gene: which splicing tools call it, how many tested and called it, and each tool's strongest evidence"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnasplice/splicing_genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast name"
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol when rMATS reported one, else the gene id"
+              "dexseq_exon": "Called by DEXSeq exon usage"
+              "dexseq_dtu": "Called by DEXSeq transcript usage"
+              "edger": "Called by edgeR diffSpliceDGE"
+              "rmats": "At least one significant rMATS event"
+              "suppa": "At least one significant SUPPA2 event"
+              "tools_tested": "Tools that tested the gene"
+              "tools_significant": "Tools that call the gene"
+              "tools": "The calling tools, comma-separated (none when no tool calls it)"
+              "dexseq_exon_padj": "DEXSeq exon gene q-value"
+              "dexseq_exon_log2fc": "DEXSeq log2 fold change of the gene's most significant bin"
+              "dexseq_dtu_padj": "DEXSeq DTU gene q-value"
+              "edger_fdr": "edgeR gene F-test FDR"
+              "edger_log2fc": "edgeR relative log2 fold change of the gene's most significant exon"
+              "rmats_events_significant": "Significant rMATS events in the gene"
+              "rmats_max_abs_dpsi": "Largest absolute PSI change among its significant rMATS events"
+              "rmats_min_fdr": "Smallest rMATS FDR of the gene"
+              "suppa_events_significant": "Significant SUPPA2 events in the gene"
+              "suppa_max_abs_dpsi": "Largest absolute delta PSI among its significant SUPPA2 events"
+              "suppa_min_pvalue": "Smallest SUPPA2 p-value of the gene"
+
+# ============================================================================
+# LINKS
+# The sample hub fans out to the per-sample collections; MultiQC names are
+# canonicalised to the hub id (sample_mapping). The contrast table carries a
+# contrast pick onto every splicing collection, and the cross-tool gene table
+# carries a gene pick (or a tool-agreement filter) onto the per-tool tabs.
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by sample selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sample_pca"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the sample space by sample selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the sample hub by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by design-table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "sample_pca"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the sample space by design-table selection"
+    enabled: true
+
+  - source_dc_tag: "contrasts"
+    source_column: "contrast"
+    target_dc_tag: "splicing_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep the cross-tool gene table on the picked contrast"
+    enabled: true
+  - source_dc_tag: "contrasts"
+    source_column: "contrast"
+    target_dc_tag: "dexseq_exon_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep DEXSeq exon usage on the picked contrast"
+    enabled: true
+  - source_dc_tag: "contrasts"
+    source_column: "contrast"
+    target_dc_tag: "edger_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep edgeR diffSpliceDGE on the picked contrast"
+    enabled: true
+  - source_dc_tag: "contrasts"
+    source_column: "contrast"
+    target_dc_tag: "dexseq_dtu"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep DEXSeq transcript usage on the picked contrast"
+    enabled: true
+  - source_dc_tag: "contrasts"
+    source_column: "contrast"
+    target_dc_tag: "rmats_events"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep the rMATS events on the picked contrast"
+    enabled: true
+  - source_dc_tag: "contrasts"
+    source_column: "contrast"
+    target_dc_tag: "suppa_events"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "contrast"}
+    description: "Keep the SUPPA2 events on the picked contrast"
+    enabled: true
+
+  - source_dc_tag: "splicing_genes"
+    source_column: "gene_id"
+    target_dc_tag: "dexseq_exon_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the cross-tool gene selection onto DEXSeq exon usage"
+    enabled: true
+  - source_dc_tag: "splicing_genes"
+    source_column: "gene_id"
+    target_dc_tag: "edger_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the cross-tool gene selection onto edgeR diffSpliceDGE"
+    enabled: true
+  - source_dc_tag: "splicing_genes"
+    source_column: "gene_id"
+    target_dc_tag: "dexseq_dtu"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the cross-tool gene selection onto DEXSeq transcript usage"
+    enabled: true
+  - source_dc_tag: "splicing_genes"
+    source_column: "gene_id"
+    target_dc_tag: "rmats_events"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the cross-tool gene selection onto the rMATS events"
+    enabled: true
+  - source_dc_tag: "splicing_genes"
+    source_column: "gene_id"
+    target_dc_tag: "suppa_events"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the cross-tool gene selection onto the SUPPA2 events"
+    enabled: true

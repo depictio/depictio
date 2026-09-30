@@ -1,0 +1,19 @@
+# nf-core/funcscan pipeline-level aggregations. Like comBGC, these are
+# pipeline-local rather than nf-core modules: funcscan runs up to four
+# independent screens (ARG, AMP, BGC, CAZyme) whose aggregated reports share
+# nothing but the sample and the contig, and the outputs below are the joins
+# that give the four screens a common hub. There is no nf-core module to derive
+# identity from, so it is declared in full here and `source_url` points at the
+# pipeline instead of `nf_core_url`.
+id: funcscan
+name: nf-core/funcscan
+description: >-
+  Run-level joins across the four nf-core/funcscan screens: a per-sample
+  screening hub (ARG, AMP, BGC and CAZyme headline counts), a per-contig
+  annotation summary that puts the four screens on the same locus, and the
+  software versions the run recorded.
+homepage: https://nf-co.re/funcscan
+source_url: https://github.com/nf-core/funcscan
+edam_topics:
+  - http://edamontology.org/topic_3174 # Metagenomics
+  - http://edamontology.org/topic_0080 # Sequence analysis

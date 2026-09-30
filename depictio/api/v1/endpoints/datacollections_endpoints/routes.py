@@ -1,7 +1,7 @@
 import asyncio
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -54,6 +54,8 @@ async def polars_schema(
 async def viz_suggestions(
     data_collection_id: PyObjectId,
     min_confidence: float = 0.0,
+    selection_columns: list[str] | None = Query(default=None),
+    existing_kinds: list[str] | None = Query(default=None),
     current_user: str = Depends(get_user_or_anonymous),
 ) -> dict:
     """Rank advanced-viz kinds by how well they fit this DC.
@@ -65,9 +67,15 @@ async def viz_suggestions(
     builder can still let the user pick a low-scoring kind and bind columns
     manually. Each entry carries:
 
-      - `score`: 0.0-1.0 graded fit (dtype compatibility × column-name
-        similarity across required roles, plus optional-role and structural
-        nudges).
+      - `score`: 0.0-1.0, for ranking only (>= 0.8 is "Recommended"). Not a
+        quality measure: the UI shows `match` and `reasons` instead.
+      - `match`: the evidence behind the score: "named" (every distinctive
+        role has a column named like it), "shape" (the table has the shape
+        the kind reads, e.g. a numeric pair or many numeric axes), "context"
+        (the dashboard tab makes it right, e.g. a record card following a
+        selection) or "weak".
+      - `reasons`: short strings behind the match, e.g.
+        "x/y: numeric pair dim_1, dim_2".
       - `role_candidates`: per required role, dtype-compatible columns ranked
         best-first — the UI uses these to pre-fill bindings.
       - `unmet_roles` / `weak_roles`: required roles with no candidate, or
@@ -76,14 +84,28 @@ async def viz_suggestions(
     Query params:
         min_confidence: optional score floor (0.0-1.0). Default 0.0 returns
             every kind ranked; raise it to keep only confident matches.
+        selection_columns: repeatable. Columns emitted by the selection-capable
+            tiles of the dashboard tab the new tile lands on. A record card is
+            recommended only when the DC holds one of them.
+        existing_kinds: repeatable. Advanced-viz kinds already on that tab;
+            flagged in `reasons`, the score is unchanged.
     """
-    from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
+    from depictio.models.components.advanced_viz.schemas import (
+        SuggestionContext,
+        suggest_viz_kinds,
+    )
 
     specs = await _get_data_collection_specs(data_collection_id, current_user)
     dc_type = (specs.get("config") or {}).get("type")
     schema = await _get_data_collection_polars_schema(data_collection_id, current_user)
 
-    viz = suggest_viz_kinds(schema, min_confidence=min_confidence, dc_type=dc_type)
+    context = None
+    if selection_columns or existing_kinds:
+        context = SuggestionContext(
+            selection_columns=frozenset(c for c in selection_columns or [] if c),
+            existing_kinds=frozenset(k for k in existing_kinds or [] if k),
+        )
+    viz = suggest_viz_kinds(schema, min_confidence=min_confidence, dc_type=dc_type, context=context)
 
     return {
         "data_collection_id": str(data_collection_id),
@@ -95,6 +117,8 @@ async def viz_suggestions(
                 "role_candidates": s.role_candidates,
                 "unmet_roles": s.unmet_roles,
                 "weak_roles": s.weak_roles,
+                "match": s.match,
+                "reasons": list(s.reasons),
             }
             for s in viz
         ],

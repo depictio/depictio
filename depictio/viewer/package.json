@@ -17,6 +17,7 @@
     "@deck.gl/layers": "~9.4.0",
     "@deck.gl/react": "~9.4.0",
     "@deck.gl/widgets": "~9.4.0",
+    "@genome-spy/core": "0.88.1",
     "@hms-dbmi/viv": "^0.23.0",
     "@iconify/react": "^5.0.2",
     "@luma.gl/constants": "~9.4.0",

@@ -1,0 +1,24 @@
+id: jellyfish_histogram
+name: Read k-mer spectrum
+mode: histo
+description: >-
+  The k-mer multiplicity histogram of each read set, cut past the main peak.
+  The main peak sits at the k-mer depth of the sequencing; a second peak at half
+  that depth is the heterozygous share of the genome, and a long right tail the
+  repeats. It is the curve GenomeScope fits, so a genome size estimate can be
+  checked against it by eye.
+find:
+  path_glob: "**/jellyfish/histo/*.tsv"
+  path_glob_alt:
+    - "**/*.histo"
+recipe: jellyfish/histogram.py
+fixture: histogram.tsv
+renders_as:
+  - { id: kmer_spectrum, component: advanced_viz, kind: profile,
+      roles: {series: read_set, x: multiplicity, y: kmers} }
+  - { id: kmer_mass_spectrum, component: advanced_viz, kind: profile,
+      roles: {series: read_set, x: multiplicity, y: kmer_mass} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: multiplicity, y: kmers, color: read_set, title: Read k-mer spectrum} }
+  - { component: card, column: peak_multiplicity, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

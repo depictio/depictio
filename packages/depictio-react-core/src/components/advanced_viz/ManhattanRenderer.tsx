@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Input,
-  MultiSelect,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Stack,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -22,16 +12,36 @@ import {
   advancedVizSelectionFilter,
   extractScatterSelection,
   filtersExcludingOwn,
+  hasOwnSelection,
 } from '../../selection';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
+import { rainfallDistances } from './rainfallDistances';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import {
+  VizControlGroup,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+} from './controls/VizControls';
+import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 
 type Highlight = 'above' | 'below' | 'none';
+
+/** `manhattan` puts the score on y. `rainfall` puts log10 of the distance to
+ *  the previous variant on the same chromosome there instead: the mutation-
+ *  density figure, where clustered events (kataegis) fall to the bottom of the
+ *  plot and the eye reads density rather than significance. The x axis, the
+ *  chromosome blocks, the selection and the labels are the same in both. */
+type VizMode = 'manhattan' | 'rainfall';
+
+const RAINFALL_Y_TITLE = 'log10(distance to previous variant, bp)';
 
 interface ManhattanConfig {
   chr_col: string;
@@ -54,6 +64,11 @@ interface ManhattanConfig {
   /** Column the emitted values belong to. No default: see the field's
    *  description in depictio/models/components/advanced_viz/configs.py. */
   selection_column?: string | null;
+  /** `rainfall` swaps the score on y for the distance to the previous variant
+   *  on the same chromosome. See `VizMode` below. */
+  mode?: VizMode;
+  /** Rainfall only: column whose values colour each point. */
+  rainfall_class_col?: string | null;
 }
 
 /** Sentinel values for the Colour-by Select that aren't real DC columns. */
@@ -149,6 +164,28 @@ const ManhattanRenderer: React.FC<Props> = ({
     'default_color_by',
     COLOR_BY_CHROMOSOME,
   );
+  const [mode, setMode] = usePersistedVizControl<VizMode>(
+    metadata,
+    'mode',
+    'manhattan',
+  );
+  const rainfall = mode === 'rainfall';
+  const rainfallClassCol = rainfall ? config.rainfall_class_col || null : null;
+
+  // ---- Following a region someone else brushed ----------------------------
+  // A `genome_selection` filter on this collection's own `chr_col` / `pos_col`
+  // already narrows the rows the server returns; what the tile adds is moving
+  // its chromosome narrowing onto the same contig and clamping the axis to the
+  // window, so a Manhattan under a genome_view reads as the same locus.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  useEffect(() => {
+    if (!followedRegion) return;
+    setSelectedChrs((current) =>
+      current.length === 1 && current[0] === followedRegion.chrom
+        ? current
+        : [followedRegion.chrom],
+    );
+  }, [followedRegion]);
 
   // ---- Selection as a cross-filter ---------------------------------------
   // `undefined` means this component does not select: either the dashboard
@@ -171,8 +208,11 @@ const ManhattanRenderer: React.FC<Props> = ({
     // The selection column is fetched whether or not it is also a colour-by
     // option, so a dashboard only has to name it once.
     if (selectionColumn && !cols.includes(selectionColumn)) cols.push(selectionColumn);
+    // Only while rainfall is the mode: a Manhattan has no use for the class
+    // column, and fetching it anyway would widen every variant frame.
+    if (rainfallClassCol && !cols.includes(rainfallClassCol)) cols.push(rainfallClassCol);
     return cols;
-  }, [config, selectionColumn]);
+  }, [config, selectionColumn, rainfallClassCol]);
 
   // This component must NOT narrow itself by its own selection: a lasso would
   // otherwise redraw the track as only the variants it caught, and the user
@@ -181,6 +221,9 @@ const ManhattanRenderer: React.FC<Props> = ({
   const filtersForFetch = useMemo(
     () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
     [filters, metadata.index],
+  );
+  const selectionRevision = useSelectionRevision(
+    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
@@ -207,8 +250,12 @@ const ManhattanRenderer: React.FC<Props> = ({
       // must not sample across, and `highlight` says which side of it is the
       // population being looked at. Without a line there is no declared tail and
       // the server falls back to reading the score column's range.
+      //
+      // Never in rainfall mode: keeping the score's tail whole and thinning the
+      // rest is exactly what a distance-to-the-previous-variant axis must not
+      // be handed, since every dropped row stretches its neighbour's distance.
       tail:
-        config.score_threshold != null && config.highlight !== 'none'
+        !rainfall && config.score_threshold != null && config.highlight !== 'none'
           ? {
               column: config.score_col,
               direction: config.highlight === 'below' ? 'low' : 'high',
@@ -234,6 +281,9 @@ const ManhattanRenderer: React.FC<Props> = ({
     JSON.stringify(requiredCols),
     JSON.stringify(filtersForFetch),
     refreshTick,
+    // The two modes ask the server for differently-reduced frames, so a switch
+    // has to re-fetch even when the column list happens to be identical.
+    rainfall,
   ]);
 
   // Variant clouds are the densest thing on a dashboard, so always compete for
@@ -278,6 +328,25 @@ const ManhattanRenderer: React.FC<Props> = ({
       if (visibleSet.has(chrs[i])) rowIdx.push(i);
     }
 
+    // Rainfall's y: the distance to the previous variant on the same
+    // chromosome. The first variant of each chromosome has no predecessor, so
+    // it leaves the figure altogether rather than being drawn at some invented
+    // distance. Computed over the whole frame, because a distance never spans
+    // a chromosome boundary and the narrowing above only ever drops whole
+    // chromosomes.
+    const rainfallByRow = rainfall
+      ? new Map(rainfallDistances(chrs, positions).map((d) => [d.row, d.logDistance]))
+      : null;
+    if (rainfallByRow) {
+      let kept = 0;
+      for (const i of rowIdx) {
+        if (rainfallByRow.has(i)) rowIdx[kept++] = i;
+      }
+      rowIdx.length = kept;
+    }
+    /** The y a row carries in the current mode. */
+    const yAt = (i: number) => (rainfallByRow ? (rainfallByRow.get(i) as number) : scores[i]);
+
     // 1) Per-chromosome cumulative x-offset, over the visible chromosomes only
     //    so that narrowing the selection zooms the axis onto them instead of
     //    leaving one cluster stranded in an otherwise empty genome. Each
@@ -309,7 +378,21 @@ const ManhattanRenderer: React.FC<Props> = ({
     // so a single-chromosome view sits centred on its own axis instead of
     // being pushed against the left edge with dead space on the right.
     const totalSpan = Math.max(1, cursor - padding);
-    const xRange: [number, number] = [-padding / 2, totalSpan + padding / 2];
+    const fullXRange: [number, number] = [-padding / 2, totalSpan + padding / 2];
+    // A followed region is a window on one chromosome, so it becomes a window
+    // on the cumulative axis through that chromosome's own offset. Outside the
+    // drawn span it is not this tile's locus and the axis stays put.
+    const regionWindow = (() => {
+      if (!followedRegion) return null;
+      const offset = offsetByChr.get(followedRegion.chrom);
+      if (offset === undefined) return null;
+      const window = regionXRange(followedRegion);
+      if (!window) return null;
+      const lo = offset + window[0];
+      const hi = offset + window[1];
+      return hi < fullXRange[0] || lo > fullXRange[1] ? null : ([lo, hi] as [number, number]);
+    })();
+    const xRange: [number, number] = regionWindow ?? fullXRange;
 
     // 2) Map every visible row to its cumulative x and chromosome colour. When
     //    a threshold is set, points below it dim to grey so the eye is drawn to
@@ -321,7 +404,10 @@ const ManhattanRenderer: React.FC<Props> = ({
     const colorByChr = new Map<string, string>(
       allChrs.map((c, i) => [c, _palette[i % _palette.length]]),
     );
-    const hasThreshold = scoreThreshold != null && Number.isFinite(scoreThreshold);
+    // Rainfall does not read the score at all, so the threshold line, the
+    // above/below sizing, the tier chips and the tier-coloured markers all go
+    // with it rather than annotating an axis that is no longer on the plot.
+    const hasThreshold = !rainfall && scoreThreshold != null && Number.isFinite(scoreThreshold);
     const tiers: ('ABOVE' | 'BELOW')[] | null = hasThreshold
       ? scores.map((s) => (s != null && s >= (scoreThreshold as number) ? 'ABOVE' : 'BELOW'))
       : null;
@@ -440,6 +526,27 @@ const ManhattanRenderer: React.FC<Props> = ({
         }));
     }
 
+    // Rainfall's class column gets its own categorical palette and legend, and
+    // replaces the Colour-by rules wholesale rather than composing with them:
+    // mutation class is what this figure is about, and Colour-by (chromosome,
+    // score, an extra column) belongs to the view where the score is the axis.
+    // With no class column bound the chromosome palette stays, as today.
+    const classValues = rainfallClassCol
+      ? ((rows[rainfallClassCol] as (string | number | null)[] | undefined) ?? null)
+      : null;
+    let rainfallClassColor: ((idx: number) => string) | null = null;
+    let rainfallLegendItems: { name: string; color: string }[] = [];
+    if (classValues) {
+      const keyOf = (i: number) => (classValues[i] == null ? '∅' : String(classValues[i]));
+      const uniqueVals = Array.from(new Set(rowIdx.map(keyOf))).sort();
+      const map = new Map(uniqueVals.map((v, i) => [v, _palette[i % _palette.length]]));
+      rainfallClassColor = (i: number) => map.get(keyOf(i)) ?? _palette[0];
+      rainfallLegendItems = uniqueVals.map((v) => ({
+        name: v,
+        color: map.get(v) ?? _palette[0],
+      }));
+    }
+
     // Chromosomes dropped by the dropdown are already out of `rowIdx`, so no
     // colour rule has to account for them any more.
     const colors = rowIdx.map((i) => {
@@ -452,6 +559,8 @@ const ManhattanRenderer: React.FC<Props> = ({
         const isHighlighted = highlight === 'above' ? isAbove : !isAbove;
         if (!isHighlighted) return dimColor;
       }
+
+      if (rainfallClassColor) return rainfallClassColor(i);
 
       // Highlighted (or no-threshold) points: paint by the Colour-by mode.
       if (colorBy === COLOR_BY_CHROMOSOME) {
@@ -547,10 +656,12 @@ const ManhattanRenderer: React.FC<Props> = ({
         candidates.push(j);
       }
       const direction = hasThreshold && highlight === 'below' ? 1 : -1;
-      candidates.sort(
-        (a, b) =>
-          direction * ((scores[rowIdx[a]] ?? Infinity) - (scores[rowIdx[b]] ?? Infinity)),
-      );
+      // Rainfall ranks the other way round: the notable variants are the ones
+      // closest to their neighbour, since a tight cluster is the whole point
+      // of the figure. Negating the y keeps one comparator for both modes.
+      const rankOf = (i: number) =>
+        rainfallByRow ? -yAt(i) : (scores[i] ?? Infinity);
+      candidates.sort((a, b) => direction * (rankOf(rowIdx[a]) - rankOf(rowIdx[b])));
       const top = candidates.slice(0, topNLabels);
       for (const j of top) {
         const i = rowIdx[j];
@@ -560,7 +671,7 @@ const ManhattanRenderer: React.FC<Props> = ({
           : `${chrs[i]}:${positions[i]}`;
         annotations.push({
           x: xs[j],
-          y: scores[i],
+          y: yAt(i),
           text: label,
           showarrow: true,
           arrowhead: 0,
@@ -616,11 +727,12 @@ const ManhattanRenderer: React.FC<Props> = ({
     // layout and one hover template rather than two of each.
     const selectionSource = selectionColumn ? (rows[selectionColumn] as unknown[]) ?? [] : [];
     const hasFeatureText = feats.length > 0;
+    const yHoverLabel = rainfall ? 'log10 distance' : 'score';
     const mainTrace: Record<string, unknown> = {
       type: 'scattergl' as const,
       mode: 'markers' as const,
       x: xs,
-      y: rowIdx.map((i) => scores[i]),
+      y: rowIdx.map(yAt),
       ...(hasFeatureText ? { text: rowIdx.map((i) => String(feats[i] ?? '')) } : {}),
       customdata: rowIdx.map((i) => [
         // null rather than '' for a row the selection column has no value for:
@@ -631,16 +743,18 @@ const ManhattanRenderer: React.FC<Props> = ({
         Number(positions[i] ?? 0),
       ]),
       hovertemplate: hasFeatureText
-        ? `%{customdata[1]}:%{customdata[2]:,d}<br>score: %{y}<br>%{text}<extra></extra>`
-        : `%{customdata[1]}:%{customdata[2]:,d}<br>score: %{y}<extra></extra>`,
+        ? `%{customdata[1]}:%{customdata[2]:,d}<br>${yHoverLabel}: %{y}<br>%{text}<extra></extra>`
+        : `%{customdata[1]}:%{customdata[2]:,d}<br>${yHoverLabel}: %{y}<extra></extra>`,
       marker: { color: colors, size: sizes, opacity: 0.85 },
       showlegend: false,
     };
 
     // Invisible legend traces — one per categorical value — so Plotly draws a
     // proper colour legend the user can decode. Same pattern as
-    // OncoplotRenderer uses for mutation-type colours.
-    const legendTraces = categoricalLegendItems.map((item) => ({
+    // OncoplotRenderer uses for mutation-type colours. Rainfall's class
+    // column, when bound, is the legend instead of the Colour-by column.
+    const legendItems = rainfallClassColor ? rainfallLegendItems : categoricalLegendItems;
+    const legendTraces = legendItems.map((item) => ({
       type: 'scatter' as const,
       mode: 'markers' as const,
       x: [null as unknown as number],
@@ -730,13 +844,15 @@ const ManhattanRenderer: React.FC<Props> = ({
           },
           yaxis: {
             ...plotlyAxisOverrides(isDark, theme),
-            title: { text: config.score_kind || config.score_col },
+            title: { text: rainfall ? RAINFALL_Y_TITLE : config.score_kind || config.score_col },
             zeroline: false,
             // Clamp range for bounded score types. Plotly's autorange
             // over-pads when annotation labels sit at the data ceiling
             // (variant labels at AF=1), which is what created the giant
-            // [-1, 4] empty band under the variant dots.
-            ...(/(af|allele frequency|frequency|proportion|fraction)/i.test(
+            // [-1, 4] empty band under the variant dots. The clamp is a
+            // statement about the score, so it goes with it in rainfall mode.
+            ...(!rainfall &&
+            /(af|allele frequency|frequency|proportion|fraction)/i.test(
               String(config.score_kind || ''),
             )
               ? { range: [0, 1.05], autorange: false, fixedrange: false }
@@ -751,7 +867,10 @@ const ManhattanRenderer: React.FC<Props> = ({
                 x: 1.02,
                 y: 1,
                 font: { size: 10 },
-                title: { text: typeof colorBy === 'string' ? colorBy : '', font: { size: 10 } },
+                title: {
+                  text: rainfallClassCol || (typeof colorBy === 'string' ? colorBy : ''),
+                  font: { size: 10 },
+                },
               }
             : undefined,
           // Drag draws a lasso instead of zooming, so the selection is
@@ -767,6 +886,9 @@ const ManhattanRenderer: React.FC<Props> = ({
           // `refreshTick` like FigureRenderer: a realtime tick still
           // repaints, a filter change does not.
           uirevision: `tick-${refreshTick ?? 0}`,
+          // Selected points are keyed apart from the zoom: an outside clear
+          // (group saved, filter removed) undims the plot and keeps the view.
+          selectionrevision: `sel-${selectionRevision}`,
           autosize: true,
         },
       },
@@ -778,24 +900,29 @@ const ManhattanRenderer: React.FC<Props> = ({
     rows,
     config,
     refreshTick,
+    selectionRevision,
     selectionColumn,
     selectionEnabled,
     scoreThreshold,
     selectedChrs,
+    followedRegion,
     topNLabels,
     markerSizeAbove,
     markerSizeBelow,
     markerSizeUniform,
     highlight,
     colorBy,
+    rainfall,
+    rainfallClassCol,
     colorScheme,
     theme,
     glGranted,
   ]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable between
-  // renders — see VolcanoRenderer for the full reasoning.
-  const hasThreshold = scoreThreshold != null && Number.isFinite(scoreThreshold);
+  // renders, see VolcanoRenderer for the full reasoning. Rainfall ignores the
+  // score, so the threshold-driven controls go with it.
+  const hasThreshold = !rainfall && scoreThreshold != null && Number.isFinite(scoreThreshold);
 
   // Build Colour-by Select options from the live data — always include the two
   // sentinels (Chromosome / Score), then any extra ``color_by_columns`` that
@@ -812,44 +939,56 @@ const ManhattanRenderer: React.FC<Props> = ({
     return opts;
   }, [config.color_by_columns, config.score_kind, rows]);
 
-  const controls = useMemo(
+  // Encoding tier: which figure (score or rainfall), what colours it, where
+  // the threshold cuts, which side of it is the hit, and which chromosomes are
+  // on the axis. Labels and marker sizes are paint.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
-        {colorByOptions.length > 2 ? (
-          <Select
-            size="xs"
-            label="Colour by"
-            value={colorBy}
-            onChange={(v) => setColorBy(v ?? COLOR_BY_CHROMOSOME)}
-            data={colorByOptions}
-            allowDeselect={false}
+      <>
+        <VizControlGroup title="Data">
+          <VizSegmented
+            aria-label="Figure"
+            value={mode}
+            onChange={(v) => setMode(v as VizMode)}
+            data={[
+              { value: 'manhattan', label: 'Score' },
+              { value: 'rainfall', label: 'Rainfall' },
+            ]}
           />
-        ) : null}
-        <NumberInput
-          size="xs"
-          label="Threshold"
-          value={scoreThreshold ?? ''}
-          onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
-          decimalScale={3}
-        />
-        <NumberInput
-          size="xs"
-          label="Top-N labels"
-          value={topNLabels}
-          onChange={(v) => setTopNLabels(Number(v) || 0)}
-          min={0}
-          max={50}
-        />
-        {hasThreshold ? (
-          <>
-            <Input.Wrapper label="Highlight" size="xs">
-              <Stack gap={4}>
-                <Text size="xs" fw={500}>
-                  Mode
-                </Text>
-                <SegmentedControl
-                size="xs"
-                fullWidth
+          {/* A class column is the rainfall figure's colour rule, so Colour-by
+              has nothing left to say while it is bound. */}
+          {colorByOptions.length > 2 && !rainfallClassCol ? (
+            <VizSelect
+              label="Colour by"
+              value={colorBy}
+              onChange={(v) => setColorBy(v ?? COLOR_BY_CHROMOSOME)}
+              data={colorByOptions}
+              allowDeselect={false}
+            />
+          ) : null}
+          <VizMultiSelect
+            label="Chromosomes"
+            value={selectedChrs}
+            onChange={setSelectedChrs}
+            data={allChrs}
+            placeholder="all"
+            searchable
+            clearable
+          />
+        </VizControlGroup>
+        {rainfall && !hasThreshold ? null : (
+          <VizControlGroup title="Threshold">
+            {rainfall ? null : (
+              <VizNumberInput
+                label="Threshold"
+                value={scoreThreshold ?? ''}
+                onChange={(v) => setScoreThreshold(v === '' ? undefined : Number(v))}
+                decimalScale={3}
+              />
+            )}
+            {hasThreshold ? (
+              <VizSegmented
+                label="Highlight"
                 value={highlight}
                 onChange={(v) => setHighlight(v as Highlight)}
                 data={[
@@ -858,15 +997,43 @@ const ManhattanRenderer: React.FC<Props> = ({
                   { value: 'none', label: 'Both' },
                 ]}
               />
-              </Stack>
-            </Input.Wrapper>
-            <NumberInput
-              size="xs"
+            ) : null}
+          </VizControlGroup>
+        )}
+      </>
+    ),
+    [
+      scoreThreshold,
+      hasThreshold,
+      highlight,
+      colorBy,
+      colorByOptions,
+      mode,
+      rainfall,
+      rainfallClassCol,
+      selectedChrs,
+      allChrs,
+    ],
+  );
+
+  const controls = useMemo(
+    () => (
+      <VizControlGroup title="Labels and markers">
+        <VizNumberInput
+          label="Top-N labels"
+          value={topNLabels}
+          onChange={(v) => setTopNLabels(Number(v) || 0)}
+          min={0}
+          max={50}
+        />
+        {hasThreshold ? (
+          <>
+            <VizNumberInput
               label={
                 highlight === 'below'
-                  ? 'Marker size (below — highlighted)'
+                  ? 'Marker size (below, highlighted)'
                   : highlight === 'above'
-                  ? 'Marker size (above — highlighted)'
+                  ? 'Marker size (above, highlighted)'
                   : 'Marker size (above)'
               }
               value={markerSizeAbove}
@@ -874,13 +1041,12 @@ const ManhattanRenderer: React.FC<Props> = ({
               min={1}
               max={30}
             />
-            <NumberInput
-              size="xs"
+            <VizNumberInput
               label={
                 highlight === 'below'
-                  ? 'Marker size (above — dimmed)'
+                  ? 'Marker size (above, dimmed)'
                   : highlight === 'above'
-                  ? 'Marker size (below — dimmed)'
+                  ? 'Marker size (below, dimmed)'
                   : 'Marker size (below)'
               }
               value={markerSizeBelow}
@@ -890,8 +1056,7 @@ const ManhattanRenderer: React.FC<Props> = ({
             />
           </>
         ) : (
-          <NumberInput
-            size="xs"
+          <VizNumberInput
             label="Marker size"
             value={markerSizeUniform}
             onChange={(v) => setMarkerSizeUniform(Math.max(1, Number(v) || 1))}
@@ -899,31 +1064,9 @@ const ManhattanRenderer: React.FC<Props> = ({
             max={30}
           />
         )}
-        <MultiSelect
-          size="xs"
-          label="Chromosomes"
-          value={selectedChrs}
-          onChange={setSelectedChrs}
-          data={allChrs}
-          placeholder="all"
-          searchable
-          clearable
-        />
-      </Stack>
+      </VizControlGroup>
     ),
-    [
-      scoreThreshold,
-      hasThreshold,
-      topNLabels,
-      markerSizeAbove,
-      markerSizeBelow,
-      markerSizeUniform,
-      highlight,
-      colorBy,
-      colorByOptions,
-      selectedChrs,
-      allChrs,
-    ],
+    [hasThreshold, topNLabels, markerSizeAbove, markerSizeBelow, markerSizeUniform, highlight],
   );
 
   // Recolour by the dashboard's analysis groups, when the groups were made on
@@ -977,27 +1120,18 @@ const ManhattanRenderer: React.FC<Props> = ({
   // `groupFromSelectionFilter` when the user tries to save it as a group. It
   // still cross-filters at any size.
   //
-  // Only a gesture may empty the selection. Each `Plotly.react` re-applies the
-  // drawn box or lasso to the traces and emits `plotly_selected` again, and on
-  // the WebGL trace that re-selection comes back with no points: unguarded, the
-  // filter a gesture sets is cleared by the very re-render it causes, a fraction
-  // of a second later. `plotly_selecting` fires while a box or lasso is dragged.
-  const gestureInProgress = React.useRef(false);
+  // Only a gesture may empty the selection: the shared guard drops the empty
+  // re-selection every `Plotly.react` emits (see selectionGesture).
   const emitSelection = (values: string[]) => {
     if (!onFilterChange || !selectionColumn) return;
     onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
   };
-  const handleSelecting = () => {
-    gestureInProgress.current = true;
-  };
-  const handleSelected = (event: any) => {
-    if (!selectionEnabled) return;
-    const fromGesture = gestureInProgress.current;
-    gestureInProgress.current = false;
-    const values = extractScatterSelection(event, 0);
-    if (values.length === 0 && !fromGesture) return;
-    emitSelection(values);
-  };
+  const { onSelecting: handleSelecting, onSelected: handleSelected } =
+    useGestureGuardedSelection(
+      selectionEnabled
+        ? (event: any) => emitSelection(extractScatterSelection(event, 0))
+        : undefined,
+    );
   // A single click is a one-point selection, which is how the scatter figures
   // and the Dash viewer have always read it.
   const handleClick = (event: any) => {
@@ -1028,6 +1162,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     <AdvancedVizFrame
       title={metadata.title || 'Manhattan'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
@@ -1044,8 +1179,8 @@ const ManhattanRenderer: React.FC<Props> = ({
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={PLOT_CONFIG}
-          onSelecting={selectionEnabled ? handleSelecting : undefined}
-          onSelected={selectionEnabled ? handleSelected : undefined}
+          onSelecting={handleSelecting}
+          onSelected={handleSelected}
           onClick={selectionEnabled ? handleClick : undefined}
           onDeselect={selectionEnabled ? handleDeselect : undefined}
         />

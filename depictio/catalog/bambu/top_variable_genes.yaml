@@ -1,0 +1,17 @@
+id: bambu_top_variable_genes
+name: Most variable genes
+mode: exploratory/heatmap
+description: >-
+  The 100 genes with the highest variance of log2(CPM + 1) across the run,
+  wide (genes x samples). Ranking on normalised values rather than raw counts
+  is what makes it a design heatmap instead of a library-size heatmap.
+find: { path_glob: "**/bambu/counts_gene.txt" }
+recipe: bambu/top_variable_genes.py
+fixture: top_variable_genes.tsv
+renders_as:
+  # `index` is not optional in practice: ComplexHeatmapConfig.index_column
+  # falls back to the literal "sample_id", which this matrix does not have.
+  - { id: variable_gene_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }
+  - { component: card, column: log_cpm_variance, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
+  - { component: table, page_size: 25 }

@@ -10,6 +10,7 @@ from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
+from depictio.models.models.data_collections_types.indexed_file import DCIndexedFileConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.phylogeny import DCPhylogenyConfig
@@ -176,6 +177,7 @@ class DataCollectionConfig(MongoModel):
         | DCGeoJSONConfig
         | DCPhylogenyConfig
         | DCBioimageConfig
+        | DCIndexedFileConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
@@ -223,6 +225,7 @@ class DataCollectionConfig(MongoModel):
             "geojson",
             "phylogeny",
             "bioimage",
+            "indexed_file",
         ]
         lower_v = v.lower()
         if lower_v not in allowed_values:
@@ -304,6 +307,13 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCBioimageConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCBioimageConfig()
+        elif type_value == "indexed_file":
+            # File-backed DC: no delta table, the browser reads the objects from
+            # S3 over range requests. `format` is required, so an absent config
+            # is an error rather than a default instance.
+            if not isinstance(dc_specific_properties, DCIndexedFileConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCIndexedFileConfig(**dc_specific_properties)
 
         # Validate that scan is provided for non-MultiQC types and native sources
         source = values.get("source", "native")  # Default to string value

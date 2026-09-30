@@ -1,0 +1,18 @@
+id: funcscan_samplesheet
+name: Samplesheet
+mode: run/samplesheet
+description: >-
+  The nf-core/funcscan input sheet: one row per sample and the assembly it was
+  screened from. Two columns and no experimental factor, which is why the
+  cohort filters on this pipeline are built on the screening hub rather than on
+  the sheet.
+find:
+  path_glob: "**/input/samplesheet*.csv"
+  path_glob_alt: ["**/samplesheet*.csv"]
+# no recipe → declare the columns:
+fixture: samplesheet.tsv # co-located bundled sample (grounds the preview)
+columns:
+  sample: String
+  fasta: String
+renders_as:
+  - { component: table }

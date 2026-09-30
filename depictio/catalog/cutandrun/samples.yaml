@@ -1,0 +1,29 @@
+id: cutandrun_samples
+name: Sample hub
+mode: design/samples
+description: >-
+  One row per CUT&RUN sample, collapsed from the library rows of the validated
+  samplesheet: the name every output file uses, the target it profiles, its
+  replicate number, whether it is an IgG control and which control it was
+  called against.
+# The samplesheet is library-level (`<sample>_T<n>`) and never spells out the
+# `<group>_R<replicate>` name the rest of the run is keyed on, so the hub is
+# derived rather than read. The IgG control rows stay in: a CUT&RUN sample is
+# only interpretable next to the control it was thresholded against.
+find:
+  path_glob: "**/samplesheet.valid.csv"
+recipe: cutandrun/samples.py
+fixture: samples.tsv
+renders_as:
+  - { id: sample_design_bar, component: figure, visu_type: bar, dict_kwargs: {x: target, y: n_libraries, color: role, title: Libraries per target} }
+  # The glance strip every tab opens with: the design split by role, by target,
+  # the libraries behind it and the replicate depth.
+  - { component: card, column: sample_id, aggregation: count, secondary_layout: donut, breakdown_col: role }
+  - { component: card, column: target, aggregation: count, secondary_layout: top_n, breakdown_col: target, top_n_count: 3 }
+  - { component: card, column: n_libraries, aggregation: sum, secondary_layout: composition, breakdown_col: target }
+  - { component: card, column: replicate, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # `replicate` is an Int64, so the categorical twin is what a MultiSelect can
+  # filter on; both are declared so a template can pick either.
+  - { id: sample_replicate_filter, component: interactive, interactive_type: MultiSelect, column_name: replicate_label }
+  - { id: sample_target_filter, component: interactive, interactive_type: MultiSelect, column_name: target }
+  - { component: table }

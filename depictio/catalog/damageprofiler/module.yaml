@@ -1,0 +1,9 @@
+# DamageProfiler. Three outputs: the misincorporation frequency table at both
+# read ends, the mapped fragment length distribution, and the one-row-per-library
+# authenticity summary that pairs the two (derived from the first two, not from
+# a file of its own). The base-composition tables and the JSON summary
+# DamageProfiler also writes restate what those cover; nothing needed them yet.
+id: damageprofiler
+name: DamageProfiler
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/damageprofiler
+homepage: https://github.com/Integrative-Transcriptomics/DamageProfiler

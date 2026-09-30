@@ -1,34 +1,130 @@
-title: Precision-recall benchmark (demo)
-project_tag: Advanced Visualisations
+# Variant calling benchmark: one tab of the advanced-visualisation showcase.
+title: 'Variant calling benchmark'
+subtitle: 'Callers against a truth set: operating points, and the curves their quality threshold sweeps'
+icon: 'mdi:check-decagram'
+icon_color: 'indigo'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d62'
 is_main_tab: false
-parent_dashboard_tag: Advanced Visualisations
 tab_order: 24
-icon: mdi:target-arrow
-icon_color: indigo
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:check-decagram'
+tab_icon_color: 'indigo'
+
+filter_sections:
+  - name: 'Caller scope'
+    icon: 'mdi:filter-variant'
+    color: 'indigo'
+    description: 'Restricts which callers are drawn, in each of the two collections'
+
+grid_sections:
+  - name: 'Variant calling benchmark'
+    icon: 'mdi:check-decagram'
+    color: 'indigo'
+    description: 'Precision and recall of each caller against the truth set'
+
 components:
-- component_type: text
-  tag: pr-demo-intro
-  title: Precision–recall benchmark
-  order: 1
-  alignment: left
-  body: >
-    Each point is a variant caller at its (recall, precision); dotted lines are
-    equal-F1 contours, the diagonal is recall=precision. Top-right is best.
-    Synthetic demo data. Open the gear for colour scale, point-size and axis controls.
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  layout: {x: 0, y: 0, w: 8, h: 1}
-- component_type: advanced_viz
-  workflow_tag: advanced_viz_demo
-  data_collection_tag: benchmark_demo
-  viz_kind: pr_benchmark
-  config:
+  - tag: pr-demo-intro
+    index: pr-text
+    component_type: text
+    title: 'Variant calling benchmark'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Variant calling benchmark'
+    body: >
+      Left, each caller at its default operating point in precision against recall, with
+      dotted equal-F1 contours: top right is best. Right, the same callers with their
+      quality threshold swept, as a ROC curve by default; the header switch shows the PR
+      curve or both, with the area under each curve in the legend. The inputs are hap.py or
+      RTG vcfeval summaries such as nf-core/variantbenchmarking and nf-core/sarek produce.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: pr-demo-viz
+    index: pr-points
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    title: 'Operating points'
+    description: 'One point per caller at its default threshold, sized by true positives, against equal-F1 contours.'
+    section: 'Variant calling benchmark'
     viz_kind: pr_benchmark
-    label_col: tool
-    recall_col: recall
-    precision_col: precision
-    f1_col: f1
-    support_col: tp
-  tag: pr-demo-viz
-  title: Precision–recall benchmark
-  layout: {x: 0, y: 1, w: 8, h: 10}
+    config:
+      viz_kind: pr_benchmark
+      label_col: tool
+      recall_col: recall
+      precision_col: precision
+      f1_col: f1
+      support_col: tp
+      view: pr
+      views: [pr]
+      controls_placement: header
+    layout: { x: 0, y: 2, w: 4, h: 9 }
+
+  - tag: roc-demo-viz
+    index: pr-sweep
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: roc_curve_demo
+    title: 'Threshold sweep'
+    description: 'One curve per caller along its quality threshold, as ROC, PR or both, with the area under each curve.'
+    section: 'Variant calling benchmark'
+    viz_kind: pr_benchmark
+    config:
+      viz_kind: pr_benchmark
+      label_col: tool
+      recall_col: recall
+      precision_col: precision
+      fpr_col: fpr
+      threshold_col: quality
+      group_col: tool
+      show_labels: false
+      show_auc: true
+      view: roc
+      views: [pr, roc, both]
+      controls_placement: header
+    layout: { x: 4, y: 2, w: 4, h: 9 }
+
+  - tag: filter-pr-tool
+    index: pr-f-tool
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: benchmark_demo
+    interactive_component_type: MultiSelect
+    column_name: tool
+    column_type: object
+    title: 'Caller (operating points)'
+    placement: left
+    section: 'Caller scope'
+    group: 'Caller filters'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-roc-tool
+    index: pr-f-sweep-tool
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: roc_curve_demo
+    interactive_component_type: MultiSelect
+    column_name: tool
+    column_type: object
+    title: 'Caller (sweep)'
+    placement: left
+    section: 'Caller scope'
+    group: 'Caller filters'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-roc-quality
+    index: pr-f-quality
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: roc_curve_demo
+    interactive_component_type: RangeSlider
+    column_name: quality
+    column_type: float64
+    title: 'Quality threshold'
+    placement: left
+    section: 'Caller scope'
+    group: 'Caller filters'
+    show_histogram: true
+    layout: { x: 0, y: 6, w: 1, h: 3 }

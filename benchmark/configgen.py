@@ -617,7 +617,9 @@ def _advanced_viz_config(viz_kind: str, feature_id_col: str = "individual_id") -
     synthetic, ``qq`` reads the uniform ``frac_expressing`` as its p-value (so
     the QQ line is the ideal diagonal), and the taxonomy kinds treat
     ``feature_class`` as a taxon. The three sampling policies are all covered:
-    tail (volcano/ma/manhattan), hash (qq/lollipop), none (the rest).
+    tail (volcano with its ``ma``/``qq`` views, manhattan), hash (lollipop), none
+    (the rest). ``ma`` and ``qq`` are kept under their legacy kind names so the
+    benchmark exercises the alias that stored dashboards rely on.
     """
     configs: dict[str, dict] = {
         # ── tail: keep the significant end whole, stride the middle ──────────

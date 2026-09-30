@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The same taxonomy the stacked bars show, drawn as concentric rings from kingdom outwards. Clicking a wedge zooms into it rather than filtering the dashboard, so it is a way to read the hierarchy rather than to select from it. The left panel is what narrows the other tiles.\n",
+      "body": "The same abundance table as concentric rings from kingdom outwards, arc size set by abundance. Click a wedge to zoom into that lineage; the start rank and the rank that drives colour are in the tile header. It reads the hierarchy rather than selecting from it: the left panel narrows the data. Input: nf-core/ampliseq or nf-core/taxprofiler classifications.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Hierarchical taxonomic composition \u2014 Kingdom \u2192 Genus, arc size = abundance.",
+      "description": "Hierarchical taxonomic composition from kingdom to genus, arc size set by abundance.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Hierarchy",
       "viz_kind": "sunburst",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "sunburst",
         "rank_cols": [
           "Kingdom",
@@ -122,6 +123,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#F68B33",
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
@@ -164,6 +166,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#2E7D32",
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
@@ -197,7 +200,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -210,9 +213,9 @@
     {
       "i": "box-sun-plot",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -232,7 +235,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Sunburst",
+  "title": "Taxonomic hierarchy",
   "subtitle": "Hierarchical taxonomic composition",
   "icon": "mdi:weather-sunny",
   "icon_color": "orange",
@@ -269,7 +272,7 @@
   },
   "tab_order": 20,
   "main_tab_name": null,
-  "tab_icon": "mdi:weather-sunny",
+  "tab_icon": "mdi:chart-donut",
   "tab_icon_color": "orange",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -295,5 +298,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

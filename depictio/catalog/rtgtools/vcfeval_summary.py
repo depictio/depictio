@@ -9,10 +9,12 @@ route, and two of the values a recipe can meet are not the ones a reader would g
 The same recipe therefore serves the germline and the somatic categories without a
 ``source_overrides`` entry per route.
 
-In the germline table the ``Tool`` column carries the *sample* id (test1/test2/test3) and
-``Caller`` the truth-set version; in the somatic table ``Tool``/``Caller`` carry the variant
-*caller* (mutect2/strelka/freebayes). We expose ``Tool`` as the generic ``label`` so a single
-schema covers both; the threshold sweep is collapsed to the canonical summary row
+Every row is one benchmarked callset: ``Tool`` is its id in the pipeline samplesheet
+(exposed as ``label``), ``Caller`` the caller the samplesheet names for it (``caller``), and
+the truth set it was compared against is the second token of the ``File`` name
+(``<id>.<truth set>.<caller>.summary.txt``, exposed as ``truth_set``). The vocabulary is the
+same on the germline and the somatic route: ``caller`` is always the tool that made the calls,
+never the truth set. The threshold sweep is collapsed to the canonical summary row
 (``Threshold == "None"``).
 """
 
@@ -28,9 +30,25 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+
+#: The pipeline names every per-callset file ``<id>.<truth set>.<caller>.<ext>``
+#: and its summary tables carry that name in ``File`` next to ``Tool`` (the
+#: samplesheet id) and ``Caller``, so the truth set is the token after the id.
+def truth_set_expr(file_col: str = "File", tool_col: str = "Tool") -> pl.Expr:
+    """The truth-set token of the pipeline's ``<id>.<truth>.<caller>.<ext>`` file name."""
+    return (
+        pl.col(file_col)
+        .cast(pl.Utf8)
+        .str.strip_prefix(pl.col(tool_col).cast(pl.Utf8) + pl.lit("."))
+        .str.split(".")
+        .list.first()
+    )
+
+
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "caller": pl.Utf8,
+    "truth_set": pl.Utf8,  # null when the table has no File column
     "tp_base": pl.Int64,
     "tp_comp": pl.Int64,
     "fp": pl.Int64,
@@ -52,7 +70,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         if (df["Threshold"] == "None").any():
             df = df.filter(pl.col("Threshold") == "None")
 
-    df = df.rename({"Tool": "label", "Caller": "caller"})
+    df = df.with_columns(
+        (truth_set_expr() if "File" in df.columns else pl.lit(None, dtype=pl.Utf8)).alias(
+            "truth_set"
+        )
+    ).rename({"Tool": "label", "Caller": "caller"})
 
     for col_name in ("tp_base", "tp_comp", "fp", "fn"):
         src = {"tp_base": "TP_base", "tp_comp": "TP_comp", "fp": "FP", "fn": "FN"}[col_name]
@@ -62,5 +84,16 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = df.with_columns(pl.col(src).cast(pl.Float64, strict=False).alias(col_name))
 
     return df.select(
-        ["label", "caller", "tp_base", "tp_comp", "fp", "fn", "precision", "recall", "f1"]
+        [
+            "label",
+            "caller",
+            "truth_set",
+            "tp_base",
+            "tp_comp",
+            "fp",
+            "fn",
+            "precision",
+            "recall",
+            "f1",
+        ]
     )

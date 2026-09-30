@@ -1,0 +1,6 @@
+# Nonpareil. Lightweight: identity is derived from the nf-core meta.yml that
+# `nf_core_url` points at (not duplicated). Override a field here only on drift.
+id: nonpareil
+name: Nonpareil
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nonpareil/set
+homepage: https://nonpareil.readthedocs.io

@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useContext, useRef } from 'react';
+import { useMantineTheme } from '@mantine/core';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
@@ -17,8 +18,10 @@ import TimelineRenderer from './interactive/TimelineRenderer';
 import GroupCompareStrip, { type GroupComparePayload } from './card/GroupCompareStrip';
 import SecondaryMetrics, {
   NUMERIC_LAYOUTS,
+  breakdownHasShares,
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
+import { formatCardNumber } from './card/metrics/format';
 import { wrapWithChrome } from './chrome';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import SaveGroupAction, {
@@ -27,7 +30,13 @@ import SaveGroupAction, {
   selectionCandidateFor,
 } from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
-import { isMapSelectionEnabled, supportsSelectionGrouping } from '../selection';
+import { SectionColorContext } from './SectionIcon';
+import {
+  cardScopedFilters,
+  isMapSelectionEnabled,
+  ownSelection,
+  supportsSelectionGrouping,
+} from '../selection';
 import { ActiveHighlight } from '../highlight';
 import type { GroupRenderState } from '../selectionGroups';
 
@@ -131,7 +140,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         value={cardValue}
         secondaryValues={cardSecondaryValues}
         loading={cardLoading}
-        filterApplied={filters.length > 0}
+        filterApplied={cardScopedFilters(filters, metadata).length > 0}
       />,
       { extraActions, showDragHandle },
     );
@@ -281,7 +290,13 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
       />,
-      { onResetFilter: onResetSelection, extraActions: chromeExtras, showDragHandle, sourceFilterActive },
+      {
+        onResetFilter: onResetSelection,
+        extraActions: chromeExtras,
+        showDragHandle,
+        sourceFilterActive,
+        selectionCount: ownSelection(filters, metadata.index).count,
+      },
     );
   }
 
@@ -460,6 +475,7 @@ const TableBlock: React.FC<{
       extraActions: combinedExtras,
       showDragHandle,
       sourceFilterActive,
+      selectionCount: ownSelection(filters, metadata.index).count,
     },
   );
 };
@@ -537,6 +553,7 @@ const MapBlock: React.FC<{
       extraActions: mapExtras,
       showDragHandle,
       sourceFilterActive,
+      selectionCount: ownSelection(filters, metadata.index).count,
     },
   );
 };
@@ -604,7 +621,13 @@ const FigureBlock: React.FC<{
         onLoadAllState={setLoadAllState}
       />
     </Suspense>,
-    { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },
+    {
+      onResetFilter: onResetSelection,
+      extraActions: combinedExtras,
+      showDragHandle,
+      sourceFilterActive,
+      selectionCount: ownSelection(filters, metadata.index).count,
+    },
   );
 };
 
@@ -675,6 +698,7 @@ const CardRenderer: React.FC<{
         top: { name: string; count: number; percent: number }[];
         top_share: number;
         unique_values: number;
+        breakdown_kind?: string;
       }
     | undefined;
   if (breakdown !== undefined) {
@@ -736,7 +760,10 @@ const CardRenderer: React.FC<{
       (layout === 'top_n' || layout === 'concentration') &&
       breakdown &&
       Array.isArray(breakdown.top) &&
-      breakdown.top.length > 0
+      breakdown.top.length > 0 &&
+      // A share of the total only exists under count / sum: "Top 3 = 83%"
+      // under a max or an average card would be a share of nothing.
+      breakdownHasShares(breakdown, metadata.column_name)
     ) {
       const share = Math.round((breakdown.top_share || 0) * 100);
       return `${base} · Top ${breakdown.top.length} = ${share}%`;
@@ -769,6 +796,16 @@ const CardRenderer: React.FC<{
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
   // without flicker. Brief transitions smooth out the dim/restore swing.
   const dimming = loading && value != null;
+  // A card with no colour of its own takes its section's, so the cards of a
+  // section read as one group. Outside a section it stays neutral.
+  // Resolved to the theme's hex, not a CSS variable: the secondary strip
+  // derives its tints from the colour's channels and falls back to teal on
+  // anything it cannot parse.
+  const sectionColor = useContext(SectionColorContext);
+  const theme = useMantineTheme();
+  const iconColor =
+    (metadata.icon_color as string | undefined) ||
+    (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
   return (
     <div
       style={{
@@ -784,7 +821,7 @@ const CardRenderer: React.FC<{
         title={metadata.title || inferCardTitle(metadata)}
         value={displayValue}
         icon_name={metadata.icon_name}
-        icon_color={metadata.icon_color}
+        icon_color={iconColor}
         title_color={metadata.title_color}
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
@@ -809,13 +846,10 @@ const CardRenderer: React.FC<{
                     // added later, which is how a new one renders as `vertical`.
                     (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
                   }
-                  color={
-                    (metadata.icon_color as string | undefined) ||
-                    (metadata.title_color as string | undefined) ||
-                    null
-                  }
+                  color={iconColor || (metadata.title_color as string | undefined) || null}
                   coverageValue={typeof value === 'number' ? value : null}
                   coverageMax={coverageMax}
+                  heroColumn={metadata.column_name}
                 />
               )}
               {groupCompare && (
@@ -846,11 +880,9 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Exported alongside `inferCardTitle`, and for the same reason. */
+/** Exported alongside `inferCardTitle`, and for the same reason. Numbers get
+ *  thousands separators and magnitude-aware rounding (`formatCardNumber`). */
 export function formatValue(v: unknown): string | number {
-  if (typeof v === 'number') {
-    if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
-    return v;
-  }
+  if (typeof v === 'number') return formatCardNumber(v);
   return String(v);
 }

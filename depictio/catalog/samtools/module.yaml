@@ -1,0 +1,9 @@
+# SAMtools. Two outputs: `flagstat` (the report every pipeline needing this
+# entry publishes without a BAM in hand) and `stats_sections` (the full
+# `samtools stats` report, read line by line so the read-length, coverage and
+# indel histograms and the SN summary block each become rows). Output ids and
+# schemas are shared by several templates: extend them, do not rename them.
+id: samtools
+name: SAMtools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/samtools/flagstat
+homepage: https://www.htslib.org

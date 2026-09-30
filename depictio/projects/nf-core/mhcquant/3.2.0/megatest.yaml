@@ -1,0 +1,84 @@
+# Megatest manifest for nf-core/mhcquant 3.2.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline mhcquant --version 3.2.0 --max-file-mb 300 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# test_full profile: human PBMC immunopeptidomes (PRIDE PXD011628), two samples
+# with three raw replicates each; the samplesheet carries a Condition column.
+# The pipeline does not publish its samplesheet, so the template ships it
+# under input/ (METADATA_FILE); download_test_data.sh copies it into
+# {dest}/input/. Its columns are reordered to ID, Condition, Sample, ... so
+# metadata auto-detection picks Condition as GROUP_COL.
+pipeline: mhcquant
+version: "3.2.0"
+# s3://nf-core-awsmegatests/mhcquant/results-<results_sha>/ == the 3.2.0 release tag_sha.
+results_sha: "6ec12c97f7889a3e1f09ab89930723045c6bac68"
+run_root: ""
+multiqc:
+  version: "1.33"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet: mhcquant's custom content sections (identification
+  # counts, length distribution, score/RT/mz histograms, intensities).
+  - multiqc/multiqc_data/multiqc.parquet
+  # Final per-sample peptide tables at the output root, <Sample>_<Condition>.tsv
+  # (one row per precursor, FDR filtered, with per-replicate intensities). Named
+  # explicitly: fnmatch lets "*.tsv" cross directories and would also pull the
+  # all_peaks and spectral-library TSVs (about 350 MB).
+  - PBMC007_B.tsv
+  - PBMC009_A.tsv
+  # Comet PSM tables (Percolator input, one per raw replicate): every candidate
+  # PSM with its search features, before FDR filtering.
+  - intermediate_results/comet/*_pin.tsv
+  # Fragment ion annotations of the identified spectra (matching ions only).
+  - intermediate_results/ion_annotations/*_matching_ions.tsv
+  #
+  # Deliberately NOT fetched:
+  #   *.mzTab (50 to 80 MB each): the same identifications as the peptide TSV.
+  #   intermediate_results/rescoring/*.idXML (up to 600 MB), features/*.featureXML
+  #     and alignment/*.trafoXML: OpenMS XML intermediates, not tables.
+  #   intermediate_results/ion_annotations/*_all_peaks.tsv (up to 250 MB): every
+  #     peak of every spectrum; the matching-ion table is the useful subset.
+  #   spectrum_library/*_speclib.tsv: a DIA spectral library, a derived export of
+  #     the same peptides with predicted fragments.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - PBMC
+  - PBMC007
+  - PBMC009
+  - PBMC007_B
+  - PBMC009_A
+  - msms29
+  - msms30
+  - msms31
+  - msms35
+  - msms36
+  - msms37
+  - PXD011628
+  - HLA-A*02:01
+  - Homo sapiens
+  - human
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the pipeline: the template reads
+  # {dest}/input/samplesheet.tsv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/mhcquant/3.2.0 --data-root {dest} --var GROUP_COL=Condition --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/mhcquant/3.2.0 --data-root {dest} --var GROUP_COL=Condition

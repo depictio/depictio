@@ -1,0 +1,6 @@
+# endorS.py: the endogenous-DNA calculator nf-core/eager runs after mapping.
+# One output, the per-library percentage it publishes as MultiQC custom content.
+id: endorspy
+name: endorS.py
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/endorspy
+homepage: https://github.com/aidaanva/endorS.py

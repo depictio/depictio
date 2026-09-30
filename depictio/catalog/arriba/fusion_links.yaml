@@ -1,0 +1,59 @@
+id: arriba_fusion_links
+name: Arriba breakpoint links
+mode: fusion-detection
+description: >-
+  The same Arriba calls as the fusion table, read as pairs of genomic loci: the
+  two "chr:pos" breakpoints are split into bindable chromosome and position
+  columns, the read evidence is summed into one link weight, and the event class
+  and confidence come through unchanged. This is the row shape a chord diagram
+  binds, so a run's fusions can be read as a partner map across the genome
+  instead of as a list of names.
+find: { filename: "*.arriba.fusions.tsv" }
+recipe: arriba/fusion_links.py
+fixture: fusion_links.tsv
+renders_as:
+  - {
+      id: partner_chords,
+      component: advanced_viz,
+      kind: genome_chord,
+      roles:
+        {
+          chrom_a: chrom_a,
+          pos_a: pos_a,
+          chrom_b: chrom_b,
+          pos_b: pos_b,
+          label: label,
+          weight: weight,
+          category: category,
+        },
+    }
+  - {
+      id: class_by_confidence,
+      component: figure,
+      visu_type: bar,
+      dict_kwargs: { x: category, y: weight, color: confidence },
+    }
+  - {
+      component: card,
+      column: weight,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: label,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: category,
+      top_n_count: 3,
+    }
+  - {
+      component: card,
+      column: category,
+      aggregation: nunique,
+      secondary_layout: donut,
+      breakdown_col: category,
+    }
+  - { component: interactive, interactive_type: MultiSelect, column_name: confidence }
+  - { component: table, row_selection_enabled: true, row_selection_column: label }

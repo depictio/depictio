@@ -846,6 +846,7 @@ _MANIFEST_FIELDS = {
     "prefix_keys",
     "renames",
     "post_fetch_help",
+    "forbidden_terms",
 }
 _MULTIQC_FIELDS = {"version", "parquet", "reprocess"}
 
@@ -880,6 +881,12 @@ def manifest_from_dict(data: Any, path: Path | None = None) -> Manifest:
     unknown = set(data) - _MANIFEST_FIELDS
     if unknown:
         raise ValueError(f"{where}: unknown field(s) {sorted(unknown)}")
+    forbidden = data.get("forbidden_terms")
+    if forbidden is not None and (
+        not isinstance(forbidden, list)
+        or not all(isinstance(t, str) and t.strip() for t in forbidden)
+    ):
+        raise ValueError(f"{where}: 'forbidden_terms' must be a list of non-empty strings")
     for name in ("pipeline", "version"):
         if not isinstance(data.get(name), str) or not data[name].strip():
             raise ValueError(f"{where}: '{name}' is required and must be a quoted string")

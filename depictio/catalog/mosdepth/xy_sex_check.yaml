@@ -1,0 +1,25 @@
+id: mosdepth_xy_sex_check
+name: X and Y coverage sex check
+mode: xy
+description: >-
+  Mean depth on chromosome X and on chromosome Y for every library, from the
+  small per-run table MultiQC's mosdepth module writes, split per sample and
+  alignment stage. The X/Y depth ratio separates the two common karyotypes
+  cleanly: two X and no Y leaves almost no Y signal and a large ratio, one X
+  and one Y sits near 1. `inferred_sex` applies a 10x cut-off in the empty
+  band between them. It is a heuristic on two summary numbers, not a genotype
+  call, and a sex chromosome aneuploidy, a mixed or contaminated library or a
+  very low-depth run can all land on the wrong side of it. Read it as a check
+  against the sex recorded in the sample sheet, and read the raw X and Y
+  depths beside it to see how far from the cut-off a library actually sits.
+find:
+  path_glob: "**/mosdepth-xy-coverage-plot.txt"
+recipe: mosdepth/xy_sex_check.py
+fixture: xy_sex_check.tsv
+renders_as:
+  - { id: sex_check_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: x_coverage, y: y_coverage, label: sample, color: inferred_sex} }
+  # Four lanes at most (two libraries, two stages), so the strip names them
+  # rather than ranking them: the point is which library is the outlier.
+  - { component: card, column: xy_ratio, aggregation: average, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: table }

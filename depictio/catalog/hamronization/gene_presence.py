@@ -71,8 +71,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         base.group_by("sample", "gene_symbol")
         .agg(
-            # The most frequent class label a gene carries across its hits.
-            pl.col("drug_class").mode().first().alias("drug_class"),
+            # The most frequent class label a gene carries across its hits;
+            # ``mode()`` returns ties in an arbitrary order, so they are sorted.
+            pl.col("drug_class").mode().sort().first().alias("drug_class"),
             pl.len().cast(pl.Float64).alias("hits"),
             pl.col("tool").n_unique().cast(pl.Int64).alias("n_tools"),
             pl.col("identity").mean().alias("mean_identity"),
