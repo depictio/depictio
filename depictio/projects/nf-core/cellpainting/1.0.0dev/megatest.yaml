@@ -1,0 +1,87 @@
+# Megatest manifest for nf-core/cellpainting 1.0.0dev (read by scripts/nfcore_megatest.py).
+#
+# nf-core/cellpainting is UNRELEASED. This template is pinned to the dev commit
+# 40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3 (2026-04-29), whose AWS megatest
+# results are the run below. Fetch the subset with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline cellpainting --version 1.0.0dev --max-file-mb 300 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored plate map
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# test_full profile: one JUMP Cell Painting plate of cpg0016 (source_4, an ORF
+# overexpression plate), 4 wells x 9 sites x 8 channels. The pipeline does not
+# take or publish a plate map, so the template ships the 4-well subset of the
+# JUMP plate map under input/ (METADATA_FILE); download_test_data.sh copies it
+# into {dest}/input/.
+#
+# Layout notes (verified on this run):
+#   * the analysis step is published flat (cellprofiler/analysis/analysis/), not
+#     in one <batch>_<plate>_<well>_<site>/ directory per site as docs/output.md
+#     says, so its Image.csv, object CSVs and outline PNGs hold the last site
+#     written only. The per-cell data of every site is intact in cytotable/;
+#   * the assay-development overlays sit in
+#     cellprofiler/assay_development/assaydevelopment/, one per well;
+#   * the MultiQC parquet carries run metadata only (no module ran), so the
+#     template has no MultiQC collection.
+pipeline: cellpainting
+version: "1.0.0dev"
+results_sha: "40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3"
+run_root: ""
+multiqc: {}
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # One Parquet per site: the single-cell profiles every CytoTable recipe reads.
+  - cytotable/*.parquet
+  # CellProfiler analysis tables (Image.csv: image quality per site) and the
+  # per-site outline PNGs.
+  - cellprofiler/analysis/*.csv
+  - cellprofiler/analysis/*_outlines.png
+  # Assay-development segmentation overlays, one PNG per well.
+  - cellprofiler/assay_development/*_ObjectOverlay.png
+  # Illumination correction functions, one per plate and channel (about 4.5 MB each).
+  - cellprofiler/illumination_correction/*.npy
+  #
+  # Deliberately NOT fetched: the raw TIFF stacks (inputs, on the cellpainting
+  # gallery bucket, not in the results) and the MultiQC report (run metadata only).
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test): the plate, batch and source, the wells,
+# the perturbations of the vendored plate map and the JUMP cell line.
+forbidden_terms:
+  - BR00117035
+  - 2021_04_26_Batch1
+  - source_4
+  - cpg0016
+  - A03
+  - A04
+  - B03
+  - B04
+  - CEBPE
+  - FHL1
+  - TSC22D3
+  - HcRed
+  - JCP2022_900266
+  - JCP2022_915129
+  - JCP2022_905732
+  - JCP2022_900531
+  - U2OS
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The plate map is not an input of the pipeline: the template reads
+  # {dest}/input/platemap.csv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/cellpainting/1.0.0dev --data-root {dest} --dry-run
+
+  # 2. Push the segmentation PNGs the image gallery shows (needs ~/.depictio/CLI.yaml)
+  depictio-cli images push {dest} s3://depictio-bucket/nf-core-cellpainting/ --extensions .png
+
+  # 3. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/cellpainting/1.0.0dev --data-root {dest}

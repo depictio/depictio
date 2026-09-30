@@ -1,0 +1,5 @@
+plate,well,pert_type,perturbation,modality,jcp2022_id,broad_sample,gene_description
+BR00117035,A03,trt,CEBPE,orf,JCP2022_900266,ccsbBroad304_00289,CCAAT enhancer binding protein epsilon
+BR00117035,A04,negcon,HcRed,orf,JCP2022_915129,ccsbBroad304_99988,
+BR00117035,B03,trt,TSC22D3,orf,JCP2022_905732,ccsbBroad304_06126,TSC22 domain family member 3
+BR00117035,B04,trt,FHL1,orf,JCP2022_900531,ccsbBroad304_00567,four and a half LIM domains 1

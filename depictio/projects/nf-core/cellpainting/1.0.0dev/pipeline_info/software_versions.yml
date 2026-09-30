@@ -1,0 +1,9 @@
+CELLPROFILER_ANALYSIS:
+  cellprofiler: 4.2.8
+CELLPROFILER_ASSAYDEVELOPMENT:
+  cellprofiler: 4.2.8
+CELLPROFILER_ILLUMINATIONCORRECTION:
+  cellprofiler: 4.2.8
+Workflow:
+    nf-core/cellpainting: v1.0.0dev-g40423f0
+    Nextflow: 25.10.4

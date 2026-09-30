@@ -1,0 +1,1233 @@
+version: 1
+# nf-core/cellpainting 1.0.0dev reference dashboard (the pipeline is unreleased;
+# the template is pinned to a dev commit, see template.yaml).
+#
+# Funnel: the plate (what was imaged, how many cells per well, the plate
+# layout) -> acquisition and segmentation QC (cells per site, image quality,
+# illumination, the shape of the segmented objects) -> the segmentation images
+# themselves (the visual QC gate) -> the morphological profiles (feature
+# distributions, the well x feature heatmap, the single-cell PCA) -> the
+# comparison between perturbation groups.
+#
+# The run publishes no MultiQC module (its report carries run metadata only),
+# so the main tab is an Overview. The plate-map hub (`samples`, keyed on
+# well_id) is the anchor: the pinned Well filters (well and GROUP_COL) reach
+# every collection through the project links, and every tab adds an open
+# tab-local filter section on its own columns.
+#
+# The four glance cards, the plate map (collapsed) and the Well filters are
+# pinned persistent sections, so they ride along on every tab.
+#
+# No bioimage viewer: the raw TIFF stacks are pipeline inputs, not outputs, and
+# the run publishes no pyramidal image. The Images tab shows the segmentation
+# PNGs through the image gallery.
+main_dashboard:
+  title: nf-core/cellpainting
+  subtitle: "Cell Painting plate: cells per well and site, image quality, morphological profiles and perturbation groups"
+  project_tag: Cell Painting Profiling
+  main_tab_name: Overview
+  tab_icon: mdi:microscope
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Well filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: Well scope
+    icon: mdi:tune
+    color: indigo
+    description: Keep only the wells inside a cell-count band
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: What the plate holds, on every tab
+    persistent: true
+    pin: top
+  - name: Plate map
+    icon: mdi:table-account
+    color: teal
+    description: The well hub every filter starts from
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Plate layout
+    icon: mdi:view-dashboard-outline
+    color: blue
+    description: Cells segmented per well, as the plate and as a ranking
+  - name: Well detail
+    icon: mdi:information-outline
+    color: cyan
+    description: One row per well with its median profile, and the record of the picked well
+  components:
+  # --------------------------------------------------------- run at a glance
+  - component_type: card
+    tag: cp-gl-card-wells
+    index: cp-gl-card-wells
+    section: Run at a glance
+    workflow_tag: cellpainting
+    data_collection_tag: samples
+    aggregation: count
+    column_name: well_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: "{GROUP_COL}"
+    display: {icon_name: 'mdi:grid', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: "Wells by {GROUP_COL_DISPLAY}"
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cp-gl-card-cells
+    index: cp-gl-card-cells
+    section: Run at a glance
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_profile
+    aggregation: sum
+    column_name: n_cells
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: well_id
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells segmented
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cp-gl-card-sites
+    index: cp-gl-card-sites
+    section: Run at a glance
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    aggregation: count
+    column_name: site_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: well
+    top_n_count: 3
+    display: {icon_name: 'mdi:image-multiple-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Sites imaged
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cp-gl-card-cells-per-site
+    index: cp-gl-card-cells-per-site
+    section: Run at a glance
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n_cells
+    column_type: int64
+    display: {icon_name: 'mdi:chart-box-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells per site
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ---------------------------------------------------------------- plate map
+  - component_type: text
+    tag: cp-ref-intro
+    section: Plate map
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per imaged well, read from the screen's plate map, with the
+      sites and cells the run produced for it. Every well filter starts from
+      this table, so it is what narrows every other tab.
+    workflow_tag: cellpainting
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: cp-ref-table-platemap
+    section: Plate map
+    workflow_tag: cellpainting
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: well_id
+    title: Plate map
+    description: One row per imaged well with its design columns.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # ------------------------------------------------------------ plate layout
+  - component_type: text
+    tag: cp-ov-intro
+    section: Plate layout
+    title: Where the cells are on the plate
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Cells segmented per well, drawn as the plate and ranked per well. A
+      pattern along a row, a column or the plate edge points at acquisition
+      or dispensing rather than at the perturbations.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-plate-layout
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cp-ov-av-plate
+    index: cp-ov-av-plate
+    section: Plate layout
+    workflow_tag: cellpainting
+    data_collection_tag: cp-plate-layout
+    use: cytotable/plate_heatmap
+    config:
+      controls_placement: header
+      index_column: plate_row
+      value_columns_pattern: "^col_"
+      cluster_rows: false
+      cluster_cols: false
+      colorscale: Blues
+    title: Cells segmented per well, plate layout
+    description: Plate rows down, plate columns across; empty cells are wells the run did not image.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: cp-ov-fig-cells-per-well
+    section: Plate layout
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/cells_per_well_bar
+    visu_type: bar
+    dict_kwargs: {x: well_id, y: n_cells, color: group, title: Cells segmented per well}
+    title: Cells segmented per well
+    description: "Coloured by {GROUP_COL_DISPLAY}; a well far below its group has lost cells to toxicity, seeding or segmentation."
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 5}
+
+  # ------------------------------------------------------------- well detail
+  - component_type: table
+    tag: cp-ov-table-wells
+    section: Well detail
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_profile
+    row_selection_enabled: true
+    row_selection_column: well_id
+    title: Per-well profiles
+    description: One row per well, the medians of the curated features and their z-scores across wells; select a row to read the well beside the table.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: cp-ov-av-well-record
+    index: cp-ov-av-well-record
+    section: Well detail
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_record
+    config:
+      id_col: well_id
+      title_col: well_id
+      selection_source: any
+      linked_component: cp-ov-table-wells
+      sections:
+        Well: [well_id, plate, well, group]
+        Imaging: [n_sites, n_cells, cells_per_site]
+        Shape: [cell_area, nucleus_area, cytoplasm_area, cell_eccentricity, nucleus_form_factor]
+        Stains: [nucleus_dna_integrated, cell_rna_mean, cell_er_mean, cell_agp_mean, cell_mito_mean]
+        Organelles: [cell_mito_granularity, cell_er_mito_correlation, cell_mito_inner_ring_frac, cell_neighbors]
+      labels:
+        group: "{GROUP_COL_DISPLAY}"
+    title: Well record
+    description: The picked well with its imaging yield and median profile.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+
+  # ----------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: cp-filter-well
+    index: cp-well-filter
+    section: Well filters
+    group: Well scope
+    workflow_tag: cellpainting
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: well_id
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:grid'}
+    placement: left
+    title: Well
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cp-filter-group
+    index: cp-group-filter
+    section: Well filters
+    group: Well scope
+    workflow_tag: cellpainting
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: "{GROUP_COL}"
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:flask-outline'}
+    placement: left
+    title: "{GROUP_COL_DISPLAY}"
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cp-ov-filter-cells
+    index: cp-ov-cells-range
+    section: Well scope
+    group: Well yield
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_cells_filter
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: n_cells
+    column_type: int64
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:counter'}
+    placement: left
+    title: Cells per well
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+# ============================================================================
+# Plate QC
+# ============================================================================
+- title: Plate QC
+  subtitle: Cells per site, image focus and saturation, illumination correction and the segmented object shapes
+  advanced_viz_controls: header
+  tab_order: 2
+  tab_icon: mdi:check-decagram
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Site scope
+    icon: mdi:tune
+    color: blue
+    description: Keep only the sites inside a cell-count band, and pick the channels of the image-quality panels
+  grid_sections:
+  - name: Cells per site
+    icon: mdi:chart-box-outline
+    color: blue
+    description: How many cells each site yielded and what they look like, site by site
+  - name: Image quality
+    icon: mdi:microscope
+    color: indigo
+    description: Focus and saturation of every raw channel of the analysed sites
+  - name: Illumination correction
+    icon: mdi:chart-line
+    color: violet
+    description: How uneven the illumination was that every raw image was corrected for
+  - name: Segmentation
+    icon: mdi:shape-outline
+    color: cyan
+    description: Nucleus against cell size, one point per segmented cell
+  - name: Site detail
+    icon: mdi:information-outline
+    color: cyan
+    description: One row per site, and the record of the picked site
+  components:
+  - component_type: interactive
+    tag: cp-qc-filter-cells
+    index: cp-qc-cells-range
+    section: Site scope
+    group: Site yield
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_cells_filter
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: n_cells
+    column_type: int64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:counter'}
+    placement: left
+    title: Cells per site
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cp-qc-filter-channel
+    index: cp-qc-channel-filter
+    section: Site scope
+    group: Site yield
+    workflow_tag: cellpainting
+    data_collection_tag: cp-image-qc
+    use: cellprofiler/channel_filter
+    interactive_component_type: MultiSelect
+    column_name: channel
+    column_type: object
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:palette-outline'}
+    placement: left
+    title: Channel
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # ---------------------------------------------------------- cells per site
+  - component_type: text
+    tag: cp-qc-intro
+    section: Cells per site
+    title: Which sites to trust
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each well is imaged at several sites, and a site out of focus, at the
+      well edge or on debris yields few cells or abnormal nuclei. Compare every
+      site with the other sites of its well before reading any profile.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cp-qc-card-nucleus-area
+    index: cp-qc-card-nucleus-area
+    section: Cells per site
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_nucleus_area
+    column_type: float64
+    display: {icon_name: 'mdi:circle-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Nucleus area per site
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-qc-card-cell-area
+    index: cp-qc-card-cell-area
+    section: Cells per site
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_cell_area
+    column_type: float64
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area per site
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-qc-card-dna
+    index: cp-qc-card-dna
+    section: Cells per site
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_nucleus_dna
+    column_type: float64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Nuclear DNA per site
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-qc-card-neighbors
+    index: cp-qc-card-neighbors
+    section: Cells per site
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_neighbors
+    column_type: float64
+    display: {icon_name: 'mdi:account-group-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Touching cells per site
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: cp-qc-fig-cells-per-site
+    section: Cells per site
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/cells_per_site_box
+    visu_type: box
+    dict_kwargs: {x: well, y: n_cells, points: all, title: "Cells per site, by well"}
+    title: Cells per site, by well
+    description: One point per site; a site far below its well's box is the one to drop or to look at on the Images tab.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: cp-qc-av-site-scatter
+    index: cp-qc-av-site-scatter
+    section: Cells per site
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_scatter
+    config:
+      controls_placement: header
+      x_title: Cells on the site
+      y_title: Median nucleus area (pixels)
+      selection_enabled: true
+      selection_column: site_id
+    title: Cell count against nucleus size, per site
+    description: Sites with few cells and large or small nuclei are the usual signature of a focus or segmentation problem; lasso them to narrow the tables.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+  # ----------------------------------------------------------- image quality
+  - component_type: text
+    tag: cp-qc-iq-intro
+    section: Image quality
+    title: Focus and saturation per channel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      CellProfiler measures every raw channel of every analysed site. A power
+      log-log slope far below the rest of its channel marks a blurred field,
+      and saturated pixels mark an over-exposed stain.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-image-qc
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: cp-qc-fig-blur
+    section: Image quality
+    workflow_tag: cellpainting
+    data_collection_tag: cp-image-qc
+    use: cellprofiler/focus_box
+    visu_type: box
+    dict_kwargs: {x: channel, y: power_log_log_slope, points: all, title: Power log-log slope per channel}
+    title: Blur per channel
+    description: Power log-log slope, one point per site; more negative is blurrier.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: figure
+    tag: cp-qc-fig-saturation
+    section: Image quality
+    workflow_tag: cellpainting
+    data_collection_tag: cp-image-qc
+    use: cellprofiler/saturation_box
+    visu_type: box
+    dict_kwargs: {x: channel, y: percent_saturated, points: all, title: Saturated pixels per channel}
+    title: Saturation per channel
+    description: Share of pixels at the maximum intensity, one point per site.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 5}
+
+  # ------------------------------------------------- illumination correction
+  - component_type: text
+    tag: cp-qc-illum-intro
+    section: Illumination correction
+    title: How even the field was lit
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each curve is the correction factor of one plate and channel, from the
+      field centre to its corners; a flat curve means even illumination. A
+      steep or lopsided curve means the images leaned on the correction.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-illumination
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cp-qc-av-illum
+    index: cp-qc-av-illum
+    section: Illumination correction
+    workflow_tag: cellpainting
+    data_collection_tag: cp-illumination
+    use: cellprofiler/illumination_radial
+    config:
+      controls_placement: header
+      x_title: Distance from the field centre (0 centre, 1 corner)
+      y_title: Correction factor
+    title: Illumination correction, centre to corner
+    description: One curve per plate and channel; the factor every raw pixel at that distance was divided by.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 5, h: 6}
+  - component_type: figure
+    tag: cp-qc-fig-illum-range
+    section: Illumination correction
+    workflow_tag: cellpainting
+    data_collection_tag: cp-illumination
+    use: cellprofiler/illumination_range_bar
+    visu_type: bar
+    dict_kwargs: {x: channel, y: correction_range, color: plate, barmode: group, title: Illumination correction range per channel}
+    title: Correction range per channel
+    description: Maximum over minimum of each correction function; 1 is a perfectly even field.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 6}
+
+  # ------------------------------------------------------------ segmentation
+  - component_type: text
+    tag: cp-qc-seg-intro
+    section: Segmentation
+    title: Nucleus against cell size
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One point per segmented cell. Under-segmented clumps sit far to the top
+      right and over-segmented fragments pile up at the bottom left, apart from
+      the main cloud.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cp-qc-av-shape
+    index: cp-qc-av-shape
+    section: Segmentation
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/shape_scatter
+    config:
+      controls_placement: header
+      x_title: Nucleus area (pixels)
+      y_title: Cell area (pixels)
+      selection_enabled: true
+      selection_column: cell_id
+    title: Nucleus area against cell area
+    description: Coloured by well; lasso a cloud of outliers to see which sites they come from.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  # ------------------------------------------------------------- site detail
+  - component_type: table
+    tag: cp-qc-table-sites
+    section: Site detail
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_summary
+    row_selection_enabled: true
+    row_selection_column: site_id
+    title: Per-site summary
+    description: One row per site with its cell count and median morphology; select a row to read the site beside the table.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    tag: cp-qc-av-site-record
+    index: cp-qc-av-site-record
+    section: Site detail
+    workflow_tag: cellpainting
+    data_collection_tag: cp-sites
+    use: cytotable/site_record
+    config:
+      id_col: site_id
+      title_col: site_id
+      selection_source: any
+      linked_component: cp-qc-table-sites
+      sections:
+        Site: [site_id, plate, well, site]
+        Yield: [n_cells, median_neighbors]
+        Morphology: [median_cell_area, median_nucleus_area, median_nucleus_dna]
+    title: Site record
+    description: The picked site with its yield and median morphology.
+    title_size: h3
+    layout: {x: 5, y: 0, w: 3, h: 7}
+
+# ============================================================================
+# Images
+# ============================================================================
+- title: Images
+  subtitle: The segmentation overlays and outlines CellProfiler wrote, filtered by well, site and group
+  advanced_viz_controls: header
+  tab_order: 3
+  tab_icon: mdi:image-multiple-outline
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Image scope
+    icon: mdi:tune
+    color: cyan
+    description: Which kind of segmentation image the gallery shows
+  grid_sections:
+  - name: Segmentation images
+    icon: mdi:microscope
+    color: cyan
+    description: Outlines drawn over the stains, the visual check of the segmentation
+  - name: Image list
+    icon: mdi:table
+    color: gray
+    description: One row per image file
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: cp-im-filter-kind
+    index: cp-im-kind-filter
+    section: Image scope
+    group: Image kind
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    use: cellprofiler/overlay_kind_filter
+    interactive_component_type: SegmentedControl
+    column_name: image_kind
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:image-outline'}
+    placement: left
+    title: Image kind
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: text
+    tag: cp-im-intro
+    section: Segmentation images
+    title: Check the segmentation by eye
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The object overlays show one representative site per well with the
+      nuclei and cell outlines drawn over the stains, the check to make before
+      trusting any count. Narrow the gallery with the well and group filters,
+      or pick outlines to see the analysed sites.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cp-im-card-images
+    index: cp-im-card-images
+    section: Segmentation images
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    use: cellprofiler/object_overlays
+    aggregation: count
+    column_name: image_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: image_kind
+    display: {icon_name: 'mdi:image-multiple-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Images by kind
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-im-card-wells
+    index: cp-im-card-wells
+    section: Segmentation images
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    use: cellprofiler/object_overlays
+    aggregation: nunique
+    column_name: well_id
+    column_type: object
+    secondary_layout: uniqueness
+    display: {icon_name: 'mdi:grid', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Wells with an image
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-im-card-sites
+    index: cp-im-card-sites
+    section: Segmentation images
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    use: cellprofiler/object_overlays
+    aggregation: nunique
+    column_name: site_id
+    column_type: object
+    secondary_layout: completeness
+    display: {icon_name: 'mdi:image-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Sites with outlines
+    description: The object overlays carry no site; outlines do.
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-im-card-plates
+    index: cp-im-card-plates
+    section: Segmentation images
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    use: cellprofiler/object_overlays
+    aggregation: nunique
+    column_name: plate
+    column_type: object
+    secondary_layout: uniqueness
+    display: {icon_name: 'mdi:view-grid-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Plates
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: image
+    tag: cp-im-gallery
+    section: Segmentation images
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    image_column: image_path
+    thumbnail_size: 220
+    columns: 4
+    max_images: 48
+    title: Segmentation overlays
+    description: Click an image to open it at full size.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 9}
+  - component_type: table
+    tag: cp-im-table-images
+    section: Image list
+    workflow_tag: cellpainting
+    data_collection_tag: cp-overlays
+    use: cellprofiler/object_overlays
+    title: Image files
+    description: One row per PNG, with the plate, well and site it shows.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 5}
+
+# ============================================================================
+# Profiles
+# ============================================================================
+- title: Profiles
+  subtitle: Feature distributions, the well x feature heatmap and the single-cell PCA
+  advanced_viz_controls: header
+  tab_order: 4
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cell scope
+    icon: mdi:tune
+    color: violet
+    description: Keep only the cells inside a size band, for example to drop fragments and clumps
+  grid_sections:
+  - name: Feature distributions
+    icon: mdi:chart-bell-curve
+    color: violet
+    description: How the curated features are distributed, cell by cell
+  - name: Well profiles
+    icon: mdi:chart-box-outline
+    color: grape
+    description: Every well's median profile, as z-scores across the run's wells
+  - name: Cell embedding
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: The single cells projected on the principal components of their features
+  - name: Cell table
+    icon: mdi:table
+    color: gray
+    description: One row per cell with its curated features
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: cp-pr-filter-cell-area
+    index: cp-pr-cell-area-range
+    section: Cell scope
+    group: Cell size
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/cell_area_filter
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: cell_area
+    column_type: float64
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Cell area (pixels)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  # --------------------------------------------------- feature distributions
+  - component_type: text
+    tag: cp-pr-intro
+    section: Feature distributions
+    title: The curated morphological profile
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      About two dozen of the thousands of features CellProfiler measures:
+      size and shape, DNA content, stain intensities, texture, granularity,
+      colocalisation and crowding. A two-peaked DNA content histogram is the
+      cell cycle; a shift of the whole distribution between wells is a
+      phenotype or a plate effect.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cp-pr-card-cells
+    index: cp-pr-card-cells
+    section: Feature distributions
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/single_cell
+    aggregation: count
+    column_name: cell_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: well
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells in scope
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-pr-card-cell-area
+    index: cp-pr-card-cell-area
+    section: Feature distributions
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/single_cell
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: cell_area
+    column_type: float64
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-pr-card-dna
+    index: cp-pr-card-dna
+    section: Feature distributions
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/single_cell
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: nucleus_dna_integrated
+    column_type: float64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Nuclear DNA content
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-pr-card-neighbors
+    index: cp-pr-card-neighbors
+    section: Feature distributions
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/single_cell
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: cell_neighbors
+    column_type: float64
+    display: {icon_name: 'mdi:account-group-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Touching cells
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: cp-pr-fig-dna
+    section: Feature distributions
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/dna_content_histogram
+    visu_type: histogram
+    dict_kwargs: {x: nucleus_dna_integrated, color: well, title: Integrated nuclear DNA intensity}
+    title: DNA content per cell
+    description: Integrated DNA stain in the nucleus; G1 and G2 cells form two peaks about a factor two apart.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 5}
+  - component_type: figure
+    tag: cp-pr-fig-cell-area
+    section: Feature distributions
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/cell_area_box
+    visu_type: box
+    dict_kwargs: {x: well, y: cell_area, title: Cell area per well}
+    title: Cell area per well
+    description: One box per well, one value per cell.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 5}
+
+  # ------------------------------------------------------------ well profiles
+  - component_type: text
+    tag: cp-pr-heat-intro
+    section: Well profiles
+    title: Wells by feature
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each row is a well, each column a curated feature, coloured by how far
+      the well's median sits from the median of all wells in robust
+      standard deviations. Wells that cluster together share a phenotype;
+      the side strip shows their group.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cp-pr-av-heatmap
+    index: cp-pr-av-heatmap
+    section: Well profiles
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_heatmap
+    config:
+      controls_placement: header
+      index_column: well_id
+      value_columns_pattern: "^z_"
+      row_annotation_cols: [group]
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      cluster_metric: euclidean
+      colorscale: RdBu_r
+    title: Well x feature profile (robust z-scores)
+    description: "Rows are wells, annotated by {GROUP_COL_DISPLAY}; columns are the curated features."
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
+  # ----------------------------------------------------------- cell embedding
+  - component_type: text
+    tag: cp-pr-emb-intro
+    section: Cell embedding
+    title: Where each cell sits in feature space
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A PCA of the standardised curated features, one point per cell. Colour
+      by group, well, size or DNA content to see whether cells separate by
+      perturbation, by plate position or by cell cycle.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cell-embedding
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cp-pr-av-pca
+    index: cp-pr-av-pca
+    section: Cell embedding
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cell-embedding
+    use: cytotable/cell_pca
+    config:
+      controls_placement: header
+      selection_enabled: true
+      selection_column: cell_id
+      hover_cols: [well_id, pc_1_variance, pc_2_variance]
+    title: Single-cell PCA
+    description: "Opens coloured by {GROUP_COL_DISPLAY}; the hover gives the share of variance of PC1 and PC2."
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
+  # --------------------------------------------------------------- cell table
+  - component_type: table
+    tag: cp-pr-table-cells
+    section: Cell table
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cells
+    use: cytotable/single_cell
+    row_selection_enabled: true
+    row_selection_column: cell_id
+    title: Single cells
+    description: One row per cell with its site, position and curated features.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+
+# ============================================================================
+# Perturbations
+# ============================================================================
+- title: Perturbations
+  subtitle: Per-group summaries and a feature-by-feature comparison between two groups
+  advanced_viz_controls: header
+  tab_order: 5
+  tab_icon: mdi:scale-balance
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Comparison scope
+    icon: mdi:tune
+    color: grape
+    description: Which groups the summaries and the comparison read
+  grid_sections:
+  - name: Per-group summaries
+    icon: mdi:chart-box-outline
+    color: grape
+    description: Wells and cells per group, and the well medians of two key features
+  - name: Compare two groups
+    icon: mdi:scale-balance
+    color: pink
+    description: Every curated feature tested between two groups of cells
+  components:
+  - component_type: interactive
+    tag: cp-pt-filter-group
+    index: cp-pt-group-filter
+    section: Comparison scope
+    group: Groups
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cell-profiles
+    use: cytotable/cell_group_filter
+    interactive_component_type: MultiSelect
+    column_name: group
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:flask-outline'}
+    placement: left
+    title: "{GROUP_COL_DISPLAY} (cells)"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  # --------------------------------------------------- per-group summaries
+  - component_type: text
+    tag: cp-pt-intro
+    section: Per-group summaries
+    title: What each group looks like
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each well is summarised by the median of its cells, the unit a
+      perturbation is compared on. A group whose wells scatter as widely as
+      the groups differ has no consistent phenotype.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cp-pt-card-wells
+    index: cp-pt-card-wells
+    section: Per-group summaries
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_profile
+    aggregation: count
+    column_name: well_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: group
+    display: {icon_name: 'mdi:grid', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Profiled wells by group
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-pt-card-cells
+    index: cp-pt-card-cells
+    section: Per-group summaries
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cell-profiles
+    use: cytotable/cell_profiles
+    aggregation: count
+    column_name: cell_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: group
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells by group
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-pt-card-cell-area
+    index: cp-pt-card-cell-area
+    section: Per-group summaries
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_profile
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: cell_area
+    column_type: float64
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Well median cell area
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cp-pt-card-dna
+    index: cp-pt-card-dna
+    section: Per-group summaries
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/well_profile
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: nucleus_dna_integrated
+    column_type: float64
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Well median DNA content
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: cp-pt-fig-cell-area
+    section: Per-group summaries
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/group_cell_area_box
+    visu_type: box
+    dict_kwargs: {x: group, y: cell_area, points: all, title: "Median cell area per well, by group"}
+    title: Cell area by group
+    description: One point per well, the median area of its cells.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 4, h: 5}
+  - component_type: figure
+    tag: cp-pt-fig-dna
+    section: Per-group summaries
+    workflow_tag: cellpainting
+    data_collection_tag: cp-wells
+    use: cytotable/group_dna_box
+    visu_type: box
+    dict_kwargs: {x: group, y: nucleus_dna_integrated, points: all, title: "Median nuclear DNA per well, by group"}
+    title: DNA content by group
+    description: One point per well; a shift is a cell-cycle or ploidy effect.
+    title_size: h3
+    layout: {x: 4, y: 4, w: 4, h: 5}
+
+  # -------------------------------------------------------- compare two groups
+  - component_type: text
+    tag: cp-pt-cmp-intro
+    section: Compare two groups
+    title: Which features separate two groups
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Pick two groups in the tile header (or two saved selections, for
+      example cells lassoed on the PCA) and read the volcano for the features
+      that move. Cells of one well are not independent, so treat it as a
+      ranking of features to look at, not as a test of the perturbation.
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cell-profiles
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cp-pt-av-compare
+    index: cp-pt-av-compare
+    section: Compare two groups
+    workflow_tag: cellpainting
+    data_collection_tag: cp-cell-profiles
+    use: cytotable/group_feature_compare
+    config:
+      controls_placement: header
+      index_col: cell_id
+      group_col: group
+      test: wilcoxon
+      log_transform: false
+      min_observations: 10
+      fdr_threshold: 0.05
+      log2fc_threshold: 0.25
+      top_n_labels: 15
+      auto_run: true
+    title: Group A against group B, feature by feature
+    description: Wilcoxon test per curated feature between the cells of the two groups, Benjamini-Hochberg corrected.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
