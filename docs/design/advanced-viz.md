@@ -456,13 +456,15 @@ The third lot added a protein module of three kinds, linked by residue rather th
 Details, data contract and resolver settings are in `docs/design/protein-structure.md`.
 
 **`molecule_3d`.** A protein structure in 3D (3Dmol.js, loaded in its own chunk only when a tile
-mounts), coloured by pLDDT, chain, N-to-C spectrum or a column of the bound residue or variant
-table, with variants as spheres on the alpha carbon. The structure comes from an `indexed_file`
+mounts), coloured by pLDDT, chain, N-to-C spectrum, secondary structure, residue type, hydrophobicity
+or a column of the bound residue or variant table, in one or several combined representations,
+with variants as spheres on the alpha carbon and the picked site in red ball and stick. The structure comes from an `indexed_file`
 collection of `pdb` / `mmcif` objects, one per entity (`structure_source: file`), or from the
 opt-in structure resolver (`resolve`: AlphaFold DB by accession or gene, ESMFold by sequence).
 Only `position` is required. A variant whose `ref_aa` disagrees with the model is listed as a
-numbering mismatch instead of drawn. `layout: structure_sequence | structure_msa` puts a sequence
-strip or the alignment in the same tile.
+numbering mismatch instead of drawn. `layout: structure_sequence | structure_msa | structure_text`
+puts a sequence strip, the alignment or the written sequence (one clickable letter per residue)
+in the same tile.
 
 **`msa`.** A multiple sequence alignment on a virtualised canvas: one row per sequence (`msa_id`,
 `seq_id`, `aligned_sequence` required, `rank` and `identity` optional), Clustal, Zappo,

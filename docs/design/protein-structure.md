@@ -67,7 +67,7 @@ instead. All three default `selection_enabled` to `true` (`SELECTION_ON_BY_DEFAU
 
 | kind | renderer | config fields (defaults) |
 | --- | --- | --- |
-| `molecule_3d` | 3Dmol.js in a lazy chunk | `structure_source` (`file` \| `resolve`), `structure_dc_id` / `structure_wf_id` / `structure_dc_tag`, `entity_col` (`entity`), `uniprot_col`, `gene_col`, `sequence_col`, `taxon` (9606), `position_col` (`position`), `chain_col`, `value_col`, `category_col`, `ref_aa_col`, `alt_aa_col`, `label_col`, `color_mode` (`plddt` \| `chain` \| `spectrum` \| `value` \| `category` \| `uniform`), `colour_scale` (Viridis when null), `representation` (`cartoon` \| `trace` \| `stick` \| `sphere` \| `surface`), `show_variants` (true), `show_labels` (false), `layout` (`structure`), `msa_dc_id` / `msa_wf_id` / `msa_dc_tag`, `selection_enabled` (true), `follow_selection` (true) |
+| `molecule_3d` | 3Dmol.js in a lazy chunk | `structure_source` (`file` \| `resolve`), `structure_dc_id` / `structure_wf_id` / `structure_dc_tag`, `entity_col` (`entity`), `uniprot_col`, `gene_col`, `sequence_col`, `taxon` (9606), `position_col` (`position`), `chain_col`, `value_col`, `category_col`, `ref_aa_col`, `alt_aa_col`, `label_col`, `color_mode` (`plddt` \| `chain` \| `spectrum` \| `value` \| `category` \| `secondary_structure` \| `residue_type` \| `hydrophobicity` \| `uniform`), `colour_scale` (Viridis when null), `representation` (`cartoon` \| `trace` \| `stick` \| `sphere` \| `surface`), `representations` (a list of the same, replaces `representation` when set), `highlight_site` (true), `spin` (false), `show_variants` (true), `show_labels` (false), `layout` (`structure` \| `structure_sequence` \| `structure_msa` \| `structure_text`), `msa_dc_id` / `msa_wf_id` / `msa_dc_tag`, `selection_enabled` (true), `follow_selection` (true) |
 | `msa` | canvas `MsaPanel` | `msa_id_col` (`msa_id`), `seq_id_col` (`seq_id`), `sequence_col` (`aligned_sequence`), `rank_col` (`rank`), `identity_col` (`identity`), `color_scheme` (`clustal` \| `zappo` \| `hydrophobicity` \| `identity` \| `none`), `max_rows` (200, at most 1000), `sort_by` (`rank` \| `identity` \| `input`), `show_consensus` (true), `show_conservation` (true), `entity_col_for_selection` (`entity`), `position_col_for_selection` (`position`), `chains_col` (`chains`), `chain_col_for_selection` (`chain`), `selection_enabled` (true), `follow_selection` (true) |
 | `sequence_track` | canvas `SequenceStrip` | `entity_col` (`entity`), `position_col` (`position`), `residue_col` (`residue`), `value_col`, `category_col`, `value_label`, `domains_dc_id` / `domains_wf_id` / `domains_dc_tag`, `domain_start_col` (`start`), `domain_end_col` (`end`), `domain_label_col` (`label`), `variants_dc_id` / `variants_wf_id` / `variants_dc_tag`, `variant_position_col` (`position`), `variant_label_col` (`label`), `variant_category_col` (`category`), `selection_enabled` (true), `follow_selection` (true) |
 
@@ -77,6 +77,23 @@ instead. All three default `selection_enabled` to `true` (`SELECTION_ON_BY_DEFAU
 model; the structure comes from the companion collection or the resolver. Variants are spheres
 on the alpha carbon, sized by `value_col` when bound. The entity shown is the one the dashboard's
 filters name on `entity_col`, else the reader's pick in the tile, else the first.
+
+Colour modes that read the structure itself: `secondary_structure` paints the helix and strand
+3Dmol assigns (from the file's HELIX and SHEET records, else computed from the backbone), in the
+RasMol structure colours the sequence track's glyphs use, coil neutral; `residue_type` hands the
+model to 3Dmol's `amino` scheme and draws no legend; `hydrophobicity` colours each residue by its
+Kyte-Doolittle score on the ramp the `msa` kind's hydrophobicity scheme uses, so a residue has one
+colour in both tiles. `representations` combine in one style (a cartoon or a trace, sticks,
+spheres, sticks with spheres drawn as ball and stick, a surface on top); a surface alone keeps a
+cartoon under it, because 3Dmol does not hover or pick a surface. `highlight_site` draws the
+picked residue or range (the tile's own pick, or another tile's when following) as red ball and
+stick over the representation, up to 50 residues; a longer range keeps the plain selection
+sticks. `spin` starts the model turning; the view buttons (reset, spin, save as PNG) sit at the
+top right of the canvas whatever the setting.
+
+In the tile, the Style control is a multi-select over the representations (the last one cannot
+be removed), and Colour by lists every mode whose inputs are bound (`value` and `category` need
+their column).
 
 `sequence_track` draws, on one 2D canvas: a ruler, the one-letter sequence (blocks when too dense
 to read), a value lane, a category lane, domain spans and variant lollipops. The value lane uses
@@ -106,9 +123,30 @@ tall), with a draggable divider (structure share 0.2 to 0.85):
   column names (`msa_id`, `seq_id`, `aligned_sequence`, `rank`, `identity`, `coverage`, `chains`),
   not the `msa` kind's config. Default structure share 0.55. Without an MSA binding the tile falls
   back to `structure`.
+- `structure_text`: the model's one-letter sequence written as plain monospace text under the
+  structure, every chain of the model in its own block, wrapped to the pane in lines of
+  ten-letter blocks with the number of each line's first residue at its start (structure
+  numbering). A letter click picks that residue exactly as a click in 3D does (a
+  `residue_selection`, the red site), and zooms onto it; shift-click extends from the last pick
+  to a range. Hovering a letter publishes on the highlight bus and marks the residue in 3D. The
+  letters show what the rest of the dashboard says: the pick red, underlined, on a light red
+  background; the bound table's variants in red; the hovered residue outlined. A pick made
+  elsewhere scrolls into view when it is out of sight. The text scrolls inside its pane, one
+  listener per gesture on the text area (event delegation), and a hover re-renders only the lines
+  it enters and leaves. Default structure share 0.7, always stacked.
 
 Hover and selection are shared inside the tile as between tiles. One combined tile costs one
 WebGL slot and one set of chrome, which is the reason for the layout rather than two tiles.
+
+### Compact placement
+
+The protein tabs put the 3D tile on half the section width, about 520 px high (`w: 4, h: 5`),
+beside the selector that drives it (a scatter or a lollipop whose click names one entity or one
+residue range), with the sequence track and the alignment full width below and the tables
+collapsed under them. At that size the tile keeps its controls in the header
+(`controls_placement: header`), and below 560 by 440 px of body the colour legend flows its
+swatches in rows in the bottom-left corner and lets the pointer through. The written sequence
+wraps to the pane width, so nothing overflows sideways.
 
 ## 3. Linking: `residue_selection` and the highlight bus
 
@@ -340,11 +378,12 @@ does not resolve tags, so a showcase seed binds companions by id.
     structure_dc_tag: <pipeline>_structures
     entity_col: entity
     position_col: position
-    layout: structure_msa
+    layout: structure_text
     msa_dc_tag: <pipeline>_msa
     color_mode: plddt
+    highlight_site: true
     controls_placement: header
-  layout: {x: 0, y: 0, w: 8, h: 11}
+  layout: {x: 4, y: 0, w: 4, h: 5}
 - component_type: advanced_viz
   tag: <prefix>-sequence
   section: <section>
@@ -361,8 +400,13 @@ does not resolve tags, so a showcase seed binds companions by id.
     category_col: category
     domains_dc_tag: <pipeline>_domains
     variants_dc_tag: <pipeline>_variants
-  layout: {x: 0, y: 11, w: 8, h: 4}
+  layout: {x: 0, y: 4, w: 8, h: 4}
 ```
+
+The selector on the other half is any tile whose click leaves one value on a column named like
+`entity_col` (a `scatter_xy` with one point per structure, for example): the 3D tile shows the
+entity a filter names when it names exactly one, and in file mode that value must equal the
+structure's indexed_file sample id.
 
 A catalog output can carry the same bindings as a `Render` entry (`kind: molecule_3d`,
 `roles: {position: position, entity: entity, ...}`), which a template consumes with `use:`. Put
@@ -375,7 +419,8 @@ the entity column so the reader picks the protein, and set `residue_axis: true` 
 - **vitest** (`packages/depictio-react-core`): `highlight/bus.test.ts`,
   `selection.residue.test.ts`, `selection.proteinKinds.test.ts`,
   `selectionGroups.residue.test.ts`, `components/advanced_viz/molecule/{residueData,resolve,
-  splitView,structureText}.test.ts`, `components/advanced_viz/protein/{alignment,canvas,
+  sequenceLines,splitView,structureText,viewer}.test.ts` (the written sequence's wrapping,
+  numbering, marks and click-to-range; the representation, site and colour-mode mapping), `components/advanced_viz/protein/{alignment,canvas,
   rendererData,residueColours,sequence}.test.ts`, `components/advanced_viz/lollipopOverlay.test.ts`,
   plus the protein cases in `splitPanels.test.ts` (kind buckets) and
   `record_card/recordSelection.test.ts` (a residue pick reaching a record card).
