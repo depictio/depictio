@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict
 
 from depictio.cli.cli_logging import logger
+from depictio.models.models.comments import Anchor, Author, ThreadStatus
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.deltatables import DeltaTableAggregated
@@ -34,6 +35,43 @@ class BrandingAssetBackupDoc(BaseModel):
     content_type: str
     data_b64: str
     updated_at: int
+
+
+class ProjectStorageConfigBackupDoc(BaseModel):
+    """Per-project S3 read credentials, as written by
+    `projects_endpoints.storage_config._set_project_storage`.
+
+    The secret is stored Fernet-encrypted with the instance's key under
+    `DEPICTIO_AUTH_KEYS_DIR`; a backup restored on another instance keeps the
+    document but the owner has to re-enter the secret.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    project_id: Any
+    endpoint_url: str
+    bucket: str | None = None
+    region: str | None = None
+    access_key_id: str | None = None
+    secret_encrypted: str | None = None
+    updated_at: str | None = None
+
+
+class CommentThreadBackupDoc(BaseModel):
+    """A stored comment thread (``_id`` plus the ``CommentThread`` fields).
+
+    Loose on purpose: the backup carries Mongo's ``_id`` rather than the API's
+    ``id``, and datetimes as strings. The anchor and author are checked strictly,
+    since a thread whose anchor no longer parses can never be listed again.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    project_id: str
+    parent_dashboard_id: str
+    anchor: Anchor
+    created_by: Author
+    status: ThreadStatus = "open"
 
 
 def validate_backup_file(backup_path: str) -> Dict[str, Any]:
@@ -90,6 +128,8 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             "groups": GroupBeanie,
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
+            "project_storage_configs": ProjectStorageConfigBackupDoc,
+            "comment_threads": CommentThreadBackupDoc,
         }
 
         # Validate each collection
@@ -208,6 +248,8 @@ EXPECTED_BACKUP_COLLECTIONS = [
     "groups",
     "instance_settings",
     "branding_assets",
+    "project_storage_configs",
+    "comment_threads",
 ]
 
 
@@ -246,6 +288,8 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "groups": GroupBeanie,
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
+            "project_storage_configs": ProjectStorageConfigBackupDoc,
+            "comment_threads": CommentThreadBackupDoc,
         }
 
         # Check against expected collections
@@ -271,7 +315,17 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         # _create_mongodb_backup's collections_config yet either — excluded here to
         # match current reality, not a judgment that it shouldn't ever be backed up;
         # adding real backup coverage for it is a separate, deliberate change.
-        ledger_collections = ["task_events", "app_logs", "telemetry", "ingestion_runs"]
+        # 'agent_tool_calls' is the agent tool audit ledger (90-day TTL), same
+        # footing as 'task_events'; 'agent_quotas' holds daily write counters
+        # (2-day TTL).
+        ledger_collections = [
+            "task_events",
+            "app_logs",
+            "telemetry",
+            "ingestion_runs",
+            "agent_tool_calls",
+            "agent_quotas",
+        ]
         # The assistant's history ('ai_summaries', 'ai_analyses', and the
         # 'ai_generations' run records) is LLM output keyed by dashboard:
         # useful to keep, but not wired into _create_mongodb_backup's

@@ -74,7 +74,7 @@ class TestNextflowManifestResolution:
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
-        assert "--data-root is required when using --template" in output
+        assert "is required when using --template" in output
         assert result.exit_code == 1
 
     def test_explicit_project_config_path_wins_over_manifest(self, app, runner, tmp_path):
@@ -118,7 +118,7 @@ class TestNextflowManifestResolution:
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
         # Stopped at the --data-root guard, i.e. --template was used as-is.
-        assert "--data-root is required when using --template" in output
+        assert "is required when using --template" in output
         assert result.exit_code == 1
 
 

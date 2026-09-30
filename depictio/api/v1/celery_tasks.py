@@ -2549,6 +2549,170 @@ def compute_sankey(payload: dict) -> dict:
     }
 
 
+# A step in any of these statuses will never change again on its own, so the
+# finalizer can close the run around it and a dependent DC can stop waiting on
+# it: "skipped" joined "success"/"failed" once an optional pre-flight miss
+# started seeding steps that way (see ``_dispatch_refresh_tasks``).
+_TERMINAL_STEP_STATUSES = frozenset({"success", "failed", "skipped"})
+
+# How long a dependent DC's task waits between checks on its dc_ref(s), and how
+# many times before it gives up: 180 * 10s = 30 minutes, the same order of
+# magnitude as this task's own ``soft_time_limit`` below.
+_DEPENDENCY_WAIT_SECONDS = 10
+_DEPENDENCY_MAX_WAITS = 180
+
+
+def _unfinished_dependencies(steps: list[dict], depends_on: list[str]) -> list[str]:
+    """The names in ``depends_on`` whose step hasn't reached a terminal status.
+
+    A name in ``depends_on`` with no step in ``steps`` at all (pruned at
+    resolution, or simply not part of this run) is not waited for: only a
+    step actually seeded here can ever go terminal.
+    """
+    by_name = {s.get("name"): s.get("status") for s in steps}
+    return [
+        dep for dep in depends_on if dep in by_name and by_name[dep] not in _TERMINAL_STEP_STATUSES
+    ]
+
+
+def _finalize_manifest_refresh_run(run_id: str) -> None:
+    """Close the run once every seeded step is terminal. Idempotent —
+    concurrent finalizers both compute the same $set."""
+    from depictio.api.v1.monitoring import store
+
+    doc = store.get_ingestion_run(run_id)
+    if not doc or doc.get("status") != "running":
+        return
+    steps = doc.get("steps") or []
+    if not steps or any(s.get("status") not in _TERMINAL_STEP_STATUSES for s in steps):
+        return
+    failed = [s for s in steps if s.get("status") == "failed"]
+    if not failed:
+        status = "success"
+    else:
+        # A skipped step is a nominal absence, not a failure: it must never
+        # make an otherwise-clean run read as "failed", so it drops out of
+        # both sides of the "every step failed" comparison.
+        non_skipped = [s for s in steps if s.get("status") != "skipped"]
+        status = "failed" if non_skipped and len(failed) == len(non_skipped) else "partial"
+    store.finish_ingestion_run(
+        run_id,
+        status=status,
+        current_step=None,
+        error=(failed[0].get("detail") if failed else None),
+    )
+
+
+@celery_app.task(
+    bind=True,
+    name="depictio.manifest.refresh_dc",
+    soft_time_limit=1800,
+    time_limit=2100,
+    max_retries=_DEPENDENCY_MAX_WAITS,
+)
+def manifest_refresh_dc_task(self, payload: dict) -> dict:
+    """Re-ingest one manifest-backed DC — the async unit of a manifest refresh.
+
+    Input shape (built by ``_refresh_manifest_in_project`` / ``_dispatch_refresh_tasks``):
+        {
+          "run_id":     ingestion-run id (steps pre-seeded, one per DC tag),
+          "project_id", "wf_index", "dc_id", "dc_tag",
+          "sync_files": bool,
+          "user": {"id", "email", "is_admin"},
+          "depends_on": [dc_tag, ...] (optional; recipe DCs only, see
+                         ``manifest_ingest._recipe_dependencies``),
+        }
+
+    The project document is re-read here (nothing rich crosses the broker) and
+    is never written: refresh has no scan-config changes to persist or revert,
+    which is what makes per-DC parallelism safe.
+
+    ``depends_on`` is checked before the step is even marked "running", and
+    outside the ``try/except`` below: ``self.retry()`` raises Celery's own
+    ``Retry`` exception to unwind out of this call, and a blanket
+    ``except Exception`` would catch that as if it were an ingestion failure.
+    An unfinished dependency reschedules this same task after a short wait
+    rather than occupying a worker slot for up to 30 minutes; giving up after
+    ``_DEPENDENCY_MAX_WAITS`` retries fails the step by name instead of
+    retrying forever against a dependency that will never finish.
+    """
+    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
+    from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+        ProjectStorageUnusable,
+        storage_options_for_project,
+    )
+    from depictio.api.v1.monitoring import store
+    from depictio.models.models.users import UserBase
+
+    run_id = payload["run_id"]
+    tag = payload["dc_tag"]
+
+    depends_on = payload.get("depends_on") or []
+    if depends_on:
+        doc = store.get_ingestion_run(run_id) or {}
+        unfinished = _unfinished_dependencies(doc.get("steps") or [], depends_on)
+        if unfinished:
+            names = ", ".join(unfinished)
+            if self.request.retries >= _DEPENDENCY_MAX_WAITS:
+                message = f"Gave up waiting for {names} to finish."
+                store.set_ingestion_step(
+                    run_id,
+                    step={"name": tag, "status": "failed", "detail": message},
+                    current_step=None,
+                )
+                _finalize_manifest_refresh_run(run_id)
+                return {"tag": tag, "ok": False, "message": message}
+            if self.request.retries == 0:
+                # Stays "pending": this DC hasn't started, it's queued behind
+                # another one, but the detail tells a polling UI why.
+                store.set_ingestion_step(
+                    run_id,
+                    step={"name": tag, "status": "pending", "detail": f"Waiting for {names}."},
+                    current_step=None,
+                )
+            raise self.retry(countdown=_DEPENDENCY_WAIT_SECONDS)
+
+    store.set_ingestion_step(run_id, step={"name": tag, "status": "running"}, current_step=tag)
+    try:
+        project = projects_collection.find_one({"_id": ObjectId(payload["project_id"])})
+        if not project:
+            raise ValueError("Project no longer exists.")
+        workflow_dict = project["workflows"][payload["wf_index"]]
+        user = UserBase(
+            id=ObjectId(payload["user"]["id"]),
+            email=payload["user"]["email"],
+            is_admin=bool(payload["user"].get("is_admin", False)),
+        )
+        ok, message = _run_dc_ingest(
+            workflow_dict,
+            payload["dc_id"],
+            user,
+            sync_files=bool(payload.get("sync_files", True)),
+            # Resolved worker-side so credentials never cross the broker.
+            remote_storage_options=storage_options_for_project(payload["project_id"]),
+        )
+    except ProjectStorageUnusable as exc:
+        # The project's stored storage config cannot be used from this worker
+        # (secret encrypted with a key this worker does not have, or endpoint
+        # no longer allowed). Reading with the instance credentials instead
+        # would be silent misbehaviour, so the DC step fails with the reason;
+        # the operator context (key path) goes to the worker log only.
+        logger.error(f"Manifest refresh for DC '{tag}' cannot use project storage: {exc}")
+        ok, message = False, exc.detail
+    except Exception as exc:  # noqa: BLE001 — any crash is a per-DC failure
+        logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
+        ok, message = False, str(exc)
+
+    store.set_ingestion_step(
+        run_id,
+        step={"name": tag, "status": "success" if ok else "failed", "detail": message},
+        current_step=None,
+    )
+    _finalize_manifest_refresh_run(run_id)
+    return {"tag": tag, "ok": ok, "message": message}
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -2559,4 +2723,5 @@ __all__: list[str] = [
     "compute_upset",
     "compute_coverage_track",
     "compute_sankey",
+    "manifest_refresh_dc_task",
 ]

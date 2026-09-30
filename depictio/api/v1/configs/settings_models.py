@@ -249,6 +249,7 @@ class MongoDBConfig(ServiceConfig):
         ai_summaries_collection: str = Field(default="ai_summaries")
         ai_analyses_collection: str = Field(default="ai_analyses")
         ai_generations_collection: str = Field(default="ai_generations")
+        project_storage_collection: str = Field(default="project_storage_configs")
         app_logs_collection: str = Field(default="app_logs")
         # Instance branding: the singleton overrides document and the uploaded
         # logo bytes. Named here so backup/restore can reach them like any other
@@ -263,6 +264,13 @@ class MongoDBConfig(ServiceConfig):
         # stored there would be regenerated on every dev wipe and inflate the
         # project's installation count.
         telemetry_collection: str = Field(default="telemetry")
+        # Comment threads (and the annotations they carry) pinned to dashboard components. Stored
+        # apart from `dashboards` so a dashboard save never rewrites or drops them.
+        comment_threads_collection: str = Field(default="comment_threads")
+        # One row per agent tool call (MCP or in-app), kept 90 days by a TTL index.
+        agent_tool_calls_collection: str = Field(default="agent_tool_calls")
+        # Daily per-token write counters for agents (threads, reports), kept two days by a TTL index.
+        agent_quotas_collection: str = Field(default="agent_quotas")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -831,6 +839,84 @@ class MultiQCPrerenderConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MULTIQC_")
 
 
+class RemoteConfig(BaseSettings):
+    """Policy for fetching user-supplied remote URLs (scan modes url/manifest).
+
+    Source of truth for the SSRF gateway in ``depictio.api.v1.remote_fetch``.
+    The gateway instantiates this section on every call instead of reading the
+    ``settings`` singleton, so the CLI and the Celery worker apply the very same
+    policy without importing the full API configuration.
+
+    Environment variables: ``DEPICTIO_REMOTE_<FIELD>`` (upper-cased field name).
+    A malformed value fails validation at the first fetch instead of silently
+    falling back to a default.
+    """
+
+    allow_http: bool = Field(
+        default=False,
+        description=(
+            "Accept plain http:// URLs in addition to https:// and s3://. Off by "
+            "default: the gateway and the models reject http:// locations. Turn on "
+            "for local or airgapped deployments that serve data without TLS."
+        ),
+    )
+    url_allowlist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway may fetch from. Exclusive while "
+            "set: any host not listed is rejected, and a listed host skips the "
+            "private/loopback address rejection (this is how internal deployments "
+            "and tests opt a 127.0.0.1 or intranet host in). Empty accepts every "
+            "public host."
+        ),
+    )
+    url_denylist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway always rejects. Checked before "
+            "the allowlist, so a host present in both lists is denied."
+        ),
+    )
+    max_download_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Size cap in bytes for a single remote download (data file or manifest). "
+            "Downloads stream and abort, removing the partial file, once the cap is "
+            "exceeded."
+        ),
+    )
+    public_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations readable without credentials, each either "
+            "'bucket' or 'bucket/prefix'. Empty by default, so unsigned access is "
+            "opt-in. A bucket listed here is read with the signature disabled; every "
+            "other s3:// URL keeps using the instance or project credentials. The "
+            "list is consulted before any request goes out, so naming a bucket that "
+            "is not on it never turns into an existence or region oracle."
+        ),
+    )
+    timeout_s: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "httpx timeout in seconds applied to each connect/read/write operation "
+            "of a remote fetch (not a total download time)."
+        ),
+    )
+    max_redirects: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Maximum redirect hops followed for a remote URL. The gateway re-validates "
+            "every Location against this policy before following it."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_REMOTE_")
+
+
 # ── Optional Features ─────────────────────────────────────────────────────────
 
 
@@ -960,6 +1046,37 @@ class AIConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")
+
+
+class MCPConfig(BaseSettings):
+    """Agent tools exposed over the Model Context Protocol.
+
+    Off by default: when disabled the ``/depictio/api/v1/mcp`` endpoint is not
+    mounted at all. Tools authenticate with the caller's Bearer token and only
+    see what the token's scopes allow.
+    """
+
+    enabled: bool = Field(default=False, description="Mount the MCP server at /depictio/api/v1/mcp")
+    max_output_chars: int = Field(
+        default=12_000,
+        ge=500,
+        description="Default cap on the JSON size of one tool result (larger results are truncated)",
+    )
+    rate_per_min: int = Field(
+        default=60, ge=1, description="Tool calls allowed per token (or user) per minute"
+    )
+    query_timeout_s: float = Field(
+        default=20, gt=0, description="Wall-clock seconds a data query tool may run"
+    )
+    enable_ingest: bool = Field(
+        default=False, description="Expose the ingestion tools (they also need the ingest scope)"
+    )
+    enable_llm_tools: bool = Field(
+        default=False,
+        description="Expose tools that call the configured LLM themselves (dashboard generation, suggestions)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MCP_")
 
 
 class BackupConfig(BaseSettings):
@@ -1389,6 +1506,17 @@ class PerformanceConfig(BaseSettings):
     browser_page_load_timeout: int = Field(default=90000)  # 90s default
     browser_element_timeout: int = Field(default=30000)  # 30s default
 
+    screenshots_enabled: bool = Field(
+        default=True,
+        description="Generate dashboard thumbnails with Playwright. Off when no Chromium is "
+        "available, e.g. `depictio local up` without --screenshots.",
+    )
+    screenshots_dir: str = Field(
+        default="",
+        description="Where dashboard thumbnails are written and served from. Empty means "
+        "the package's depictio/api/static/screenshots, which ships the reference thumbnails.",
+    )
+
     # Screenshot-specific timeouts (production typically needs longer)
     screenshot_navigation_timeout: int = Field(default=60000)  # 60s for navigation
     screenshot_content_wait: int = Field(default=30000)  # 30s for content
@@ -1436,6 +1564,12 @@ class PerformanceConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+    @property
+    def screenshots_path(self) -> Path:
+        if self.screenshots_dir:
+            return Path(self.screenshots_dir).expanduser()
+        return Path(__file__).resolve().parents[2] / "static" / "screenshots"
 
 
 class AnalyticsConfig(BaseSettings):
@@ -1884,10 +2018,12 @@ class Settings(BaseSettings):
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     multiqc_prerender: MultiQCPrerenderConfig = Field(default_factory=MultiQCPrerenderConfig)
+    remote: RemoteConfig = Field(default_factory=RemoteConfig)
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)

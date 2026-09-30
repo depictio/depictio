@@ -43,6 +43,8 @@ classifiers = [
 
 [project.optional-dependencies]
 multiqc = ["multiqc==1.35"]
+# `depictio mcp serve`: stdio proxy for AI agents (Claude Code, Claude Desktop).
+mcp = ["mcp==2.2.0"]
 
 [project.scripts]
 depictio-cli = "depictio.cli.depictio_cli:main"

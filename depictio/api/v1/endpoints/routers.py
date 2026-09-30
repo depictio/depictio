@@ -4,7 +4,7 @@ API router configuration for Depictio API.
 Aggregates all endpoint routers into a single router instance.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import (
@@ -20,6 +20,7 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_ro
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
+from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
@@ -36,10 +37,13 @@ from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
+from depictio.api.v1.endpoints.user_endpoints.scope_gate import enforce_token_scopes
 from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
 from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoint_router
 
-router = APIRouter()
+# Every included router inherits the scope gate: a no-op for sessions and
+# legacy tokens, fail-closed for scoped (agent) tokens.
+router = APIRouter(dependencies=[Depends(enforce_token_scopes)])
 
 router.include_router(
     projects_endpoint_router,
@@ -116,6 +120,12 @@ router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
     tags=["Dashboards"],
+)
+
+router.include_router(
+    comments_endpoint_router,
+    prefix="/comments",
+    tags=["Comments"],
 )
 
 router.include_router(

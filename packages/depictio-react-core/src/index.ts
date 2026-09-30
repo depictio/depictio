@@ -160,6 +160,9 @@ export {
   ResetButton,
   InspectorProvider,
   useInspectorControl,
+  CommentsButton,
+  CommentsControlProvider,
+  useCommentsControl,
   actionsFor,
   wrapWithChrome,
 } from './components/chrome';
@@ -167,6 +170,7 @@ export type {
   ComponentChromeProps,
   ChromeAction,
   InspectorControl,
+  CommentsControl,
   WrapWithChromeOpts,
 } from './components/chrome';
 
@@ -179,6 +183,40 @@ export {
   useDraftReview,
 } from './components/chrome/ComponentChrome';
 export type { DraftReviewControl } from './components/chrome/ComponentChrome';
+// Component comments & annotation threads (/comments API).
+export {
+  TAB_THREAD_KEY,
+  fetchCommentAccess,
+  fetchCommentThreads,
+  fetchCommentCounts,
+  createCommentThread,
+  addThreadComment,
+  editThreadComment,
+  deleteThreadComment,
+  updateCommentThread,
+  reviewCommentThread,
+  deleteCommentThread,
+  fetchPublishedAnnotations,
+} from './api';
+export type {
+  CommentThreadStatus,
+  CommentViewState,
+  CommentSelection,
+  CommentAnchor,
+  CommentAgentInfo,
+  CommentAuthor,
+  CommentEvidence,
+  CommentReview,
+  ThreadComment,
+  ThreadStaleness,
+  CommentThread,
+  ThreadCreatePayload,
+  AnnotationPatch,
+  ThreadUpdatePayload,
+  CommentCounts,
+  PublishedAnnotation,
+  ListThreadsOptions,
+} from './api';
 
 // API surface — fetchers, payload types, filter types
 export {
@@ -265,17 +303,28 @@ export {
   fetchIngestionHealth,
   fetchDataCollectionFiles,
   createProject,
+  createProjectFromManifest,
+  createProjectFromRun,
+  refreshManifest,
+  getManifestRefreshRun,
+  listProjectTemplates,
   updateProject,
   deleteProject,
   toggleProjectVisibility,
   updateProjectPermissions,
+  getProjectStorage,
+  setProjectStorage,
+  deleteProjectStorage,
+  testProjectStorage,
   importProjectZip,
   exportProjectZip,
+  exportProjectTemplate,
   fetchUserByEmail,
   fetchMultiQCByDataCollection,
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  createDataCollectionFromUrl,
   // Admin
   listAllUsers,
   deleteUser,
@@ -309,6 +358,7 @@ export {
   createLongLivedToken,
   deleteLongLivedToken,
   generateAgentConfig,
+  TOKEN_SCOPES,
   // Cross-DC links
   listProjectLinks,
   createProjectLink,
@@ -591,8 +641,26 @@ export type {
   // Project management types
   CreateProjectInput,
   CreateProjectResult,
+  FromManifestRequest,
+  FromManifestReport,
+  FromRunRequest,
+  FromRunReport,
+  FromRunDCPreview,
+  ManifestIngestDCResult,
+  ManifestRefreshStatus,
+  ManifestRefreshEntry,
+  ManifestRefreshReport,
+  RefreshManifestInput,
+  DashboardImportResult,
+  TemplateVariable,
+  TemplateInfo,
+  TemplateListResponse,
   EditProjectInput,
   ProjectPermissionsInput,
+  ProjectStorageConfig,
+  ProjectStorageConfigInput,
+  ProjectStorageTestResult,
+  ExportTemplateRequest,
   MultiQCReportSummary,
   MultiQCReportsList,
   CreateDataCollectionUploadInput,
@@ -620,6 +688,7 @@ export type {
   CliToken,
   CreatedToken,
   CliAgentConfig,
+  TokenScope,
   // Link types
   LinkResolverName,
   LinkTargetType,
@@ -687,3 +756,20 @@ export type {
   ParsedAdminUrl,
 } from './adminUrlState';
 export { Z_LAYERS } from './zLayers';
+
+// Datawrapper-style chart annotations: types, Plotly conversion, event capture.
+export * from './annotations';
+export {
+  AnnotateToolbar,
+  AnnotationColorPicker,
+  AnnotationEditor,
+  AnnotationForm,
+  InlineAnnotationEditor,
+} from './components/annotations';
+export type {
+  AnnotateToolbarProps,
+  AnnotationColorPickerProps,
+  AnnotationEditorProps,
+  AnnotationFormProps,
+  InlineAnnotationEditorProps,
+} from './components/annotations';

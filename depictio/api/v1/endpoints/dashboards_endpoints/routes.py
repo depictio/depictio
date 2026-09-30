@@ -20,6 +20,7 @@ from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_pr
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     get_child_tabs,
     get_parent_dashboard_title,
@@ -69,7 +70,7 @@ dashboards_endpoint_router = APIRouter()
 
 # Screenshots PVC mount inside the backend container; bundled image ships
 # default PNGs here for the seeded reference dashboards.
-_SCREENSHOTS_DIR = "/app/depictio/api/static/screenshots"
+_SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 # Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
 # trigger sites agree on "stale".
 _SCREENSHOT_STALE_AFTER_S = 3600
@@ -702,7 +703,9 @@ async def save_dashboard(
         # explicit Save click passes `force_screenshot=true` to bypass
         # the 1h window and always regenerate.
         try:
-            if force_screenshot or _should_enqueue_screenshot(dashboard_id_str):
+            if settings.performance.screenshots_enabled and (
+                force_screenshot or _should_enqueue_screenshot(dashboard_id_str)
+            ):
                 # Lazy import keeps API startup independent of the worker
                 # module; broad except so a Celery/broker outage never
                 # breaks the save response itself.
@@ -867,7 +870,15 @@ async def delete_dashboard(
 
     # Check if this is a main tab - if so, delete all child tabs first
     child_tabs_deleted = 0
+    # Collected before the child tabs go, so their comment threads can follow.
+    tab_ids_for_threads = [dashboard_id]
     if dashboard.get("is_main_tab", True):
+        tab_ids_for_threads += [
+            d["dashboard_id"]
+            for d in dashboards_collection.find(
+                {"parent_dashboard_id": dashboard_id}, {"dashboard_id": 1}
+            )
+        ]
         # Delete all child tabs
         child_result = dashboards_collection.delete_many({"parent_dashboard_id": dashboard_id})
         child_tabs_deleted = child_result.deleted_count
@@ -880,6 +891,7 @@ async def delete_dashboard(
         # The dashboard's uploaded logo has no other referent, so it goes with
         # it rather than sitting in `branding_assets` forever.
         delete_logo_asset(dashboard_logo_key(dashboard_id))
+        delete_threads_for_dashboards(tab_ids_for_threads)
         message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
         if child_tabs_deleted > 0:
             message += f" Also deleted {child_tabs_deleted} child tabs."
@@ -1027,6 +1039,7 @@ async def delete_tab(
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        delete_threads_for_dashboards([dashboard_id])
         return {
             "success": True,
             "message": f"Tab '{tab_title}' deleted successfully.",
@@ -5719,6 +5732,7 @@ def _import_multi_tab_dashboard(
             )
             if existing_tab is not None:
                 dashboards_collection.delete_one({"_id": existing_tab["_id"]})
+                delete_threads_for_dashboards([existing_tab["dashboard_id"]])
             continue
 
         # Validate and insert/update tab
@@ -5912,56 +5926,20 @@ def _persist_lite_dashboard(
     }
 
 
-@dashboards_endpoint_router.post("/import/yaml")
-async def import_dashboard_from_yaml(
-    yaml_content: str = Body(..., media_type="text/plain"),
-    project_id: PyObjectId | None = None,
-    overwrite: bool = False,
-    current_user: User = Depends(get_current_user),
-):
+def import_dashboard_yaml_content(
+    yaml_content: str,
+    project_id: PyObjectId | None,
+    overwrite: bool,
+    current_user: User,
+) -> dict:
+    """Parse and import dashboard YAML (single or multi-tab format).
+
+    The full import pipeline behind ``POST /dashboards/import/yaml``, minus the
+    route-level auth gates — shared so server-side orchestration (e.g.
+    ``POST /projects/from_manifest``) imports dashboards in-process instead of
+    HTTP-to-self. Synchronous throughout (pymongo collections); raises
+    ``HTTPException`` on any failure.
     """
-    Import a dashboard from YAML content.
-
-    Supports both single dashboard and multi-tab dashboard formats:
-    - Single: Standard YAML with title, components, etc.
-    - Multi-tab: YAML with main_dashboard and tabs keys
-
-    A new dashboard_id will be generated, and the current user will be set as owner.
-
-    If `overwrite=True` and a dashboard with the same title exists in the project,
-    the existing dashboard will be updated instead of creating a new one.
-
-    Project identification:
-    - If `project_id` is provided, uses that project directly
-    - If `project_id` is not provided, extracts `project_tag` from YAML and
-      looks up the project by name
-
-    Args:
-        yaml_content: The YAML content defining the dashboard(s)
-        project_id: Optional project ID (if not provided, uses project_tag from YAML)
-        overwrite: If True, update existing dashboard with same title (default: False)
-        current_user: The authenticated user (will be set as owner)
-
-    Returns:
-        Created/updated dashboard information including dashboard_id
-    """
-    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
-    # users that pass `get_current_user`, so the frontend disable on the
-    # Import tab is the only client-side gate. Mirror it here.
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
-
-    # Allow anonymous users in single-user mode (they have admin privileges)
-    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        if not settings.auth.is_single_user_mode:
-            raise HTTPException(
-                status_code=403,
-                detail="Anonymous users cannot import dashboards. Please login to continue.",
-            )
-
     # Parse YAML to detect format
     try:
         yaml_data = yaml.safe_load(yaml_content)
@@ -6027,6 +6005,59 @@ async def import_dashboard_from_yaml(
         )
 
     return _persist_lite_dashboard(lite, project_id, current_user, overwrite=overwrite)
+
+
+@dashboards_endpoint_router.post("/import/yaml")
+async def import_dashboard_from_yaml(
+    yaml_content: str = Body(..., media_type="text/plain"),
+    project_id: PyObjectId | None = None,
+    overwrite: bool = False,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Import a dashboard from YAML content.
+
+    Supports both single dashboard and multi-tab dashboard formats:
+    - Single: Standard YAML with title, components, etc.
+    - Multi-tab: YAML with main_dashboard and tabs keys
+
+    A new dashboard_id will be generated, and the current user will be set as owner.
+
+    If `overwrite=True` and a dashboard with the same title exists in the project,
+    the existing dashboard will be updated instead of creating a new one.
+
+    Project identification:
+    - If `project_id` is provided, uses that project directly
+    - If `project_id` is not provided, extracts `project_tag` from YAML and
+      looks up the project by name
+
+    Args:
+        yaml_content: The YAML content defining the dashboard(s)
+        project_id: Optional project ID (if not provided, uses project_tag from YAML)
+        overwrite: If True, update existing dashboard with same title (default: False)
+        current_user: The authenticated user (will be set as owner)
+
+    Returns:
+        Created/updated dashboard information including dashboard_id
+    """
+    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
+    # users that pass `get_current_user`, so the frontend disable on the
+    # Import tab is the only client-side gate. Mirror it here.
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+
+    # Allow anonymous users in single-user mode (they have admin privileges)
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot import dashboards. Please login to continue.",
+            )
+
+    return import_dashboard_yaml_content(yaml_content, project_id, overwrite, current_user)
 
 
 # ============================================================================
@@ -6099,8 +6130,27 @@ async def export_dashboard_as_yaml(
         )
         child_tabs = child_tabs_docs
 
+    yaml_content = dashboard_yaml_content(dashboard_doc, project_name, child_tabs)
+    return Response(
+        content=yaml_content,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
+        },
+    )
+
+
+def dashboard_yaml_content(dashboard_doc: dict, project_name: str, child_tabs: list[dict]) -> str:
+    """Tag-based YAML export of a dashboard (single or multi-tab family).
+
+    The shared core of ``GET /dashboards/{id}/yaml``, also used by the
+    template exporter (``/projects/{id}/export_template``) so exported
+    bundles and one-off dashboard exports can never drift apart. Enrichment
+    converts wf/dc ObjectIds to portable tags — the exact inverse of what
+    ``_resolve_workflow_tags`` re-binds at import time.
+    """
     # Single dashboard export (no children or is a child tab itself)
-    if not child_tabs and is_main_tab:
+    if not child_tabs and dashboard_doc.get("is_main_tab", True):
         # Enrich dashboard with workflow and data collection tags from MongoDB
         from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
 
@@ -6109,15 +6159,7 @@ async def export_dashboard_as_yaml(
         # Convert to DashboardDataLite for export
         lite = DashboardDataLite.from_full(enriched_dashboard)
         lite.project_tag = project_name
-        yaml_content = lite.to_yaml()
-
-        return Response(
-            content=yaml_content,
-            media_type="application/x-yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-            },
-        )
+        return lite.to_yaml()
 
     # Multi-tab export: main dashboard + child tabs in single YAML
     multi_tab_dict: dict[str, Any] = {}
@@ -6165,15 +6207,7 @@ async def export_dashboard_as_yaml(
     raw_yaml = yaml.dump(
         multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
     )
-    yaml_content = DashboardDataLite._apply_section_comments(raw_yaml)
-
-    return Response(
-        content=yaml_content,
-        media_type="application/x-yaml",
-        headers={
-            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-        },
-    )
+    return DashboardDataLite._apply_section_comments(raw_yaml)
 
 
 @dashboards_endpoint_router.get("/{dashboard_id}/yaml/family", deprecated=True)

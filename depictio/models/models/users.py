@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal, get_args
 
 from beanie import Document, Link, PydanticObjectId
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
@@ -7,9 +8,30 @@ from pymongo import IndexModel
 # from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.base import MongoModel, PyObjectId
 
+TokenScope = Literal["read", "annotate", "report", "edit_dashboard", "ingest"]
+"""What a scoped token may do. ``read`` is implied by every other scope."""
+
+ALL_TOKEN_SCOPES: frozenset[TokenScope] = frozenset(get_args(TokenScope))
+
+
+def effective_scopes(scopes: list[TokenScope] | None) -> frozenset[TokenScope]:
+    """Resolve a token's stored scopes to the set it is allowed to use.
+
+    ``None`` is a legacy or session token and keeps full access, so existing
+    tokens need no migration. Any explicit scope list also grants ``read``.
+    """
+    if scopes is None:
+        return ALL_TOKEN_SCOPES
+    read: TokenScope = "read"
+    return frozenset([*scopes, read])
+
 
 class TokenData(BaseModel):
     name: str | None = None
+    scopes: list[TokenScope] | None = Field(
+        default=None,
+        description="Scopes an agent token is limited to; None keeps full access",
+    )
     token_lifetime: str = Field(
         default="short-lived",
         description="Lifetime of the token",
@@ -105,6 +127,7 @@ class TokenBase(MongoModel):
     expire_datetime: datetime
     refresh_expire_datetime: datetime
     name: str | None = None
+    scopes: list[TokenScope] | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     model_config = {"arbitrary_types_allowed": True}
     logged_in: bool = False

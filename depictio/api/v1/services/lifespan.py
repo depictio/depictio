@@ -6,7 +6,7 @@ background processing, and cleanup.
 """
 
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime, timezone
 from typing import cast
 
@@ -241,6 +241,41 @@ def start_monitoring_storage(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
 
 
+def start_comment_indexes(should_initialize: bool) -> None:
+    """Create the comment-thread indexes on the initializing worker. Never fails boot."""
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.endpoints.comments_endpoints.indexes import ensure_comment_indexes
+
+        ensure_comment_indexes()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Comment index setup failed: {exc}")
+
+
+def start_agent_audit_indexes(should_initialize: bool) -> None:
+    """Create the agent tool-call audit indexes (90-day TTL). Never fails boot."""
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.agents.audit import ensure_agent_audit_indexes
+        from depictio.api.v1.agents.quotas import ensure_quota_indexes
+
+        ensure_agent_audit_indexes()
+        ensure_quota_indexes()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Agent audit index setup failed: {exc}")
+
+
+async def start_mcp_server(app: FastAPI, stack: AsyncExitStack) -> None:
+    """Run the MCP session manager when ``main.py`` mounted the endpoint."""
+    mcp_app = getattr(app.state, "mcp", None)
+    if mcp_app is None:
+        return
+    await stack.enter_async_context(mcp_app.session_manager.run())
+    logger.info(f"Worker {WORKER_ID}: MCP session manager started")
+
+
 def start_installation_telemetry() -> None:
     """Start the anonymous installation-telemetry heartbeat. Never fails boot.
 
@@ -353,11 +388,16 @@ async def lifespan(_app: FastAPI):
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
     start_monitoring_storage(should_initialize)
+    start_comment_indexes(should_initialize)
+    start_agent_audit_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)
     start_installation_telemetry()
+    mcp_stack = AsyncExitStack()
+    await start_mcp_server(_app, mcp_stack)
 
     yield
 
     # Shutdown
+    await mcp_stack.aclose()
     await stop_event_services()
     stop_background_services(background_task, should_initialize)

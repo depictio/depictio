@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.components.constants import VISU_TYPES
+from depictio.models.models.comments import MAX_BODY_CHARS, MAX_EVIDENCE_ITEMS, AgentInfo
 
 # Derived from the one visu_type list the lite model validates against, so a
 # suggestion the LLM is allowed to make is always one the figure accepts.
@@ -332,6 +333,43 @@ class BudgetSpent(BaseModel):
     )
 
 
+class AgentEvidence(BaseModel):
+    """What backs an agent finding: the tool call that showed it and what it showed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(
+        min_length=1,
+        max_length=MAX_BODY_CHARS,
+        description="The claim this evidence supports, in one sentence.",
+    )
+    call_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="call_id of the tool result that shows it (e.g. a query_data call).",
+    )
+    query: str | None = Field(
+        default=None,
+        max_length=MAX_BODY_CHARS,
+        description="The query or computation that produced the values.",
+    )
+    values: dict[str, Any] | list[Any] | None = Field(
+        default=None, description="The numbers the claim rests on, as returned by the tool."
+    )
+
+
+class AgentFinding(BaseModel):
+    """One finding of an agent-written report, tied to the evidence behind it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    detail: str = Field(min_length=1, max_length=MAX_BODY_CHARS)
+    component_index: str | None = None
+    confidence: Literal["low", "medium", "high"] = "medium"
+    evidence: list[AgentEvidence] = Field(min_length=1, max_length=MAX_EVIDENCE_ITEMS)
+
+
 class AnalysisReport(BaseModel):
     """The persisted artifact of one read-only analysis run.
 
@@ -350,6 +388,11 @@ class AnalysisReport(BaseModel):
     narrative_md: str = ""
     budget_spent: BudgetSpent = Field(default_factory=BudgetSpent)
     warnings: list[str] = Field(default_factory=list)
+    # Set on reports an agent wrote through the ``create_report`` tool; left
+    # unset (None / empty) on reports of the ``/ai/analyze`` loop.
+    agent: AgentInfo | None = None
+    agent_findings: list[AgentFinding] = Field(default_factory=list)
+    updated_at: str | None = None
 
 
 # ---------- Whole-dashboard generation ----------

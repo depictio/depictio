@@ -22,6 +22,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.security_headers import SECURITY_HEADERS
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
+from depictio.api.v1.mcp.server import mount_mcp
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
 from depictio.api.v1.services.lifespan import lifespan
 from depictio.version import get_api_version, get_version
@@ -202,6 +203,12 @@ api_version = get_api_version()
 api_prefix = f"/depictio/api/{api_version}"
 app.include_router(router, prefix=api_prefix)
 
+# MCP endpoint for agent tools. Only mounted when DEPICTIO_MCP_ENABLED is true;
+# the lifespan runs its session manager. It sits outside the API router, so
+# the router-level token scope gate does not apply: the MCP layer checks the
+# token itself and each tool checks its own scope.
+mount_mcp(app, f"{api_prefix}/mcp")
+
 
 # ---------------------------------------------------------------------------
 # React viewer SPA — served at /dashboard/{id} alongside the API.
@@ -221,7 +228,7 @@ _VIEWER_INDEX = _VIEWER_DIST / "index.html"
 # as /static/screenshots/{id}_{light|dark}.png. The path is the canonical
 # screenshot output for both the worker (Playwright writes here) and the
 # React viewer (reads via this mount).
-_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "static" / "screenshots"
+_SCREENSHOTS_DIR = settings.performance.screenshots_path
 _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount(
     "/static/screenshots",

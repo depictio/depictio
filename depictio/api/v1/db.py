@@ -65,8 +65,31 @@ ingestion_runs_collection = db[settings.mongodb.collections.ingestion_runs_colle
 ai_summaries_collection = db[settings.mongodb.collections.ai_summaries_collection]
 ai_analyses_collection = db[settings.mongodb.collections.ai_analyses_collection]
 ai_generations_collection = db[settings.mongodb.collections.ai_generations_collection]
+project_storage_collection = db[settings.mongodb.collections.project_storage_collection]
 app_logs_collection = db[settings.mongodb.collections.app_logs_collection]
 instance_settings_collection = db[settings.mongodb.collections.instance_settings_collection]
 branding_assets_collection = db[settings.mongodb.collections.branding_assets_collection]
 telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
+comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
+agent_tool_calls_collection = db[settings.mongodb.collections.agent_tool_calls_collection]
+agent_quotas_collection = db[settings.mongodb.collections.agent_quotas_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
+
+
+def ensure_project_storage_indexes(collection=None) -> None:
+    """Unique index on ``project_id`` for per-project storage configs. Idempotent.
+
+    Writes upsert on ``project_id``, so the index is a guard against a racing
+    double-insert, not a lookup optimisation. Runs from ``db_init.initialize_db``
+    on a fresh deployment and again from the first storage write in a process,
+    so instances upgraded past the first boot pick it up too. Never raises:
+    an index failure must not block a boot or a credentials write.
+
+    ``collection`` lets callers (and tests) target a patched collection instead
+    of the module-level one.
+    """
+    target = project_storage_collection if collection is None else collection
+    try:
+        target.create_index("project_id", unique=True, name="project_id_unique")
+    except Exception as exc:
+        logger.warning(f"Could not ensure unique project_id index on project storage: {exc}")

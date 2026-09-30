@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Paper, Text, Stack, useMantineColorScheme } from '@mantine/core';
+import { Group, Paper, Text, Stack, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
@@ -9,6 +9,13 @@ import { readMultiqcSelection } from '../../utils/multiqcSelection';
 import ComponentSkeleton from '../ComponentSkeleton';
 import RefetchOverlay from '../RefetchOverlay';
 import { useReportLoadStatus } from '../DashboardLoadingProvider';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import {
+  MULTIQC_SAMPLE_COLUMN,
+  multiqcFigureAnnotatable,
+  multiqcVariantKey,
+  withSampleCustomdata,
+} from '../../annotations/multiqc';
 import MultiQCGeneralStats from './MultiQCGeneralStats';
 
 interface MultiQCFigureProps {
@@ -148,8 +155,10 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   // (theme change, sibling layout shift, etc.) reconstructs `data` / `layout`
   // identities and triggers a full Plotly relayout, which is the dominant
   // client-side cost on big MultiQC figures.
+  // Each point carries its sample in customdata, so marked points are stored
+  // as sample ids (see annotations/multiqc.ts).
   const plotData = useMemo(
-    () => (figure?.data as unknown[]) || [],
+    () => withSampleCustomdata((figure?.data as unknown[]) || []),
     [figure],
   );
   const plotLayout = useMemo(
@@ -172,6 +181,26 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
     [figure, refreshTick],
   );
 
+  // ── Annotation layer ──────────────────────────────────────────────────────
+  // Annotations are drawn on the dataset they were made on (the variant), and
+  // marked points are samples: a line graph re-draws a marked sample's line,
+  // a bar graph rings its bar.
+  const selection = readMultiqcSelection(metadata as Record<string, unknown>);
+  const variant = multiqcVariantKey({
+    module: selection.module,
+    plot: selection.plot,
+    dataset: selection.dataset,
+  });
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: multiqcFigureAnnotatable(plotData),
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 0,
+    pointIdColumn: MULTIQC_SAMPLE_COLUMN,
+    variant,
+  });
+
   return (
     <Paper
       ref={containerRef}
@@ -187,10 +216,15 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
         position: 'relative',
       }}
     >
-      {titleText && (
-        <Text fw={600} size="sm" mb="xs">
-          {titleText}
-        </Text>
+      {(titleText || annotations.badges.length > 0) && (
+        <Group gap="xs" mb="xs" wrap="nowrap">
+          {titleText && (
+            <Text fw={600} size="sm">
+              {titleText}
+            </Text>
+          )}
+          {annotations.badges}
+        </Group>
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
       {/* Paper-level, not inside the figure block: on a cold DC the backend
@@ -215,13 +249,15 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
       {figure && !error && (
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
-            data={plotData as any[]}
-            layout={plotLayout}
+            data={annotations.data as any[]}
+            layout={annotations.layout}
             revision={refreshTick ?? 0}
             config={PLOT_CONFIG}
             style={PLOT_STYLE}
             useResizeHandler
+            {...annotations.plotProps()}
           />
+          {annotations.toolbar}
           <RefetchOverlay visible={showRefetchOverlay} />
           {/* MultiQC logo overlay — official icon set
             (https://github.com/MultiQC/logo). Dark icon on light backgrounds,
