@@ -1,0 +1,696 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8dd0"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8dd0"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "prot-text",
+      "component_type": "text",
+      "title": "Protein structure",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "A predicted structure coloured by pLDDT beside the alignment it was folded from, its sequence with confidence, secondary structure, domains and variants, a standalone alignment, a lollipop of the same variants and the variant table with its record card, all joined on the entity and position columns. Click a residue in 3D, brush the sequence track or alignment columns, or click a lollipop stem to select that range in every tile; hovering a residue highlights it everywhere, and picking a table row opens its record.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-structure",
+      "component_type": "advanced_viz",
+      "title": "Structure beside its alignment",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose",
+        "data_collection_tag": "protein_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The model coloured by per-residue confidence, variants as spheres coloured by consequence, next to the alignment it was folded from. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "viz_kind": "molecule_3d",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "molecule_3d",
+        "structure_source": "file",
+        "structure_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "structure_dc_id": "646b0f3c1e4a2d7f8e5b8dd1",
+        "structure_dc_tag": null,
+        "entity_col": "entity",
+        "uniprot_col": null,
+        "gene_col": null,
+        "sequence_col": null,
+        "taxon": 9606,
+        "position_col": "position",
+        "chain_col": null,
+        "value_col": "allele_fraction",
+        "category_col": "consequence",
+        "ref_aa_col": "ref_aa",
+        "alt_aa_col": "alt_aa",
+        "label_col": "protein_change",
+        "color_mode": "plddt",
+        "colour_scale": null,
+        "representation": "cartoon",
+        "show_variants": true,
+        "show_labels": false,
+        "layout": "structure_msa",
+        "msa_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "msa_dc_id": "646b0f3c1e4a2d7f8e5b8dd3",
+        "msa_dc_tag": null,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-sequence",
+      "component_type": "advanced_viz",
+      "title": "Sequence with confidence, structure, domains and variants",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The amino-acid sequence over a pLDDT lane, the secondary structure as helix and strand glyphs, the domain spans and the variant ticks. Brush a stretch to select it in every tile.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "viz_kind": "sequence_track",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "sequence_track",
+        "entity_col": "entity",
+        "position_col": "position",
+        "residue_col": "residue",
+        "value_col": "plddt",
+        "category_col": "secondary_structure",
+        "value_label": "pLDDT",
+        "domains_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "domains_dc_id": "646b0f3c1e4a2d7f8e5b8dd5",
+        "domains_dc_tag": null,
+        "domain_start_col": "start",
+        "domain_end_col": "end",
+        "domain_label_col": "domain",
+        "variants_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "variants_dc_id": "646b0f3c1e4a2d7f8e5b8dd4",
+        "variants_dc_tag": null,
+        "variant_position_col": "position",
+        "variant_label_col": "protein_change",
+        "variant_category_col": "consequence",
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-msa",
+      "component_type": "advanced_viz",
+      "title": "Alignment",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_msa_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd3"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The alignment the demo structure was folded from: 34 sequences over 172 columns, the query first",
+        "data_collection_tag": "protein_msa_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd3"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Every aligned sequence under the query, Clustal colours, with consensus and conservation. Brush columns to select those residues; click a row to select that sequence.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "viz_kind": "msa",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "msa",
+        "msa_id_col": "msa_id",
+        "seq_id_col": "seq_id",
+        "sequence_col": "aligned_sequence",
+        "rank_col": "rank",
+        "identity_col": "identity",
+        "color_scheme": "clustal",
+        "max_rows": 150,
+        "sort_by": "rank",
+        "show_consensus": true,
+        "show_conservation": true,
+        "entity_col_for_selection": "entity",
+        "position_col_for_selection": "position",
+        "chains_col": null,
+        "chain_col_for_selection": "chain",
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-lollipop",
+      "component_type": "advanced_viz",
+      "title": "Variants along the sequence",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose",
+        "data_collection_tag": "protein_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The same variants at their position, head size the allele fraction, colour the consequence. Click a stem to select its residue in every tile.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "viz_kind": "lollipop",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "lollipop",
+        "feature_id_col": "entity",
+        "position_col": "position",
+        "category_col": "consequence",
+        "effect_col": "allele_fraction",
+        "label_col": "protein_change",
+        "max_subplot_genes": 6,
+        "point_size": 8,
+        "stem_width": 1.2,
+        "scale_points_by_effect": true,
+        "show_stems": true,
+        "marker_outline": false,
+        "palette": "tab10",
+        "gene_sort": "count",
+        "top_n_labels": 4,
+        "selection_enabled": true,
+        "selection_column": "protein_change"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-table",
+      "component_type": "table",
+      "title": "Variants",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose",
+        "data_collection_tag": "protein_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per variant. Pick a row to open its record beside the table.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "protein_change",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-record",
+      "component_type": "advanced_viz",
+      "title": "Variant record",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose",
+        "data_collection_tag": "protein_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The picked variant as a fact panel: the change, where it falls and how frequent it is.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Structure, sequence and alignment",
+      "viz_kind": "record_card",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "record_card",
+        "id_col": "protein_change",
+        "title_col": "protein_change",
+        "sections": {
+          "Change": [
+            "ref_aa",
+            "position",
+            "alt_aa",
+            "consequence"
+          ],
+          "Frequency": [
+            "allele_fraction"
+          ],
+          "Protein": [
+            "entity"
+          ]
+        },
+        "labels": null,
+        "link_templates": null,
+        "selection_source": "any",
+        "linked_component": "prot-table",
+        "max_fields": 40,
+        "default_record": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-f-position",
+      "component_type": "interactive",
+      "title": "Residue range",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Residue scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "position",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Residue filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-f-consequence",
+      "component_type": "interactive",
+      "title": "Consequence",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose",
+        "data_collection_tag": "protein_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Residue scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "consequence",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Variant filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prot-f-af",
+      "component_type": "interactive",
+      "title": "Allele fraction",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose",
+        "data_collection_tag": "protein_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Residue scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "allele_fraction",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Variant filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "slider_mode": null,
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-prot-f-position",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-prot-f-consequence",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-prot-f-af",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-prot-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prot-structure",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 11,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prot-sequence",
+      "x": 0,
+      "y": 13,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prot-msa",
+      "x": 0,
+      "y": 18,
+      "w": 4,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prot-lollipop",
+      "x": 4,
+      "y": 18,
+      "w": 4,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prot-table",
+      "x": 0,
+      "y": 26,
+      "w": 5,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prot-record",
+      "x": 5,
+      "y": 26,
+      "w": 3,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Protein structure",
+  "subtitle": "A predicted structure, its alignment, sequence and variants in one linked view: pick a residue anywhere and every tile follows.",
+  "icon": "mdi:molecule",
+  "icon_color": "violet",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 47,
+  "main_tab_name": null,
+  "tab_icon": "mdi:molecule",
+  "tab_icon_color": "violet",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Residue scope",
+      "icon": "mdi:filter-variant",
+      "color": "violet",
+      "description": "Narrows the residue range every tile shows, and the variants drawn on it",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Structure, sequence and alignment",
+      "icon": "mdi:dna",
+      "color": "violet",
+      "description": "One protein in 3D, along its sequence and in its alignment, with its variants",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

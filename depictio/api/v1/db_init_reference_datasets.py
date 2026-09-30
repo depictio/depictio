@@ -236,6 +236,13 @@ STATIC_IDS = {
             "locus_peaks_demo": "646b0f3c1e4a2d7f8e5b8dc1",
             "locus_coverage_demo": "646b0f3c1e4a2d7f8e5b8dc2",
             "somatic_snv_demo": "646b0f3c1e4a2d7f8e5b8dc3",
+            # Protein structure tab (the 8ddx block): the structure file and
+            # the residue, alignment, variant and domain tables beside it.
+            "protein_structure_demo": "646b0f3c1e4a2d7f8e5b8dd1",
+            "protein_residues_demo": "646b0f3c1e4a2d7f8e5b8dd2",
+            "protein_msa_demo": "646b0f3c1e4a2d7f8e5b8dd3",
+            "protein_variants_demo": "646b0f3c1e4a2d7f8e5b8dd4",
+            "protein_domains_demo": "646b0f3c1e4a2d7f8e5b8dd5",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -287,6 +294,9 @@ STATIC_IDS = {
             # genes on one region) opens the 8dcx block; 8dc1 and 8dc2 are its
             # collections, 8dc3 the somatic SNVs of the Manhattan tab.
             "advanced_viz_locus_section": "646b0f3c1e4a2d7f8e5b8dc0",
+            # The protein structure tab opens the 8ddx block; 8dd1 to 8dd5 are
+            # its collections.
+            "advanced_viz_protein_structure": "646b0f3c1e4a2d7f8e5b8dd0",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

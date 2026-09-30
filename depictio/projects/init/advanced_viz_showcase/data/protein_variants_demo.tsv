@@ -1,0 +1,13 @@
+entity	position	ref_aa	alt_aa	consequence	allele_fraction	protein_change
+demo_protein	11	K	Q	missense	0.365	p.K11Q
+demo_protein	22	R	R	synonymous	0.387	p.R22=
+demo_protein	39	A	V	missense	0.406	p.A39V
+demo_protein	52	K	*	nonsense	0.372	p.K52*
+demo_protein	60	Y	C	missense	0.333	p.Y60C
+demo_protein	75	P	fs	frameshift	0.283	p.P75fs
+demo_protein	90	V	Q	missense	0.063	p.V90Q
+demo_protein	99	A	A	synonymous	0.299	p.A99=
+demo_protein	112	I	G	missense	0.357	p.I112G
+demo_protein	127	G	*	nonsense	0.088	p.G127*
+demo_protein	141	G	N	missense	0.445	p.G141N
+demo_protein	151	Y	fs	frameshift	0.441	p.Y151fs
