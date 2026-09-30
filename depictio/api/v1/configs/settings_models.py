@@ -3,6 +3,7 @@ import re
 import secrets
 from pathlib import Path
 from typing import Any, Literal, Optional
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
 from pydantic_settings import (
@@ -840,6 +841,66 @@ class JBrowseConfig(BaseSettings):
     enabled: bool = Field(default=False, description="Enable JBrowse genomics viewer integration")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+
+
+class StructureResolverSettings(BaseSettings):
+    """Server-side lookup of protein structures for the molecule_3d viz kind.
+
+    When enabled, ``POST /advanced_viz/structure/resolve`` turns a UniProt
+    accession, a gene name plus taxon, or an amino-acid sequence into a PDB
+    file: AlphaFold DB for known proteins, ESMFold for short sequences. What
+    leaves the server is exactly that identifier or sequence, sent to EBI
+    (AlphaFold DB), UniProt or Meta's ESM Atlas. Off by default for that reason.
+    Resolved files are cached in the deployment's bucket under ``cache_prefix``.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Allow the structure resolver to call AlphaFold DB, UniProt and ESMFold. "
+            "Off by default: accessions, gene names or sequences leave the server."
+        ),
+    )
+    afdb_base_url: str = Field(
+        default="https://alphafold.ebi.ac.uk", description="AlphaFold DB base URL"
+    )
+    uniprot_base_url: str = Field(
+        default="https://rest.uniprot.org", description="UniProt REST base URL"
+    )
+    esmfold_url: str = Field(
+        default="https://api.esmatlas.com/foldSequence/v1/pdb/",
+        description="ESMFold endpoint: POST a sequence as text/plain, get PDB text back",
+    )
+    timeout_s: float = Field(
+        default=60.0,
+        gt=0,
+        description="Timeout of each upstream request; a cold ESMFold fold takes tens of seconds",
+    )
+    total_timeout_s: float = Field(
+        default=120.0,
+        gt=0,
+        description=(
+            "Wall-time budget of one resolve request across every upstream call and retry; "
+            "bounds how long a request holds a worker thread"
+        ),
+    )
+    max_bytes: int = Field(
+        default=20 * 1024 * 1024, gt=0, description="Largest structure file accepted upstream"
+    )
+    esmfold_max_length: int = Field(
+        default=400, gt=0, description="Longest sequence sent to ESMFold"
+    )
+    cache_prefix: str = Field(
+        default="structures/resolved", description="Bucket prefix of resolved structures"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_STRUCTURE_RESOLVER_")
+
+    @property
+    def allowed_hosts(self) -> frozenset[str]:
+        """Hosts the resolver may talk to, redirects included: the three upstreams."""
+        urls = (self.afdb_base_url, self.uniprot_base_url, self.esmfold_url)
+        return frozenset(h for h in (urlsplit(u).hostname for u in urls) if h)
 
 
 class BackupConfig(BaseSettings):
@@ -1788,6 +1849,7 @@ class Settings(BaseSettings):
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
+    structure_resolver: StructureResolverSettings = Field(default_factory=StructureResolverSettings)
 
     # Observability & development
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
