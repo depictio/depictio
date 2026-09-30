@@ -81,10 +81,10 @@ template:
       description: "Set (any value) when the run used a single segmentation method: prunes the comparison viewer's collections."
       required: false
     - name: "MEMBRANE_STACK"
-      description: "Set (any value) when the samples carry a membrane image: the viewer then shows the 2-channel stack/<sample>_stack.ome.tif instead of the per-channel CLAHE images."
+      description: "Set (any value) when the samples carry a membrane image: the viewer then shows the 2-channel `stack/<sample>_stack.ome.tif` instead of the per-channel CLAHE images."
       required: false
     - name: "IMAGE_SAMPLE_PATTERN"
-      description: "Regex with one capture group giving the sample from an image file name. The default reads <sample>_<image>_gridfilled_clahe.tiff when the image name has no underscore or starts with the sample id, and <sample>_stack.ome.tif."
+      description: "Regex with one capture group giving the sample from an image file name. The default reads `<sample>_<image>_gridfilled_clahe.tiff` when the image name has no underscore or starts with the sample id, and `<sample>_stack.ome.tif`."
       required: false
       default: "^(.+?)(?:_stack\\.ome\\.tif|_(?:\\1_)?[^_]+(?:_gridfilled)?_clahe\\.tiff?)$"
   # Variables for the bundled reference dataset (the HPC test_full run with the
