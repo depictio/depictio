@@ -58,6 +58,7 @@ import {
 import { parseResidues, residueKey } from './molecule/structureText';
 import {
   createStructureViewer,
+  spanKey,
   type MarkSpec,
   type Representation,
   type ResidueRef,
@@ -752,9 +753,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerReady, structure.data, colouring, repsKey]);
 
-  const selectionKey = drawnSelection
-    ? `${drawnSelection.chain ?? ''}:${drawnSelection.start}-${drawnSelection.end}`
-    : '';
+  const selectionKey = spanKey(drawnSelection);
   useEffect(() => {
     if (!viewerReady || !structure.data) return;
     viewerRef.current?.setSelection(drawnSelection, highlightSite);
@@ -769,9 +768,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerReady, structure.data, selectionKey, selectionIsOwn, followSelection, highlightSite]);
 
-  const highlightKey = highlightSpan
-    ? `${highlightSpan.chain ?? ''}:${highlightSpan.start}-${highlightSpan.end}`
-    : '';
+  const highlightKey = spanKey(highlightSpan);
   useEffect(() => {
     if (!viewerReady || !structure.data) return;
     viewerRef.current?.setOverlay({ marks, showLabels, highlight: highlightSpan });

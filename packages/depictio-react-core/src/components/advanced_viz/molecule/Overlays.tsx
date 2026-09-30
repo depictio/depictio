@@ -17,6 +17,40 @@ const SWATCH: React.CSSProperties = {
   flex: '0 0 auto',
 };
 
+type SwatchSpec = Extract<NonNullable<LegendSpec>, { kind: 'swatches' }>;
+
+/** The swatches of a legend: one per line, or flowing in rows when `compact`. */
+const SwatchList: React.FC<{ legend: SwatchSpec; compact: boolean }> = ({ legend, compact }) => {
+  const { items, more } = legend;
+  const swatches = items.map((item) => (
+    <Group key={item.label} gap={compact ? 4 : 6} wrap="nowrap">
+      <span style={{ ...SWATCH, background: item.colour }} />
+      <Text size="xs" lineClamp={1}>
+        {item.label}
+      </Text>
+    </Group>
+  ));
+  const moreNote = more ? (
+    <Text size="xs" c="dimmed">
+      {compact ? `+${more}` : `and ${more} more`}
+    </Text>
+  ) : null;
+  if (compact) {
+    return (
+      <Group gap={8} wrap="wrap" style={{ rowGap: 0 }}>
+        {swatches}
+        {moreNote}
+      </Group>
+    );
+  }
+  return (
+    <Stack gap={1}>
+      {swatches}
+      {moreNote}
+    </Stack>
+  );
+};
+
 /**
  * `compact` (a tile at half width or about 400 px high): the swatches flow in
  * rows instead of one per line and the gradient is shorter, so the legend
@@ -46,38 +80,8 @@ export const MoleculeLegend: React.FC<{ legend: LegendSpec; compact?: boolean }>
       <Text size="xs" fw={600} mb={compact ? 0 : 2}>
         {legend.title}
       </Text>
-      {legend.kind === 'swatches' && compact ? (
-        <Group gap={8} wrap="wrap" style={{ rowGap: 0 }}>
-          {legend.items.map((item) => (
-            <Group key={item.label} gap={4} wrap="nowrap">
-              <span style={{ ...SWATCH, background: item.colour }} />
-              <Text size="xs" lineClamp={1}>
-                {item.label}
-              </Text>
-            </Group>
-          ))}
-          {legend.more ? (
-            <Text size="xs" c="dimmed">
-              {`+${legend.more}`}
-            </Text>
-          ) : null}
-        </Group>
-      ) : legend.kind === 'swatches' ? (
-        <Stack gap={1}>
-          {legend.items.map((item) => (
-            <Group key={item.label} gap={6} wrap="nowrap">
-              <span style={{ ...SWATCH, background: item.colour }} />
-              <Text size="xs" lineClamp={1}>
-                {item.label}
-              </Text>
-            </Group>
-          ))}
-          {legend.more ? (
-            <Text size="xs" c="dimmed">
-              {`and ${legend.more} more`}
-            </Text>
-          ) : null}
-        </Stack>
+      {legend.kind === 'swatches' ? (
+        <SwatchList legend={legend} compact={compact} />
       ) : (
         <Group gap={6} wrap="nowrap">
           <Text size="xs">{legend.min}</Text>
