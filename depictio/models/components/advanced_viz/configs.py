@@ -449,6 +449,39 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     show_legend: bool = Field(default=True, description="Show the taxon colour legend")
     log_y: bool = Field(default=False, description="Log-scale the abundance axis")
 
+    # The kind stacks any per-sample composition, not only taxa: CCS outcomes
+    # per library, structural categories per sample. The fields below let such
+    # a tile drop the taxonomy wording and the controls that mean nothing for
+    # it. All optional, so every taxonomy tile keeps its look.
+    hidden_controls: list[Literal["rank", "sample_sort", "top_n", "normalise"]] | None = Field(
+        default=None,
+        description=(
+            "Controls the tile does not offer. The config value still applies: "
+            "hide `rank` when rank_col is constant, `top_n` when the categories "
+            "are few and fixed, `sample_sort` when the input order is the point."
+        ),
+    )
+    rank_label: str | None = Field(
+        default=None,
+        description="Label of the rank picker (default 'Rank'), e.g. 'Level' for a non-taxonomy split",
+    )
+    x_title: str | None = Field(
+        default=None,
+        description="Sample axis title. Unset shows sample_id_col; an empty string shows none.",
+    )
+    legend_pos: Literal["bottom", "right"] = Field(
+        default="bottom",
+        description="Legend under the bars (default) or beside them, clear of tilted sample labels",
+    )
+    category_palette: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Explicit category to colour overrides, winning over the palette "
+            "cycle. Pins one colour per category across the tiles of a tab "
+            "(the same map on the matching figure and scatter tiles)."
+        ),
+    )
+
 
 class RarefactionConfig(_BaseVizConfig):
     """Multi-sample alpha-rarefaction curve.
@@ -1565,6 +1598,10 @@ class ScatterXyConfig(_BaseVizConfig):
         default="Viridis", description="Colourscale used when the colour column is numeric"
     )
     legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
+    category_palette: dict[str, str] | None = Field(
+        default=None,
+        description="Category to colour overrides for a categorical color_col, winning over the palette cycle",
+    )
     selection_enabled: bool = Field(default=False)
     selection_column: str | None = Field(default=None)
 
