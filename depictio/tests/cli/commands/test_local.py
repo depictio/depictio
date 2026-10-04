@@ -116,3 +116,63 @@ def test_windows_is_rejected_with_a_clear_message(monkeypatch):
     monkeypatch.setattr(local_stack.sys, "platform", "win32")
     with pytest.raises(local_stack.LocalStackError, match="WSL2"):
         local_stack.check_platform_supported()
+
+
+def _fake_local_server(paths):
+    """A stopped local server: data, keys, secrets and the conda-meta records."""
+    (paths.home / "mongo" / "WiredTiger").write_text("wt")
+    (paths.home / "s3" / "vol").mkdir(parents=True)
+    for name in local_stack.KEY_FILES:
+        (paths.home / "keys" / name).write_text(name)
+    meta = paths.env / "conda-meta"
+    meta.mkdir(parents=True)
+    for name, version in (("mongodb", "8.0.23"), ("seaweedfs", "4.47")):
+        (meta / f"{name}-{version}-h0_0.json").write_text(
+            f'{{"name": "{name}", "version": "{version}"}}'
+        )
+    local_stack.load_secrets(paths)
+
+
+def test_export_compose_copies_data_and_pins_the_local_versions(paths, tmp_path, monkeypatch):
+    _fake_local_server(paths)
+    monkeypatch.setattr(local_stack.sys, "platform", "linux")
+    out = tmp_path / "export"
+
+    local_stack.export_compose(paths, out, log=lambda _: None)
+
+    assert (out / "data" / "mongo" / "WiredTiger").read_text() == "wt"
+    assert (out / "data" / "s3" / "vol").is_dir()
+    assert (out / "data" / "keys" / "private_key.pem").read_text() == "private_key.pem"
+    override = (out / "docker-compose.override.yaml").read_text()
+    assert "image: mongo:8.0.23" in override
+    assert "image: chrislusf/seaweedfs:4.47" in override
+    assert "./data/mongo:/data/db" in override
+    assert f'user: "{local_stack.os.getuid()}:{local_stack.os.getgid()}"' in override
+    env = (out / ".env").read_text()
+    secrets = local_stack.load_secrets(paths)
+    assert f"DEPICTIO_S3_ROOT_PASSWORD={secrets['s3_password']}" in env
+    assert f"DEPICTIO_S3_ROOT_USER={local_stack.S3_USER}" in env
+    assert oct((out / ".env").stat().st_mode & 0o777) == "0o600"
+
+
+def test_export_compose_runs_as_the_image_user_off_linux(paths, tmp_path, monkeypatch):
+    _fake_local_server(paths)
+    monkeypatch.setattr(local_stack.sys, "platform", "darwin")
+    local_stack.export_compose(paths, tmp_path / "export", log=lambda _: None)
+    assert "user:" not in (tmp_path / "export" / "docker-compose.override.yaml").read_text()
+
+
+def test_export_compose_refuses_a_running_server(paths, tmp_path, monkeypatch):
+    _fake_local_server(paths)
+    monkeypatch.setattr(local_stack, "running_status", lambda _: {"mongo": True})
+    with pytest.raises(local_stack.LocalStackError, match="depictio local down"):
+        local_stack.export_compose(paths, tmp_path / "export", log=lambda _: None)
+
+
+def test_export_compose_refuses_a_non_empty_directory(paths, tmp_path):
+    _fake_local_server(paths)
+    out = tmp_path / "export"
+    out.mkdir()
+    (out / "keep").write_text("x")
+    with pytest.raises(local_stack.LocalStackError, match="not empty"):
+        local_stack.export_compose(paths, out, log=lambda _: None)
