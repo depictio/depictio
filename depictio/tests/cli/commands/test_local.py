@@ -122,6 +122,9 @@ def _fake_local_server(paths):
     """A stopped local server: data, keys, secrets and the conda-meta records."""
     (paths.home / "mongo" / "WiredTiger").write_text("wt")
     (paths.home / "s3" / "vol").mkdir(parents=True)
+    (paths.home / "s3" / "mini.options").write_text(
+        "ip=127.0.0.1\nip.bind=127.0.0.1\ns3.port=9123\nwebdav=false\n"
+    )
     for name in local_stack.KEY_FILES:
         (paths.home / "keys" / name).write_text(name)
     meta = paths.env / "conda-meta"
@@ -142,6 +145,11 @@ def test_export_compose_copies_data_and_pins_the_local_versions(paths, tmp_path,
 
     assert (out / "data" / "mongo" / "WiredTiger").read_text() == "wt"
     assert (out / "data" / "s3" / "vol").is_dir()
+    options = (out / "data" / "s3" / "mini.options").read_text().splitlines()
+    assert "ip.bind=0.0.0.0" in options and "s3.port=9000" in options
+    assert "ip=127.0.0.1" in options and "ip.bind=127.0.0.1" not in options
+    # The local server keeps its own options.
+    assert "ip.bind=127.0.0.1" in (paths.home / "s3" / "mini.options").read_text()
     assert (out / "data" / "keys" / "private_key.pem").read_text() == "private_key.pem"
     override = (out / "docker-compose.override.yaml").read_text()
     assert "image: mongo:8.0.23" in override
