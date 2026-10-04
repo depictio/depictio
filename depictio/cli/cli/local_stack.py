@@ -715,6 +715,25 @@ def release_version() -> str | None:
     return version if re.fullmatch(r"\d+\.\d+\.\d+", version) else None
 
 
+def _rebind_seaweedfs(options: Path) -> None:
+    """Open the copied SeaweedFS to the Compose network.
+
+    ``weed mini`` saves its flags in ``mini.options`` and reloads them, so the copy
+    would keep listening on the container's loopback only. ``ip`` stays: the
+    master's raft state is keyed on it, and every SeaweedFS component shares the
+    one container.
+    """
+    if not options.is_file():
+        return
+    pinned = {"ip.bind": "0.0.0.0", "s3.port": "9000"}
+    lines = [
+        line
+        for line in options.read_text().splitlines()
+        if line.partition("=")[0].strip() not in pinned
+    ]
+    options.write_text("\n".join([*lines, *(f"{k}={v}" for k, v in pinned.items())]) + "\n")
+
+
 def export_compose(paths: Paths, out: Path, log=print) -> bool:
     """Copy the local server's data into ``out`` with what Docker Compose needs to run it.
 
@@ -743,6 +762,7 @@ def export_compose(paths: Paths, out: Path, log=print) -> bool:
     for sub in EXPORTED_DIRS:
         log(f"Copying {sub} data")
         shutil.copytree(paths.home / sub, data / sub)
+    _rebind_seaweedfs(data / "s3" / "mini.options")
     (data / "keys").mkdir(parents=True)
     for name in KEY_FILES:
         shutil.copy2(paths.home / "keys" / name, data / "keys" / name)
