@@ -7,12 +7,14 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.local_stack import (
+    COMPOSE_URL,
     LocalStackError,
     Paths,
     check_platform_supported,
     check_server_installed,
     chromium_installed,
     ensure_binaries,
+    export_compose,
     install_chromium,
     load_secrets,
     load_state,
@@ -206,3 +208,24 @@ def wipe(
     stop_all(paths, log=_info)
     reset(paths)
     rich_print_checked_statement("Local data deleted", "success")
+
+
+@app.command("export-compose")
+def export_compose_cmd(
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="Directory to create for the Docker Compose stack"),
+    ] = Path("depictio-docker"),
+):
+    """Copy the local server's data into a directory Docker Compose runs as is."""
+    paths = Paths(local_home())
+    out = out.resolve()
+    try:
+        compose_copied = export_compose(paths, out, log=_info)
+    except LocalStackError as e:
+        _fail(str(e))
+    rich_print_checked_statement(f"Exported to {out}", "success")
+    _info(f"cd {out}")
+    if not compose_copied:
+        _info(f"curl -LO {COMPOSE_URL}")
+    _info("docker compose up -d   # then http://localhost:5080")

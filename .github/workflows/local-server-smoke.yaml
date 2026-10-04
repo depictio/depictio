@@ -16,6 +16,58 @@ on:
   workflow_dispatch:
 
 jobs:
+  # A stack started with `depictio local up` hands over to Docker Compose: same
+  # dashboards, same table data in S3, and the CLI token still valid (same keys).
+  local-to-compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: depictio local up (iris example)
+        run: uv run --python 3.12 --extra local depictio local up --examples iris --no-open
+
+      - name: Wait for the iris Delta table
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null \
+              http://127.0.0.1:8058/depictio/api/v1/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c; then
+              echo "iris delta table registered"; exit 0
+            fi
+            sleep 5
+          done
+          echo "iris delta table never appeared"; exit 1
+
+      - name: Export to Docker Compose
+        run: |
+          uv run --python 3.12 --extra local depictio local down
+          uv run --python 3.12 --extra local depictio local export-compose --out "$RUNNER_TEMP/export"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: docker compose up on the exported data
+        working-directory: ${{ runner.temp }}/export
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: Check the dashboards, the table data and the CLI token
+        run: |
+          API=http://127.0.0.1:8058/depictio/api/v1
+          curl -fsS http://127.0.0.1:8058/health
+          curl -fsS -o /dev/null "$API/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c"
+          # Read back from the exported SeaweedFS data by the worker.
+          curl -fsS -o /dev/null "$API/deltatables/preview/646b0f3c1e4a2d7f8e5b8c9c"
+          # Signed by the local server: only valid if the keys came along.
+          TOKEN=$(yq -r .user.token.access_token ~/.depictio/local/cli/admin_config.yaml)
+          curl -fsS -o /dev/null -H "Authorization: Bearer $TOKEN" "$API/auth/me"
+          curl -fsS -o /dev/null http://127.0.0.1:5080/
+
+      - name: Compose logs
+        if: failure()
+        working-directory: ${{ runner.temp }}/export
+        run: docker compose logs --no-color --tail 200
+
   local-up:
     # One runner per conda platform we have hosted runners for (osx-64 has none).
     strategy:
