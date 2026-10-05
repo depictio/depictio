@@ -22,10 +22,16 @@ import subprocess
 import sys
 import time
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-CONDA_SPECS = ["mongodb 8.0.*", "redis-server", "seaweedfs"]
+# The major series of the images in docker-compose.yaml (mongo, redis,
+# chrislusf/seaweedfs): move them together. Redis and SeaweedFS are pinned to the
+# major only: a pin below what an existing local home already runs would
+# downgrade it, and Redis cannot load an RDB written by a newer version.
+# export-compose pins the SeaweedFS image to the local version, so a hand-over
+# never downgrades either.
+CONDA_SPECS = ["mongodb 8.0.*", "redis-server 8.*", "seaweedfs 4.*"]
 ADMIN_EMAIL = "admin@example.com"
 S3_USER = "depictio"
 S3_BUCKET = "depictio-bucket"
@@ -35,6 +41,19 @@ DEFAULT_PORTS = {"api": 8058, "mongo": 27018, "redis": 6379, "s3": 9000}
 PROCESS_ORDER = ["mongo", "redis", "s3", "api", "worker"]
 # The example projects shipped in the wheel, seeded by --examples.
 EXAMPLES = ("iris", "penguins")
+# The data directories under the local home: created by `up`, deleted by `wipe`,
+# which keeps env/ (the downloaded binaries).
+DATA_DIRS = (
+    "logs",
+    "mongo",
+    "redis",
+    "s3",
+    "keys",
+    "cli",
+    "cache",
+    "multiqc_prerender",
+    "screenshots",
+)
 
 
 class LocalStackError(RuntimeError):
@@ -93,17 +112,7 @@ class Paths:
         for private in (self.home, self.home / "keys", self.home / "cli"):
             private.mkdir(parents=True, exist_ok=True)
             private.chmod(0o700)
-        for sub in (
-            "logs",
-            "mongo",
-            "redis",
-            "s3",
-            "keys",
-            "cli",
-            "cache",
-            "multiqc_prerender",
-            "screenshots",
-        ):
+        for sub in DATA_DIRS:
             (self.home / sub).mkdir(parents=True, exist_ok=True)
 
 
@@ -122,7 +131,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     except ImportError as exc:
         raise LocalStackError(
             "py-rattler is required to fetch MongoDB, Redis and SeaweedFS. "
-            "Install the local extra: uvx --python 3.12 --from 'depictio[local]' depictio local up"
+            'Install the local extra: uv tool install "depictio[local]"'
         ) from exc
 
     # The platform is part of the marker: a $HOME shared between linux-64 and
@@ -168,14 +177,39 @@ def ensure_binaries(paths: Paths, log=print) -> None:
 _PROXY_VARS = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
 
 
-def load_state(paths: Paths) -> dict:
-    if not paths.state.exists():
-        return {}
-    return json.loads(paths.state.read_text())
+@dataclass
+class State:
+    """What `up` records in state.json, for `down`, `status` and the next `up`."""
 
+    ports: dict[str, int] = field(default_factory=dict)
+    home: str = ""
+    examples: str = ""
+    pids: dict[str, int] = field(default_factory=dict)
+    # Start time of each process, so a PID reused after a reboot is not taken for ours.
+    start_times: dict[str, float | None] = field(default_factory=dict)
 
-def save_state(paths: Paths, state: dict) -> None:
-    paths.state.write_text(json.dumps(state, indent=2))
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.ports.get('api', DEFAULT_PORTS['api'])}"
+
+    @classmethod
+    def load(cls, paths: Paths) -> State | None:
+        """The state of the last `up`, or None when nothing is recorded.
+
+        Files written by earlier versions load too: a missing key takes its
+        default, and url is derived from the ports rather than read.
+        """
+        if not paths.state.exists():
+            return None
+        saved = json.loads(paths.state.read_text())
+        known = {f.name for f in fields(cls)}
+        state = cls(**{k: v for k, v in saved.items() if k in known})
+        state.home = state.home or str(paths.home)
+        return state
+
+    def save(self, paths: Paths) -> None:
+        # url is written too, for anything reading the file without this class.
+        paths.state.write_text(json.dumps({**asdict(self), "url": self.url}, indent=2))
 
 
 def load_secrets(paths: Paths) -> dict:
@@ -368,18 +402,19 @@ def process_start_time(pid: int) -> float | None:
 _START_TIME_SLACK = 5.0
 
 
-def live_pids(state: dict) -> dict[str, int]:
+def live_pids(state: State | None) -> dict[str, int]:
     """The recorded PIDs that still belong to the processes `up` started.
 
     state.json survives a reboot, after which a PID can name an unrelated process:
     one whose start time differs from the recorded one counts as gone.
     """
-    start_times = state.get("start_times", {})
+    if state is None:
+        return {}
     live: dict[str, int] = {}
-    for name, pid in state.get("pids", {}).items():
+    for name, pid in state.pids.items():
         if not pid_alive(pid):
             continue
-        recorded, current = start_times.get(name), process_start_time(pid)
+        recorded, current = state.start_times.get(name), process_start_time(pid)
         # Without a record (older state) or without psutil, only liveness is checked.
         if recorded is None or current is None or abs(current - recorded) < _START_TIME_SLACK:
             live[name] = pid
@@ -690,7 +725,7 @@ def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
 
 def stop_all(paths: Paths, log=print) -> list[str]:
     """Stop the processes `up` recorded; returns the names of those that were running."""
-    live = live_pids(load_state(paths))
+    live = live_pids(State.load(paths))
     stopped = [name for name in reversed(PROCESS_ORDER) if name in live]
     for name in stopped:
         log(f"Stopping {name} (pid {live[name]})")
@@ -701,7 +736,7 @@ def stop_all(paths: Paths, log=print) -> list[str]:
 
 
 def running_status(paths: Paths) -> dict[str, bool]:
-    live = live_pids(load_state(paths))
+    live = live_pids(State.load(paths))
     return {name: name in live for name in PROCESS_ORDER}
 
 
@@ -712,7 +747,7 @@ def check_server_installed() -> None:
     if missing:
         raise LocalStackError(
             "The Depictio server is not installed in this environment "
-            f"(missing: {', '.join(missing)}). Use: uvx --python 3.12 --from 'depictio[local]' depictio local up"
+            f'(missing: {", ".join(missing)}). Install it with: uv tool install "depictio[local]"'
         )
 
 
@@ -725,7 +760,8 @@ def _importable(module: str) -> bool:
         return False
 
 
-def _package_root() -> Path | None:
+def package_root() -> Path | None:
+    """The ``depictio`` package directory: in site-packages, or in a source checkout."""
     import importlib.util
 
     spec = importlib.util.find_spec("depictio")
@@ -735,13 +771,13 @@ def _package_root() -> Path | None:
 
 
 def viewer_built() -> bool:
-    root = _package_root()
+    root = package_root()
     return root is not None and (root / "viewer" / "dist" / "index.html").is_file()
 
 
 def seed_screenshots(paths: Paths) -> None:
     """Copy the thumbnails shipped for the reference dashboards, once."""
-    root = _package_root()
+    root = package_root()
     if root is None:
         return
     bundled = root / "api" / "static" / "screenshots"
@@ -772,17 +808,7 @@ def install_chromium() -> None:
 
 def reset(paths: Paths) -> None:
     """Delete all local data but keep the downloaded binaries."""
-    for sub in (
-        "mongo",
-        "redis",
-        "s3",
-        "keys",
-        "cli",
-        "cache",
-        "multiqc_prerender",
-        "screenshots",
-        "logs",
-    ):
+    for sub in DATA_DIRS:
         shutil.rmtree(paths.home / sub, ignore_errors=True)
     for f in (paths.state, paths.secrets, paths.ports):
         if f.exists():
@@ -790,155 +816,95 @@ def reset(paths: Paths) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Hand-over to Docker Compose
+# up: start the stack, ingest a template
 # ---------------------------------------------------------------------------
 
-COMPOSE_URL = "https://raw.githubusercontent.com/depictio/depictio/stable/docker-compose.yaml"
-# Data carried over. Redis holds only cache and queue, and thumbnails are re-rendered.
-EXPORTED_DIRS = ("mongo", "s3")
-KEY_FILES = ("private_key.pem", "public_key.pem", "api_internal_key.pem")
 
+def start_stack(
+    paths: Paths,
+    port: int | None,
+    seed: str,
+    screenshots: bool,
+    log=print,
+    warn=None,
+) -> State:
+    """Start every service and wait until the API answers; returns what was recorded.
 
-def installed_version(paths: Paths, package: str) -> str:
-    """Version of a conda-forge package in ``<home>/env``, read from its conda-meta record."""
-    for record in (paths.env / "conda-meta").glob(f"{package}-*.json"):
-        meta = json.loads(record.read_text())
-        if meta.get("name") == package:
-            return meta["version"]
-    raise LocalStackError(
-        f"{package} is not installed under {paths.env}; run `depictio local up` once"
-    )
-
-
-def compose_override(mongo_version: str, seaweedfs_version: str, user: str | None) -> str:
-    """The override that points the stock docker-compose.yaml at the exported data.
-
-    Mongo and SeaweedFS run the exact versions the local server wrote the data
-    with. Paths are relative to the export directory, so it can be moved. The key
-    files are mounted one by one over the keys volume: the API also writes a lock
-    file next to them, which a bind-mounted directory owned by the host user would
-    refuse to the image's own user.
+    Leftovers of an earlier run are stopped first. On any error, Ctrl-C included,
+    what this call started is stopped again before the error propagates.
     """
-    run_as = f'    user: "{user}"\n' if user else ""
-    keys = "".join(
-        f"      - ./data/keys/{name}:/app/depictio/keys/{name}:ro\n" for name in KEY_FILES
-    )
-    return (
-        "# Generated by `depictio local export-compose`: the Docker stack on the data\n"
-        "# of a local server. docker compose reads it next to docker-compose.yaml.\n"
-        "services:\n"
-        "  mongo:\n"
-        f"    image: mongo:{mongo_version}\n"
-        f"{run_as}"
-        "    volumes:\n"
-        "      - ./data/mongo:/data/db\n"
-        "  s3:\n"
-        f"    image: chrislusf/seaweedfs:{seaweedfs_version}\n"
-        f"{run_as}"
-        "    volumes:\n"
-        "      - ./data/s3:/data\n"
-        "  depictio-backend:\n"
-        "    volumes:\n"
-        f"{keys}"
-        "  depictio-celery-worker:\n"
-        "    volumes:\n"
-        f"{keys}"
-    )
+    warn = warn or log
+    try:
+        stop_all(paths, log=log)
+        ensure_binaries(paths, log=log)
+        seed_screenshots(paths)
+        saved_ports = load_ports(paths)
+        ports = pick_ports(port, saved_ports)
+        if port is None and saved_ports.get("api", ports["api"]) != ports["api"]:
+            warn(
+                f"Port {saved_ports['api']} is now used by another program: "
+                f"Depictio moves to port {ports['api']}"
+            )
+        save_ports(paths, ports)
+        if screenshots and not chromium_installed():
+            log("Installing Chromium for dashboard thumbnails")
+            install_chromium()
+        secret_values = load_secrets(paths)
+        env = server_env(paths, ports, secret_values, seed, screenshots)
+        state = State(ports=ports, home=str(paths.home), examples=seed)
+        state.save(paths)
+        procs = start_services(paths, ports, secret_values, env)
+        state.pids = {name: proc.pid for name, proc in procs.items()}
+        state.start_times = {name: process_start_time(proc.pid) for name, proc in procs.items()}
+        state.save(paths)
+        log(f"Services started (logs in {paths.logs}); waiting for the API")
+        wait_for_api(paths, ports, procs["api"])
+        check_alive(paths, procs)
+    except BaseException:
+        stop_all(paths, log=log)
+        raise
+    return state
 
 
-def compose_env(secret_values: dict, version: str | None) -> str:
-    lines = [
-        "# Generated by `depictio local export-compose`: the local server's credentials.",
-        "DEPICTIO_AUTH_SINGLE_USER_MODE=true",
-        f"DEPICTIO_S3_ROOT_USER={S3_USER}",
-        f"DEPICTIO_S3_ROOT_PASSWORD={secret_values['s3_password']}",
-        f"DEPICTIO_S3_BUCKET={S3_BUCKET}",
-        f"DEPICTIO_BOOTSTRAP_ADMIN_EMAIL={ADMIN_EMAIL}",
-        f"DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD={secret_values['admin_password']}",
+def ingest(
+    paths: Paths,
+    template: str,
+    data_root: Path,
+    variables: list[str] | None = None,
+    project_name: str | None = None,
+) -> int:
+    """Ingest ``data_root`` into the local server with `depictio run`; returns its exit code."""
+    cmd = [
+        sys.executable,
+        "-m",
+        "depictio.cli",
+        "run",
+        "--template",
+        template,
+        "--data-root",
+        str(data_root.resolve()),
+        "--CLI-config-path",
+        str(paths.cli_config),
     ]
-    if version:
-        lines.append(f"DEPICTIO_VERSION={version}")
-    return "\n".join(lines) + "\n"
+    if project_name:
+        cmd += ["--project-name", project_name]
+    for var in variables or []:
+        cmd += ["--var", _absolutize_path_var(var)]
+    return subprocess.call(cmd, env=_ingestion_env())
 
 
-def release_version() -> str | None:
-    """The installed depictio version when it names a published image, else None.
+def _absolutize_path_var(var: str) -> str:
+    """`run` resolves relative variables against --data-root; users type them from cwd."""
+    key, sep, value = var.partition("=")
+    if sep and value and not Path(value).is_absolute() and Path(value).exists():
+        return f"{key}={Path(value).resolve()}"
+    return var
 
-    Read from the package metadata: the CLI-only package (depictio-cli) does not
-    ship depictio.version, and both packages carry the same version number.
+
+def _ingestion_env() -> dict[str, str]:
+    """The environment of the `depictio run` child, without DEPICTIO_CLI_* overrides.
+
+    DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL, set for another instance,
+    would win over the local server's CLI configuration.
     """
-    import re
-    from importlib.metadata import PackageNotFoundError, version
-
-    for dist in ("depictio", "depictio-cli"):
-        try:
-            found = version(dist)
-        except PackageNotFoundError:
-            continue
-        return found if re.fullmatch(r"\d+\.\d+\.\d+", found) else None
-    return None
-
-
-def _rebind_seaweedfs(options: Path) -> None:
-    """Open the copied SeaweedFS to the Compose network.
-
-    ``weed mini`` saves its flags in ``mini.options`` and reloads them, so the copy
-    would keep listening on the container's loopback only. ``ip`` stays: the
-    master's raft state is keyed on it, and every SeaweedFS component shares the
-    one container.
-    """
-    if not options.is_file():
-        return
-    pinned = {"ip.bind": "0.0.0.0", "s3.port": "9000"}
-    lines = [
-        line
-        for line in options.read_text().splitlines()
-        if line.partition("=")[0].strip() not in pinned
-    ]
-    options.write_text("\n".join([*lines, *(f"{k}={v}" for k, v in pinned.items())]) + "\n")
-
-
-def export_compose(paths: Paths, out: Path, log=print) -> bool:
-    """Copy the local server's data into ``out`` with what Docker Compose needs to run it.
-
-    The data is copied, not shared: MongoDB must never run twice on one data
-    directory, and the local server stays usable. Returns whether a
-    docker-compose.yaml was copied next to the export (from a source checkout).
-    """
-    if any(running_status(paths).values()):
-        raise LocalStackError(
-            "The local server is running: stop it with `depictio local down` first"
-        )
-    if not any((paths.home / "mongo").glob("*")):
-        raise LocalStackError(f"No local server data under {paths.home}")
-    if out.exists() and any(out.iterdir()):
-        raise LocalStackError(f"{out} is not empty")
-    secret_values = load_secrets(paths)
-    override = compose_override(
-        installed_version(paths, "mongodb"),
-        installed_version(paths, "seaweedfs"),
-        # Bind-mounted data stays owned by the host user, so the database and
-        # the object store run as that user rather than the images' own.
-        f"{os.getuid()}:{os.getgid()}" if sys.platform == "linux" else None,
-    )
-
-    data = out / "data"
-    for sub in EXPORTED_DIRS:
-        log(f"Copying {sub} data")
-        shutil.copytree(paths.home / sub, data / sub)
-    _rebind_seaweedfs(data / "s3" / "mini.options")
-    (data / "keys").mkdir(parents=True)
-    for name in KEY_FILES:
-        shutil.copy2(paths.home / "keys" / name, data / "keys" / name)
-
-    (out / "docker-compose.override.yaml").write_text(override)
-    fd = os.open(out / ".env", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(compose_env(secret_values, release_version()))
-
-    root = _package_root()
-    compose = root.parent / "docker-compose.yaml" if root is not None else None
-    if compose is not None and compose.is_file():
-        shutil.copy2(compose, out / "docker-compose.yaml")
-        return True
-    return False
+    return {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_CLI_")}
