@@ -6,6 +6,7 @@
  *   `*italic*`            -> italic
  *   \`code\`              -> code
  *   `[label](https://…)`  -> link
+ *   `[label](tab:Name)`   -> link to the sibling tab called Name (see tabLinks.ts)
  *
  * We deliberately do NOT pull in react-markdown / remark / rehype — the body
  * is a single paragraph, and a regex pass is ~40 lines vs ~30 KB of deps.
@@ -24,9 +25,12 @@ export type InlineToken =
 
 // The href half is a scheme allowlist, not a catch-all: dashboard bodies are
 // authored content, and a permissive matcher would accept `javascript:`. Only
-// absolute http(s) URLs and site-relative paths become anchors; anything else
-// stays literal text, visibly wrong rather than silently dangerous.
-const LINK_HREF = String.raw`(?:https?:\/\/[^)\s]+|\/[^)\s]*)`;
+// absolute http(s) URLs, site-relative paths and `tab:` names become anchors;
+// anything else stays literal text, visibly wrong rather than silently
+// dangerous. A tab name may hold spaces and one level of parentheses
+// ("Environment (CTD)"), since that is how tabs get named.
+const TAB_TARGET = String.raw`tab:(?:[^()\n]|\([^()\n]*\))+`;
+const LINK_HREF = String.raw`(?:https?:\/\/[^)\s]+|\/[^)\s]*|${TAB_TARGET})`;
 const PATTERN = new RegExp(
   [
     '`[^`\\n]+`', // `code`

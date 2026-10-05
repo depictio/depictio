@@ -2,25 +2,13 @@ import React from 'react';
 import { Box, Divider, Group, Text, Title, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { isImagePath, themedIconSrc } from 'depictio-react-core';
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
-
-/** MultiQC ships its logo as a PNG/SVG path rather than an Iconify name; the
- *  sidebar and the app header both swap it for the SPA-served themed SVG. */
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
 
 interface TabIntroProps {
   dashboard: DashboardData | null;
   /** The active tab in the sibling family — supplies the name, icon and colour. */
   activeTab?: DashboardSummary | null;
-}
-
-/** True for path-like icon values (PNG/SVG file URLs) rather than Iconify names. */
-function isImagePath(s: string | null | undefined): boolean {
-  if (!s) return false;
-  return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
 /**
@@ -40,11 +28,6 @@ function isImagePath(s: string | null | undefined): boolean {
  * the DASHBOARD's identity line — what the listing card shows under the title
  * — which is a statement about the whole family, not about the tab being read.
  */
-function resolveIconImage(path: string, isDark: boolean): string {
-  if (!isMultiqcIcon(path)) return path;
-  return isDark ? '/dashboard/logos/multiqc_icon_white.svg' : '/dashboard/logos/multiqc_icon_dark.svg';
-}
-
 const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
@@ -62,7 +45,7 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const iconColor = (activeTab?.tab_icon_color || activeTab?.icon_color) ?? 'gray';
   // Image-path icons (the workflow logos) render as an <img>; dropping them
   // left the MultiQC tab — whose icon is only ever a logo — with a bare title.
-  const iconImageSrc = iconRaw && isImagePath(iconRaw) ? resolveIconImage(iconRaw, isDark) : null;
+  const iconImageSrc = iconRaw && isImagePath(iconRaw) ? themedIconSrc(iconRaw, isDark) : null;
   const showIcon = Boolean(iconRaw);
 
   return (

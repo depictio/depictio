@@ -15,7 +15,14 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { brandAccent, useBranding, Z_LAYERS } from 'depictio-react-core';
+import {
+  brandAccent,
+  isImagePath,
+  isMultiqcIcon,
+  themedIconSrc,
+  useBranding,
+  Z_LAYERS,
+} from 'depictio-react-core';
 import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
 import BrandLogo from './BrandLogo';
 import ThemeToggle from './ThemeToggle';
@@ -75,41 +82,6 @@ const TabLabel: React.FC<{ label: string }> = ({ label }) => {
   );
 };
 
-/** True for path-like icon values (PNG/SVG file URLs) — these came from the
- * Dash YAML and aren't valid Iconify names. */
-function isImagePath(s: string | null | undefined): boolean {
-  if (!s) return false;
-  return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
-}
-
-/** True when the tab metadata points at a MultiQC logo (legacy PNG or any of
- *  the new SVG variants). */
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
-
-/** Many legacy YAML/seed entries point at the old MultiQC PNG
- * (`/assets/images/logos/multiqc.png`). Swap those to the new official icon
- * (https://github.com/MultiQC/logo) served via the SPA's `/dashboard/logos/`
- * mount.
- *
- *   - Active tab → always white SVG (sits on a filled gray background, white
- *     gives the right contrast in both light & dark modes).
- *   - Otherwise → dark SVG on light theme, white SVG on dark theme.
- */
-function rewriteLegacyMultiqcIcon(
-  path: string,
-  theme: 'light' | 'dark',
-  isActive = false,
-): string {
-  if (!isMultiqcIcon(path)) return path;
-  if (isActive) return '/dashboard/logos/multiqc_icon_white.svg';
-  return theme === 'dark'
-    ? '/dashboard/logos/multiqc_icon_white.svg'
-    : '/dashboard/logos/multiqc_icon_dark.svg';
-}
-
 /** Resolve a YAML asset path (e.g. `/assets/images/logos/multiqc.png`) to a
  * loadable URL. The Dash app serves /assets/ on port 5122; the SPA on 8122
  * doesn't proxy them, so we point cross-port in dev. Mirrors `dashOrigin()`
@@ -134,7 +106,7 @@ function resolveAssetUrl(s: string): string {
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`.
  *  When the value is a path/URL (legacy YAML), fall through to a keyword-based
  *  Iconify default since the SPA doesn't proxy Dash's `/assets/` mount. */
-function resolveTabIcon(tab: DashboardSummary, isParent: boolean): string {
+export function resolveTabIcon(tab: DashboardSummary, isParent: boolean): string {
   if (tab.tab_icon && !isImagePath(tab.tab_icon)) return tab.tab_icon;
   if (tab.icon && !isImagePath(tab.icon)) return tab.icon;
   const t = ((tab.main_tab_name || tab.title) || '').toLowerCase();
@@ -147,7 +119,7 @@ function resolveTabIcon(tab: DashboardSummary, isParent: boolean): string {
     return 'mdi:bacteria-outline';
   return isParent ? 'mdi:view-dashboard' : 'mdi:tab';
 }
-function resolveTabColor(
+export function resolveTabColor(
   tab: DashboardSummary,
   isParent: boolean,
   brand: BrandTheme | null,
@@ -380,7 +352,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         ? d.icon
                         : null;
                   const yamlImage = yamlImageRaw
-                    ? rewriteLegacyMultiqcIcon(yamlImageRaw, theme, isActive)
+                    ? themedIconSrc(yamlImageRaw, theme === 'dark', isActive)
                     : null;
                   const iconName = resolveTabIcon(d, isParent);
                   const leftSection = yamlImage ? (

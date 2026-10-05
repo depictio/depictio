@@ -12,7 +12,9 @@ import { FILTER_PANEL_TOGGLE_EVENT, dispatchPanelToggle } from 'depictio-react-c
  * key-swap effect below re-reads storage when it lands.
  *
  * Defaults to open, like the tab sidebar: the filters are the point of the
- * page, so hiding them on first visit would bury the feature.
+ * page, so hiding them on first visit would bury the feature. A dashboard can
+ * say otherwise (`filter_panel_default: collapsed`, e.g. a prose landing tab);
+ * that only decides the first visit — a stored toggle always wins.
  */
 const STORAGE_KEY_PREFIX = 'filter-panel-collapsed:';
 
@@ -23,15 +25,19 @@ function storageKey(dashboardId: string | null): string {
   return `${STORAGE_KEY_PREFIX}${dashboardId ?? 'unknown'}`;
 }
 
-function readCollapsed(dashboardId: string | null): boolean {
+function readStored(dashboardId: string | null): boolean | null {
   try {
     const raw = localStorage.getItem(storageKey(dashboardId));
-    if (raw == null) return false;
+    if (raw == null) return null;
     const parsed = JSON.parse(raw);
-    return typeof parsed === 'boolean' ? parsed : false;
+    return typeof parsed === 'boolean' ? parsed : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function readCollapsed(dashboardId: string | null, defaultCollapsed: boolean): boolean {
+  return readStored(dashboardId) ?? defaultCollapsed;
 }
 
 function writeCollapsed(dashboardId: string | null, collapsed: boolean): void {
@@ -48,13 +54,18 @@ function writeCollapsed(dashboardId: string | null, collapsed: boolean): void {
  * @param swingPx - px the content column gains when the panel collapses, i.e.
  *   `panelWidth - railWidth`. Read at toggle time so a resize between toggles
  *   is accounted for.
+ * @param defaultCollapsed - the dashboard's `filter_panel_default`, used
+ *   only while nothing is stored for this family.
  * @returns `[open, toggle]`, matching `useSidebarOpen`.
  */
 export function useFilterPanelOpen(
   dashboardId: string | null,
   swingPx: number,
+  defaultCollapsed = false,
 ): [boolean, () => void] {
-  const [opened, setOpened] = useState<boolean>(() => !readCollapsed(dashboardId));
+  const [opened, setOpened] = useState<boolean>(
+    () => !readCollapsed(dashboardId, defaultCollapsed),
+  );
   const flagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // `toggle` is called from an event handler, so reading the live swing from a
@@ -69,15 +80,20 @@ export function useFilterPanelOpen(
   // twice, mis-sizing every figure until the post-transition re-measure.
   const openedRef = useRef(opened);
 
-  // Switching dashboards swaps the storage key under a mounted panel.
+  // Switching dashboards swaps the storage key under a mounted panel, and the
+  // dashboard's default only arrives with its document, after first render.
+  // Either one re-reads; a stored toggle still wins over the default.
   const dashboardRef = useRef(dashboardId);
+  const defaultRef = useRef(defaultCollapsed);
   useEffect(() => {
-    if (dashboardRef.current === dashboardId) return;
+    if (dashboardRef.current === dashboardId && defaultRef.current === defaultCollapsed) return;
     dashboardRef.current = dashboardId;
-    const next = !readCollapsed(dashboardId);
+    defaultRef.current = defaultCollapsed;
+    const next = !readCollapsed(dashboardId, defaultCollapsed);
+    if (next === openedRef.current) return;
     openedRef.current = next;
     setOpened(next);
-  }, [dashboardId]);
+  }, [dashboardId, defaultCollapsed]);
 
   const toggle = useCallback(() => {
     // Mark `<body>` so the dashboard grid matches its item transition duration

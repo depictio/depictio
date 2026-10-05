@@ -49,6 +49,11 @@ export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
+export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
+export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
+export { parseBlocks } from './components/blockMarkdown';
+export type { Block as MarkdownBlock } from './components/blockMarkdown';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 

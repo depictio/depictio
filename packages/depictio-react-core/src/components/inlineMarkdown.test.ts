@@ -80,4 +80,16 @@ describe('parseInlineMarkdown', () => {
       { type: 'link', value: '**bold label**', href: 'https://example.org', external: true },
     ]);
   });
+
+  it('reads a tab: link, spaces, ampersands and parentheses included', () => {
+    expect(parseInlineMarkdown('open [Community](tab:Community & Diversity (16S))')).toEqual([
+      { type: 'text', value: 'open ' },
+      {
+        type: 'link',
+        value: 'Community',
+        href: 'tab:Community & Diversity (16S)',
+        external: false,
+      },
+    ]);
+  });
 });

@@ -368,6 +368,8 @@ export interface DashboardData {
    *  dashboard. Absent on payloads cached before the field existed, which is
    *  why every reader tests `!== false` rather than `Boolean(...)`. */
   funnel_filtering?: boolean;
+  /** Initial left filter panel state before the viewer has toggled it. */
+  filter_panel_default?: 'open' | 'collapsed';
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
    *  defaults. Unset fields inherit the instance branding. */
   brand_theme?: BrandTheme | null;

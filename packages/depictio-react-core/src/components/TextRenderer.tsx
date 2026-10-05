@@ -1,9 +1,12 @@
 import React, { useRef } from 'react';
-import { Anchor, Stack, Text, Title } from '@mantine/core';
+import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core';
 
 import { StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
+import { parseBlocks } from './blockMarkdown';
+import Glyph from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
+import { TabLinkResolver, useTabLinkResolver } from './tabLinks';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
@@ -16,7 +19,10 @@ interface TextRendererProps {
  * Maps the body's inline-markdown tokens to React nodes. The grammar itself
  * lives in `inlineMarkdown.ts` so it can be unit-tested without a DOM.
  */
-const renderInlineMarkdown = (input: string): React.ReactNode[] =>
+const renderInlineMarkdown = (
+  input: string,
+  resolveTab: TabLinkResolver | null = null,
+): React.ReactNode[] =>
   parseInlineMarkdown(input).map((token, idx) => {
     switch (token.type) {
       case 'bold':
@@ -38,6 +44,26 @@ const renderInlineMarkdown = (input: string): React.ReactNode[] =>
           </code>
         );
       case 'link':
+        if (token.href.startsWith('tab:')) {
+          // A tab link wears the tab's own icon and colour, so it reads as the
+          // tab it opens. Unresolved (unknown name, or a renderer with no tab
+          // family, like the editor preview), it stays plain text: a dead
+          // anchor would be worse than none.
+          const target = resolveTab?.(token.href.slice(4)) ?? null;
+          if (!target) return <React.Fragment key={idx}>{token.value}</React.Fragment>;
+          return (
+            <Anchor
+              key={idx}
+              href={target.href}
+              inherit
+              fw={600}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+            >
+              {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
+              {token.value}
+            </Anchor>
+          );
+        }
         return (
           <Anchor
             key={idx}
@@ -55,6 +81,93 @@ const renderInlineMarkdown = (input: string): React.ReactNode[] =>
         return <React.Fragment key={idx}>{token.value}</React.Fragment>;
     }
   });
+
+const BODY_TEXT_STYLE: React.CSSProperties = {
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  margin: 0,
+  lineHeight: 1.35,
+};
+
+/**
+ * A body's blocks (see `blockMarkdown.ts`). A body with no block syntax is one
+ * paragraph and renders as the single pre-wrapped paragraph bodies always were.
+ * Headings start one level below the tile's own title scale (`#` → H3), so a
+ * body never outshouts the title above it.
+ */
+const MarkdownBody: React.FC<{ body: string; alignment: 'left' | 'center' | 'right' }> = ({
+  body,
+  alignment,
+}) => {
+  const resolveTab = useTabLinkResolver();
+  const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
+  return (
+    <>
+      {parseBlocks(body).map((block, idx) => {
+        switch (block.type) {
+          case 'heading':
+            return (
+              <Title
+                key={idx}
+                order={(block.level + 2) as 3 | 4 | 5}
+                ta={alignment}
+                style={{ margin: idx === 0 ? 0 : '8px 0 0', lineHeight: 1.2 }}
+              >
+                {inline(block.text)}
+              </Title>
+            );
+          case 'list': {
+            return (
+              <List
+                key={idx}
+                type={block.ordered ? 'ordered' : 'unordered'}
+                spacing={4}
+                style={{ lineHeight: 1.45, textAlign: 'left' }}
+              >
+                {block.items.map((item, i) => (
+                  <List.Item key={i}>{inline(item)}</List.Item>
+                ))}
+              </List>
+            );
+          }
+          case 'table':
+            return (
+              <Table key={idx} withTableBorder={false} verticalSpacing={6} highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    {block.header.map((cell, i) => (
+                      <Table.Th key={i} style={{ textAlign: block.align[i] ?? 'left' }}>
+                        {inline(cell)}
+                      </Table.Th>
+                    ))}
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {block.rows.map((row, r) => (
+                    <Table.Tr key={r}>
+                      {block.header.map((_, i) => (
+                        <Table.Td key={i} style={{ textAlign: block.align[i] ?? 'left' }}>
+                          {inline(row[i] ?? '')}
+                        </Table.Td>
+                      ))}
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            );
+          case 'rule':
+            return <Divider key={idx} my={4} />;
+          default:
+            return (
+              <Text key={idx} ta={alignment} style={BODY_TEXT_STYLE}>
+                {inline(block.text)}
+              </Text>
+            );
+        }
+      })}
+    </>
+  );
+};
 
 /**
  * Pure-presentational renderer for the `text` component_type — section
@@ -110,7 +223,9 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
     >
       <div
         ref={contentRef}
-        style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}
+        // 8px between blocks: paragraphs, lists and tables need air that a
+        // title-over-paragraph pair never did.
+        style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}
       >
       {hasTitle ? (
         <Title
@@ -130,19 +245,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           Section title
         </Title>
       ) : null}
-      {body ? (
-        <Text
-          ta={alignment}
-          style={{
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            margin: 0,
-            lineHeight: 1.35,
-          }}
-        >
-          {renderInlineMarkdown(body)}
-        </Text>
-      ) : null}
+      {body ? <MarkdownBody body={body} alignment={alignment} /> : null}
       </div>
     </Stack>
   );

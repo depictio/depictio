@@ -1,7 +1,7 @@
 import React from 'react';
-import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec } from '../api';
+import Glyph, { glyphColorVar } from './Glyph';
 
 /**
  * A section's icon, tinted with the section's colour.
@@ -20,6 +20,9 @@ import type { FilterSectionSpec } from '../api';
  * keeps its title flush against the chevron. Authoring UIs — where a row must
  * stay aligned whether or not an icon has been picked yet — pass `fallbackIcon`
  * to get a placeholder instead.
+ *
+ * `icon` may also be an image path, as a tab's may: a section of MultiQC
+ * reports can carry the MultiQC logo its tab carries.
  */
 export const SectionIcon: React.FC<{
   spec?: Pick<FilterSectionSpec, 'icon' | 'color'>;
@@ -28,14 +31,7 @@ export const SectionIcon: React.FC<{
 }> = ({ spec, size = 22, fallbackIcon }) => {
   const icon = spec?.icon || fallbackIcon;
   if (!icon) return null;
-  return (
-    <Icon
-      icon={icon}
-      width={size}
-      height={size}
-      style={{ color: sectionColorVar(spec?.color), flexShrink: 0 }}
-    />
-  );
+  return <Glyph icon={icon} color={spec?.color} size={size} />;
 };
 
 /**
@@ -45,8 +41,7 @@ export const SectionIcon: React.FC<{
  * section chose grey on purpose.
  */
 export function sectionColorVar(color?: string | null): string {
-  if (!color) return 'var(--mantine-color-dimmed)';
-  return `var(--mantine-color-${color}-6)`;
+  return glyphColorVar(color);
 }
 
 export default SectionIcon;

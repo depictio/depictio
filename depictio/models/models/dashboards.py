@@ -264,6 +264,14 @@ class DashboardDataLite(BaseModel):
         "visually distinguished, and the cascading restriction can be "
         "inspected in a funnel overview.",
     )
+    # Where the left filter panel starts on a viewer's first visit. A landing
+    # tab that is mostly prose reads better without the panel; once the viewer
+    # toggles it, their choice is remembered per dashboard family and wins.
+    filter_panel_default: Literal["open", "collapsed"] = Field(
+        default="open",
+        description="Initial state of the left filter panel before the viewer "
+        "has toggled it ('open' or 'collapsed').",
+    )
 
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
@@ -401,6 +409,7 @@ class DashboardDataLite(BaseModel):
         "icon_variant",
         "workflow_system",
         "funnel_filtering",
+        "filter_panel_default",
         "filter_sections",
         "grid_sections",
         "brand_theme",
@@ -442,6 +451,7 @@ class DashboardDataLite(BaseModel):
             "icon": "mdi:view-dashboard",
             "icon_color": "orange",
             "icon_variant": "filled",
+            "filter_panel_default": "open",
         }
         for field, default in default_value_fields.items():
             if not data.get(field) or data.get(field) == default:
@@ -1151,6 +1161,7 @@ class DashboardDataLite(BaseModel):
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
+            filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
@@ -1245,6 +1256,7 @@ class DashboardDataLite(BaseModel):
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
             "funnel_filtering": self.funnel_filtering,
+            "filter_panel_default": self.filter_panel_default,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
             if self.brand_theme
             else None,
@@ -1578,6 +1590,8 @@ class DashboardData(MongoModel):
     # Funnel filtering (issue #939). On by default; authors opt out per
     # dashboard from the settings drawer.
     funnel_filtering: bool = True
+    # Initial left-panel state before the viewer has toggled it.
+    filter_panel_default: Literal["open", "collapsed"] = "open"
     # Dashboard-level brand override (logo, palette, surfaces, figure
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.

@@ -82,6 +82,7 @@ const ingestionBannerKey = (projectId: string) =>
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
+import TabLinkProvider from './chrome/TabLinkProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
@@ -288,6 +289,7 @@ const App: React.FC = () => {
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
     panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
+    dashboard?.filter_panel_default === 'collapsed',
   );
   // Below `sm` the panel would leave the content column unusable, so it moves
   // into a drawer opened from the header. `getInitialValueInEffect: false`
@@ -895,6 +897,7 @@ const App: React.FC = () => {
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
       <BrandScope theme={dashboard?.brand_theme}>
+      <TabLinkProvider tabs={tabSiblings}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1366,6 +1369,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </TabLinkProvider>
       </BrandScope>
       </SaveGroupContext.Provider>
       </InspectorProviders>
