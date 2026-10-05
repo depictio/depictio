@@ -16,6 +16,7 @@ from depictio.cli.cli.local_stack import (
     api_healthy,
     check_platform_supported,
     check_server_installed,
+    examples_loading,
     ingest,
     local_home,
     parse_examples,
@@ -24,6 +25,7 @@ from depictio.cli.cli.local_stack import (
     start_stack,
     stop_all,
     viewer_built,
+    wait_for_examples,
 )
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
 
@@ -120,6 +122,32 @@ def _start_or_reuse(
             "Interrupted: services started by this run are stopped" if starting else "Interrupted"
         )
         raise typer.Exit(code=130)
+
+
+def _wait_for_examples(paths: Paths, state: State) -> None:
+    """Hold `ready` until the examples are loaded, so their dashboards show data.
+
+    The API loads them in the background, and on a first run stopping it in the
+    meantime would leave them half loaded.
+    """
+    try:
+        if not examples_loading(paths, state):
+            return
+        _info("Loading the examples")
+        missing = wait_for_examples(paths, state)
+    except KeyboardInterrupt:
+        _warn(
+            "Interrupted: the server keeps running and finishes loading the examples "
+            "(depictio local down to stop)"
+        )
+        raise typer.Exit(code=130)
+    if missing:
+        plural = len(missing) > 1
+        _warn(
+            f"The {' and '.join(missing)} example{'s' if plural else ''} did not finish "
+            "loading, so the dashboards show no data. depictio local wipe, then depictio "
+            f"local up, reloads {'them' if plural else 'it'} (details in {paths.logs / 'api.log'})"
+        )
 
 
 def _ingest(
@@ -223,6 +251,7 @@ def up(
     paths = Paths(local_home())
     paths.ensure_dirs()
     state = _start_or_reuse(paths, port, seed, examples is not None, screenshots)
+    _wait_for_examples(paths, state)
     if template and data_root is not None:
         _ingest(paths, template, data_root, variables, project_name)
     _print_summary(paths, state, template, data_root)

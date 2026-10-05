@@ -428,3 +428,41 @@ def test_windows_is_rejected_with_a_clear_message(monkeypatch):
     monkeypatch.setattr(local_stack.sys, "platform", "win32")
     with pytest.raises(local_stack.LocalStackError, match="WSL2"):
         local_stack.check_platform_supported()
+
+
+def test_example_tables_match_the_seeded_static_ids():
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
+    for name, dc_ids in local_stack.EXAMPLE_TABLES.items():
+        assert set(dc_ids) == set(STATIC_IDS[name]["data_collections"].values())
+
+
+def _state_with_token(paths, examples: str) -> State:
+    paths.cli_config.write_text(yaml.safe_dump({"user": {"token": {"access_token": "t"}}}))
+    return State(ports={"api": 8058}, examples=examples)
+
+
+def test_wait_for_examples_returns_once_every_table_exists(paths, monkeypatch):
+    calls = []
+
+    def table_ready(url, token, dc_id):
+        calls.append(dc_id)
+        return len(calls) > 3
+
+    monkeypatch.setattr(local_stack, "table_ready", table_ready)
+    state = _state_with_token(paths, "iris,penguins")
+    assert local_stack.wait_for_examples(paths, state, timeout=5, interval=0) == []
+
+
+def test_wait_for_examples_names_the_examples_still_missing(paths, monkeypatch):
+    monkeypatch.setattr(local_stack, "table_ready", lambda url, token, dc_id: dc_id == "x")
+    state = _state_with_token(paths, "iris,penguins")
+    missing = local_stack.wait_for_examples(paths, state, timeout=0.05, interval=0.01)
+    assert missing == ["iris", "penguins"]
+
+
+def test_no_examples_means_nothing_to_wait_for(paths, monkeypatch):
+    monkeypatch.setattr(local_stack, "table_ready", MagicMock(side_effect=AssertionError))
+    assert local_stack.examples_loading(paths, State(examples="none")) == []
+    # A state.json from before `examples` was recorded.
+    assert local_stack.examples_loading(paths, State()) == []
