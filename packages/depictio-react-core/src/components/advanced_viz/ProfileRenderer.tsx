@@ -16,8 +16,13 @@ import {
   extractScatterSelection,
   filtersExcludingOwn,
   hasOwnSelection,
+  isResidueFilter,
+  residueRangeFromFilters,
+  withoutResidueRanges,
 } from '../../selection';
+import { useHighlight, usePublishHighlight } from '../../highlight/bus';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { overlayShapeToPlotly, type OverlayShape } from './lollipopOverlay';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
@@ -73,6 +78,7 @@ interface ProfileConfig {
   selection_column?: string | null;
   derivative?: boolean;
   derivative_window?: number;
+  residue_axis?: boolean | null;
 }
 
 interface Props {
@@ -168,6 +174,9 @@ const ProfilePlot = React.memo<
 ));
 ProfilePlot.displayName = 'ProfilePlot';
 
+/** The residue number column of the protein tables (contract section 1). */
+const RESIDUE_POSITION_COLUMN = 'position';
+
 /**
  * One curve per series over an ordered numeric axis.
  *
@@ -220,10 +229,43 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   // This component must not narrow itself by its own selection: a box select
   // would otherwise redraw the profile as only the curves it caught and the
   // user could never widen it again. Every other component still narrows.
+  //
+  // A residue range picked on a protein tile over this profile's x column is
+  // a place to look, not a subset: the curve stays whole and the range is
+  // shaded (see `residueBand` below).
   const filtersForFetch = useMemo(
-    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
-    [filters, metadata.index],
+    () =>
+      withoutResidueRanges(
+        filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+        config.x_col,
+      ),
+    [filters, metadata.index, config.x_col],
   );
+
+  // ---- Residue axis: picked range + hover highlight -----------------------
+  // `residue_axis` says whether x is a residue number. Unset, the profile
+  // guesses: its x column is the canonical residue `position` of the protein
+  // tables, or a residue pick names it. Only on a residue axis does it follow
+  // (and publish) the hover bus, so a TSS or fragment-length profile never
+  // re-renders on a protein hover. Forced on, x holds residue numbers
+  // whatever the column is called, so it reads picks on the canonical
+  // `position` column too and trades events without a column name.
+  const residueAxisForced = config.residue_axis === true;
+  const residueRange = useMemo(() => {
+    const picks = filters.filter(isResidueFilter);
+    return (
+      residueRangeFromFilters(picks, null, config.x_col) ??
+      (residueAxisForced ? residueRangeFromFilters(picks, null, RESIDUE_POSITION_COLUMN) : null)
+    );
+  }, [filters, config.x_col, residueAxisForced]);
+  const onResidueAxis =
+    config.residue_axis ??
+    (config.x_col === RESIDUE_POSITION_COLUMN ||
+      filters.some(
+        (f) => isResidueFilter(f) && (f.column_name ?? f.metadata?.column_name) === config.x_col,
+      ));
+  const highlight = useHighlight(metadata.index, onResidueAxis);
+  const publishHighlight = usePublishHighlight(metadata.index);
   const selectionRevision = useSelectionRevision(
     hasOwnSelection(filters, metadata.index, 'scatter_selection'),
   );
@@ -749,10 +791,59 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
     [groupedFigure, isDark, theme],
   );
-  const plotLayout = useMemo(
+  const themedLayout = useMemo(
     () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
     [groupedFigure, isDark, theme],
   );
+  // The picked residue range as a band and the hovered residue as a dotted
+  // line, on the x axis (in its log10 coordinates when the axis is log).
+  const accent = theme.colors[theme.primaryColor]?.[isDark ? 4 : 6] ?? theme.primaryColor;
+  const plotLayout = useMemo(() => {
+    if (!themedLayout) return themedLayout;
+    const logAxis = derivative || logX;
+    const toAxis = (v: number): number | null => (!logAxis ? v : v > 0 ? Math.log10(v) : null);
+    const extra: OverlayShape[] = [];
+    if (residueRange) {
+      const x0 = toAxis(residueRange.start - 0.5);
+      const x1 = toAxis(residueRange.end + 0.5);
+      if (x0 != null && x1 != null) extra.push({ kind: 'band', x0, x1, y0: 0, y1: 1 });
+    }
+    const onAxis =
+      highlight != null &&
+      (residueAxisForced ||
+        highlight.positionColumn == null ||
+        highlight.positionColumn === config.x_col);
+    if (highlight && onAxis) {
+      const end = highlight.end ?? highlight.start;
+      for (const v of end === highlight.start ? [highlight.start] : [highlight.start, end]) {
+        const x = toAxis(v);
+        if (x != null) extra.push({ kind: 'line', x0: x, x1: x, y0: 0, y1: 1 });
+      }
+    }
+    if (extra.length === 0) return themedLayout;
+    return {
+      ...themedLayout,
+      shapes: [
+        ...((themedLayout as { shapes?: unknown[] }).shapes ?? []),
+        ...extra.map((shape) => overlayShapeToPlotly(shape, accent)),
+      ],
+    };
+  }, [themedLayout, residueRange, highlight, accent, derivative, logX, config.x_col, residueAxisForced]);
+
+  // Hovering a residue-axis profile points the protein tiles at that residue.
+  const handleHover = useCallback(
+    (event: any) => {
+      const x = Number(event?.points?.[0]?.x);
+      if (!Number.isFinite(x)) return;
+      publishHighlight({
+        start: Math.round(x),
+        // Declared residue numbers need no column name to be read as such.
+        positionColumn: residueAxisForced ? undefined : config.x_col,
+      });
+    },
+    [publishHighlight, config.x_col, residueAxisForced],
+  );
+  const handleUnhover = useCallback(() => publishHighlight(null), [publishHighlight]);
   // Chart annotations. `customdata` holds the series, shared by every point
   // of a curve, so marked points are stored as coordinates.
   const annotations = usePlotAnnotationLayer({
@@ -787,6 +878,8 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
               onSelected: guardedSelection.onSelected,
               onClick: selectionEnabled ? handleClick : undefined,
               onDeselect: selectionEnabled ? handleDeselect : undefined,
+              onHover: onResidueAxis ? handleHover : undefined,
+              onUnhover: onResidueAxis ? handleUnhover : undefined,
             })}
           />
           {annotations.toolbar}

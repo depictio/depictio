@@ -1052,6 +1052,25 @@ class LollipopConfig(_BaseVizConfig):
         default=0, ge=0, description="Label this many most extreme points; 0 draws none"
     )
 
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default: an existing dashboard keeps a lollipop that only reads.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a stem emit a residue selection (the feature and "
+            "the position, shift-click extends the range) that the protein "
+            "tiles and tables of the same columns follow, plus a point "
+            "selection on the selection column when one resolves."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the point selection values belong to. Null uses "
+            "``label_col``; with neither, only the residue selection is emitted."
+        ),
+    )
+
 
 class QQConfig(_BaseVizConfig):
     """Quantile-quantile plot for p-value distributions (GWAS / DE / eQTL QC).
@@ -1662,6 +1681,14 @@ class ProfileConfig(_BaseVizConfig):
     legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
     selection_enabled: bool = Field(default=False)
     selection_column: str | None = Field(default=None)
+    residue_axis: bool | None = Field(
+        default=None,
+        description=(
+            "Whether x is a residue number, so a residue hover or pick on the "
+            "protein tiles draws a line on it. Null guesses from the x column "
+            "name (`position`); true or false forces it"
+        ),
+    )
 
     # --- Derivative panel ---------------------------------------------------
     # The Hi-C contact-probability convention: P(s) on log-log axes with its
@@ -2738,6 +2765,310 @@ class ParallelCoordinatesConfig(_BaseVizConfig):
 
 
 # ---------------------------------------------------------------------------
+# Protein kinds (lot 3). The 3D structure, the MSA and the linear sequence
+# track of one entity share the `residue_selection` cross-filter: the same
+# entity / position column names on their collections, so a click in one
+# narrows or moves the others.
+# ---------------------------------------------------------------------------
+
+
+class Molecule3DConfig(_BaseVizConfig):
+    """A protein structure in 3D, coloured and annotated from a residue table.
+
+    The structure comes from an `indexed_file` DC of `pdb` / `mmcif` objects
+    (one per entity, `structure_source: file`) or is fetched on demand from a
+    UniProt accession, gene name or sequence (`structure_source: resolve`,
+    AlphaFold DB first, ESMFold as a fallback). The tile's bound collection is
+    the residue or variant table that colours and marks it; it may be absent
+    when only the structure is shown.
+    """
+
+    viz_kind: Literal["molecule_3d"] = "molecule_3d"
+
+    structure_source: Literal["file", "resolve"] = Field(
+        default="file",
+        description=(
+            "Where the structure comes from: `file` reads the indexed_file DC "
+            "named by `structure_dc_id`, `resolve` asks the structure resolver "
+            "from the uniprot, gene or sequence column"
+        ),
+    )
+    structure_wf_id: str | None = Field(
+        default=None, description="Workflow id of the structure indexed_file DC (pdb / mmcif)"
+    )
+    structure_dc_id: str | None = Field(
+        default=None,
+        description="Data-collection id of the structure indexed_file DC (pdb / mmcif)",
+    )
+    structure_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the structure DC (resolved to ids at import)",
+    )
+    entity_col: str | None = Field(
+        default="entity",
+        description=(
+            "Column naming the entity (protein) a row belongs to; the entity "
+            "picked by the dashboard filters on it is shown, else the first one"
+        ),
+    )
+    uniprot_col: str | None = Field(
+        default=None, description="Column holding a UniProt accession (resolve mode)"
+    )
+    gene_col: str | None = Field(
+        default=None, description="Column holding a gene symbol (resolve mode)"
+    )
+    sequence_col: str | None = Field(
+        default=None,
+        description="Column holding a one-letter protein sequence, folded by ESMFold (resolve mode)",
+    )
+    taxon: int = Field(
+        default=9606, description="NCBI taxon id used to resolve a gene symbol (resolve mode)"
+    )
+    position_col: str = Field(
+        default="position",
+        description="Residue number column, 1-based in the structure numbering",
+    )
+    chain_col: str | None = Field(default=None, description="Optional chain id column")
+    value_col: str | None = Field(
+        default=None, description="Numeric per-residue column used by `color_mode: value`"
+    )
+    category_col: str | None = Field(
+        default=None,
+        description="Categorical per-residue column (domain, consequence) used by `color_mode: category`",
+    )
+    ref_aa_col: str | None = Field(default=None, description="Reference amino acid column")
+    alt_aa_col: str | None = Field(default=None, description="Alternate amino acid column")
+    label_col: str | None = Field(
+        default=None, description="Residue or variant label column (for example a protein change)"
+    )
+    color_mode: Literal[
+        "plddt",
+        "chain",
+        "spectrum",
+        "value",
+        "category",
+        "uniform",
+        "secondary_structure",
+        "residue_type",
+        "hydrophobicity",
+    ] = Field(
+        default="plddt",
+        description=(
+            "How residues are coloured: `plddt` reads the structure's B-factor "
+            "column, `value` / `category` read the bound collection, "
+            "`secondary_structure`, `residue_type` and `hydrophobicity` read the "
+            "structure itself"
+        ),
+    )
+    colour_scale: ColourScale | None = Field(
+        default=None,
+        description="Continuous colour scale of `color_mode: value`; null uses Viridis",
+    )
+    representation: Literal["cartoon", "trace", "stick", "sphere", "surface"] = Field(
+        default="cartoon", description="Molecular representation"
+    )
+    representations: list[Literal["cartoon", "trace", "stick", "sphere", "surface"]] | None = Field(
+        default=None,
+        description=(
+            "Representations drawn together (for example cartoon and surface); "
+            "when set it replaces `representation`"
+        ),
+    )
+    highlight_site: bool = Field(
+        default=True,
+        description=(
+            "Draw the picked residue or residue range as red ball and stick, "
+            "and mark it in the written sequence"
+        ),
+    )
+    spin: bool = Field(default=False, description="Start with the structure spinning")
+    show_variants: bool = Field(
+        default=True,
+        description="Draw a sphere on the CA atom of every row carrying an alternate residue or a category",
+    )
+    show_labels: bool = Field(default=False, description="Label the marked residues")
+    layout: Literal["structure", "structure_sequence", "structure_msa", "structure_text"] = Field(
+        default="structure",
+        description=(
+            "What the tile holds: the structure alone, the structure over its "
+            "sequence strip, the structure beside the alignment of `msa_dc_id`, "
+            "or the structure over its written sequence, one clickable letter "
+            "per residue"
+        ),
+    )
+    msa_wf_id: str | None = Field(
+        default=None, description="Workflow id of the MSA table (layout `structure_msa`)"
+    )
+    msa_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the MSA table (layout `structure_msa`)"
+    )
+    msa_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the MSA table (resolved to ids at import)",
+    )
+    selection_enabled: bool = Field(
+        default=True, description="Clicking a residue emits a residue_selection filter"
+    )
+    follow_selection: bool = Field(
+        default=True,
+        description="Zoom onto and ring the residues of an incoming residue_selection or hover",
+    )
+
+    @model_validator(mode="after")
+    def _check_sources(self) -> "Molecule3DConfig":
+        if self.structure_source == "resolve" and not (
+            self.uniprot_col or self.gene_col or self.sequence_col
+        ):
+            raise ValueError(
+                "structure_source 'resolve' needs one of uniprot_col, gene_col or sequence_col"
+            )
+        if self.layout == "structure_msa" and not (self.msa_dc_id or self.msa_dc_tag):
+            raise ValueError("layout 'structure_msa' needs msa_dc_id (or msa_dc_tag)")
+        return self
+
+
+class MsaConfig(_BaseVizConfig):
+    """A multiple sequence alignment, one row per sequence, one column per aligned position.
+
+    The bound collection holds one row per aligned sequence (`msa_id`,
+    `seq_id`, `aligned_sequence`, all rows of one `msa_id` the same length).
+    Clicking a row selects that sequence; brushing columns emits a
+    `residue_selection` in the reference row's own numbering, so the
+    structure and the sequence track of the same entity follow it.
+    """
+
+    viz_kind: Literal["msa"] = "msa"
+
+    msa_id_col: str = Field(
+        default="msa_id",
+        description="Column naming the alignment (entity or family) a row belongs to",
+    )
+    seq_id_col: str = Field(default="seq_id", description="Column naming each aligned sequence")
+    sequence_col: str = Field(
+        default="aligned_sequence",
+        description="Aligned sequence column, gaps as `-`, same length within one alignment",
+    )
+    rank_col: str | None = Field(
+        default="rank", description="Row order column; rank 0 is the query / reference row"
+    )
+    identity_col: str | None = Field(
+        default="identity", description="Identity to the reference row, 0 to 1"
+    )
+    color_scheme: Literal["clustal", "zappo", "hydrophobicity", "identity", "none"] = Field(
+        default="clustal", description="Residue colouring scheme"
+    )
+    max_rows: int = Field(
+        default=200, ge=1, le=1000, description="How many aligned sequences the tile draws"
+    )
+    sort_by: Literal["rank", "identity", "input"] = Field(
+        default="rank",
+        description="Row order: rank column, identity to the reference, or input order",
+    )
+    show_consensus: bool = Field(default=True, description="Show the consensus sequence row")
+    show_conservation: bool = Field(
+        default=True, description="Show the per-column conservation bars"
+    )
+    entity_col_for_selection: str = Field(
+        default="entity",
+        description=(
+            "Entity column NAME a column brush filters on, so the filter lands "
+            "on the residue and variant tables of the same dashboard"
+        ),
+    )
+    position_col_for_selection: str = Field(
+        default="position",
+        description="Position column NAME a column brush filters on, in reference coordinates",
+    )
+    chains_col: str | None = Field(
+        default="chains",
+        description=(
+            "Chain layout column of a multi-chain reference row, for example "
+            "`A:1-664,B:665-1004` (each chain's own first and last residue, in "
+            "concatenation order). With a layout a column brush is translated to "
+            "one chain's own numbering; absent or null means a single chain"
+        ),
+    )
+    chain_col_for_selection: str | None = Field(
+        default="chain",
+        description=(
+            "Chain column NAME a column brush on a multi-chain reference filters "
+            "on, beside the entity and position columns"
+        ),
+    )
+    selection_enabled: bool = Field(
+        default=True,
+        description="Row click selects a sequence; column brush emits a residue_selection",
+    )
+    follow_selection: bool = Field(
+        default=True,
+        description="Scroll to and highlight the columns of an incoming residue_selection or hover",
+    )
+
+
+class SequenceTrackConfig(_BaseVizConfig):
+    """The linear sequence of one entity with per-residue lanes.
+
+    A residue ruler with the one-letter sequence, an optional numeric lane
+    (pLDDT or any per-residue score), a category lane (secondary structure,
+    domain), and optional domain spans and variant ticks read from two further
+    collections. Brushing emits a `residue_selection`.
+    """
+
+    viz_kind: Literal["sequence_track"] = "sequence_track"
+
+    entity_col: str | None = Field(
+        default="entity", description="Column naming the entity (protein) a row belongs to"
+    )
+    position_col: str = Field(default="position", description="Residue number column, 1-based")
+    residue_col: str | None = Field(default="residue", description="One-letter residue column")
+    value_col: str | None = Field(
+        default=None, description="Numeric per-residue column drawn as a lane"
+    )
+    category_col: str | None = Field(
+        default=None, description="Categorical per-residue column drawn as a coloured lane"
+    )
+    value_label: str | None = Field(default=None, description="Title of the numeric lane")
+    domains_wf_id: str | None = Field(
+        default=None, description="Workflow id of the domain spans table (optional)"
+    )
+    domains_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the domain spans table (optional)"
+    )
+    domains_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the domain spans table (resolved to ids at import)",
+    )
+    domain_start_col: str = Field(default="start", description="Domain start column")
+    domain_end_col: str = Field(default="end", description="Domain end column")
+    domain_label_col: str = Field(default="label", description="Domain label column")
+    variants_wf_id: str | None = Field(
+        default=None, description="Workflow id of the variant table (optional)"
+    )
+    variants_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the variant table (optional)"
+    )
+    variants_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the variant table (resolved to ids at import)",
+    )
+    variant_position_col: str = Field(
+        default="position", description="Amino-acid position column of the variant table"
+    )
+    variant_label_col: str | None = Field(
+        default="label", description="Variant label column of the variant table"
+    )
+    variant_category_col: str | None = Field(
+        default="category", description="Variant consequence column of the variant table"
+    )
+    selection_enabled: bool = Field(
+        default=True, description="Brushing the track emits a residue_selection"
+    )
+    follow_selection: bool = Field(
+        default=True, description="Highlight the residues of an incoming residue_selection or hover"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Retired kinds, kept alive as views of the kind that survived
 # ---------------------------------------------------------------------------
 
@@ -2897,7 +3228,10 @@ _VizConfigUnion = Annotated[
     | CnvProfileConfig
     | GenomeChordConfig
     | RecordCardConfig
-    | ParallelCoordinatesConfig,
+    | ParallelCoordinatesConfig
+    | Molecule3DConfig
+    | MsaConfig
+    | SequenceTrackConfig,
     Field(discriminator="viz_kind"),
 ]
 

@@ -41,6 +41,11 @@ export default defineConfig({
         replacement: path.resolve(__dirname, '../../packages/depictio-react-core/src'),
       },
       { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
+      // The single-file build inlines every dynamic import, so the real
+      // 3Dmol.js would ride along in every catalog page. The stub throws a
+      // friendly "3D preview unavailable in the catalog" the molecule_3d
+      // renderer shows as its empty state.
+      { find: /^3dmol$/, replacement: path.resolve(__dirname, 'src/catalog-preview/threeDmolStub.ts') },
     ],
     dedupe: [
       'react',

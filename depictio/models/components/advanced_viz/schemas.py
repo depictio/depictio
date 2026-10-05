@@ -298,6 +298,24 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "parallel_coordinates": {
         "sample": _STRING,
     },
+    # Protein kinds (lot 3). The 3D structure and the sequence track read a
+    # residue or variant table where only the residue number is required: the
+    # structure itself comes from an indexed_file DC (pdb / mmcif) or from the
+    # structure resolver, and every other column only colours or marks it.
+    "molecule_3d": {
+        "position": _NUMERIC,
+    },
+    # One row per aligned sequence; every row of one `msa_id` has the same
+    # length (a3m insertions removed by the recipe). The `sequence` role binds
+    # `sequence_col`, whose canonical column is `aligned_sequence`.
+    "msa": {
+        "msa_id": _STRING,
+        "seq_id": _STRING,
+        "sequence": _STRING,
+    },
+    "sequence_track": {
+        "position": _NUMERIC,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -312,6 +330,14 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
 # typical short forms). When adding support for a new tool output whose columns
 # map to a viz role, mirror those column names here so the dtype-aware suggester
 # surfaces the matching viz kind.
+# Shared by the protein kinds (molecule_3d, sequence_track).
+_RESIDUE_POSITION_NAMES = frozenset(
+    {"position", "residue_number", "resnum", "resi", "aa_pos", "protein_position", "pos"}
+)
+_PROTEIN_ENTITY_NAMES = frozenset(
+    {"entity", "protein", "uniprot", "gene", "target", "structure_id"}
+)
+
 ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "volcano": {
         "feature_id": frozenset(
@@ -698,6 +724,36 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": frozenset({"sample", "sample_id", "library", "run", "run_id", "id", "name"}),
         "group": frozenset({"group", "condition", "treatment", "batch", "category", "class"}),
     },
+    "molecule_3d": {
+        "position": _RESIDUE_POSITION_NAMES,
+        "entity": _PROTEIN_ENTITY_NAMES,
+        "chain": frozenset({"chain", "chain_id", "auth_asym_id"}),
+        "value": frozenset({"value", "plddt", "score", "bfactor", "b_factor", "vaf"}),
+        "category": frozenset({"category", "consequence", "domain", "secondary_structure", "ss"}),
+        "ref_aa": frozenset({"ref_aa", "ref", "wt_aa", "reference_aa", "aa_ref"}),
+        "alt_aa": frozenset({"alt_aa", "alt", "mut_aa", "alternate_aa", "aa_alt"}),
+        "label": frozenset({"label", "hgvsp", "protein_change", "aa_change", "name"}),
+        "uniprot": frozenset({"uniprot", "uniprot_id", "accession", "uniprot_accession"}),
+        "gene": frozenset({"gene", "gene_name", "symbol", "gene_symbol"}),
+        "sequence": frozenset({"sequence", "protein_sequence", "aa_sequence", "seq"}),
+    },
+    "msa": {
+        "msa_id": frozenset({"msa_id", "alignment_id", "family", "entity", "query", "target"}),
+        "seq_id": frozenset({"seq_id", "sequence_id", "id", "name", "accession", "hit"}),
+        "sequence": frozenset(
+            {"aligned_sequence", "alignment", "aligned_seq", "sequence", "seq", "aln"}
+        ),
+        "rank": frozenset({"rank", "order", "index", "hit_rank"}),
+        "identity": frozenset({"identity", "pident", "seq_identity", "percent_identity"}),
+        "coverage": frozenset({"coverage", "cov", "query_coverage", "qcov"}),
+    },
+    "sequence_track": {
+        "position": _RESIDUE_POSITION_NAMES,
+        "entity": _PROTEIN_ENTITY_NAMES,
+        "residue": frozenset({"residue", "aa", "amino_acid", "resn", "residue_name"}),
+        "value": frozenset({"value", "plddt", "score", "conservation", "disorder"}),
+        "category": frozenset({"category", "secondary_structure", "ss", "domain", "region"}),
+    },
 }
 
 
@@ -851,6 +907,31 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     },
     "parallel_coordinates": {
         "group": _STRING,
+    },
+    "molecule_3d": {
+        "entity": _STRING,
+        "chain": _STRING,
+        "value": _NUMERIC,
+        "category": _STRING,
+        "ref_aa": _STRING,
+        "alt_aa": _STRING,
+        "label": _STRING,
+        "uniprot": _STRING,
+        "gene": _STRING,
+        "sequence": _STRING,
+    },
+    # `coverage` is a canonical MSA column with no config role yet: the
+    # renderer reads it by name when present, so it is not listed here (an
+    # optional role must map to a `<role>_col` field).
+    "msa": {
+        "rank": _NUMERIC,
+        "identity": _NUMERIC,
+    },
+    "sequence_track": {
+        "entity": _STRING,
+        "residue": _STRING,
+        "value": _NUMERIC,
+        "category": _STRING,
     },
 }
 
@@ -1365,6 +1446,28 @@ class _Draft:
     role_candidates: dict[str, list[str]]
 
 
+# molecule_3d and sequence_track require only a residue `position`, which half
+# the genomic tables carry too (damage profiles, coverage, lollipops). A named
+# match on it alone is no evidence for a protein kind, so the table must also
+# speak protein: a residue, an amino-acid change, a per-residue confidence or a
+# protein identifier. Without one the kinds stay pickable under the bar.
+_PROTEIN_KINDS = frozenset({"molecule_3d", "sequence_track"})
+_PROTEIN_EVIDENCE_RE = re.compile(
+    r"^(entity|residue|residue_name|resn|aa|amino_acid|ref_aa|alt_aa|wt_aa|mut_aa|"
+    r"plddt|uniprot|uniprot_id|protein|protein_id|hgvsp|protein_change|aa_change|"
+    r"chain|chain_id|secondary_structure)$"
+)
+
+
+def _shape_protein(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """molecule_3d / sequence_track: a position alone does not make a protein table."""
+    if any(_PROTEIN_EVIDENCE_RE.match(_normalize_name(c)) for c in dc_schema):
+        return
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    draft.match = "weak"
+    draft.reasons = ["no residue or protein column (residue, ref_aa, plddt, uniprot, entity)"]
+
+
 def _shape_scatter(dc_schema: dict[str, str], draft: _Draft) -> None:
     """scatter_xy by shape: a coordinate pair, or two measurements plus a label."""
     ids = _id_columns(dc_schema)
@@ -1553,6 +1656,8 @@ def _score_kind(
         _shape_profile(dc_schema, draft, named)
     elif kind == "embedding":
         _shape_embedding(dc_schema, draft)
+    elif kind in _PROTEIN_KINDS:
+        _shape_protein(dc_schema, draft)
     elif kind == "sunburst" and not any(
         _is_string(d) and _RANK_NAME_RE.match(_normalize_name(c)) for c, d in dc_schema.items()
     ):
@@ -1757,6 +1862,33 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
     "parallel_coordinates": {
         "sample": "One polyline per distinct value: the line identity, not a facet.",
         "group": "Optional categorical column driving the line colour.",
+    },
+    "molecule_3d": {
+        "position": "Residue number in the structure numbering (1-based).",
+        "entity": "Which structure a row belongs to; the filtered entity is the one shown.",
+        "chain": "Optional chain id, for multi-chain structures.",
+        "value": "Optional per-residue score, used by the value colour mode.",
+        "category": "Optional per-residue class (domain, consequence), used by the category colour mode.",
+        "ref_aa": "Optional reference amino acid of a variant.",
+        "alt_aa": "Optional alternate amino acid; rows carrying one are marked on the structure.",
+        "label": "Optional residue or variant label (for example a protein change).",
+        "uniprot": "UniProt accession used to fetch a predicted structure (resolve mode).",
+        "gene": "Gene symbol used to fetch a predicted structure (resolve mode).",
+        "sequence": "Protein sequence folded on demand when no accession resolves (resolve mode).",
+    },
+    "msa": {
+        "msa_id": "Which alignment a row belongs to (entity or family).",
+        "seq_id": "Name of each aligned sequence: one row of the alignment.",
+        "sequence": "Aligned sequence with gaps as '-', the same length within one alignment.",
+        "rank": "Optional row order; rank 0 is the query or reference row.",
+        "identity": "Optional identity to the reference row, from 0 to 1.",
+    },
+    "sequence_track": {
+        "position": "Residue number (1-based) along the sequence ruler.",
+        "entity": "Which protein a row belongs to; the filtered entity is the one drawn.",
+        "residue": "Optional one-letter amino acid shown on the ruler.",
+        "value": "Optional per-residue score drawn as a lane (pLDDT, conservation).",
+        "category": "Optional per-residue class drawn as a coloured lane.",
     },
 }
 
@@ -2079,6 +2211,33 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
             "one panel per pair."
         ),
         "icon": "tabler:chart-line",
+    },
+    "molecule_3d": {
+        "label": "3D structure",
+        "description": (
+            "A protein structure in 3D, coloured by confidence, chain or a "
+            "per-residue column, with variants marked on it. Linked to the "
+            "sequence and alignment tiles of the same protein."
+        ),
+        "icon": "tabler:cube-3d-sphere",
+    },
+    "msa": {
+        "label": "Sequence alignment",
+        "description": (
+            "A multiple sequence alignment, one row per sequence, coloured by "
+            "residue, with consensus and conservation. A column brush selects "
+            "residues on the linked structure."
+        ),
+        "icon": "tabler:align-justified",
+    },
+    "sequence_track": {
+        "label": "Sequence track",
+        "description": (
+            "One protein's sequence as a residue ruler with per-residue score "
+            "and class lanes, domain spans and variant ticks. Brush to select "
+            "residues."
+        ),
+        "icon": "tabler:ruler-2",
     },
 }
 

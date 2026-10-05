@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "3dmol": "^2.5.5",
     "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",
     "@mantine/carousel": "^7.14.0",

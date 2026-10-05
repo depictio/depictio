@@ -1,4 +1,5 @@
-"""Data-collection config for indexed genomic files (VCF, BAM, bigWig, GFF3, FASTA).
+"""Data-collection config for indexed genomic files (VCF, BAM, bigWig, GFF3, FASTA)
+and for whole-file structure objects (PDB, mmCIF).
 
 An ``indexed_file`` DC is file-backed and has no delta table: the pipeline's
 output files (and their index sidecars) are copied to S3 at ingest, and the
@@ -6,6 +7,11 @@ browser reads them directly over HTTP range requests. That is what GenomeSpy's
 lazy data sources need (indexedFasta, bigwig, bigbed, tabix, vcf, gff3, bam),
 and it is the only way a 200 MB VCF becomes a track without materialising it as
 a table first.
+
+The ``pdb`` / ``mmcif`` formats reuse the same file-backed path for protein
+structures: one structure per entity (the sample id is the entity id), no
+index sidecar, fetched whole by the ``molecule_3d`` viz through the same
+presigned manifest.
 
 One object per sample: the scan matches one primary file per sample, the CLI
 uploads it plus its index under ``indexed_file_s3_prefix(dc_id, sample)``, and
@@ -26,7 +32,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-IndexedFileFormat = Literal["vcf", "bam", "bigwig", "bigbed", "gff3", "fasta", "tabix"]
+IndexedFileFormat = Literal[
+    "vcf", "bam", "bigwig", "bigbed", "gff3", "fasta", "tabix", "pdb", "mmcif"
+]
 
 #: Formats GenomeSpy can read lazily, mapped to the index sidecar suffix the
 #: parser needs. An empty string means the format is self-indexed (bigWig and
@@ -39,6 +47,10 @@ DEFAULT_INDEX_SUFFIX: dict[str, str] = {
     "fasta": ".fai",
     "bigwig": "",
     "bigbed": "",
+    # Structure files are read whole (a few hundred kB to a few MB), never by
+    # range, so they carry no index. Extensions: .pdb, .cif, .mmcif (gz ok).
+    "pdb": "",
+    "mmcif": "",
 }
 
 #: Bucket-relative prefix every indexed file lands under.
@@ -73,6 +85,14 @@ def indexed_file_s3_key(dc_id: str, sample: str, name: str) -> str:
 _STRIPPED_SUFFIXES: tuple[str, ...] = (
     ".vcf.gz",
     ".vcf.bgz",
+    ".pdb.gz",
+    ".ent.gz",
+    ".cif.gz",
+    ".mmcif.gz",
+    ".pdb",
+    ".ent",
+    ".cif",
+    ".mmcif",
     ".gff3.gz",
     ".gff.gz",
     ".bed.gz",
@@ -98,10 +118,13 @@ _STRIPPED_SUFFIXES: tuple[str, ...] = (
 def sample_from_path(path: str, sample_regex: str | None = None) -> str:
     """Name the sample a scanned file belongs to.
 
-    ``sample_regex`` wins when it matches and declares a ``sample`` group;
-    otherwise the file name with its format and compression suffixes stripped is
-    used. The result is sanitised into a single S3 path segment, so a sample id
-    can never introduce a separator or a traversal segment.
+    ``sample_regex`` wins when it matches: its ``sample`` group names the
+    sample; a regex with named groups but no ``sample`` group names it by those
+    groups joined with ``__`` in declaration order (empty groups skipped), so
+    ``(?P<engine>...)/.../(?P<target>...)`` gives ``<engine>__<target>``.
+    Otherwise the file name with its format and compression suffixes stripped
+    is used. The result is sanitised into a single S3 path segment, so a sample
+    id can never introduce a separator or a traversal segment.
     """
     derived: str | None = None
     if sample_regex:
@@ -110,11 +133,12 @@ def sample_from_path(path: str, sample_regex: str | None = None) -> str:
         except re.error:
             match = None
         if match:
-            try:
+            groups = match.re.groupindex
+            if "sample" in groups:
                 derived = match.group("sample")
-            except IndexError:
-                # A regex without a named `sample` group: fall back to the name.
-                derived = None
+            elif groups:
+                parts = [match.group(name) for name in groups]
+                derived = "__".join(part for part in parts if part) or None
     if not derived:
         derived = posixpath.basename(path.replace("\\", "/"))
         lowered = derived.lower()
@@ -140,7 +164,9 @@ class DCIndexedFileConfig(BaseModel):
         description=(
             "File format. Each maps to one GenomeSpy lazy data source: vcf, bam, "
             "bigwig, bigbed, gff3, fasta (indexedFasta) or tabix (any other "
-            "bgzip-compressed, tabix-indexed interval file such as BED)."
+            "bgzip-compressed, tabix-indexed interval file such as BED). "
+            "pdb and mmcif hold protein structures (.pdb, .cif, .mmcif, gzip "
+            "allowed), one per entity, read whole by the molecule_3d viz."
         )
     )
     index_suffix: str | None = Field(
@@ -154,9 +180,10 @@ class DCIndexedFileConfig(BaseModel):
     sample_regex: str | None = Field(
         default=None,
         description=(
-            "Regular expression with a named group 'sample', matched against the "
-            "scanned file path to name the sample. Null falls back to the file "
-            "name with its format and compression suffixes stripped."
+            "Regular expression matched against the scanned file path to name "
+            "the sample: its named group 'sample', or, without one, its named "
+            "groups joined with '__' in declaration order. Null falls back to "
+            "the file name with its format and compression suffixes stripped."
         ),
     )
     sample_col: str = Field(
@@ -192,7 +219,14 @@ class DCIndexedFileConfig(BaseModel):
     def _normalise_format(cls, v):
         if isinstance(v, str):
             normalised = v.lower().strip()
-            aliases = {"bw": "bigwig", "bigWig".lower(): "bigwig", "bb": "bigbed", "gff": "gff3"}
+            aliases = {
+                "bw": "bigwig",
+                "bigWig".lower(): "bigwig",
+                "bb": "bigbed",
+                "gff": "gff3",
+                "cif": "mmcif",
+                "ent": "pdb",
+            }
             normalised = aliases.get(normalised, normalised)
             if normalised not in DEFAULT_INDEX_SUFFIX:
                 raise ValueError(f"format must be one of {sorted(DEFAULT_INDEX_SUFFIX)}")

@@ -1,0 +1,263 @@
+# Protein structure: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+#
+# The whole protein module in one section, in the compact protein-tab layout:
+# a selector (the variant lollipop) on half the width beside the 3D structure
+# over its written sequence, then the sequence track and the alignment full
+# width, then the variant table with its record card. They read four
+# collections that share only the `entity` and `position` column names, which
+# is what carries a residue pick (`residue_selection`) from any tile to every
+# other one. Companion collections are bound by id, as the seed generator
+# resolves no `*_dc_tag`.
+title: 'Protein structure'
+subtitle: 'A predicted structure, its alignment, sequence and variants in one linked view: pick a residue anywhere and every tile follows.'
+icon: 'mdi:molecule'
+icon_color: 'violet'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8dd0'
+is_main_tab: false
+tab_order: 47
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:molecule'
+tab_icon_color: 'violet'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Residue scope'
+    icon: 'mdi:filter-variant'
+    color: 'violet'
+    description: 'Narrows the residue range every tile shows, and the variants drawn on it'
+
+grid_sections:
+  - name: 'Structure, sequence and alignment'
+    icon: 'mdi:dna'
+    color: 'violet'
+    description: 'One protein in 3D, along its sequence and in its alignment, with its variants'
+
+components:
+  - tag: text-protein-structure
+    index: prot-text
+    component_type: text
+    title: 'Protein structure'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Structure, sequence and alignment'
+    body: >
+      A predicted structure over its written sequence beside a lollipop of its variants, then
+      the sequence track, the alignment and the variant table, all joined on the entity and
+      position columns. Click a stem, a residue in 3D or a letter of the sequence, or brush the
+      track or alignment columns, to select that range in every tile (shift-click extends it);
+      hovering a residue highlights it everywhere.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-protein-structure
+    index: 'prot-structure'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_variants_demo'
+    title: 'Structure and its sequence'
+    description: 'The model coloured by per-residue confidence, variants as spheres coloured by consequence, the picked site in red ball and stick, over its written sequence with the variant letters in red. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.'
+    section: 'Structure, sequence and alignment'
+    viz_kind: 'molecule_3d'
+    config:
+      viz_kind: "molecule_3d"
+      controls_placement: popover
+      structure_source: "file"
+      structure_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      structure_dc_id: "646b0f3c1e4a2d7f8e5b8dd1"
+      entity_col: "entity"
+      position_col: "position"
+      ref_aa_col: "ref_aa"
+      alt_aa_col: "alt_aa"
+      category_col: "consequence"
+      value_col: "allele_fraction"
+      label_col: "protein_change"
+      color_mode: "plddt"
+      representation: "cartoon"
+      representations: ["cartoon"]
+      highlight_site: true
+      spin: false
+      show_variants: true
+      layout: "structure_text"
+      msa_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      msa_dc_id: "646b0f3c1e4a2d7f8e5b8dd3"
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 4, y: 2, w: 4, h: 5 }
+
+  - tag: viz-protein-sequence
+    index: 'prot-sequence'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Sequence with confidence, structure, domains and variants'
+    description: 'The amino-acid sequence over a pLDDT lane, the secondary structure as helix and strand glyphs, the domain spans and the variant ticks. Brush a stretch to select it in every tile.'
+    section: 'Structure, sequence and alignment'
+    viz_kind: 'sequence_track'
+    config:
+      viz_kind: "sequence_track"
+      controls_placement: "header"
+      entity_col: "entity"
+      position_col: "position"
+      residue_col: "residue"
+      value_col: "plddt"
+      value_label: "pLDDT"
+      category_col: "secondary_structure"
+      domains_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      domains_dc_id: "646b0f3c1e4a2d7f8e5b8dd5"
+      domain_start_col: "start"
+      domain_end_col: "end"
+      domain_label_col: "domain"
+      variants_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      variants_dc_id: "646b0f3c1e4a2d7f8e5b8dd4"
+      variant_position_col: "position"
+      variant_label_col: "protein_change"
+      variant_category_col: "consequence"
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 0, y: 6, w: 8, h: 5 }
+
+  - tag: viz-protein-msa
+    index: 'prot-msa'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_msa_demo'
+    title: 'Alignment'
+    description: 'Every aligned sequence under the query, Clustal colours, with consensus and conservation. Brush columns to select those residues; click a row to select that sequence.'
+    section: 'Structure, sequence and alignment'
+    viz_kind: 'msa'
+    config:
+      viz_kind: "msa"
+      controls_placement: "header"
+      msa_id_col: "msa_id"
+      seq_id_col: "seq_id"
+      sequence_col: "aligned_sequence"
+      rank_col: "rank"
+      identity_col: "identity"
+      chains_col: null
+      color_scheme: "clustal"
+      max_rows: 150
+      sort_by: "rank"
+      show_consensus: true
+      show_conservation: true
+      entity_col_for_selection: "entity"
+      position_col_for_selection: "position"
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 0, y: 11, w: 8, h: 6 }
+
+  - tag: viz-protein-lollipop
+    index: 'prot-lollipop'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_variants_demo'
+    title: 'Variants along the sequence'
+    description: 'The same variants at their position, head size the allele fraction, colour the consequence. Click a stem to select its residue in every tile.'
+    section: 'Structure, sequence and alignment'
+    viz_kind: 'lollipop'
+    config:
+      viz_kind: "lollipop"
+      controls_placement: popover
+      feature_id_col: "entity"
+      position_col: "position"
+      category_col: "consequence"
+      effect_col: "allele_fraction"
+      label_col: "protein_change"
+      top_n_labels: 4
+      selection_enabled: true
+      selection_column: "protein_change"
+    layout: { x: 0, y: 2, w: 4, h: 5 }
+
+  - tag: table-protein-variants
+    index: 'prot-table'
+    component_type: table
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_variants_demo'
+    title: 'Variants'
+    description: 'One row per variant. Pick a row to open its record beside the table.'
+    section: 'Structure, sequence and alignment'
+    row_selection_enabled: true
+    row_selection_column: 'protein_change'
+    layout: { x: 0, y: 17, w: 5, h: 7 }
+
+  - tag: viz-protein-variant-record
+    index: 'prot-record'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_variants_demo'
+    title: 'Variant record'
+    description: 'The picked variant as a fact panel: the change, where it falls and how frequent it is.'
+    section: 'Structure, sequence and alignment'
+    viz_kind: 'record_card'
+    config:
+      viz_kind: "record_card"
+      id_col: "protein_change"
+      title_col: "protein_change"
+      linked_component: "table-protein-variants"
+      sections:
+        Change: ["ref_aa", "position", "alt_aa", "consequence"]
+        Frequency: ["allele_fraction"]
+        Protein: ["entity"]
+    layout: { x: 5, y: 17, w: 3, h: 7 }
+
+  - tag: filter-protein-position
+    index: prot-f-position
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'position'
+    column_type: 'int64'
+    title: 'Residue range'
+    placement: left
+    section: 'Residue scope'
+    group: 'Residue filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-protein-consequence
+    index: prot-f-consequence
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_variants_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'consequence'
+    column_type: 'object'
+    title: 'Consequence'
+    placement: left
+    section: 'Residue scope'
+    group: 'Variant filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-protein-allele-fraction
+    index: prot-f-af
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_variants_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'allele_fraction'
+    column_type: 'float64'
+    title: 'Allele fraction'
+    placement: left
+    show_histogram: true
+    section: 'Residue scope'
+    group: 'Variant filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

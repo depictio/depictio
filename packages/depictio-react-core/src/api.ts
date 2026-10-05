@@ -826,6 +826,11 @@ export type InteractiveFilterSource =
    *  position range) because the pipeline filters by column and a genomic
    *  region is two columns. See `genomeRegionFilters` in `selection.ts`. */
   | 'genome_selection'
+  /** A residue range picked on a protein tile (molecule_3d, msa,
+   *  sequence_track, lollipop). Same pair shape as `genome_selection`: an
+   *  entity multi-select and a position range. See `residueRangeFilters` in
+   *  `selection.ts`. */
+  | 'residue_selection'
   /** A range brushed on one axis of a `parallel_coordinates` tile. Emits an
    *  ordinary RangeSlider entry on that axis's column. */
   | 'axis_selection'
@@ -1063,7 +1068,10 @@ export type AdvancedVizKind =
   | 'cnv_profile'
   | 'genome_chord'
   | 'record_card'
-  | 'parallel_coordinates';
+  | 'parallel_coordinates'
+  | 'molecule_3d'
+  | 'msa'
+  | 'sequence_track';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

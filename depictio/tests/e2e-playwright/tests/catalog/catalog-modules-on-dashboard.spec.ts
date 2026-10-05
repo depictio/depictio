@@ -192,6 +192,11 @@ const KIND_CONTENT_SELECTOR: Record<string, string> = {
   genome_chord: 'svg[role="img"]',
   record_card: ".mantine-Card-root",
   group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
+  // A 3D tile placed alone has no structure collection bound and CI runs with
+  // the structure resolver off, so its explained empty state is a pass.
+  molecule_3d: '.depictio-molecule-3d canvas, [data-testid="advanced-viz-empty"]',
+  msa: ".depictio-msa canvas",
+  sequence_track: ".depictio-sequence-track canvas",
 };
 
 /** How long to wait for CONTENT_SELECTOR, per component type.

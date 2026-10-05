@@ -11,6 +11,7 @@ const SELECTION_SOURCES = new Set([
   'table_selection',
   'map_selection',
   'tree_selection',
+  'residue_selection',
 ]);
 
 export function isSelectionFilter(f: InteractiveFilter): boolean {

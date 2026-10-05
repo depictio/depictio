@@ -78,6 +78,13 @@ export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: bool
   );
 }
 
+/** Kinds whose config model defaults `selection_enabled` to true. */
+const SELECTION_ON_BY_DEFAULT: ReadonlySet<string> = new Set([
+  'molecule_3d',
+  'msa',
+  'sequence_track',
+]);
+
 /**
  * The DC column an advanced_viz component emits its selection on, or
  * `undefined` when it cannot emit one at all.
@@ -103,19 +110,23 @@ export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: bool
  */
 export function advancedVizSelectionColumn(metadata: StoredMetadata): string | undefined {
   const config = (metadata.config ?? {}) as Record<string, unknown>;
-  if (config.selection_enabled !== true) return undefined;
-  const named =
-    typeof config.selection_column === 'string' && config.selection_column
-      ? config.selection_column
-      : undefined;
-  switch (typeof metadata.viz_kind === 'string' ? metadata.viz_kind : '') {
-    case 'embedding': {
-      const sampleIdCol =
-        typeof config.sample_id_col === 'string' && config.sample_id_col
-          ? config.sample_id_col
-          : undefined;
-      return named ?? sampleIdCol;
-    }
+  const kind = typeof metadata.viz_kind === 'string' ? metadata.viz_kind : '';
+  // The protein kinds select by default (their models default
+  // `selection_enabled` to true), so a stored blob that omits the key still
+  // emits; every other kind stays opt-in.
+  const enabled =
+    typeof config.selection_enabled === 'boolean'
+      ? config.selection_enabled
+      : SELECTION_ON_BY_DEFAULT.has(kind);
+  if (!enabled) return undefined;
+  const configColumn = (key: string): string | undefined => {
+    const value = config[key];
+    return typeof value === 'string' && value ? value : undefined;
+  };
+  const named = configColumn('selection_column');
+  switch (kind) {
+    case 'embedding':
+      return named ?? configColumn('sample_id_col');
     case 'manhattan':
       return named;
     case 'genome_view':
@@ -124,29 +135,31 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // brush is a separate path (`genomeRegionFilters` below) that needs no
       // opt-in, because a chromosome and a position range are never ambiguous.
       return named;
-    case 'profile': {
-      const seriesCol =
-        typeof config.series_col === 'string' && config.series_col
-          ? config.series_col
-          : undefined;
-      return named ?? seriesCol;
-    }
-    case 'scatter_xy': {
+    case 'profile':
+      return named ?? configColumn('series_col');
+    case 'scatter_xy':
       // The label column, because that is what identifies a point: the axes are
       // numeric by definition and the colour column is a grouping, so filtering
       // on either would select a band rather than the points that were clicked.
-      const labelCol =
-        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
-      return named ?? labelCol;
-    }
-    case 'genome_chord': {
+      return named ?? configColumn('label_col');
+    case 'genome_chord':
       // A chord is one named link between two loci, so its label is the
       // identifier. The two chromosome columns are a grouping and the positions
       // are numeric, so neither could stand in for it.
-      const chordLabelCol =
-        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
-      return named ?? chordLabelCol;
-    }
+      return named ?? configColumn('label_col');
+    case 'molecule_3d':
+    case 'sequence_track':
+      // A picked residue is a position; the entity half travels in the
+      // `residue_selection` filter pair, not in this scatter-style column.
+      return configColumn('position_col') ?? 'position';
+    case 'msa':
+      // A row click picks one sequence of the alignment.
+      return configColumn('seq_id_col') ?? 'seq_id';
+    case 'lollipop':
+      // A stem is a variant at a position of a feature. Its label names it
+      // when one is bound; otherwise the pick is the position, whose feature
+      // half travels in the `residue_selection` pair like the protein kinds.
+      return named ?? configColumn('label_col') ?? configColumn('position_col') ?? 'position';
     default:
       return undefined;
   }
@@ -209,12 +222,19 @@ export function isRegionFilter(f: InteractiveFilter): boolean {
   return f.source === 'genome_selection';
 }
 
+/** A genome region or a residue range: a place to look, never a subset a
+ *  card should summarise (see `cardScopedFilters`). */
+function isLocusFilter(f: InteractiveFilter): boolean {
+  return isRegionFilter(f) || isResidueFilter(f);
+}
+
 /**
- * The filters a card reads: every active filter except the genome region,
- * unless the card opts in with `follow_region_filter`.
+ * The filters a card reads: every active filter except a genome region or a
+ * residue range, unless the card opts in with `follow_region_filter`.
  *
  * A region is a place to look, not a subset to summarise, so a card keeps
- * summarising the whole collection while the tracks follow the locus. Mirrors
+ * summarising the whole collection while the tracks follow the locus (or the
+ * protein tiles follow the residue pick). Mirrors
  * `depictio/api/v1/region_scope.py`, which applies the same rule server-side
  * in `bulk_compute_cards` and the card preview routes.
  */
@@ -223,7 +243,7 @@ export function cardScopedFilters(
   card: { follow_region_filter?: unknown } | null | undefined,
 ): InteractiveFilter[] {
   if (card?.follow_region_filter === true) return filters;
-  return filters.some(isRegionFilter) ? filters.filter((f) => !isRegionFilter(f)) : filters;
+  return filters.some(isLocusFilter) ? filters.filter((f) => !isLocusFilter(f)) : filters;
 }
 
 /**
@@ -365,6 +385,204 @@ export function regionFromFilters(
   return { chrom, start: range[0], end: range[1] };
 }
 
+/** Index suffix of the position-range half of a residue selection, the
+ *  `::pos` of a genome region for the same reason (two halves, two keys). */
+export const RESIDUE_RANGE_INDEX_SUFFIX = '::res';
+
+export function residueRangeFilterIndex(componentIndex: string): string {
+  return `${componentIndex}${RESIDUE_RANGE_INDEX_SUFFIX}`;
+}
+
+/** Index suffix of the chain half of a residue pick on a complex, which
+ *  numbers each chain on its own (`chainSelectionFilter` builds the entry). */
+export const CHAIN_SELECTION_INDEX_SUFFIX = '::chain';
+
+export function chainSelectionFilterIndex(componentIndex: string): string {
+  return `${componentIndex}${CHAIN_SELECTION_INDEX_SUFFIX}`;
+}
+
+/** True for either half of a residue selection (`source: 'residue_selection'`). */
+export function isResidueFilter(f: InteractiveFilter): boolean {
+  return f.source === 'residue_selection';
+}
+
+/** The column a filter applies to, wherever it carries it. */
+export function filterColumn(f: InteractiveFilter): string | undefined {
+  return f.column_name ?? f.metadata?.column_name;
+}
+
+/** What a protein tile picked: a residue range on one entity. */
+export interface ResidueRangeSelection {
+  /** Column naming the protein (or family) the range belongs to. `null` or
+   *  omitted when the bound tables hold one entity only: the range half is
+   *  then emitted alone. */
+  entityColumn?: string | null;
+  /** Column holding the 1-based residue number. */
+  positionColumn: string;
+  /** The picked entity. `null` with a range means "this range, any entity". */
+  entity?: string | null;
+  /** First residue of the range; `null` clears the selection. */
+  start: number | null;
+  /** Last residue, inclusive. Defaults to `start` (a single residue). */
+  end?: number | null;
+  /** The emitting tile's DC, for the backend's link resolution. */
+  dcId?: string;
+}
+
+/**
+ * The filter pair a protein tile emits for a residue range.
+ *
+ * The genome region's shape (`genomeRegionFilters`) on protein coordinates:
+ * a `MultiSelect` on the entity column carrying `[entity]` and a `RangeSlider`
+ * on the position column carrying `[start, end]` (inclusive, so a single
+ * residue is `[p, p]`). Both are ordinary column filters, so a residue or
+ * variant table naming the same two columns narrows with no server change,
+ * and every protein tile reads the range back by column name
+ * (`residueRangeFromFilters`), whichever tile or sidebar control set it.
+ *
+ * `start: null` returns the cleared form of both halves (`value: []`), which
+ * `mergeFiltersBySource` drops: that is how a tile resets its selection.
+ */
+export function residueRangeFilters(
+  index: string,
+  selection: ResidueRangeSelection,
+): InteractiveFilter[] {
+  const { entityColumn, positionColumn, dcId } = selection;
+  const lo = selection.start;
+  const hiRaw = selection.end ?? selection.start;
+  const valid = lo != null && hiRaw != null && Number.isFinite(lo) && Number.isFinite(hiRaw);
+  const range: [number, number] | [] = valid
+    ? [Math.round(Math.min(lo, hiRaw)), Math.round(Math.max(lo, hiRaw))]
+    : [];
+  const entity = valid && selection.entity != null && selection.entity !== ''
+    ? [String(selection.entity)]
+    : [];
+  const half = (
+    halfIndex: string,
+    value: string[] | [number, number] | [],
+    column: string,
+    componentType: 'MultiSelect' | 'RangeSlider',
+  ): InteractiveFilter => ({
+    index: halfIndex,
+    value,
+    source: 'residue_selection',
+    column_name: column,
+    interactive_component_type: componentType,
+    metadata: {
+      dc_id: dcId,
+      column_name: column,
+      interactive_component_type: componentType,
+      selection_column: column,
+    },
+  });
+  const rangeHalf = half(residueRangeFilterIndex(index), range, positionColumn, 'RangeSlider');
+  return entityColumn
+    ? [half(index, entity, entityColumn, 'MultiSelect'), rangeHalf]
+    : [rangeHalf];
+}
+
+/** The entity a filter list names on `entityColumn`, when it names exactly
+ *  one (any source: another tile's pick, a sidebar selector). */
+export function residueEntityFromFilters(
+  filters: readonly InteractiveFilter[],
+  entityColumn: string | null | undefined,
+): string | null {
+  if (!entityColumn) return null;
+  let entity: string | null = null;
+  for (const f of filters) {
+    if (filterColumn(f) !== entityColumn) continue;
+    const v = f.value;
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      if (v.length !== 1) return null;
+      entity = String(v[0]);
+    } else if (typeof v === 'string' || typeof v === 'number') {
+      entity = String(v);
+    }
+  }
+  return entity;
+}
+
+/**
+ * Read a residue range back out of the filter list, BY COLUMN NAME and from
+ * any source, so another tile's click, a sidebar position slider or a table
+ * of the same columns all drive a following tile the same way
+ * (`regionFromFilters` for proteins).
+ *
+ * Returns `null` when no range is set on `positionColumn`, or when the entity
+ * column carries several entities (a range on "A and B" is nowhere to look).
+ * `entity` is `null` when nothing names one: the range then applies to
+ * whichever entity the reading tile shows.
+ */
+export function residueRangeFromFilters(
+  filters: readonly InteractiveFilter[],
+  entityColumn: string | null | undefined,
+  positionColumn: string,
+): { entity: string | null; start: number; end: number } | null {
+  let range: [number, number] | null = null;
+  let entityValues = 0;
+  let entity: string | null = null;
+  for (const f of filters) {
+    const column = filterColumn(f);
+    if (entityColumn && column === entityColumn) {
+      const v = f.value;
+      const values = Array.isArray(v) ? v : v == null || v === '' ? [] : [v];
+      if (values.length === 0) continue;
+      entityValues = values.length;
+      entity = values.length === 1 ? String(values[0]) : null;
+    } else if (column === positionColumn && Array.isArray(f.value) && f.value.length === 2) {
+      const lo = Number(f.value[0]);
+      const hi = Number(f.value[1]);
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+      const span: [number, number] = [Math.min(lo, hi), Math.max(lo, hi)];
+      // Several range filters on the position column (a tile's pick and a
+      // sidebar slider) all apply server-side, so what is left is their
+      // intersection; an empty intersection selects nothing.
+      range = range ? [Math.max(range[0], span[0]), Math.min(range[1], span[1])] : span;
+    }
+  }
+  if (!range || range[0] > range[1]) return null;
+  if (entityValues > 1) return null;
+  return { entity, start: range[0], end: range[1] };
+}
+
+/**
+ * `filters` without the position halves of every `residue_selection` on
+ * `positionColumn`, whichever tile emitted them.
+ *
+ * For a tile that draws the whole protein along that column (a lollipop, a
+ * per-residue profile): a picked range is a place to look, so the tile keeps
+ * every position and shades the range instead of being clipped to it. The
+ * entity half stays, so a pick on another protein still switches the tile to
+ * that protein's rows.
+ */
+export function withoutResidueRanges(
+  filters: InteractiveFilter[],
+  positionColumn: string,
+): InteractiveFilter[] {
+  return filters.filter(
+    (f) =>
+      !(
+        isResidueFilter(f) &&
+        filterColumn(f) === positionColumn &&
+        f.index.endsWith(RESIDUE_RANGE_INDEX_SUFFIX)
+      ),
+  );
+}
+
+/** The filter list a residue-emitting tile renders against: every filter
+ *  except both halves of its own `residue_selection`, so it keeps drawing the
+ *  whole protein and rings its pick instead of hiding the rest. */
+export function filtersExcludingOwnResidue(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+): InteractiveFilter[] {
+  const resIndex = residueRangeFilterIndex(componentIndex);
+  return filters.filter(
+    (f) => !(isResidueFilter(f) && (f.index === componentIndex || f.index === resIndex)),
+  );
+}
+
 /**
  * The filter list a selection-source component should render against: every
  * dashboard filter *except* the one it emitted itself.
@@ -379,6 +597,49 @@ export function filtersExcludingOwn(
   source: InteractiveFilterSource,
 ): InteractiveFilter[] {
   return filters.filter((f) => !(f.index === componentIndex && f.source === source));
+}
+
+/**
+ * The crossfilter rule for a selector tile: every dashboard filter except its
+ * own selection AND every filter, from any source, on the column it selects
+ * on (`selectionColumn`, see `advancedVizSelectionColumn`).
+ *
+ * Filters match by column name across data collections, so a protein tile's
+ * residue pick (entity half on `entity`) or a sidebar picker on the same
+ * column would otherwise narrow a scatter that selects on `entity` to the one
+ * point it names, and the reader could no longer pick another. The tile keeps
+ * every point and marks the named ones instead (`valuesOnColumn`). Filters on
+ * any other column still narrow it. Without a selection column this is
+ * `filtersExcludingOwn`.
+ */
+export function filtersForSelector(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+  selectionColumn: string | null | undefined,
+): InteractiveFilter[] {
+  const others = filtersExcludingOwn(filters, componentIndex, source);
+  return selectionColumn ? others.filter((f) => filterColumn(f) !== selectionColumn) : others;
+}
+
+/**
+ * Every value the filters name on `column` (any source), as strings. With
+ * `exclude`, the entry that component emitted from that source is skipped.
+ */
+export function valuesOnColumn(
+  filters: readonly InteractiveFilter[],
+  column: string | null | undefined,
+  exclude?: { index: string; source: InteractiveFilterSource },
+): Set<string> {
+  const out = new Set<string>();
+  if (!column) return out;
+  for (const f of filters) {
+    if (filterColumn(f) !== column) continue;
+    if (exclude && f.index === exclude.index && f.source === exclude.source) continue;
+    const values = Array.isArray(f.value) ? f.value : [f.value];
+    for (const x of values) if (x != null && x !== '') out.add(String(x));
+  }
+  return out;
 }
 
 /** Whether the dashboard still holds a non-empty selection this component emitted. */
@@ -412,6 +673,7 @@ const CLEARABLE_SELECTION_SOURCES: ReadonlySet<InteractiveFilterSource> = new Se
   'map_selection',
   'image_selection',
   'genome_selection',
+  'residue_selection',
 ]);
 
 /** The selection one tile currently contributes to the dashboard. */
@@ -426,24 +688,33 @@ export interface OwnSelection {
 
 /**
  * Read back the selection a tile has emitted, keyed on its own index (and the
- * `::pos` index of a genome region's second half) so another tile's selection
- * on the same column never counts as this one's.
+ * `::pos` / `::res` index of a region's or residue range's second half, and
+ * the `::chain` index of a residue pick on a complex) so another tile's
+ * selection on the same column never counts as this one's.
  */
 export function ownSelection(
   filters: readonly InteractiveFilter[],
   componentIndex: string,
 ): OwnSelection {
   const posIndex = genomePosFilterIndex(componentIndex);
+  const resIndex = residueRangeFilterIndex(componentIndex);
+  const chainIndex = chainSelectionFilterIndex(componentIndex);
+  const halves = new Set([componentIndex, posIndex, resIndex, chainIndex]);
   const own: InteractiveFilter[] = [];
   let count = 0;
+  let residueHalfOnly = false;
   for (const f of filters) {
-    if (f.index !== componentIndex && f.index !== posIndex) continue;
+    if (!halves.has(f.index)) continue;
     if (!f.source || !CLEARABLE_SELECTION_SOURCES.has(f.source)) continue;
     const v = f.value;
     if (v == null || (Array.isArray(v) && v.length === 0)) continue;
     own.push(f);
     if (f.index === componentIndex) count += Array.isArray(v) ? v.length : 1;
+    else if (f.index === resIndex || f.index === chainIndex) residueHalfOnly = true;
   }
+  // A residue range on a single-entity tile has no entity half; it is still
+  // one selection the reader can clear (so is a chain pick left on its own).
+  if (count === 0 && residueHalfOnly) count = 1;
   return { filters: own, count };
 }
 
@@ -513,6 +784,37 @@ export function extractRowSelection(
   return out;
 }
 
+/** The component index a residue pick's half belongs to (its entity half's index). */
+function residuePickIndex(index: string): string {
+  for (const suffix of [RESIDUE_RANGE_INDEX_SUFFIX, CHAIN_SELECTION_INDEX_SUFFIX]) {
+    if (index.endsWith(suffix)) return index.slice(0, -suffix.length);
+  }
+  return index;
+}
+
+/**
+ * Residue picks whose entity `next` no longer allows: `next` is another
+ * source's pick of values on the entity column of the pick, and the pick's
+ * entity is not among them. Returns their component indices.
+ */
+function residuePicksLeftBehind(
+  filters: InteractiveFilter[],
+  next: InteractiveFilter,
+): Set<string> {
+  const stale = new Set<string>();
+  const column = filterColumn(next);
+  const type = next.interactive_component_type ?? next.metadata?.interactive_component_type;
+  if (isResidueFilter(next) || column == null || type === 'RangeSlider') return stale;
+  if (!Array.isArray(next.value) || next.value.length === 0) return stale;
+  const allowed = new Set(next.value.map(String));
+  for (const f of filters) {
+    if (!isResidueFilter(f) || filterColumn(f) !== column || !Array.isArray(f.value)) continue;
+    if (residuePickIndex(f.index) !== f.index) continue;
+    if (f.value.some((v) => !allowed.has(String(v)))) stale.add(f.index);
+  }
+  return stale;
+}
+
 /**
  * Add or replace a filter, deduping by ``(index, source)``.
  *
@@ -522,13 +824,30 @@ export function extractRowSelection(
  * AND emit a selection — so we key by the tuple.
  *
  * Passing ``value === null | undefined | []`` clears the matching entry.
+ *
+ * A ``residue_selection`` also replaces the ones other tiles made on the same
+ * column: the protein tiles of a tab share one residue range, so the last
+ * gesture wins instead of intersecting with an older pick (a click on residue
+ * 22 in 3D then a brush over 40-70 in the alignment would match nothing).
+ *
+ * A filter that moves the entity column elsewhere drops the residue picks made
+ * on the old entity: after residue 30 of gene X, a click on gene Y in a gene
+ * scatter would otherwise keep `gene=[X]` alongside `gene=[Y]` and match nothing.
  */
 export function mergeFiltersBySource(
   filters: InteractiveFilter[],
   next: InteractiveFilter,
 ): InteractiveFilter[] {
+  const sameResidueColumn = (f: InteractiveFilter) =>
+    isResidueFilter(next) &&
+    isResidueFilter(f) &&
+    filterColumn(f) != null &&
+    filterColumn(f) === filterColumn(next);
+  const stalePicks = residuePicksLeftBehind(filters, next);
   const matches = (f: InteractiveFilter) =>
-    f.index === next.index && (f.source ?? null) === (next.source ?? null);
+    (f.index === next.index && (f.source ?? null) === (next.source ?? null)) ||
+    sameResidueColumn(f) ||
+    (isResidueFilter(f) && stalePicks.has(residuePickIndex(f.index)));
 
   const cleared =
     next.value === null ||

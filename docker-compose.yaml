@@ -112,6 +112,9 @@ services:
       DEPICTIO_FEEDBACK_ENABLED: "${DEPICTIO_FEEDBACK_ENABLED:-false}"
       DEPICTIO_FEEDBACK_URL: "${DEPICTIO_FEEDBACK_URL:-}"
       DEPICTIO_FEEDBACK_LABEL: "${DEPICTIO_FEEDBACK_LABEL:-Feedback}"
+      # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
+      # Off by default: accessions, gene names or sequences leave the server.
+      DEPICTIO_STRUCTURE_RESOLVER_ENABLED: "${DEPICTIO_STRUCTURE_RESOLVER_ENABLED:-false}"
       # Forwarded so the automatic CI suppression works through the container
       # boundary. These are set on the machine running Compose, not inside the
       # container, so without this a pipeline that brings Depictio up on every
@@ -143,6 +146,9 @@ services:
     container_name: depictio-viewer
     ports:
       - 5080:8080
+    environment:
+      # Browser-facing S3 origin when storage is another host (presigned file tiles).
+      DEPICTIO_CSP_CONNECT_EXTRA: ${DEPICTIO_CSP_CONNECT_EXTRA:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s

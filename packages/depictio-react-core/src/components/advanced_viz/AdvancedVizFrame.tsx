@@ -377,6 +377,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     </Alert>
   ) : emptyMessage ? (
     <div
+      data-testid="advanced-viz-empty"
       style={{
         display: 'flex',
         alignItems: 'center',

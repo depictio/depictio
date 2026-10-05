@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InteractiveFilter } from '../../../api';
+import { residueRangeFilters } from '../../../selection';
 import { honouredSelectionSources, readRecordSelection } from './recordSelection';
 
 const scatter = (values: unknown[], dcId = 'dc-1'): InteractiveFilter => ({
@@ -21,12 +22,10 @@ const table = (values: unknown[], dcId = 'dc-1'): InteractiveFilter => ({
 });
 
 describe('honouredSelectionSources', () => {
-  it('takes both sources for "any" and for an unset value', () => {
-    expect(honouredSelectionSources('any')).toEqual(['scatter_selection', 'table_selection']);
-    expect(honouredSelectionSources(undefined)).toEqual([
-      'scatter_selection',
-      'table_selection',
-    ]);
+  it('takes every source for "any" and for an unset value', () => {
+    const all = ['scatter_selection', 'table_selection', 'residue_selection'];
+    expect(honouredSelectionSources('any')).toEqual(all);
+    expect(honouredSelectionSources(undefined)).toEqual(all);
   });
 
   it('narrows to the named source', () => {
@@ -86,5 +85,54 @@ describe('readRecordSelection with a linked component', () => {
       })?.values,
     ).toEqual(['R1']);
     expect(readRecordSelection([scatter(['S1'])], { linkedIndex: 'tile-b' })).toBeNull();
+  });
+});
+
+describe('readRecordSelection with a residue pick', () => {
+  const pick = (start: number, end: number, entity: string | null = 'P1', dcId = 'dc-var') =>
+    residueRangeFilters('mol', {
+      entityColumn: entity === null ? null : 'entity',
+      positionColumn: 'position',
+      entity,
+      start,
+      end,
+      dcId,
+    });
+
+  it('reads the pair as one selection on the entity', () => {
+    expect(readRecordSelection(pick(10, 20), { dcId: 'dc-var' })).toEqual({
+      source: 'residue_selection',
+      column: 'entity',
+      values: ['P1'],
+      ownCollection: true,
+    });
+  });
+
+  it('matches on the spanned positions when there is no entity half', () => {
+    const picked = readRecordSelection(pick(3, 5, null), { dcId: 'dc-var' });
+    expect(picked).toMatchObject({ column: 'position', values: ['3', '4', '5'] });
+  });
+
+  it('follows the linked protein tile through both halves', () => {
+    const filters = [scatter(['S1']), ...pick(10, 20)];
+    expect(readRecordSelection(filters, { dcId: 'dc-var', linkedIndex: 'mol' })?.source).toBe(
+      'residue_selection',
+    );
+    expect(readRecordSelection(pick(10, 20), { linkedIndex: 'other' })).toBeNull();
+  });
+
+  it('is not followed when the card names another source', () => {
+    expect(
+      readRecordSelection(pick(10, 20), { dcId: 'dc-var', selectionSource: 'scatter_selection' }),
+    ).toBeNull();
+  });
+
+  it('ignores a cleared pick', () => {
+    const cleared = residueRangeFilters('mol', {
+      entityColumn: 'entity',
+      positionColumn: 'position',
+      start: null,
+    });
+    expect(readRecordSelection(cleared, { dcId: 'dc-var' })).toBeNull();
   });
 });

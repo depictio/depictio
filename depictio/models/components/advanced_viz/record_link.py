@@ -31,7 +31,28 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "profile": ("selection_column", "series_col"),
     "scatter_xy": ("selection_column", "label_col"),
     "genome_chord": ("selection_column", "label_col"),
+    # Protein kinds (lot 3). A picked residue is a position (the entity half
+    # travels in the `residue_selection` filter pair); an MSA row is a sequence.
+    # The trailing literal is the model default, used when the field is unset.
+    "molecule_3d": ("position_col", "=position"),
+    "msa": ("seq_id_col", "=seq_id"),
+    "sequence_track": ("position_col", "=position"),
+    # A stem: its label when bound, else its position (the feature half travels
+    # in the `residue_selection` pair, as for the protein kinds). Opt-in.
+    "lollipop": ("selection_column", "label_col", "position_col", "=position"),
 }
+
+# Kinds whose pick reaches a record card as a `residue_selection` pair (an
+# entity and a position range) that the server applies as ordinary column
+# filters. The card then shows the rows in the range whatever its `id_col`, so
+# the id_col agreement check does not apply to them. Mirrors
+# `readRecordSelection` in record_card/recordSelection.ts.
+RESIDUE_EMITTING_KINDS: frozenset[str] = frozenset({"molecule_3d", "sequence_track", "lollipop"})
+
+# Kinds whose config model defaults `selection_enabled` to true, so a raw YAML
+# config that omits the key still emits. Mirrors `SELECTION_ON_BY_DEFAULT` in
+# selection.ts.
+SELECTION_ON_BY_DEFAULT: frozenset[str] = frozenset({"molecule_3d", "msa", "sequence_track"})
 
 
 class LinkedComponentError(ValueError):
@@ -119,10 +140,13 @@ def emitted_selection_column(
         return None
     if ctype == "advanced_viz":
         cfg = config if config is not None else _config(comp)
-        fields = SELECTION_EMITTING_KINDS.get(str(cfg.get("viz_kind") or viz_kind_of(comp)))
-        if not fields or cfg.get("selection_enabled") is not True:
+        kind = str(cfg.get("viz_kind") or viz_kind_of(comp))
+        fields = SELECTION_EMITTING_KINDS.get(kind)
+        if not fields or cfg.get("selection_enabled", kind in SELECTION_ON_BY_DEFAULT) is not True:
             return None
         for field in fields:
+            if field.startswith("="):
+                return field[1:]
             if cfg.get(field):
                 return str(cfg[field])
     return None
@@ -165,6 +189,9 @@ def linked_component_problems(
                 f"advanced_viz one of {sorted(SELECTION_EMITTING_KINDS)} with "
                 "selection_enabled)"
             )
+            continue
+        source_kind = str((config or {}).get("viz_kind") or viz_kind_of(source) or "")
+        if source_kind in RESIDUE_EMITTING_KINDS:
             continue
         id_col = str(_config(card).get("id_col") or "id")
         same_dc = card.get("data_collection_tag") == source.get("data_collection_tag")
