@@ -1,10 +1,12 @@
 # EMBL Dev Environment - dev.demo.depictio.embl.org
-# All tags (including beta) deploy to this environment
+# Every tag (beta and stable) deploys here automatically
 #
 # Layered on top of:
 #   - values.yaml (base configuration)
 #   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
-#   - values-embl-secrets.yaml (S3 credentials)
+#   - values-embl-secrets.yaml (shared secrets), then
+#     values-embl-secrets-demodev.yaml (dev's own S3 bucket); both kept on the
+#     self-hosted runner, outside the repo
 #
 # Tenant quota: 32 CPU / 64 GiB / 30 pods, shared between this env and
 # values-embl-demo.yaml. Budget with MongoDB Community Operator HA (3 replicas
