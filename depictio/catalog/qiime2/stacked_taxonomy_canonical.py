@@ -14,6 +14,8 @@ Canonical schema (see depictio/models/components/advanced_viz/schemas.py):
 
 Optional roles:
     lineage : Utf8 — full ``Kingdom;Phylum;…`` lineage string
+    <metadata columns> : Utf8 — every categorical sample-metadata column, for
+        the renderer's annotation strips
 """
 
 import polars as pl
@@ -63,6 +65,9 @@ SOURCES: list[RecipeSource] = [
 ]
 
 _METADATA_ID_COL = "sample"  # `Metadata_full.tsv` calls the sample col "sample"
+# A metadata column with more categories than this is an identifier or a
+# measurement, not something an annotation strip can colour legibly.
+_MAX_STRIP_CATEGORIES = 25
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
@@ -168,25 +173,41 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     long = long.with_columns(pl.col("taxon").cast(pl.Utf8))
 
-    # Optional habitat join + sort. The StackedTaxonomy renderer's default
-    # ``sample sort`` mode is ``input`` (preserves the row order it reads
-    # from the DC), so sorting the recipe output by (habitat, sample_id)
-    # makes the rendered bars group adjacently per habitat — easier to read
-    # cross-habitat composition shifts than alphabetical sample IDs.
+    # Metadata join + sort. The renderer's annotation strips colour each bar by
+    # a per-sample column read from this DC, so every categorical metadata
+    # column has to be here, not just the reference dataset's `habitat` (a run
+    # grouped by `locality` got one colour for every sample). Only
+    # low-cardinality string columns are joined: they are the only ones a strip
+    # can show, and each joined column is repeated on every (sample, taxon) row.
+    #
+    # The renderer's default ``sample sort`` mode is ``input`` (it preserves the
+    # row order it reads), so sorting by the grouping column groups the bars by
+    # it. That column is `habitat` when present, else the first joined column
+    # (the template convention: metadata column 2 is the grouping column).
     metadata = sources.get("metadata")
-    if metadata is not None and "habitat" in metadata.columns:
+    if metadata is not None:
         sample_col = next(
             (c for c in (_METADATA_ID_COL, "ID", "sample_id") if c in metadata.columns), None
         )
         if sample_col is not None:
-            sample_to_habitat = (
-                metadata.select(sample_col, "habitat")
-                .unique(subset=[sample_col])
-                .rename({sample_col: "sample_id"})
-                .with_columns(pl.col("habitat").cast(pl.Utf8))
-            )
-            long = long.join(sample_to_habitat, on="sample_id", how="left").sort(
-                ["habitat", "sample_id", "rank"]
-            )
+            strip_cols = [
+                c
+                for c in metadata.columns
+                if c != sample_col
+                and c not in long.columns
+                and metadata.schema[c] in (pl.Utf8, pl.Categorical, pl.Boolean)
+                and metadata[c].n_unique() <= _MAX_STRIP_CATEGORIES
+            ]
+            if strip_cols:
+                sample_meta = (
+                    metadata.select(sample_col, *strip_cols)
+                    .unique(subset=[sample_col])
+                    .rename({sample_col: "sample_id"})
+                    .with_columns(pl.col(strip_cols).cast(pl.Utf8))
+                )
+                group_col = "habitat" if "habitat" in strip_cols else strip_cols[0]
+                long = long.join(sample_meta, on="sample_id", how="left").sort(
+                    [group_col, "sample_id", "rank"], nulls_last=True
+                )
 
     return long
