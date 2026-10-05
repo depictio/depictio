@@ -13,15 +13,51 @@ on:
       - "pyproject.toml"
       - "pnpm-lock.yaml"
       - ".github/workflows/local-server-smoke.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "depictio/**"
+      - "packages/plotly-*/**"
+      - "pyproject.toml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/local-server-smoke.yaml"
   workflow_dispatch:
 
 jobs:
+  # Linux x86_64 always runs. The arm64 and macOS legs cost more and mostly
+  # catch platform issues of `depictio local` itself, so a pull request runs
+  # them only when it touches the local server, its packaging or this workflow;
+  # pushes to main and manual runs always do.
+  platforms:
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: read
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          os='["ubuntu-24.04", "ubuntu-24.04-arm", "macos-15"]'
+          if [ -n "$PR" ]; then
+            gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename' \
+              > "$RUNNER_TEMP/files.txt"
+            local_files='^(depictio/cli/cli/local|depictio/cli/cli/commands/local\.py$|pyproject\.toml$|\.github/workflows/local-server-smoke\.yaml$)'
+            if ! grep -qE "$local_files" "$RUNNER_TEMP/files.txt"; then
+              os='["ubuntu-24.04"]'
+            fi
+          fi
+          echo "os=$os" >> "$GITHUB_OUTPUT"
+
   local-up:
+    needs: platforms
     # One runner per conda platform we have hosted runners for (osx-64 has none).
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+        os: ${{ fromJSON(needs.platforms.outputs.os) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -32,10 +68,11 @@ jobs:
         with:
           version: 10
 
+      # Node 20, as in docker-images/Dockerfile.viewer; it also runs Playwright below.
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "20"
           cache: pnpm
 
       # Same knobs as docker-images/Dockerfile.viewer. The wheel excludes the
@@ -120,13 +157,6 @@ jobs:
           if grep -E "exited with 'signal|WorkerLostError" ~/.depictio/local/logs/worker.log; then
             echo "a worker process crashed"; exit 1
           fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: depictio/tests/e2e-playwright/package-lock.json
 
       - name: Install Playwright
         id: playwright
