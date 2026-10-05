@@ -14,6 +14,7 @@
 
 import { test, expect } from "@fixtures/auth";
 import { API_URL, API_PREFIX } from "@fixtures/auth";
+import { DASHBOARDS_GRID_URL } from "@fixtures/dashboard";
 
 const IRIS_DASHBOARD_ID = "6824cb3b89d2b72169309737";
 const IRIS_DC_ID = "646b0f3c1e4a2d7f8e5b8c9c";
@@ -66,7 +67,7 @@ test.describe("Local mode (depictio local up)", () => {
 
   test("the seeded iris dashboard is listed", async ({ page }) => {
     // The grid, not the table: the card locator below only exists there.
-    await page.goto("/dashboards?view=thumbnails");
+    await page.goto(DASHBOARDS_GRID_URL);
     await expect(
       page.locator("[data-testid='dashboard-card']").filter({ hasText: "Iris" }).first(),
     ).toBeVisible({ timeout: 30_000 });
