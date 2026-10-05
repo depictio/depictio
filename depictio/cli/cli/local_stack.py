@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib.util
 import json
 import os
 import secrets
@@ -52,8 +53,19 @@ SEAWEEDFS_PORTS = {
 }
 # Start order; stopped in reverse.
 PROCESS_ORDER = ["mongo", "redis", "s3", "api", "worker"]
-# The example projects shipped in the wheel, seeded by --examples.
-EXAMPLES = ("iris", "penguins")
+# The example projects shipped in the wheel, seeded by --examples, with their Delta
+# tables from STATIC_IDS in depictio/api/v1/db_init_reference_datasets.py: copied,
+# because importing that module needs the server's settings. A test keeps the two
+# in sync.
+EXAMPLE_TABLES = {
+    "iris": ("646b0f3c1e4a2d7f8e5b8c9c",),
+    "penguins": (
+        "646b0f3c1e4a2d7f8e5b8c9f",
+        "646b0f3c1e4a2d7f8e5b8ca0",
+        "646b0f3c1e4a2d7f8e5b8ca1",
+    ),
+}
+EXAMPLES = tuple(EXAMPLE_TABLES)
 # The data directories under the local home: created by `up`, deleted by `wipe`,
 # which keeps env/ (the downloaded binaries).
 DATA_DIRS = (
@@ -134,10 +146,6 @@ class Paths:
 # ---------------------------------------------------------------------------
 
 
-def _env_marker(paths: Paths) -> Path:
-    return paths.env / ".depictio-specs.json"
-
-
 def ensure_binaries(paths: Paths, log=print) -> None:
     try:
         from rattler import Platform, VirtualPackage, install, solve
@@ -151,7 +159,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     # linux-aarch64 hosts, or a Python switched between Rosetta and native on a
     # Mac, must not reuse binaries built for the other architecture.
     wanted = {"specs": CONDA_SPECS, "platform": str(Platform.current())}
-    marker = _env_marker(paths)
+    marker = paths.env / ".depictio-specs.json"
     if marker.exists() and json.loads(marker.read_text()) == wanted:
         return
     if paths.env.exists():
@@ -185,9 +193,6 @@ def ensure_binaries(paths: Paths, log=print) -> None:
 # ---------------------------------------------------------------------------
 # State, ports, secrets
 # ---------------------------------------------------------------------------
-
-
-_PROXY_VARS = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
 
 
 @dataclass
@@ -225,6 +230,14 @@ class State:
         paths.state.write_text(json.dumps({**asdict(self), "url": self.url}, indent=2))
 
 
+def write_private_file(path: Path, text: str) -> None:
+    """Write ``text`` to ``path``. A new file is created owner-only rather than
+    chmod-ed afterwards, so it is never readable by others."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+
+
 def load_secrets(paths: Paths) -> dict:
     if paths.secrets.exists():
         return json.loads(paths.secrets.read_text())
@@ -232,10 +245,7 @@ def load_secrets(paths: Paths) -> dict:
         "s3_password": secrets.token_urlsafe(24),
         "admin_password": secrets.token_urlsafe(24),
     }
-    # Created owner-only rather than chmod-ed afterwards, so it is never readable by others.
-    fd = os.open(paths.secrets, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
-        fh.write(json.dumps(values))
+    write_private_file(paths.secrets, json.dumps(values))
     return values
 
 
@@ -412,7 +422,7 @@ def pid_alive(pid: int | None) -> bool:
             return False
     try:
         os.kill(pid, 0)
-    except (OSError, ProcessLookupError):
+    except OSError:
         return False
     return True
 
@@ -454,30 +464,27 @@ def live_pids(state: State | None) -> dict[str, int]:
 
 
 def spawn(paths: Paths, name: str, cmd: list[str], env: dict | None = None) -> subprocess.Popen:
-    log_file = open(paths.logs / f"{name}.log", "ab")  # noqa: SIM115 - handed to the child
-    proc = subprocess.Popen(
-        cmd,
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        env=env,
-        cwd=paths.home,
-        start_new_session=True,
-    )
-    log_file.close()
-    return proc
+    # The child gets its own copy of the log file descriptor, so ours can be closed.
+    with open(paths.logs / f"{name}.log", "ab") as log_file:
+        return subprocess.Popen(
+            cmd,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            env=env,
+            cwd=paths.home,
+            start_new_session=True,
+        )
 
 
-def wait_until(
-    check, what: str, timeout: float, proc: subprocess.Popen | None = None, log_path=None
-) -> None:
+def wait_until(check, what: str, timeout: float, proc: subprocess.Popen, log_path: Path) -> None:
     deadline = time.monotonic() + timeout
+    hint = f" See {log_path}"
     while time.monotonic() < deadline:
         if check():
             return
         # poll() rather than kill(pid, 0): an unreaped child stays visible as a zombie.
-        if proc is not None and proc.poll() is not None:
-            hint = f" See {log_path}" if log_path else ""
+        if proc.poll() is not None:
             if proc.returncode == -signal.SIGILL:
                 hint += (
                     " It was killed by an illegal instruction: MongoDB 5+ needs AVX on "
@@ -485,7 +492,6 @@ def wait_until(
                 )
             raise LocalStackError(f"{what} exited during startup.{hint}")
         time.sleep(0.5)
-    hint = f" See {log_path}" if log_path else ""
     raise LocalStackError(f"Timed out after {timeout:.0f}s waiting for {what}.{hint}")
 
 
@@ -542,6 +548,9 @@ def _stop_child(proc: subprocess.Popen, timeout: float = 20) -> None:
     terminate_group(proc.pid, timeout, alive=lambda: proc.poll() is None)
     with contextlib.suppress(subprocess.TimeoutExpired):
         proc.wait(timeout=5)
+
+
+_PROXY_VARS = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
 
 
 def _start_services(
@@ -713,9 +722,7 @@ def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
         s3["service_port"] = s3["external_port"] = ports["s3"]
         # Replaced in one step, so a CLI reading it meanwhile never sees half a file.
         tmp = paths.cli_config.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            yaml.safe_dump(config, fh, default_flow_style=False, sort_keys=False)
+        write_private_file(tmp, yaml.safe_dump(config, default_flow_style=False, sort_keys=False))
         os.replace(tmp, paths.cli_config)
     paths.cli_config.chmod(0o600)
     return changed
@@ -728,19 +735,6 @@ def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
             raise LocalStackError(
                 f"The {name} process exited during startup. See {paths.logs / f'{name}.log'}"
             )
-
-
-# Delta tables of the bundled examples, from STATIC_IDS in
-# depictio/api/v1/db_init_reference_datasets.py: copied, because importing that
-# module needs the server's settings. A test keeps the two in sync.
-EXAMPLE_TABLES = {
-    "iris": ("646b0f3c1e4a2d7f8e5b8c9c",),
-    "penguins": (
-        "646b0f3c1e4a2d7f8e5b8c9f",
-        "646b0f3c1e4a2d7f8e5b8ca0",
-        "646b0f3c1e4a2d7f8e5b8ca1",
-    ),
-}
 
 
 def table_ready(url: str, token: str, dc_id: str) -> bool:
@@ -824,8 +818,7 @@ def stop_all(paths: Paths, log=print) -> list[str]:
     for name in stopped:
         log(f"Stopping {name} (pid {live[name]})")
         terminate_group(live[name])
-    if paths.state.exists():
-        paths.state.unlink()
+    paths.state.unlink(missing_ok=True)
     return stopped
 
 
@@ -846,8 +839,6 @@ def check_server_installed() -> None:
 
 
 def _importable(module: str) -> bool:
-    import importlib.util
-
     try:
         return importlib.util.find_spec(module) is not None
     except ModuleNotFoundError:
@@ -856,8 +847,6 @@ def _importable(module: str) -> bool:
 
 def package_root() -> Path | None:
     """The ``depictio`` package directory: in site-packages, or in a source checkout."""
-    import importlib.util
-
     spec = importlib.util.find_spec("depictio")
     if spec is None or not spec.submodule_search_locations:
         return None
@@ -905,8 +894,7 @@ def reset(paths: Paths) -> None:
     for sub in DATA_DIRS:
         shutil.rmtree(paths.home / sub, ignore_errors=True)
     for f in (paths.state, paths.secrets, paths.ports):
-        if f.exists():
-            f.unlink()
+        f.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

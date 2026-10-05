@@ -73,7 +73,7 @@ def test_server_env_drops_inherited_depictio_variables(paths, monkeypatch):
     monkeypatch.setenv("DEPICTIO_MONGODB_SERVICE_NAME", "mongo")
     monkeypatch.setenv("DEPICTIO_SEED_PROJECTS", "penguins")
     ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
-    env = server_env(paths, ports, {"s3_password": "x", "admin_password": "y"}, "none", True)
+    env = server_env(paths, ports, SECRETS, "none", True)
 
     assert env["DEPICTIO_MONGODB_SERVICE_NAME"] == "127.0.0.1"
     assert "DEPICTIO_SEED_PROJECTS" not in env
