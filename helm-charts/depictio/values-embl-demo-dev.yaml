@@ -51,6 +51,15 @@ celery:
       cpu: "4"
   env:
     DEPICTIO_CELERY_WORKERS: "4"  # 4 slots per pod × 2 pods = 8 total
+  extraEnv: &s3ChecksumEnv
+    # The EMBL S3 gateway rejects the checksums botocore >= 1.36 sends by
+    # default (PutObject: "x-amz-content-sha256 must be UNSIGNED-PAYLOAD, ..."),
+    # which fails the backend's startup write check. EMBL's S3 docs recommend
+    # these two switches for every client.
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: "when_required"
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: "when_required"
 
 # Backend API — serves the React viewer SPA + its data-fetching endpoints
 # (render_figure, bulk_compute_cards, …). 2 replicas for HA + tail latency;
@@ -82,6 +91,7 @@ backend:
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
     # Explicit API URL to match ingress host (for browser-based requests)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
+  extraEnv: *s3ChecksumEnv
 
 # Ingress - Dev Environment
 ingress:

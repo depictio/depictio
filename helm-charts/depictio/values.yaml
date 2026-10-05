@@ -265,6 +265,11 @@ backend:
     tag: "1.12.0-b1"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Raw container env entries (name/value or valueFrom), appended after the
+  # chart-managed ones. The ConfigMap is an explicit key allowlist, so this is
+  # the way to set variables it does not know, e.g. the botocore checksum
+  # switches an S3 gateway may need.
+  extraEnv: []
   resources:
     requests:
       memory: "1Gi"
@@ -423,6 +428,8 @@ celery:
     tag: "1.12.0-b1"
     pullPolicy: Always
   replicas: 1
+  # Same as backend.extraEnv, for the worker container.
+  extraEnv: []
   resources:
     requests:
       memory: "512Mi"

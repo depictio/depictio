@@ -86,11 +86,10 @@ jobs:
       RELEASE: devdemo
       API_URL: https://dev.api.demo.depictio.embl.org
     steps:
-      # The chart and values of the tag itself, so they match the images.
-      - name: Checkout the tag
+      # The chart and values come from main (or the dispatched branch), not
+      # from the tag, so a chart fix reaches dev without waiting for a release.
+      - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          ref: v${{ env.VERSION }}
 
       - name: Check the images exist
         run: |

@@ -606,6 +606,9 @@ spec:
               value: "true"
             - name: PYTHONUNBUFFERED
               value: "1"
+            {{- with .Values.backend.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           command:
             - "/app/run_fastapi.sh"
           ports:
@@ -956,6 +959,9 @@ spec:
             {{- end }}
             - name: PYTHONUNBUFFERED
               value: "1"
+            {{- with .Values.celery.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           command:
             - "/app/run_celery_worker.sh"
           resources:
