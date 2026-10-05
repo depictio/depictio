@@ -16,10 +16,11 @@ from depictio.cli.cli.local_stack import (
     api_healthy,
     check_platform_supported,
     check_server_installed,
-    examples_loading,
+    examples_status,
     ingest,
     local_home,
     parse_examples,
+    requested_examples,
     reset,
     running_status,
     start_stack,
@@ -124,23 +125,31 @@ def _start_or_reuse(
         raise typer.Exit(code=130)
 
 
-def _wait_for_examples(paths: Paths, state: State) -> None:
+def _wait_for_examples(paths: Paths, state: State, asked: list[str]) -> list[str]:
     """Hold `ready` until the examples are loaded, so their dashboards show data.
 
     The API loads them in the background, and on a first run stopping it in the
-    meantime would leave them half loaded.
+    meantime would leave them half loaded. ``asked`` are the examples --examples
+    named. Returns the examples this home has.
     """
     try:
-        if not examples_loading(paths, state):
-            return
-        _info("Loading the examples")
-        missing = wait_for_examples(paths, state)
+        status = examples_status(paths, state)
+        if "loading" in status.values():
+            _info("Loading the examples")
+            status = wait_for_examples(paths, state)
     except KeyboardInterrupt:
         _warn(
             "Interrupted: the server keeps running and finishes loading the examples "
             "(depictio local down to stop)"
         )
         raise typer.Exit(code=130)
+    absent = [name for name, s in status.items() if s == "absent"]
+    if unseeded := [name for name in absent if name in asked]:
+        _warn(
+            f"This local home has no {' or '.join(unseeded)} example: examples are added "
+            "on its first run only"
+        )
+    missing = [name for name, s in status.items() if s == "loading"]
     if missing:
         plural = len(missing) > 1
         _warn(
@@ -148,6 +157,7 @@ def _wait_for_examples(paths: Paths, state: State) -> None:
             "loading, so the dashboards show no data. depictio local wipe, then depictio "
             f"local up, reloads {'them' if plural else 'it'} (details in {paths.logs / 'api.log'})"
         )
+    return [name for name in requested_examples(state) if name not in absent]
 
 
 def _ingest(
@@ -169,12 +179,16 @@ def _ingest(
 
 
 def _print_summary(
-    paths: Paths, state: State, template: str | None, data_root: Path | None
+    paths: Paths,
+    state: State,
+    examples: list[str],
+    template: str | None,
+    data_root: Path | None,
 ) -> None:
     rich_print_checked_statement(f"Depictio is ready: {state.url}/dashboards", "success")
     rows = []
-    if state.examples:
-        rows.append(("Examples", state.examples.replace(",", ", ")))
+    if examples:
+        rows.append(("Examples", ", ".join(examples)))
     if template and data_root is not None:
         rows.append(("Ingested", f"{data_root.resolve()} ({template})"))
     rows += [
@@ -251,10 +265,10 @@ def up(
     paths = Paths(local_home())
     paths.ensure_dirs()
     state = _start_or_reuse(paths, port, seed, examples is not None, screenshots)
-    _wait_for_examples(paths, state)
+    present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
     if template and data_root is not None:
         _ingest(paths, template, data_root, variables, project_name)
-    _print_summary(paths, state, template, data_root)
+    _print_summary(paths, state, present, template, data_root)
     if open_browser:
         _open_dashboards(state)
 

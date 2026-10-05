@@ -22,6 +22,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
@@ -202,6 +203,8 @@ class State:
     ports: dict[str, int] = field(default_factory=dict)
     home: str = ""
     examples: str = ""
+    # Started on an empty database, so the examples are being seeded.
+    first_run: bool = False
     pids: dict[str, int] = field(default_factory=dict)
     # Start time of each process, so a PID reused after a reboot is not taken for ours.
     start_times: dict[str, float | None] = field(default_factory=dict)
@@ -404,6 +407,17 @@ def server_env(
         env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] = "true"
     else:
         env["DEPICTIO_SEED_PROJECTS"] = seed
+    return bypass_proxy_for_loopback(env)
+
+
+def bypass_proxy_for_loopback(env: dict[str, str]) -> dict[str, str]:
+    """``env`` with 127.0.0.1 and localhost added to no_proxy.
+
+    boto3 and httpx send through a proxy set in the environment, and a usual
+    no_proxy=localhost does not cover 127.0.0.1, where every local service listens.
+    """
+    current = env.get("no_proxy") or env.get("NO_PROXY")
+    env["no_proxy"] = env["NO_PROXY"] = ",".join(filter(None, [current, "127.0.0.1,localhost"]))
     return env
 
 
@@ -615,6 +629,8 @@ def _start_services(
             "-s3.port.lance=0",
             "-admin.ui=false",
             "-webdav=false",
+            # weed mini reports cluster statistics to seaweedfs.com by default.
+            "-master.telemetry=false",
         ],
         env=s3_env,
     )
@@ -737,52 +753,69 @@ def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
             )
 
 
-def table_ready(url: str, token: str, dc_id: str) -> bool:
-    """Whether the API has a Delta table for the data collection ``dc_id``."""
+def table_status(url: str, token: str, dc_id: str) -> str:
+    """'ready' once the API has a Delta table for the data collection ``dc_id``,
+    'absent' if the data collection does not exist, 'loading' otherwise."""
     request = urllib.request.Request(
         f"{url}/depictio/api/v1/deltatables/specs/{dc_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
-        with _DIRECT.open(request, timeout=5) as resp:
-            return resp.status == 200
+        with _DIRECT.open(request, timeout=5):
+            return "ready"
+    except urllib.error.HTTPError as exc:
+        # The endpoint answers 404 both while the Delta table is being written and
+        # when the data collection itself does not exist.
+        with contextlib.suppress(OSError):
+            if exc.code == 404 and b"Data collection not found" in exc.read():
+                return "absent"
+        return "loading"
     except Exception:
-        return False
+        return "loading"
 
 
-def examples_loading(paths: Paths, state: State) -> list[str]:
-    """The seeded examples whose Delta tables do not exist yet.
+def requested_examples(state: State) -> list[str]:
+    """The examples `up` asked the server to seed."""
+    return [name for name in state.examples.split(",") if name in EXAMPLE_TABLES]
+
+
+def examples_status(paths: Paths, state: State) -> dict[str, str]:
+    """'ready', 'loading' or 'absent' for each requested example; empty if unknown.
 
     The API loads them in a background thread once it has started, so /health
-    answers first: on a first run they need a few more seconds.
+    answers first: on a first run they need a few more seconds, and their projects
+    appear one after the other. They are seeded on the first run of a local home
+    only, so later a missing one is one the home was created without.
     """
     import yaml
 
-    names = [name for name in state.examples.split(",") if name in EXAMPLE_TABLES]
+    names = requested_examples(state)
     if not names:
-        return []
+        return {}
     try:
         config = yaml.safe_load(paths.cli_config.read_text())
         token = config["user"]["token"]["access_token"]
     except (OSError, KeyError, TypeError):
-        return []
-    return [
-        name
-        for name in names
-        if not all(table_ready(state.url, token, dc_id) for dc_id in EXAMPLE_TABLES[name])
-    ]
+        return {}
+    not_found = "loading" if state.first_run else "absent"
+    status = {}
+    for name in names:
+        tables = {table_status(state.url, token, dc_id) for dc_id in EXAMPLE_TABLES[name]}
+        tables = {not_found if s == "absent" else s for s in tables}
+        status[name] = next(s for s in ("absent", "loading", "ready") if s in tables)
+    return status
 
 
 def wait_for_examples(
     paths: Paths, state: State, timeout: float = 120, interval: float = 1.0
-) -> list[str]:
-    """Wait for the seeded examples to load; returns the ones still missing at the timeout."""
+) -> dict[str, str]:
+    """examples_status once no example is loading any more, or at the timeout."""
     deadline = time.monotonic() + timeout
-    missing = examples_loading(paths, state)
-    while missing and time.monotonic() < deadline:
+    status = examples_status(paths, state)
+    while "loading" in status.values() and time.monotonic() < deadline:
         time.sleep(interval)
-        missing = examples_loading(paths, state)
-    return missing
+        status = examples_status(paths, state)
+    return status
 
 
 def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
@@ -933,7 +966,12 @@ def start_stack(
             install_chromium()
         secret_values = load_secrets(paths)
         env = server_env(paths, ports, secret_values, seed, screenshots)
-        state = State(ports=ports, home=str(paths.home), examples=seed)
+        state = State(
+            ports=ports,
+            home=str(paths.home),
+            examples=seed,
+            first_run=not any((paths.home / "mongo").glob("*")),
+        )
         state.save(paths)
         procs = start_services(paths, ports, secret_values, env)
         state.pids = {name: proc.pid for name, proc in procs.items()}
@@ -989,4 +1027,5 @@ def _ingestion_env() -> dict[str, str]:
     DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL, set for another instance,
     would win over the local server's CLI configuration.
     """
-    return {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_CLI_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_CLI_")}
+    return bypass_proxy_for_loopback(env)
