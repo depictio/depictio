@@ -341,6 +341,10 @@ def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
     path = (
         Path(__file__).resolve().parents[2] / "projects" / "init" / dataset_name / "static_ids.json"
     )
+    if not path.parent.is_dir():
+        # Not installed at all (the published wheel ships iris and penguins
+        # only): nothing to seed, and nothing worth a warning on every start.
+        return {}
     try:
         return cast(dict[str, Any], json.loads(path.read_text()))
     except (OSError, ValueError) as exc:

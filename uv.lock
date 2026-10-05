@@ -1015,7 +1015,6 @@ dependencies = [
     { name = "types-requests" },
     { name = "umap-learn" },
     { name = "uvicorn" },
-    { name = "watchdog" },
     { name = "websockets" },
 ]
 
@@ -1038,6 +1037,11 @@ dev = [
 ]
 local = [
     { name = "py-rattler" },
+]
+
+[package.dev-dependencies]
+worker-reload = [
+    { name = "watchdog" },
 ]
 
 [package.metadata]
@@ -1102,10 +1106,12 @@ requires-dist = [
     { name = "types-requests", specifier = "==2.33.0.20260712" },
     { name = "umap-learn", specifier = "==0.5.12" },
     { name = "uvicorn", specifier = "==0.52.1" },
-    { name = "watchdog", specifier = "==6.0.0" },
     { name = "websockets", specifier = "==17.0.1" },
 ]
 provides-extras = ["dev", "local"]
+
+[package.metadata.requires-dev]
+worker-reload = [{ name = "watchdog", specifier = "==6.0.0" }]
 
 [[package]]
 name = "deprecated"

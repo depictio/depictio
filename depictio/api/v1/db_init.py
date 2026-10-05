@@ -218,10 +218,20 @@ async def create_initial_dashboards(
     from depictio.api.v1.db_init_reference_datasets import STATIC_IDS, ReferenceDatasetRegistry
 
     projects_base = os.path.join(os.path.dirname(__file__), "..", "..", "projects")
+
+    def rel_path(name: str) -> str:
+        try:
+            return ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        except FileNotFoundError:
+            # Left out of the installed package (the published wheel ships iris
+            # and penguins only). Its dashboard JSONs are missing too, and
+            # create_dashboard_from_json skips a JSON that does not exist.
+            return ReferenceDatasetRegistry.DATASET_PATHS[name]
+
     # Resolve each dataset's (possibly versioned) path once — dashboards_config
     # below references the same dataset up to 23 times (advanced_viz_showcase).
     rel_paths = {
-        name: ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        name: rel_path(name)
         for name in (
             "iris",
             "penguins",

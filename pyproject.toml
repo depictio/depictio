@@ -45,8 +45,10 @@ dependencies = [
   "colorlog==6.12.0",
   # Visualization
   "plotly-express==0.4.1",
-  "plotly-complexheatmap",
-  "plotly-upset",
+  # In-tree packages (packages/): [tool.uv.sources] installs them from the
+  # checkout; the pins are what a published depictio wheel requires.
+  "plotly-complexheatmap==0.1.0",
+  "plotly-upset==0.1.0",
   # Data processing
   "deltalake==1.6.2",
   "fastparquet==2026.5.0",
@@ -99,10 +101,6 @@ dependencies = [
   # CLI utilities (required by API code that imports CLI helpers)
   "typer==0.27.0",
   "rich==15.0.0",
-  # Dev-only file watcher for live-reloading the Celery worker. run_celery_worker.sh
-  # wraps celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true; in prod
-  # it's installed (~1 MB) but never invoked. Celery has no built-in reloader.
-  "watchdog==6.0.0",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
@@ -128,8 +126,18 @@ dev = [
   "types-bleach==6.4.0.20260728",
   "types-boto3==1.43.62",
 ]
-# `depictio local up`: fetches MongoDB, Redis and MinIO from conda-forge.
+# `depictio local up`: fetches MongoDB, Redis and SeaweedFS from conda-forge.
 local = ["py-rattler==0.26.0"]
+
+# Groups are never published with the wheel, unlike extras.
+[dependency-groups]
+# File watcher for live-reloading the Celery worker: run_celery_worker.sh wraps
+# celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true (Celery has no
+# built-in reloader). Dockerfile.worker installs this group so the published
+# worker image still supports dev mode. Kept out of the core dependencies
+# because watchdog 6.0.0 has no Python 3.14 macOS wheel. The API's opt-in YAML
+# watcher (yaml_watcher.py) uses it when present and polls otherwise.
+worker-reload = ["watchdog==6.0.0"]
 
 
 [project.scripts]
@@ -145,28 +153,72 @@ plotly-upset = { path = "packages/plotly-upset", editable = true }
 requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# The wheel serves `depictio local up`: the iris and penguins examples, plus the
+# nf-core templates for ingesting the user's own results. The Docker images copy the
+# source tree instead of installing the wheel, so none of the trimming below affects
+# them: they keep every reference project and thumbnail.
+[tool.setuptools]
+# Data files come from package-data alone, so a stale depictio.egg-info/SOURCES.txt
+# from an earlier build cannot add files back.
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["depictio*"]
-exclude = ["depictio.viewer.node_modules*"]
+exclude = [
+  "depictio.viewer.node_modules*",
+  "depictio.tests*",
+  "depictio.projects.test*",
+  # Example projects; iris and penguins ship as package-data below.
+  "depictio.projects.init.*",
+]
 
-# Files the server reads at runtime. Without them the wheel is an API with no viewer,
-# templates or reference datasets; only the Docker image (which copies the source tree)
-# had them. The viewer bundle must be built first: cd depictio/viewer && pnpm run build.
+# Files the server reads at runtime. The viewer bundle must be built first:
+# cd depictio/viewer && pnpm run build. Include globs are glob()-based: `**` recurses
+# but skips dot-directories, hence the separate .db_seeds patterns.
 [tool.setuptools.package-data]
 "depictio" = [
   "viewer/dist/**/*",
-  "api/static/**/*",
+  # Reference thumbnails of the iris and penguins dashboards only.
+  "api/static/screenshots/6824cb3b89d2b72169309737_*.png",
+  "api/static/screenshots/6824cb3b89d2b72169309738_*.png",
+  "api/static/branding/**/*",
+  "api/static/dashboard_logos/**/*",
   "api/static_assets/**/*",
-  "projects/**/*",
-  # Globs skip dot-directories: the dashboard seeds need their own pattern.
-  "projects/**/.db_seeds/*",
+  "projects/init/iris/**/*",
+  "projects/init/iris/.db_seeds/*",
+  "projects/init/penguins/**/*",
+  "projects/init/penguins/.db_seeds/*",
+  "projects/nf-core/**/*",
+  "projects/nf-core/**/.db_seeds/*",
   "catalog/**/*",
   "cli/configs/**/*",
 ]
 
+# Exclude patterns are fnmatch-based: `*` also crosses `/`, so each pattern matches
+# at any depth below its prefix, and no pattern can carve an exception out of another.
 [tool.setuptools.exclude-package-data]
-"depictio" = ["viewer/dist/**/*.map", "**/__pycache__/*", "**/*.pyc"]
+"depictio" = [
+  "viewer/dist/*.map",
+  "*/__pycache__/*",
+  "*.pyc",
+  # Template docs (screenshots), validation reports and megatest inputs: never read
+  # by the API or the CLI.
+  "projects/nf-core/*/docs/*",
+  "projects/nf-core/*.md",
+  "projects/nf-core/*/megatest.yaml",
+  "projects/nf-core/*/download_test_data.sh",
+  # Reference datasets of ampliseq and viralrecon (canonical TSVs, MultiQC parquet,
+  # trees, reference metadata). Only reference seeding reads them
+  # (db_init_reference_datasets.py); ingesting the user's own results reads the
+  # template.yaml, dashboards and recipes, and the user's files.
+  "projects/nf-core/ampliseq/*.tsv",
+  "projects/nf-core/ampliseq/*.parquet",
+  "projects/nf-core/ampliseq/*.nwk",
+  "projects/nf-core/viralrecon/*.tsv",
+  "projects/nf-core/viralrecon/*.parquet",
+  "projects/nf-core/viralrecon/*.nwk",
+]
 
 # [tool.mypy]
 # exclude = ["build/", "depictio/api/"]

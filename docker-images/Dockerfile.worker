@@ -66,11 +66,14 @@ RUN groupadd -g ${GID} depictio && \
 # (--no-install-project), so a source edit or the per-release version churn in
 # pyproject/VERSION doesn't reinstall everything — see Dockerfile.api for the
 # full rationale.
+# `--group worker-reload` adds watchdog, whose `watchmedo` run_celery_worker.sh
+# needs when DEPICTIO_DEV_MODE=true. Every sync below passes it, since a sync
+# without it would uninstall watchdog again.
 COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev \
-    || uv sync --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --group worker-reload \
+    || uv sync --no-install-project --no-dev --group worker-reload
 
 # Browser bundle target inside the image. We download into a BuildKit
 # cache mount and copy out — caches the chromium payload across rebuilds
@@ -100,7 +103,8 @@ RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev || uv sync --no-dev
+    uv sync --frozen --no-dev --group worker-reload \
+    || uv sync --no-dev --group worker-reload
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
 RUN chmod +x /app/run_celery_worker.sh
