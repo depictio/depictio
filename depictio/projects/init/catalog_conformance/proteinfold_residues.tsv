@@ -1,0 +1,16 @@
+entity	engine	target	chain	position	residue	value	category	confidently_placed
+colabfold__T1024	colabfold	T1024	A	1	M	67.12	Low	0.0
+colabfold__T1024	colabfold	T1024	A	2	K	77.69	Confident	100.0
+colabfold__T1024	colabfold	T1024	A	3	E	82.31	Confident	100.0
+colabfold__T1024	colabfold	T1024	A	4	F	86.31	Confident	100.0
+colabfold__T1024	colabfold	T1024	A	5	W	88.25	Confident	100.0
+colabfold__T1024	colabfold	T1024	A	6	N	89.5	Confident	100.0
+colabfold__T1024	colabfold	T1024	A	7	L	91.75	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	8	D	92.31	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	9	K	92.62	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	10	N	93.44	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	11	L	94.31	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	12	Q	95.69	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	13	L	95.69	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	14	R	94.81	Very high	100.0
+colabfold__T1024	colabfold	T1024	A	15	L	95.38	Very high	100.0

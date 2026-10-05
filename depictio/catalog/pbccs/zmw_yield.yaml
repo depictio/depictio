@@ -1,0 +1,19 @@
+id: pbccs_zmw_yield
+name: CCS yield per library
+mode: pacbio/ccs-yield
+description: >-
+  ZMWs read, ZMWs that produced a CCS (HiFi) read and the main reasons the
+  others were filtered, summed over the chunks of each library, from the ccs
+  JSON report.
+find:
+  path_glob: "**/*.report.json"
+recipe: pbccs/zmw_yield.py
+fixture: zmw_yield.tsv
+renders_as:
+  # Depth against pass rate: a library low on both lost its movie, one low on
+  # the rate only lost its ZMWs to a filter (see pbccs/zmw_outcomes).
+  - { id: ccs_yield_plane, component: advanced_viz, kind: scatter_xy,
+      roles: {x: zmw_input, y: pct_passed, label: library, color: sample} }
+  - { component: card, column: zmw_passed, aggregation: sum, secondary_layout: top_n, breakdown_col: library, top_n_count: 3 }
+  - { component: card, column: pct_passed, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

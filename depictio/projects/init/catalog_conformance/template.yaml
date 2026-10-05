@@ -175,6 +175,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 54b847ffc2a3d3086b681b45
+    data_collection_tag: assemblyscan_stats
+    description: Assembly statistics — recipe output (assemblyscan/stats.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: assemblyscan/stats.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 38315a2e3025322d7b4e211a
     data_collection_tag: ataqv_chromosome_counts
     description: Reads per reference sequence — recipe output (ataqv/chromosome_counts.py), seeded from
@@ -971,6 +985,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 320cbf5a5ee8764efc3c4fea
+    data_collection_tag: cmaple_tree_layout
+    description: Family tree segments — recipe output (cmaple/tree_layout.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cmaple/tree_layout.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: af3563ea717c8054a3aaca9c
     data_collection_tag: cnvkit_cnv_profile
     description: Copy-number profile — recipe output (cnvkit/cnv_profile.py), seeded from the catalog
@@ -1123,6 +1151,104 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 5987373a5b0af42ed3de39b7
+    data_collection_tag: crisprseq_clonality
+    description: Clonality call per library — recipe output (crisprseq/clonality.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/clonality.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 202bc71617e14bbb0f95b20d
+    data_collection_tag: crisprseq_cut_site_profile
+    description: Indel position around the cut site — recipe output (crisprseq/cut_site_profile.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/cut_site_profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1fb77e8f0a13ce3a0e9c783f
+    data_collection_tag: crisprseq_edit_outcomes
+    description: Edit outcome composition — recipe output (crisprseq/edit_outcomes.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/edit_outcomes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ad3fa5960eb4b5ca8c4b1573
+    data_collection_tag: crisprseq_edit_summary
+    description: Editing outcome per library — recipe output (crisprseq/edit_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/edit_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0b4be1d8993a2ad4e3e2d535
+    data_collection_tag: crisprseq_indel_sizes
+    description: Indel size distribution — recipe output (crisprseq/indel_sizes.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/indel_sizes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5f06731d1beb24f302a17a94
+    data_collection_tag: crisprseq_indels
+    description: Indel alleles per library — recipe output (crisprseq/indels.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/indels.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6103a42db0644d44b7830027
+    data_collection_tag: crisprseq_substitutions
+    description: Substitution and gap rate per position — recipe output (crisprseq/substitutions.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: crisprseq/substitutions.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 6a61a5069e63b608a6ec2593
     data_collection_tag: ctatsplicing_cancer_introns
     description: Cancer intron candidates — recipe output (ctatsplicing/cancer_introns.py), seeded from
@@ -1146,6 +1272,34 @@ workflows:
       source: transformed
       transform:
         recipe: ctatsplicing/introns.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5f11614812e2d488dc9b78bf
+    data_collection_tag: cuppa_classifier_matrix
+    description: Cancer type by classifier matrix — recipe output (cuppa/classifier_matrix.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cuppa/classifier_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: de6a3643221d201bf1b15af5
+    data_collection_tag: cuppa_predictions
+    description: Tissue of origin probabilities — recipe output (cuppa/predictions.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cuppa/predictions.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -1672,6 +1826,33 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 16ce99d724042676dab5a0ff
+    data_collection_tag: famsa_alignment
+    description: Family alignment — recipe output (famsa/alignment.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: famsa/alignment.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 8cd283af60323565a8e97432
+    data_collection_tag: famsa_conservation
+    description: Residue conservation — recipe output (famsa/conservation.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: famsa/conservation.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 27f16c6cb818184c24636983
     data_collection_tag: funcscan_contig_annotation
     description: Contig annotation — recipe output (funcscan/contig_annotation.py), seeded from the catalog
@@ -1985,6 +2166,62 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 522f4e84182aa1b5b7230f0d
+    data_collection_tag: hmf_bamtools_coverage_profile
+    description: Cumulative coverage — recipe output (hmf_bamtools/coverage_profile.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmf_bamtools/coverage_profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ee53cc13116fe2da8280a700
+    data_collection_tag: hmf_bamtools_fragment_length
+    description: Fragment length distribution — recipe output (hmf_bamtools/fragment_length.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmf_bamtools/fragment_length.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3beeec3425c3bb259a144455
+    data_collection_tag: hmf_bamtools_summary
+    description: Alignment and coverage summary — recipe output (hmf_bamtools/summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmf_bamtools/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3b5dda7ca1ebc248a17e5904
+    data_collection_tag: hmmer_hmmsearch_domtbl
+    description: Domain hits (hmmsearch) — recipe output (hmmer/hmmsearch_domtbl.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmmer/hmmsearch_domtbl.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 82f223a5c7b53ddf6a7cfec1
     data_collection_tag: homer_annotated_peaks
     description: Peak annotation — recipe output (homer/annotate_peaks.py), seeded from the catalog fixture
@@ -2026,6 +2263,48 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: f1bd6d1ba446b475f394db8a
+    data_collection_tag: interproscan_matches
+    description: InterPro signature matches — recipe output (interproscan/matches.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: interproscan/matches.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 15365cf8474202efa26c989d
+    data_collection_tag: isoseq_insert_length
+    description: FLNC insert length distribution — recipe output (isoseq/insert_length.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: isoseq/insert_length.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 34a3006e05b0af49cc24c23f
+    data_collection_tag: isoseq_refine_summary
+    description: Full-length read yield — recipe output (isoseq/refine_summary.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: isoseq/refine_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: f7cf57984ff91bc0a9c56aa2
     data_collection_tag: ivar_variants_long
     description: Variant calls — recipe output (ivar/variants_long.py), seeded from the catalog fixture
@@ -2063,6 +2342,116 @@ workflows:
       source: transformed
       transform:
         recipe: kallisto/run_metrics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: dc43e229e5ff7a99cd761f8c
+    data_collection_tag: last_split_identity
+    description: One-to-one alignment identity — recipe output (last/split_identity.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: last/split_identity.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 129b1b6cf7924c34595bf460
+    data_collection_tag: last_split_matrix
+    description: Substitution matrix and distances — recipe output (last/split_matrix.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: last/split_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ef29db9a3fe3cc62cecc2341
+    data_collection_tag: last_synteny_links
+    description: Synteny links — recipe output (last/synteny_links.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: last/synteny_links.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 9cf029cb00bac75a04375b66
+    data_collection_tag: last_train_params
+    description: Fitted alignment parameters — recipe output (last/train_params.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: last/train_params.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 172a207e1105e9bdc3d2cf0c
+    data_collection_tag: lilac_alleles
+    description: HLA alleles and their state in the tumor — recipe output (lilac/alleles.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: lilac/alleles.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: c1486ba27796f2dfacaf2b45
+    data_collection_tag: linx_fusion_structure
+    description: Fusion partners along the fused transcript — recipe output (linx/fusion_structure.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: linx/fusion_structure.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e3346d7188ee1caa2a809dde
+    data_collection_tag: linx_fusions
+    description: Predicted gene fusions — recipe output (linx/fusions.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: linx/fusions.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5b10a3855ec7368c231f1814
+    data_collection_tag: linx_svs
+    description: Clustered structural variants — recipe output (linx/svs.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: linx/svs.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -2659,6 +3048,19 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: b193a3160c26bec334ab5f2b
+    data_collection_tag: neo_neoepitopes
+    description: Candidate neoepitopes — recipe output (neo/neoepitopes.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: neo/neoepitopes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 08a79b4e8079f80a7509bc8e
     data_collection_tag: nextclade_report
     description: Clade assignment — recipe output (nextclade/nextclade_results.py), seeded from the catalog
@@ -2840,6 +3242,33 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: ae553b0c24f82dd4be9825b7
+    data_collection_tag: pbccs_zmw_outcomes
+    description: CCS outcome per library — recipe output (pbccs/zmw_outcomes.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: pbccs/zmw_outcomes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 4be83b90ca50e890b27dea50
+    data_collection_tag: pbccs_zmw_yield
+    description: CCS yield per library — recipe output (pbccs/zmw_yield.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: pbccs/zmw_yield.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 52842a032a0e9259bfc5a4e5
     data_collection_tag: picard_markduplicates_metrics
     description: Duplication metrics — recipe output (picard/markduplicates_metrics.py), seeded from the
@@ -2890,6 +3319,299 @@ workflows:
       source: transformed
       transform:
         recipe: prokka/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 61390dc20359bd909ad6e765
+    data_collection_tag: proteinannotator_database_coverage
+    description: Protein x database coverage — recipe output (proteinannotator/database_coverage.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/database_coverage.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: eab248add148a7622c9b5068
+    data_collection_tag: proteinannotator_database_sets
+    description: Database agreement per protein — recipe output (proteinannotator/database_sets.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/database_sets.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 94a993e7836fde078db4463e
+    data_collection_tag: proteinannotator_domains
+    description: Protein domains, all databases — recipe output (proteinannotator/domains.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/domains.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3f14a1fff64937d8de191e06
+    data_collection_tag: proteinannotator_proteins
+    description: Protein annotation summary — recipe output (proteinannotator/proteins.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/proteins.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0b6e0c4484bcd7a2d5cd8a63
+    data_collection_tag: proteinannotator_residues
+    description: Residue table (sequence, structure, domains) — recipe output (proteinannotator/residues.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/residues.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b90b957a651cd621c9c0f797
+    data_collection_tag: proteinannotator_sample_summary
+    description: Sample summary — recipe output (proteinannotator/sample_summary.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/sample_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0e3d888aafc5b093cfdd283e
+    data_collection_tag: proteinfamilies_cluster_size_distribution
+    description: Initial cluster sizes — recipe output (proteinfamilies/cluster_size_distribution.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfamilies/cluster_size_distribution.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e3acdc01e421417f80b27a09
+    data_collection_tag: proteinfamilies_family_members
+    description: Family members — recipe output (proteinfamilies/family_members.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfamilies/family_members.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6d37a57f58d3f931b5bbc0ae
+    data_collection_tag: proteinfamilies_family_metadata
+    description: Protein families — recipe output (proteinfamilies/family_metadata.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfamilies/family_metadata.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: dc6b523cfc5bd7d50b0c4cb4
+    data_collection_tag: proteinfold_engine_plddt
+    description: Residue confidence per engine — recipe output (proteinfold/engine_plddt.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/engine_plddt.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 136bfd15505fff0cc4670009
+    data_collection_tag: proteinfold_models
+    description: Model confidence scores — recipe output (proteinfold/models.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/models.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 36098cbf8172ee7ea0be4077
+    data_collection_tag: proteinfold_msa
+    description: Multiple sequence alignments of the MSA-based engines — recipe output (proteinfold/msa.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/msa.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3439444991c359592a07597e
+    data_collection_tag: proteinfold_pae
+    description: Predicted aligned error of the top-ranked models — recipe output (proteinfold/pae.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/pae.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 59d74ff5d0e61943516c3c6d
+    data_collection_tag: proteinfold_plddt_ranks
+    description: Residue confidence of each engine's models — recipe output (proteinfold/plddt_ranks.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/plddt_ranks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1a46791bfa6ceaf3220fc1df
+    data_collection_tag: proteinfold_residues
+    description: Residue confidence of the top-ranked structures — recipe output (proteinfold/residues.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/residues.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 02e0ad7fa4ea9896c3359aec
+    data_collection_tag: purple_cnv_segments
+    description: Allele-specific copy-number segments — recipe output (purple/cnv_segments.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: purple/cnv_segments.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ba5687cad817ccbc5626edc4
+    data_collection_tag: purple_drivers
+    description: Driver catalog — recipe output (purple/drivers.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: purple/drivers.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 56b3ec81bb6da10243428f4e
+    data_collection_tag: purple_gene_copy_number
+    description: Copy number per gene — recipe output (purple/gene_copy_number.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: purple/gene_copy_number.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: f881a5d035f5223ee96334c3
+    data_collection_tag: purple_protein_changes
+    description: Protein changes of somatic variants — recipe output (purple/protein_changes.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: purple/protein_changes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 4b3b4533414e2cccb45d7fba
+    data_collection_tag: purple_purity
+    description: Tumor purity, ploidy and QC — recipe output (purple/purity.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: purple/purity.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 9ce03b2f7cc914dbe36d67bd
+    data_collection_tag: purple_somatic_variants
+    description: Somatic small variants — recipe output (purple/somatic_variants.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: purple/somatic_variants.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -3029,6 +3751,19 @@ workflows:
       source: transformed
       transform:
         recipe: qiime2/taxonomy_heatmap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6437d5d933517f24a265b839
+    data_collection_tag: qsee_status
+    description: QC verdicts per feature — recipe output (qsee/status.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qsee/status.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -3312,6 +4047,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 832bc316c607e97f9f9df29b
+    data_collection_tag: s4pred_secondary_structure
+    description: Secondary structure per residue — recipe output (s4pred/secondary_structure.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: s4pred/secondary_structure.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: da6655fbb8a7a51586f2b38d
     data_collection_tag: salmon_gene_expression
     description: Gene expression (long) — recipe output (salmon/gene_expression_long.py), seeded from
@@ -3462,6 +4211,59 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: fb84ae77659708af142c339f
+    data_collection_tag: seqfu_stats
+    description: Sequence file statistics — recipe output (seqfu/stats.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seqfu/stats.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: df16fd65d9acfc2bdbaee067
+    data_collection_tag: seqkit_sequences
+    description: Sequences — recipe output (seqkit/sequences.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seqkit/sequences.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 361205d9c66c9de89d7331ac
+    data_collection_tag: seqtk_cutn_gap_lengths
+    description: Assembly gap lengths — recipe output (seqtk/cutn_gap_lengths.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seqtk/cutn_gap_lengths.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: d73ddb38458f8930c5d383e6
+    data_collection_tag: seqtk_cutn_gaps
+    description: Assembly gaps — recipe output (seqtk/cutn_gaps.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seqtk/cutn_gaps.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 243757de8c3af75e2b47fa63
     data_collection_tag: sidle_reconstructed
     description: Reconstructed features — recipe output (sidle/reconstructed.py), seeded from the catalog
@@ -3486,6 +4288,20 @@ workflows:
       source: transformed
       transform:
         recipe: sidle/reconstruction_qc.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: d49249a4f90f60956393f9a9
+    data_collection_tag: sigs_allocation
+    description: Mutational signature allocation — recipe output (sigs/allocation.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sigs/allocation.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -3723,6 +4539,75 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 9eafa835d129d1cc114fe3f0
+    data_collection_tag: tama_category_composition
+    description: Structural category composition — recipe output (tama/category_composition.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tama/category_composition.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: f21d244239444e630f687c75
+    data_collection_tag: tama_genes
+    description: Isoforms per gene — recipe output (tama/genes.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tama/genes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 28c123c386dc1c182fa3c81b
+    data_collection_tag: tama_polya_tails
+    description: Poly(A) tail length distribution — recipe output (tama/polya_tails.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tama/polya_tails.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: cb76e44bca867ded3e7667cd
+    data_collection_tag: tama_transcript_blocks
+    description: Isoform structures against the reference — recipe output (tama/transcript_blocks.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tama/transcript_blocks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 90d603c9209bb1e32881473e
+    data_collection_tag: tama_transcripts
+    description: Isoforms with read support and structural category — recipe output (tama/transcripts.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tama/transcripts.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: a70964eb5ccbd30038c351f3
     data_collection_tag: taxpasta_embedding
     description: Profiler ordination — recipe output (taxpasta/embedding.py), seeded from the catalog
@@ -3887,6 +4772,28 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: fc491356170a390eb29df7b5
+    data_collection_tag: chord_prediction
+    description: Homologous recombination deficiency — raw CHORD output, recognised by find
+    config:
+      type: Table
+      metatype: Aggregate
+      scan:
+        mode: recursive
+        scan_parameters:
+          regex_config:
+            pattern: chord/sample_01\.chord\.prediction\.tsv
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+        columns_description:
+          sample: String
+          p_BRCA1: Float64
+          p_BRCA2: Float64
+          p_hrd: Float64
+          hr_status: String
+          hrd_type: String
   - id: 356fb8ce2e829105547aa364
     data_collection_tag: funcscan_samplesheet
     description: Samplesheet — raw nf-core/funcscan output, recognised by find
@@ -3962,6 +4869,30 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 51b4d4485146a8e69f5c42d5
+    data_collection_tag: teal_telomere_length
+    description: Telomere length — raw TEAL output, recognised by find
+    config:
+      type: Table
+      metatype: Aggregate
+      scan:
+        mode: recursive
+        scan_parameters:
+          regex_config:
+            pattern: teal/sample_01\.teal\.tellength\.tsv
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+        columns_description:
+          sampleId: String
+          type: String
+          rawTelomereLength: Float64
+          finalTelomereLength: Float64
+          fullFragments: Int64
+          totalTelomericReads: Int64
+          purity: Float64
+          ploidy: Float64
   - id: 7a60dd03a5c6749cc2bfea48
     data_collection_tag: multiqc_report
     description: Synthetic MultiQC report carrying every section the catalog declares
@@ -3982,6 +4913,7 @@ workflows:
         - bismark
         - bowtie2
         - bracken
+        - ccs
         - cellranger
         - centrifuge
         - checkm2
@@ -4002,6 +4934,7 @@ workflows:
         - iVar
         - kaiju
         - kraken
+        - lima
         - malt
         - metaphlan
         - mirtop
@@ -4059,6 +4992,8 @@ workflows:
           - Paired-end alignments
           bracken:
           - Top taxa
+          ccs:
+          - ZMWs filtered and passed
           cellranger:
           - Count - Summary stats
           - Count - BC rank plot
@@ -4120,6 +5055,9 @@ workflows:
           - Top taxa
           kraken:
           - Top taxa
+          lima:
+          - ZMW filtering
+          - Per sample count data
           malt:
           - Metagenomic Mappability
           metaphlan:

@@ -1,0 +1,91 @@
+# Megatest manifest for nf-core/isoseq 3.0.1 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline isoseq --version 3.0.1 --max-file-mb 250 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored design table
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml).
+#
+# test_full profile: one PacBio Iso-Seq sample (one samplesheet row, started
+# from subreads), CCS split in 100 chunks, uLTRA mapping to an iGenomes Ensembl
+# assembly, TAMA collapse per chunk and TAMA merge per sample. Every per-chunk
+# file is named <sample>_<row>.chunk<N>.*; the merge is named <sample>.*. The run
+# publishes no samplesheet and the samplesheet has no design column, so the
+# template ships a design table under input/ (sample_metadata.tsv, built from the
+# sample name once by hand; see docs/dashboards.md).
+pipeline: isoseq
+version: "3.0.1"
+# s3://nf-core-awsmegatests/isoseq/results-<results_sha>/ == the 3.0.1 release tag_sha.
+results_sha: "6c944831289d4d6e33497026f6b18e8c671705bd"
+run_root: ""
+multiqc:
+  version: "1.33"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet: the ccs and lima modules, one report sample per CCS chunk.
+  - multiqc/multiqc_data/multiqc.parquet
+  # CCS report per chunk (pbcopper JSON, ZMW yield and filter reasons).
+  - 01_PBCCS/*.report.json
+  # isoseq refine: FL / FLNC counts (JSON) and the per-read insert length (CSV,
+  # about 270 KB per chunk).
+  - 03_ISOSEQ_REFINE/*.filter_summary.report.json
+  - 03_ISOSEQ_REFINE/*.report.csv
+  # TAMA poly(A) clean-up: tail length histogram per chunk.
+  - 05_GSTAMA_POLYACLEANUP/*_polya_flnc_report.txt.gz
+  # TAMA collapse: reads per collapsed model (the read support chain).
+  - 07_GSTAMA_COLLAPSE/*_trans_report.txt
+  # TAMA merge: the final annotation and its membership table, per sample.
+  - 09_GSTAMA_MERGE/*.bed
+  - 09_GSTAMA_MERGE/*_merge.txt
+  # The reference annotation uLTRA indexed (234 MB), the default REFERENCE_GTF
+  # the isoforms are classified against.
+  - ULTRA_INDEX/genome.gtf
+  #
+  # Deliberately NOT fetched:
+  #   01_PBCCS, 02_LIMA, 03_ISOSEQ_REFINE, 04_BAMTOOLS_CONVERT, 06.2_ULTRA BAMs
+  #     and FASTAs (about 2.5 GB): reads, not tables.
+  #   02_LIMA/*.lima.summary / .counts: the same counts as the MultiQC lima module.
+  #   07_GSTAMA_COLLAPSE/*_read.txt, *_variants.txt, *_local_density_error.txt
+  #     (270 MB together): per-read and per-variant logs no tile reads.
+  #   09_GSTAMA_MERGE/*_trans_report.txt, *_gene_report.txt (84 MB): merge
+  #     provenance; the read support comes from *_merge.txt and the collapse reports.
+  #   ULTRA_INDEX/*.pickle, database.db: the uLTRA index.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - 30dpf
+  - 30dpf_Muscle
+  - 30dpf_Muscle_0
+  - Muscle
+  - muscle
+  - Sscrofa10.2
+  - Sscrofa
+  - Sus scrofa
+  - pig
+  - porcine
+  - A56378_R0564-S28
+  - m64319e_211004_030205
+post_fetch_help: |
+  === Quick test commands ===
+
+  # isoseq publishes no design table: the reference seed reads
+  # {dest}/input/sample_metadata.tsv (download_test_data.sh copies the vendored
+  # one there). Leave METADATA_FILE out for a run without one.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/isoseq/3.0.1 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv --var GROUP_COL=tissue --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/isoseq/3.0.1 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv --var GROUP_COL=tissue

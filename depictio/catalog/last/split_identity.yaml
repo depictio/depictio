@@ -1,0 +1,27 @@
+id: last_split_identity
+name: One-to-one alignment identity
+mode: genome-alignment/summary
+description: >-
+  One row per pairwise genome alignment from the one-line summary last-split
+  writes for MultiQC: aligned length, percent identity with and without gap
+  columns, and the sequence count and length of both genomes. The share of each
+  genome the one-to-one alignment covers is derived alongside, so a distant
+  genome (lower identity) can be told apart from a fragmented one (lower
+  coverage at the same identity).
+find:
+  path_glob: "**/*.o2o.tsv"
+recipe: last/split_identity.py
+fixture: split_identity.tsv
+renders_as:
+  - { id: identity_vs_coverage, component: advanced_viz, kind: scatter_xy,
+      roles: {x: target_aligned_pct, y: percent_identity, label: query, size: aligned_bp} }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: query, y: target_aligned_pct, title: Share of the target covered by the one-to-one alignment} }
+  - { component: card, column: percent_identity, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: target_aligned_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: aligned_bp, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: query, top_n_count: 3 }
+  - { component: interactive, interactive_type: RangeSlider, column_name: percent_identity }
+  - { component: table, row_selection_enabled: true, row_selection_column: query }

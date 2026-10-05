@@ -1,0 +1,24 @@
+id: seqfu_stats
+name: Sequence file statistics
+mode: sequences/stats
+description: >-
+  One row per summarised file: the sample and the stage the file was taken at
+  (before or after filtering when the pipeline names it so), the sequence
+  count, the total length, the mean, minimum and maximum length, N50, N75,
+  N90 and auN.
+find:
+  path_glob: "**/qc/*/*_after.tsv"
+  path_glob_alt:
+    - "**/qc/*/*_before.tsv"
+    - "**/seqfu/*.tsv"
+recipe: seqfu/stats.py
+fixture: stats.tsv
+renders_as:
+  - { id: sequences_total, component: card, column: sequences, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { id: mean_length, component: card, column: mean_length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: n50_length, component: card, column: n50, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: sequences, color: stage, barmode: group} }
+  - { component: table }

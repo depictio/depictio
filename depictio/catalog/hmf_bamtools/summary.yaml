@@ -1,0 +1,20 @@
+id: hmf_bamtools_summary
+name: Alignment and coverage summary
+mode: bam_metrics
+description: >-
+  One row per DNA sample: total, duplicate and dual-strand reads, mean, median
+  and spread of the coverage, the fractions of bases lost to low mapping or
+  base quality, duplicates, unmapped reads and read overlap, and the fraction
+  of the genome covered at 10x, 20x, 30x, 60x and the other depths BamTools
+  reports.
+find:
+  path_glob: "**/*.bam_metric.summary.tsv"
+recipe: hmf_bamtools/summary.py
+fixture: summary.tsv
+renders_as:
+  - { id: mean_coverage_spread, component: card, column: mean_coverage, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: total_reads_spread, component: card, column: total_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: worst_duplicate_frac, component: card, column: duplicate_frac, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: min_frac_ge_30x, component: card, column: frac_ge_30x, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: coverage_record, component: advanced_viz, kind: record_card, roles: {id: sample} }
+  - { id: bam_summary_table, component: table, row_selection_enabled: true, row_selection_column: sample }

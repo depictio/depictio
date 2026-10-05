@@ -1,0 +1,16 @@
+id: lilac_alleles
+name: HLA alleles and their state in the tumor
+mode: lilac
+description: >-
+  LILAC's HLA typing, one row per tumor and called allele: the fragments that
+  support it in the reference, the tumor and the RNA, its tumor copy number,
+  a flag for an allele lost in the tumor, and the somatic variants inside it.
+  A lost or mutated allele can no longer present the neoantigens it would.
+find:
+  path_glob: "**/*.lilac.tsv"
+recipe: lilac/alleles.py
+fixture: alleles.tsv
+renders_as:
+  - { id: allele_count, component: card, column: allele_id, aggregation: count, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3 }
+  - { id: allele_cn_bar, component: figure, visu_type: bar, dict_kwargs: {x: allele, y: tumor_copy_number, color: gene} }
+  - { id: allele_table, component: table, row_selection_enabled: true, row_selection_column: allele_id }

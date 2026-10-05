@@ -1,0 +1,16 @@
+id: pbccs_zmw_outcomes
+name: CCS outcome per library
+mode: pacbio/ccs-yield
+description: >-
+  Where every ZMW of a library went in CCS, as a share of its input ZMWs:
+  passed, or the filter that removed it (too few passes, SNR, draft
+  failures, heteroduplexes). Stacks to 100 % per library.
+find:
+  path_glob: "**/*.report.json"
+recipe: pbccs/zmw_outcomes.py
+fixture: zmw_outcomes.tsv
+renders_as:
+  - { id: ccs_outcome_bars, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: library, taxon: outcome, rank: rank, abundance: pct_of_input} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: library, y: pct_of_input, color: outcome} }
+  - { component: table }

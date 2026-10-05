@@ -1,0 +1,28 @@
+id: tama_transcript_blocks
+name: Isoform structures against the reference
+mode: exon-blocks
+description: >-
+  Exon blocks of every TAMA merge isoform, labelled with its structural
+  category and read support, beside the exon and CDS blocks of the reference
+  transcripts of the same gene (class and sample "reference").
+find:
+  path_glob: "**/09_GSTAMA_MERGE/*.bed"
+recipe: tama/transcript_blocks.py
+fixture: transcript_blocks.tsv
+renders_as:
+  - id: isoform_structures
+    component: advanced_viz
+    kind: transcript_structure
+    roles:
+      transcript_id: transcript_id
+      gene_id: gene_id
+      chrom: chrom
+      start: start
+      end: end
+      feature: feature
+      strand: strand
+      sample: sample
+      gene_name: gene_name
+      transcript_class: transcript_class
+      expression: expression
+  - { component: table }

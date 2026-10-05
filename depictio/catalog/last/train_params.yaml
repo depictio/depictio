@@ -1,0 +1,21 @@
+id: last_train_params
+name: Fitted alignment parameters
+mode: genome-alignment/parameters
+description: >-
+  The scoring parameters last-train fitted for each genome pair before
+  alignment: the substitution identity of its training sample, the score scale
+  and the gap opening and extension costs for deletions and insertions. The
+  costs track divergence, so a pair whose costs stand apart from genomes of
+  similar identity is worth checking.
+find:
+  path_glob: "**/*.train.tsv"
+recipe: last/train_params.py
+fixture: train_params.tsv
+renders_as:
+  - { id: gap_cost_vs_identity, component: advanced_viz, kind: scatter_xy,
+      roles: {x: training_percent_identity, y: deletion_open_cost, label: query} }
+  - { component: card, column: training_percent_identity, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: deletion_open_cost, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

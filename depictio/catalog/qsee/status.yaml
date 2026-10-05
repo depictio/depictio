@@ -1,0 +1,17 @@
+id: qsee_status
+name: QC verdicts per feature
+mode: qsee
+description: >-
+  One row per sample and checked QC feature (coverage, mapping and base
+  quality, duplicates, purity, deleted genes, contamination, TINC): the source
+  tool, the value, the PASS, WARN or FAIL verdict and the condition that fails
+  it.
+find:
+  path_glob: "**/*.qsee.status.tsv.gz"
+recipe: qsee/status.py
+fixture: status.tsv
+renders_as:
+  - { id: qc_check_count, component: card, column: check_id, aggregation: count, secondary_layout: top_n, breakdown_col: qc_status, top_n_count: 3 }
+  - { id: qc_status_bar, component: figure, visu_type: bar, dict_kwargs: {x: source_tool, color: qc_status} }
+  - { id: qc_status_filter, component: interactive, interactive_type: MultiSelect, column_name: qc_status }
+  - { id: qc_status_table, component: table, row_selection_enabled: true, row_selection_column: check_id }

@@ -1,0 +1,7 @@
+sample	stage	file	sequences	total_length	mean_length	n50	n75	n90	aun	min_length	max_length
+T1024	after	T1024.fasta	1	408	408.0	408	408	408	408.0	408	408
+T1024	before	T1024.fasta	1	408	408.0	408	408	408	408.0	408	408
+T1026	after	T1026.fasta	1	172	172.0	172	172	172	172.0	172	172
+T1026	before	T1026.fasta	1	172	172.0	172	172	172	172.0	172	172
+l_arginase	after	l_arginase.fasta	1	350	350.0	350	350	350	350.0	350	350
+l_arginase	before	l_arginase.faa	1	350	350.0	350	350	350	350.0	350	350

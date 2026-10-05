@@ -1,0 +1,2 @@
+entity	sample	source	label	description	start	end	evalue	protein_length	interpro_accession	interpro_description	go_terms	pathways
+GI|225038609|EFDID|719595|FULL	l_arginase	SFLD	SFLDS00057	Glutaminase/Asparaginase	17	347	0.0	350				

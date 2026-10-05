@@ -1,0 +1,16 @@
+id: linx_fusion_structure
+name: Fusion partners along the fused transcript
+mode: linx
+description: >-
+  Each LINX fusion laid out as two partner lanes along the fused transcript in
+  exon units: the 5' partner's exons up to the fused exon and the 3' partner's
+  exons from its fused exon are kept, the rest are drawn as lost, and the
+  breakpoint sits between them. LINX publishes no residue coordinates per
+  fusion, which is why the axis is the exon rank.
+find:
+  path_glob: "**/*.linx.fusion.tsv"
+recipe: linx/fusion_structure.py
+fixture: fusion_structure.tsv
+renders_as:
+  - { id: fusion_exon_layout, component: advanced_viz, kind: fusion_structure, roles: {fusion_id: fusion, partner: partner, feature: feature, start: start, end: end, breakpoint: breakpoint, retained: retained} }
+  - { component: table }

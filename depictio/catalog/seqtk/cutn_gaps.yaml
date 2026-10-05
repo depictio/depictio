@@ -1,0 +1,20 @@
+id: seqtk_cutn_gaps
+name: Assembly gaps
+mode: assembly/gaps
+description: >-
+  Runs of N per assembly from seqtk cutN: how many, their total and median
+  length, the longest, and how many sequences carry one. N runs are the
+  scaffolding gaps an assembler leaves between contigs; they cannot align, so a
+  gap-rich assembly covers less of the target without being more divergent.
+find:
+  path_glob: "**/cutn/*.bed"
+recipe: seqtk/cutn_gaps.py
+fixture: cutn_gaps.tsv
+renders_as:
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: genome, y: gap_bp, title: Bases in assembly gaps per genome} }
+  - { component: card, column: gaps, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: gap_bp, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: genome, top_n_count: 3 }
+  - { component: table, row_selection_enabled: true, row_selection_column: genome }

@@ -1,0 +1,22 @@
+id: crisprseq_cut_site_profile
+name: Indel position around the cut site
+mode: gene-editing/cut-site-profile
+description: >-
+  At every position within the profile window of the cut site, the share of
+  each library's classified reads whose deletion covers it and the share with
+  an insertion starting there. A Cas9 cut shows as a deletion peak straddling
+  offset 0.
+find: { path_glob: "**/*_indels.csv" }
+recipe: crisprseq/cut_site_profile.py
+fixture: cut_site_profile.tsv
+renders_as:
+  - id: deletion_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: offset, y: deletion_pct }
+  - id: insertion_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: offset, y: insertion_pct }
+  - { component: interactive, interactive_type: RangeSlider, column_name: offset }
+  - { component: table }

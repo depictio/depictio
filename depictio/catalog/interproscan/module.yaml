@@ -1,0 +1,13 @@
+# InterProScan runs the member-database signatures of InterPro (Pfam, PANTHER,
+# CDD, HAMAP, TIGRFAM, SFLD and others, whichever the run enables) on protein
+# sequences and integrates them into InterPro entries with GO terms and
+# pathways. Its TSV output has no header: 11 fixed columns, then the InterPro
+# entry, its description, GO terms and pathways when they apply. A sequence
+# with no match writes nothing, so an empty file is a normal output.
+id: interproscan
+name: InterProScan
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/interproscan
+homepage: https://interproscan-docs.readthedocs.io/
+description: >-
+  Protein signature matches from the InterPro member databases, with the
+  integrated InterPro entry, GO terms and pathways of every match.

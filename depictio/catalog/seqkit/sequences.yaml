@@ -1,0 +1,23 @@
+id: seqkit_sequences
+name: Sequences
+mode: sequences/records
+description: >-
+  One row per sequence of the FASTA a pipeline published after filtering: the
+  sequence id (the first word of the header), the rest of the header as a
+  description, the length and the sequence itself. For a protein FASTA the
+  length is in residues and the sequence is the one-letter chain a structure
+  predictor folds.
+find:
+  path_glob: "**/qc/*/*.fasta"
+  path_glob_alt:
+    - "**/qc/*/*.faa"
+    - "**/qc/*/*.fa"
+recipe: seqkit/sequences.py
+fixture: sequences.tsv
+renders_as:
+  - { id: sequence_count, component: card, column: entity, aggregation: count,
+      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { id: sequence_length, component: card, column: length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: length, color: sample} }
+  - { component: table, columns: [entity, sample, description, length] }

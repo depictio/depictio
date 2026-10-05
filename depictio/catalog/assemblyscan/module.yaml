@@ -1,0 +1,6 @@
+# assembly-scan: summary statistics of a FASTA assembly (contig lengths, N50,
+# base composition) as one JSON or TSV record.
+id: assemblyscan
+name: assembly-scan
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/assemblyscan
+homepage: https://github.com/rpetit3/assembly-scan

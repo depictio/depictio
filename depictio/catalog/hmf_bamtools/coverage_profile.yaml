@@ -1,0 +1,16 @@
+id: hmf_bamtools_coverage_profile
+name: Cumulative coverage
+mode: bam_metrics
+description: >-
+  BamTools' per-depth base counts turned into the fraction of bases covered
+  at least each depth, one curve per DNA sample. A tumor sequenced deeper than
+  its normal sits to the right; a curve that drops early marks a sample below
+  the depth the somatic callers need.
+find:
+  path_glob: "**/*.bam_metric.coverage.tsv"
+recipe: hmf_bamtools/coverage_profile.py
+fixture: coverage_profile.tsv
+renders_as:
+  - { id: cumulative_coverage_curve, component: advanced_viz, kind: profile, roles: {series: sample, x: coverage, y: fraction_at_least} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: coverage, y: fraction, color: sample} }
+  - { component: table }

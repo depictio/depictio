@@ -1,0 +1,23 @@
+id: s4pred_secondary_structure
+name: Secondary structure per residue
+mode: protein/residues
+description: >-
+  One row per residue: the protein, the residue number and amino acid, the
+  predicted state (helix, strand or coil) as the residue table category, the
+  probability of that state as its value, and the three state probabilities.
+  A sequence track draws it as a coloured state lane over a confidence lane.
+find:
+  path_glob: "**/s4pred/*/ss2/*.ss2"
+  path_glob_alt:
+    - "**/*.ss2"
+recipe: s4pred/secondary_structure.py
+fixture: secondary_structure.tsv
+renders_as:
+  - { id: ss_sequence_track, component: advanced_viz, kind: sequence_track,
+      roles: {position: position, entity: entity, residue: residue, category: category, value: value} }
+  - { id: ss_confidence, component: card, column: value, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: ss_residues, component: card, column: position, aggregation: count,
+      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: category, color: category} }
+  - { component: table }

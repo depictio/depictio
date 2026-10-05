@@ -1,0 +1,8 @@
+# Neo (hmftools): neoepitope prediction from point mutations, indels and
+# fusions, scored with the tumor's HLA alleles and its RNA expression.
+# nf-core/oncoanalyser publishes <group_id>/neo/ (finder, scorer and annotated
+# fusion tables), named <tumor_id>.neo.*.
+id: neo
+name: Neo
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/neo
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/neo

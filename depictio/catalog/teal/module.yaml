@@ -1,0 +1,6 @@
+# TEAL (hmftools): telomere length and telomeric rearrangements from WGS.
+# nf-core/oncoanalyser publishes <group_id>/teal/<sample_id>.teal.*.
+id: teal
+name: TEAL
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/teal
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/teal

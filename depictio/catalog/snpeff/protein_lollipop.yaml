@@ -13,6 +13,8 @@ fixture: protein_lollipop.tsv
 renders_as:
   - { id: coding_variant_needles, component: advanced_viz, kind: lollipop,
       roles: {feature_id: gene, position: aa_pos, category: impact, label: hgvs_p, effect: vaf} }
+  - { id: coding_variant_structure, component: advanced_viz, kind: molecule_3d,
+      roles: {entity: gene, gene: gene, position: aa_pos, category: impact, value: vaf, label: hgvs_p} }
   - { component: card, column: variant_key, aggregation: count, secondary_layout: top_n,
       breakdown_col: gene, top_n_count: 5 }
   - { component: table }

@@ -1,0 +1,89 @@
+# Megatest manifest for nf-core/crisprseq 2.3.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline crisprseq --version 2.3.0 --max-file-mb 50 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# test_full profile, targeted analysis (analysis: targeted, aligner: minimap2):
+# 6,195 single-end amplicon libraries, each with its own reference amplicon and
+# protospacer (122 distinct protospacers over 223 amplicons), no HDR template.
+# The run publishes a flat per-sample layout: cigar/<sample>_*.csv (CIGAR parser
+# tables) and clonality/<sample>_edits_classified.csv. There is no MultiQC report
+# in this release run and no published samplesheet, so the template ships the
+# test_full samplesheet under input/ (METADATA_FILE) without its fastq paths and
+# reference sequences (see input/README of download_test_data.sh).
+#
+# Size: the listed keys are about 2.3 GB over ~43,000 small files (the per-read
+# indel tables are 2.2 GB of it); everything else in the run is BAMs (3.7 GB)
+# and the per-sample plotly HTML reports (70 GB), which the template never reads.
+pipeline: crisprseq
+version: "2.3.0"
+# s3://nf-core-awsmegatests/crisprseq/results-<results_sha>/ == the 2.3.0 release tag_sha.
+results_sha: "0e9f915c4a3c89d02a66ec58e2decbc832323c8b"
+run_root: ""
+keys:
+  # Pipeline params + software versions.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Per-sample read accounting: raw, merged, quality-filtered, clustered and
+  # aligned reads (the last four as percentages of the raw reads).
+  - cigar/*_reads-summary.csv
+  # Per-sample edit outcome counts: WT, template-based, delins, in-frame and
+  # out-of-frame insertions and deletions.
+  - cigar/*_edits.csv
+  # Per-sample indel QC: reads passing the error-rate and position filters.
+  - cigar/*_QC-indels.csv
+  # Per-position nucleotide percentages around the cut site (substitutions and
+  # gaps), a few hundred rows per sample.
+  - cigar/*_subs-perc.csv
+  # Per-read indel calls (type, start, length, frequency, cut site): the source
+  # of the indel size and position profiles. "*_indels.csv" does not match the
+  # _QC-indels, _Emptyindels or _Badlyindels files.
+  - cigar/*_indels.csv
+  # Cut site position on the amplicon (a one-element JSON list): anchors the
+  # substitution profile, which does not carry it.
+  - cigar/*_cutSite.json
+  # Clonality classifier: edit percentages, zygosity call and peak statistics.
+  - clonality/*_edits_classified.csv
+  #
+  # Deliberately NOT fetched:
+  #   minimap2/*.bam (3.7 GB): alignments, not tables.
+  #   cigar/*_edition.html, *_reads.html, *_QC-indels.html (23.5 GB each): the
+  #     pipeline's own per-sample plotly reports.
+  #   cigar/*_Emptyindels.csv, *_Badlyindels.csv: zero-row markers for libraries
+  #     with no indel or a failed alignment.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - SRR3696622
+  - SRR3696623
+  - SRR3696624
+  - SRR3702819
+  - SRR3702820
+  - CCTATTCCCTATGAATTCATGGC
+  - CCATTCAGTGGCCTGAGCAGTGG
+  - CCTCTTTCCCTTTGTGTTCGTCA
+  - CCCACTAGCAGCACAGCCCTCCC
+  - Homo sapiens
+  - human
+  - HEK293
+  - K562
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the pipeline: the template reads
+  # {dest}/input/samplesheet.csv (download_test_data.sh copies the vendored one
+  # there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/crisprseq/2.3.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/crisprseq/2.3.0 --data-root {dest}

@@ -1,0 +1,22 @@
+# nf-core/proteinfamilies' own reporting steps. The initial cluster size
+# distribution (CALCULATE_CLUSTER_DISTRIBUTION), the family metadata and member
+# rosters (EXTRACT_FAMILY_REPS, EXTRACT_FAMILY_MEMBERS) come from
+# pipeline-local processes, so there is no nf-core module to derive identity
+# from and it is declared in full, the same documented exception as mhcquant.
+#
+# The alignments, HMMs and trees those steps summarise come from nf-core
+# modules and live in their own tool folders (famsa, cmaple); the family table
+# folds the family HMM (hmmer/hmmbuild) header and information content in, so
+# one row per family carries everything a family record shows.
+id: proteinfamilies
+name: nf-core/proteinfamilies
+description: >-
+  Protein family generation summaries of nf-core/proteinfamilies: how the
+  input sequences clustered, the families built from the clusters with their
+  representative, seed and model statistics, and the member roster of every
+  family with each member's identity to the representative.
+homepage: https://nf-co.re/proteinfamilies
+source_url: https://github.com/nf-core/proteinfamilies/tree/2.5.0/modules/local
+edam_topics:
+  - http://edamontology.org/topic_0623 # Gene and protein families
+  - http://edamontology.org/topic_0078 # Proteins

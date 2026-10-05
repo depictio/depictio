@@ -8,6 +8,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
+import { autoPickValue, isAlwaysSelected, singlePick } from './alwaysSelected';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
@@ -86,6 +87,33 @@ const MultiSelectRenderer: React.FC<{
       .map((v) => ({ value: v, label: v, disabled: !availableSet.has(v) }));
   }, [options, availableSet]);
 
+  // `always_selected`: an empty filter, or one holding a value the list no
+  // longer offers, takes the first option shown, through the same callback a
+  // user pick goes through. Keyed on the picked value, so it fires once per
+  // such state and stays idle while an offered value is held (or if the parent
+  // ignores the change), which rules out a loop.
+  const alwaysSelected = isAlwaysSelected(metadata);
+  const autoPick = autoPickValue({
+    enabled: alwaysSelected && Boolean(onChange),
+    loading,
+    selected,
+    options: optionItems,
+  });
+  const autoPickKey = autoPick?.[0] ?? null;
+  const emit = (value: string[]) =>
+    onChange?.({
+      index: metadata.index,
+      value,
+      column_name: metadata.column_name,
+      interactive_component_type: metadata.interactive_component_type,
+      filter_expr: metadata.filter_expr,
+    });
+  useEffect(() => {
+    if (autoPickKey !== null) emit([autoPickKey]);
+    // `emit` closes over props that only matter when the key changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPickKey]);
+
   // Skeleton on first load so this widget matches the rest of the dashboard's
   // loading treatment instead of flashing an empty select. Framed like the
   // loaded state, so the panel row doesn't gain a border on arrival.
@@ -125,15 +153,8 @@ const MultiSelectRenderer: React.FC<{
                 )
               : undefined
           }
-          onChange={(next) =>
-            onChange?.({
-              index: metadata.index,
-              value: next,
-              column_name: metadata.column_name,
-              interactive_component_type: metadata.interactive_component_type,
-              filter_expr: metadata.filter_expr,
-            })
-          }
+          clearable={!alwaysSelected}
+          onChange={(next) => emit(alwaysSelected ? singlePick(next, optionItems) : next)}
         />
         {funnelHighlight && (
           <FunnelAvailabilityBadge

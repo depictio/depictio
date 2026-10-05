@@ -1,0 +1,23 @@
+id: famsa_alignment
+name: Family alignment
+mode: protein/msa
+description: >-
+  The protein module's MSA table: one row per aligned sequence of every family
+  alignment, the family representative first (rank 0), with each row's
+  identity to the representative and the share of the representative it
+  covers. Capped at 500 rows per family in file order.
+find:
+  path_glob: "**/full_msa/filtered/famsa_align/*/*.aln"
+  path_glob_alt:
+    - "**/update_families/full_msa/famsa_align/*/*.aln"
+    - "**/full_msa/filtered/mafft_align/*/*.fas"
+recipe: famsa/alignment.py
+fixture: alignment.tsv
+renders_as:
+  - { id: family_msa, component: advanced_viz, kind: msa,
+      roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity} }
+  - { id: aligned_rows, component: card, column: seq_id, aggregation: count,
+      secondary_layout: top_n, breakdown_col: msa_id, top_n_count: 3 }
+  - { id: aligned_identity, component: card, column: identity, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -1,0 +1,625 @@
+# nf-core/isoseq Template v3.0.1 - PacBio Iso-Seq full-length transcriptomes
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/isoseq/3.0.1 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv] [--var REFERENCE_GTF=/path/to/genes.gtf]
+#
+# Tested against nf-core/isoseq AWS megatest results:
+#   s3://nf-core-awsmegatests/isoseq/results-6c944831289d4d6e33497026f6b18e8c671705bd
+#   (test_full profile, see megatest.yaml for the fetch manifest)
+# ============================================================================
+#
+# What the run publishes (all paths relative to DATA_ROOT):
+#   01_PBCCS/<sample>_<N>.chunk<X>.report.json        CCS report per chunk
+#   03_ISOSEQ_REFINE/<...>.filter_summary.report.json FL / FLNC counts per chunk
+#   03_ISOSEQ_REFINE/<...>.report.csv                 per-read insert length
+#   05_GSTAMA_POLYACLEANUP/<...>_polya_flnc_report.txt.gz  poly(A) tail lengths
+#   07_GSTAMA_COLLAPSE/<...>_trans_report.txt         reads per collapsed model
+#   09_GSTAMA_MERGE/<sample>.bed + <sample>_merge.txt  the final transcriptome
+#   ULTRA_INDEX/genome.gtf                            the reference (uLTRA route)
+#   multiqc/multiqc_data/multiqc.parquet              ccs + lima panels
+# Every per-chunk output is summed back per library (samplesheet row) and per
+# sample (the row prefix without its `_<N>` counter) by the recipes.
+#
+# Design. The pipeline does not publish its samplesheet, and the samplesheet
+# carries no design column anyway, so the design is an optional table declared
+# through METADATA_FILE (sample id in the first column or a column named
+# `sample`, every other column a factor), the ampliseq convention. GROUP_COL
+# defaults to its first factor column. Without it the metadata collection and
+# its links are pruned and every tile bound to the sample hub keeps working.
+#
+# Reference. Structural categories (FSM, ISM, NIC, NNC, ...) and the reference
+# lanes of the structure view compare the isoforms with REFERENCE_GTF, the GTF
+# uLTRA indexed by default. A minimap2 run does not publish it: pass the GTF the
+# run used, or every isoform is `unclassified`.
+template:
+  template_id: "nf-core/isoseq/3.0.1"
+  description: "nf-core/isoseq template for PacBio Iso-Seq: CCS and primer QC, the full-length read funnel, insert and poly(A) lengths, and the TAMA transcriptome with read support, SQANTI-style structural categories against the reference and isoform structures per gene."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one isoseq run (01_PBCCS/ to 09_GSTAMA_MERGE/, ULTRA_INDEX/, multiqc/, pipeline_info/)"
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV or CSV): sample id in the first column (or a column named sample), one column per factor. Enables the design filters and the group card."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table sample-id column (links join on it). Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group and filter by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "REFERENCE_GTF"
+      description: "Reference annotation the isoforms are classified against (GTF with gene_id, transcript_id and optionally gene_name). Defaults to the GTF uLTRA indexed; pass it for a minimap2 run."
+      required: false
+      default: "{DATA_ROOT}/ULTRA_INDEX/genome.gtf"
+    - name: "SKIP_MULTIQC"
+      description: "Set (--var SKIP_MULTIQC=true) for a run with --skip_multiqc: no report, so the MultiQC collection is pruned."
+      required: false
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # design table vendored in input/ (see docs/dashboards.md).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "tissue"
+      GROUP_COL_DISPLAY: "Tissue"
+      REFERENCE_GTF: "{DATA_ROOT}/ULTRA_INDEX/genome.gtf"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"    # the whole iGenomes catalogue
+          - "hook_url"   # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "CCS"
+        key_patterns: ["chunk_ccs", "min_passes", "min_snr", "top_passes", "min_length", "max_length", "rq"]
+      - group: "Primers and refine"
+        key_patterns: ["primers", "require_polya"]
+      - group: "Mapping"
+        key_patterns: ["aligner", "chunk_mapping", "genome", "fasta", "gtf", "igenomes_*"]
+      - group: "TAMA collapse and merge"
+        key_patterns: ["capped", "five_prime", "splice_junction", "three_prime", "tama_merge_all"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "publish_dir_mode", "trace_report_suffix", "validate_params", "version", "help*", "show_hidden", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email"]
+    highlight:
+      - "aligner"
+      - "genome"
+      - "min_passes"
+      - "rq"
+      - "capped"
+      - "five_prime"
+      - "splice_junction"
+      - "three_prime"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_MULTIQC"
+      remove_dc_tags: ["multiqc_data"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Iso-Seq Full-Length Transcriptomes"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "isoseq"
+    version: "3.0.1"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/isoseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional): the run's factors, keyed on the sample id.
+      # Pruned with its links when METADATA_FILE is absent.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # MultiQC: the ccs and lima modules, one sample per CCS chunk.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run: CCS ZMW filtering and lima primer filtering, per chunk"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "ccs"
+              - "lima"
+            plots:
+              ccs:
+                - "ZMWs filtered and passed"
+              lima:
+                - "ZMW filtering"
+
+      # ----------------------------------------------------------------
+      # Read funnel: CCS, primers, refine (catalog pbccs/*, isoseq/*).
+      # Optional: a run started from lima, refine or mapping skips CCS
+      # (and refine), and the collections are skipped with it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "pbccs_zmw_yield"
+        optional: true
+        description: "CCS yield per library: ZMWs read, ZMWs that produced a HiFi read and the main filter reasons, summed over the CCS chunks"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "pbccs/zmw_yield.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the library belongs to"
+              "library": "Samplesheet row (SMRT cell) prefix, <sample>_<row>"
+              "chunks": "CCS chunks summed"
+              "zmw_input": "ZMWs read from the subreads"
+              "zmw_passed": "ZMWs that produced a CCS read"
+              "zmw_filtered": "ZMWs removed by any filter"
+              "pct_passed": "ZMWs that produced a CCS read, percent of input"
+              "too_few_passes": "ZMWs removed for lacking full passes"
+              "poor_snr": "ZMWs removed below the SNR threshold"
+              "draft_failures": "ZMWs removed while drafting the consensus"
+              "other_filtered": "ZMWs removed for any other reason"
+
+      - data_collection_tag: "pbccs_zmw_outcomes"
+        optional: true
+        description: "CCS outcome of every ZMW per library (passed, or the filter that removed it), as a share of the input ZMWs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "pbccs/zmw_outcomes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the library belongs to"
+              "library": "Samplesheet row (SMRT cell) prefix"
+              "rank": "Composition level, constant CCS outcome"
+              "outcome": "Passed, or the CCS filter that removed the ZMW"
+              "zmws": "ZMWs with that outcome"
+              "pct_of_input": "ZMWs with that outcome, percent of the library's input"
+
+      - data_collection_tag: "isoseq_refine_summary"
+        optional: true
+        description: "Full-length (FL), non-chimeric (FLNC) and poly(A) FLNC read counts per library, from isoseq refine"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "isoseq/refine_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the library belongs to"
+              "library": "Samplesheet row (SMRT cell) prefix"
+              "fl_reads": "Full-length reads (both primers found)"
+              "flnc_reads": "Full-length non-chimeric reads kept by refine"
+              "flnc_polya_reads": "FLNC reads with a poly(A) tail"
+              "chimeric_reads": "Full-length reads removed as chimeric"
+              "pct_flnc": "FLNC reads, percent of full-length reads"
+              "pct_polya": "FLNC reads with a poly(A) tail, percent"
+
+      - data_collection_tag: "isoseq_insert_length"
+        optional: true
+        description: "FLNC insert length distribution per sample, 100 bp bins, from the per-read isoseq refine report"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "isoseq/insert_length.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "length_bp": "Insert length bin start, bp (100 bp bins, the last one open-ended at 15 kb)"
+              "reads": "FLNC reads in the bin"
+              "pct": "FLNC reads in the bin, percent of the sample"
+              "cumulative_pct": "FLNC reads up to and including the bin, percent"
+
+      - data_collection_tag: "tama_polya_tails"
+        optional: true
+        description: "Poly(A) tail lengths TAMA removed from the FLNC reads, per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tama/polya_tails.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "tail_length": "Poly(A) tail length removed, nt (100 means 100 or more)"
+              "reads": "Reads with that tail length"
+              "pct": "Reads with that tail length, percent of the sample"
+
+      # ----------------------------------------------------------------
+      # Transcriptome (catalog tama/*). The merged BED is scanned raw
+      # because only a file-name regex tells the per-sample merge from the
+      # per-chunk collapse BEDs; every other collection derives from it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tama_merge_bed_raw"
+        description: "TAMA merge annotations (BED12, one per sample), the input of the transcriptome collections"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^(?!.*_(?:collapsed|trans_read)\\.bed$)(?!all_samples\\.bed$).+\\.bed$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              quote_char: null
+              new_columns: ["chrom", "chrom_start", "chrom_end", "name", "score", "strand",
+                            "thick_start", "thick_end", "item_rgb", "block_count",
+                            "block_sizes", "block_starts"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chrom": "Sequence"
+              "chrom_start": "Transcript start, 0-based"
+              "chrom_end": "Transcript end, exclusive"
+              "name": "TAMA gene and transcript ids, gene;transcript"
+              "score": "BED score"
+              "strand": "Strand"
+              "thick_start": "Thick start (TAMA copies the transcript start)"
+              "thick_end": "Thick end"
+              "item_rgb": "Display colour written by TAMA"
+              "block_count": "Exon count"
+              "block_sizes": "Exon lengths, comma-separated"
+              "block_starts": "Exon starts relative to chrom_start, comma-separated"
+              "source_path": "File the line came from (the sample is its name)"
+
+      - data_collection_tag: "tama_transcripts"
+        description: "Every final isoform of every sample: position, exons, length, FLNC read support and its structural category against the reference annotation"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tama/transcripts.py"
+            source_overrides:
+              reference:
+                path: "{REFERENCE_GTF}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "transcript_id": "TAMA isoform id, unique within a sample"
+              "tama_gene_id": "TAMA gene id"
+              "gene_id": "Reference gene the isoform was assigned to, else sample:TAMA gene"
+              "gene_name": "Reference gene name, else the TAMA gene id"
+              "ref_transcript_id": "Reference transcript matched (FSM and ISM only)"
+              "structural_category": "FSM, ISM, NIC, NNC, genic, antisense, intergenic, or unclassified without a reference"
+              "exon_structure": "mono-exon or multi-exon"
+              "chrom": "Sequence"
+              "start": "First base, 1-based"
+              "end": "Last base, inclusive"
+              "strand": "Strand"
+              "exons": "Exon count"
+              "transcript_length": "Summed exon length, bp"
+              "junctions": "Splice junctions"
+              "known_junctions": "Splice junctions annotated in the reference"
+              "read_support": "FLNC reads TAMA collapsed into the isoform"
+              "source_models": "TAMA collapse models merged into the isoform"
+
+      - data_collection_tag: "tama_transcript_blocks"
+        description: "Exon blocks of every isoform, beside the exon and CDS blocks of the reference transcripts of the same gene"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tama/transcript_blocks.py"
+            source_overrides:
+              reference:
+                path: "{REFERENCE_GTF}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "transcript_id": "Isoform, or reference transcript"
+              "gene_id": "Reference gene, else sample:TAMA gene"
+              "gene_name": "Reference gene name, else the TAMA gene id"
+              "chrom": "Sequence"
+              "start": "Block start, 1-based"
+              "end": "Block end, inclusive"
+              "feature": "exon, or CDS on reference transcripts"
+              "strand": "Strand"
+              "transcript_class": "Structural category, or reference"
+              "sample": "Sample, or reference"
+              "expression": "FLNC reads supporting the isoform (empty on reference lanes)"
+
+      - data_collection_tag: "tama_genes"
+        description: "One row per sample and gene: isoforms, read support, isoforms per structural category and the read share of the dominant isoform"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tama/genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "gene_id": "Reference gene, else sample:TAMA gene"
+              "gene_name": "Reference gene name, else the TAMA gene id"
+              "gene_status": "annotated (a reference gene) or novel"
+              "chrom": "Sequence"
+              "start": "First base of the gene's isoforms"
+              "end": "Last base of the gene's isoforms"
+              "strand": "Strand"
+              "isoforms": "Isoforms assigned to the gene"
+              "read_support": "FLNC reads over the gene's isoforms"
+              "fsm_isoforms": "Full splice match isoforms"
+              "ism_isoforms": "Incomplete splice match isoforms"
+              "nic_isoforms": "Novel in catalog isoforms"
+              "nnc_isoforms": "Novel not in catalog isoforms"
+              "novel_isoforms": "NIC plus NNC isoforms"
+              "dominant_isoform_pct": "Reads of the best-supported isoform, percent of the gene's reads"
+              "top_category": "Structural category carrying most of the gene's reads"
+
+      - data_collection_tag: "tama_category_composition"
+        description: "Share of each sample's isoforms and FLNC reads in every structural category"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tama/category_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "level": "Isoforms or FLNC reads"
+              "structural_category": "Structural category"
+              "count": "Isoforms, or FLNC reads, in the category"
+              "pct": "Share of the sample's total at that level, percent"
+
+      # ----------------------------------------------------------------
+      # Sample hub: one row per sample, the read funnel and the
+      # transcriptome summary, plus the design columns when given.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "One row per sample: the read funnel from ZMWs to collapsed FLNC reads, insert length, and the transcriptome summary, with the design columns when a design table is given"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/isoseq/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "libraries": "Samplesheet rows (SMRT cells) of the sample"
+              "zmw_input": "ZMWs read by CCS"
+              "ccs_reads": "ZMWs that produced a CCS read"
+              "ccs_pass_pct": "CCS reads, percent of input ZMWs"
+              "fl_reads": "Full-length reads (both primers found)"
+              "flnc_reads": "Full-length non-chimeric reads"
+              "flnc_pct": "FLNC reads, percent of full-length reads"
+              "collapsed_reads": "FLNC reads TAMA collapsed into a final isoform"
+              "collapsed_pct": "Collapsed reads, percent of FLNC reads"
+              "median_insert_bp": "Median FLNC insert length, bp (100 bp bins)"
+              "isoforms": "Final isoforms"
+              "genes": "Genes the isoforms belong to"
+              "annotated_genes": "Reference genes among them"
+              "fsm_pct": "Isoforms matching a reference intron chain, percent"
+              "novel_isoform_pct": "NIC plus NNC isoforms, percent"
+              "novel_read_pct": "FLNC reads on NIC plus NNC isoforms, percent"
+
+# ============================================================================
+# LINKS. The sample hub (and the design table, when there is one) filters
+# every sample-keyed collection; the isoform and gene tables filter the
+# structure lanes by gene, so a category or gene selection keeps the reference
+# lanes of the genes it keeps.
+# ============================================================================
+links:
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the sample hub by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: {resolver: "sample_mapping", target_field: "sample"}
+    description: "Filter the MultiQC panels by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "pbccs_zmw_yield"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the CCS yield by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "pbccs_zmw_outcomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the CCS outcomes by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "isoseq_refine_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the refine yield by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "isoseq_insert_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the insert length curves by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "tama_polya_tails"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the poly(A) curves by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "tama_transcripts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the isoforms by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "tama_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the genes by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "tama_category_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the category composition by the design table selection"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: {resolver: "sample_mapping", target_field: "sample"}
+    description: "Filter the MultiQC panels (one sample per CCS chunk) by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "pbccs_zmw_yield"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the CCS yield by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "pbccs_zmw_outcomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the CCS outcomes by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "isoseq_refine_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the refine yield by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "isoseq_insert_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the insert length curves by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tama_polya_tails"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the poly(A) curves by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tama_transcripts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the isoforms by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tama_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the genes by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tama_category_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the category composition by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "tama_transcripts"
+    source_column: "gene_id"
+    target_dc_tag: "tama_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Keep the genes of the isoforms an isoform filter keeps"
+    enabled: true
+  - source_dc_tag: "tama_transcripts"
+    source_column: "gene_id"
+    target_dc_tag: "tama_transcript_blocks"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Keep the structure lanes (isoforms and reference) of the genes an isoform filter keeps"
+    enabled: true
+  - source_dc_tag: "tama_genes"
+    source_column: "gene_id"
+    target_dc_tag: "tama_transcript_blocks"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Draw the structure lanes of the genes picked in the gene table"
+    enabled: true

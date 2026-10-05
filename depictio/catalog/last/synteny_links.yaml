@@ -1,0 +1,24 @@
+id: last_synteny_links
+name: Synteny links
+mode: genome-alignment/synteny
+description: >-
+  The one-to-one alignment read as links between a target locus and a query
+  locus, from the PSL export (--export_aln_to psl), which carries coordinates
+  but no sequence. Each alignment is placed at its midpoint on both genomes,
+  weighted by its matching bases and classed by orientation; query sequence
+  names are prefixed so shared names such as chr1 stay two arcs. The longest
+  alignments of each pair are kept, the collinear blocks a synteny ring shows.
+find:
+  path_glob: "**/*.psl.gz"
+recipe: last/synteny_links.py
+fixture: synteny_links.tsv
+renders_as:
+  - { id: synteny_ring, component: advanced_viz, kind: genome_chord,
+      roles: {chrom_a: chrom_a, pos_a: pos_a, chrom_b: chrom_b, pos_b: pos_b,
+              label: label, weight: weight, category: category, sample: query} }
+  - { component: card, column: weight, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: chrom_a, top_n_count: 3 }
+  - { component: card, column: category, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: category }
+  - { component: interactive, interactive_type: MultiSelect, column_name: category }
+  - { component: table, row_selection_enabled: true, row_selection_column: label }

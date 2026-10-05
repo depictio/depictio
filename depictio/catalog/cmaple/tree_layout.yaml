@@ -1,0 +1,33 @@
+id: cmaple_tree_layout
+name: Family tree segments
+mode: phylogeny/layout
+description: >-
+  Every family tree laid out rectangularly (x = distance from the root, tips
+  one slot apart, families stacked) as line segments: two point rows and a
+  null separator row per segment in draw order, the member id on the row that
+  ends at a tip. One line trace sorted by draw_order draws the forest; a
+  family filter draws one tree.
+find:
+  path_glob: "**/phylogeny/cmaple/*/*.treefile"
+  path_glob_alt:
+    - "**/*.treefile"
+recipe: cmaple/tree_layout.py
+fixture: tree_layout.tsv
+renders_as:
+  - component: figure
+    code: |
+      d = df.sort('draw_order')
+      tips = d.filter(pl.col('is_tip'))
+      edges = go.Scatter(
+          x=d['x'].to_list(), y=d['y'].to_list(), mode='lines', connectgaps=False,
+          line={'width': 1}, hoverinfo='skip', showlegend=False,
+      )
+      tip_marks = go.Scatter(
+          x=tips['x'].to_list(), y=tips['y'].to_list(), mode='markers',
+          marker={'size': 6}, text=tips['node'].to_list(), customdata=tips['family'].to_list(),
+          hovertemplate='%{text}<br>%{customdata}<extra></extra>', showlegend=False,
+      )
+      fig = go.Figure(data=[edges, tip_marks])
+      fig.update_layout(xaxis_title='Substitutions per site from the root', margin={'t': 16, 'l': 16, 'r': 16, 'b': 48})
+      fig.update_yaxes(visible=False, autorange='reversed')
+  - { component: table }

@@ -22,6 +22,13 @@ import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { demandForPx } from './contentDemand';
+import {
+  taxonomyAxisTitle,
+  DENSE_AXIS_BARS,
+  taxonomyLegend,
+  visibleTaxonomyControls,
+  type TaxonomyLegendPos,
+} from './stackedTaxonomyOptions';
 
 /** The stacked bars run vertically: samples are the x axis, so the tile's
  *  height is furniture, not a count. This is the plot area a stack of
@@ -63,6 +70,15 @@ interface StackedTaxonomyConfig {
    *  reads its values from the row's metadata column at the matching
    *  sample. Renderer ensures the fetched column list includes these. */
   annotation_strips?: AnnotationStrip[] | null;
+  /** Controls the tile does not offer; the config value still applies. */
+  hidden_controls?: string[] | null;
+  /** Label of the rank picker, 'Rank' when unset. */
+  rank_label?: string | null;
+  /** Sample axis title: unset shows sample_id_col, empty shows none. */
+  x_title?: string | null;
+  legend_pos?: TaxonomyLegendPos;
+  /** Category to colour overrides, winning over the palette cycle. */
+  category_palette?: Record<string, string> | null;
 }
 
 interface Props {
@@ -272,7 +288,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     // the top-N colours. Universe = all taxa in the DC; fallback = the filtered
     // top-N set ordered as they appear in tracesByTaxon.
     const taxaForPalette = Array.from(tracesByTaxon.keys()).filter((t) => t !== 'Other');
-    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette);
+    const colourSource = stableColorMap(
+      taxonUniverse ?? taxaForPalette,
+      palette,
+      config.category_palette ?? null,
+    );
     const data = Array.from(tracesByTaxon.entries())
       .filter(([, arr]) => arr.some((v) => v > 0))
       .map(([t, arr]) => ({
@@ -356,7 +376,9 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const bottomStrips = strips.filter((s) => (s.position ?? 'bottom') === 'bottom').length;
     const topStrips = strips.length - bottomStrips;
     const bMargin = 70 + bottomStrips * 22;
-    const tMargin = 30 + topStrips * 22;
+    const denseAxis = orderedSamples.length > DENSE_AXIS_BARS;
+    const legendOnTop = denseAxis && showLegend && config.legend_pos !== 'right';
+    const tMargin = 30 + topStrips * 22 + (legendOnTop ? 40 : 0);
 
     return {
       // The legend and the strips are what actually grows this tile, so the
@@ -373,8 +395,9 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           annotations: stripAnnotations,
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
-            title: { text: config.sample_id_col },
+            title: { text: taxonomyAxisTitle(config.x_title, config.sample_id_col) },
             tickangle: -45,
+            showticklabels: !denseAxis,
           },
           // When normalise is ON we lock the y-axis to [0, 1] and format ticks
           // as percentages — this gives the toggle a visible effect even when
@@ -396,7 +419,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
                 ...(logY ? { type: 'log' as const } : {}),
               },
           showlegend: showLegend,
-          legend: { orientation: 'h', y: -0.25 },
+          legend: taxonomyLegend(config.legend_pos, denseAxis),
           autosize: true,
         },
       },
@@ -410,42 +433,55 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // Encoding tier: rank, sample order, how many taxa survive the pooling, and
   // whether the bars are read as proportions. Change one of those and it is a
   // different figure; the legend and the log scale only change how it looks.
+  const shown = useMemo(
+    () => visibleTaxonomyControls(config.hidden_controls),
+    [config.hidden_controls],
+  );
+  const rankLabel = config.rank_label || 'Rank';
   const primaryControls = useMemo(
     () => (
       <>
-        <VizSelect
-          label="Rank"
-          value={rank}
-          onChange={setRank}
-          data={allRanks}
-          clearable
-        />
-        <VizSelect
-          label="Sort samples"
-          value={sampleSort}
-          onChange={(v) => v && setSampleSort(v as SampleSort)}
-          data={[
-            { value: 'input', label: 'Input order' },
-            { value: 'total_abundance', label: 'Total abundance' },
-            { value: 'first_taxon', label: 'Top taxon' },
-          ]}
-          allowDeselect={false}
-        />
-        <VizNumberInput
-          label="Top-N taxa"
-          value={topN}
-          onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
-          min={1}
-          max={50}
-        />
-        <VizSwitch
-          checked={normalise}
-          onChange={(e) => setNormalise(e.currentTarget.checked)}
-          label="Normalise"
-        />
+        {shown.rank ? (
+          <VizSelect
+            label={rankLabel}
+            value={rank}
+            onChange={setRank}
+            data={allRanks}
+            clearable
+          />
+        ) : null}
+        {shown.sample_sort ? (
+          <VizSelect
+            label="Sort samples"
+            value={sampleSort}
+            onChange={(v) => v && setSampleSort(v as SampleSort)}
+            data={[
+              { value: 'input', label: 'Input order' },
+              { value: 'total_abundance', label: 'Total abundance' },
+              { value: 'first_taxon', label: 'Top taxon' },
+            ]}
+            allowDeselect={false}
+          />
+        ) : null}
+        {shown.top_n ? (
+          <VizNumberInput
+            label="Top-N taxa"
+            value={topN}
+            onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+            min={1}
+            max={50}
+          />
+        ) : null}
+        {shown.normalise ? (
+          <VizSwitch
+            checked={normalise}
+            onChange={(e) => setNormalise(e.currentTarget.checked)}
+            label="Normalise"
+          />
+        ) : null}
       </>
     ),
-    [rank, sampleSort, topN, normalise, allRanks],
+    [rank, sampleSort, topN, normalise, allRanks, rankLabel, shown],
   );
 
   const controls = useMemo(

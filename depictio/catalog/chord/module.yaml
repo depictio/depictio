@@ -1,0 +1,8 @@
+# CHORD (hmftools): random-forest classifier of homologous recombination
+# deficiency from SNV, indel and SV contexts. nf-core/oncoanalyser publishes
+# <group_id>/chord/<tumor_id>.chord.prediction.tsv, which names the tumor in
+# its own sample column.
+id: chord
+name: CHORD
+homepage: https://github.com/hartwigmedical/hmftools/tree/master/chord
+source_url: https://github.com/nf-core/oncoanalyser/tree/master/modules/local/chord

@@ -1,0 +1,17 @@
+id: crisprseq_indel_sizes
+name: Indel size distribution
+mode: gene-editing/indel-sizes
+description: >-
+  Share of each library's classified reads at every signed indel size
+  (insertions positive, deletions negative), summed from the indel alleles. The
+  shape is a guide's repair signature.
+find: { path_glob: "**/*_indels.csv" }
+recipe: crisprseq/indel_sizes.py
+fixture: indel_sizes.tsv
+renders_as:
+  - id: size_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: size, y: pct_reads }
+  - { component: interactive, interactive_type: RangeSlider, column_name: size }
+  - { component: table }

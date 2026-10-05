@@ -1,0 +1,15 @@
+id: proteinannotator_database_sets
+name: Database agreement per protein
+mode: protein/database-sets
+description: >-
+  Protein by database membership: 1 when a database annotates at least one
+  domain on the protein. The intersections read as agreement: proteins every
+  database annotates are well-known families, proteins only one database
+  reaches are where the annotation rests on a single source.
+find:
+  path_glob: "**/domain_annotation/*/*.domtbl.gz"
+recipe: proteinannotator/database_sets.py
+fixture: database_sets.tsv
+renders_as:
+  - { id: database_upset, component: advanced_viz, kind: upset_plot }
+  - { component: table }

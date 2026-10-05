@@ -1,0 +1,13 @@
+# PacBio ccs: circular consensus (HiFi) reads from subreads, one per ZMW.
+#
+# ccs writes one pbcopper JSON report per run (id `ccs_processing`), one per
+# chunk when the run is split with --chunk: how many ZMWs went in, how many
+# produced a consensus read and why the others were filtered. The recipes below
+# glob `*.report.json` and keep the CCS reports by their id, so they match the
+# file names ccs writes, never a pipeline directory. MultiQC's `ccs` module
+# draws the same counts per chunk (catalog multiqc/ccs); these outputs sum the
+# chunks back into libraries so the dashboard can filter and compose them.
+id: pbccs
+name: PacBio ccs
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/pbccs
+homepage: https://github.com/PacificBiosciences/ccs

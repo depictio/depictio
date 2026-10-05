@@ -1,0 +1,488 @@
+# nf-core/pairgenomealign Template v3.0.4 - pairwise genome alignment
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/pairgenomealign/3.0.4 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv]
+#
+# Tested against the nf-core/pairgenomealign AWS megatest results:
+#   s3://nf-core-awsmegatests/pairgenomealign/results-8ee09a1cdc920fc90cd62358952045e5019e1fe0/
+# `megatest.yaml` next to this file lists the exact subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# What the run publishes, and so what this template reads. pairgenomealign
+# aligns every genome of its samplesheet (the queries) to one target genome
+# with LAST and names each per-pair output <target>___<query>:
+#   - alignment/*.o2o.tsv, *.o2o.matrix.txt, *.train.tsv: the one-line identity
+#     summary, the substitution matrix with distance estimates, and the fitted
+#     scoring parameters of each pair (catalog last/*). The MAF alignments
+#     themselves (up to gigabytes per pair) are not read.
+#   - alignment/*.psl.gz: the PSL export of the one-to-one alignment, written
+#     only with --export_aln_to psl; it feeds the synteny ring (catalog
+#     last/synteny_links.py) and is optional.
+#   - assemblyscan/*.json and cutn/*.bed: contiguity, composition and poly-N
+#     gaps of each query assembly (catalog assemblyscan/stats.py, seqtk/cutn_*).
+#   - multiqc/multiqc_data/multiqc.parquet: the pipeline's custom content
+#     sections (identity, last-train parameters, assembly-scan tables).
+#
+# Design. The pipeline samplesheet carries only sample and fasta, so the design
+# is an optional table declared through METADATA_FILE (genome id in a column
+# named `sample`, or in the first column; every other column a factor), the
+# ampliseq convention. GROUP_COL defaults to its first factor column. Without it
+# the metadata collection is pruned and every tile keeps working ungrouped.
+# ============================================================================
+template:
+  template_id: "nf-core/pairgenomealign/3.0.4"
+  description: "nf-core/pairgenomealign template for pairwise genome alignment: how much of the target each query genome aligns to and at what identity, divergence and the substitution spectrum, assembly contiguity and gaps of the queries, and synteny with the target."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one pairgenomealign run (alignment/, assemblyscan/, cutn/, multiqc/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): genome id in a column named sample (or in the first column), one column per factor such as a clade. Enables the design filters and grouping."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table genome-id column. Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group and filter genomes by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "SKIP_ASSEMBLY_QC"
+      description: "Set (--var SKIP_ASSEMBLY_QC=true) for a run with --skip_assembly_qc: no assemblyscan/ reports, so the assembly statistics collection is pruned."
+      required: false
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # design table vendored in input/ (see megatest.yaml).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/genome_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "clade"
+      GROUP_COL_DISPLAY: "Clade"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+          - "genomes"            # the whole iGenomes map, not a run setting
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Genomes"
+        key_patterns: ["target", "targetName", "input", "query", "queryName"]
+      - group: "Alignment (LAST)"
+        key_patterns: ["seed", "softmask", "strand", "m2m", "lastal_*", "last_split_mismap", "export_aln_to", "multi_cram"]
+      - group: "Dot plots"
+        key_patterns: ["skip_dotplot_*", "dotplot_*"]
+      - group: "Run context"
+        key_patterns: ["skip_assembly_qc", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "genome", "igenomes_*"]
+    highlight:
+      - "targetName"
+      - "seed"
+      - "softmask"
+      - "strand"
+      - "m2m"
+      - "lastal_args"
+      - "last_split_mismap"
+      - "export_aln_to"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_ASSEMBLY_QC"
+      remove_dc_tags: ["assemblyscan_stats"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Pairwise Genome Alignment"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "pairgenomealign"
+    version: "3.0.4"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/pairgenomealign"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional), read by the genome hub below
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Genome design table (optional, --var METADATA_FILE=...): one row per query genome, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Query genome id, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # Per-pair alignment summaries (catalog last/*)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "last_split_identity"
+        description: "One-to-one alignment summary per genome pair: aligned length, percent identity and the share of each genome covered"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "last/split_identity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair": "Alignment id, target and query joined by three underscores"
+              "target": "Target genome id"
+              "query": "Query genome id (samplesheet sample)"
+              "aligned_bp": "Length of the one-to-one alignment in alignment columns"
+              "percent_identity": "Identical columns over all alignment columns, gaps included, in percent"
+              "percent_identity_no_gaps": "Identical columns over gap-free alignment columns, in percent"
+              "target_sequences": "Sequences in the target genome"
+              "target_length": "Target genome length in base pairs"
+              "query_sequences": "Sequences in the query genome"
+              "query_length": "Query genome length in base pairs"
+              "target_aligned_pct": "Aligned length over the target genome length, in percent"
+              "query_aligned_pct": "Aligned length over the query genome length, in percent"
+
+      - data_collection_tag: "last_split_matrix"
+        optional: true
+        description: "Substitution matrix summary and evolutionary distances of each one-to-one alignment, with the 12-class substitution spectrum"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "last/split_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair": "Alignment id, target and query joined by three underscores"
+              "target": "Target genome id"
+              "query": "Query genome id (samplesheet sample)"
+              "blocks": "Alignment blocks of the one-to-one alignment"
+              "columns_analyzed": "Alignment columns the matrix counts"
+              "p_distance": "Share of substituted columns among aligned A/C/G/T columns"
+              "jc69_distance": "Jukes-Cantor corrected distance"
+              "f81_distance": "Felsenstein 1981 corrected distance"
+              "k80_distance": "Kimura two-parameter corrected distance"
+              "t92_distance": "Tamura 1992 corrected distance"
+              "identical_columns": "Aligned columns with the same base on both genomes"
+              "substituted_columns": "Aligned columns with different bases"
+              "transitions": "Purine to purine or pyrimidine to pyrimidine substitutions"
+              "transversions": "Purine to pyrimidine substitutions and the reverse"
+              "ts_tv_ratio": "Transitions over transversions"
+              "target_gap_columns": "Columns with a query base against a target gap (insertions in the query)"
+              "query_gap_columns": "Columns with a target base against a query gap (deletions in the query)"
+              "A_to_C_pct": "Target A aligned to query C, in percent of all substitutions"
+              "A_to_G_pct": "Target A aligned to query G, in percent of all substitutions"
+              "A_to_T_pct": "Target A aligned to query T, in percent of all substitutions"
+              "C_to_A_pct": "Target C aligned to query A, in percent of all substitutions"
+              "C_to_G_pct": "Target C aligned to query G, in percent of all substitutions"
+              "C_to_T_pct": "Target C aligned to query T, in percent of all substitutions"
+              "G_to_A_pct": "Target G aligned to query A, in percent of all substitutions"
+              "G_to_C_pct": "Target G aligned to query C, in percent of all substitutions"
+              "G_to_T_pct": "Target G aligned to query T, in percent of all substitutions"
+              "T_to_A_pct": "Target T aligned to query A, in percent of all substitutions"
+              "T_to_C_pct": "Target T aligned to query C, in percent of all substitutions"
+              "T_to_G_pct": "Target T aligned to query G, in percent of all substitutions"
+
+      - data_collection_tag: "last_train_params"
+        optional: true
+        description: "Scoring parameters last-train fitted for each genome pair: training identity, score scale, gap costs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "last/train_params.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair": "Alignment id, target and query joined by three underscores"
+              "target": "Target genome id"
+              "query": "Query genome id (samplesheet sample)"
+              "training_percent_identity": "Substitution identity of the training alignments, in percent"
+              "score_scale": "Scale of the score parameters (lastal -t)"
+              "deletion_open_cost": "Gap opening cost for deletions (lastal -a)"
+              "insertion_open_cost": "Gap opening cost for insertions (lastal -A)"
+              "deletion_extend_cost": "Gap extension cost for deletions (lastal -b)"
+              "insertion_extend_cost": "Gap extension cost for insertions (lastal -B)"
+              "strand_setting": "Strand parameter (lastal -S)"
+
+      - data_collection_tag: "last_synteny_links"
+        optional: true  # only with --export_aln_to psl
+        description: "Synteny links between the target and each query from the PSL export: the longest alignments of each pair as target and query loci"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "last/synteny_links.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair": "Alignment id, target and query joined by three underscores"
+              "target": "Target genome id"
+              "query": "Query genome id (samplesheet sample)"
+              "label": "Target interval of the alignment, as sequence:start-end"
+              "chrom_a": "Target sequence"
+              "start_a": "Alignment start on the target (0-based)"
+              "end_a": "Alignment end on the target"
+              "pos_a": "Alignment midpoint on the target, where the link is drawn"
+              "chrom_b": "Query sequence, prefixed with q: so it never merges with a target name"
+              "start_b": "Alignment start on the query forward strand (0-based)"
+              "end_b": "Alignment end on the query forward strand"
+              "pos_b": "Alignment midpoint on the query, where the link is drawn"
+              "weight": "Matching bases of the alignment, the link weight"
+              "aligned_bp": "Alignment span on the target in base pairs"
+              "identity_pct": "Matches over matches plus mismatches, in percent"
+              "category": "Orientation of the query relative to the target (same strand or inverted)"
+              "rank": "Rank of the alignment by matching bases within its pair"
+
+      # ----------------------------------------------------------------
+      # Query assemblies (catalog assemblyscan/stats.py, seqtk/cutn_*)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "assemblyscan_stats"
+        optional: true  # absent with --skip_assembly_qc
+        description: "Contiguity and composition of each query assembly from assembly-scan"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "assemblyscan/stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Query genome id, read off the report file name"
+              "contigs": "Sequences in the assembly"
+              "total_length": "Assembly length in base pairs"
+              "max_contig_length": "Longest sequence in base pairs"
+              "mean_contig_length": "Mean sequence length in base pairs"
+              "median_contig_length": "Median sequence length in base pairs"
+              "min_contig_length": "Shortest sequence in base pairs"
+              "n50": "N50 in base pairs"
+              "l50": "Number of sequences holding half of the assembly"
+              "gc_pct": "GC content in percent"
+              "n_pct": "N content in percent"
+              "contigs_over_1kb": "Sequences longer than 1 kb"
+              "contigs_over_10kb": "Sequences longer than 10 kb"
+              "contigs_over_100kb": "Sequences longer than 100 kb"
+              "contigs_over_1mb": "Sequences longer than 1 Mb"
+              "contigs_over_1mb_pct": "Sequences longer than 1 Mb, in percent of all sequences"
+
+      - data_collection_tag: "seqtk_cutn_gaps"
+        optional: true
+        description: "Assembly gaps (runs of N) per query genome from seqtk cutN: count, total and median length, longest"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seqtk/cutn_gaps.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Query genome id, read off the BED file name"
+              "gaps": "Runs of N in the assembly"
+              "gap_bp": "Bases in runs of N"
+              "sequences_with_gaps": "Sequences holding at least one run of N"
+              "median_gap_bp": "Median run length in base pairs"
+              "max_gap_bp": "Longest run in base pairs"
+
+      - data_collection_tag: "seqtk_cutn_gap_lengths"
+        optional: true
+        description: "Length distribution of the assembly gaps of each query genome, in log10 bins"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seqtk/cutn_gap_lengths.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Query genome id, read off the BED file name"
+              "gap_length_bp": "Lower edge of the length bin in base pairs"
+              "log10_gap_length": "Lower edge of the length bin on the log10 scale (four bins per decade)"
+              "gaps": "Runs of N whose length falls in the bin"
+              "gaps_pct": "Share of the genome's runs of N that fall in the bin, in percent"
+              "gap_bp": "Bases in those runs"
+
+      # ----------------------------------------------------------------
+      # Genome hub. Declared after every collection it reads through dc_ref:
+      # a dc_ref is read back from the referenced Delta table, which exists
+      # only once that collection has been processed.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "genomes"
+        description: "Genome hub: one row per query genome with its alignment, divergence, assembly and gap summary and the design columns"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/pairgenomealign/genomes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Query genome id (samplesheet sample), the key every other collection joins on"
+              "target": "Target genome the query was aligned to (--targetName)"
+              "pair": "Alignment id, target and query joined by three underscores, as the pipeline names its files"
+              "aligned_bp": "Length of the one-to-one alignment in alignment columns"
+              "percent_identity": "Identical columns over all alignment columns, gaps included, in percent"
+              "target_aligned_pct": "Aligned length over the target genome length, in percent"
+              "query_aligned_pct": "Aligned length over the query genome length, in percent"
+              "blocks": "Number of alignment blocks of the one-to-one alignment"
+              "k80_distance": "Kimura two-parameter distance on the aligned A/C/G/T columns"
+              "ts_tv_ratio": "Transitions over transversions among the substituted columns"
+              "contigs": "Sequences in the query assembly (assembly-scan)"
+              "total_length": "Query assembly length in base pairs (assembly-scan)"
+              "n50": "Query assembly N50 in base pairs (assembly-scan)"
+              "gc_pct": "Query assembly GC content, in percent (assembly-scan)"
+              "gaps": "Runs of N in the query assembly (seqtk cutN)"
+              "gap_bp": "Bases in runs of N in the query assembly (seqtk cutN)"
+
+      # ----------------------------------------------------------------
+      # MultiQC: pairgenomealign's own report sections (custom content)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run: one-to-one alignment identity, last-train parameters, and assembly-scan contig length and base content tables"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            # Every section is custom content, so the module ids are the
+            # section anchors and each module holds one plot named after it.
+            modules:
+              - "last_o2o"
+              - "train"
+              - "contigs_length_statistics"
+              - "base_content_summary"
+            plots:
+              last_o2o: ["last_o2o-section"]
+              train: ["train-section"]
+              contigs_length_statistics: ["contigs_length_statistics-section"]
+              base_content_summary: ["base_content_summary-section"]
+
+# ============================================================================
+# LINKS: the genome hub filters every per-genome collection
+# ============================================================================
+links:
+  # The alignment sections of the report name their rows by pair
+  # (<target>___<query>, and <target>___<query>.train for the parameters), so
+  # the pair id reaches them by prefix; the assembly sections name rows by the
+  # query genome, which the second link maps directly.
+  - source_dc_tag: "genomes"
+    source_column: "pair"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: {resolver: "regex", target_field: "sample"}
+    description: "Filter the MultiQC alignment sections by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: {resolver: "sample_mapping", target_field: "sample"}
+    description: "Filter the MultiQC assembly sections by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "last_split_identity"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "query"}
+    description: "Filter the alignment summary by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "last_split_matrix"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "query"}
+    description: "Filter the substitution summary by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "last_train_params"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "query"}
+    description: "Filter the fitted parameters by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "last_synteny_links"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "query"}
+    description: "Filter the synteny links by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "assemblyscan_stats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the assembly statistics by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "seqtk_cutn_gaps"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the assembly gap summary by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "seqtk_cutn_gap_lengths"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the gap length profiles by the selected genomes"
+    enabled: true
+  # Reverse links: a selection made on a tab's own table or scatter narrows
+  # the hub, and through it every other tab.
+  - source_dc_tag: "last_split_identity"
+    source_column: "query"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Narrow the genome hub to the genomes selected on the alignment tiles"
+    enabled: true
+  - source_dc_tag: "assemblyscan_stats"
+    source_column: "genome"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Narrow the genome hub to the assemblies selected on the assembly tiles"
+    enabled: true

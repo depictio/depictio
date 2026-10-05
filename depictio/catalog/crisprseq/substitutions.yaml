@@ -1,0 +1,21 @@
+id: crisprseq_substitutions
+name: Substitution and gap rate per position
+mode: gene-editing/substitutions
+description: >-
+  For every amplicon position within the profile window of the cut site, the
+  dominant base and the share of reads carrying another base (substitution) or
+  a gap. Base editors show as a substitution peak upstream of the cut.
+find: { path_glob: "**/*_subs-perc.csv" }
+recipe: crisprseq/substitutions.py
+fixture: substitutions.tsv
+renders_as:
+  - id: substitution_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: offset, y: substitution_pct }
+  - id: gap_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: offset, y: gap_pct }
+  - { component: interactive, interactive_type: RangeSlider, column_name: offset }
+  - { component: table }

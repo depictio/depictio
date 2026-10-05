@@ -1,0 +1,16 @@
+entity	engine	target	n_models	residue_index	plddt	plddt_min	plddt_max
+alphafold2__T1024	alphafold2	T1024	5	2	81.99	31.63	81.99
+alphafold2__T1024	alphafold2	T1024	5	4	94.39	32.5	94.39
+alphafold2__T1024	alphafold2	T1024	5	6	96.64	33.62	96.64
+alphafold2__split_msa_prediction__T1024	alphafold2 (split msa prediction)	T1024	5	2	81.99	32.21	81.99
+alphafold2__split_msa_prediction__T1024	alphafold2 (split msa prediction)	T1024	5	4	94.47	30.14	94.47
+alphafold2__split_msa_prediction__T1024	alphafold2 (split msa prediction)	T1024	5	6	96.67	29.46	96.67
+colabfold__T1024	colabfold	T1024	5	2	75.71	67.4	75.71
+colabfold__T1024	colabfold	T1024	5	4	87.28	81.4	87.28
+colabfold__T1024	colabfold	T1024	5	6	90.62	84.97	90.62
+esmfold__T1024	esmfold	T1024	1	2	82.5	82.5	82.5
+esmfold__T1024	esmfold	T1024	1	4	88.93	88.93	88.93
+esmfold__T1024	esmfold	T1024	1	6	94.58	94.58	94.58
+rosettafold_all_atom__T1024	rosettafold_all_atom	T1024	1	2	69.0	69.0	69.0
+rosettafold_all_atom__T1024	rosettafold_all_atom	T1024	1	4	74.0	74.0	74.0
+rosettafold_all_atom__T1024	rosettafold_all_atom	T1024	1	6	77.5	77.5	77.5

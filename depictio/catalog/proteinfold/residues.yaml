@@ -1,0 +1,31 @@
+id: proteinfold_residues
+name: Residue confidence of the top-ranked structures
+mode: protein/residues
+description: >-
+  One row per residue of every top-ranked structure, one structure per engine
+  and target: chain and residue number in the structure's own numbering, the
+  amino acid, pLDDT (the model's per-residue confidence, 0 to 100, read from
+  the B-factor column) and its AlphaFold confidence band (Very high, Confident,
+  Low, Very low, as the pLDDT legend of the protein tiles). The entity is the id
+  the structures collection gives the same PDB, so the 3D tile, the sequence
+  track and the alignment of one structure select each other's residues.
+find:
+  path_glob: "**/top_ranked_structures/*.pdb"
+recipe: proteinfold/residues.py
+fixture: residues.tsv
+renders_as:
+  - { id: structure_plddt, component: advanced_viz, kind: molecule_3d,
+      roles: {position: position, entity: entity, chain: chain, value: value, category: category} }
+  # No category lane: the pLDDT lane already colours each residue by its band.
+  - { id: plddt_sequence_track, component: advanced_viz, kind: sequence_track,
+      roles: {position: position, entity: entity, residue: residue, value: value} }
+  - { id: residue_plddt, component: card, column: value, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: confident_share, component: card, column: confidently_placed, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: residue_bands, component: card, column: position, aggregation: count,
+      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: value, color: engine} }
+  - { component: interactive, interactive_type: Select, column_name: engine }
+  - { component: interactive, interactive_type: RangeSlider, column_name: position }
+  - { component: table, row_selection_enabled: true, row_selection_column: position }

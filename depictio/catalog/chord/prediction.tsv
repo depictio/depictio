@@ -1,0 +1,3 @@
+sample	p_BRCA1	p_BRCA2	p_hrd	hr_status	hrd_type	remarks_hr_status	remarks_hrd_type
+TUMOR1	0.63	0.236	0.866	HR_deficient	BRCA1_type		
+TUMOR2	0.02	0.01	0.03	HR_proficient	none		

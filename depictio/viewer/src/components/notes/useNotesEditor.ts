@@ -90,6 +90,9 @@ export function useNotesEditor(
       if (!canEditRef.current) return;
       const html = ed.getHTML();
       if (html === lastSavedRef.current) return;
+      // TipTap renders empty notes as one empty paragraph; saving that would
+      // rewrite the whole dashboard on every visit by an owner.
+      if (html === '<p></p>' && !lastSavedRef.current) return;
       scheduleSave(html);
     },
   });

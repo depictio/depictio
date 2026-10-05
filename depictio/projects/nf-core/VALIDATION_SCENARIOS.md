@@ -995,6 +995,233 @@ MultiQC parquet, and the reason is recorded in its report.
 
 ---
 
+## crisprseq 2.3.0
+
+**Megatest:** `s3://nf-core-awsmegatests/crisprseq/results-0e9f915c4a3c89d02a66ec58e2decbc832323c8b/`
+(tag 2.3.0, run_root `.`, manifest megatest.yaml, `test_full` targeted profile; BAMs and
+per-library HTML reports not fetched)
+
+**MultiQC:** the run writes none; the template declares no `multiqc_data` collection and opens on
+an Overview tab instead
+
+**Template requirements:**
+- Always: `samples` (`METADATA_FILE`, default `{DATA_ROOT}/input/samplesheet.csv`; the pipeline
+  does not publish its samplesheet, so it is vendored and copied by `download_test_data.sh`), the
+  CIGAR parser tables under `cigar/`
+- `GROUP_COL` defaults to `protospacer`; pass `--var GROUP_COL=protospacer` explicitly, because the
+  metadata auto-detection otherwise picks `fastq_1`
+- The 6,195-file fan-in is bound through glob recipe sources (`read_kwargs.columns`), with no raw
+  collection; the per-guide collections are built by pipeline-local recipes
+- Conditional set by hand, not read from `params.json`: `SKIP_CLONALITY` removes the clonality
+  collection
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| CR1 | **test_full targeted megatest (validated offline)** | `--var GROUP_COL=protospacer` | none | 13 collections; every recipe runs on the real files (the indel recipe in about 25 s on 2.2 GB of per-read tables); CLI dry run 8/8. |
+| CR2 | **clonality skipped** | `--skip_clonality` plus `--var SKIP_CLONALITY=1` | no `clonality/` | The clonality collection and its tiles are removed. The flag is not read from `params.json`. |
+| CR3 | **HDR donor template** | a samplesheet with a `template` column | template-based reads appear | The template-based outcome tiles fill for the first time; the megatest has no donor, so they have never seen data. |
+| CR4 | **base editor** | a base-editing run | substitutions dominate the outcomes | The substitution heatmap becomes the main reading; indel tiles go sparse. |
+| CR5 | **single guide** | one `--protospacer` for every library | one protospacer | The per-guide view collapses to one guide; the group filter holds a single value. |
+| CR6 | **screening workflow** | `--analysis screening` | MAGeCK / BAGEL2 outputs instead of `cigar/` | Not covered by the template; no screening megatest is published. |
+
+**Ranking by template stress:** CR3 > CR4 > CR1 > CR2 > CR5 > CR6
+
+---
+
+## isoseq 3.0.1
+
+**Megatest:** `s3://nf-core-awsmegatests/isoseq/results-6c944831289d4d6e33497026f6b18e8c671705bd/`
+(tag 3.0.1, run_root `.`, manifest megatest.yaml; BAMs not fetched, 234 MB of the 286 MB fetched
+is the uLTRA GTF)
+
+**MultiQC:** run wrote 1.33 -> used as-is (ccs and lima modules, one report sample per CCS chunk)
+
+**Template requirements:**
+- Always: the CCS and refine reports, the TAMA polyA, collapse and merge outputs, and
+  `REFERENCE_GTF` (default `{DATA_ROOT}/ULTRA_INDEX/genome.gtf`, the GTF uLTRA indexed), which the
+  template classifies the isoforms against itself (SQANTI3-like, exact intron chains), since the
+  pipeline runs no SQANTI
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/sample_metadata.tsv`), with `GROUP_COL` naming the factor
+- Conditional: `SKIP_MULTIQC` prunes the MultiQC collection
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| IS1 | **megatest with design (validated offline)** | `--var METADATA_FILE=<DATA_ROOT>/input/sample_metadata.tsv --var GROUP_COL=tissue` | none | 12 collections; every recipe runs on the real files; CLI dry run 8/8. |
+| IS2 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | The design card goes, so the glance strip shows 3 of its 4 cards. Dry run 8/8. |
+| IS3 | **minimap2 aligner** | `--aligner minimap2` | no `ULTRA_INDEX/genome.gtf` | Pass `--var REFERENCE_GTF=<annotation>`; without it every isoform is classified as unclassified. |
+| IS4 | **rows started after CCS** | a samplesheet of CCS BAMs | no CCS reports | The optional CCS collections are skipped with their tiles. |
+| IS5 | **several SMRT cells per sample** | a multi-cell samplesheet | chunks of several cells per sample | The funnel sums the cells per sample. Not run. |
+| IS6 | **pooled merge** | `--tama_merge_all` | an `all_samples.bed` annotation | The pooled BED is excluded by the file-name regex, so novel genes stay per sample. Not run. |
+
+**Ranking by template stress:** IS3 > IS5 > IS4 > IS6 > IS2 > IS1
+
+---
+
+## oncoanalyser 3.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/oncoanalyser/results-7c74c87a43749952b38c9a18915947570f0595a0/`
+(tag 3.0.0, run_root `.`, manifest megatest.yaml, `test_full` WGTS profile: a tumor/normal DNA pair
+plus tumor RNA; outputs under one `<group_id>/` directory per tumor; 33 MB of tables and VCFs out
+of 272 GB)
+
+**MultiQC:** the run writes none; the template declares no `multiqc_data` collection and opens on
+an Overview tab instead
+
+**Template requirements:**
+- Always: `samples` (`METADATA_FILE`; the pipeline does not publish its samplesheet, so it is
+  vendored under `input/` and copied by `download_test_data.sh`), and the PURPLE, LINX and BamTools
+  outputs
+- Optional: the CUPPA, SIGS, CHORD, LILAC, TEAL, Neo and QSEE collections, each skipped when its
+  tool did not run
+- `GENOME` (default `hg38`) names the assembly of the locus and `genome_view` annotation, which
+  accept only hg38 and mm10
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| OA1 | **test_full WGTS megatest (validated offline)** | none | none | Every recipe runs on the real files; CLI dry run 8/8. |
+| OA2 | **tumor-only** | a samplesheet without normal rows | PURPLE runs in `TUMOR` mode | Germline drivers and the normal QC rows are absent. |
+| OA3 | **targeted panel** | `--mode targeted` | no CUPPA, SIGS, CHORD or Neo | The optional collections are pruned with their tiles. |
+| OA4 | **GRCh37** | `--genome GRCh37_hmf` plus `--var GENOME=hg19` | hg19 coordinates | The locus and `genome_view` annotation must be set to none, since `cnv_profile` and `genome_view` accept only hg38 and mm10. |
+| OA5 | **DNA only** | no RNA sample | no transcriptome evidence | The CUPPA RNA columns and the Neo RNA support are empty. |
+
+**Ranking by template stress:** OA4 > OA2 > OA3 > OA5 > OA1
+
+---
+
+## pairgenomealign 3.0.4
+
+**Megatest:** `s3://nf-core-awsmegatests/pairgenomealign/results-8ee09a1cdc920fc90cd62358952045e5019e1fe0/`
+(tag 3.0.4, run_root `.`, manifest megatest.yaml, `test_full` profile; tables-only fetch of about
+20 MB out of 42.8 GB)
+
+**MultiQC:** run wrote 1.33 -> used as-is (pairgenomealign custom content only)
+
+**Template requirements:**
+- Always: the LAST per-pair summaries (split identity, substitution matrix, training parameters)
+  and `multiqc_data`
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/genome_metadata.tsv`), with `GROUP_COL` auto-detected as its first factor column
+- Optional: the synteny collection, which reads the PSL export (`--export_aln_to psl`); the
+  megatest ran with `no_export`, so it is skipped there
+- Conditional: `SKIP_ASSEMBLY_QC` prunes the assembly statistics collection
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| PG1 | **megatest with design (validated offline)** | `--var METADATA_FILE=<DATA_ROOT>/input/genome_metadata.tsv` | none | Every recipe runs on the real files; the synteny collection is skipped (no PSL); CLI dry run 8/8. |
+| PG2 | **PSL export** | `--export_aln_to psl` | `<target>___<query>.psl.gz` files | The Synteny tab fills. Checked only on a PSL converted in scratch; the real export naming is untested. |
+| PG3 | **assembly QC skipped** | `--skip_assembly_qc` plus `--var SKIP_ASSEMBLY_QC=1` | no `assemblyscan/` | The assembly statistics collection and its tiles are pruned. |
+| PG4 | **gap-free assemblies** | T2T queries | no run of N | The gap collections are skipped and the hub's gap columns are null. |
+| PG5 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | The group filter and the design card disappear. |
+
+**Ranking by template stress:** PG2 > PG4 > PG3 > PG5 > PG1
+
+---
+
+## proteinannotator 1.1.0
+
+**Megatest:** `s3://nf-core-awsmegatests/proteinannotator/results-cbf78d471f62d91af666e8c77bcd580b4743c6be/`
+(development run `v1.2.0dev-gb8fac19`, outdir `results-dev`, not a tag; run_root `.`, manifest
+megatest.yaml, `test_full` profile)
+
+**MultiQC:** run wrote 1.33 -> not read (SeqFu custom-content sections anchored by sample name,
+which no generic panel can bind; the SeqFu TSVs hold the same numbers). No MultiQC tab
+
+**Template requirements:**
+- Always: the SeqFu statistics, the hmmsearch domain tables, the InterProScan TSVs and the S4PRED
+  `ss2` files
+- Optional: `metadata` (`--var METADATA_FILE`; the megatest design is vendored as
+  `input/sample_metadata.tsv`), with `GROUP_COL` auto-detected as its first factor column
+- The 3D tile resolves each protein by sequence through the structure resolver
+  (`DEPICTIO_STRUCTURE_RESOLVER_ENABLED`, off by default)
+- Conditionals: `SKIP_INTERPROSCAN` prunes the InterProScan collections, `SKIP_S4PRED` the
+  secondary-structure collections
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| PA1 | **megatest with design (validated offline)** | `--var METADATA_FILE=<DATA_ROOT>/input/sample_metadata.tsv` | none | 11 collections; every recipe runs on the real files; CLI dry run passes with and without `METADATA_FILE`. |
+| PA2 | **InterProScan skipped** | `--skip_interproscan` plus `--var SKIP_INTERPROSCAN=1` | no `functional_annotation/` | The InterProScan collections are pruned; domains come from hmmsearch only. Dry run passes. |
+| PA3 | **S4PRED skipped** | `--skip_s4pred` plus `--var SKIP_S4PRED=1` | no `s4pred/` | The secondary-structure collections are pruned; the residue table keeps its sequence and domains. Dry run passes. |
+| PA4 | **proteome-scale input** | a FASTA of thousands of proteins | residue table grows with total length | The sequence is repeated on every residue row, so memory and table size scale with the proteome. |
+| PA5 | **resolver disabled** | default server settings | none | The 3D tile's structure request answers 403 and the tile shows its empty state. |
+
+**Ranking by template stress:** PA4 > PA5 > PA2 > PA3 > PA1
+
+---
+
+## proteinfamilies 2.5.0
+
+**Megatest:** `s3://nf-core-awsmegatests/proteinfamilies/results-f8c0b183e59df3d87c38d0f7c4acc6918593f4f5/`
+(tag 2.5.0, run_root `.`, manifest megatest.yaml, `test_full` profile)
+
+**MultiQC:** run wrote 1.35 -> used as-is (custom content only; the SeqFu and cluster-size
+sections are named after each sample, so only the family metadata table is bound)
+
+**Template requirements:**
+- Always: `samples` (`METADATA_FILE`, default `{DATA_ROOT}/input/samplesheet.csv`; the pipeline
+  reads its samplesheet from a URL and does not publish it, so it is vendored and copied by
+  `download_test_data.sh`), the clustering, family, MSA and HMM outputs
+- `GROUP_COL` defaults to `mode` (create or update, derived from the sheet); passing
+  `METADATA_FILE` explicitly triggers the auto-detection, which picks `fasta`, so pass `GROUP_COL`
+  with it
+- Conditional set by hand, not read from `params.json`: `SKIP_PHYLOGENETIC_INFERENCE` drops
+  `cmaple_tree_raw` and `family_trees`; both are also `optional`
+- One tree per family: the trees are drawn from a segment table by a code figure, because a
+  phylogeny collection serves one Newick file
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| FM1 | **test_full megatest (validated offline)** | none | none | 2 samples (create, update), 13 families (8 new, 5 updated), 384 members, 8 CMAPLE trees; every recipe runs on the real files; CLI dry run 8/8. |
+| FM2 | **phylogeny skipped** | `--skip_phylogenetic_inference` plus `--var SKIP_PHYLOGENETIC_INFERENCE=1` | no `phylogeny/` | `cmaple_tree_raw` and `family_trees` are dropped with the tree tiles. |
+| FM3 | **create only** | a samplesheet without existing HMMs or MSAs to update | no family updates | Every family is new; the mode filter holds one value. |
+| FM4 | **large input** | millions of sequences per sample | many more families | The per-family MSA and residue collections grow with the family count; not measured. |
+
+**Ranking by template stress:** FM4 > FM2 > FM3 > FM1
+
+---
+
+## proteinfold 2.1.0
+
+**Megatest:** `s3://nf-core-awsmegatests/proteinfold/results-a414fd1368009500b66761e37e7cde80366a45e9/`
+(development run `v2.1.0dev-ga414fd1`, not a tag, because the 2.0.0 release run is empty; run_root
+`.`, manifest megatest.yaml; eleven `test_full` runs under one prefix)
+
+**MultiQC:** each engine writes its own report with per-target pLDDT custom content only; none is
+bound
+
+**Template requirements:**
+- Always: `targets` (`METADATA_FILE`, default `{DATA_ROOT}/input/samplesheet.csv`; the union of
+  the monomer and multimer `test_full` sheets is vendored), the structures and pLDDT tables of
+  every engine present
+- `GROUP_COL` defaults to `assembly` (single chain or complex, derived from the structures)
+- Optional per engine: MSA, PAE and score collections; an engine that does not write them skips
+  them
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| PF1 | **multi-engine megatest (validated offline)** | none | none | 3 targets, 12 structures, 9 PAE matrices, 9 alignments; every recipe runs on the real files; CLI dry run 8/8. |
+| PF2 | **ESMFold only** | `--mode esmfold` | no MSA, PAE or score files | The optional MSA, PAE and score collections are skipped, and the MSA tile has nothing to point at. |
+| PF3 | **multimer run** | AlphaFold2 multimer on complexes | interface scores | ipTM and ipSAE fill; on the megatest's heterodimer they are low, a real negative. |
+| PF4 | **AlphaFold3 or Boltz** | a run with one of those engines | other output names | Output file names are unverified; the engine may not be picked up. |
+
+**Ranking by template stress:** PF4 > PF2 > PF3 > PF1
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

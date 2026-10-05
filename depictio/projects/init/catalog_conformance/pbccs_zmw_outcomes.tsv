@@ -1,0 +1,13 @@
+sample	library	rank	outcome	zmws	pct_of_input
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Passed	428803	76.70537685188167
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Lacking full passes	117434	21.006894133725442
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Below SNR threshold	8536	1.526941501826391
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Draft generation error	2536	0.4536461631480468
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Insufficient draft cov	794	0.1420327498184342
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Heteroduplex insertions	758	0.13559297778636414
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Coverage drops	81	0.014489487072157645
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	CCS below minimum RQ	57	0.01019630571744427
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Draft below --min-length	17	0.0030410034595886415
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	CCS did not converge	5	0.0008944127822319534
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Draft too different	3	0.0005366476693391721
+30dpf_Muscle	30dpf_Muscle_0	CCS outcome	Empty coverage windows	2	0.00035776511289278135

@@ -1,0 +1,724 @@
+# nf-core/proteinannotator Template v1.1.0 - protein domain and structure annotation
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/proteinannotator/1.1.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv]
+#
+# Tested against the nf-core/proteinannotator AWS megatest results:
+#   s3://nf-core-awsmegatests/proteinannotator/results-cbf78d471f62d91af666e8c77bcd580b4743c6be/
+#   (a dev run of the pipeline, reported as v1.2.0dev; the 1.1.0 release prefix
+#   is not used, see megatest.yaml)
+#
+# What the run publishes, and so what this template reads:
+#   - qc/<sample>/: the filtered FASTA every later step ran on, and the SeqFu
+#     statistics before and after the length and duplicate filter.
+#   - domain_annotation/<db>/<sample>.domtbl.gz: hmmsearch domain tables for
+#     Pfam, FunFam, NMPFamsDB and MetagRoot (catalog hmmer/hmmsearch_domtbl).
+#   - functional_annotation/interproscan/<sample>/<sample>.tsv: InterProScan
+#     signature matches (catalog interproscan/matches); absent with
+#     --skip_interproscan, empty for a sample with no match.
+#   - s4pred/<sample>/ss2/<sequence id>.ss2: S4PRED secondary structure per
+#     residue (catalog s4pred/secondary_structure); absent with --skip_s4pred.
+#   The catalog proteinannotator/* recipes join them into one domain table,
+#   one residue table, a protein summary, the protein x database matrices and
+#   the per-sample hub.
+#
+# Not read: the MultiQC report. It carries only SeqFu custom-content sections
+# whose anchors are named after each sample, so no panel can be named
+# generically; the same numbers come from the SeqFu tables directly.
+#
+# Design. The pipeline samplesheet (id, fasta) carries no design column, so the
+# design is an optional table declared through METADATA_FILE (sample id in the
+# first column, or in a column named `sample`; every other column a factor),
+# the ampliseq convention. GROUP_COL defaults to its first factor column.
+# Without it the metadata collection and its links are pruned and every tile
+# bound to the sample hub keeps working.
+#
+# Structures. The pipeline predicts no 3D structure. The structure tile folds
+# the protein it shows from its sequence through the structure resolver
+# (ESMFold), so it needs the resolver enabled on the server.
+# ============================================================================
+template:
+  template_id: "nf-core/proteinannotator/1.1.0"
+  description: "nf-core/proteinannotator template: input filtering, domains from Pfam, FunFam, NMPFamsDB, MetagRoot and InterProScan in one table, database agreement per protein, secondary structure per residue, and a predicted 3D structure coloured by domain"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one proteinannotator run (qc/, domain_annotation/, functional_annotation/, s4pred/, pipeline_info/)"
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV or CSV): sample id in the first column (or a column named sample), one column per factor. Enables the design filter and the design card."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table sample-id column (links join on it). Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group and filter by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "SKIP_INTERPROSCAN"
+      description: "Set (--var SKIP_INTERPROSCAN=true) for a run with --skip_interproscan: no functional_annotation/, so the InterProScan collections are pruned."
+      required: false
+    - name: "SKIP_S4PRED"
+      description: "Set (--var SKIP_S4PRED=true) for a run with --skip_s4pred: no s4pred/, so the secondary-structure collections are pruned (the residue table keeps its sequence and domains)."
+      required: false
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # design table vendored in input/ (see docs/dashboards.md).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "protein_set"
+      GROUP_COL_DISPLAY: "Protein set"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"   # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Input filtering"
+        key_patterns: ["skip_preprocessing", "min_seq_length", "max_seq_length", "remove_duplicates_on_sequence"]
+      - group: "Domain databases (hmmsearch)"
+        key_patterns: ["skip_pfam", "pfam_*", "skip_funfam", "funfam_*", "skip_nmpfams", "nmpfams_*", "skip_metagroot", "metagroot_*", "hmmsearch_*"]
+      - group: "InterProScan"
+        key_patterns: ["skip_interproscan", "interproscan_*"]
+      - group: "Secondary structure"
+        key_patterns: ["skip_s4pred", "s4pred_*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "min_seq_length"
+      - "max_seq_length"
+      - "remove_duplicates_on_sequence"
+      - "hmmsearch_evalue_cutoff"
+      - "interproscan_applications"
+      - "skip_interproscan"
+      - "skip_s4pred"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_INTERPROSCAN"
+      remove_dc_tags: ["interproscan_tsv_raw", "interproscan_matches"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_S4PRED"
+      remove_dc_tags: ["s4pred_ss2_raw", "s4pred_secondary_structure"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Protein Annotation"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "proteinannotator"
+    version: "1.1.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/proteinannotator"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    # Declared in dependency order: the CLI ingests sequentially, and every
+    # recipe reads the collections above it through dc_ref.
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier, the samplesheet id. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # Raw scans: whole lines, parsed by the catalog recipes below
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seqfu_stats_raw"
+        description: "SeqFu statistics of every sample before and after the input filter, as written (input of seqfu_stats)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_(?:before|after)\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              quote_char: null
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "File": "Summarised FASTA file name"
+              "#Seq": "Number of sequences"
+              "Total bp": "Total length, in residues for a protein FASTA"
+              "Avg": "Mean sequence length"
+              "N50": "N50 length"
+              "N75": "N75 length"
+              "N90": "N90 length"
+              "auN": "Area under the Nx curve"
+              "Min": "Shortest sequence"
+              "Max": "Longest sequence"
+              "source_path": "File the row came from; sample and stage are derived from its name"
+
+      - data_collection_tag: "seqkit_fasta_raw"
+        description: "Lines of the filtered FASTA of every sample (input of seqkit_sequences)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?qc/[^/]+/[^/]+\\.(?:fasta|faa|fa)$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              quote_char: null
+              new_columns: ["raw_line"]
+              row_index_name: "line_no"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              raise_if_empty: false
+            columns_description:
+              "line_no": "Line number within the file, keeps every record's lines in order"
+              "raw_line": "One FASTA line, header or sequence"
+              "source_path": "File the line came from; the sample is derived from its name"
+
+      - data_collection_tag: "hmmer_domtbl_raw"
+        description: "Data lines of every hmmsearch domain table, one per database and sample (input of hmmer_hmmsearch_domtbl)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.domtbl(?:\\.gz)?$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              quote_char: null
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              raise_if_empty: false
+            columns_description:
+              "raw_line": "One space-aligned domtbl line, the comment header already stripped"
+              "source_path": "File the line came from; the database is its directory and the sample its name"
+
+      - data_collection_tag: "interproscan_tsv_raw"
+        optional: true
+        description: "Lines of every InterProScan TSV (input of interproscan_matches); absent with --skip_interproscan"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?interproscan/[^/]+/[^/]+\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              quote_char: null
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              raise_if_empty: false
+            columns_description:
+              "raw_line": "One tab-separated InterProScan match line"
+              "source_path": "File the line came from; the sample is derived from its name"
+
+      - data_collection_tag: "s4pred_ss2_raw"
+        optional: true
+        description: "Residue lines of every S4PRED ss2 file (input of s4pred_secondary_structure); absent with --skip_s4pred"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.ss2$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              quote_char: null
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              raise_if_empty: false
+            columns_description:
+              "raw_line": "One residue line: position, residue, state and the three state probabilities"
+              "source_path": "File the line came from; the protein is its name and the sample its directory"
+
+      # ----------------------------------------------------------------
+      # Per-tool tables (catalog recipes)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seqfu_stats"
+        description: "One row per sample and stage (before or after the input filter): sequence count, total, mean, minimum and maximum length, N50"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seqfu/stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id (samplesheet id)"
+              "stage": "before or after the length and duplicate filter"
+              "file": "Summarised FASTA file name"
+              "sequences": "Number of sequences"
+              "total_length": "Total length in residues"
+              "mean_length": "Mean sequence length"
+              "n50": "N50 length"
+              "n75": "N75 length"
+              "n90": "N90 length"
+              "aun": "Area under the Nx curve"
+              "min_length": "Shortest sequence"
+              "max_length": "Longest sequence"
+
+      - data_collection_tag: "seqkit_sequences"
+        description: "One row per protein of the filtered FASTA: id, header description, length and sequence"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seqkit/sequences.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id, the first word of the FASTA header"
+              "sample": "Sample the protein came from"
+              "description": "Rest of the FASTA header"
+              "length": "Length in residues"
+              "sequence": "One-letter amino-acid sequence"
+
+      - data_collection_tag: "hmmer_hmmsearch_domtbl"
+        description: "Every domain hmmsearch reported, per database: spans, E-values, bit scores and HMM coverage"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hmmer/hmmsearch_domtbl.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "source": "Database searched (the domain_annotation directory)"
+              "label": "Family HMM name"
+              "accession": "Family HMM accession, when the database has one"
+              "description": "Protein description from the FASTA header"
+              "start": "Envelope start on the protein"
+              "end": "Envelope end on the protein"
+              "protein_length": "Protein length"
+              "hmm_length": "HMM length"
+              "domain_index": "Domain number on this protein and HMM"
+              "domain_count": "Domains of this HMM on this protein"
+              "seq_evalue": "Full-sequence E-value"
+              "seq_score": "Full-sequence bit score"
+              "c_evalue": "Conditional E-value of the domain"
+              "i_evalue": "Independent E-value of the domain"
+              "dom_score": "Domain bit score"
+              "dom_bias": "Domain bias correction"
+              "hmm_from": "First HMM state aligned"
+              "hmm_to": "Last HMM state aligned"
+              "ali_from": "Alignment start on the protein"
+              "ali_to": "Alignment end on the protein"
+              "acc": "Mean posterior probability of the aligned residues"
+              "hmm_coverage": "Share of the HMM the alignment covers, 0 to 1"
+              "neg_log10_evalue": "-log10 of the independent E-value"
+
+      - data_collection_tag: "interproscan_matches"
+        optional: true
+        description: "Every InterProScan signature match: member database, signature, span, E-value, InterPro entry, GO terms and pathways"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "interproscan/matches.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "source": "Member database (analysis) of the signature"
+              "label": "Signature accession"
+              "description": "Signature description"
+              "start": "Match start"
+              "end": "Match end"
+              "evalue": "Match E-value or score as the member database reports it"
+              "protein_length": "Protein length"
+              "interpro_accession": "Integrated InterPro entry"
+              "interpro_description": "InterPro entry description"
+              "go_terms": "GO terms of the entry"
+              "pathways": "Pathway annotations of the entry"
+
+      - data_collection_tag: "s4pred_secondary_structure"
+        optional: true
+        description: "One row per residue: S4PRED state (helix, strand or coil), its probability and the three state probabilities"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "s4pred/secondary_structure.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "position": "Residue number, 1-based"
+              "residue": "Amino acid, one letter"
+              "ss_code": "Predicted state code: H, E or C"
+              "category": "Predicted state: Helix, Strand or Coil"
+              "value": "Probability of the predicted state"
+              "p_coil": "Coil probability"
+              "p_helix": "Helix probability"
+              "p_strand": "Strand probability"
+
+      # ----------------------------------------------------------------
+      # Joined per-protein and per-sample tables (catalog proteinannotator/*)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "proteinannotator_domains"
+        description: "One row per domain span from every database: hmmsearch libraries and InterProScan member databases"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinannotator/domains.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "domain_id": "Protein, database, family and span joined, the key a domain is selected by"
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "database": "Search the domain comes from: pfam, funfam, nmpfams, metagroot or interproscan"
+              "source": "HMM library, or the InterProScan member database"
+              "label": "Family or signature name"
+              "description": "Signature description (InterProScan)"
+              "start": "Domain start"
+              "end": "Domain end"
+              "span": "Domain length in residues"
+              "protein_length": "Protein length"
+              "evalue": "Independent E-value (hmmsearch) or match E-value (InterProScan)"
+              "neg_log10_evalue": "-log10 of the E-value"
+              "score": "Domain bit score (hmmsearch)"
+              "hmm_coverage": "Share of the HMM aligned (hmmsearch), 0 to 1"
+              "accession": "HMM accession or InterPro entry"
+
+      - data_collection_tag: "proteinannotator_proteins"
+        description: "One row per protein: length, domain hits per database, share of residues annotated, best domain and secondary structure shares"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinannotator/proteins.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "description": "FASTA header description"
+              "length": "Length in residues"
+              "annotation_status": "annotated when any database reports a domain, else unannotated"
+              "domain_hits": "Domains from all databases"
+              "databases_hit": "Databases with at least one domain on the protein"
+              "pfam_hits": "Pfam domains"
+              "funfam_hits": "FunFam domains"
+              "nmpfams_hits": "NMPFamsDB domains"
+              "metagroot_hits": "MetagRoot domains"
+              "interproscan_hits": "InterProScan matches"
+              "annotated_residues": "Residues covered by at least one domain"
+              "annotated_pct": "Share of residues covered by at least one domain, %"
+              "top_domain": "Domain with the lowest E-value"
+              "top_domain_database": "Database of the top domain"
+              "top_domain_evalue": "E-value of the top domain"
+              "helix_pct": "Residues predicted helix, %"
+              "strand_pct": "Residues predicted strand, %"
+              "coil_pct": "Residues predicted coil, %"
+
+      - data_collection_tag: "proteinannotator_residues"
+        description: "One row per residue: amino acid, secondary structure state and probability, best covering domain, and the protein sequence"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinannotator/residues.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "position": "Residue number, 1-based"
+              "residue": "Amino acid, one letter"
+              "category": "Predicted secondary structure: Helix, Strand or Coil"
+              "value": "Probability of the predicted state"
+              "domain": "Lowest E-value domain covering the residue"
+              "domain_database": "Database of that domain"
+              "domains_here": "Domains covering the residue"
+              "sequence": "Full sequence of the protein, folded by the structure tile"
+
+      - data_collection_tag: "proteinannotator_database_coverage"
+        description: "Protein by database matrix: share of each protein's residues each database annotates"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinannotator/database_coverage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "pfam": "Share of residues covered by Pfam domains, 0 to 1"
+              "funfam": "Share of residues covered by FunFam domains, 0 to 1"
+              "nmpfams": "Share of residues covered by NMPFamsDB domains, 0 to 1"
+              "metagroot": "Share of residues covered by MetagRoot domains, 0 to 1"
+              "interproscan": "Share of residues covered by InterProScan matches, 0 to 1"
+
+      - data_collection_tag: "proteinannotator_database_sets"
+        description: "Protein by database membership: 1 when the database annotates the protein"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "proteinannotator/database_sets.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Protein id"
+              "sample": "Sample the protein came from"
+              "pfam": "1 when Pfam annotates the protein"
+              "funfam": "1 when FunFam annotates the protein"
+              "nmpfams": "1 when NMPFamsDB annotates the protein"
+              "metagroot": "1 when MetagRoot annotates the protein"
+              "interproscan": "1 when InterProScan annotates the protein"
+
+      # ----------------------------------------------------------------
+      # Sample hub
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "One row per sample: sequences given and kept by the input filter, residues, lengths and annotation rates"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "proteinannotator/sample_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample id (samplesheet id)"
+              "input_sequences": "Sequences in the input FASTA"
+              "kept_sequences": "Sequences kept by the length and duplicate filter"
+              "removed_sequences": "Sequences the filter removed"
+              "kept_residues": "Residues in the kept sequences"
+              "mean_length": "Mean length of the kept sequences"
+              "n50": "N50 of the kept sequences"
+              "min_length": "Shortest kept sequence"
+              "max_length": "Longest kept sequence"
+              "annotated_proteins": "Proteins with at least one domain"
+              "annotated_protein_pct": "Share of kept proteins with at least one domain, %"
+              "domain_hits": "Domains from all databases"
+              "median_annotated_pct": "Median share of a protein's residues covered by a domain, %"
+
+links:
+  # Sample hub to every sample-keyed collection. The design table sends the
+  # same links (pruned with it when METADATA_FILE is absent).
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seqfu_stats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the SeqFu statistics by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "proteinannotator_proteins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the protein summary by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "proteinannotator_domains"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the domain table by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "proteinannotator_residues"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the residue table by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "proteinannotator_database_coverage"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the coverage matrix rows by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "proteinannotator_database_sets"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the database membership rows by the sample hub selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "hmmer_hmmsearch_domtbl"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the raw hmmsearch hits by the sample hub selection"
+    enabled: true
+
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the sample hub by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "proteinannotator_proteins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the protein summary by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "proteinannotator_domains"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the domain table by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "proteinannotator_residues"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the residue table by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "proteinannotator_database_coverage"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the coverage matrix rows by the design table selection"
+    enabled: true
+  - source_dc_tag: "metadata"
+    source_column: "{METADATA_ID_COL}"
+    target_dc_tag: "proteinannotator_database_sets"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the database membership rows by the design table selection"
+    enabled: true
+
+  # Protein summary to every protein-keyed collection: a protein picked in a
+  # filter or a table row narrows the domains, residues and matrices to it.
+  - source_dc_tag: "proteinannotator_proteins"
+    source_column: "entity"
+    target_dc_tag: "proteinannotator_domains"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the domain table by the selected proteins"
+    enabled: true
+  - source_dc_tag: "proteinannotator_proteins"
+    source_column: "entity"
+    target_dc_tag: "proteinannotator_residues"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the residue table by the selected proteins"
+    enabled: true
+  - source_dc_tag: "proteinannotator_proteins"
+    source_column: "entity"
+    target_dc_tag: "proteinannotator_database_coverage"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the coverage matrix by the selected proteins"
+    enabled: true
+  - source_dc_tag: "proteinannotator_proteins"
+    source_column: "entity"
+    target_dc_tag: "proteinannotator_database_sets"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the database membership by the selected proteins"
+    enabled: true
+  - source_dc_tag: "proteinannotator_proteins"
+    source_column: "entity"
+    target_dc_tag: "hmmer_hmmsearch_domtbl"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the raw hmmsearch hits by the selected proteins"
+    enabled: true
+  # A domain database picked on the Domains tab narrows the proteins to those
+  # it annotates.
+  - source_dc_tag: "proteinannotator_domains"
+    source_column: "entity"
+    target_dc_tag: "proteinannotator_proteins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the protein summary to the proteins carrying the selected domains"
+    enabled: true

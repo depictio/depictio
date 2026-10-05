@@ -1,0 +1,13 @@
+# SeqFu `stats` summarises a FASTA or FASTQ file on one line: sequence count,
+# total length, mean, N50 / N75 / N90, auN, shortest and longest. Pipelines run
+# it before and after a filtering step and name the files accordingly, which
+# the recipe reads into a `stage` column.
+id: seqfu
+name: SeqFu
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/seqfu/stats
+homepage: https://telatin.github.io/seqfu2/
+description: >-
+  Sequence length statistics of FASTA / FASTQ files, per file and per
+  processing stage.
+edam_topics:
+  - http://edamontology.org/topic_0080 # Sequence analysis

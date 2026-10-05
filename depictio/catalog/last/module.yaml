@@ -1,0 +1,8 @@
+# LAST: pairwise genome alignment (lastdb, last-train, lastal, last-split,
+# last-dotplot, maf-convert). The outputs here are the small per-pair
+# summaries nf-core/pairgenomealign publishes next to the MAF alignments,
+# plus the optional PSL export; the MAF files themselves are not read.
+id: last
+name: LAST
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/last/split
+homepage: https://gitlab.com/mcfrith/last
