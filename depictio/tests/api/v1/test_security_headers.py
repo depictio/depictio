@@ -84,6 +84,14 @@ class TestBasemapOrigins:
             assert host in sources, f"{style} has no allowed origin"
 
 
+    def test_map_worker_may_start_from_a_blob(self) -> None:
+        """maplibre builds its tile worker from a `blob:` URL.
+
+        Without an explicit worker-src the browser falls back to script-src,
+        which carries no `blob:`, and the map renders its legend over nothing.
+        """
+        assert "blob:" in _directive(CSP, "worker-src")
+
 class TestNginxMirrorsTheApi:
     def test_policies_are_identical(self) -> None:
         text = NGINX_TEMPLATE.read_text()

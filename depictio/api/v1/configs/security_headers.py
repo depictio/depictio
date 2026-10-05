@@ -38,9 +38,14 @@ SECURITY_HEADERS: dict[str, str] = {
     #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
     #   open-street-map → tile.openstreetmap.org
     # The bare apex is listed separately: a `*.` wildcard does not match it.
+    #
+    # worker-src: maplibre spawns its tile-parsing worker from a `blob:` URL.
+    # With no worker-src the browser falls back to script-src, which has no
+    # blob:, so the worker is refused and every map stays blank.
     "Content-Security-Policy": (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
+        "worker-src 'self' blob:; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "font-src 'self' data:; "
