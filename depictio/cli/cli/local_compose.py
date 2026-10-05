@@ -26,6 +26,7 @@ from depictio.cli.cli.local_stack import (
     package_root,
     running_status,
     stop_all,
+    write_private_file,
 )
 
 # The compose file a release's images were built with.
@@ -117,8 +118,10 @@ def compose_env(secret_values: dict, version: str | None) -> str:
 def checkout_compose() -> Path | None:
     """The docker-compose.yaml of the source checkout depictio runs from, if any."""
     root = package_root()
-    compose = root.parent / "docker-compose.yaml" if root is not None else None
-    return compose if compose is not None and compose.is_file() else None
+    if root is None:
+        return None
+    compose = root.parent / "docker-compose.yaml"
+    return compose if compose.is_file() else None
 
 
 def download(url: str) -> bytes:
@@ -212,6 +215,4 @@ def export_compose(paths: Paths, out: Path, log=print) -> None:
 
     (out / "docker-compose.yaml").write_bytes(compose)
     (out / "docker-compose.override.yaml").write_text(override)
-    fd = os.open(out / ".env", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(compose_env(secret_values, version))
+    write_private_file(out / ".env", compose_env(secret_values, version))
