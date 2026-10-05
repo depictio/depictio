@@ -261,10 +261,11 @@ the cards (8 → 2 libraries) and carry over from one tab to the next.
    - **CPU**: MongoDB 5+ needs AVX on x86_64 and ARMv8.2-A on arm64 (no Raspberry
      Pi 4). A `mongod` killed by SIGILL is reported as such.
 
-   `weed mini` uses its default internal ports (master 9333, volume 9340, filer
-   8888, admin 23646, and gRPC at +10000) and moves to free ones when they are
-   taken (it logs "finding alternative port"); only the S3 port is chosen by
-   `depictio local`. The full stack has been run on Python 3.13 and 3.14 from the
+   `weed mini` gets every internal port from `depictio local` (master, volume,
+   filer, admin and their gRPC ports, at their defaults 9333, 9340, 8888, 23646
+   and +10000 when free). Left to itself it moves off a taken port ("finding
+   alternative port"), but next to a second `weed mini` that search races with its
+   own binds and the volume server stops on "address already in use". The full stack has been run on Python 3.13 and 3.14 from the
    wheel (2026-10-05) and on 3.12 earlier; the dependency set resolves to wheels on
    3.11 to 3.14.
 5. **Version drift with Compose**: Redis and SeaweedFS are pinned to their major

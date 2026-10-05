@@ -155,6 +155,22 @@ def test_pick_ports_skips_a_busy_preferred_port(monkeypatch):
     assert len(set(ports.values())) == len(ports)
 
 
+def test_seaweedfs_gets_a_free_port_for_every_internal_listener(monkeypatch):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        taken = busy.getsockname()[1]
+        monkeypatch.setitem(local_stack.SEAWEEDFS_PORTS, "volume.port", taken)
+
+        flags = local_stack.seaweedfs_port_flags({9333})
+
+    ports = {flag.split("=")[0]: int(flag.split("=")[1]) for flag in flags}
+    assert set(ports) == {f"-{name}" for name in local_stack.SEAWEEDFS_PORTS}
+    assert ports["-volume.port"] != taken
+    assert ports["-master.port"] != 9333
+    assert len(set(ports.values())) == len(ports)
+
+
 def test_pick_ports_rejects_a_busy_explicit_api_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))
