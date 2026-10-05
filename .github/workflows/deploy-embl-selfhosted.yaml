@@ -1,12 +1,12 @@
-name: Deploy to EMBL (Self-Hosted)
+name: Deploy to EMBL dev (Self-Hosted)
 
 # SECURITY NOTE: This workflow uses self-hosted runners.
 # It triggers after the image build of a tag push (never after a PR build).
 # Only users with write access can push tags.
 #
-# Automatic: every release tag, beta or stable, deploys to dev
-# (dev.demo.depictio.embl.org) once its images are built.
-# Manual only: demo (demo.depictio.embl.org), through workflow_dispatch.
+# Every release tag, beta or stable, deploys to dev (dev.demo.depictio.embl.org)
+# once its images are built; workflow_dispatch redeploys any version there.
+# Demo (demo.depictio.embl.org) is deployed by hand with helm, not from here.
 
 on:
   # Trigger after the image build completes
@@ -23,19 +23,6 @@ on:
         description: 'Version tag to deploy (without v prefix, e.g., 0.6.0-b18, 0.6.0, 0.6.1)'
         required: true
         type: string
-      environment:
-        description: 'Target environment (dev for beta, demo for stable, both for dual deployment)'
-        required: true
-        type: choice
-        options:
-          - dev
-          - demo
-          - both
-      register_projects:
-        description: 'Register demo projects after a demo deployment'
-        required: false
-        type: boolean
-        default: true
 
 # Prevent concurrent deployments
 concurrency:
@@ -68,7 +55,7 @@ jobs:
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "Deploying ${TAG#v} to dev"
 
-  # Dev environment - every tag (beta and stable) deploys here automatically
+  # Every tag (beta and stable) deploys here automatically
   deploy-dev:
     name: Deploy to Dev (dev.demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
@@ -78,7 +65,7 @@ jobs:
       always() &&
       (
         (github.event_name == 'workflow_run' && needs.resolve-tag.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
+        github.event_name == 'workflow_dispatch'
       )
     env:
       VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || needs.resolve-tag.outputs.version }}
@@ -161,159 +148,3 @@ jobs:
           done
           echo "::error::${API_URL}/health does not report ${VERSION}"
           exit 1
-
-  # Demo environment - manual dispatch only, never deployed automatically
-  deploy-demo:
-    name: Deploy to Demo (demo.depictio.embl.org)
-    runs-on: [self-hosted, embl-deploy]
-    environment: embl-demo
-    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both')
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # Fetch all tags for validation
-
-      - name: Display available recent tags
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "📋 Recent available tags:"
-          echo "Beta tags (for dev environment):"
-          git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
-          echo ""
-          echo "Stable tags (for demo environment):"
-          git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
-
-      - name: Determine version
-        id: version
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Deploying version: ${VERSION}"
-
-      - name: Validate tag exists
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TAG="v${VERSION}"
-
-          echo "🔍 Validating tag: ${TAG}"
-
-          if git rev-parse "${TAG}" >/dev/null 2>&1; then
-            echo "✅ Tag ${TAG} exists"
-          else
-            echo "❌ Error: Tag ${TAG} does not exist!"
-            echo "Available recent tags:"
-            git tag -l 'v*' --sort=-version:refname | head -20
-            exit 1
-          fi
-
-      - name: Wait for Docker image to be available
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="ghcr.io/depictio/depictio:${VERSION}"
-          echo "Checking for image: ${IMAGE}"
-
-          for i in {1..30}; do
-            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
-              echo "Image ${IMAGE} is available"
-              break
-            fi
-            echo "Waiting for image... (attempt $i/30)"
-            sleep 10
-          done
-
-      - name: Deploy to Demo environment
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          echo "🚀 Deploying version ${VERSION} to demo.depictio.embl.org"
-
-          helm upgrade --install demo ./helm-charts/depictio \
-            --namespace datasci-depictio-project-demo \
-            -f helm-charts/depictio/values.yaml \
-            -f helm-charts/depictio/values-embl-demo-base.yaml \
-            -f helm-charts/depictio/values-embl-demo.yaml \
-            -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
-            --set backend.image.tag="${VERSION}" \
-            --set frontend.image.tag="${VERSION}" \
-            --wait --timeout 10m --atomic \
-            --insecure-skip-tls-verify
-
-          echo "✅ Demo deployment complete"
-
-      - name: Verify deployment
-        run: |
-          echo "📋 Checking deployment status..."
-          kubectl get pods -n datasci-depictio-project-demo -l release=demo,type=app
-          kubectl get ingress -n datasci-depictio-project-demo
-
-      - name: Wait for services to be ready
-        run: |
-          echo "⏳ Waiting for backend to be ready..."
-          kubectl wait --for=condition=ready pod \
-            -l release=demo,app=depictio-backend \
-            -n datasci-depictio-project-demo \
-            --timeout=300s
-
-          echo "⏳ Waiting for viewer to be ready..."
-          kubectl wait --for=condition=ready pod \
-            -l release=demo,app=depictio-viewer \
-            -n datasci-depictio-project-demo \
-            --timeout=300s
-
-          echo "✅ All services are ready"
-
-  # Register demo projects after demo deployment
-  register-projects-demo:
-    name: Register Demo Projects (Demo)
-    runs-on: [self-hosted, embl-deploy]
-    needs: deploy-demo
-    if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.register_projects == 'true'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Setup Python and CLI
-        run: |
-          if command -v uv &> /dev/null; then
-            cd depictio/cli
-            uv venv venv --python 3.11
-            source venv/bin/activate
-            uv pip install -e .
-          else
-            cd depictio/cli
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -e .
-          fi
-
-      - name: Get admin token from backend pod
-        id: token
-        run: |
-          BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo \
-            -l release=demo,app=depictio-backend \
-            -o jsonpath='{.items[0].metadata.name}')
-
-          echo "Getting admin config from pod: ${BACKEND_POD}"
-          kubectl cp datasci-depictio-project-demo/${BACKEND_POD}:/app/depictio/.depictio/admin_config.yaml ./admin_config.yaml
-
-          TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
-          echo "::add-mask::${TOKEN}"
-          echo "token=${TOKEN}" >> $GITHUB_OUTPUT
-
-      - name: Register Iris demo project
-        run: |
-          cd depictio/cli
-          source venv/bin/activate
-
-          echo "📊 Registering Iris demo project..."
-          depictio-cli config check \
-            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-            --CLI-config-path ../../admin_config.yaml || true
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f admin_config.yaml
