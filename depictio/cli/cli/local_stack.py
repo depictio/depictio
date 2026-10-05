@@ -697,6 +697,67 @@ def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
             )
 
 
+# Delta tables of the bundled examples, from STATIC_IDS in
+# depictio/api/v1/db_init_reference_datasets.py: copied, because importing that
+# module needs the server's settings. A test keeps the two in sync.
+EXAMPLE_TABLES = {
+    "iris": ("646b0f3c1e4a2d7f8e5b8c9c",),
+    "penguins": (
+        "646b0f3c1e4a2d7f8e5b8c9f",
+        "646b0f3c1e4a2d7f8e5b8ca0",
+        "646b0f3c1e4a2d7f8e5b8ca1",
+    ),
+}
+
+
+def table_ready(url: str, token: str, dc_id: str) -> bool:
+    """Whether the API has a Delta table for the data collection ``dc_id``."""
+    request = urllib.request.Request(
+        f"{url}/depictio/api/v1/deltatables/specs/{dc_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with _DIRECT.open(request, timeout=5) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def examples_loading(paths: Paths, state: State) -> list[str]:
+    """The seeded examples whose Delta tables do not exist yet.
+
+    The API loads them in a background thread once it has started, so /health
+    answers first: on a first run they need a few more seconds.
+    """
+    import yaml
+
+    names = [name for name in state.examples.split(",") if name in EXAMPLE_TABLES]
+    if not names:
+        return []
+    try:
+        config = yaml.safe_load(paths.cli_config.read_text())
+        token = config["user"]["token"]["access_token"]
+    except (OSError, KeyError, TypeError):
+        return []
+    return [
+        name
+        for name in names
+        if not all(table_ready(state.url, token, dc_id) for dc_id in EXAMPLE_TABLES[name])
+    ]
+
+
+def wait_for_examples(
+    paths: Paths, state: State, timeout: float = 120, interval: float = 1.0
+) -> list[str]:
+    """Wait for the seeded examples to load; returns the ones still missing at the timeout."""
+    deadline = time.monotonic() + timeout
+    missing = examples_loading(paths, state)
+    while missing and time.monotonic() < deadline:
+        time.sleep(interval)
+        missing = examples_loading(paths, state)
+    return missing
+
+
 def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
     """Stop the process group ``pid`` leads: SIGTERM, up to ``timeout`` seconds, SIGKILL.
 
