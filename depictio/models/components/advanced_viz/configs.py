@@ -333,6 +333,13 @@ class StackedTaxonomyConfig(_BaseVizConfig):
             "automatically — no recipe change needed beyond emitting the column."
         ),
     )
+    taxon_palette: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Taxon -> hex colour overrides for the bars. Unlisted taxa keep the "
+            "default cycle, which repeats past twelve taxa."
+        ),
+    )
     sample_sort: Literal["input", "total_abundance", "first_taxon"] = Field(
         default="input", description="Order of samples along the x axis"
     )
