@@ -1,5 +1,4 @@
 import http.server
-import importlib.metadata
 import json
 import os
 import socket
@@ -14,10 +13,12 @@ import pytest
 import yaml
 
 from depictio.cli.cli import local_stack
-from depictio.cli.cli.commands.local import _absolutize_path_var
 from depictio.cli.cli.local_stack import (
+    DATA_DIRS,
     LocalStackError,
     Paths,
+    State,
+    _absolutize_path_var,
     parse_examples,
     pick_ports,
     port_is_free,
@@ -194,6 +195,49 @@ def test_ensure_dirs_makes_the_home_keys_and_cli_owner_only(tmp_path):
         assert directory.stat().st_mode & 0o777 == 0o700
 
 
+def test_wipe_deletes_every_data_dir_and_keeps_the_binaries(paths):
+    (paths.env / "bin").mkdir(parents=True)
+    local_stack.load_secrets(paths)
+    local_stack.save_ports(paths, dict(local_stack.DEFAULT_PORTS))
+    State(ports=dict(local_stack.DEFAULT_PORTS)).save(paths)
+
+    local_stack.reset(paths)
+
+    assert not [sub for sub in DATA_DIRS if (paths.home / sub).exists()]
+    assert not [f for f in (paths.state, paths.secrets, paths.ports) if f.exists()]
+    assert (paths.env / "bin").is_dir()
+
+
+# --- state.json -------------------------------------------------------------------
+
+
+def test_state_reads_an_older_file_and_writes_the_same_keys(paths):
+    # As written before start times and examples were recorded.
+    ports = {"api": 18058, "mongo": 17018, "redis": 16379, "s3": 19000}
+    paths.state.write_text(
+        json.dumps({"pids": {"api": 12}, "ports": ports, "url": "http://127.0.0.1:18058"})
+    )
+
+    state = State.load(paths)
+
+    assert state == State(ports=ports, home=str(paths.home), pids={"api": 12})
+    assert state.url == "http://127.0.0.1:18058"
+    state.save(paths)
+    assert set(json.loads(paths.state.read_text())) == {
+        "pids",
+        "ports",
+        "url",
+        "home",
+        "examples",
+        "start_times",
+    }
+
+
+def test_state_is_none_until_up_records_one(paths):
+    assert State.load(paths) is None
+    assert local_stack.live_pids(None) == {}
+
+
 # --- Recorded PIDs ----------------------------------------------------------
 
 
@@ -210,7 +254,7 @@ def test_only_a_pid_with_its_recorded_start_time_is_signalled(paths, monkeypatch
     state = {"pids": {"api": os.getpid()}}
     if recorded is not None:
         state["start_times"] = {"api": recorded}
-    local_stack.save_state(paths, state)
+    paths.state.write_text(json.dumps(state))
 
     assert local_stack.running_status(paths)["api"] is ours
     assert local_stack.stop_all(paths, log=lambda _: None) == (["api"] if ours else [])
@@ -221,7 +265,7 @@ def test_stop_all_does_not_wait_out_a_child_it_already_stopped(paths):
     # `up` stopping what it started, after Ctrl-C: the exited child is a zombie until reaped.
     proc = subprocess.Popen(["sleep", "60"], start_new_session=True)
     started = local_stack.process_start_time(proc.pid)
-    local_stack.save_state(paths, {"pids": {"api": proc.pid}, "start_times": {"api": started}})
+    State(pids={"api": proc.pid}, start_times={"api": started}).save(paths)
 
     begin = time.monotonic()
     assert local_stack.stop_all(paths, log=lambda _: None) == ["api"]
@@ -384,93 +428,3 @@ def test_windows_is_rejected_with_a_clear_message(monkeypatch):
     monkeypatch.setattr(local_stack.sys, "platform", "win32")
     with pytest.raises(local_stack.LocalStackError, match="WSL2"):
         local_stack.check_platform_supported()
-
-
-def _fake_local_server(paths):
-    """A stopped local server: data, keys, secrets and the conda-meta records."""
-    (paths.home / "mongo" / "WiredTiger").write_text("wt")
-    (paths.home / "s3" / "vol").mkdir(parents=True)
-    (paths.home / "s3" / "mini.options").write_text(
-        "ip=127.0.0.1\nip.bind=127.0.0.1\ns3.port=9123\nwebdav=false\n"
-    )
-    for name in local_stack.KEY_FILES:
-        (paths.home / "keys" / name).write_text(name)
-    meta = paths.env / "conda-meta"
-    meta.mkdir(parents=True)
-    for name, version in (("mongodb", "8.0.23"), ("seaweedfs", "4.47")):
-        (meta / f"{name}-{version}-h0_0.json").write_text(
-            f'{{"name": "{name}", "version": "{version}"}}'
-        )
-    local_stack.load_secrets(paths)
-
-
-def test_export_compose_copies_data_and_pins_the_local_versions(paths, tmp_path, monkeypatch):
-    _fake_local_server(paths)
-    monkeypatch.setattr(local_stack.sys, "platform", "linux")
-    monkeypatch.setattr(local_stack, "release_version", lambda: "9.8.7")
-    out = tmp_path / "export"
-
-    local_stack.export_compose(paths, out, log=lambda _: None)
-
-    assert (out / "data" / "mongo" / "WiredTiger").read_text() == "wt"
-    assert (out / "data" / "s3" / "vol").is_dir()
-    options = (out / "data" / "s3" / "mini.options").read_text().splitlines()
-    assert "ip.bind=0.0.0.0" in options and "s3.port=9000" in options
-    assert "ip=127.0.0.1" in options and "ip.bind=127.0.0.1" not in options
-    # The local server keeps its own options.
-    assert "ip.bind=127.0.0.1" in (paths.home / "s3" / "mini.options").read_text()
-    assert (out / "data" / "keys" / "private_key.pem").read_text() == "private_key.pem"
-    override = (out / "docker-compose.override.yaml").read_text()
-    assert "image: mongo:8.0.23" in override
-    assert "image: chrislusf/seaweedfs:4.47" in override
-    assert "./data/mongo:/data/db" in override
-    assert f'user: "{local_stack.os.getuid()}:{local_stack.os.getgid()}"' in override
-    env = (out / ".env").read_text()
-    secrets = local_stack.load_secrets(paths)
-    assert f"DEPICTIO_S3_ROOT_PASSWORD={secrets['s3_password']}" in env
-    assert f"DEPICTIO_S3_ROOT_USER={local_stack.S3_USER}" in env
-    assert "DEPICTIO_VERSION=9.8.7" in env.splitlines()
-    assert oct((out / ".env").stat().st_mode & 0o777) == "0o600"
-
-
-@pytest.mark.parametrize(
-    ("installed", "expected"),
-    [
-        ({"depictio": "1.2.3", "depictio-cli": "1.2.3"}, "1.2.3"),
-        ({"depictio-cli": "1.2.3"}, "1.2.3"),
-        ({"depictio": "1.2.3b1"}, None),
-        ({"depictio-cli": "1.2.3-b1"}, None),
-        ({}, None),
-    ],
-)
-def test_release_version_names_only_published_releases(monkeypatch, installed, expected):
-    def version(dist):
-        if dist not in installed:
-            raise importlib.metadata.PackageNotFoundError(dist)
-        return installed[dist]
-
-    monkeypatch.setattr(importlib.metadata, "version", version)
-    assert local_stack.release_version() == expected
-
-
-def test_export_compose_runs_as_the_image_user_off_linux(paths, tmp_path, monkeypatch):
-    _fake_local_server(paths)
-    monkeypatch.setattr(local_stack.sys, "platform", "darwin")
-    local_stack.export_compose(paths, tmp_path / "export", log=lambda _: None)
-    assert "user:" not in (tmp_path / "export" / "docker-compose.override.yaml").read_text()
-
-
-def test_export_compose_refuses_a_running_server(paths, tmp_path, monkeypatch):
-    _fake_local_server(paths)
-    monkeypatch.setattr(local_stack, "running_status", lambda _: {"mongo": True})
-    with pytest.raises(local_stack.LocalStackError, match="depictio local down"):
-        local_stack.export_compose(paths, tmp_path / "export", log=lambda _: None)
-
-
-def test_export_compose_refuses_a_non_empty_directory(paths, tmp_path):
-    _fake_local_server(paths)
-    out = tmp_path / "export"
-    out.mkdir()
-    (out / "keep").write_text("x")
-    with pytest.raises(local_stack.LocalStackError, match="not empty"):
-        local_stack.export_compose(paths, out, log=lambda _: None)

@@ -1,180 +1,287 @@
-# Serveur Depictio local, sans container
+# Local Depictio server, without containers
 
-Issue #1085. Cas d'usage : un reviewer nf-core teste un template sur ses propres
-résultats, sans Docker et sans rien installer à la main.
+Issue #1085, PR #1110. Use case: an nf-core reviewer tries a template on their own
+results, without Docker and without installing anything by hand. When the trial
+becomes a real deployment, the same data moves to Docker Compose.
 
-## Ce que fait l'utilisateur
+## What the user does
 
 ```bash
-# prérequis unique : uv  (curl -LsSf https://astral.sh/uv/install.sh | sh)
-uvx --python 3.12 --from "depictio[local]" depictio local up \
-    --template nf-core/rnaseq/latest --data-root results/ \
+# the only prerequisite: uv  (curl -LsSf https://astral.sh/uv/install.sh | sh)
+uv tool install "depictio[local]"     # once published on PyPI; puts `depictio` on PATH
+depictio local up                      # iris and penguins examples
+depictio local up --template nf-core/rnaseq/latest --data-root results/ \
     --var SAMPLESHEET_FILE=samplesheet.csv
 
 depictio local status | down | wipe
+depictio local export-compose --out depictio-docker   # hand over to Docker Compose
 ```
 
-`up` démarre la pile, ingère le dossier, puis ouvre `http://127.0.0.1:8058/dashboards`.
-Sans `--template`, la commande charge les exemples `iris,penguins` (`--examples all|none|…`).
+`up` starts the stack, ingests the directory, then opens
+`http://127.0.0.1:8058/dashboards`. Without `--template` it seeds the iris and
+penguins examples (`--examples iris|penguins|iris,penguins|none`). It ends with a
+short summary: the dashboards URL, where the data and logs are, how to add data,
+how to point the CLI at this server, and how to stop it. Over SSH, or on Linux
+without a display, it prints the `ssh -L` tunnel to open instead of a browser.
 
-## Choix retenu : les mêmes services, en processus natifs
+## Chosen approach: the same services, as native processes
 
-C'est le **même code serveur** que Docker/K8s (API FastAPI, worker Celery, viewer,
-modèles). Seule la configuration change, et uniquement via les variables
-`DEPICTIO_*` existantes.
+It is the **same server code** as Docker/K8s (FastAPI API, Celery worker, viewer,
+models). Only the configuration differs, and only through the existing
+`DEPICTIO_*` variables.
 
-| Composant | Docker | Local (`depictio local up`) |
+| Component | Docker | Local (`depictio local up`) |
 |---|---|---|
-| MongoDB | image `mongo:8.0.14` | `mongodb 8.0.*` de conda-forge (8.0.23) |
-| Redis | image `redis` | `redis-server` de conda-forge |
-| S3 | SeaweedFS (`weed mini`), image `chrislusf/seaweedfs` | `seaweedfs` de conda-forge (4.47), même `weed mini` |
-| Binaires | images | installés une fois par **py-rattler** (la bibliothèque sur laquelle pixi est construit, wheel PyPI) dans `~/.depictio/local/env` |
-| API | gunicorn, 4 workers | uvicorn, 1 worker, sur 127.0.0.1 |
-| Worker | conteneur Celery | `celery worker --concurrency=2` : `prefork` sous Linux, `threads` sous macOS |
-| Viewer | nginx ou Vite | `dist/` inclus dans le wheel, servi par FastAPI |
-| Auth | au choix | mono-utilisateur (`DEPICTIO_AUTH_SINGLE_USER_MODE`) |
-| Miniatures | Playwright dans le worker | désactivées, sauf avec `--screenshots` |
+| MongoDB | image `mongo:8.0.14` | `mongodb 8.0.*` from conda-forge (8.0.23, the only 8.0 build there) |
+| Redis | image `redis:8.2.1` | `redis-server 8.*` from conda-forge (no 8.0, 8.2 or 8.4 build there) |
+| S3 | SeaweedFS (`weed mini`), image `chrislusf/seaweedfs:4.46` | `seaweedfs 4.*` from conda-forge, same `weed mini` |
+| Binaries | images | installed once by **py-rattler** (the library pixi is built on, a PyPI wheel) into `~/.depictio/local/env` |
+| API | gunicorn, 4 workers | uvicorn, 1 worker, on 127.0.0.1 |
+| Worker | Celery container | `celery worker --concurrency=2`: `prefork` on Linux, `threads` on macOS |
+| Viewer | nginx or Vite | `dist/` shipped in the wheel, served by FastAPI on the API port |
+| Auth | any mode | single-user (`DEPICTIO_AUTH_SINGLE_USER_MODE`) |
+| Thumbnails | Playwright in the worker | off, unless `--screenshots` |
+| Ports | fixed in Compose | 8058, 27018, 6379, 9000 or free ones, then kept in `ports.json` |
 
-![un seul serveur, deux façons de le lancer](../../docs/images/v1.4/local/schema_same_code.png)
+The conda specs follow the image tags of `docker-compose.yaml` and must move with
+them (a comment next to `CONDA_SPECS` says so). The specs and the conda platform
+are recorded next to the binaries, so changing either reinstalls them on the next
+`up`.
 
-![ce que fait depictio local up](../../docs/images/v1.4/local/schema_up_flow.png)
+![one server, two ways to run it](../../docs/images/v1.4/local/schema_same_code.png)
 
-Les deux schémas sont générés par `dev/diagrams/local_server.py`, avec la boîte
-à outils Excalidraw du repo (`sketch.py`).
+![what depictio local up does](../../docs/images/v1.4/local/schema_up_flow.png)
 
-## Serveur vs CLI
+Both schemas are generated by `dev/diagrams/local_server.py`, with the repository's
+Excalidraw toolkit (`sketch.py`).
 
-| | Serveur Docker / K8s | Serveur local : `depictio[local]` (cette PR) | CLI : `depictio-cli` |
+## Server vs CLI
+
+| | Docker / K8s server | Local server: `depictio[local]` (this PR) | CLI: `depictio-cli` |
 |---|---|---|---|
-| Rôle | instance partagée | serveur complet et client sur le poste | client : ingère vers un serveur existant |
-| Installation | `docker compose up` / Helm | `uvx --python 3.12 --from "depictio[local]" depictio local up` | `uvx depictio-cli` |
-| Publié | images ghcr.io | **non** (PyPI à faire) | oui, PyPI 1.11.2 |
-| Prérequis | Docker ou un cluster | `uv` seulement | `uv` seulement |
-| Serveur nécessaire | c'est lui | non, il le démarre | oui (URL + token dans `CLI.yaml`) |
-| Environnement Python | dans les images | ~2 Go, ~30 s à froid | ~0,9 Go, 11 s à froid |
-| Autres téléchargements | images | MongoDB, Redis, SeaweedFS de conda-forge : ~710 Mo installés, 10 s, une seule fois | aucun |
-| Viewer | nginx | `dist/` du wheel, servi par FastAPI | aucun |
-| Auth | multi-utilisateur, public ou mono-utilisateur | mono-utilisateur | token de l'instance cible |
-| Commandes | — | celles de la CLI + `local up/down/status/wipe` | `run`, `dashboard`, `data`, `config`, `backup`… |
-| `depictio local up` | — | fonctionne | message clair qui renvoie vers `depictio[local]` |
-| Usage type | équipe, démo, production | reviewer qui teste un template sur ses résultats | déclencheur Nextflow, CI, envoi vers une instance partagée |
+| Role | shared instance | full server and client on one machine | client: ingests into an existing server |
+| Install | `docker compose up` / Helm | `uv tool install "depictio[local]"` | `uv tool install depictio-cli` |
+| Published | ghcr.io images | **not yet** (PyPI pending) | yes, PyPI 1.11.2 |
+| Prerequisites | Docker or a cluster | `uv` only | `uv` only |
+| Needs a server | it is the server | no, it starts one | yes (URL and token in `CLI.yaml`) |
+| Python environment | inside the images | ~2 GB, ~30 s cold | ~0.9 GB, 11 s cold |
+| Other downloads | images | MongoDB, Redis, SeaweedFS from conda-forge: ~710 MB installed, 10 s, once | none |
+| Viewer | nginx | the wheel's `dist/`, served by FastAPI | none |
+| Auth | multi-user, public or single-user | single-user | token of the target instance |
+| Commands | n/a | the CLI's, plus `local up/down/status/wipe/export-compose` | `run`, `dashboard`, `data`, `config`, `backup`... |
+| `depictio local up` | n/a | works | a clear message pointing to `depictio[local]` |
+| Typical use | team, demo, production | a reviewer trying a template on their results | Nextflow trigger, CI, upload to a shared instance |
 
-## Captures (1920×1200, Playwright, pile lancée par `uvx` depuis le wheel)
+The environment sizes and times in this table were measured on 2026-09-24.
 
-nf-core/rnaseq 3.26.0, sous-ensemble du megatest, avec les panneaux ouverts puis repliés :
+## Running a local server
 
-| sidebar et filtres ouverts | sidebar et filtres repliés |
+Everything lives under `~/.depictio/local` (or `DEPICTIO_LOCAL_HOME`): `env/` for
+the binaries, one directory per service, `logs/`, and three small files. The home,
+`keys/` (token signing keys) and `cli/` (admin token) are owner-only; `secrets.json`
+(S3 and admin passwords) is created `0600`.
+
+- **Sticky ports.** The first `up` takes 8058, 27018, 6379 and 9000, or free ports
+  when those are taken, and saves them in `ports.json`, which `down` keeps. Later
+  runs reuse them, so the dashboards URL stays the same. A saved port that another
+  program has taken since moves to a free one with a warning; an explicit `--port`
+  that is busy fails. After each start the CLI configuration is rewritten to the
+  ports in use, so ingestion never targets a stale port.
+- **Safe stops.** `state.json` records each PID with its start time. A PID whose
+  start time differs (reused after a reboot) is never signalled. A stop signals the
+  whole process group, so Celery pool processes and Chromium go too.
+- **Startup.** Ready means the API answers `/health` on its port, then the worker is
+  checked alive; a service that dies names its log. Ctrl-C during startup stops
+  what that run started and exits 130. A failed check (platform, missing server
+  packages) never touches a server that is already running. A conda-forge download
+  failure is a one-line error.
+- **Isolation.** Inherited `DEPICTIO_*` variables, set for another instance, are
+  dropped, except the telemetry opt-out. `DEPICTIO_CLI_*` overrides do not reach
+  the ingestion subprocess.
+- **Data.** Kept from one `up` to the next; `wipe` deletes it and keeps the binaries.
+
+## Hand-over to Docker Compose
+
+`depictio local export-compose --out DIR` turns a local server into a Compose stack
+on the same data:
+
+1. Stops the local server if it is running, so the copy is consistent, and says so.
+   Everything that can fail beforehand (no data, non-empty `DIR`, no compose file)
+   is checked first, so a refused export leaves the server running.
+2. Copies the MongoDB and SeaweedFS data and the three key files into `DIR/data`.
+   The data is copied, not shared: MongoDB must never run twice on one data
+   directory, and the local server stays usable. Redis holds only cache and queue,
+   and thumbnails are re-rendered, so neither is carried over.
+3. Writes the `docker-compose.yaml` that matches the running code: the checkout's
+   own file when run from a source checkout (it matches the code even where the
+   version number still names the last release), else the file of the `v<version>`
+   tag, downloaded through any configured proxy. A dev or beta build outside a
+   checkout is refused with a message, since no published file matches it.
+4. Writes `docker-compose.override.yaml`: the `mongo` and `chrislusf/seaweedfs`
+   images at the exact versions the local server wrote the data with (read from the
+   conda metadata), bind mounts of the copied data, and the key files mounted one
+   by one, read-only. On Linux MongoDB and SeaweedFS run as the host user, who owns
+   the copied files.
+5. Writes `.env` (`0600`): single-user mode, the S3 and admin credentials, and
+   `DEPICTIO_VERSION` for a release.
+6. Rewrites the copied SeaweedFS `mini.options` to listen on `0.0.0.0:9000`, or the
+   container would keep listening on its own loopback. `ip` stays: the master's raft
+   state is keyed on it.
+
+It ends with the one command to run next: `cd DIR && docker compose up -d`, then
+`http://localhost:5080`. The CLI token minted by the local server stays valid,
+because the keys come along.
+
+The `local-to-compose` job in `depictio-ci.yaml` brings up the iris example locally,
+exports it, runs Compose on the images built for the commit, and checks that the
+table is served, that the worker reads it back from the exported SeaweedFS, and
+that the local CLI token is accepted.
+
+## The wheel
+
+The `depictio` wheel is 8.6 MB (43.8 MB before; measured on 2026-10-05). It ships
+the viewer bundle without sourcemaps, the nf-core template definitions (enough for
+`--template` on one's own results), and the iris and penguins examples with their
+seeds (`.db_seeds/*.json`) and two thumbnails. The other reference projects, the
+nf-core documentation screenshots and reports, and the ampliseq and viralrecon
+reference data stay out. Docker images copy the source tree and are unaffected.
+
+- `package-data` uses explicit include globs: `projects/**/*` alone skips the
+  `.db_seeds` dot-directories, which once left a wheel with tables but no dashboard.
+- API startup tolerates reference datasets missing from the installed package.
+- `watchdog` moved to a `worker-reload` group installed by the worker image only:
+  it has no Python 3.14 macOS wheel and only live-reloads the worker in dev mode.
+- `plotly-upset` and `plotly-complexheatmap` are pinned to 0.1.0, so the wheel's
+  metadata can resolve from PyPI once they are published.
+- The smoke workflow fails if the wheel grows past 15 MB or loses a required file.
+
+## Screenshots (1920x1200, Playwright, stack started by `uvx` from the wheel)
+
+nf-core/rnaseq 3.26.0, a subset of the megatest, with the panels open then collapsed:
+
+| sidebar and filters open | sidebar and filters collapsed |
 |---|---|
 | ![](../../docs/images/v1.4/local/screenshots/rnaseq_01.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_02.png) |
 | ![](../../docs/images/v1.4/local/screenshots/rnaseq_03.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_04.png) |
 
-Filtre `Condition = GM12878` : les cartes sont recalculées (8 → 2 librairies),
-puis le filtre suit sur l'onglet MultiQC.
+Filter `Condition = GM12878`: the cards are recomputed (8 → 2 libraries), then the
+filter carries over to the MultiQC tab.
 
-| sans filtre | avec filtre | onglet MultiQC filtré |
+| no filter | with the filter | MultiQC tab, filtered |
 |---|---|---|
 | ![](../../docs/images/v1.4/local/screenshots/rnaseq_05.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_06.png) | ![](../../docs/images/v1.4/local/screenshots/rnaseq_07.png) |
 
-## Approches écartées
+## Approaches set aside
 
-Les approches suivantes ont été écartées pendant l'implémentation :
+- **Local disk storage (`file://`)**: S3 appears in 257 places across 41 files
+  (boto3, mandatory `PolarsStorageOptions`, hard-coded `s3://`, MultiQC and GeoJSON
+  uploads). delta-rs works well on local paths (a successful trial), but the change
+  is size L. Native SeaweedFS, the same `weed mini` as in Docker, needs no change to
+  the server code.
+- **Native MinIO** (the first version of this PR): `main` moved from MinIO to
+  SeaweedFS after the community MinIO images were withdrawn. The local mode follows,
+  to stay the same server as Docker. On the way the licence goes from AGPL to
+  Apache-2.0 and linux-aarch64 is covered.
+- **Celery without Redis (threads / `task_always_eager`)**: 14 `.delay` /
+  `apply_async` call sites would need routing, and `always_eager` would block
+  `GET /dashboards/get` during the MultiQC prerender. `redis-server` is 1 to 12 MB.
+- **Official MongoDB tarballs**: one binary per Linux distribution, linked to the
+  system's OpenSSL. The conda-forge package only needs glibc 2.17 or later (old HPC
+  clusters included) and macOS 11 or later.
+- **pixi**: it needs a clone of the repository and pixi installed. py-rattler solves
+  the same conda-forge packages from Python, so `uvx` is enough. `pixi.toml` remains
+  the developers' tool.
 
-- **Stockage sur disque local (`file://`)** : S3 apparaît à 257 endroits dans
-  41 fichiers (boto3, `PolarsStorageOptions` obligatoire, `s3://` construit en
-  dur, uploads MultiQC et GeoJSON). delta-rs fonctionne bien en local (essai
-  concluant), mais le chantier est de taille L. SeaweedFS natif, le même
-  `weed mini` que dans Docker, ne demande aucune ligne de code métier.
-- **MinIO natif** (première version de cette PR) : `main` est passé de MinIO à
-  SeaweedFS après le retrait des images communautaires MinIO. Le mode local
-  suit, pour rester le même serveur que Docker. Au passage, la licence passe
-  d'AGPL à Apache-2.0 et linux-aarch64 est couvert.
-- **Celery sans Redis (threads / `task_always_eager`)** : il faudrait router
-  14 sites `.delay` / `apply_async`, et `always_eager` bloquerait
-  `GET /dashboards/get` pendant le prerender MultiQC. `redis-server` fait 1 à 12 Mo.
-- **Tarballs officiels MongoDB** : un binaire par distribution Linux, lié à
-  l'OpenSSL du système. Le paquet conda-forge dépend seulement de glibc ≥ 2.17
-  (y compris les vieux clusters HPC) et de macOS ≥ 11.
-- **pixi** : il faut cloner le repo et installer pixi. py-rattler résout les
-  mêmes paquets conda-forge depuis Python, donc `uvx` suffit. `pixi.toml` reste
-  l'outil des développeurs.
+## Changes in this PR
 
-## Changements faits dans cette PR
-
-| Fichier | Changement |
+| File | Change |
 |---|---|
-| `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe` : MongoDB, Redis et SeaweedFS via py-rattler, variables `DEPICTIO_S3_*`, ports libres, secrets générés (0600), PID et logs dans `~/.depictio/local/`, ingestion via `depictio run`, `--var` transmis tel quel |
-| `pyproject.toml` | extra `local = ["py-rattler"]` ; `package-data` (viewer `dist/` sans sourcemaps, templates, données de démo, assets, et les seeds `projects/**/.db_seeds/*`, qu'un glob `**/*` ignore parce que le dossier est caché). **Le wheel racine ne contenait que le `.py`** : même bug que le wheel CLI 1.9.2 |
-| `depictio/version.py` | repli sur `importlib.metadata` : `VERSION` est hors du package, **l'API plantait à l'import depuis un wheel** |
-| `db_init_reference_datasets.py` | les `project.yaml` de référence codent `/app/depictio/...` en dur ; ce préfixe est réécrit vers la racine réelle du package (aucun effet dans l'image) |
-| `settings_models.py` + 4 sites | `DEPICTIO_PERFORMANCE_SCREENSHOTS_ENABLED` et `_SCREENSHOTS_DIR`. Au démarrage, `clean_screenshots()` supprime les PNG sans dashboard en base, et **il effaçait les miniatures versionnées du repo** quand le serveur tournait depuis un checkout avec une partie des exemples. En local, les miniatures vont dans `~/.depictio/local/screenshots` |
-| `dev/diagrams/local_server.py`, `docs/images/v1.4/local/` | les deux schémas (SVG + PNG) et les captures ci-dessus |
-| `.github/workflows/local-server-smoke.yaml` | sur ubuntu x86_64, ubuntu arm64 et macOS : construit le wheel (viewer compris), lance `uvx … depictio local up --examples iris` hors du checkout, vérifie `/health`, `/dashboards` et la table Delta iris, puis lance Playwright sur cette pile : `tests/local/local-mode.spec.ts` (dashboard iris affiché, filtre `Variety = Setosa` qui fait passer la carte de 150 à 50 fleurs, aucune réponse 5xx), plus les specs existantes `single-user-mode` et `about` |
+| `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe`: MongoDB, Redis and SeaweedFS through py-rattler (pinned to the Compose series), `DEPICTIO_S3_*` settings, sticky ports, generated secrets (`0600`), PIDs with start times and logs in `~/.depictio/local/`, ingestion through `depictio run`, `--var` passed through |
+| `depictio/cli/cli/local_compose.py` | `depictio local export-compose`: the hand-over described above |
+| `pyproject.toml` | `local = ["py-rattler==0.26.0"]` extra; `package-data` include globs for the slim wheel; `watchdog` moved to a `worker-reload` group; `plotly-upset` and `plotly-complexheatmap` pinned to 0.1.0. **The root wheel used to hold only the `.py` files**: the same bug as the 1.9.2 CLI wheel |
+| `depictio/version.py` | falls back on `importlib.metadata`: `VERSION` is outside the package, **so the API failed at import from a wheel** |
+| `db_init.py`, `db_init_reference_datasets.py` | the reference `project.yaml` files hard-code `/app/depictio/...`; that prefix is rewritten to the actual package root (no effect in the image). Reference datasets absent from the installed package are skipped |
+| `settings_models.py` and 4 call sites | `DEPICTIO_PERFORMANCE_SCREENSHOTS_ENABLED` and `_SCREENSHOTS_DIR`. At startup `clean_screenshots()` deletes PNGs without a dashboard in the database, and **it erased the repository's committed thumbnails** when the server ran from a checkout with only some of the examples. Locally, thumbnails go to `~/.depictio/local/screenshots` |
+| `mantine_templates.py` | a lock around the Plotly template patch (see the measurements below) |
+| `docker-images/Dockerfile.worker` | installs the `worker-reload` group |
+| `dev/diagrams/local_server.py`, `docs/images/v1.4/local/` | the two schemas (SVG and PNG) and the screenshots above |
+| `.github/workflows/local-server-smoke.yaml` | builds the wheel (viewer included) and checks its size and contents, runs `uvx ... depictio local up --examples iris` outside the checkout, checks `/health`, `/dashboards`, the iris Delta table and a worker read of it, then runs Playwright on that stack: `tests/local/local-mode.spec.ts` (iris dashboard rendered, filter `Variety = Setosa` takes the card from 150 to 50 flowers, no 5xx response), plus the existing `single-user-mode` and `about` specs. Linux x86_64 always runs; Linux arm64 and macOS arm64 run on pushes to main, on manual runs, and on pull requests that touch the local server, `pyproject.toml` or the workflow |
+| `.github/workflows/depictio-ci.yaml` | the `local-to-compose` hand-over job |
 
-## Mesures (Linux x86_64, réseau datacenter)
+## Measurements (Linux x86_64, datacenter network)
 
-| | Valeur |
-|---|---|
-| Wheel `depictio` | 43,6 Mo (104,6 Mo décompressé) ; viewer 11 Mo sans sourcemaps (46 Mo avec) |
-| Environnement Python `uvx` | ~2 Go. Principaux postes : kaleido 221 Mo, deux runtimes polars de 206 Mo chacun, llvmlite 172 Mo, pyarrow 152 Mo, playwright 137 Mo |
-| Binaires conda (mongodb, redis-server, seaweedfs + deps) | 10 s ; environ 710 Mo installés (`mongod` 209 Mo, `weed` 226 Mo) |
-| Démarrage de mongod | 0,6 s |
-| **Premier lancement** à froid, rnaseq inclus | **47 s** (tout téléchargé) |
-| Lancement suivant avec données vierges (rnaseq) | 17 s |
-| `up` avec exemple iris, caches chauds | 8 s ; table Delta iris prête environ 4 s plus tard |
-| Build du viewer | 71 s (à faire dans le job de release) |
+| | Value | Measured on |
+|---|---|---|
+| `depictio` wheel | 8.6 MB; viewer 11 MB unpacked without sourcemaps (46 MB with) | 2026-10-05 (viewer: 2026-09-24) |
+| `uvx` Python environment | ~2 GB. Largest items: kaleido 221 MB, two polars runtimes of 206 MB each, llvmlite 172 MB, pyarrow 152 MB, playwright 137 MB | 2026-09-24 |
+| conda binaries (mongodb, redis-server, seaweedfs and dependencies) | 10 s; about 710 MB installed (`mongod` 209 MB, `weed` 226 MB) | 2026-09-25, with SeaweedFS 4.47 |
+| mongod startup | 0.6 s | 2026-09-24 |
+| **First run**, cold, rnaseq included | **47 s** (everything downloaded) | 2026-09-25 |
+| Next run on fresh data (rnaseq) | 17 s | 2026-09-25 |
+| `up` with the iris example, warm caches | 8 s; the iris Delta table is ready about 4 s later | 2026-09-25 |
+| Viewer build | 71 s (belongs in the release job) | 2026-09-24 |
 
-Le job e2e a trouvé un bug que les `curl` laissaient passer : sans les seeds
-`.db_seeds`, le wheel démarrait avec la table iris mais sans aucun dashboard
-(404 sur `/dashboards/get`, liste vide). Il en a trouvé un second, présent aussi
-dans Docker : sur un processus froid, deux premiers rendus de figures simultanés
-pouvaient lire le cache des templates Plotly à moitié rempli (`KeyError:
-'mantine_dark'`, 500 sur `render_figure`). Il est corrigé par un verrou dans
-`mantine_templates.py`.
+The e2e job caught a bug that the `curl` checks missed: without the `.db_seeds`
+seeds, the wheel started with the iris table but no dashboard (404 on
+`/dashboards/get`, empty list). It caught a second one, also present in Docker: on a
+cold process, two simultaneous first figure renders could read the Plotly template
+cache half filled (`KeyError: 'mantine_dark'`, 500 on `render_figure`). A lock in
+`mantine_templates.py` fixes it.
 
-Validé avec Playwright (1920×1200) : iris, penguins et le megatest nf-core/rnaseq
-3.26.0 (22 Mo). Les 4 onglets et les 12 figures MultiQC s'affichent. Les filtres
-recalculent les cartes (8 → 2 librairies) et se propagent d'un onglet à l'autre.
+Validated with Playwright (1920x1200): iris, penguins and the nf-core/rnaseq 3.26.0
+megatest (22 MB). The 4 tabs and the 12 MultiQC figures render. Filters recompute
+the cards (8 → 2 libraries) and carry over from one tab to the next.
 
-## Risques et questions ouvertes
+## Risks and open questions
 
-1. **Publication PyPI (bloquant pour la commande en une ligne)** : ni `depictio`,
-   ni `plotly-complexheatmap`, ni `plotly-upset` ne sont publiés. Il faut publier
-   les trois, avec le build du viewer avant `uv build`, et vérifier que le nom
-   `depictio` est libre.
-2. **Taille** : 2 Go d'environnement Python, c'est lourd pour un reviewer. On
-   pourrait déplacer `kaleido`, `umap-learn` et `playwright` dans des extras
-   serveur optionnels, et ne garder qu'un seul runtime polars
-   (`polars[rtcompat]` ajoute le second).
-3. **Licences** : MongoDB est sous SSPL et Redis sous SSPL/RSAL ; SeaweedFS est sous Apache-2.0.
-   Les binaires sont téléchargés par l'utilisateur depuis conda-forge, pas
-   redistribués par nous. Est-ce acceptable ?
-4. **Plateformes** : Linux et macOS, x86_64 et arm64. Le job de smoke-test tourne
-   sur linux-64, linux-aarch64 et osx-arm64 ; osx-64 n'a pas de runner.
-   - **macOS** : le worker Celery tourne en `--pool=threads`. En `prefork`, les
-     processus fils chargent libarrow, deltalake et le trousseau TLS, qui appellent
-     CoreFoundation et SystemConfiguration après un `fork()` sans `exec` : ils
-     meurent en SIGABRT ou SIGSEGV, et `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` n'y
-     change rien. Le prix : les `time_limit` Celery et `--max-tasks-per-child` ne
-     s'appliquent pas.
-   - **Windows** : refusé dès le départ avec un message qui renvoie vers WSL2 ou
-     Docker. conda-forge n'a pas de `redis-server` pour win-64, et les services
-     sont gérés comme des groupes de processus POSIX (`os.killpg`).
-   - **Binaires** : la plateforme conda (`osx-arm64`, `linux-aarch64`…) est
-     enregistrée avec les specs, donc un `$HOME` partagé entre deux architectures
-     réinstalle au lieu de lancer un binaire de la mauvaise architecture.
-   - **CPU** : MongoDB 5+ demande AVX sur x86_64 et ARMv8.2-A sur arm64 (pas de
-     Raspberry Pi 4). Un `mongod` tué par SIGILL est signalé comme tel.
+1. **PyPI publication (blocking for the one-line command)**: `depictio`,
+   `plotly-upset` and `plotly-complexheatmap` are not published yet. All three
+   need publishing, with the viewer built before `uv build`, and the `depictio`
+   name must be checked as available.
+2. **Size**: the wheel is small now, but the Python environment is ~2 GB, which is
+   heavy for a reviewer. `kaleido`, `umap-learn` and `playwright` could move to
+   optional server extras, and a single polars runtime could be kept
+   (`polars[rtcompat]` adds the second).
+3. **Licences**: MongoDB is under the SSPL, Redis under the SSPL or RSALv2 (as
+   packaged on conda-forge), SeaweedFS under Apache-2.0. The binaries are downloaded by the user from
+   conda-forge, not redistributed by us. Is that acceptable?
+4. **Platforms**: Linux and macOS, x86_64 and arm64. The smoke test runs on
+   linux-64, linux-aarch64 and osx-arm64; osx-64 has no hosted runner.
+   - **macOS**: the Celery worker runs with `--pool=threads`. With `prefork`, the
+     children load libarrow, deltalake and the TLS trust store, which call
+     CoreFoundation and SystemConfiguration after a `fork()` without `exec`: they
+     die with SIGABRT or SIGSEGV, and `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` does not
+     help. The cost: Celery `time_limit` and `--max-tasks-per-child` do not apply.
+   - **Windows**: refused up front with a message pointing to WSL2 or Docker.
+     conda-forge has no `redis-server` for win-64, and services are managed as POSIX
+     process groups (`os.killpg`).
+   - **Binaries**: the conda platform (`osx-arm64`, `linux-aarch64`...) is recorded
+     with the specs, so a `$HOME` shared between two architectures reinstalls
+     instead of running a binary built for the other one.
+   - **CPU**: MongoDB 5+ needs AVX on x86_64 and ARMv8.2-A on arm64 (no Raspberry
+     Pi 4). A `mongod` killed by SIGILL is reported as such.
 
-   `weed mini` garde ses ports internes par défaut
-   (master 9333, volume 9340, filer 8888, admin 23646, et gRPC à +10000) : si
-   l'un est occupé, `up` s'arrête et cite le log de SeaweedFS. Seul Python 3.12 a été testé, d'où le `--python 3.12`
-   dans la commande (`uvx` prendrait sinon le Python le plus récent, avec lequel
-   les versions épinglées ne sont pas garanties).
-5. **Samplesheet** : les résultats nf-core ne contiennent pas le samplesheet.
-   Il faut le passer avec `--var SAMPLESHEET_FILE=…`, sinon la collection
-   `samplesheet` échoue et `up` sort en erreur.
-6. **Template rnaseq** (indépendant du mode local) : un filtre interroge
-   `condition` et `sample` sur `gene_counts`, qui n'a pas ces colonnes, d'où
-   des 404 dans la console.
-7. **Données** : elles sont conservées d'un `up` à l'autre, et `wipe` les efface.
-   Faut-il plutôt un mode éphémère par défaut ?
+   `weed mini` uses its default internal ports (master 9333, volume 9340, filer
+   8888, admin 23646, and gRPC at +10000) and moves to free ones when they are
+   taken (it logs "finding alternative port"); only the S3 port is chosen by
+   `depictio local`. The full stack has been run on Python 3.13 and 3.14 from the
+   wheel (2026-10-05) and on 3.12 earlier; the dependency set resolves to wheels on
+   3.11 to 3.14.
+5. **Version drift with Compose**: Redis and SeaweedFS are pinned to their major
+   series only, so a local home may run newer minors than Compose (Redis 8.10
+   against 8.2.1, SeaweedFS 4.48 against 4.46 on 2026-10-05). A tighter pin would
+   downgrade existing homes, and Redis cannot load an RDB written by a newer
+   version. The hand-over pins the SeaweedFS image to the local version, so data
+   never moves to an older SeaweedFS.
+6. **Hand-over and releases**: from a wheel, the hand-over uses the compose file of
+   the installed version's tag, so it works from the first release that ships
+   `depictio local`. The `v1.11.2` tag and the `stable` branch still run MinIO and
+   have no `s3` service.
+7. **Samplesheet**: nf-core results do not include the samplesheet. It must be
+   passed with `--var SAMPLESHEET_FILE=...`, or the `samplesheet` collection fails
+   and `up` exits with an error.
+8. **rnaseq template** (independent of the local mode): a filter queries `condition`
+   and `sample` on `gene_counts`, which has neither column, hence 404s in the
+   console.
+9. **Data**: kept from one `up` to the next, and `wipe` deletes it. Should an
+   ephemeral mode be the default instead?

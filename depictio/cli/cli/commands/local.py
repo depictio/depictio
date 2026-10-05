@@ -1,42 +1,29 @@
 import os
-import subprocess
+import shlex
 import sys
 import webbrowser
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from rich.markup import escape
 
+from depictio.cli.cli.local_compose import export_compose
 from depictio.cli.cli.local_stack import (
-    COMPOSE_URL,
     LocalStackError,
     Paths,
+    State,
     api_healthy,
-    check_alive,
     check_platform_supported,
     check_server_installed,
-    chromium_installed,
-    ensure_binaries,
-    export_compose,
-    install_chromium,
-    load_ports,
-    load_secrets,
-    load_state,
+    ingest,
     local_home,
     parse_examples,
-    pick_ports,
-    process_start_time,
     reset,
     running_status,
-    save_ports,
-    save_state,
-    seed_screenshots,
-    server_env,
-    start_services,
+    start_stack,
     stop_all,
     viewer_built,
-    wait_for_api,
 )
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
 
@@ -54,26 +41,15 @@ def _warn(msg: str) -> None:
     rich_print_checked_statement(msg, "warning")
 
 
-def _fail(msg: str) -> None:
+def _fail(msg: str) -> NoReturn:
     rich_print_checked_statement(msg, "error")
     raise typer.Exit(code=1)
 
 
-def _absolutize_path_var(var: str) -> str:
-    """`run` resolves relative variables against --data-root; users type them from cwd."""
-    key, sep, value = var.partition("=")
-    if sep and value and not Path(value).is_absolute() and Path(value).exists():
-        return f"{key}={Path(value).resolve()}"
-    return var
-
-
-def _ingestion_env() -> dict[str, str]:
-    """The environment of the `depictio run` child, without DEPICTIO_CLI_* overrides.
-
-    DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL, set for another instance,
-    would win over the local server's CLI configuration.
-    """
-    return {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_CLI_")}
+def _print_rows(rows: list[tuple[str, str]]) -> None:
+    for label, value in rows:
+        # soft_wrap: long paths stay on one line, so commands copy-paste intact.
+        console.print(f"  [bold]{label}:[/bold] {escape(value)}", soft_wrap=True, highlight=False)
 
 
 def _has_display() -> bool:
@@ -89,11 +65,88 @@ def _has_display() -> bool:
     return True
 
 
-def _print_summary(paths: Paths, state: dict, template: str | None, data_root: Path | None) -> None:
-    rich_print_checked_statement(f"Depictio is ready: {state['url']}/dashboards", "success")
+def _check_up_flags(template: str | None, data_root: Path | None, examples: str | None) -> str:
+    """Reject flags that do not go together, before anything starts; returns the seed."""
+    if (template is None) != (data_root is None):
+        _fail("--template and --data-root go together")
+    if data_root is not None and not data_root.is_dir():
+        _fail(f"--data-root {data_root} is not a directory")
+    try:
+        return parse_examples(examples, template)
+    except LocalStackError as exc:
+        _fail(str(exc))
+
+
+def _start_or_reuse(
+    paths: Paths, port: int | None, seed: str, examples_given: bool, screenshots: bool | None
+) -> State:
+    """The server already running, else a new one; exits 1 on failure and 130 on Ctrl-C.
+
+    A failed check never takes down a server that was already running: only
+    start_stack stops services (an earlier run's leftovers, then on error what
+    it started).
+    """
+    starting = False
+    try:
+        check_platform_supported()
+        check_server_installed()
+        if not viewer_built():
+            _warn(
+                "The viewer bundle (depictio/viewer/dist) is not built: the API will run but "
+                "dashboards will not render. Build it with: cd depictio/viewer && pnpm run build"
+            )
+        state = State.load(paths)
+        if state is not None and all(running_status(paths).values()):
+            _info(f"Depictio is already running at {state.url}")
+            # Applied at startup only; ingestion with --template still goes ahead.
+            ignored = [
+                ("--port", port is not None and port != state.ports["api"]),
+                ("--examples", examples_given),
+                ("--screenshots" if screenshots else "--no-screenshots", screenshots is not None),
+            ]
+            for flag, given in ignored:
+                if given:
+                    _warn(
+                        f"{flag} is ignored: the server is already running "
+                        "(depictio local down first)"
+                    )
+            return state
+        starting = True
+        return start_stack(paths, port, seed, bool(screenshots), log=_info, warn=_warn)
+    except LocalStackError as exc:
+        _fail(str(exc))
+    except KeyboardInterrupt:
+        _warn(
+            "Interrupted: services started by this run are stopped" if starting else "Interrupted"
+        )
+        raise typer.Exit(code=130)
+
+
+def _ingest(
+    paths: Paths,
+    template: str,
+    data_root: Path,
+    variables: list[str] | None,
+    project_name: str | None,
+) -> None:
+    """Ingest with `depictio run`; on failure the server keeps running."""
+    _info(f"Ingesting {data_root} with template {template}")
+    try:
+        code = ingest(paths, template, data_root, variables, project_name)
+    except KeyboardInterrupt:
+        _warn("Ingestion interrupted; the server is still running (depictio local down to stop)")
+        raise typer.Exit(code=130)
+    if code != 0:
+        _fail("Ingestion failed; the server is still running (depictio local down to stop)")
+
+
+def _print_summary(
+    paths: Paths, state: State, template: str | None, data_root: Path | None
+) -> None:
+    rich_print_checked_statement(f"Depictio is ready: {state.url}/dashboards", "success")
     rows = []
-    if state.get("examples"):
-        rows.append(("Examples", state["examples"].replace(",", ", ")))
+    if state.examples:
+        rows.append(("Examples", state.examples.replace(",", ", ")))
     if template and data_root is not None:
         rows.append(("Ingested", f"{data_root.resolve()} ({template})"))
     rows += [
@@ -102,9 +155,18 @@ def _print_summary(paths: Paths, state: dict, template: str | None, data_root: P
         ("CLI on this server", f"export DEPICTIO_CLI_CONFIG_PATH={paths.cli_config}"),
         ("Stop", "depictio local down"),
     ]
-    for label, value in rows:
-        # soft_wrap: long paths stay on one line, so commands copy-paste intact.
-        console.print(f"  [bold]{label}:[/bold] {escape(value)}", soft_wrap=True, highlight=False)
+    _print_rows(rows)
+
+
+def _open_dashboards(state: State) -> None:
+    if _has_display():
+        webbrowser.open(f"{state.url}/dashboards")
+        return
+    api_port = state.ports["api"]
+    _info(
+        f"No browser here: from your machine, run ssh -L {api_port}:127.0.0.1:{api_port} "
+        f"<host>, then open {state.url}/dashboards"
+    )
 
 
 @app.command()
@@ -157,130 +219,15 @@ def up(
     ] = None,
 ):
     """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
-    if (template is None) != (data_root is None):
-        _fail("--template and --data-root go together")
-    if data_root is not None and not data_root.is_dir():
-        _fail(f"--data-root {data_root} is not a directory")
-    try:
-        seed = parse_examples(examples, template)
-    except LocalStackError as exc:
-        _fail(str(exc))
-
+    seed = _check_up_flags(template, data_root, examples)
     paths = Paths(local_home())
     paths.ensure_dirs()
-    # Set once services may have been started, so a failure stops them, but a
-    # failed check never takes down a server that was already running.
-    starting = False
-    try:
-        check_platform_supported()
-        check_server_installed()
-        if not viewer_built():
-            _warn(
-                "The viewer bundle (depictio/viewer/dist) is not built: the API will run but "
-                "dashboards will not render. Build it with: cd depictio/viewer && pnpm run build"
-            )
-
-        state = load_state(paths)
-        if all(running_status(paths).values()):
-            _info(f"Depictio is already running at {state['url']}")
-            # Applied at startup only; ingestion with --template still goes ahead.
-            ignored = [
-                ("--port", port is not None and port != state["ports"]["api"]),
-                ("--examples", examples is not None),
-                ("--screenshots" if screenshots else "--no-screenshots", screenshots is not None),
-            ]
-            for flag, given in ignored:
-                if given:
-                    _warn(
-                        f"{flag} is ignored: the server is already running "
-                        "(depictio local down first)"
-                    )
-        else:
-            starting = True
-            stop_all(paths, log=_info)
-            ensure_binaries(paths, log=_info)
-            seed_screenshots(paths)
-            saved_ports = load_ports(paths)
-            ports = pick_ports(port, saved_ports)
-            if port is None and saved_ports.get("api", ports["api"]) != ports["api"]:
-                _warn(
-                    f"Port {saved_ports['api']} is now used by another program: "
-                    f"Depictio moves to port {ports['api']}"
-                )
-            save_ports(paths, ports)
-            if screenshots and not chromium_installed():
-                _info("Installing Chromium for dashboard thumbnails")
-                install_chromium()
-            secret_values = load_secrets(paths)
-            env = server_env(paths, ports, secret_values, seed, bool(screenshots))
-            url = f"http://127.0.0.1:{ports['api']}"
-            state = {
-                "pids": {},
-                "ports": ports,
-                "url": url,
-                "home": str(paths.home),
-                "examples": seed,
-            }
-            save_state(paths, state)
-            procs = start_services(paths, ports, secret_values, env)
-            state["pids"] = {name: proc.pid for name, proc in procs.items()}
-            state["start_times"] = {
-                name: process_start_time(proc.pid) for name, proc in procs.items()
-            }
-            save_state(paths, state)
-            _info(f"Services started (logs in {paths.logs}); waiting for the API")
-            wait_for_api(paths, ports, procs["api"])
-            check_alive(paths, procs)
-    except LocalStackError as exc:
-        if starting:
-            stop_all(paths, log=_info)
-        _fail(str(exc))
-    except KeyboardInterrupt:
-        if starting:
-            stop_all(paths, log=_info)
-        _warn(
-            "Interrupted: services started by this run are stopped" if starting else "Interrupted"
-        )
-        raise typer.Exit(code=130)
-
+    state = _start_or_reuse(paths, port, seed, examples is not None, screenshots)
     if template and data_root is not None:
-        cmd = [
-            sys.executable,
-            "-m",
-            "depictio.cli",
-            "run",
-            "--template",
-            template,
-            "--data-root",
-            str(data_root.resolve()),
-            "--CLI-config-path",
-            str(paths.cli_config),
-        ]
-        if project_name:
-            cmd += ["--project-name", project_name]
-        for var in variables or []:
-            cmd += ["--var", _absolutize_path_var(var)]
-        _info(f"Ingesting {data_root} with template {template}")
-        try:
-            code = subprocess.call(cmd, env=_ingestion_env())
-        except KeyboardInterrupt:
-            _warn(
-                "Ingestion interrupted; the server is still running (depictio local down to stop)"
-            )
-            raise typer.Exit(code=130)
-        if code != 0:
-            _fail("Ingestion failed; the server is still running (depictio local down to stop)")
-
+        _ingest(paths, template, data_root, variables, project_name)
     _print_summary(paths, state, template, data_root)
     if open_browser:
-        if _has_display():
-            webbrowser.open(f"{state['url']}/dashboards")
-        else:
-            api_port = state["ports"]["api"]
-            _info(
-                f"No browser here: from your machine, run ssh -L {api_port}:127.0.0.1:{api_port} "
-                f"<host>, then open {state['url']}/dashboards"
-            )
+        _open_dashboards(state)
 
 
 @app.command()
@@ -297,22 +244,21 @@ def down():
 def status():
     """Show which local processes are running and whether the API answers."""
     paths = Paths(local_home())
-    state = load_state(paths)
-    if not state:
+    state = State.load(paths)
+    if state is None:
         _info("Depictio local is not running.")
         return
-    ports = state["ports"]
     for name, alive in running_status(paths).items():
-        where = f" (port {ports[name]})" if name in ports else ""
+        where = f" (port {state.ports[name]})" if name in state.ports else ""
         rich_print_checked_statement(
             f"{name}{where}: {'running' if alive else 'stopped'}", "success" if alive else "error"
         )
-    healthy = api_healthy(ports["api"])
+    healthy = api_healthy(state.ports["api"])
     rich_print_checked_statement(
-        f"API at {state['url']}: {'reachable' if healthy else 'not reachable'}",
+        f"API at {state.url}: {'reachable' if healthy else 'not reachable'}",
         "success" if healthy else "error",
     )
-    _info(f"Logs: {Path(state['home']) / 'logs'}")
+    _info(f"Logs: {Path(state.home) / 'logs'}")
 
 
 @app.command()
@@ -335,15 +281,20 @@ def export_compose_cmd(
         typer.Option("--out", help="Directory to create for the Docker Compose stack"),
     ] = Path("depictio-docker"),
 ):
-    """Copy the local server's data into a directory Docker Compose runs as is."""
+    """Copy the local server's data into a directory Docker Compose runs as is.
+
+    A running local server is stopped first, so the copy is consistent.
+    """
     paths = Paths(local_home())
     out = out.resolve()
     try:
-        compose_copied = export_compose(paths, out, log=_info)
-    except LocalStackError as e:
-        _fail(str(e))
+        export_compose(paths, out, log=_info)
+    except LocalStackError as exc:
+        _fail(str(exc))
     rich_print_checked_statement(f"Exported to {out}", "success")
-    _info(f"cd {out}")
-    if not compose_copied:
-        _info(f"curl -LO {COMPOSE_URL}")
-    _info("docker compose up -d   # then http://localhost:5080")
+    _print_rows(
+        [
+            ("Start it", f"cd {shlex.quote(str(out))} && docker compose up -d"),
+            ("Then open", "http://localhost:5080"),
+        ]
+    )
