@@ -1,7 +1,7 @@
 [project]
 name = "depictio"
 version = "1.11.2"
-description = "Depictio — FastAPI backend + Celery worker for the React viewer SPA"
+description = "Interactive dashboards for bioinformatics pipeline results: server, worker, viewer and CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -103,7 +103,7 @@ dependencies = [
   "rich==15.0.0",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
-urls = { Homepage = "http://github.com/depictio/depictio" }
+urls = { Homepage = "https://github.com/depictio/depictio", Documentation = "https://depictio.github.io/depictio-docs/latest/" }
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",

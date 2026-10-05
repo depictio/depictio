@@ -12,6 +12,7 @@ on:
       - "packages/plotly-*/**"
       - "pyproject.toml"
       - "pnpm-lock.yaml"
+      - "scripts/check_depictio_wheel.py"
       - ".github/workflows/local-server-smoke.yaml"
   push:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - "packages/plotly-*/**"
       - "pyproject.toml"
       - "pnpm-lock.yaml"
+      - "scripts/check_depictio_wheel.py"
       - ".github/workflows/local-server-smoke.yaml"
   workflow_dispatch:
 
@@ -94,34 +96,9 @@ jobs:
           uv build --wheel --out-dir "$RUNNER_TEMP/wheels" packages/plotly-complexheatmap
           ls -la "$RUNNER_TEMP/wheels"
 
-      # The package-data globs in pyproject.toml keep the wheel to what `depictio local
-      # up` reads. Fail here, before the slow boot, if it grows back or loses a file.
+      # Fail here, before the slow boot, if the wheel grows back or loses a file.
       - name: Check the depictio wheel contents
-        run: |
-          python3 - "$(ls $RUNNER_TEMP/wheels/depictio-*.whl)" <<'EOF'
-          import os, re, sys, zipfile
-          path = sys.argv[1]
-          names = zipfile.ZipFile(path).namelist()
-          size_mb = os.path.getsize(path) / 1e6
-          required = [
-              r"depictio/viewer/dist/index\.html",
-              r"depictio/projects/init/iris/\.db_seeds/dashboard\.json",
-              r"depictio/projects/init/penguins/\.db_seeds/dashboard\.json",
-              r"depictio/projects/nf-core/rnaseq/[^/]+/template\.yaml",
-          ]
-          forbidden = [
-              r"depictio/tests/",
-              r"depictio/projects/nf-core/.*/docs/",
-              # Thumbnails other than the iris and penguins dashboards.
-              r"depictio/api/static/screenshots/(?!6824cb3b89d2b7216930973[78]_)",
-          ]
-          errors = [f"missing {p}" for p in required if not any(re.fullmatch(p, n) for n in names)]
-          errors += [f"forbidden {n}" for n in names if any(re.match(p, n) for p in forbidden)]
-          if size_mb > 15:
-              errors.append(f"wheel is {size_mb:.1f} MB, over the 15 MB cap")
-          print(f"{os.path.basename(path)}: {size_mb:.1f} MB, {len(names)} files")
-          sys.exit("\n".join(errors[:20]) or None)
-          EOF
+        run: python3 scripts/check_depictio_wheel.py "$(ls $RUNNER_TEMP/wheels/depictio-*.whl)"
 
       - name: depictio local up (iris example, from the wheel, outside the checkout)
         id: up
