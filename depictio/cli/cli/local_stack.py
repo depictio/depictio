@@ -11,6 +11,7 @@ Only configuration differs from the Docker profile: every service is pointed at
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import secrets
@@ -32,6 +33,8 @@ S3_BUCKET = "depictio-bucket"
 DEFAULT_PORTS = {"api": 8058, "mongo": 27018, "redis": 6379, "s3": 9000}
 # Start order; stopped in reverse.
 PROCESS_ORDER = ["mongo", "redis", "s3", "api", "worker"]
+# The example projects shipped in the wheel, seeded by --examples.
+EXAMPLES = ("iris", "penguins")
 
 
 class LocalStackError(RuntimeError):
@@ -74,6 +77,10 @@ class Paths:
         return self.home / "secrets.json"
 
     @property
+    def ports(self) -> Path:
+        return self.home / "ports.json"
+
+    @property
     def cli_config(self) -> Path:
         return self.home / "cli" / f"{ADMIN_EMAIL.split('@')[0]}_config.yaml"
 
@@ -81,6 +88,11 @@ class Paths:
         return self.env / "bin" / name
 
     def ensure_dirs(self) -> None:
+        # Owner-only: keys/ holds the token signing keys and cli/ the admin token and
+        # S3 secret, which the API writes with the default umask (world-readable).
+        for private in (self.home, self.home / "keys", self.home / "cli"):
+            private.mkdir(parents=True, exist_ok=True)
+            private.chmod(0o700)
         for sub in (
             "logs",
             "mongo",
@@ -136,7 +148,14 @@ def ensure_binaries(paths: Paths, log=print) -> None:
         f"into {paths.env} (first run only)"
     )
     start = time.monotonic()
-    asyncio.run(_install())
+    try:
+        asyncio.run(_install())
+    except Exception as exc:
+        # Without the marker, the next run starts the download over.
+        raise LocalStackError(
+            f"Could not download MongoDB, Redis and SeaweedFS from conda-forge: {exc}. "
+            "Check your network or proxy."
+        ) from exc
     marker.write_text(json.dumps(wanted))
     log(f"Native services installed in {time.monotonic() - start:.0f}s")
 
@@ -197,16 +216,48 @@ def pick_port(preferred: int, taken: set[int]) -> int:
         return sock.getsockname()[1]
 
 
-def pick_ports(api_port: int | None) -> dict[str, int]:
+def pick_ports(api_port: int | None, saved: dict[str, int] | None = None) -> dict[str, int]:
+    """Ports for this run: --port, else the previous run's, else the defaults.
+
+    Reusing the previous ports keeps the URL stable. One that another program has
+    taken since is replaced by a free one, so `up` never stops on it.
+    """
+    preferred = {**DEFAULT_PORTS, **(saved or {})}
     ports: dict[str, int] = {}
-    for name, preferred in DEFAULT_PORTS.items():
+    for name in DEFAULT_PORTS:
         if name == "api" and api_port:
             if not port_is_free(api_port):
-                raise LocalStackError(f"Port {api_port} is already in use")
+                raise LocalStackError(f"Port {api_port} is already in use: choose another --port")
             ports[name] = api_port
         else:
-            ports[name] = pick_port(preferred, set(ports.values()))
+            ports[name] = pick_port(preferred[name], set(ports.values()))
     return ports
+
+
+def load_ports(paths: Paths) -> dict[str, int]:
+    """The ports of the previous run, kept across `down` (unlike state.json)."""
+    if not paths.ports.exists():
+        return {}
+    saved = json.loads(paths.ports.read_text())
+    return {k: v for k, v in saved.items() if k in DEFAULT_PORTS and isinstance(v, int)}
+
+
+def save_ports(paths: Paths, ports: dict[str, int]) -> None:
+    paths.ports.write_text(json.dumps(ports, indent=2))
+
+
+def parse_examples(value: str | None, template: str | None) -> str:
+    """--examples as DEPICTIO_SEED_PROJECTS takes it, or 'none'."""
+    if value is None:
+        return "none" if template else ",".join(EXAMPLES)
+    names = [name.strip().lower() for name in value.split(",") if name.strip()]
+    if names == ["none"]:
+        return "none"
+    if not names or not set(names) <= set(EXAMPLES):
+        raise LocalStackError(
+            f"--examples {value!r} is not valid: use iris, penguins, iris,penguins or none"
+        )
+    return ",".join(dict.fromkeys(names))
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +269,13 @@ def server_env(
     paths: Paths, ports: dict[str, int], secret_values: dict, seed: str, screenshots: bool
 ) -> dict:
     host = "127.0.0.1"
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_")}
+    # Inherited DEPICTIO_* settings target another instance, except the telemetry
+    # opt-out (DEPICTIO_TELEMETRY_ENABLED=false), which must reach this one too.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("DEPICTIO_") or k.startswith("DEPICTIO_TELEMETRY_")
+    }
     env.update(
         {
             "DEPICTIO_CONTEXT": "server",
@@ -269,7 +326,7 @@ def server_env(
     )
     if seed == "none":
         env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] = "true"
-    elif seed != "all":
+    else:
         env["DEPICTIO_SEED_PROJECTS"] = seed
     return env
 
@@ -282,11 +339,51 @@ def server_env(
 def pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
+    # A child of this process (`up` stopping what it just started) stays visible as a
+    # zombie until reaped, so reap it here; for any other process this is a no-op.
+    with contextlib.suppress(ChildProcessError):
+        if os.waitpid(pid, os.WNOHANG)[0] == pid:
+            return False
     try:
         os.kill(pid, 0)
     except (OSError, ProcessLookupError):
         return False
     return True
+
+
+def process_start_time(pid: int) -> float | None:
+    """When ``pid`` started, or None without psutil (a server dependency) or once it is gone."""
+    try:
+        import psutil
+    except ImportError:
+        return None
+    try:
+        return psutil.Process(pid).create_time()
+    except psutil.Error:
+        return None
+
+
+# Slack for a recorded start time: psutil derives it from the boot time on Linux,
+# which a clock step can shift. A PID reused after a reboot is off by far more.
+_START_TIME_SLACK = 5.0
+
+
+def live_pids(state: dict) -> dict[str, int]:
+    """The recorded PIDs that still belong to the processes `up` started.
+
+    state.json survives a reboot, after which a PID can name an unrelated process:
+    one whose start time differs from the recorded one counts as gone.
+    """
+    start_times = state.get("start_times", {})
+    live: dict[str, int] = {}
+    for name, pid in state.get("pids", {}).items():
+        if not pid_alive(pid):
+            continue
+        recorded, current = start_times.get(name), process_start_time(pid)
+        # Without a record (older state) or without psutil, only liveness is checked.
+        if recorded is None or current is None or abs(current - recorded) < _START_TIME_SLACK:
+            live[name] = pid
+    return live
 
 
 def spawn(paths: Paths, name: str, cmd: list[str], env: dict | None = None) -> subprocess.Popen:
@@ -333,10 +430,27 @@ def tcp_ready(port: int) -> bool:
         return False
 
 
+# Loopback checks bypass any proxy set in the environment (common on HPC login
+# nodes), which cannot reach this machine's 127.0.0.1.
+_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def http_ready(url: str) -> bool:
     try:
-        with urllib.request.urlopen(url, timeout=2) as resp:
+        with _DIRECT.open(url, timeout=2) as resp:
             return resp.status < 500
+    except Exception:
+        return False
+
+
+def api_healthy(port: int) -> bool:
+    """Whether the Depictio API answers its health check on ``port``.
+
+    The payload is checked too, so another server answering on that port does not count.
+    """
+    try:
+        with _DIRECT.open(f"http://127.0.0.1:{port}/health", timeout=2) as resp:
+            return resp.status == 200 and json.load(resp).get("status") == "healthy"
     except Exception:
         return False
 
@@ -354,14 +468,13 @@ def start_services(
     return procs
 
 
-def _stop_child(proc: subprocess.Popen) -> None:
+def _stop_child(proc: subprocess.Popen, timeout: float = 20) -> None:
     if proc.poll() is not None:
         return
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-        proc.wait(timeout=20)
-    except (OSError, subprocess.TimeoutExpired):
-        proc.kill()
+    # poll() rather than kill(pid, 0): an unreaped child stays visible as a zombie.
+    terminate_group(proc.pid, timeout, alive=lambda: proc.poll() is None)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=5)
 
 
 def _start_services(
@@ -496,12 +609,13 @@ def wait_for_api(
     paths: Paths, ports: dict[str, int], proc: subprocess.Popen, timeout: float = 300
 ) -> None:
     wait_until(
-        lambda: http_ready(f"http://127.0.0.1:{ports['api']}/health"),
+        lambda: api_healthy(ports["api"]),
         "the Depictio API",
         timeout,
         proc,
         paths.logs / "api.log",
     )
+    # Written by the API when it creates the admin token, before /health answers.
     wait_until(
         paths.cli_config.exists,
         f"the CLI configuration ({paths.cli_config})",
@@ -509,44 +623,86 @@ def wait_for_api(
         proc,
         paths.logs / "api.log",
     )
+    sync_cli_config(paths, ports)
 
 
-def stop_pid(pid: int, timeout: float = 20) -> None:
-    if not pid_alive(pid):
-        return
+def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
+    """Point the CLI configuration at this run's API and S3 ports; keep it owner-only.
+
+    The API writes it only when it creates the admin token, on the first run, so
+    after a port change it still names the old ports. Returns whether it changed.
+    """
+    import yaml
+
+    config = yaml.safe_load(paths.cli_config.read_text()) or {}
+    s3 = config.setdefault("s3_storage", {})
+    url = f"http://127.0.0.1:{ports['api']}"
+    changed = config.get("api_base_url") != url or any(
+        s3.get(key) != ports["s3"] for key in ("service_port", "external_port")
+    )
+    if changed:
+        config["api_base_url"] = url
+        s3["service_port"] = s3["external_port"] = ports["s3"]
+        # Replaced in one step, so a CLI reading it meanwhile never sees half a file.
+        tmp = paths.cli_config.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            yaml.safe_dump(config, fh, default_flow_style=False, sort_keys=False)
+        os.replace(tmp, paths.cli_config)
+    paths.cli_config.chmod(0o600)
+    return changed
+
+
+def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
+    """Fail when a service died while the API was starting, e.g. a crashed worker."""
+    for name, proc in procs.items():
+        if proc.poll() is not None:
+            raise LocalStackError(
+                f"The {name} process exited during startup. See {paths.logs / f'{name}.log'}"
+            )
+
+
+def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
+    """Stop the process group ``pid`` leads: SIGTERM, up to ``timeout`` seconds, SIGKILL.
+
+    Every service starts in its own session, so its group also holds what it forked
+    (Celery pool processes, Chromium), which signalling ``pid`` alone leaves running.
+    """
+    alive = alive or (lambda: pid_alive(pid))
     try:
         os.killpg(pid, signal.SIGTERM)
-    except (OSError, ProcessLookupError):
+    except OSError:
+        # Not a group leader: stop the process alone.
         try:
             os.kill(pid, signal.SIGTERM)
-        except (OSError, ProcessLookupError):
+        except OSError:
             return
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not pid_alive(pid):
-            return
+    while alive() and time.monotonic() < deadline:
         time.sleep(0.2)
-    try:
+    # Whatever ignored SIGTERM, or outlived the leader.
+    with contextlib.suppress(OSError):
         os.killpg(pid, signal.SIGKILL)
-    except (OSError, ProcessLookupError):
-        pass
+    if alive():
+        with contextlib.suppress(OSError):
+            os.kill(pid, signal.SIGKILL)
 
 
-def stop_all(paths: Paths, log=print) -> None:
-    state = load_state(paths)
-    pids = state.get("pids", {})
-    for name in reversed(PROCESS_ORDER):
-        pid = pids.get(name)
-        if pid_alive(pid):
-            log(f"Stopping {name} (pid {pid})")
-            stop_pid(pid)
+def stop_all(paths: Paths, log=print) -> list[str]:
+    """Stop the processes `up` recorded; returns the names of those that were running."""
+    live = live_pids(load_state(paths))
+    stopped = [name for name in reversed(PROCESS_ORDER) if name in live]
+    for name in stopped:
+        log(f"Stopping {name} (pid {live[name]})")
+        terminate_group(live[name])
     if paths.state.exists():
         paths.state.unlink()
+    return stopped
 
 
 def running_status(paths: Paths) -> dict[str, bool]:
-    pids = load_state(paths).get("pids", {})
-    return {name: pid_alive(pids.get(name)) for name in PROCESS_ORDER}
+    live = live_pids(load_state(paths))
+    return {name: name in live for name in PROCESS_ORDER}
 
 
 def check_server_installed() -> None:
@@ -628,7 +784,7 @@ def reset(paths: Paths) -> None:
         "logs",
     ):
         shutil.rmtree(paths.home / sub, ignore_errors=True)
-    for f in (paths.state, paths.secrets):
+    for f in (paths.state, paths.secrets, paths.ports):
         if f.exists():
             f.unlink()
 
@@ -706,13 +862,21 @@ def compose_env(secret_values: dict, version: str | None) -> str:
 
 
 def release_version() -> str | None:
-    """The depictio version when it names a published image, else None."""
+    """The installed depictio version when it names a published image, else None.
+
+    Read from the package metadata: the CLI-only package (depictio-cli) does not
+    ship depictio.version, and both packages carry the same version number.
+    """
     import re
+    from importlib.metadata import PackageNotFoundError, version
 
-    from depictio.version import get_version
-
-    version = get_version()
-    return version if re.fullmatch(r"\d+\.\d+\.\d+", version) else None
+    for dist in ("depictio", "depictio-cli"):
+        try:
+            found = version(dist)
+        except PackageNotFoundError:
+            continue
+        return found if re.fullmatch(r"\d+\.\d+\.\d+", found) else None
+    return None
 
 
 def _rebind_seaweedfs(options: Path) -> None:
