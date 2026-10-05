@@ -359,7 +359,7 @@ backend:
     # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
     # the CSS viewport the dashboard is laid out at, times a pixel density that
     # keeps the shot readable once a card shrinks it.
-    DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "thumbnails"
+    DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "table"
     DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "1440"
     DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "900"
     DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "2.0"

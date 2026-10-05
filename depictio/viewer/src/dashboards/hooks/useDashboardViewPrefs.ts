@@ -13,8 +13,9 @@ export type GroupBy = 'none' | 'project' | 'owner' | 'visibility' | 'workflow';
 export type SortBy = 'recent' | 'name' | 'owner';
 export type Density = 'compact' | 'cozy';
 export type VisibilityFilter = 'all' | 'public' | 'private';
-/** Thumbnail grid columns at the widest breakpoint. `auto` is the responsive
- *  default; a number caps the grid at that many cards per row. */
+/** Thumbnail grid columns at the widest breakpoint. A number caps the grid at
+ *  that many cards per row; `auto` never asks for more columns than a section
+ *  has cards, so a lone dashboard spans the whole width. */
 export type CardsPerRow = 'auto' | 2 | 3 | 4 | 5 | 6;
 /** The metadata badges a thumbnail card can show under its title. */
 export type CardBadge =
@@ -26,6 +27,8 @@ export type CardBadge =
   | 'tabs';
 
 export const CARDS_PER_ROW_OPTIONS: readonly CardsPerRow[] = ['auto', 2, 3, 4, 5, 6];
+/** Five keeps a short section, or a single dashboard, at thumbnail size. */
+export const DEFAULT_CARDS_PER_ROW: CardsPerRow = 5;
 /** Every card badge, in the order the card renders them. Selections are kept
  *  in this order too, so toggling one off and on again never reshuffles the
  *  row. */
@@ -65,7 +68,7 @@ export interface DashboardViewPrefs {
   /** True once the view came from the person: they picked one in the toolbar,
    *  or opened a link that named one. Until then the deployment's default
    *  (`DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW`) may still change it under
-   *  them, which is what lets an instance open on the table without
+   *  them, which is what lets an instance open on the thumbnails without
    *  overriding anybody's choice. */
   viewChosen: boolean;
   groupBy: GroupBy;
@@ -108,7 +111,7 @@ export const DASHBOARD_SCOPE_PARAMS = [
 ] as const;
 
 const DEFAULT_PREFS: DashboardViewPrefs = {
-  view: 'thumbnails',
+  view: 'table',
   viewChosen: false,
   groupBy: 'none',
   sortBy: 'recent',
@@ -116,7 +119,7 @@ const DEFAULT_PREFS: DashboardViewPrefs = {
   filters: emptyDashboardFilters(),
   density: 'cozy',
   onlyPinned: false,
-  cardsPerRow: 'auto',
+  cardsPerRow: DEFAULT_CARDS_PER_ROW,
   cardBadges: [...CARD_BADGES],
 };
 

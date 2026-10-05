@@ -276,10 +276,10 @@ class TestViewerConfig:
     def test_dashboards_default_view(self):
         """The listing's default view is a deployment setting."""
         with env_vars({"DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW": None}):
-            assert ViewerConfig().dashboards_default_view == "thumbnails"
-
-        with env_vars({"DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW": "table"}):
             assert ViewerConfig().dashboards_default_view == "table"
+
+        with env_vars({"DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW": "thumbnails"}):
+            assert ViewerConfig().dashboards_default_view == "thumbnails"
 
     def test_dashboards_default_view_rejects_unknown(self):
         """A typo must fail at startup rather than reach the SPA."""

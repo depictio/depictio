@@ -2,6 +2,14 @@ import { expect, Page } from "@playwright/test";
 import { IRIS_PROJECT_LABEL } from "./projects";
 
 /**
+ * The listing in its thumbnail grid. The default view is the table, and the
+ * `dashboard-card` locators below only exist in the grid. `?view=` counts as
+ * the visitor's own choice and is stored, so later visits in the same test
+ * keep the grid.
+ */
+export const DASHBOARDS_GRID_URL = "/dashboards?view=thumbnails";
+
+/**
  * Opens the "New Dashboard" modal, fills title + project, submits,
  * and waits for the new card to appear. Returns the unique title used.
  */

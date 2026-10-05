@@ -198,7 +198,7 @@ class ViewerConfig(ServiceConfig):
     )
 
     dashboards_default_view: Literal["thumbnails", "table"] = Field(
-        default="thumbnails",
+        default="table",
         description="Which view /dashboards opens in for someone who has never "
         "picked one: 'thumbnails' for the card grid with screenshot previews, "
         "'table' for sortable columns with bulk selection. A view chosen in the "

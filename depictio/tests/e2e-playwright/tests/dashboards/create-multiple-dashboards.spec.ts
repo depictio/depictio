@@ -9,7 +9,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { createDashboard, deleteDashboard } from "@fixtures/dashboard";
+import { DASHBOARDS_GRID_URL, createDashboard, deleteDashboard } from "@fixtures/dashboard";
 
 test.describe("Create and manage multiple dashboards", () => {
   test.skip(
@@ -22,7 +22,7 @@ test.describe("Create and manage multiple dashboards", () => {
     page,
   }) => {
     await loginAsAdmin();
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
 
     const stamp = new Date().toISOString().replace(/:/g, "-");
     const first = `First Dashboard ${stamp}`;
