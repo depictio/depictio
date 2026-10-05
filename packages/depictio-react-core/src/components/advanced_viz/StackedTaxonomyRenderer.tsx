@@ -191,7 +191,12 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const { figure, allRanks } = useMemo(() => {
     if (!rows) return { figure: null, allRanks: [] as string[] };
     const samples = (rows[config.sample_id_col] || []).map((v) => String(v ?? '')) as string[];
-    const taxa = (rows[config.taxon_col] || []).map((v) => String(v ?? '')) as string[];
+    // A lineage that stops above the shown rank ("Eukaryota;") has a blank leaf.
+    // Named, so it gets a legend entry a reader can identify rather than an
+    // unlabelled swatch.
+    const taxa = (rows[config.taxon_col] || []).map(
+      (v) => String(v ?? '').trim() || 'Unclassified',
+    ) as string[];
     const ranks = (rows[config.rank_col] || []).map((v) => String(v ?? '')) as string[];
     const ab = (rows[config.abundance_col] || []) as number[];
 
