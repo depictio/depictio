@@ -151,3 +151,86 @@ class TestSupportedImageExtensions:
         """Test all extensions start with a dot."""
         for ext in SUPPORTED_IMAGE_EXTENSIONS:
             assert ext.startswith("."), f"Extension {ext} should start with '.'"
+
+
+class TestListRegisteredFiles:
+    """GET /files/list/{dc_id}: who sees which files, and what of them."""
+
+    @staticmethod
+    def _file(owner_id):
+        from bson import ObjectId
+
+        return {
+            "_id": ObjectId(),
+            "file_location": "/data/iris.csv",
+            "permissions": {"owners": [{"_id": owner_id, "email": "owner@example.org"}]},
+        }
+
+    async def _list(self, user, project_found, files):
+        from unittest.mock import MagicMock, patch
+
+        from bson import ObjectId
+
+        from depictio.api.v1.endpoints.files_endpoints import routes
+
+        projects = MagicMock()
+        projects.find_one.return_value = {"_id": ObjectId()} if project_found else None
+        files_collection = MagicMock()
+        files_collection.aggregate.return_value = iter(files)
+        with (
+            patch("depictio.api.v1.db.projects_collection", projects),
+            patch.object(routes, "files_collection", files_collection),
+        ):
+            result = await routes.list_registered_files(str(ObjectId()), current_user=user)
+        match = files_collection.aggregate.call_args[0][0][0]["$match"]
+        return result, match, projects
+
+    @pytest.mark.asyncio
+    async def test_project_reader_lists_every_file_without_owner_details(self):
+        from unittest.mock import MagicMock
+
+        from bson import ObjectId
+
+        reader = MagicMock(is_admin=False, id=ObjectId())
+        result, match, _ = await self._list(reader, True, [self._file(ObjectId())])
+
+        assert "permissions.owners._id" not in match
+        assert len(result) == 1
+        assert result[0]["file_location"] == "/data/iris.csv"
+        assert "permissions" not in result[0]
+
+    @pytest.mark.asyncio
+    async def test_owner_keeps_the_permissions_of_their_own_files(self):
+        from unittest.mock import MagicMock
+
+        from bson import ObjectId
+
+        owner = MagicMock(is_admin=False, id=ObjectId())
+        result, _, _ = await self._list(owner, True, [self._file(owner.id)])
+
+        assert "permissions" in result[0]
+
+    @pytest.mark.asyncio
+    async def test_non_reader_only_matches_their_own_files(self):
+        from unittest.mock import MagicMock
+
+        from bson import ObjectId
+
+        outsider = MagicMock(is_admin=False, id=ObjectId())
+        _, match, projects = await self._list(outsider, False, [])
+
+        assert match["permissions.owners._id"] == ObjectId(outsider.id)
+        assert "$or" in projects.find_one.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_admin_lists_every_file_with_permissions(self):
+        from unittest.mock import MagicMock
+
+        from bson import ObjectId
+
+        admin = MagicMock(is_admin=True, id=ObjectId())
+        result, match, projects = await self._list(admin, False, [self._file(ObjectId())])
+
+        assert "permissions.owners._id" not in match
+        assert "permissions" in result[0]
+        projects.find_one.assert_not_called()

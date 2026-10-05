@@ -115,7 +115,7 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
     # a property of the *caller*, not of the file's owners. Keying off
     # ``permissions.owners.is_admin`` previously let any caller list every
     # file whose owner happened to be admin.
-    if current_user.is_admin:
+    if current_user.is_admin or _can_read_data_collection(target_data_collection_id, user_oid):
         permission_match: dict = {}
     else:
         permission_match = {"permissions.owners._id": user_oid}
@@ -125,7 +125,41 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
 
     result = files_collection.aggregate(pipeline)
     files = list(result)
+    if not current_user.is_admin:
+        # A reader sees which files feed the project, not who registered them:
+        # the owners' entries carry their emails.
+        for file in files:
+            owners = file.get("permissions", {}).get("owners", [])
+            if not any(owner.get("_id") == user_oid for owner in owners):
+                file.pop("permissions", None)
     return convert_objectid_to_str(files)
+
+
+def _can_read_data_collection(data_collection_id: ObjectId, user_oid: ObjectId) -> bool:
+    """Whether the user may read the project holding ``data_collection_id``.
+
+    Mirrors ``deltatables_endpoints._build_permission_pipeline``: an owner, a
+    viewer (explicitly or through ``"*"``), or anyone for a public project.
+    Those users can already read the data itself, so they may also list the
+    files it was built from.
+    """
+    from depictio.api.v1.db import projects_collection
+
+    return (
+        projects_collection.find_one(
+            {
+                "workflows.data_collections._id": data_collection_id,
+                "$or": [
+                    {"permissions.owners._id": user_oid},
+                    {"permissions.viewers._id": user_oid},
+                    {"permissions.viewers": "*"},
+                    {"is_public": True},
+                ],
+            },
+            {"_id": 1},
+        )
+        is not None
+    )
 
 
 @files_endpoint_router.delete("/delete/{file_id}")
