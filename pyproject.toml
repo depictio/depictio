@@ -168,6 +168,8 @@ include = ["depictio*"]
 exclude = [
   "depictio.viewer.node_modules*",
   "depictio.tests*",
+  # Maintainer scripts (reseeding, seed and docs generation), run from a checkout.
+  "depictio.dev_scripts*",
   "depictio.projects.test*",
   # Example projects; iris and penguins ship as package-data below.
   "depictio.projects.init.*",
