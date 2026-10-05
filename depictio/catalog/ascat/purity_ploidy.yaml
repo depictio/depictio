@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../output.schema.json
+id: ascat_purity_ploidy
+name: Tumour purity and ploidy
+mode: ascat
+description: >-
+  ASCAT's fit for each tumour sample. Per the ASCAT documentation the
+  .purityploidy.txt file carries AberrantCellFraction and Ploidy, one data row
+  per sample. Purity is the share of sequenced cells carrying the tumour
+  genome, ploidy the average copy number of that genome, and every log2 ratio
+  on the copy-number profile is read against them: a low-purity sample
+  flattens the whole track.
+find:
+  path_glob: "**/variant_calling/ascat/*/*.purityploidy.txt"
+recipe: ascat/purity_ploidy.py
+fixture: purity_ploidy.tsv
+renders_as:
+  - { id: ascat_purity_card, component: card, column: purity, aggregation: median, secondary_layout: gauge, coverage_max: 1.0 }
+  - { id: ascat_ploidy_card, component: card, column: ploidy, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: ascat_fit_table, component: table, columns: [sample, purity, ploidy] }

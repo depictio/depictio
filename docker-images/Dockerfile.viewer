@@ -21,7 +21,7 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 # node_modules — install only re-runs when a package.json or the lockfile
 # changes. node_modules is .dockerignored, so copying source afterwards can't
 # clobber the installed store.
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
 COPY depictio/viewer/package.json ./depictio/viewer/

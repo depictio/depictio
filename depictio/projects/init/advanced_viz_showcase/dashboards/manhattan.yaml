@@ -1,12 +1,17 @@
-# Manhattan — one tab of the advanced-visualisation showcase.
+# Manhattan: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Manhattan'
-subtitle: 'Generic chr/pos/score with threshold line, alternating bands and top-N locus labels'
+#
+# Two modes of one kind, on two collections: the association scan (score on y)
+# and the rainfall (log10 inter-variant distance on y) of a tumour's somatic
+# SNVs, where the kataegis foci planted by generate_fixtures.py drop to the
+# bottom of the plot.
+title: 'Genome-wide scans'
+subtitle: 'An association scan with its significance threshold, and the rainfall of one tumour genome where clustered mutations (kataegis) fall to the bottom.'
 icon: 'mdi:chart-line-stacked'
 icon_color: 'orange'
 icon_variant: filled
@@ -18,48 +23,48 @@ parent_dashboard_tag: volcano
 tab_icon: 'mdi:chart-line-stacked'
 tab_icon_color: 'orange'
 
-# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
-# this family read different collections whose column names collide while their
-# value domains do not overlap, so a control fanned out from one tab would show
-# up everywhere and bite on nothing.
 filter_sections:
   - name: 'Scan scope'
     icon: 'mdi:filter-variant'
     color: 'orange'
-    description: 'Restricts the scan to a region or a score range'
+    description: 'Restricts the scan to a chromosome or a score range, and the rainfall to substitution classes'
 
 grid_sections:
   - name: 'Genome-wide scan'
     icon: 'mdi:chart-line'
     color: 'orange'
-    description: 'Markers at their genomic position against significance'
+    description: 'Markers at their genomic position against significance, then somatic SNVs against the distance to their neighbour'
 
 components:
   - tag: text-manhattan
     index: man-text
     component_type: text
-    title: 'Genome-wide scan'
+    title: 'Genome-wide scans'
     order: 3
     alignment: left
     vertical_alignment: top
     section: 'Genome-wide scan'
     body: >
-      Markers plotted at their genomic position against their score, with alternating bands
-      separating the chromosomes and a threshold line across the plot. Peaks that clear the
-      line are labelled by feature id; restricting to one chromosome isolates a locus.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Top: an association scan, each marker at its position against -log10(padj), peaks over
+      the dashed threshold labelled; lasso markers to filter by feature. Bottom: the same kind
+      in rainfall mode on one tumour genome, y is log10 of the distance to the previous SNV,
+      so the three kataegis foci (C to T and C to G runs) drop as vertical streaks. Colour-by
+      and the mode sit in each header. Inputs: GWAS or QTL summary statistics, and the somatic
+      VCF of nf-core/sarek.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-manhattan
     index: 'man-manhattan'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'manhattan_demo'
-    title: 'Manhattan plot — chr × score'
-    description: 'Per-chromosome significance with alternating bands and top-N locus labels. Tune the threshold line in Settings ⚙.'
+    title: 'Association scan'
+    description: 'Per-chromosome significance with alternating bands, the threshold line and the top 8 loci labelled. Lasso or click markers to publish a feature filter.'
     section: 'Genome-wide scan'
     viz_kind: 'manhattan'
     config:
       viz_kind: "manhattan"
+      controls_placement: "header"
       chr_col: "chr"
       pos_col: "pos"
       score_col: "score"
@@ -73,7 +78,27 @@ components:
       # nothing, so the config has to say it out loud.
       selection_enabled: true
       selection_column: "feature"
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+    layout: { x: 0, y: 2, w: 8, h: 6 }
+
+  - tag: viz-manhattan-rainfall
+    index: 'man-rainfall'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'somatic_snv_demo'
+    title: 'Somatic mutation rainfall'
+    description: 'Each SNV at its position, y is log10 of the distance to the previous SNV on the chromosome, colour is the substitution class. Clusters fall to the bottom.'
+    section: 'Genome-wide scan'
+    viz_kind: 'manhattan'
+    config:
+      viz_kind: "manhattan"
+      controls_placement: "header"
+      mode: "rainfall"
+      chr_col: "chr"
+      pos_col: "pos"
+      score_col: "vaf"
+      rainfall_class_col: "mutation_class"
+      top_n_labels: 0
+    layout: { x: 0, y: 8, w: 8, h: 6 }
 
   - tag: filter-manhattan-chr
     index: man-f-chr
@@ -86,10 +111,9 @@ components:
     title: 'Chromosome'
     placement: left
     section: 'Scan scope'
-    group: 'Locus filters'
+    group: 'Association filters'
     display:
       title_size: md
-      custom_color: '#F68B33'
       icon_name: 'mdi:dna'
     layout: { x: 0, y: 0, w: 1, h: 3 }
 
@@ -104,9 +128,26 @@ components:
     title: 'Score'
     placement: left
     section: 'Scan scope'
-    group: 'Locus filters'
+    group: 'Association filters'
+    show_histogram: true
     display:
       title_size: md
-      custom_color: '#E74C3C'
       icon_name: 'mdi:chart-line'
     layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-manhattan-mutation-class
+    index: man-f-mutation-class
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'somatic_snv_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'mutation_class'
+    column_type: 'object'
+    title: 'Substitution class'
+    placement: left
+    section: 'Scan scope'
+    group: 'Rainfall filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

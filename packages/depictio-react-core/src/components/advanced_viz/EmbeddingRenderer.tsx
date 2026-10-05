@@ -1,17 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Badge,
-  Group,
-  MultiSelect,
-  NumberInput,
-  SegmentedControl,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Badge, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
 
 import {
@@ -30,11 +18,22 @@ import {
   advancedVizSelectionFilter,
   extractScatterSelection,
   filtersExcludingOwn,
+  hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
+import { useSelectionRevision } from './selectionGesture';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 
@@ -141,10 +140,14 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
   const [ncontours, setNcontours] = usePersistedVizControl(metadata, 'ncontours', 14);
   const [densityOpacity, setDensityOpacity] = usePersistedVizControl(metadata, 'density_opacity', 0.45);
+  // An explicit `color_col` is the author's colour; `cluster_col` is what the
+  // legend and centroids group on, and only colours the map when nothing else
+  // was named. Two tiles on one collection that differ only by `color_col`
+  // must not draw the same picture.
   const [colorBy, setColorBy] = usePersistedVizControl<string | null>(
     metadata,
     'default_color_by',
-    config.cluster_col || config.color_col || null,
+    config.color_col || config.cluster_col || null,
   );
   const [showDensity, setShowDensity] = usePersistedVizControl(metadata, 'show_density', false);
 
@@ -243,6 +246,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const filtersForFetch = useMemo(
     () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
     [filters, metadata.index],
+  );
+  const selectionRevision = useSelectionRevision(
+    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
@@ -785,6 +791,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
         // `refreshTick` like FigureRenderer: a realtime tick still
         // repaints, a filter change does not.
         uirevision: `tick-${refreshTick ?? 0}`,
+        // The selected points are keyed separately, so an outside clear (the
+        // selection saved as a group, or removed from the filter summary)
+        // undims the cloud without dropping the zoom. See useSelectionRevision.
+        selectionrevision: `sel-${selectionRevision}`,
         ...(actuallyRender3D ? { scene: scene3D, uirevision: 'embedding-3d' } : layout2D),
         ...(!actuallyRender3D && centroidAnnotations.length > 0
           ? { annotations: centroidAnnotations }
@@ -815,6 +825,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     rows,
     config,
     refreshTick,
+    selectionRevision,
     selectionEnabled,
     selectionColumn,
     selectionInOwnSlot,
@@ -926,13 +937,16 @@ const EmbeddingRenderer: React.FC<Props> = ({
     return typeof vs[0] === 'number';
   }, [rows, colorBy]);
 
-  const controls = useMemo(
+  // Encoding tier: the reduction method, the number of dimensions on screen
+  // and what the colour means. Those three are the analysis; the method's own
+  // hyper-parameters, the point paint and the overlays refine it and stay in
+  // the second tier.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
-        {liveMode ? (
-          <>
-            <Select
-              size="xs"
+      <>
+        <VizControlGroup title="Projection">
+          {liveMode ? (
+            <VizSelect
               label="Method"
               value={method}
               onChange={(v) => v && setMethod(v as ComputeMethod)}
@@ -942,64 +956,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
                 { value: 'tsne', label: 't-SNE' },
                 { value: 'pcoa', label: 'PCoA' },
               ]}
-              description="Dim-reduction algorithm dispatched as a Celery task"
             />
-            {method === 'umap' ? (
-              <Group gap="xs" grow>
-                <NumberInput
-                  size="xs"
-                  label="n_neighbors"
-                  description="2–100"
-                  value={nNeighbors}
-                  onChange={(v) => setNNeighbors(Math.max(2, Math.min(100, Number(v) || 15)))}
-                  min={2}
-                  max={100}
-                />
-                <NumberInput
-                  size="xs"
-                  label="min_dist"
-                  description="0–1"
-                  value={minDist}
-                  onChange={(v) => setMinDist(Math.max(0, Math.min(1, Number(v) || 0.1)))}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  decimalScale={2}
-                />
-              </Group>
-            ) : null}
-            {method === 'tsne' ? (
-              <NumberInput
-                size="xs"
-                label="perplexity"
-                description="2–100 (clamped below sample count)"
-                value={perplexity}
-                onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
-                min={2}
-                max={100}
-              />
-            ) : null}
-            {computeStatus ? (
-              <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-                {computeStatus}
-              </Badge>
-            ) : null}
-            {computeMs != null && computeStatus == null ? (
-              <Text size="xs" c="dimmed">
-                {method.toUpperCase()} computed in {computeMs} ms
-              </Text>
-            ) : null}
-          </>
-        ) : null}
-        {/* View 2D/3D toggle. In precomputed mode this is only meaningful when
-            the DC has a dim_3_col; in live mode the user can opt into 3D and
-            n_components flips to 3 automatically. */}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            View
-          </Text>
-          <SegmentedControl
-            size="xs"
+          ) : null}
+          <VizSegmented
+            label="View"
             value={view3D ? '3d' : '2d'}
             onChange={(v) => setView3D(v === '3d')}
             data={[
@@ -1008,32 +968,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
             ]}
             disabled={!liveMode && !has3DConfigured}
           />
-        </Stack>
-        <Select
-          size="xs"
-          label="Plot style"
-          value={plotStyle}
-          onChange={(v) => v && setPlotStyle(v as PlotStyle)}
-          data={[
-            { value: 'default', label: 'Axis lines' },
-            { value: 'grid', label: 'Gridlines + ticks' },
-            { value: 'clean', label: 'No axes' },
-          ]}
-          description="Axis furniture drawn around the points"
-          allowDeselect={false}
-        />
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
-            label="Point size"
-            value={pointSize}
-            onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
-            min={1}
-            max={30}
-          />
-          {colorOptions.length > 0 ? (
-            <Select
-              size="xs"
+        </VizControlGroup>
+        {colorOptions.length > 0 ? (
+          <VizControlGroup title="Colour">
+            <VizSelect
               label="Colour by"
               value={colorBy}
               onChange={setColorBy}
@@ -1041,92 +979,135 @@ const EmbeddingRenderer: React.FC<Props> = ({
               searchable
               clearable
             />
+          </VizControlGroup>
+        ) : null}
+      </>
+    ),
+    [liveMode, method, view3D, has3DConfigured, colorBy, colorOptions],
+  );
+
+  const controls = useMemo(
+    () => (
+      <>
+        {liveMode ? (
+          <VizControlGroup title="Method parameters">
+            {method === 'umap' ? (
+              <>
+                <VizNumberInput
+                  label="n_neighbors"
+                  value={nNeighbors}
+                  onChange={(v) => setNNeighbors(Math.max(2, Math.min(100, Number(v) || 15)))}
+                  min={2}
+                  max={100}
+                />
+                <VizNumberInput
+                  label="min_dist"
+                  value={minDist}
+                  onChange={(v) => setMinDist(Math.max(0, Math.min(1, Number(v) || 0.1)))}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  decimalScale={2}
+                />
+                <VizFullRow>
+                  <Text size="xs" c="dimmed">
+                    n_neighbors 2–100, min_dist 0–1
+                  </Text>
+                </VizFullRow>
+              </>
+            ) : null}
+            {method === 'tsne' ? (
+              <>
+                <VizNumberInput
+                  label="perplexity"
+                  value={perplexity}
+                  onChange={(v) => setPerplexity(Math.max(2, Math.min(100, Number(v) || 30)))}
+                  min={2}
+                  max={100}
+                />
+                <VizFullRow>
+                  <Text size="xs" c="dimmed">
+                    2–100 (clamped below sample count)
+                  </Text>
+                </VizFullRow>
+              </>
+            ) : null}
+            {computeStatus ? (
+              <VizFullRow>
+                <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                  {computeStatus}
+                </Badge>
+              </VizFullRow>
+            ) : null}
+            {computeMs != null && computeStatus == null ? (
+              <VizFullRow>
+                <Text size="xs" c="dimmed">
+                  {method.toUpperCase()} computed in {computeMs} ms
+                </Text>
+              </VizFullRow>
+            ) : null}
+          </VizControlGroup>
+        ) : null}
+        <VizControlGroup title="Display">
+          <VizSelect
+            label="Plot style"
+            value={plotStyle}
+            onChange={(v) => v && setPlotStyle(v as PlotStyle)}
+            data={[
+              { value: 'default', label: 'Axis lines' },
+              { value: 'grid', label: 'Gridlines + ticks' },
+              { value: 'clean', label: 'No axes' },
+            ]}
+            description="Axis furniture drawn around the points"
+            allowDeselect={false}
+          />
+          <VizSelect
+            label="Legend"
+            value={legendPos}
+            onChange={(v) => v && setLegendPos(v as LegendPos)}
+            data={[
+              { value: 'right', label: 'Right (outside)' },
+              { value: 'bottom', label: 'Bottom' },
+              { value: 'in-tr', label: 'Inside, top-right' },
+              { value: 'hidden', label: 'Hidden' },
+            ]}
+            allowDeselect={false}
+          />
+          {hoverCandidates.length > 0 ? (
+            <VizMultiSelect
+              label="Hover columns"
+              placeholder="Pick extra columns…"
+              value={hoverCols}
+              onChange={setHoverCols}
+              data={hoverCandidates}
+              searchable
+              clearable
+              maxValues={6}
+            />
           ) : null}
-        </Group>
-        {colorByIsNumeric ? (
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>
-              Colourscale
-            </Text>
-            <Switch
-              size="xs"
+        </VizControlGroup>
+        <VizControlGroup title="Markers">
+          <VizNumberInput
+            label="Point size"
+            value={pointSize}
+            onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
+            min={1}
+            max={30}
+          />
+          {colorByIsNumeric ? (
+            <VizSwitch
               checked={reverseScale}
               onChange={(e) => setReverseScale(e.currentTarget.checked)}
-              label="Reverse"
+              label="Reverse colourscale"
             />
-          </Stack>
-        ) : null}
-        {hoverCandidates.length > 0 ? (
-          <MultiSelect
-            size="xs"
-            label="Hover columns"
-            placeholder="Pick extra columns…"
-            value={hoverCols}
-            onChange={setHoverCols}
-            data={hoverCandidates}
-            searchable
-            clearable
-            maxValues={6}
-          />
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Density
-          </Text>
-          <Switch
-            size="xs"
-            checked={showDensity}
-            onChange={(e) => setShowDensity(e.currentTarget.checked)}
-            label="Density overlay"
-            disabled={view3D}
-          />
-        </Stack>
-        {showDensity && !view3D ? (
-          <Group gap="xs" grow>
-            <NumberInput
-              size="xs"
-              label="Contours"
-              value={ncontours}
-              onChange={(v) => setNcontours(Math.max(2, Math.min(40, Number(v) || 14)))}
-              min={2}
-              max={40}
-            />
-            <NumberInput
-              size="xs"
-              label="Opacity"
-              value={densityOpacity}
-              onChange={(v) => setDensityOpacity(Math.max(0.05, Math.min(1, Number(v) || 0.45)))}
-              min={0.05}
-              max={1}
-              step={0.05}
-              decimalScale={2}
-            />
-          </Group>
-        ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Annotations
-          </Text>
-          <Switch
-            size="xs"
-            checked={showCentroids}
-            onChange={(e) => setShowCentroids(e.currentTarget.checked)}
-            label="Cluster centroids"
-          />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Markers
-          </Text>
-          <Switch
-            size="xs"
+          ) : null}
+          <VizSwitch
             checked={markerOutline}
             onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
             label="Outline"
           />
           {markerOutline ? (
-            <NumberInput
-              size="xs"
+            <VizNumberInput
               label="Outline width"
               value={outlineWidth}
               onChange={(v) => setOutlineWidth(Math.max(0.5, Math.min(4, Number(v) || 1.5)))}
@@ -1136,21 +1117,41 @@ const EmbeddingRenderer: React.FC<Props> = ({
               decimalScale={1}
             />
           ) : null}
-        </Stack>
-        <Select
-          size="xs"
-          label="Legend"
-          value={legendPos}
-          onChange={(v) => v && setLegendPos(v as LegendPos)}
-          data={[
-            { value: 'right', label: 'Right (outside)' },
-            { value: 'bottom', label: 'Bottom' },
-            { value: 'in-tr', label: 'Inside, top-right' },
-            { value: 'hidden', label: 'Hidden' },
-          ]}
-          allowDeselect={false}
-        />
-      </Stack>
+        </VizControlGroup>
+        <VizControlGroup title="Overlays">
+          <VizSwitch
+            checked={showDensity}
+            onChange={(e) => setShowDensity(e.currentTarget.checked)}
+            label="Density overlay"
+            disabled={view3D}
+          />
+          {showDensity && !view3D ? (
+            <>
+              <VizNumberInput
+                label="Contours"
+                value={ncontours}
+                onChange={(v) => setNcontours(Math.max(2, Math.min(40, Number(v) || 14)))}
+                min={2}
+                max={40}
+              />
+              <VizNumberInput
+                label="Opacity"
+                value={densityOpacity}
+                onChange={(v) => setDensityOpacity(Math.max(0.05, Math.min(1, Number(v) || 0.45)))}
+                min={0.05}
+                max={1}
+                step={0.05}
+                decimalScale={2}
+              />
+            </>
+          ) : null}
+          <VizSwitch
+            checked={showCentroids}
+            onChange={(e) => setShowCentroids(e.currentTarget.checked)}
+            label="Cluster centroids"
+          />
+        </VizControlGroup>
+      </>
     ),
     [
       liveMode,
@@ -1208,6 +1209,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     <AdvancedVizFrame
       title={metadata.title || 'Embedding'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

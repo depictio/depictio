@@ -1,0 +1,108 @@
+# Megatest manifest for nf-core/eager 2.4.5 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline eager --version 2.4.5 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# 2.4.5 is pinned because every 2.5.x megatest prefix holds pipeline_info/ only.
+# The run is two Atlantic cod libraries (COD076E1bL1, COD092E1bL1i69; three
+# lanes each, ERR1943600-602 and ERR1943607-609) mapped with BWA, deduplicated
+# with Picard MarkDuplicates (not DeDup), damage-profiled with DamageProfiler
+# and genotyped with GATK HaplotypeCaller. Sex determination, MTNucRatio,
+# mapDamage and bedtools were not enabled, so no such directory exists.
+#
+# eager 2.x is a DSL1 pipeline: the run wrote a pre-parquet MultiQC (1.13.dev0,
+# multiqc/multiqc_data/multiqc_data.json only), so the manifest fetches the raw
+# MultiQC inputs and the parquet Depictio reads is produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+# BAM, BAI, FASTQ and VCF are never fetched (mapping/, lanemerging/,
+# samtools/filter/, deduplication/*/*.bam, genotyping/*.vcf.gz: 11 GB).
+pipeline: eager
+version: "2.4.5"
+# s3://nf-core-awsmegatests/eager/results-<results_sha>/ == the 2.4.5 release tag_sha.
+results_sha: "42c9d5f8602e5e88fdcec28f194d2cd4cff61c75"
+run_root: ""
+multiqc:
+  version: "1.13.dev0"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  # Software versions (tab-separated DSL1 csv), trace, report, timeline, DAG.
+  - pipeline_info/*
+  - documentation/*
+  # Provenance of the original MultiQC report (version banner, module list).
+  # The reprocess tool skips every multiqc*/ directory when it re-parses inputs.
+  - multiqc/multiqc_data/multiqc_data.json
+  - multiqc/multiqc_data/multiqc.log
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ---------------------
+  # FastQC on the raw lanes and after AdapterRemoval; AdapterRemoval settings.
+  - fastqc/input_fastq/zips/*_fastqc.zip
+  - fastqc/after_clipping/zips/*_fastqc.zip
+  - adapterremoval/output/*.settings
+  # samtools flagstat before and after the mapping-quality filter. Both files
+  # are flagstat output despite the .stats extension.
+  - samtools/stats/*_flagstat.stats
+  - samtools/filtered_stats/*_postfilterflagstat.stats
+  # Picard MarkDuplicates metrics (the run's --dedupper markduplicates).
+  - deduplication/*/*_rmdup.metrics
+  # DamageProfiler: misincorporation at both read ends, read-length
+  # distribution, base composition and the JSON summary.
+  - damageprofiler/*/*.txt
+  - damageprofiler/*/dmgprof.json
+  # Qualimap BamQC: the genome_results summary plus the raw histograms.
+  - qualimap/*/genome_results.txt
+  - qualimap/*/raw_data_qualimapReport/*.txt
+  # preseq lc_extrap complexity curves (named <sample>.filtered.preseq).
+  - preseq/*.preseq
+  # endorS.py endogenous DNA (MultiQC general-stats custom content).
+  - endorspy/*_endogenous_dna_mqc.json
+  # bcftools stats over the HaplotypeCaller VCFs (the VCFs themselves are 300 MB each).
+  - bcftools/stats/*.vcf.stats
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Reprocess MultiQC (the run wrote MultiQC 1.13.dev0, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/eager/2.4.5 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/eager/2.4.5 --data-root {dest}
+# Megatest facts that must never reach a dashboard text (lint rule e in
+# depictio/tests/models/test_template_conventions.py): sample and library ids,
+# ENA runs, the organism and its reference contigs.
+forbidden_terms:
+  - COD076
+  - COD092
+  - COD076E1bL1
+  - COD092E1bL1i69
+  - ERR1943600
+  - ERR1943601
+  - ERR1943602
+  - ERR1943607
+  - ERR1943608
+  - ERR1943609
+  - cod
+  - Atlantic
+  - Gadus
+  - Gadus_morhua
+  - morhua
+  - gadMor
+  - vikingfish
+  - NC_044048.1
+  - NC_044056.1
+  - NC_002081.1

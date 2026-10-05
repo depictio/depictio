@@ -33,6 +33,7 @@ import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import { useUiScale } from '../uiScale';
+import { useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
@@ -204,6 +205,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const isInitialLoad = figure === null;
   const showInitialLoader = (!inView || (isInitialLoad && loading));
   const showRefetchOverlay = !isInitialLoad && loading;
+
+  // What this figure's content says it needs, in grid rows. Server-side,
+  // because a Plotly figure fills whatever box it is given: nothing in the DOM
+  // says two bars are two bars, only the builder that counted the categories
+  // does. Absent for the visu types where the count says nothing about the
+  // height a reader wants (scatter, line), and ignored altogether unless the
+  // component opts in with `layout: {fit: auto}`, figures default to `fixed`.
+  useContentDemand(metadata.index, renderMeta?.content_demand ?? null);
 
   // Report load status to the dashboard registry. Off-screen → pending (null);
   // once we have a figure it stays "ready" through any refetch overlay.

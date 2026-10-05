@@ -10,3 +10,11 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - es5-ext
+
+# @genome-spy/core pins @gmod/tabix 3.2.2, which still calls
+# unzipChunkSlice(buf, chunk, cache); @gmod/bgzf-filehandle 6.4+ reads that third
+# argument as a worker pool and throws "workerPool.decompressBlocks is not a
+# function", so every tabix-backed lazy source (VCF, GFF3, tabix) fails to load.
+# 6.3.3 satisfies both @gmod/bam (^6.2.0) and @gmod/tabix (^6.0.9). The override
+# lives in the root package.json (pnpm 9 reads `pnpm.overrides` there); drop it
+# once @genome-spy/core moves to a @gmod/tabix that passes two args.

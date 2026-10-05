@@ -1,0 +1,14 @@
+id: cellranger_pca_variance
+name: PCA variance explained
+mode: analysis/pca_variance
+description: >-
+  Share of total expression variance each of Cell Ranger's reported
+  principal components explains, the scree behind the PCA embedding.
+find:
+  path_glob: "**/analysis/pca/*/variance.csv"
+recipe: cellranger/pca_variance.py
+fixture: pca_variance.tsv
+renders_as:
+  - { id: pca_scree, component: figure, visu_type: bar, dict_kwargs: {x: pc, y: variance_explained, color: sample, title: PCA scree} }
+  - { component: card, column: variance_explained, aggregation: max, secondary_layout: histogram }
+  - { component: table }

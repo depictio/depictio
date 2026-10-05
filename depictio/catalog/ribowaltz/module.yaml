@@ -1,0 +1,14 @@
+# riboWaltz: P-site offsets and the Ribo-seq quality readouts built on them
+# (3-nt periodicity per frame, read-length distribution, metagene profiles
+# around the start and stop codons, P-site share per transcript region).
+#
+# The module writes one set of `<library>.ribowaltz.<table>.tsv` files per
+# Ribo-seq library under a `ribowaltz_qc/` folder. The recipes below match on
+# those file-name suffixes, never on a pipeline directory. MultiQC has a
+# riboWaltz module too (catalog multiqc/ribowaltz); these outputs keep the
+# counts and the per-region frame split MultiQC flattens, so the dashboard can
+# filter and compose them.
+id: ribowaltz
+name: riboWaltz
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribowaltz
+homepage: https://github.com/LabTranslationalArchitectomics/riboWaltz

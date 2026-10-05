@@ -1,0 +1,17 @@
+id: damageprofiler_misincorporation
+name: Misincorporation profile
+description: >-
+  Substitution frequency by distance from the read end, 5' and 3', C>T and
+  G>A deamination against every other substitution pooled, the ancient-DNA
+  authentication read.
+find:
+  path_glob: "**/*_freq_misincorporations.txt"
+recipe: damageprofiler/misincorporation.py
+fixture: misincorporation.tsv
+renders_as:
+  # New in lot 2 (depictio.models.components.advanced_viz kind damage_profile):
+  # a `use:` on this id may fail model validation until that kind lands.
+  - { id: eager_damage_profile, component: advanced_viz, kind: damage_profile, roles: {sample: sample, end: end, position: position, base_change: base_change, frequency: frequency} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: frequency, color: base_change, line_dash: end, title: Misincorporation frequency by position} }
+  - { component: card, column: frequency, aggregation: max, secondary_layout: top_n, breakdown_col: base_change, top_n_count: 3 }
+  - { component: table }

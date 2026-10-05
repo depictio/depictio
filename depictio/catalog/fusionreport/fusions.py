@@ -10,21 +10,35 @@ This recipe keeps the scalar half of that file and turns the per-caller columns
 into 0/1 membership flags, which is what a set-intersection view of the callers
 needs. The evidence strings themselves are parsed by ``caller_evidence.py``.
 
-The recipe harness concatenates the globbed per-sample files without their path and
-the CSV carries no sample column, so no ``sample`` column can be derived: the
-FUSION is the unit of analysis here, and cross-collection links are keyed on it.
+The CSV carries no sample column, so the source declares ``source_path`` and the
+sample is read off the file name (``fusionreport/<sample>/<sample>.fusions.csv``).
+One row is one fusion in one sample, and the rank is fusion-report's order
+WITHIN that sample.
 
-Output columns: fusion, gene_5p, gene_3p, databases, n_databases, fii,
-explained_fii, arriba, fusioncatcher, starfusion, n_tools, tool_support, rank
+The caller columns are not a fixed list: every column of the file that is not
+one of fusion-report's own (fusion, databases, FII, explained FII) is a caller
+the run executed, so a run with ``--tools`` narrowed or widened gets exactly its
+callers, each as a 0/1 flag named after the tool.
+
+Output columns: sample, fusion, gene_5p, gene_3p, databases, n_databases, fii,
+explained_fii, <one 0/1 column per caller>, n_tools, tool_support, rank
 """
+
+import re
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME: the source hands every row the path
+# of its file, and the sample is the basename minus the suffix.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".fusions.csv"
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
+        source_path=_SOURCE_PATH,
         glob_pattern="fusionreport/*/*.fusions.csv",
         format="CSV",
         read_kwargs={"infer_schema_length": 10000},
@@ -32,6 +46,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
@@ -39,18 +54,40 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "n_databases": pl.Int64,
     "fii": pl.Float64,
     "explained_fii": pl.Utf8,
-    "arriba": pl.Int64,
-    "fusioncatcher": pl.Int64,
-    "starfusion": pl.Int64,
     "n_tools": pl.Int64,
     "tool_support": pl.Utf8,
     "rank": pl.Int64,
 }
+# The callers nf-core/rnafusion runs by default, type-checked when present. Any
+# other caller column the file carries is published the same way.
+OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+    "arriba": pl.Int64,
+    "fusioncatcher": pl.Int64,
+    "starfusion": pl.Int64,
+}
 
-# Every caller fusion-report knows about. A run only writes the columns for the
-# callers it executed, so the missing ones are filled with 0 rather than dropped:
-# the UpSet set columns must stay stable across runs.
-CALLERS = ("arriba", "fusioncatcher", "starfusion")
+# fusion-report's own columns; every other column is one caller's evidence.
+_REPORT_COLUMNS = frozenset(
+    {
+        "fusion",
+        "databases",
+        "fusion indication index (fii)",
+        "fii",
+        "score",
+        "explained fii",
+        "explained score",
+        _SOURCE_PATH,
+    }
+)
+
+
+def caller_columns(df: pl.DataFrame) -> dict[str, str]:
+    """``{source column: caller flag name}`` for every caller column of the file."""
+    return {
+        col: re.sub(r"[^0-9a-z]+", "_", col.strip().lower()).strip("_")
+        for col in df.columns
+        if col.strip().lower() not in _REPORT_COLUMNS
+    }
 
 
 def _column(df: pl.DataFrame, *candidates: str) -> str | None:
@@ -78,6 +115,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     partners = pl.col(fusion_col).cast(pl.Utf8).str.splitn("--", 2)
     exprs: list[pl.Expr] = [
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+        if _SOURCE_PATH in df.columns
+        else pl.lit("", dtype=pl.Utf8).alias("sample"),
         pl.col(fusion_col).cast(pl.Utf8).alias("fusion"),
         partners.struct.field("field_0").fill_null("").alias("gene_5p"),
         partners.struct.field("field_1").fill_null("").alias("gene_3p"),
@@ -93,17 +137,16 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         if databases_col
         else pl.lit("", dtype=pl.Utf8).alias("databases")
     )
-    for caller in CALLERS:
-        col = _column(df, caller)
-        if col is None:
-            exprs.append(pl.lit(0, dtype=pl.Int64).alias(caller))
-            continue
+    callers = caller_columns(df)
+    if not callers:
+        raise ValueError(f"fusions: no caller column beside fusion-report's own in {df.columns}")
+    for col, caller in callers.items():
         called = pl.col(col).cast(pl.Utf8).fill_null("").str.strip_chars().str.len_chars() > 0
         exprs.append(called.cast(pl.Int64).alias(caller))
 
     out = df.select(exprs)
 
-    n_tools = pl.sum_horizontal([pl.col(c) for c in CALLERS]).cast(pl.Int64)
+    n_tools = pl.sum_horizontal([pl.col(c) for c in callers.values()]).cast(pl.Int64)
     out = out.with_columns(
         pl.when(pl.col("databases").str.len_chars() == 0)
         .then(pl.lit(0, dtype=pl.Int64))
@@ -117,10 +160,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("tool_support"),
     )
 
-    # Rank mirrors fusion-report's own ordering: the FII first, the number of
-    # agreeing callers as the tie-break, the name last so the rank is stable.
+    # Rank mirrors fusion-report's own ordering, per sample: the FII first, the
+    # number of agreeing callers as the tie-break, the name last so it is stable.
     out = out.sort(
-        ["fii", "n_tools", "fusion"], descending=[True, True, False], nulls_last=True
-    ).with_row_index(name="rank", offset=1)
+        ["sample", "fii", "n_tools", "fusion"],
+        descending=[False, True, True, False],
+        nulls_last=True,
+    ).with_columns(pl.int_range(1, pl.len() + 1, dtype=pl.Int64).over("sample").alias("rank"))
 
-    return out.select(list(EXPECTED_SCHEMA)).with_columns(pl.col("rank").cast(pl.Int64))
+    fixed = [c for c in EXPECTED_SCHEMA if c not in ("n_tools", "tool_support", "rank")]
+    return out.select([*fixed, *callers.values(), "n_tools", "tool_support", "rank"])

@@ -1,0 +1,17 @@
+id: bambu_counts_transcript_long
+name: Transcript counts per sample
+mode: quantification/transcript-long
+description: >-
+  Bambu transcript counts melted to one row per sample and transcript, with
+  CPM and log2(CPM + 1) normalised against the full library, and the gene and
+  biotype each isoform belongs to carried alongside.
+find: { path_glob: "**/bambu/counts_transcript.txt" }
+recipe: bambu/counts_transcript_long.py
+fixture: counts_transcript_long.tsv
+renders_as:
+  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: log_cpm, color: condition, title: Isoform expression distribution per library} }
+  - { component: card, column: log_cpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: count, aggregation: sum, secondary_layout: donut, breakdown_col: condition }
+  - { component: table, page_size: 25 }

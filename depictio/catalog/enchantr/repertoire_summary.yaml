@@ -16,4 +16,12 @@ renders_as:
   - component: figure
     visu_type: scatter
     dict_kwargs: { x: sequences, y: number_of_clones, color: subject_id, size: sequences_per_clone, log_x: "True", log_y: "True" }
+  # Richness against evenness: the two halves of a Hill profile on one plane, so
+  # a repertoire that is large but carried by a few clones separates from one
+  # that is both large and flat. Size is the sequencing depth behind the point,
+  # which is what a difference in richness has to be read against.
+  - id: richness_evenness
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: richness, y: evenness, label: sample_id, color: subject_id, size: sequences }
   - { component: table, row_selection_enabled: true, row_selection_column: sample_id }

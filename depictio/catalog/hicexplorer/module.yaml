@@ -1,0 +1,8 @@
+# HIC_PLOT_DIST_VS_COUNTS is a local module in nf-core/hic (no TOOL_SUBTOOL
+# nf-core/modules name), wrapping hicexplorer's hicPlotDistVsCounts --outFileData.
+# nf_core_url is reserved for github.com/nf-core/modules/... shared modules, so
+# the pipeline-local source lives in source_url instead.
+id: hicexplorer
+name: HiCExplorer
+source_url: https://github.com/nf-core/hic/blob/master/modules/local/hicexplorer/dist_vs_counts.nf
+homepage: https://hicexplorer.readthedocs.io/

@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../module.schema.json
+# Control-FREEC — multi-output tool, so a folder. Lightweight: identity is
+# derived from the nf-core meta.yml that `nf_core_url` points at (not
+# duplicated). nf-core/sarek runs `controlfreec/freec`, which writes the
+# `<sample>_ratio.txt` window table this catalog binds.
+id: controlfreec
+name: Control-FREEC
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/controlfreec/freec
+biotools_url: https://bio.tools/freec

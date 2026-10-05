@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The same ANCOM-BC table as the previous tab, drawn the way a differential-abundance figure usually is: top-N features by effect, bars signed by direction, one panel per contrast. Where the volcano answers which features are significant, this answers how large the differences are.\n",
+      "body": "The same ANCOM-BC table opened on a single contrast, gut against soil, which is how a figure for one comparison is usually drawn: the taxa with the largest effect, ranked, positive bars enriched in the first group. Switch contrast with the tabs inside the tile; the Log-fold change slider on the left shows the distribution you cut. Input: nf- core/ampliseq ANCOM-BC or ALDEx2 differentials.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "da-bar",
       "component_type": "advanced_viz",
-      "title": "DA barplot \u2014 faceted by contrast",
+      "title": "Gut against soil",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "ancombc_demo",
       "wf_id": {
@@ -64,6 +64,7 @@
       "section": "Differential barplot",
       "viz_kind": "da_barplot",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "da_barplot",
         "feature_id_col": "feature_id",
         "contrast_col": "contrast",
@@ -72,7 +73,7 @@
         "label_col": "label",
         "significance_threshold": 0.05,
         "top_n": 15,
-        "contrast_view": "all"
+        "contrast_view": "gut_vs_soil"
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -114,6 +115,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#E91E63",
       "icon_name": "mdi:bullseye-arrow",
       "wf_tag": "python/advanced_viz_demo"
@@ -156,6 +158,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#1976D2",
       "icon_name": "mdi:trending-up",
       "wf_tag": "python/advanced_viz_demo"
@@ -189,7 +192,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -204,7 +207,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -224,8 +227,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "DA barplot (per contrast)",
-  "subtitle": "Faceted top-N differentially-abundant taxa \u2014 one panel per contrast. Useful for side-by-side comparison.",
+  "title": "Taxa in one contrast",
+  "subtitle": "The top differentially abundant taxa of one contrast, ranked by effect",
   "icon": "mdi:chart-bar-stacked",
   "icon_color": "pink",
   "icon_variant": "filled",
@@ -261,7 +264,7 @@
   },
   "tab_order": 12,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-bar-stacked",
+  "tab_icon": "mdi:scale-balance",
   "tab_icon_color": "pink",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -287,5 +290,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

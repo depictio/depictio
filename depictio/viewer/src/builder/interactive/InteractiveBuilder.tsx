@@ -118,10 +118,14 @@ interface InteractiveConfig {
   group?: string;
   placement?: string;
   show_marks?: boolean;
+  /** RangeSlider only: draw the column's histogram above the slider. */
+  show_histogram?: boolean;
 }
 
 /** Variants whose renderers read `show_marks`. */
 const MARKS_VARIANTS = ['Slider', 'RangeSlider', 'Timeline'];
+/** Variants whose renderers read `show_histogram`. */
+const HISTOGRAM_VARIANTS = ['RangeSlider'];
 /** Mirrors TOP_PANEL_INTERACTIVE_TYPES in depictio/models/components/constants.py. */
 const TOP_PLACEMENT_VARIANTS = ['Timeline'];
 
@@ -171,6 +175,10 @@ const InteractivePreview: React.FC = () => {
     icon_name: icon_name || 'bx:slider-alt',
     icon_color: color && color.length > 0 ? color : undefined,
     color: color || '',
+    // The two per-control switches the form exposes: the renderers read them
+    // off the metadata, so a preview without them showed the defaults.
+    show_marks: config.show_marks,
+    show_histogram: config.show_histogram,
     default_state: {
       scale: 'linear',
       marks_number: 5,
@@ -301,6 +309,7 @@ const InteractiveBuilder: React.FC = () => {
   const selected = config.interactive_component_type;
   const supportsTop = TOP_PLACEMENT_VARIANTS.includes(selected ?? '');
   const supportsMarks = MARKS_VARIANTS.includes(selected ?? '');
+  const supportsHistogram = HISTOGRAM_VARIANTS.includes(selected ?? '');
 
   // Switching an existing top-placed Timeline to another variant would leave
   // `placement: 'top'` on a type the model rejects, so drop it here as well as
@@ -438,6 +447,14 @@ const InteractiveBuilder: React.FC = () => {
                 description="Leave off inside a group for a denser panel"
                 checked={config.show_marks === true}
                 onChange={(e) => patchConfig({ show_marks: e.currentTarget.checked })}
+              />
+            )}
+            {supportsHistogram && (
+              <Switch
+                label="Show histogram"
+                description="Draw the column's distribution above the slider handles"
+                checked={config.show_histogram === true}
+                onChange={(e) => patchConfig({ show_histogram: e.currentTarget.checked })}
               />
             )}
           </Stack>

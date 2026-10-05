@@ -1,0 +1,16 @@
+id: mirtop_isomir_landscape
+name: isomiR landscape of the top miRNAs
+mode: mirna/isomirs
+description: >-
+  For the most expressed miRNAs, the mean share of reads in each isomiR class
+  (reference, 3' trimmed or extended, 3' addition, 5' shift, seed or central
+  change) and the fraction of samples where the class is a real part of the
+  miRNA's reads.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/isomir_landscape.py
+fixture: isomir_landscape.tsv
+renders_as:
+  - { id: isomir_dot_plot, component: advanced_viz, kind: dot_plot,
+      roles: {cluster: variant_class, gene: mirna, mean_expression: mean_share_pct, frac_expressing: samples_fraction} }
+  - { component: table }

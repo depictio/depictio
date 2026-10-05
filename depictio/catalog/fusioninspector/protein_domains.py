@@ -17,12 +17,11 @@ identical domain list; identical ``(fusion, partner, domain, start, end)`` rows
 are de-duplicated. The e-value is turned into ``-log10`` for plotting, capped at
 300 so a reported 0 does not become infinity.
 
-Like the fusion output, this table carries no sample column: the abridged file
-has none and the recipe harness concatenates the globbed files without their
-path, so the fusion (and within it the domain) is the unit of analysis.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
 
 Output columns:
-    fusion, partner, domain, domain_start, domain_end, domain_length, evalue,
+    sample, fusion, partner, domain, domain_start, domain_end, domain_length, evalue,
     neg_log10_evalue, prot_fusion_type
 """
 
@@ -30,9 +29,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`fusioninspector/<sample>/<sample>.FusionInspector.fusions.abridged.tsv`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".FusionInspector.fusions.abridged.tsv"
+
+
+def _sample() -> pl.Expr:
+    """``fusioninspector/S1/S1.FusionInspector.fusions.abridged.tsv`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
+        source_path=_SOURCE_PATH,
         glob_pattern="fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
         format="TSV",
         # `annots` embeds JSON-ish double quotes, so quoting must stay off.
@@ -41,6 +59,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "fusion": pl.Utf8,
     "partner": pl.Utf8,
     "domain": pl.Utf8,
@@ -62,6 +81,7 @@ _MAX_NEG_LOG10 = 300.0
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Explode the packed Pfam records of both partners into one row per domain."""
     df = sources["fusions"].select(
+        _sample(),
         pl.col("#FusionName").cast(pl.Utf8).alias("fusion"),
         pl.col("PROT_FUSION_TYPE")
         .cast(pl.Utf8)
@@ -77,7 +97,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .with_columns(pl.lit(partner, dtype=pl.Utf8).alias("partner"))
         .with_columns(pl.col(field).str.split("^").alias("record"))
         .explode("record")
-        .select("fusion", "partner", "prot_fusion_type", "record")
+        .select("sample", "fusion", "partner", "prot_fusion_type", "record")
         for field, partner in _PARTNERS.items()
     ]
     long = pl.concat(frames, how="vertical")
@@ -87,6 +107,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         long.select(
+            "sample",
             "fusion",
             "partner",
             pl.col("record").str.split("|").list.first().alias("domain"),
@@ -106,10 +127,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # One fusion is reported once per transcript pair, so the same domain is
         # listed several times with identical coordinates.
         .unique(
-            subset=["fusion", "partner", "domain", "domain_start", "domain_end"],
+            subset=["sample", "fusion", "partner", "domain", "domain_start", "domain_end"],
             keep="first",
             maintain_order=True,
         )
-        .sort("fusion", "partner", "domain_start", "domain")
+        .sort("sample", "fusion", "partner", "domain_start", "domain")
         .select(list(EXPECTED_SCHEMA))
     )

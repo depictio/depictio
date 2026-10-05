@@ -25,6 +25,7 @@ import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import ComponentSkeleton from '../ComponentSkeleton';
 import RefetchOverlay from '../RefetchOverlay';
 import { useReportLoadStatus } from '../DashboardLoadingProvider';
+import { rowsForHeight, useContentDemand } from '../autofit';
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
@@ -38,6 +39,16 @@ type ViewMode = 'table' | 'violin';
 type SortDir = 'asc' | 'desc' | null;
 
 const PAGE_SIZE = 50;
+
+// The table's height, in the pixels its own markup takes: paper padding and
+// the controls row, the header, one line per visible row, the pager when there
+// is more than one page. The grid only ever shrinks the tile to this (see
+// `FIT_POLICIES`), so an over-estimate costs a little white space and an
+// under-estimate a scrollbar.
+const TABLE_CHROME_PX = 24 + 44;
+const TABLE_HEADER_PX = 34;
+const TABLE_ROW_PX = 31;
+const TABLE_PAGER_PX = 38;
 
 interface DataBar {
   min: number;
@@ -230,6 +241,24 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     () => sortedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [sortedRows, safePage],
   );
+
+  // Height the table asks the grid for. Nothing in the violin view: a plot
+  // keeps the height its author gave it.
+  const contentDemand = useMemo(
+    () =>
+      mode && view === 'table' && visibleRows.length > 0
+        ? {
+            rows: rowsForHeight(
+              TABLE_CHROME_PX +
+                TABLE_HEADER_PX +
+                visibleRows.length * TABLE_ROW_PX +
+                (totalPages > 1 ? TABLE_PAGER_PX : 0),
+            ),
+          }
+        : null,
+    [mode, view, visibleRows.length, totalPages],
+  );
+  useContentDemand(metadata.index, contentDemand);
 
   const onHeaderClick = (colId: string) => {
     if (sortKey !== colId) {

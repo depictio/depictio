@@ -1,0 +1,13 @@
+# VCF is a file format, not a tool: every variant caller in nf-core publishes
+# one, and the rows inside it are the same rows whichever caller wrote them.
+# The reader lives in depictio/recipes/lib/vcf.py and is pure Polars (bgzip is
+# gzip-compatible), so no pipeline needs a VCF dependency to get a per-variant
+# table. There is no nf-core/modules entry to point `nf_core_url` at, which is
+# the same documented exception as bambu / enchantr / QIIME2.
+id: vcf
+name: VCF
+description: >-
+  Per-variant records read straight out of the VCFs a variant caller publishes,
+  for the panels that need one row per call rather than a per-file summary.
+homepage: https://samtools.github.io/hts-specs/
+source_url: https://github.com/samtools/hts-specs

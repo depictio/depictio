@@ -1,0 +1,32 @@
+id: samtools_stats_sections
+name: Alignment distributions
+mode: alignment/distributions
+description: >-
+  The distribution blocks of a samtools stats report, which MultiQC never
+  surfaces: the read-length histogram (RL), the coverage-depth histogram
+  (COV), the indel-length spectrum (ID) and, for paired data, the insert-size
+  distribution (IS), with the SN summary block on one row per sample beside
+  them. Each section has its own value column, so three profile tiles read the
+  same collection without a filter between them.
+# `*.bam.stats` rather than `*.stats`: the latter also matches the
+# `*flagstat.stats` that `flagstat.yaml` owns, and a file reached by two globs
+# is recognised as two different outputs.
+find:
+  path_glob: "**/*.bam.stats"
+  path_glob_alt:
+    - "**/samtools_stats/*.stats"
+    - "**/samtools/*.stats"
+recipe: samtools/stats_sections.py
+fixture: stats_sections.tsv
+renders_as:
+  - { id: read_length_profile, component: advanced_viz, kind: profile, roles: {series: series, x: bin, y: n_reads} }
+  - { id: coverage_distribution, component: advanced_viz, kind: profile, roles: {series: series, x: bin, y: n_bases} }
+  - { id: indel_spectrum, component: advanced_viz, kind: profile, roles: {series: series, x: bin, y: n_indels} }
+  - { component: card, column: reads_mapped_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: identity_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: average_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: maximum_length, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: supplementary_alignments, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: average_quality, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: reads_mapped, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table, page_size: 25 }

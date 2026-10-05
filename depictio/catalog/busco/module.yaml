@@ -1,0 +1,10 @@
+# BUSCO: gene-content completeness of an assembly against a lineage set of
+# near-universal single-copy orthologs. Two outputs read the same batch summary:
+# the per-assembly scores, and the same scores unpivoted into the four BUSCO
+# classes for a composition bar. The per-gene `full_table.tsv` files and the
+# `run_*/` internals (tens of thousands of files per assembly) are not read.
+id: busco
+name: BUSCO
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/busco/busco
+homepage: https://busco.ezlab.org
+description: Gene-content completeness of assemblies against a BUSCO lineage dataset.

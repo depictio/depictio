@@ -1,0 +1,138 @@
+# Megatest manifest for nf-core/methylseq 2.3.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline methylseq --version 2.3.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# The run publishes one route per aligner (bismark/, bismark_hisat/, bwameth/);
+# the template covers the default Bismark route, so run_root is bismark/ and the
+# keys below are relative to it. They are mirrored 1:1 below the destination,
+# which becomes the template DATA_ROOT.
+#
+# 2.3.0 is pinned because every 3.x / 4.x megatest prefix is empty or holds
+# BAMs only. The run wrote a pre-parquet MultiQC, so the manifest fetches the
+# raw MultiQC inputs and the parquet Depictio reads is produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+pipeline: methylseq
+version: "2.3.0"
+# s3://nf-core-awsmegatests/methylseq/results-<results_sha>/ == the 2.3.0 release tag_sha.
+results_sha: "93bc5811603c287c766a0ff7e03b5b41f4483895"
+run_root: "bismark/"
+multiqc:
+  version: "1.13"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/*.csv
+  - pipeline_info/*.txt
+  # Pre-pipeline samplesheet: sample ids here are what every Bismark output
+  # file names itself after (pipeline_info/samplesheet.valid.csv adds a _T1
+  # technical-replicate suffix that does not match those file names).
+  - input/*.csv
+  # Provenance of the original MultiQC report.
+  - multiqc/multiqc_data/multiqc_data.json
+  - multiqc/multiqc_data/*.txt
+  - multiqc/multiqc_data/*.log
+  - multiqc/*/multiqc_data/multiqc_data.json
+  - multiqc/*/multiqc_data/*.txt
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ---------------------
+  # `fnmatch` (not glob): "*" crosses directories, so these also reach
+  # fastqc/zips/*.zip, trimgalore/logs/*.txt and trimgalore/fastqc/zips/*.zip.
+  - fastqc/*.zip
+  - trimgalore/*.txt
+  - trimgalore/*.zip
+  # Bismark alignment / deduplication / splitting / M-bias reports, summary.
+  - bismark/alignments/logs/*
+  - bismark/deduplicated/logs/*
+  - bismark/methylation_calls/mbias/*
+  - bismark/methylation_calls/splitting_report/*
+  - bismark/methylation_calls/bedGraph/*
+  - bismark/reports/*.html
+  - bismark/summary/*
+  # Qualimap BamQC (fnmatch reaches the per-sample qualimap/<sample>/*.txt and
+  # qualimap/<sample>/raw_data_qualimapReport/*.txt files too).
+  - qualimap/*.txt
+  # NOT fetched: preseq/*.txt and picard_metrics/*. This 2.3.0 run's
+  # PRESEQ_LCEXTRAP step FAILED for 6 of 7 samples (execution_trace) and wrote
+  # no output for them; Picard never runs on the Bismark route at all (no
+  # picard_metrics/ directory, no PICARD trace entries). A megatest run where
+  # PRESEQ_LCEXTRAP succeeds for every sample could re-add "preseq/*.txt".
+# Run-specific values the dashboard texts must never name (checked by
+# depictio/tests/models/test_template_conventions.py): the megatest samples and
+# their accessions, the cell lines and conditions of its design, the organism
+# and assembly, and the locus the navigator used to open on.
+forbidden_terms:
+  - "SRR7961102_GSM3415666_MShef11_low_oxygen_Q1"
+  - "SRR7961103_GSM3415667_MShef11_low_oxygen_Q2"
+  - "SRR7961104_GSM3415668_MShef11_low_oxygen_Q3"
+  - "SRR7961150_GSM3415714_MShef4_bulk"
+  - "SRR7961161_GSM3415725_MShef4_J1"
+  - "SRR7961163_GSM3415727_MShef4_J2"
+  - "SRR7961164_GSM3415728_MShef4_J3"
+  - "SRR7961102"
+  - "SRR7961103"
+  - "SRR7961104"
+  - "SRR7961150"
+  - "SRR7961161"
+  - "SRR7961163"
+  - "SRR7961164"
+  - "GSM3415666"
+  - "GSM3415667"
+  - "GSM3415668"
+  - "GSM3415714"
+  - "GSM3415725"
+  - "GSM3415727"
+  - "GSM3415728"
+  - "E-MTAB-6511"
+  - "MShef11"
+  - "MShef4"
+  - "hESC"
+  - "low_oxygen"
+  - "low-oxygen"
+  - "low oxygen"
+  - "normoxic"
+  - "J1"
+  - "J2"
+  - "J3"
+  - "Q1"
+  - "Q2"
+  - "Q3"
+  - "Homo sapiens"
+  - "human"
+  - "hg38"
+  - "GRCh38"
+  - "NKX2-1"
+  - "chr14"
+  - "seven libraries"
+prefix_keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+renames: {}
+post_fetch_help: |
+  === Design table ===
+
+  # The run's design (cell line x condition) is vendored with the template; the
+  # reference seed reads it from {dest}/input/, so copy it there first:
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/methylseq/2.3.0/input/sample_metadata.tsv {dest}/input/
+
+  === Reprocess MultiQC (the run wrote a pre-parquet MultiQC, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest} --dry-run \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest}

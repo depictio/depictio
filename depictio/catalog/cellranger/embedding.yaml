@@ -1,0 +1,16 @@
+id: cellranger_embedding
+name: Cell embeddings and clusters
+mode: analysis/embedding
+description: >-
+  UMAP, t-SNE and the first 3 principal components of every cell, coloured
+  by Cell Ranger's graph-based cluster.
+find:
+  path_glob: "**/analysis/clustering/gene_expression_graphclust/clusters.csv"
+recipe: cellranger/embedding.py
+fixture: embedding.tsv
+renders_as:
+  - { id: umap_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster, color: cluster} }
+  - { id: tsne_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster, color: cluster} }
+  - { id: pca_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: pc_1, dim_2: pc_2, dim_3: pc_3, cluster: cluster, color: cluster} }
+  - { component: card, column: barcode, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster }
+  - { component: table }

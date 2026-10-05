@@ -1,0 +1,18 @@
+id: qualimap_genome_fraction_coverage
+name: Genome fraction by depth
+description: >-
+  The share of the reference covered at least X deep, from Qualimap BamQC. The
+  number a shallow shotgun library is judged on, because a mean depth well
+  under 1X says nothing about whether the reads are spread over the genome or
+  piled on a tenth of it.
+find:
+  path_glob: "**/genome_fraction_coverage.txt"
+recipe: qualimap/genome_fraction_coverage.py
+fixture: genome_fraction_coverage.tsv
+renders_as:
+  - { id: genome_fraction_profile, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: min_coverage, y: genome_fraction_pct} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: min_coverage, y: genome_fraction_pct, color: sample, title: Share of the reference covered at least X deep} }
+  - { component: card, column: genome_fraction_pct, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: genome_fraction_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, page_size: 25 }

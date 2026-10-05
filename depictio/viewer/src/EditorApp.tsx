@@ -97,6 +97,8 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  AdvancedVizConfigDraftProvider,
+  AdvancedVizPlacementDefaultProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -111,6 +113,7 @@ import type {
   ActiveHighlight,
   RealtimeJournalEntry,
   GroupRenderState,
+  ControlsPlacement,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -604,6 +607,62 @@ const EditorApp: React.FC = () => {
     [scheduleSave],
   );
 
+  /** Sizing intent, stored beside the font scale and for the same reason: the
+   *  grid reads it off `stored_metadata`, and react-grid-layout would drop it
+   *  from a layout item on the first drag. `fixed` is written when the user
+   *  resizes a tile by hand, the height they chose then outranks anything the
+   *  content asks for, and `auto` by the tile's "Reset to auto height". The
+   *  height itself rides the same debounced save as any layout nudge. */
+  const handleComponentFit = useCallback(
+    (componentId: string, fit: 'auto' | 'fixed') => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const current = (cur.stored_metadata || []).find((m) => m.index === componentId);
+      if (current?.fit === fit) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId ? { ...m, fit } : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+  const handleTileFixed = useCallback(
+    (componentId: string) => handleComponentFit(componentId, 'fixed'),
+    [handleComponentFit],
+  );
+  const handleResetFit = useCallback(
+    (componentId: string) => handleComponentFit(componentId, 'auto'),
+    [handleComponentFit],
+  );
+
+  /**
+   * Advanced-viz config write-back: a Tier-2 control the author touched while
+   * editing (a threshold, a rank, where the controls are pinned) is merged into
+   * that component's stored config and saved with the same debounce as a layout
+   * nudge. The viewer mounts no sink, so a reader's changes stay local, which
+   * is the whole rule `AdvancedVizConfigDraft` encodes: only a surface that can
+   * persist the result provides one.
+   */
+  const handleVizConfigDraft = useCallback(
+    (componentId: string, patch: Record<string, unknown>) => {
+      const cur = dashboardRef.current;
+      if (!cur || !componentId) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId
+            ? { ...m, config: { ...((m.config as Record<string, unknown>) || {}), ...patch } }
+            : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
   /** Dashboard-level brand theme (#397). Goes through the targeted
    *  `PATCH /dashboards/appearance` rather than the full-document save: an
    *  appearance edit and an in-flight layout save would otherwise be
@@ -748,6 +807,63 @@ const EditorApp: React.FC = () => {
         setSaveStatus('saved');
       } catch (err) {
         console.error('[EditorApp] funnel toggle save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * Persist the dashboard-wide default placement of advanced-viz controls.
+   * Same save-now pattern as the funnel toggle; a tile that states its own
+   * `controls_placement` is unaffected, which is what makes this a default
+   * rather than an override.
+   */
+  const handleAdvancedVizControls = useCallback(
+    async (placement: ControlsPlacement) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, advanced_viz_controls: placement };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] controls placement save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * Persist the dashboard-wide autofit switch. Same save-now pattern: the
+   * whole grid re-lays out on the answer, so it should not sit in a debounce
+   * behind an unrelated layout nudge.
+   */
+  const handleToggleAutofit = useCallback(
+    async (enabled: boolean) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, autofit: enabled };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] autofit toggle save failed:', err);
         setSaveStatus('error');
       }
     },
@@ -1580,6 +1696,7 @@ const EditorApp: React.FC = () => {
         groupRender={groupRender}
         bulkOptions={groupsApi.bulkOptions}
         renderSectionActions={renderPersistentSectionAction}
+        autofit={dashboard?.autofit !== false}
       />
     ) : null;
 
@@ -1654,6 +1771,11 @@ const EditorApp: React.FC = () => {
   return (
     <>
     <InspectorProviders control={inspectorControl}>
+    {/* Tier-2 viz controls an author touches here are written back onto the
+        component's config; the dashboard-wide default decides where every
+        advanced-viz tile draws them unless the tile states its own. */}
+    <AdvancedVizConfigDraftProvider value={handleVizConfigDraft}>
+    <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
@@ -1905,6 +2027,9 @@ const EditorApp: React.FC = () => {
                 onMoveToSection={handleMoveToSection}
                 renderSectionActions={renderGridSectionAction}
                 onComponentFontScale={handleComponentFontScale}
+                onTileFixed={handleTileFixed}
+                onResetFit={handleResetFit}
+                autofit={dashboard?.autofit !== false}
                 refreshTick={plotThemeTick}
               />
               {bottomGridSections.length > 0 && (
@@ -1917,6 +2042,7 @@ const EditorApp: React.FC = () => {
                   groupRender={groupRender}
                   bulkOptions={groupsApi.bulkOptions}
                   renderSectionActions={renderPersistentSectionAction}
+                  autofit={dashboard?.autofit !== false}
                 />
               )}
             </Box>
@@ -2002,6 +2128,8 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         onToggleFunnelFiltering={handleToggleFunnelFiltering}
+        onChangeAdvancedVizControls={handleAdvancedVizControls}
+        onToggleAutofit={handleToggleAutofit}
         onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
       />
@@ -2036,6 +2164,8 @@ const EditorApp: React.FC = () => {
     </AppShell>
     </BrandScope>
     </SaveGroupContext.Provider>
+    </AdvancedVizPlacementDefaultProvider>
+    </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
     </>
   );
@@ -2075,6 +2205,12 @@ interface RightComponentGridProps {
 
   /** Fired by a figure cell's font-size control with the new multiplier. */
   onComponentFontScale: (componentId: string, scale: number) => void;
+  /** Fired when a tile's height is dragged: that tile leaves autofit. */
+  onTileFixed: (componentId: string) => void;
+  /** Fired by a tile's "Reset to auto height": it rejoins autofit. */
+  onResetFit: (componentId: string) => void;
+  /** The dashboard's autofit switch, forwarded to the grid. */
+  autofit?: boolean;
   /** Bumped when the dashboard plot theme changes, so figures refetch. */
   refreshTick?: number;
 }
@@ -2108,6 +2244,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onMoveToSection,
   renderSectionActions,
   onComponentFontScale,
+  onTileFixed,
+  onResetFit,
+  autofit,
   refreshTick,
 }) => {
   const allComponents = useMemo(
@@ -2175,6 +2314,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       editMode={true}
       renderSectionActions={renderSectionActions}
       onLayoutChange={onLayoutChange}
+      autofit={autofit}
+      onTileFixed={onTileFixed}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
           dashboardId={dashboardId}
@@ -2188,6 +2329,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onMoveToSection={onMoveToSection}
           fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
           onFontScale={onComponentFontScale}
+          fit={metadata.fit === 'auto' || metadata.fit === 'fixed' ? metadata.fit : undefined}
+          onResetFit={autofit === false ? undefined : onResetFit}
         />
       )}
     />

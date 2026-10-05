@@ -13,7 +13,7 @@
     {
       "index": "sash-text",
       "component_type": "text",
-      "title": "Splice junctions",
+      "title": "Alternative splicing",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Each intron is an arc from its donor to its acceptor, drawn thicker the more reads support it, one lane per sample. Introns here run from 430 bp to 15 kb, so the arcs are deliberately uneven: a real locus never splices on a regular pitch. Follow the novel arc that bridges exon 2 straight to exon 4. It is a handful of reads in the controls and carries as much support as a constitutive junction in the knockdowns, while the two arcs into and out of exon 3 collapse. That exon is being skipped.\n",
+      "body": "A sashimi plot: per sample, read coverage as bars and every splice junction as a dome from donor to acceptor, its height and width set by the reads crossing it. In the knockdowns the dome from exon 2 straight to exon 4 rises while coverage over exon 3 drops: that exon is skipped. Drag or scroll to zoom, raise Min reads to hide weak junctions, switch to Arcs for the Plotly panel. Inputs are STAR SJ.out.tab junctions plus binned coverage, as written by nf-core/rnaseq, rnafusion and nanoseq (synthetic exons placed in CHD4, hg38).\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "sash-arcs",
       "component_type": "advanced_viz",
-      "title": "Splice junctions",
+      "title": "Splice junctions and coverage",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "sashimi_demo",
       "wf_id": {
@@ -48,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Splice junctions across an exon-skipping event: two loci on chr12, 4 samples in two conditions, known and novel junctions",
+        "description": "Splice junctions across an exon-skipping event: two loci on chr12 (the first inside the hg38 CHD4 footprint), 4 samples in two conditions, known and novel junctions",
         "data_collection_tag": "sashimi_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Junction arcs over a cassette-exon locus, coloured known vs novel and stacked one lane per sample. Minimum read support, junctions per lane, log-scaled arc width and the region picker all live in the Settings \u2699 popover.",
+      "description": "Coverage bars and junction domes per sample over a cassette-exon locus, known and novel junctions coloured apart, with the inferred exon model and the hg38 gene lane underneath.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Splice junctions",
       "viz_kind": "sashimi",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "sashimi",
         "chr_col": "chrom",
         "start_col": "start",
@@ -81,7 +82,7 @@
         "arc_height": 1.0,
         "arc_colors": null,
         "coverage_wf_id": null,
-        "coverage_dc_id": null,
+        "coverage_dc_id": "646b0f3c1e4a2d7f8e5b8d87",
         "coverage_dc_tag": "sashimi_coverage_demo",
         "coverage_chr_col": "chromosome",
         "coverage_position_col": "position",
@@ -93,7 +94,15 @@
         "coverage_color": null,
         "coverage_log": false,
         "color_by": "annotation",
-        "max_arc_width": 4
+        "max_arc_width": 3,
+        "arc_width_by_support": false,
+        "arc_split": "annotation",
+        "view": "genomespy",
+        "views": [
+          "genomespy",
+          "plotly"
+        ],
+        "annotation": "hg38"
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -112,7 +121,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Splice junctions across an exon-skipping event: two loci on chr12, 4 samples in two conditions, known and novel junctions",
+        "description": "Splice junctions across an exon-skipping event: two loci on chr12 (the first inside the hg38 CHD4 footprint), 4 samples in two conditions, known and novel junctions",
         "data_collection_tag": "sashimi_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -135,6 +144,7 @@
       "group": "Junction filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#7950F2",
       "icon_name": "mdi:flask",
       "wf_tag": "python/advanced_viz_demo"
@@ -154,7 +164,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Splice junctions across an exon-skipping event: two loci on chr12, 4 samples in two conditions, known and novel junctions",
+        "description": "Splice junctions across an exon-skipping event: two loci on chr12 (the first inside the hg38 CHD4 footprint), 4 samples in two conditions, known and novel junctions",
         "data_collection_tag": "sashimi_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -177,6 +187,7 @@
       "group": "Junction filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
@@ -196,7 +207,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Splice junctions across an exon-skipping event: two loci on chr12, 4 samples in two conditions, known and novel junctions",
+        "description": "Splice junctions across an exon-skipping event: two loci on chr12 (the first inside the hg38 CHD4 footprint), 4 samples in two conditions, known and novel junctions",
         "data_collection_tag": "sashimi_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -219,6 +230,7 @@
       "group": "Junction filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:counter",
       "wf_tag": "python/advanced_viz_demo"
@@ -295,8 +307,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Splice junctions",
-  "subtitle": "Junction arcs on a base-pair axis, arc width scaled by supporting reads. Cassette-exon skipping across two conditions, one lane per sample.",
+  "title": "Alternative splicing",
+  "subtitle": "Read coverage and splice junctions per sample over one gene: a cassette exon skipped in the knockdown.",
   "icon": "mdi:dna",
   "icon_color": "violet",
   "icon_variant": "filled",
@@ -358,5 +370,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

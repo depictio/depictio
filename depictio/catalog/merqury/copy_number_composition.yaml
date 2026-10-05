@@ -1,0 +1,21 @@
+id: merqury_copy_number_composition
+name: Read k-mer copy number in the assembly
+mode: spectra-cn/composition
+description: >-
+  Where the solid read k-mers ended up, per assembly: absent from it, present
+  once, twice, three times, four times or more. On a haploid or collapsed
+  assembly nearly all of them should be present once; a large absent share is
+  lost sequence, a large two-copy share is duplicated sequence such as retained
+  haplotigs. Read k-mers at or below the error trough of the read spectrum are
+  left out, so sequencing errors do not count as absent sequence.
+find:
+  path_glob: "**/*.spectra-cn.hist"
+recipe: merqury/copy_number_composition.py
+fixture: copy_number_composition.tsv
+renders_as:
+  - { id: copy_number_bars, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: assembly_id, taxon: copy_class, rank: rank, abundance: percent} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: copy_class, barmode: stack, title: Read k-mer copy number per assembly} }
+  - { component: card, column: solid_kmers, aggregation: sum,
+      secondary_layout: donut, breakdown_col: copy_class }
+  - { component: table }

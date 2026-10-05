@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",
     "@mantine/carousel": "^7.14.0",
     "@mantine/code-highlight": "^7.14.0",

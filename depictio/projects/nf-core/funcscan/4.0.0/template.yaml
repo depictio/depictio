@@ -105,14 +105,15 @@ template:
     - if_var_present: "SKIP_ARG"
       remove_dc_tags:
         ["hamronization_report", "hamronization_gene_presence",
-         "hamronization_gene_matrix", "hamronization_tool_overlap"]
+         "hamronization_gene_matrix", "hamronization_class_matrix",
+         "hamronization_tool_overlap"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "SKIP_AMP"
       remove_dc_tags:
         ["ampcombi_summary", "ampcombi_embedding", "ampcombi_clusters"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "SKIP_BGC"
-      remove_dc_tags: ["combgc_summary", "combgc_tool_overlap"]
+      remove_dc_tags: ["combgc_summary", "combgc_region_track", "combgc_tool_overlap"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "SKIP_CAZYME"
       remove_dc_tags: ["dbcan_overview", "dbcan_tool_overlap", "dbcan_substrates"]
@@ -141,10 +142,12 @@ workflows:
     data_collections:
       # ----------------------------------------------------------------
       # MultiQC. funcscan feeds MultiQC nothing but the software-versions
-      # table, so the 4.0.0 megatest parquet holds a single run_metadata row
-      # with no general-stats and no module sections. The DC is kept (a future
-      # release may add modules) but optional, and no dashboard tab binds it, so
-      # the tool versions reach the UI through the provenance block above.
+      # table: the 4.0.0 megatest parquet holds a single run_metadata row,
+      # `multiqc.list_plots()` returns two modules with no plots at all and
+      # `list_samples()` is empty, so there is no panel a `multiqc` tile could
+      # render. The DC is kept (a future release may add modules) and the one
+      # payload the report does carry reaches the Run report tab through the
+      # `software_versions` collection below, which reads the same parquet.
       # ----------------------------------------------------------------
       - data_collection_tag: "multiqc_data"
         optional: true
@@ -155,7 +158,28 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+                # Path-qualified, so it has to start at the run root or with
+                # `.*/`; the optional middle segment covers the per-aligner
+                # report dirs other pipelines write.
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+
+      - data_collection_tag: "software_versions"
+        optional: true
+        description: "Software versions the run recorded, one row per process and tool"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "funcscan/software_versions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "process": "Nextflow process that reported the version"
+              "tool": "Software the process ran"
+              "version": "Version string the process reported"
+              "screen": "Screen the process belongs to (ARG, AMP, BGC, CAZyme, Annotation, Taxonomy, Workflow)"
+              "tools": "Always 1, so a card can sum tools"
 
       - data_collection_tag: "samplesheet"
         optional: true
@@ -232,6 +256,21 @@ workflows:
             columns_description:
               "gene_symbol": "Row identifier (use as index_column)"
               "drug_class": "Row annotation (use as row_annotation_cols)"
+
+      - data_collection_tag: "hamronization_class_matrix"
+        optional: true
+        description: "Drug class by sample hit-count matrix, one level above the gene matrix"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "hamronization/class_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "drug_class": "Row identifier: the leading drug class, folded across the tool vocabularies"
+              "top_tool": "Row annotation: the ARG tool reporting the class most often"
+              "n_genes_band": "Row annotation: how many distinct genes the class covers, banded"
 
       - data_collection_tag: "hamronization_tool_overlap"
         optional: true
@@ -334,6 +373,29 @@ workflows:
               "n_pfam": "PFAM domains annotated on the region's CDSs"
               "regions": "Always 1, so a card can sum regions"
 
+      - data_collection_tag: "combgc_region_track"
+        optional: true
+        description: "Predicted BGC regions as coordinates, for the genome, arrow and coverage tracks"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "combgc/region_track.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "contig": "Assembly contig the region sits on"
+              "region_id": "Product class plus the interval, unique per region"
+              "tool": "BGC prediction tool"
+              "product_class": "Predicted product class"
+              "start": "Region start on the contig, in bases"
+              "end": "Region end on the contig, in bases"
+              "strand": "Always '.': comBGC reports no orientation for a region"
+              "length_kb": "Region length in kilobases, the track's score axis"
+              "cds_count": "Coding sequences inside the region"
+              "complete": "Whether the region is complete on the contig (antiSMASH only)"
+
       - data_collection_tag: "combgc_tool_overlap"
         optional: true
         description: "Contig by BGC-caller binary membership matrix for the UpSet plot"
@@ -425,7 +487,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/funcscan/screening_summary.py"
+            recipe: "funcscan/screening_summary.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -440,6 +502,36 @@ workflows:
               "cazymes": "Annotated carbohydrate-active enzyme genes"
               "cazyme_families": "Distinct CAZy families"
               "screens": "How many of the four screens produced a result for the sample"
+
+      # Annotation layer. funcscan annotates every assembly once and screens
+      # the predicted proteins four times; the annotation itself is not
+      # published with the megatest results, but every screen carries the
+      # contig its feature sits on, so the locus view is rebuilt from the
+      # screens. Declared after screening_summary for the same dc_ref reason.
+      - data_collection_tag: "contig_annotation"
+        optional: true
+        description: "Per-contig annotation summary (features per screen, length, density)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "funcscan/contig_annotation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "contig": "Assembly contig carrying at least one feature"
+              "contig_length": "Contig length in bases, read from the assembler's contig name"
+              "contig_coverage": "K-mer coverage, read from the assembler's contig name"
+              "arg_hits": "Resistance-gene hits on the contig"
+              "amp_candidates": "Antimicrobial-peptide candidates on the contig"
+              "bgc_regions": "Predicted biosynthetic gene cluster regions on the contig"
+              "cazyme_genes": "CAZyme genes on the contig"
+              "features": "Features all four screens put on the contig together"
+              "screens_on_contig": "How many of the four screens found something on the contig"
+              "features_per_kb": "Features divided by the contig length in kilobases"
+              "top_screen": "Screen contributing the most features to the contig"
 
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
@@ -499,6 +591,83 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the ARG tool-overlap matrix by the hub sample list"
+    enabled: true
+
+  # --- new collections: the same hub sample filter reaches them -----------
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "contig_annotation"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-contig annotation summary by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "combgc_region_track"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the BGC region coordinates by the hub sample list"
+    enabled: true
+
+  # hamronization_class_matrix is wide the same way gene_matrix is: the sample
+  # ids are columns, so the runtime narrows it to a COLUMN subset and
+  # `target_field` is nominal rather than load-bearing.
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "hamronization_class_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the ARG drug-class matrix to the hub sample list (column subset)"
+    enabled: true
+
+  # The Annotation tab's contig selection reaches the screens that report a
+  # contig, so a locus picked there stays picked on the Resistome, AMP and BGC
+  # tabs. The CAZyme overview joins on the same key.
+  - source_dc_tag: "contig_annotation"
+    source_column: "contig"
+    target_dc_tag: "hamronization_report"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contig"
+    description: "Carry a contig selection into the ARG hits"
+    enabled: true
+
+  - source_dc_tag: "contig_annotation"
+    source_column: "contig"
+    target_dc_tag: "ampcombi_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contig"
+    description: "Carry a contig selection into the AMP candidates"
+    enabled: true
+
+  - source_dc_tag: "contig_annotation"
+    source_column: "contig"
+    target_dc_tag: "combgc_region_track"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contig"
+    description: "Carry a contig selection into the BGC region coordinates"
+    enabled: true
+
+  - source_dc_tag: "contig_annotation"
+    source_column: "contig"
+    target_dc_tag: "dbcan_overview"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "contig"
+    description: "Carry a contig selection into the CAZyme annotations"
     enabled: true
 
   # hamronization_gene_matrix is wide (sample ids are columns, not rows), so the
