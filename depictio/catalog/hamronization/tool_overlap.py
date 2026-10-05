@@ -15,16 +15,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="report",
         path="reports/hamronization_summarize/hamronization_combined_report.tsv",
         format="TSV",
+        input_schema={
+            "input_file_name": pl.Utf8,
+            "input_sequence_id": pl.Utf8,
+            "analysis_software_name": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""]},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contig": pl.Utf8,
     "sample": pl.Utf8,
 }

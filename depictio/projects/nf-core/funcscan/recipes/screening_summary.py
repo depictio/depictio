@@ -19,14 +19,36 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="arg", dc_ref="hamronization_report", optional=True),
-    RecipeSource(ref="amp", dc_ref="ampcombi_summary", optional=True),
-    RecipeSource(ref="bgc", dc_ref="combgc_summary", optional=True),
-    RecipeSource(ref="cazyme", dc_ref="dbcan_overview", optional=True),
+    RecipeSource(
+        ref="arg",
+        dc_ref="hamronization_report",
+        input_schema={"sample": pl.Utf8, "gene_symbol": pl.Utf8, "tool": pl.Utf8},
+        optional=True,
+    ),
+    RecipeSource(
+        ref="amp",
+        dc_ref="ampcombi_summary",
+        input_schema={"sample": pl.Utf8, "prob_max": pl.Float64},
+        optional=True,
+    ),
+    RecipeSource(
+        ref="bgc",
+        dc_ref="combgc_summary",
+        input_schema={"sample": pl.Utf8, "product_class": pl.Utf8},
+        optional=True,
+    ),
+    RecipeSource(
+        ref="cazyme",
+        dc_ref="dbcan_overview",
+        input_schema={"sample": pl.Utf8, "family": pl.Utf8},
+        optional=True,
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "arg_hits": pl.Int64,
     "arg_genes": pl.Int64,
@@ -95,7 +117,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for part in present[1:]:
         out = out.join(part, on="sample", how="full", coalesce=True)
 
-    count_cols = [c for c in EXPECTED_SCHEMA if c not in ("sample", "screens")]
+    count_cols = [c for c in OUTPUT_SCHEMA if c not in ("sample", "screens")]
     out = out.with_columns(
         *[
             (pl.col(c) if c in out.columns else pl.lit(0)).fill_null(0).cast(pl.Int64).alias(c)
@@ -115,5 +137,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("screens")
         )
         .sort("sample")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

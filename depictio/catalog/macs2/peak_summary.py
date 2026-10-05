@@ -37,17 +37,30 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summary",
         glob_pattern="**/*peak.summary.txt",
         format="TSV",
+        input_schema={
+            "sample": pl.Utf8,
+            "measure": pl.Utf8,
+            "num_peaks": pl.Utf8,
+            "Median": pl.Utf8,
+            "Mean": pl.Utf8,
+            "Max.": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
     RecipeSource(
         ref="frip",
         glob_pattern="**/*_peaks.FRiP_mqc.tsv",
         format="TSV",
+        input_schema={
+            "sample": pl.Utf8,
+            "frip_score": pl.Utf8,
+        },
         read_kwargs={
             "has_header": False,
             "comment_prefix": "#",
@@ -57,7 +70,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "num_peaks": pl.Int64,
     "frip_score": pl.Float64,
@@ -120,7 +134,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     wide = wide.join(frip.unique(subset="sample"), on="sample", how="left")
 
-    for column, dtype in EXPECTED_SCHEMA.items():
+    for column, dtype in OUTPUT_SCHEMA.items():
         if column not in wide.columns:
             wide = wide.with_columns(pl.lit(None, dtype=dtype).alias(column))
-    return wide.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return wide.select(list(OUTPUT_SCHEMA)).sort("sample")

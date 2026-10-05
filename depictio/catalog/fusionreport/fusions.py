@@ -22,7 +22,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: every column is matched case-insensitively, with fallbacks.
     RecipeSource(
         ref="fusions",
         glob_pattern="fusionreport/*/*.fusions.csv",
@@ -31,7 +33,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
@@ -123,4 +126,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ["fii", "n_tools", "fusion"], descending=[True, True, False], nulls_last=True
     ).with_row_index(name="rank", offset=1)
 
-    return out.select(list(EXPECTED_SCHEMA)).with_columns(pl.col("rank").cast(pl.Int64))
+    return out.select(list(OUTPUT_SCHEMA)).with_columns(pl.col("rank").cast(pl.Int64))

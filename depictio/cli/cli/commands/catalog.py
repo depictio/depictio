@@ -350,7 +350,7 @@ def catalog_validate(
     # makes the whole entry meaningless while still passing every other check.
     problems.extend(_check_fixture_sanity(entries))
     # Ground each render's bound columns against the real data shape:
-    # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
+    # the fixture (most complete) > the recipe's OUTPUT_SCHEMA > declared columns.
     # Beyond name existence, dtypes are checked too (advanced_viz roles + numeric
     # card aggregations) via `ground_render_dtypes`.
     for entry in entries:

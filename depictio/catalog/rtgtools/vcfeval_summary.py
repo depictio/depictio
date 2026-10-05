@@ -20,15 +20,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rtgtools_summary",
         glob_pattern="*/summary/tables/rtgtools/rtgtools.summary.csv",
         format="CSV",
+        input_schema={
+            "Tool": pl.Utf8,
+            "Caller": pl.Utf8,
+            "TP_base": pl.Int64,
+            "TP_comp": pl.Int64,
+            "FP": pl.Int64,
+            "FN": pl.Int64,
+            "Precision": pl.Float64,
+            "Recall": pl.Float64,
+            "F1": pl.Float64,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "caller": pl.Utf8,
     "tp_base": pl.Int64,

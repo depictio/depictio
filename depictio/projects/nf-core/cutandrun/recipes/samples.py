@@ -29,16 +29,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
         path="pipeline_info/samplesheet.valid.csv",
         format="CSV",
+        input_schema={
+            "id": pl.Utf8,
+            "group": pl.Utf8,
+            "replicate": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "target": pl.Utf8,
     "replicate": pl.Int64,
@@ -104,4 +111,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("target"))
         .alias("role")
     )
-    return samples.select(list(EXPECTED_SCHEMA)).sort(["is_control", "target", "replicate"])
+    return samples.select(list(OUTPUT_SCHEMA)).sort(["is_control", "target", "replicate"])

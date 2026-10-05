@@ -29,13 +29,16 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the sheet is free-form; the id column is matched by content.
     RecipeSource(
         ref="samplesheet",
         path="input/samplesheet.tsv",
         format="tsv",
         read_kwargs={"infer_schema_length": 10000},
     ),
+    # No input_schema: the sample and size factor columns are matched case-insensitively.
     RecipeSource(
         ref="sizefactors",
         glob_pattern="other/deseq2/**/*.deseq2.sizefactors.tsv",
@@ -43,12 +46,13 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "group": pl.Utf8,
     "size_factor": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 MAX_LEVELS = 12
 

@@ -46,11 +46,21 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads (see module docstring).
 RAW_DC_TAG = "seacr_fragment_lengths_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lengths", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="lengths",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "fragment_length": pl.Utf8,
+            "count": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "fragment_length": pl.Int64,
@@ -95,4 +105,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("count") / pl.col("count").sum().over("sample")).alias("fraction"),
     )
     df = df.with_columns(pl.col("fraction").cum_sum().over("sample").alias("cumulative_fraction"))
-    return df.select(list(EXPECTED_SCHEMA))
+    return df.select(list(OUTPUT_SCHEMA))

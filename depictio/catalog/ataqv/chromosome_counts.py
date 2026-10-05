@@ -37,16 +37,21 @@ _LINE_READ_KWARGS = {
     "infer_schema_length": 0,
 }
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="reports",
         glob_pattern="**/*.ataqv.json",
         format="CSV",
+        input_schema={
+            "raw": pl.Utf8,
+        },
         read_kwargs=_LINE_READ_KWARGS,
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,
     "read_count": pl.Int64,
@@ -105,6 +110,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             ),
             (pl.col("read_count") + 1).log10().alias("log10_read_count"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "chromosome"])
     )

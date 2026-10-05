@@ -16,16 +16,26 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="report",
         path="reports/hamronization_summarize/hamronization_combined_report.tsv",
         format="TSV",
+        input_schema={
+            "input_file_name": pl.Utf8,
+            "gene_symbol": pl.Utf8,
+            "drug_class": pl.Utf8,
+            "analysis_software_name": pl.Utf8,
+            "sequence_identity": pl.Float64,
+            "coverage_percentage": pl.Float64,
+        },
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""]},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene_symbol": pl.Utf8,
     "drug_class": pl.Utf8,
@@ -80,5 +90,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .with_columns((pl.col("n_tools") / max(n_tools_total, 1)).alias("tool_frac"))
         .sort("sample", "gene_symbol")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

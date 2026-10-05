@@ -30,11 +30,30 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
         glob_pattern="arriba/*.arriba.fusions.tsv",
         format="TSV",
+        input_schema={
+            "#gene1": pl.Utf8,
+            "gene2": pl.Utf8,
+            "breakpoint1": pl.Utf8,
+            "breakpoint2": pl.Utf8,
+            "site1": pl.Utf8,
+            "site2": pl.Utf8,
+            "type": pl.Utf8,
+            "confidence": pl.Utf8,
+            "reading_frame": pl.Utf8,
+            "split_reads1": pl.Int64,
+            "split_reads2": pl.Int64,
+            "discordant_mates": pl.Int64,
+            "coverage1": pl.Int64,
+            "coverage2": pl.Int64,
+            "retained_protein_domains": pl.Utf8,
+            "tags": pl.Utf8,
+        },
         read_kwargs={
             "infer_schema_length": 10000,
             "quote_char": None,
@@ -45,7 +64,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
@@ -109,4 +129,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(0.0)
         .cast(pl.Float64)
         .alias("support_fraction"),
-    ).select(list(EXPECTED_SCHEMA))
+    ).select(list(OUTPUT_SCHEMA))

@@ -28,13 +28,16 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: one column per sample, the id column found by name or position.
     RecipeSource(
         ref="vst",
         glob_pattern="**/all.vst.tsv",
         format="tsv",
         read_kwargs={"null_values": ["NA"], "infer_schema_length": 10000},
     ),
+    # No input_schema: the sample-id and factor columns are discovered from the sheet.
     RecipeSource(
         ref="samplesheet",
         path="input/samplesheet.tsv",
@@ -44,10 +47,11 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 TOP_N = 500
 MAX_ANNOTATIONS = 4

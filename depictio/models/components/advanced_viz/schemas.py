@@ -6,7 +6,7 @@ schema, calls validate_binding(config, dc_schema), and surfaces any
 missing-column or wrong-dtype problems in the builder UI.
 
 Per-pipeline recipes are responsible for producing DCs whose columns can
-play these roles; the recipe's own EXPECTED_SCHEMA validates the actual
+play these roles; the recipe's own OUTPUT_SCHEMA validates the actual
 column names + dtypes (see depictio/recipes/__init__.py:validate_schema).
 """
 

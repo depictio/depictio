@@ -19,11 +19,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profile", glob_pattern="sylph/*/*.sylph.tsv", format="tsv"),
+    RecipeSource(
+        ref="profile",
+        glob_pattern="sylph/*/*.sylph.tsv",
+        format="tsv",
+        input_schema={
+            "Sample_file": pl.Utf8,
+            "Genome_file": pl.Utf8,
+            "Taxonomic_abundance": pl.Float64,
+            "Adjusted_ANI": pl.Float64,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "genome": pl.Utf8,
     "contig_name": pl.Utf8,
@@ -38,7 +50,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "kmers_reassigned": pl.Int64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Read-file suffixes taxprofiler leaves on the sylph sample name.
 _READ_SUFFIXES = (

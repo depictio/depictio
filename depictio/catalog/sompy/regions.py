@@ -9,15 +9,24 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="sompy_regions",
         glob_pattern="*/summary/tables/sompy/sompy.regions.csv",
         format="CSV",
+        input_schema={
+            "Tool": pl.Utf8,
+            "Type": pl.Utf8,
+            "Recall": pl.Float64,
+            "Precision": pl.Float64,
+            "F1": pl.Float64,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "caller": pl.Utf8,
     "af_bin": pl.Utf8,
     "recall": pl.Float64,
@@ -25,7 +34,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "f1": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "tp": pl.Int64,
     "fp": pl.Int64,
     "fn": pl.Int64,

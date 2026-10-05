@@ -29,7 +29,9 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.lineage import CANONICAL_RANKS, UNCLASSIFIED, asv_table_to_ranks
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the rank columns are read only when present.
     RecipeSource(
         ref="asv_tax",
         path="qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv",
@@ -39,6 +41,7 @@ SOURCES: list[RecipeSource] = [
         read_kwargs={"infer_schema_length": 0},
         optional=True,
     ),
+    # No input_schema: the lineage is the first column, read by position.
     RecipeSource(
         ref="genus",
         path="qiime2/rel_abundance_tables/rel-table-6.tsv",
@@ -49,17 +52,19 @@ SOURCES: list[RecipeSource] = [
         # under an 8-rank one (sbdi-gtdb) it is the Family.
         optional=True,
     ),
+    # No input_schema: habitat and the sample id column are read only when present.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "Kingdom": pl.Utf8,
     "Phylum": pl.Utf8,
     "abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "Class": pl.Utf8,
     "Order": pl.Utf8,
     "Family": pl.Utf8,

@@ -51,13 +51,35 @@ MACS2_DC_TAG = "macs2_peaks"
 SEACR_DC_TAG = "seacr_peaks"
 SAMPLES_DC_TAG = "samples"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="macs2", dc_ref=MACS2_DC_TAG, optional=True),
-    RecipeSource(ref="seacr", dc_ref=SEACR_DC_TAG, optional=True),
-    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG),
+    RecipeSource(
+        ref="macs2",
+        dc_ref=MACS2_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "chr": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+        },
+        optional=True,
+    ),
+    RecipeSource(
+        ref="seacr",
+        dc_ref=SEACR_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "chr": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+        },
+        optional=True,
+    ),
+    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, input_schema={"sample_id": pl.Utf8}),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "caller": pl.Utf8,
@@ -224,4 +246,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("frac_shared"),
         (pl.col("n_peaks").cast(pl.Float64) + 1.0).log10().alias("log10_n_peaks"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["target", "sample", "caller"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["target", "sample", "caller"])

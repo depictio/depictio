@@ -26,16 +26,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="boolean",
         glob_pattern="**/*.consensus_peaks.boolean.txt",
         format="TSV",
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "interval_id": pl.Utf8,
+            "num_samples": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "consensus_set": pl.Utf8,
     "interval_id": pl.Utf8,
@@ -44,7 +53,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "support": pl.Utf8,
 }
 # One Float64 fold-enrichment column per sample follows; names are run-specific.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Rows kept per consensus set. Server-side clustering is quadratic in rows, so
 # the matrix stays a few hundred intervals tall even for a 100k-peak set.
@@ -126,4 +135,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     top = df.filter(
         pl.col("_total_fc").rank("ordinal", descending=True).over("consensus_set") <= TOP_N
     ).sort(["consensus_set", "chr", "start"])
-    return top.select(list(EXPECTED_SCHEMA) + samples)
+    return top.select(list(OUTPUT_SCHEMA) + samples)

@@ -39,16 +39,21 @@ _LINE_READ_KWARGS = {
     "infer_schema_length": 0,
 }
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="reports",
         glob_pattern="**/*.ataqv.json",
         format="CSV",
+        input_schema={
+            "raw": pl.Utf8,
+        },
         read_kwargs=_LINE_READ_KWARGS,
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "position": pl.Int64,
     "coverage": pl.Float64,
@@ -103,4 +108,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("position").cast(pl.Int64, strict=False),
         pl.col("coverage").cast(pl.Float64, strict=False),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "position"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "position"])

@@ -64,7 +64,7 @@ handle + the real dataset):
 | **output** | One **file the tool emits**, with `find` (how to recognise it in a run) + optional `recipe`. | `qiime2_rel_abundance` — `find: rel-table-*.tsv` |
 | **render** | One **way to visualise** an output (`renders_as[*]`); its `id` is the `use:` handle. An output can have several. | under `rel_abundance`: `stacked_taxonomy` / `sunburst` / `complex_heatmap` |
 | **role** | A viz's **semantic column slot**, mapped to a column; expands to `<role>_col`. Empty `roles: {}` = a pure "render as <kind>" handle (binding stays per-tile). | volcano `{feature_id: id, effect_size: lfc, significance: q_val}` |
-| **recipe** | A `.py` **reshape** (`SOURCES` + `EXPECTED_SCHEMA` + `transform`) turning a raw file (or another DC) into a bindable shape. Optional — omitted when the raw file is already bindable. | `qiime2/ancombc.py` (join + melt) |
+| **recipe** | A `.py` **reshape** (`SOURCES` with each source's `input_schema` + `OUTPUT_SCHEMA` + `transform`) turning a raw file (or another DC) into a bindable shape. Optional — omitted when the raw file is already bindable. | `qiime2/ancombc.py` (join + melt) |
 | **use:** | The dashboard authoring handle `use: <module>/<render-id>` — inherits `viz_kind` + role bindings from the catalog render; the tile's `config:` overrides. | `use: qiime2/complex_heatmap` + `data_collection_tag` + `config` |
 | **DC** (data collection) | The **real dataset** a tile binds (`data_collection_tag` → `dc_id`). The render says *how* to view; the DC says *what*. | `complex_heatmap_canonical`, `bray_curtis_canonical` |
 
@@ -115,7 +115,7 @@ just hand-maintained and blind to upstream tool identity.
 | **Viz contract** | `models/components/advanced_viz/schemas.py` → `CANONICAL_SCHEMAS` | Per-viz required **roles** → accepted dtypes (volcano, manhattan, oncoplot, stacked_taxonomy, sunburst, da_barplot, lollipop, rarefaction, complex_heatmap, embedding, …). The "beyond-QC" surface. |
 | **Tool→viz registry** | ~~`producers.py` → `KNOWN_PRODUCERS`~~ **(removed)** | Was a column-name fingerprint registry. Retired (dtype-blind, unreliable); see §0 and the status note above. |
 | **Auto-mapping** | `schemas.py` → `suggest_viz_kinds()` | Runtime reverse lookup from a DC's `{col: dtype}` schema (role-name aliases + dtype). Wired into the API (`/datacollections/viz-suggestions`) and the React DC card's "Suggested visualisations" chips. `suggest_producers()` was removed; the API still returns `producers: []` for client compatibility. |
-| **Reshape engine** | `recipes/__init__.py` + `projects/nf-core/*/recipes/*.py` | A 2-tier DAG: raw tool file → typed DC → canonical-schema DC. Each recipe declares `SOURCES` (glob/path/dc_ref), `EXPECTED_SCHEMA`, `transform()`. |
+| **Reshape engine** | `recipes/__init__.py` + `projects/nf-core/*/recipes/*.py` | A 2-tier DAG: raw tool file → typed DC → canonical-schema DC. Each recipe declares `SOURCES` (glob/path/dc_ref, each with the `input_schema` it reads), `OUTPUT_SCHEMA`, `transform()`. |
 
 **The four gaps**, mapped to the asks:
 

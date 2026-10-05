@@ -41,16 +41,19 @@ _TECHNICAL_SUFFIX = r"_T\d+$"
 #: ``<group>_R<replicate>`` -> the two parts.
 _SAMPLE_PATTERN = r"^(?<group>.+)_R(?<replicate>\d+)$"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="design",
         glob_pattern="**/design_reads.csv",
         format="CSV",
+        input_schema={"sample_id": pl.Utf8},
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "merged_library": pl.Utf8,
     "group": pl.Utf8,
@@ -93,4 +96,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     samples = samples.with_columns(
         pl.col("group").fill_null(pl.col("sample")),
     )
-    return samples.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return samples.select(list(OUTPUT_SCHEMA)).sort("sample")

@@ -23,16 +23,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="overview",
         glob_pattern="cazyme/dbcan/cazyme_annotation/*/*_overview.tsv",
         format="TSV",
+        input_schema={
+            "Gene ID": pl.Utf8,
+            "EC#": pl.Utf8,
+            "dbCAN_hmm": pl.Utf8,
+            "dbCAN_sub": pl.Utf8,
+            "DIAMOND": pl.Utf8,
+            "#ofTools": pl.Int64,
+            "Recommend Results": pl.Utf8,
+            "Substrate": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene_id": pl.Utf8,
     "contig": pl.Utf8,
@@ -119,5 +131,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.lit(1, dtype=pl.Int64).alias("genes"),
         )
         .sort("sample", "gene_id")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

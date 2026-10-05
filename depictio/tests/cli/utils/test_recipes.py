@@ -31,6 +31,7 @@ from depictio.recipes import (
     load_recipe,
     resolve_sources,
     validate_schema,
+    validate_sources,
 )
 
 # ---------------------------------------------------------------------------
@@ -42,7 +43,7 @@ _MINIMAL_RECIPE = (
     "from depictio.models.models.transforms import RecipeSource\n"
     "\n"
     "SOURCES = [RecipeSource(ref='input', path='data.csv', format='csv')]\n"
-    "EXPECTED_SCHEMA = {'value': pl.Int64}\n"
+    "OUTPUT_SCHEMA = {'value': pl.Int64}\n"
     "\n"
     "def transform(sources):\n"
     "    return sources['input'].select('value')\n"
@@ -177,7 +178,7 @@ class TestLoadRecipe:
                 recipes_mod.PROJECTS_DIR = projects_dir
                 module = load_recipe("vendor/pipe/transform.py")
                 assert hasattr(module, "SOURCES")
-                assert hasattr(module, "EXPECTED_SCHEMA")
+                assert hasattr(module, "OUTPUT_SCHEMA")
                 assert callable(module.transform)
             finally:
                 recipes_mod.PROJECTS_DIR = original
@@ -206,6 +207,50 @@ class TestLoadRecipe:
         with pytest.raises(RecipeError, match="not found"):
             load_recipe("nonexistent/recipe.py")
 
+    @pytest.mark.parametrize(
+        ("schema_lines", "message"),
+        [
+            (
+                "EXPECTED_SCHEMA = {'value': pl.Int64}\n",
+                "rename EXPECTED_SCHEMA to OUTPUT_SCHEMA$",
+            ),
+            (
+                "OUTPUT_SCHEMA = {'value': pl.Int64}\nOPTIONAL_SCHEMA = {'extra': pl.Utf8}\n",
+                "rename OPTIONAL_SCHEMA to OPTIONAL_OUTPUT_SCHEMA$",
+            ),
+            (
+                "EXPECTED_SCHEMA = {'value': pl.Int64}\nOPTIONAL_SCHEMA = {'extra': pl.Utf8}\n",
+                "rename EXPECTED_SCHEMA to OUTPUT_SCHEMA and "
+                "OPTIONAL_SCHEMA to OPTIONAL_OUTPUT_SCHEMA$",
+            ),
+        ],
+        ids=["expected_only", "optional_next_to_output", "both_legacy"],
+    )
+    def test_load_recipe_rejects_legacy_schema_names(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        schema_lines: str,
+        message: str,
+    ) -> None:
+        """A recipe still using the pre-rename constants fails with a rename hint."""
+        import depictio.recipes as recipes_mod
+
+        code = (
+            "import polars as pl\n"
+            "from depictio.models.models.transforms import RecipeSource\n"
+            "\n"
+            "SOURCES = [RecipeSource(ref='input', path='data.csv', format='csv')]\n"
+            f"{schema_lines}"
+            "\n"
+            "def transform(sources):\n"
+            "    return sources['input'].select('value')\n"
+        )
+        projects_dir = _make_fake_projects_dir(str(tmp_path), "vendor/pipe/legacy.py", code)
+        monkeypatch.setattr(recipes_mod, "PROJECTS_DIR", projects_dir)
+        with pytest.raises(RecipeError, match=message):
+            load_recipe("vendor/pipe/legacy.py")
+
     def test_load_all_synthetic_recipes(self) -> None:
         """All synthetic recipes load successfully and have valid attributes."""
         import depictio.recipes as recipes_mod
@@ -217,7 +262,7 @@ class TestLoadRecipe:
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "\n"
                 "SOURCES = [RecipeSource(ref='tbl', path='table.tsv', format='tsv')]\n"
-                "EXPECTED_SCHEMA = {'name': pl.Utf8, 'count': pl.Int64}\n"
+                "OUTPUT_SCHEMA = {'name': pl.Utf8, 'count': pl.Int64}\n"
                 "\n"
                 "def transform(sources):\n"
                 "    return sources['tbl']\n"
@@ -239,12 +284,12 @@ class TestLoadRecipe:
                 for recipe_name in list_recipes():
                     module = load_recipe(recipe_name)
                     assert hasattr(module, "SOURCES")
-                    assert hasattr(module, "EXPECTED_SCHEMA")
+                    assert hasattr(module, "OUTPUT_SCHEMA")
                     assert callable(module.transform)
                     assert isinstance(module.SOURCES, list)
                     assert len(module.SOURCES) > 0
-                    assert isinstance(module.EXPECTED_SCHEMA, dict)
-                    assert len(module.EXPECTED_SCHEMA) > 0
+                    assert isinstance(module.OUTPUT_SCHEMA, dict)
+                    assert len(module.OUTPUT_SCHEMA) > 0
             finally:
                 recipes_mod.PROJECTS_DIR = original
 
@@ -256,14 +301,14 @@ class TestLoadRecipe:
             "import polars as pl\n"
             "from depictio.models.models.transforms import RecipeSource\n"
             "SOURCES = [RecipeSource(ref='d', path='data.csv', format='csv')]\n"
-            "EXPECTED_SCHEMA = {'shared_col': pl.Int64}\n"
+            "OUTPUT_SCHEMA = {'shared_col': pl.Int64}\n"
             "def transform(s): return s['d'].rename({'value': 'shared_col'})\n"
         )
         override_code = (
             "import polars as pl\n"
             "from depictio.models.models.transforms import RecipeSource\n"
             "SOURCES = [RecipeSource(ref='d', path='data.csv', format='csv')]\n"
-            "EXPECTED_SCHEMA = {'versioned_col': pl.Int64}\n"
+            "OUTPUT_SCHEMA = {'versioned_col': pl.Int64}\n"
             "def transform(s): return s['d'].rename({'value': 'versioned_col'})\n"
         )
 
@@ -286,9 +331,9 @@ class TestLoadRecipe:
                 module_shared = load_recipe("vendor/pipe/recipe.py")
                 assert callable(module_versioned.transform)
                 assert callable(module_shared.transform)
-                # They are different modules (different EXPECTED_SCHEMA keys)
-                assert set(module_versioned.EXPECTED_SCHEMA.keys()) != set(
-                    module_shared.EXPECTED_SCHEMA.keys()
+                # They are different modules (different OUTPUT_SCHEMA keys)
+                assert set(module_versioned.OUTPUT_SCHEMA.keys()) != set(
+                    module_shared.OUTPUT_SCHEMA.keys()
                 )
             finally:
                 recipes_mod.PROJECTS_DIR = original
@@ -369,7 +414,7 @@ class TestResolveSources:
         """Create a fake recipe module with given SOURCES."""
         module = MagicMock(spec=ModuleType)
         module.SOURCES = sources
-        module.EXPECTED_SCHEMA = schema or {}
+        module.OUTPUT_SCHEMA = schema or {}
         return module
 
     def test_resolve_csv_source(self) -> None:
@@ -458,25 +503,29 @@ class TestValidateSchema:
     def test_optional_schema_absent_passes(self) -> None:
         """Optional column absent from result: no error."""
         df = pl.DataFrame({"x": [1]})
-        validate_schema(df, {"x": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+        validate_schema(
+            df, {"x": pl.Int64}, "test_recipe", optional_output_schema={"opt_col": pl.Utf8}
+        )
 
     def test_optional_schema_present_correct_type_passes(self) -> None:
         """Optional column present with correct type: no error."""
         df = pl.DataFrame({"x": [1], "opt_col": ["value"]})
-        validate_schema(df, {"x": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+        validate_schema(
+            df, {"x": pl.Int64}, "test_recipe", optional_output_schema={"opt_col": pl.Utf8}
+        )
 
     def test_optional_schema_present_wrong_type_raises(self) -> None:
         """Optional column present with wrong type: RecipeError."""
         df = pl.DataFrame({"x": [1], "opt_col": [99]})
         with pytest.raises(RecipeError, match="optional column 'opt_col'"):
             validate_schema(
-                df, {"x": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8}
+                df, {"x": pl.Int64}, "test_recipe", optional_output_schema={"opt_col": pl.Utf8}
             )
 
     def test_optional_schema_none_is_noop(self) -> None:
-        """optional_schema=None behaves the same as no optional_schema."""
+        """optional_output_schema=None behaves the same as no optional_output_schema."""
         df = pl.DataFrame({"x": [1]})
-        validate_schema(df, {"x": pl.Int64}, "test_recipe", optional_schema=None)
+        validate_schema(df, {"x": pl.Int64}, "test_recipe", optional_output_schema=None)
 
 
 class TestExecuteRecipe:
@@ -510,7 +559,7 @@ class TestExecuteRecipe:
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "\n"
                 "SOURCES = [RecipeSource(ref='input', path='data.csv', format='csv')]\n"
-                "EXPECTED_SCHEMA = {'value': pl.Int64}\n"
+                "OUTPUT_SCHEMA = {'value': pl.Int64}\n"
                 "\n"
                 "def transform(sources):\n"
                 "    return {'not': 'a dataframe'}\n",
@@ -542,7 +591,7 @@ class TestExecuteRecipe:
                 "    RecipeSource(ref='main', path='data.csv', format='csv'),\n"
                 "    RecipeSource(ref='meta', dc_ref='other_dc'),\n"
                 "]\n"
-                "EXPECTED_SCHEMA = {'id': pl.Utf8, 'label': pl.Utf8}\n"
+                "OUTPUT_SCHEMA = {'id': pl.Utf8, 'label': pl.Utf8}\n"
                 "\n"
                 "def transform(sources):\n"
                 "    return sources['main'].join(sources['meta'], on='id')\n",
@@ -576,7 +625,7 @@ class TestExecuteRecipe:
                 "    RecipeSource(ref='main', path='data.csv', format='csv'),\n"
                 "    RecipeSource(ref='meta', dc_ref='other_dc'),\n"
                 "]\n"
-                "EXPECTED_SCHEMA = {'id': pl.Utf8}\n"
+                "OUTPUT_SCHEMA = {'id': pl.Utf8}\n"
                 "\n"
                 "def transform(sources):\n"
                 "    return sources['main']\n",
@@ -608,7 +657,7 @@ class TestExecuteRecipe:
                 "    RecipeSource(ref='main', path='data.csv', format='csv'),\n"
                 "    RecipeSource(ref='meta', dc_ref='other_dc', optional=True),\n"
                 "]\n"
-                "EXPECTED_SCHEMA = {'id': pl.Utf8}\n"
+                "OUTPUT_SCHEMA = {'id': pl.Utf8}\n"
                 "\n"
                 "def transform(sources):\n"
                 "    assert sources['meta'] is None\n"
@@ -639,7 +688,7 @@ class TestExecuteRecipe:
                 "import polars as pl\n"
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "SOURCES = [RecipeSource(ref='d', path='data.csv', format='csv')]\n"
-                "EXPECTED_SCHEMA = {'shared_col': pl.Int64}\n"
+                "OUTPUT_SCHEMA = {'shared_col': pl.Int64}\n"
                 "def transform(s): return s['d'].rename({'value': 'shared_col'})\n"
             )
             # Version override returns column "versioned_col"
@@ -651,7 +700,7 @@ class TestExecuteRecipe:
                 "import polars as pl\n"
                 "from depictio.models.models.transforms import RecipeSource\n"
                 "SOURCES = [RecipeSource(ref='d', path='data.csv', format='csv')]\n"
-                "EXPECTED_SCHEMA = {'versioned_col': pl.Int64}\n"
+                "OUTPUT_SCHEMA = {'versioned_col': pl.Int64}\n"
                 "def transform(s): return s['d'].rename({'value': 'versioned_col'})\n"
             )
 
@@ -675,16 +724,91 @@ class TestExecuteRecipe:
                 recipes_mod.PROJECTS_DIR = original_dir
 
 
+class TestValidateSources:
+    """Checkpoint between reading the sources and transform()."""
+
+    def _module(self, **source_kwargs) -> ModuleType:
+        module = MagicMock(spec=ModuleType)
+        module.SOURCES = [RecipeSource(ref="data", path="data.csv", **source_kwargs)]
+        return module
+
+    def test_missing_column_names_source_and_column(self) -> None:
+        module = self._module(input_schema={"sample": pl.Utf8, "count": pl.Int64})
+        df = pl.DataFrame({"sample": ["a"]})
+        with pytest.raises(RecipeError, match=r"source 'data' lacks input column\(s\) \['count'\]"):
+            validate_sources(module, {"data": df}, "t/r.py")
+
+    @pytest.mark.parametrize(
+        ("actual", "declared"),
+        [
+            (pl.Series([1]), pl.Int64),
+            (pl.Series(["1"]), pl.Int64),  # text the recipe casts itself
+            (pl.Series([None]), pl.Float64),  # all-null column
+            (pl.Series([1]), pl.Float64),  # one numeric type for another
+            (pl.Series([1.5]), pl.Utf8),
+        ],
+    )
+    def test_compatible_dtypes_pass(self, actual: pl.Series, declared: type) -> None:
+        module = self._module(input_schema={"x": declared})
+        validate_sources(module, {"data": actual.alias("x").to_frame()}, "t/r.py")
+
+    def test_structural_mismatch_fails(self) -> None:
+        module = self._module(input_schema={"x": pl.Int64})
+        df = pl.DataFrame({"x": [[1, 2]]})
+        with pytest.raises(RecipeError, match="input column 'x' expected Int64"):
+            validate_sources(module, {"data": df}, "t/r.py")
+
+    def test_sources_without_schema_or_resolved_to_none_are_skipped(self) -> None:
+        validate_sources(self._module(), {"data": pl.DataFrame({"a": [1]})}, "t/r.py")
+        module = self._module(input_schema={"a": pl.Int64}, optional=True)
+        validate_sources(module, {"data": None}, "t/r.py")
+        validate_sources(module, {"data": pl.DataFrame()}, "t/r.py")
+
+    def test_execute_recipe_checks_inputs_before_transform(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import depictio.recipes as recipes_mod
+
+        code = _MINIMAL_RECIPE.replace(
+            "format='csv')", "format='csv', input_schema={'value': pl.Int64})"
+        )
+        projects_dir = _make_fake_projects_dir(str(tmp_path), "vendor/pipe/r.py", code)
+        monkeypatch.setattr(recipes_mod, "PROJECTS_DIR", projects_dir)
+        (tmp_path / "data.csv").write_text("other\n1\n")
+        with pytest.raises(RecipeError, match=r"lacks input column\(s\) \['value'\]"):
+            execute_recipe("vendor/pipe/r.py", tmp_path)
+
+    def test_input_schema_serialises_to_dtype_names(self) -> None:
+        source = RecipeSource(ref="data", path="d.csv", input_schema={"n": pl.Int64})
+        assert '"input_schema":{"n":"Int64"}' in source.model_dump_json()
+
+    def test_load_recipe_rejects_non_dtype_schema(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import depictio.recipes as recipes_mod
+
+        code = _MINIMAL_RECIPE.replace(
+            "format='csv')", "format='csv', input_schema={'value': int})"
+        )
+        projects_dir = _make_fake_projects_dir(str(tmp_path), "vendor/pipe/r.py", code)
+        monkeypatch.setattr(recipes_mod, "PROJECTS_DIR", projects_dir)
+        with pytest.raises(RecipeError, match="is not a polars dtype"):
+            load_recipe("vendor/pipe/r.py")
+
+
 @pytest.mark.parametrize("recipe_name", list_recipes())
 def test_bundled_recipe_structure(recipe_name: str) -> None:
-    """Every bundled recipe on disk has SOURCES, EXPECTED_SCHEMA, and a callable transform."""
+    """Every bundled recipe on disk has SOURCES, OUTPUT_SCHEMA, and a callable transform."""
     module = load_recipe(recipe_name)
     assert hasattr(module, "SOURCES"), f"{recipe_name}: missing SOURCES"
-    assert hasattr(module, "EXPECTED_SCHEMA"), f"{recipe_name}: missing EXPECTED_SCHEMA"
+    assert hasattr(module, "OUTPUT_SCHEMA"), f"{recipe_name}: missing OUTPUT_SCHEMA"
     assert callable(module.transform), f"{recipe_name}: transform not callable"
     assert isinstance(module.SOURCES, list) and len(module.SOURCES) > 0
-    assert isinstance(module.EXPECTED_SCHEMA, dict) and len(module.EXPECTED_SCHEMA) > 0
+    assert isinstance(module.OUTPUT_SCHEMA, dict) and len(module.OUTPUT_SCHEMA) > 0
     for src in module.SOURCES:
         assert isinstance(src, RecipeSource), (
             f"{recipe_name}: SOURCES must contain RecipeSource instances"
         )
+    source_text = Path(module.__file__).read_text()
+    assert "# INPUT SCHEMA:" in source_text, f"{recipe_name}: no '# INPUT SCHEMA:' line"
+    assert "# OUTPUT SCHEMA:" in source_text, f"{recipe_name}: no '# OUTPUT SCHEMA:' line"

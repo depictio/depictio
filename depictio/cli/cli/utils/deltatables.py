@@ -1125,6 +1125,7 @@ def process_recipe_data_collection(
         from depictio.recipes import load_recipe as _load_recipe
         from depictio.recipes import resolve_sources as _resolve_sources
         from depictio.recipes import validate_schema as _validate_schema
+        from depictio.recipes import validate_sources as _validate_sources
     except ModuleNotFoundError:
         # Fallback: import from source tree when package isn't installed with sub-packages
         import importlib.util
@@ -1141,6 +1142,7 @@ def process_recipe_data_collection(
         _load_recipe = _mod.load_recipe
         _resolve_sources = _mod.resolve_sources
         _validate_schema = _mod.validate_schema
+        _validate_sources = _mod.validate_sources
 
     transform_config = data_collection.config.transform
     if transform_config is None:
@@ -1249,10 +1251,16 @@ def process_recipe_data_collection(
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
+            _validate_sources(recipe_module, sources, recipe_name)
             result_df = recipe_module.transform(sources)
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
-            _validate_schema(result_df, recipe_module.EXPECTED_SCHEMA, recipe_name)
+            _validate_schema(
+                result_df,
+                recipe_module.OUTPUT_SCHEMA,
+                recipe_name,
+                getattr(recipe_module, "OPTIONAL_OUTPUT_SCHEMA", None),
+            )
             _print_recipe_preview(recipe_name, sources, result_df)
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}

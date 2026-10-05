@@ -15,7 +15,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the metric columns are matched by a tolerant name lookup.
     RecipeSource(
         ref="truvari_summary",
         glob_pattern="*/summary/tables/truvari/truvari.summary.csv",
@@ -23,14 +25,15 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "precision": pl.Float64,
     "recall": pl.Float64,
     "f1": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "tp_base": pl.Int64,
     "tp_comp": pl.Int64,
     "fp": pl.Int64,
