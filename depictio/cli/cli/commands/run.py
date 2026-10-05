@@ -36,18 +36,14 @@ from depictio.models.utils import convert_model_to_dict
 
 
 def _cli_version() -> str | None:
-    """Installed depictio-cli version, or ``None`` if it can't be determined.
+    """Installed CLI version, or ``None`` if it can't be determined.
 
     Best-effort metadata for the monitoring ledger — never raises.
     """
     try:
-        from importlib.metadata import PackageNotFoundError
-        from importlib.metadata import version as _pkg_version
+        from depictio.cli.cli.utils.telemetry import cli_version
 
-        try:
-            return _pkg_version("depictio-cli")
-        except PackageNotFoundError:
-            return "dev"
+        return cli_version()
     except Exception:
         return None
 

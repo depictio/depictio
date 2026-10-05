@@ -28,6 +28,7 @@ from depictio.cli.cli.local_stack import (
     stop_all,
     write_private_file,
 )
+from depictio.cli.cli.utils.telemetry import cli_version
 
 # The compose file a release's images were built with.
 COMPOSE_URL = "https://raw.githubusercontent.com/depictio/depictio/v{version}/docker-compose.yaml"
@@ -37,20 +38,18 @@ KEY_FILES = ("private_key.pem", "public_key.pem", "api_internal_key.pem")
 
 
 def release_version() -> str | None:
-    """The installed depictio version when it names a published image, else None.
+    """The installed version as release tags spell it, or None for a dev build.
 
-    Read from the package metadata: the CLI-only package (depictio-cli) does not
-    ship depictio.version, and both packages carry the same version number.
+    That is the git tag without its ``v`` and the image tag: ``1.2.3``, or
+    ``1.2.3-b1`` for a beta, whose package version is ``1.2.3b1``. Read from the
+    package metadata, since the CLI-only package (depictio-cli) does not ship
+    depictio.version.
     """
-    from importlib.metadata import PackageNotFoundError, version
-
-    for dist in ("depictio", "depictio-cli"):
-        try:
-            found = version(dist)
-        except PackageNotFoundError:
-            continue
-        return found if re.fullmatch(r"\d+\.\d+\.\d+", found) else None
-    return None
+    match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-?b(\d+))?", cli_version())
+    if match is None:
+        return None
+    release, beta = match.groups()
+    return f"{release}-b{beta}" if beta else release
 
 
 def installed_version(paths: Paths, package: str) -> str:
@@ -149,8 +148,8 @@ def compose_file(version: str | None, log=print) -> bytes:
         return local.read_bytes()
     if version is None:
         raise LocalStackError(
-            "This depictio build is not a release, so no published docker-compose.yaml "
-            "matches it. The hand-over needs a released version (e.g. "
+            "This depictio build is not a release or a beta, so no published "
+            "docker-compose.yaml matches it. The hand-over needs a released version (e.g. "
             'uv tool install "depictio[local]==X.Y.Z") or a source checkout of depictio.'
         )
     url = COMPOSE_URL.format(version=version)

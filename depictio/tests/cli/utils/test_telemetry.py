@@ -381,6 +381,18 @@ class TestCliVersion:
         ):
             assert cli_version() == "dev"
 
+    @pytest.mark.parametrize("installed", ["depictio", "depictio-cli"])
+    def test_reads_the_server_or_the_client_distribution(self, installed):
+        from importlib.metadata import PackageNotFoundError
+
+        def version(dist):
+            if dist != installed:
+                raise PackageNotFoundError(dist)
+            return "1.2.3"
+
+        with patch("depictio.cli.cli.utils.telemetry._pkg_version", side_effect=version):
+            assert cli_version() == "1.2.3"
+
 
 class TestVersionHeader:
     def test_generate_api_headers_includes_the_cli_version(self):
