@@ -37,6 +37,19 @@ S3_USER = "depictio"
 S3_BUCKET = "depictio-bucket"
 
 DEFAULT_PORTS = {"api": 8058, "mongo": 27018, "redis": 6379, "s3": 9000}
+# weed mini's internal listeners and their default ports. Not kept across runs: its
+# volume server and filer register with the master again at each start.
+SEAWEEDFS_PORTS = {
+    "master.port": 9333,
+    "master.port.grpc": 19333,
+    "volume.port": 9340,
+    "volume.port.grpc": 19340,
+    "filer.port": 8888,
+    "filer.port.grpc": 18888,
+    "admin.port": 23646,
+    "admin.port.grpc": 33646,
+    "s3.port.grpc": 18333,
+}
 # Start order; stopped in reverse.
 PROCESS_ORDER = ["mongo", "redis", "s3", "api", "worker"]
 # The example projects shipped in the wheel, seeded by --examples.
@@ -245,9 +258,12 @@ def port_is_free(port: int) -> bool:
 def pick_port(preferred: int, taken: set[int]) -> int:
     if preferred not in taken and port_is_free(preferred):
         return preferred
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        if port not in taken:
+            return port
 
 
 def pick_ports(api_port: int | None, saved: dict[str, int] | None = None) -> dict[str, int]:
@@ -266,6 +282,22 @@ def pick_ports(api_port: int | None, saved: dict[str, int] | None = None) -> dic
         else:
             ports[name] = pick_port(preferred[name], set(ports.values()))
     return ports
+
+
+def seaweedfs_port_flags(taken: set[int]) -> list[str]:
+    """`weed mini` flags for its internal ports, each one free now and not in `taken`.
+
+    Left to itself, weed mini moves off a taken default port, but next to a second
+    weed mini (another local home, a dev stack) that search races with its own
+    binds and stops it at startup.
+    """
+    taken = set(taken)
+    flags = []
+    for flag, preferred in SEAWEEDFS_PORTS.items():
+        port = pick_port(preferred, taken)
+        taken.add(port)
+        flags.append(f"-{flag}={port}")
+    return flags
 
 
 def load_ports(paths: Paths) -> dict[str, int]:
@@ -569,6 +601,7 @@ def _start_services(
             "-ip=127.0.0.1",
             "-ip.bind=127.0.0.1",
             f"-s3.port={ports['s3']}",
+            *seaweedfs_port_flags(set(ports.values())),
             "-s3.port.iceberg=0",
             "-s3.port.lance=0",
             "-admin.ui=false",
