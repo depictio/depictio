@@ -204,6 +204,11 @@ def export_compose(paths: Paths, out: Path, log=print) -> None:
         log("Stopping the local server for a consistent copy (depictio local up restarts it)")
         stop_all(paths, log=lambda _msg: None)
 
+    # Owner-only like the local home, since the copies keep their modes and
+    # data/keys holds the token-signing key. Containers reach their bind mounts
+    # without going through this directory.
+    out.mkdir(parents=True, exist_ok=True)
+    out.chmod(0o700)
     data = out / "data"
     for sub in EXPORTED_DIRS:
         log(f"Copying {sub} data")

@@ -76,6 +76,7 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     assert "depictio local up --template <template> --data-root <dir>" in out
     assert "depictio local down" in out
     assert state.start_times == dict.fromkeys(PROCESS_ORDER, 123.0)
+    assert state.first_run
     assert local_stack.load_ports(stack.paths) == state.ports
     stack.webbrowser.open.assert_not_called()
 
@@ -125,6 +126,21 @@ def test_up_on_a_running_server_names_the_flags_it_ignores(stack):
 
     result, out = _invoke("up", "--port", "18058", "--no-open")
     assert "is ignored" not in out
+
+
+@pytest.mark.parametrize("given", [True, False], ids=["--examples", "default"])
+def test_examples_missing_from_an_existing_home_are_not_waited_for(stack, monkeypatch, given):
+    monkeypatch.setattr(local_cmd, "examples_status", lambda paths, state: {"iris": "absent"})
+    wait = MagicMock()
+    monkeypatch.setattr(local_cmd, "wait_for_examples", wait)
+
+    result, out = _invoke("up", *(["--examples", "iris"] if given else []), "--no-open")
+
+    assert result.exit_code == 0, out
+    wait.assert_not_called()
+    assert "Examples: iris" not in out
+    warning = "This local home has no iris example: examples are added on its first run only"
+    assert (warning in out) == given
 
 
 def test_ingestion_runs_the_cli_module_without_remote_overrides(stack, tmp_path, monkeypatch):

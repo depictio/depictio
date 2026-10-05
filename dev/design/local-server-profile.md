@@ -91,13 +91,23 @@ the binaries, one directory per service, `logs/`, and three small files. The hom
   start time differs (reused after a reboot) is never signalled. A stop signals the
   whole process group, so Celery pool processes and Chromium go too.
 - **Startup.** Ready means the API answers `/health` on its port, then the worker is
-  checked alive; a service that dies names its log. Ctrl-C during startup stops
+  checked alive, then the requested examples have their Delta tables. The API
+  loads them in a background thread after `/health` answers, and a server stopped
+  in those seconds would keep them half loaded, since later boots skip the
+  reference projects. `up` waits up to 2 minutes and names an example still
+  loading. On a first run (`first_run` in `state.json`: started on an empty
+  database) a missing data collection is still to come, since the example projects
+  are created one after the other; later it is one the home was created without
+  (examples are seeded on its first run only), which is not waited for. A service that dies names its log. Ctrl-C during startup stops
   what that run started and exits 130. A failed check (platform, missing server
   packages) never touches a server that is already running. A conda-forge download
   failure is a one-line error.
 - **Isolation.** Inherited `DEPICTIO_*` variables, set for another instance, are
   dropped, except the telemetry opt-out. `DEPICTIO_CLI_*` overrides do not reach
-  the ingestion subprocess.
+  the ingestion subprocess. The API, the worker and the ingestion get `127.0.0.1`
+  added to `no_proxy`, since boto3 and httpx otherwise send loopback traffic
+  through a proxy set in the environment; `weed mini` runs without the proxy
+  variables and with its telemetry off.
 - **Data.** Kept from one `up` to the next; `wipe` deletes it and keeps the binaries.
 
 ## Hand-over to Docker Compose
@@ -108,7 +118,10 @@ on the same data:
 1. Stops the local server if it is running, so the copy is consistent, and says so.
    Everything that can fail beforehand (no data, non-empty `DIR`, no compose file)
    is checked first, so a refused export leaves the server running.
-2. Copies the MongoDB and SeaweedFS data and the three key files into `DIR/data`.
+2. Makes `DIR` owner-only (`0700`), like the local home: the copies keep their
+   modes, and `data/keys` holds the token-signing key. Containers reach their bind
+   mounts without going through it. Then copies the MongoDB and SeaweedFS data and
+   the three key files into `DIR/data`.
    The data is copied, not shared: MongoDB must never run twice on one data
    directory, and the local server stays usable. Redis holds only cache and queue,
    and thumbnails are re-rendered, so neither is carried over.
@@ -286,3 +299,15 @@ the cards (8 → 2 libraries) and carry over from one tab to the next.
    console.
 9. **Data**: kept from one `up` to the next, and `wipe` deletes it. Should an
    ephemeral mode be the default instead?
+10. **Shared machines**: owner-only files protect the data on disk, not the running
+    server. On a machine with other users, such as an HPC login node, they can reach
+    every port on `127.0.0.1`: the API in single-user mode (anonymous requests act
+    as the admin), `mongod` without `--auth`, Redis without a password, and the
+    SeaweedFS filer, which serves objects without S3 credentials. The docs warn
+    about it. Closing it means `mongod --auth` and `redis-server --requirepass` with
+    generated secrets, SeaweedFS JWT keys in `security.toml`, and a login in front
+    of the API.
+11. **Reference processing is not resumed** (Docker included): once
+    `initialization_complete` is set, a boot never processes the reference projects
+    again, so an interrupted first processing stays incomplete. `up` waits for the
+    examples, which avoids it locally; a server-side resume is a follow-up.
