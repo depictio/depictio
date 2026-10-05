@@ -1,18 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Paper,
-  Text,
-  Stack,
-  Badge,
-  Group,
-  useMantineColorScheme,
-} from '@mantine/core';
+import { Paper, Text, Stack, Badge, Group, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
-// Vite resolve.alias in depictio/viewer/vite.config.ts rewrites bare
-// `plotly.js` to `plotly.js/dist/plotly`, so this import grabs the prebuilt
-// browser UMD bundle that react-plotly.js itself uses internally — no
-// `buffer/` source walk, no extra bundle weight, single Plotly instance.
-import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
 import {
@@ -38,6 +26,8 @@ import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { stripOverlayPoints, supportsAnnotation } from '../annotations/layer';
+import { clearDrawnSelection, usePlotAnnotationLayer } from './annotations/usePlotAnnotationLayer';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -240,14 +230,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
 
   const handleSelected = (event: any) => {
     if (!selectionEnabled || !selectionColumn) return;
-    const values = extractScatterSelection(event, selectionColumnIndex);
+    const values = extractScatterSelection(stripOverlayPoints(event), selectionColumnIndex);
     emitSelection(values);
   };
 
   const handleClick = (event: any) => {
     if (!selectionEnabled || !selectionColumn) return;
     // Treat single-point click as a one-element selection — Dash does the same.
-    const values = extractScatterSelection(event, selectionColumnIndex);
+    const values = extractScatterSelection(stripOverlayPoints(event), selectionColumnIndex);
     emitSelection(values);
   };
 
@@ -255,15 +245,6 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     if (!selectionEnabled) return;
     emitSelection([]);
   };
-
-  // Plotly graph div captured on init/update so we can imperatively clear the
-  // visual lasso/box selection when the user clicks the chrome reset button.
-  // react-plotly.js is a controlled wrapper for `data` + `layout`, but the
-  // drawn selection lives in Plotly's internal UI state (`layout.selections`
-  // and per-trace `selectedpoints`) which isn't reflected back into our props.
-  // Forcing those to null via `relayout` / `restyle` is the documented escape
-  // hatch.
-  const gdRef = useRef<HTMLElement | null>(null);
 
   const hasOwnSelection = useMemo(() => {
     return filters.some(
@@ -287,35 +268,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     prevHadOwnSelection.current = hasOwnSelection;
     if (!wasActive || hasOwnSelection) return;
 
-    const gd = gdRef.current;
-    if (!gd) return;
-
-    // Plotly methods accept a string selector or HTMLElement. The Plot's gd
-    // is the chart container; relayout({selections: null}) wipes drawn
-    // selection shapes (lasso/box outline) and restyle({selectedpoints:
-    // null}) restores the un-dimmed look on every trace. Wrapped in
-    // try/catch because the gd may have unmounted between scheduling and
-    // running, and Plotly raises on a detached div.
-    try {
-      // Casts: @types/plotly.js wants Plotly types on gd but the wrapper
-      // exposes a regular HTMLElement that Plotly accepts at runtime; and
-      // `selections` / `selectedpoints` aren't in the typed layout/style
-      // surface but Plotly accepts them as a known clear-state idiom.
-      const target = gd as unknown as Parameters<typeof Plotly.relayout>[0];
-      Plotly.relayout(target, { selections: null } as Partial<Plotly.Layout>).catch(() => {});
-      const data = (gd as unknown as { data?: unknown[] }).data;
-      const traceCount = Array.isArray(data) ? data.length : 0;
-      if (traceCount > 0) {
-        const indices = Array.from({ length: traceCount }, (_, i) => i);
-        Plotly.restyle(
-          target,
-          { selectedpoints: [null] } as Partial<Plotly.PlotData>,
-          indices,
-        ).catch(() => {});
-      }
-    } catch {
-      // best-effort: gd may have unmounted between schedule and run
-    }
+    // relayout({selections: null}) wipes drawn selection shapes (lasso/box
+    // outline) and restyle({selectedpoints: null}) restores the un-dimmed
+    // look on every trace.
+    clearDrawnSelection(annotations.gdRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasOwnSelection]);
 
   // ── New-item highlight pipeline ───────────────────────────────────────────
@@ -423,7 +380,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return overlayTrace ? [...base, overlayTrace] : base;
   }, [figure, overlayTrace, glGranted]);
 
-  const layout = useMemo<Record<string, unknown>>(() => {
+  const baseLayout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {
       ...((figure?.layout as Record<string, unknown>) || {}),
       autosize: true,
@@ -459,7 +416,27 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // changes don't bump refreshTick, so zoom/pan still survive those.
     base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
+    // uirevision above stays tied to refreshTick only: entering or leaving
+    // annotate mode, or adding an annotation, must not reset the user's zoom.
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale]);
+
+  // ── Annotation layer ──────────────────────────────────────────────────────
+  // Datawrapper-style annotations (ranges, reference lines, marked points,
+  // arrow notes) are drawn client-side on top of the server figure, and in
+  // annotate mode Plotly gestures draw new ones instead of filtering. Marked
+  // points match on the raw server traces (before the GL fallback and the
+  // new-items halo).
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAnnotation(metadata),
+    data: figureData,
+    layout: baseLayout,
+    sourceData: figure?.data,
+    pointIdIndex: selectionColumnIndex,
+    pointIdColumn: selectionColumn,
+  });
+
+  const missingPointsBadges = annotations.badges;
 
   // "N of M points" indicator. Passive/informational — the full-load toggle
   // itself lives in the component chrome (see the onLoadAllState effect below),
@@ -558,7 +535,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {(metadata.title || reductionBadge || groupedBadge) && (
+      {(metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0) && (
         <Group gap="xs" mb="xs" wrap="nowrap">
           {metadata.title && (
             <Text fw={600} size="sm">
@@ -567,6 +544,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           )}
           {reductionBadge}
           {groupedBadge}
+          {missingPointsBadges}
         </Group>
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
@@ -578,22 +556,21 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       {figure && (
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
-            data={figureData as any[]}
-            layout={layout}
+            data={annotations.data as any[]}
+            layout={annotations.layout}
             revision={refreshTick ?? 0}
             config={{ displaylogo: false, responsive: true }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
-            onInitialized={(_fig, gd) => {
-              gdRef.current = gd as HTMLElement;
-            }}
-            onUpdate={(_fig, gd) => {
-              gdRef.current = gd as HTMLElement;
-            }}
-            onSelected={selectionEnabled ? handleSelected : undefined}
-            onClick={selectionEnabled ? handleClick : undefined}
-            onDeselect={selectionEnabled ? handleDeselect : undefined}
+            // In annotate mode the selection handlers are detached: gestures
+            // draw annotations and never filter the dashboard.
+            {...annotations.plotProps({
+              onSelected: selectionEnabled ? handleSelected : undefined,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
           />
+          {annotations.toolbar}
           <RefetchOverlay visible={showRefetchOverlay} />
         </div>
       )}

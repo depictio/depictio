@@ -18,6 +18,10 @@ import {
   hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
 import {
   VizControlGroup,
   VizNumberInput,
@@ -139,42 +143,29 @@ function withAlpha(colour: string, alpha: number): string {
 }
 
 /**
- * Pure presentation wrapper around `<Plot>`, memoised on the figure identity
- * so parent re-renders (filter churn, refresh ticks) don't rebuild the Plotly
- * figure and drop an in-flight zoom / select drag.
+ * Pure presentation wrapper around `<Plot>`, memoised on the (already themed
+ * and annotated) figure and on each handler, so parent re-renders (filter
+ * churn, refresh ticks) don't rebuild the Plotly figure and drop an in-flight
+ * zoom / select drag. The selection handlers arrive gesture-guarded from the
+ * renderer (see selectionGesture), so annotate mode can detach them as a pair.
  */
-const ProfilePlot = React.memo<{
-  figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  isDark: boolean;
-  theme: ReturnType<typeof useMantineTheme>;
-  plotConfig: Record<string, unknown>;
-  onSelected?: (event: any) => void;
-  onClick?: (event: any) => void;
-  onDeselect?: () => void;
-}>(({ figure, isDark, theme, plotConfig, onSelected, onClick, onDeselect }) => {
-  const themedData = useMemo(
-    () => applyDataTheme(figure.data, isDark, theme),
-    [figure.data, isDark, theme],
-  );
-  const themedLayout = useMemo(
-    () => applyLayoutTheme(figure.layout as any, isDark, theme),
-    [figure.layout, isDark, theme],
-  );
-  const selection = useGestureGuardedSelection(onSelected);
-  return (
-    <Plot
-      data={themedData as any}
-      layout={themedLayout as any}
-      useResizeHandler
-      style={PLOT_STYLE}
-      config={plotConfig as any}
-      onSelecting={selection.onSelecting}
-      onSelected={selection.onSelected}
-      onClick={onClick}
-      onDeselect={onDeselect}
-    />
-  );
-});
+const ProfilePlot = React.memo<
+  {
+    data: unknown[];
+    layout: Record<string, unknown>;
+    plotConfig: Record<string, unknown>;
+  } & PlotEventHandlers &
+    PlotGraphHandlers
+>(({ data, layout, plotConfig, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={plotConfig as any}
+    {...handlers}
+  />
+));
 ProfilePlot.displayName = 'ProfilePlot';
 
 /**
@@ -660,6 +651,9 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     [emitSelection],
   );
   const handleDeselect = useCallback(() => emitSelection([]), [emitSelection]);
+  // Only a gesture may empty the selection (see selectionGesture). Guarded
+  // here rather than inside the plot so annotate mode detaches both halves.
+  const guardedSelection = useGestureGuardedSelection(selectionEnabled ? handleSelected : undefined);
 
   // Encoding tier: the axis scales and the slope panel decide what the curve
   // says (a power law is only a line on log-log). Width, band and legend are
@@ -750,6 +744,24 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   // Whether any series matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. `customdata` holds the series, shared by every point
+  // of a curve, so marked points are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+  });
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -762,17 +774,23 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {groupedFigure ? (
-        <ProfilePlot
-          figure={groupedFigure}
-          isDark={isDark}
-          theme={theme}
-          plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
-          onSelected={selectionEnabled ? handleSelected : undefined}
-          onClick={selectionEnabled ? handleClick : undefined}
-          onDeselect={selectionEnabled ? handleDeselect : undefined}
-        />
+        <>
+          <ProfilePlot
+            data={annotations.data}
+            layout={annotations.layout}
+            plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
+            {...annotations.plotProps({
+              onSelecting: guardedSelection.onSelecting,
+              onSelected: guardedSelection.onSelected,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

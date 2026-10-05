@@ -46,6 +46,8 @@ import {
   type DeTier,
   type DeView,
 } from './deViews';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 
 interface VolcanoConfig {
   feature_id_col: string;
@@ -545,6 +547,32 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // Whether any point matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. Slot 0 of `customdata` is what marked points are keyed
+  // on: the label (the feature id when there is no label column) in the
+  // volcano and MA views, the feature id in the QQ view (only set when the
+  // binding names one). The views have different axes, so annotations are
+  // stored per view once the tile offers more than one.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 0,
+    pointIdColumn:
+      (activeView === 'qq' ? config.feature_id_col : config.label_col || config.feature_id_col) ||
+      undefined,
+    variant: offered.length > 1 ? activeView : undefined,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Volcano plot'}
@@ -558,6 +586,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       dataColumns={requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
+      badges={annotations.badges}
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {
@@ -576,13 +605,17 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       }
     >
       {groupedFigure ? (
-        <Plot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <>
+          <Plot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

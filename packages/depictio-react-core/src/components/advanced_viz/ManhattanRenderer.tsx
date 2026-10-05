@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+
 import {
   fetchAdvancedVizData,
   InteractiveFilter,
@@ -1158,6 +1161,18 @@ const ManhattanRenderer: React.FC<Props> = ({
     [groupedFigure, isDark, theme],
   );
 
+  // Chart annotations. Slot 0 of `customdata` holds the selection value when
+  // the component selects; otherwise marked points are stored as coordinates.
+  // In annotate mode the selection handlers are detached (see plotProps).
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotFigure?.data,
+    layout: plotFigure?.layout,
+    pointIdIndex: 0,
+    pointIdColumn: selectionColumn,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Manhattan'}
@@ -1171,19 +1186,25 @@ const ManhattanRenderer: React.FC<Props> = ({
       dataColumns={requiredCols}
       counts={counts}
       tierAnnotation={tierAnnotation}
+      badges={annotations.badges}
     >
       {plotFigure ? (
-        <Plot
-          data={plotFigure.data}
-          layout={plotFigure.layout}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={PLOT_CONFIG}
-          onSelecting={handleSelecting}
-          onSelected={handleSelected}
-          onClick={selectionEnabled ? handleClick : undefined}
-          onDeselect={selectionEnabled ? handleDeselect : undefined}
-        />
+        <>
+          <Plot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={PLOT_CONFIG}
+            {...annotations.plotProps({
+              onSelecting: handleSelecting,
+              onSelected: handleSelected,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

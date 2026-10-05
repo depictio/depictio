@@ -16,6 +16,10 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -128,33 +132,23 @@ function isMember(value: unknown): boolean {
 }
 
 /**
- * Pure presentation wrapper. Memoised on (figure, isDark, theme) so a parent
- * re-render driven by filter or refresh state doesn't hand Plotly fresh data +
- * layout objects and rebuild the figure mid-interaction.
+ * Pure presentation wrapper. Memoised on the (already themed and annotated)
+ * figure and on each handler so a parent re-render driven by filter or
+ * refresh state doesn't hand Plotly fresh data + layout objects and rebuild
+ * the figure mid-interaction.
  */
-const GseaPlot = React.memo<{
-  figure: { data: unknown[]; layout: Record<string, unknown> };
-  isDark: boolean;
-  theme: ReturnType<typeof useMantineTheme>;
-}>(({ figure, isDark, theme }) => {
-  const themedData = useMemo(
-    () => applyDataTheme(figure.data, isDark, theme),
-    [figure.data, isDark, theme],
-  );
-  const themedLayout = useMemo(
-    () => applyLayoutTheme(figure.layout, isDark, theme),
-    [figure.layout, isDark, theme],
-  );
-  return (
-    <Plot
-      data={themedData as any}
-      layout={themedLayout as any}
-      useResizeHandler
-      style={PLOT_STYLE}
-      config={PLOT_CONFIG as any}
-    />
-  );
-});
+const GseaPlot = React.memo<
+  { data: unknown[]; layout: Record<string, unknown> } & PlotEventHandlers & PlotGraphHandlers
+>(({ data, layout, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={PLOT_CONFIG as any}
+    {...handlers}
+  />
+));
 GseaPlot.displayName = 'GseaPlot';
 
 const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
@@ -525,7 +519,7 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       showgrid: true,
     };
 
-    return { data: data as unknown[], layout };
+    return { data: data as unknown[], layout, singlePanel: panels.length === 1 };
   }, [
     shown,
     colourMap,
@@ -595,6 +589,26 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
     </VizControlGroup>
   );
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (figure ? applyLayoutTheme(figure.layout, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  // Chart annotations, on the curve-alone view only: the hit rug, the ranked
+  // metric and the faceted layout each stack another y axis on the rank axis.
+  // Curve points are ranks, not rows, so marked points are stored as
+  // coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && !!figure?.singlePanel,
+    data: plotData,
+    layout: plotLayout,
+  });
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -608,8 +622,14 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       emptyMessage={rows && !figure ? 'No gene set to walk' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
-      {figure ? <GseaPlot figure={figure} isDark={isDark} theme={theme} /> : null}
+      {figure ? (
+        <>
+          <GseaPlot data={annotations.data} layout={annotations.layout} {...annotations.plotProps()} />
+          {annotations.toolbar}
+        </>
+      ) : null}
     </AdvancedVizFrame>
   );
 };

@@ -12,6 +12,10 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
@@ -74,35 +78,24 @@ const PLOT_CONFIG = {
 };
 
 /**
- * Pure presentation wrapper around <Plot>. Memoised on (figure ref,
- * isDark, theme) so parent re-renders triggered by filter / refresh state
- * don't churn the data + layout props passed to Plotly — that churn was
- * forcing Plotly.react() to rebuild the figure and dropping any in-flight
- * zoom box selection mid-drag.
+ * Pure presentation wrapper around <Plot>. Memoised on the (already themed
+ * and annotated) figure and on each handler so parent re-renders triggered by
+ * filter / refresh state don't churn the data + layout props passed to
+ * Plotly — that churn was forcing Plotly.react() to rebuild the figure and
+ * dropping any in-flight zoom box selection mid-drag.
  */
-const RarefactionPlot = React.memo<{
-  figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  isDark: boolean;
-  theme: ReturnType<typeof useMantineTheme>;
-}>(({ figure, isDark, theme }) => {
-  const themedData = useMemo(
-    () => applyDataTheme(figure.data, isDark, theme),
-    [figure.data, isDark, theme],
-  );
-  const themedLayout = useMemo(
-    () => applyLayoutTheme(figure.layout as any, isDark, theme),
-    [figure.layout, isDark, theme],
-  );
-  return (
-    <Plot
-      data={themedData as any}
-      layout={themedLayout as any}
-      useResizeHandler
-      style={PLOT_STYLE}
-      config={PLOT_CONFIG as any}
-    />
-  );
-});
+const RarefactionPlot = React.memo<
+  { data: unknown[]; layout: Record<string, unknown> } & PlotEventHandlers & PlotGraphHandlers
+>(({ data, layout, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={PLOT_CONFIG as any}
+    {...handlers}
+  />
+));
 RarefactionPlot.displayName = 'RarefactionPlot';
 
 // Shared tab10 palette via colors.ts so cross-viz colour assignments stay
@@ -523,6 +516,34 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
     />
   );
 
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. A point is a sample's mean at one depth, not a row,
+  // so marked points are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+  });
+  const plot = groupedFigure ? (
+    <>
+      <RarefactionPlot
+        data={annotations.data}
+        layout={annotations.layout}
+        {...annotations.plotProps()}
+      />
+      {annotations.toolbar}
+    </>
+  ) : null;
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -535,6 +556,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {metricOptions.length > 1 ? (
         // Tabs switcher (same pattern as DaBarplotRenderer's contrast switcher) —
@@ -555,19 +577,11 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
               </Tabs.Tab>
             ))}
           </Tabs.List>
-          <div style={PLOT_CONTAINER_STYLE}>
-            {groupedFigure ? (
-              <RarefactionPlot
-                figure={groupedFigure}
-                isDark={isDark}
-                theme={theme}
-              />
-            ) : null}
-          </div>
+          <div style={PLOT_CONTAINER_STYLE}>{plot}</div>
         </Tabs>
-      ) : groupedFigure ? (
-        <RarefactionPlot figure={groupedFigure} isDark={isDark} theme={theme} />
-      ) : null}
+      ) : (
+        plot
+      )}
     </AdvancedVizFrame>
   );
 };

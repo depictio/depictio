@@ -237,3 +237,18 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+/* A component with comment threads keeps its comments icon (and its count
+ * badge) on screen without hover, like the selection hint above: the icon is a
+ * Mantine `light` ActionIcon carrying its own tint, so it needs no backdrop. */
+.depictio-component-actions > .depictio-comments-persistent {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Annotate mode is a state, not a hover affordance: its toggle stays visible
+ * while the figure is being annotated so the way out is always on screen. */
+.depictio-component-actions > .depictio-annotate-active {
+  opacity: 1;
+  pointer-events: auto;
+}
