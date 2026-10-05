@@ -19,19 +19,25 @@
 #   MongoDB ×3        2.1 CPU / 4.5 GiB  2.1 CPU / 4.5G  4.2 CPU / 9 GiB
 #   Redis             0.5 CPU / 512 Mi   0.5 CPU / 512M  1 CPU / 1 GiB
 #   TOTAL             ~15.6 CPU / ~29 G  ~12.6 CPU / ~24 ~28 CPU / ~53 GiB ✅
+#
+# Pods are also capped at 10 per namespace (Capsule quota, seen 2026-10-05),
+# which is what limits the viewer to one replica below.
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:
   autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
-# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
-# zero-downtime rolling deploy (no PVC, so RollingUpdate is safe here).
+# Viewer (nginx SPA) — stateless and tiny: one replica, rolled with a surge
+# pod so a deploy has no downtime (no PVC, so RollingUpdate is safe here).
+# One replica, not two, because the namespace is capped at 10 pods: with
+# backend ×2, celery ×2, MongoDB ×3 and Redis, a second viewer leaves no room
+# for the pre-upgrade wipe job, and every upgrade hangs until Helm times out.
 viewer:
-  replicas: 2
+  replicas: 1
   strategy: "RollingUpdate"
 
 # Protect the multi-replica workloads during node drains / cluster upgrades.
-# dev runs >1 replica for backend, viewer AND celery, so all three get a PDB.
+# Only components with >1 replica get a PDB here: backend and celery.
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
