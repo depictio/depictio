@@ -50,6 +50,10 @@ interface StackedTaxonomyConfig {
    *  reads its values from the row's metadata column at the matching
    *  sample. Renderer ensures the fetched column list includes these. */
   annotation_strips?: AnnotationStrip[] | null;
+  /** Taxon → colour overrides. The default cycle has twelve hues, so a top-15
+   *  view always repeats some; pinning the taxa a reader compares keeps them
+   *  apart and keeps them the same colour across dashboards. */
+  taxon_palette?: Record<string, string> | null;
 }
 
 interface Props {
@@ -259,7 +263,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     // the top-N colours. Universe = all taxa in the DC; fallback = the filtered
     // top-N set ordered as they appear in tracesByTaxon.
     const taxaForPalette = Array.from(tracesByTaxon.keys()).filter((t) => t !== 'Other');
-    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette);
+    const colourSource = stableColorMap(
+      taxonUniverse ?? taxaForPalette,
+      palette,
+      config.taxon_palette ?? null,
+    );
     const data = Array.from(tracesByTaxon.entries())
       .filter(([, arr]) => arr.some((v) => v > 0))
       .map(([t, arr]) => ({
