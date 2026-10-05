@@ -86,6 +86,8 @@ def test_export_compose_copies_data_and_pins_the_local_versions(
     assert f"DEPICTIO_S3_ROOT_USER={local_stack.S3_USER}" in env
     assert "DEPICTIO_VERSION=9.8.7" in env.splitlines()
     assert oct((out / ".env").stat().st_mode & 0o777) == "0o600"
+    # data/keys holds the token-signing key, copied with its mode.
+    assert oct(out.stat().st_mode & 0o777) == "0o700"
     source.stop_all.assert_not_called()
 
 

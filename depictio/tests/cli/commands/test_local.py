@@ -90,6 +90,17 @@ def test_server_env_keeps_the_telemetry_opt_out(paths, monkeypatch):
     assert env["DEPICTIO_TELEMETRY_DEPLOYMENT_KIND"] == "local"
 
 
+def test_the_server_and_ingestion_reach_127_0_0_1_without_the_proxy(paths, monkeypatch):
+    monkeypatch.setenv("http_proxy", "http://proxy:3128")
+    monkeypatch.setenv("no_proxy", "localhost,.example.org")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    assert env["no_proxy"] == env["NO_PROXY"] == "localhost,.example.org,127.0.0.1,localhost"
+    assert local_stack._ingestion_env()["NO_PROXY"].endswith("127.0.0.1,localhost")
+
+
 @pytest.mark.parametrize(
     ("value", "template", "expected"),
     [
@@ -245,6 +256,7 @@ def test_state_reads_an_older_file_and_writes_the_same_keys(paths):
         "url",
         "home",
         "examples",
+        "first_run",
         "start_times",
     }
 
@@ -453,32 +465,100 @@ def test_example_tables_match_the_seeded_static_ids():
         assert set(dc_ids) == set(STATIC_IDS[name]["data_collections"].values())
 
 
-def _state_with_token(paths, examples: str) -> State:
+def _state_with_token(paths, examples: str, first_run: bool = False) -> State:
     paths.cli_config.write_text(yaml.safe_dump({"user": {"token": {"access_token": "t"}}}))
-    return State(ports={"api": 8058}, examples=examples)
+    return State(ports={"api": 8058}, examples=examples, first_run=first_run)
+
+
+class _Specs(http.server.BaseHTTPRequestHandler):
+    """The deltatables specs endpoint, whose 404s tell a missing collection from one loading."""
+
+    DETAILS = {
+        "loading": "No DeltaTable found for data collection loading",
+        "absent": "Data collection not found or access denied.",
+    }
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        detail = self.DETAILS.get(self.path.rsplit("/", 1)[-1])
+        self.send_response(404 if detail else 200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"detail": detail} if detail else {}).encode())
+
+    def log_message(self, *_args):
+        pass
+
+
+def test_table_status_tells_a_missing_collection_from_one_loading():
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Specs)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        statuses = {
+            dc: local_stack.table_status(url, "t", dc) for dc in ("ok", "loading", "absent")
+        }
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert statuses == {"ok": "ready", "loading": "loading", "absent": "absent"}
+    # An API that does not answer yet: keep waiting.
+    assert local_stack.table_status(f"http://127.0.0.1:{_free_ports(1)[0]}", "t", "x") == "loading"
 
 
 def test_wait_for_examples_returns_once_every_table_exists(paths, monkeypatch):
     calls = []
 
-    def table_ready(url, token, dc_id):
+    def table_status(url, token, dc_id):
         calls.append(dc_id)
-        return len(calls) > 3
+        return "ready" if len(calls) > 3 else "loading"
 
-    monkeypatch.setattr(local_stack, "table_ready", table_ready)
+    monkeypatch.setattr(local_stack, "table_status", table_status)
     state = _state_with_token(paths, "iris,penguins")
-    assert local_stack.wait_for_examples(paths, state, timeout=5, interval=0) == []
+    status = local_stack.wait_for_examples(paths, state, timeout=5, interval=0)
+    assert status == {"iris": "ready", "penguins": "ready"}
 
 
-def test_wait_for_examples_names_the_examples_still_missing(paths, monkeypatch):
-    monkeypatch.setattr(local_stack, "table_ready", lambda url, token, dc_id: dc_id == "x")
+def test_wait_for_examples_reports_the_examples_still_loading(paths, monkeypatch):
+    monkeypatch.setattr(local_stack, "table_status", lambda url, token, dc_id: "loading")
     state = _state_with_token(paths, "iris,penguins")
-    missing = local_stack.wait_for_examples(paths, state, timeout=0.05, interval=0.01)
-    assert missing == ["iris", "penguins"]
+    status = local_stack.wait_for_examples(paths, state, timeout=0.05, interval=0.01)
+    assert status == {"iris": "loading", "penguins": "loading"}
+
+
+def test_an_example_the_home_was_created_without_is_not_waited_for(paths, monkeypatch):
+    iris = local_stack.EXAMPLE_TABLES["iris"]
+    monkeypatch.setattr(
+        local_stack,
+        "table_status",
+        lambda url, token, dc_id: "ready" if dc_id in iris else "absent",
+    )
+    sleep = MagicMock()
+    monkeypatch.setattr(local_stack.time, "sleep", sleep)
+    state = _state_with_token(paths, "iris,penguins")
+
+    assert local_stack.wait_for_examples(paths, state) == {"iris": "ready", "penguins": "absent"}
+    sleep.assert_not_called()
+
+
+def test_on_a_first_run_an_example_not_created_yet_is_waited_for(paths, monkeypatch):
+    # The penguins project is only created once iris is processed.
+    rounds = []
+
+    def table_status(url, token, dc_id):
+        if dc_id == local_stack.EXAMPLE_TABLES["iris"][0]:
+            rounds.append(dc_id)
+            return "ready"
+        return "ready" if len(rounds) > 2 else "absent"
+
+    monkeypatch.setattr(local_stack, "table_status", table_status)
+    state = _state_with_token(paths, "iris,penguins", first_run=True)
+    status = local_stack.wait_for_examples(paths, state, timeout=5, interval=0)
+    assert status == {"iris": "ready", "penguins": "ready"}
 
 
 def test_no_examples_means_nothing_to_wait_for(paths, monkeypatch):
-    monkeypatch.setattr(local_stack, "table_ready", MagicMock(side_effect=AssertionError))
-    assert local_stack.examples_loading(paths, State(examples="none")) == []
+    monkeypatch.setattr(local_stack, "table_status", MagicMock(side_effect=AssertionError))
+    assert local_stack.examples_status(paths, State(examples="none")) == {}
     # A state.json from before `examples` was recorded.
-    assert local_stack.examples_loading(paths, State()) == []
+    assert local_stack.examples_status(paths, State()) == {}
