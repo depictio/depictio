@@ -65,7 +65,8 @@ test.describe("Local mode (depictio local up)", () => {
   });
 
   test("the seeded iris dashboard is listed", async ({ page }) => {
-    await page.goto("/dashboards");
+    // The grid, not the table: the card locator below only exists there.
+    await page.goto("/dashboards?view=thumbnails");
     await expect(
       page.locator("[data-testid='dashboard-card']").filter({ hasText: "Iris" }).first(),
     ).toBeVisible({ timeout: 30_000 });
