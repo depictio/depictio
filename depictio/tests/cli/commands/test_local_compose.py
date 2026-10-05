@@ -8,6 +8,7 @@ import pytest
 
 from depictio.cli.cli import local_compose, local_stack
 from depictio.cli.cli.local_stack import LocalStackError, Paths
+from depictio.cli.cli.utils import telemetry
 
 COMPOSE = b"services: {}\n"
 
@@ -161,8 +162,9 @@ def test_a_failed_download_names_the_url(monkeypatch):
     [
         ({"depictio": "1.2.3", "depictio-cli": "1.2.3"}, "1.2.3"),
         ({"depictio-cli": "1.2.3"}, "1.2.3"),
-        ({"depictio": "1.2.3b1"}, None),
-        ({"depictio-cli": "1.2.3-b1"}, None),
+        # A beta's package version, spelled as its tag and images are.
+        ({"depictio": "1.2.3b1"}, "1.2.3-b1"),
+        ({"depictio": "1.2.3.dev4"}, None),
         ({}, None),
     ],
 )
@@ -172,7 +174,7 @@ def test_release_version_names_only_published_releases(monkeypatch, installed, e
             raise importlib.metadata.PackageNotFoundError(dist)
         return installed[dist]
 
-    monkeypatch.setattr(importlib.metadata, "version", version)
+    monkeypatch.setattr(telemetry, "_pkg_version", version)
     assert local_compose.release_version() == expected
 
 

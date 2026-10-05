@@ -128,7 +128,7 @@ on the same data:
 3. Writes the `docker-compose.yaml` that matches the running code: the checkout's
    own file when run from a source checkout (it matches the code even where the
    version number still names the last release), else the file of the `v<version>`
-   tag, downloaded through any configured proxy. A dev or beta build outside a
+   tag, downloaded through any configured proxy. A dev build outside a
    checkout is refused with a message, since no published file matches it.
 4. Writes `docker-compose.override.yaml`: the `mongo` and `chrislusf/seaweedfs`
    images at the exact versions the local server wrote the data with (read from the

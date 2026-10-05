@@ -107,13 +107,9 @@ def display_depictio_cli_logo() -> None:
         "pink": "#E6779F",
     }
 
-    from importlib.metadata import PackageNotFoundError
-    from importlib.metadata import version as _pkg_version
+    from depictio.cli.cli.utils.telemetry import cli_version as _cli_version
 
-    try:
-        cli_version = _pkg_version("depictio-cli")
-    except PackageNotFoundError:
-        cli_version = "dev"
+    cli_version = _cli_version()
 
     # Pre-rendered favicon (20x8 chars), generated offline from the logo PNG by
     # snapping each pixel to the nearest brand colour - sharp wedge edges without

@@ -65,14 +65,17 @@ _DEFAULT_API_KEY: Final[str] = DEFAULT_API_KEY
 
 
 def cli_version() -> str:
-    """Installed ``depictio-cli`` version, or ``"dev"`` from a source checkout.
+    """Installed version of the CLI, or ``"dev"`` from a source checkout.
 
-    Same resolution the startup banner and the ``version`` command already use.
+    The CLI ships in two distributions with the same version number: ``depictio``
+    (the full server) and ``depictio-cli`` (the client only).
     """
-    try:
-        return _pkg_version("depictio-cli")
-    except PackageNotFoundError:
-        return "dev"
+    for dist in ("depictio", "depictio-cli"):
+        try:
+            return _pkg_version(dist)
+        except PackageNotFoundError:
+            continue
+    return "dev"
 
 
 def _env_flag(name: str, default: bool) -> bool:

@@ -1,5 +1,3 @@
-from importlib.metadata import PackageNotFoundError, version
-
 import click
 import typer
 
@@ -8,11 +6,9 @@ def register_standalone_commands(app: typer.Typer):
     @app.command("version")
     def version_cmd():
         """Show version information"""
-        try:
-            package_version = version("depictio-cli")  # Replace with your actual package name
-            typer.echo(f"Depictio CLI version: {package_version}")
-        except PackageNotFoundError:
-            typer.echo("Depictio CLI version: unknown (not installed)")
+        from depictio.cli.cli.utils.telemetry import cli_version
+
+        typer.echo(f"Depictio CLI version: {cli_version()}")
 
     @app.command("commands")
     def commands_cmd(ctx: typer.Context):
