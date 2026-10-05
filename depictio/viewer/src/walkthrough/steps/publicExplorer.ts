@@ -75,7 +75,7 @@ export function buildPublicExplorerWalkthrough(
         target: 'dashboard-card',
         route: /^\/dashboards\/?$/,
         title: 'Open a dashboard',
-        body: 'Click any dashboard card to dive in — the tour resumes inside.',
+        body: 'Click any dashboard to dive in — the tour resumes inside.',
         position: 'right',
         awaitClick: true,
       },

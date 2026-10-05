@@ -8,7 +8,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { createDashboard, deleteDashboard } from "@fixtures/dashboard";
+import { DASHBOARDS_GRID_URL, createDashboard, deleteDashboard } from "@fixtures/dashboard";
 
 test.describe("Create dashboard and verify it persists", () => {
   test.skip(
@@ -21,7 +21,7 @@ test.describe("Create dashboard and verify it persists", () => {
     page,
   }) => {
     await loginAsAdmin();
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
 
     const uniqueTitle = `Test Dashboard ${new Date()
       .toISOString()
@@ -33,7 +33,7 @@ test.describe("Create dashboard and verify it persists", () => {
     // (page.reload() leaves the viewer in a session-loading state which
     // temporarily disables ownership-gated actions like Delete.)
     await page.goto("/profile");
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await expect(
       page.locator("[data-testid='dashboard-card']").filter({ hasText: uniqueTitle }).first(),
     ).toBeVisible({ timeout: 15_000 });

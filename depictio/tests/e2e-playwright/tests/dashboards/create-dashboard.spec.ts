@@ -4,7 +4,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { createDashboard, deleteDashboard } from "@fixtures/dashboard";
+import { DASHBOARDS_GRID_URL, createDashboard, deleteDashboard } from "@fixtures/dashboard";
 
 test.describe("Create and manage dashboard", () => {
   test.skip(
@@ -17,7 +17,7 @@ test.describe("Create and manage dashboard", () => {
     page,
   }) => {
     await loginAsAdmin();
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await expect(page).toHaveURL(/\/dashboards/);
 
     const uniqueTitle = `Test Dashboard ${new Date()

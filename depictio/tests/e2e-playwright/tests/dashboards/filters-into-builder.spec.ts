@@ -18,7 +18,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { createDashboard, deleteDashboard } from "@fixtures/dashboard";
+import { DASHBOARDS_GRID_URL, createDashboard, deleteDashboard } from "@fixtures/dashboard";
 import type { Page } from "@playwright/test";
 
 /** Pick an option from an open Mantine Select/MultiSelect portal listbox. */
@@ -98,7 +98,7 @@ test.describe("Active filters propagate into the builder and new components", ()
   }) => {
     test.setTimeout(240_000);
     await loginAsAdmin();
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
 
     const uniqueTitle = `Filter Propagation ${new Date()
       .toISOString()
@@ -173,7 +173,7 @@ test.describe("Active filters propagate into the builder and new components", ()
     await expect(page.getByText(/of 150/)).toHaveCount(0);
 
     // Cleanup.
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await deleteDashboard(page, uniqueTitle);
   });
 });
