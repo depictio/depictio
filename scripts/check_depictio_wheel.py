@@ -20,6 +20,7 @@ REQUIRED = [
 ]
 FORBIDDEN = [
     r"depictio/tests/",
+    r"depictio/dev_scripts/",
     r"depictio/projects/nf-core/.*/docs/",
     # Thumbnails other than the iris and penguins dashboards.
     r"depictio/api/static/screenshots/(?!6824cb3b89d2b7216930973[78]_)",
