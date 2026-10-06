@@ -102,6 +102,7 @@ export const RenameGroupModal: React.FC<{
           <SidebarModalHeader icon="mdi:folder-edit-outline" title="Edit Group" />
           <TextInput
             label="Group name"
+            description="The heading its tabs sit under in the sidebar. Another group's name merges the two."
             required
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
