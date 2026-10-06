@@ -24,6 +24,7 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY packages/depictio-react-ai/package.json ./packages/depictio-react-ai/
 COPY depictio/viewer/package.json ./depictio/viewer/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
