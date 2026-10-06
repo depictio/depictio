@@ -119,3 +119,9 @@ ColumnType = Literal[
 
 # Figure mode (UI-based or code-based)
 FigureMode = Literal["ui", "code"]
+
+# How a metric card is drawn. Shared by a card's own `variant` and a grid
+# section's `card_variant` (the style its cards take unless they set one), so
+# the two can never drift apart. Mirrored by CARD_VARIANTS in
+# packages/depictio-react-core/src/components/cardVariant.ts.
+CardVariant = Literal["default", "headline", "compact", "minimal"]

@@ -25,3 +25,28 @@ describe('fitLayoutHeights', () => {
     expect(fitted[1].h).toBe(1);
   });
 });
+
+describe('fitLayoutHeights with compact cards', () => {
+  const layouts = [
+    { i: 'a', y: 0, h: 8 },
+    { i: 'b', y: 0, h: 8 },
+  ];
+
+  it('lets a row of compact cards shrink to the tallest of them', () => {
+    const members = [
+      { index: 'a', component_type: 'card', variant: 'compact' },
+      { index: 'b', component_type: 'card', variant: 'compact' },
+    ];
+    const fitted = fitLayoutHeights(members, layouts, { a: 60, b: 90 });
+    expect(fitted.map((l) => l.h)).toEqual([rowsForHeight(90), rowsForHeight(90)]);
+  });
+
+  it('keeps the authored height when a compact card shares its row with another style', () => {
+    const members = [
+      { index: 'a', component_type: 'card', variant: 'compact' },
+      { index: 'b', component_type: 'card', variant: 'headline' },
+    ];
+    const fitted = fitLayoutHeights(members, layouts, { a: 60, b: 90 });
+    expect(fitted.map((l) => l.h)).toEqual([8, 8]);
+  });
+});

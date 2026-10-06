@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DependencyList, type RefObject } from 'react';
 
 import { ROW_SPLIT } from '../gridConfig';
+import { resolveCardVariant } from './cardVariant';
 
 /**
  * The contract between a tile that knows how tall its content is and the grid
@@ -126,6 +127,9 @@ interface FittableMember {
   component_type?: string;
   /** A text tile's frame; framed tiles size as a row, like cards. */
   surface?: unknown;
+  /** A card's style, its section's already folded in: a row of compact cards
+   *  fits its content both ways. */
+  variant?: unknown;
 }
 
 /**
@@ -176,6 +180,18 @@ export function fitLayoutHeights<T extends SizedItem>(
       Math.max(framedRowDemand.get(l.y) ?? 0, rowsForHeight(measured, rowPx)),
     );
   }
+  // Rows on which every card is compact. A compact card exists to be low, and
+  // the height an author's card was created with (sized for a default card)
+  // would leave it a line of numbers floating in an empty tile. The whole row
+  // has to be compact for it to shrink, because a default or headline card
+  // beside it keeps its height, and the row would no longer line up.
+  const variantOf = new Map(members.map((m) => [m.index, m.variant]));
+  const compactRows = new Map<number, boolean>();
+  for (const l of layouts) {
+    if (!cardIds.has(l.i)) continue;
+    const compact = resolveCardVariant(variantOf.get(l.i)) === 'compact';
+    compactRows.set(l.y, (compactRows.get(l.y) ?? true) && compact);
+  }
   const cardRowDemand = new Map<number, number>();
   for (const l of layouts) {
     if (!cardIds.has(l.i) || !fittedIds.has(l.i)) continue;
@@ -192,8 +208,10 @@ export function fitLayoutHeights<T extends SizedItem>(
       // Cards grow, never shrink: a measurement says how much room the content
       // needs, not how much room the card is worth. A sparse card fitted to its
       // value alone would drop below the height its author gave it, and drop
-      // out of line with the row it belongs to.
-      const grown = demand ? Math.max(l.h, demand) : l.h;
+      // out of line with the row it belongs to. A row of nothing but compact
+      // cards is the exception (see `compactRows`): it is all the same low
+      // card, so it fits to the tallest of them either way.
+      const grown = demand ? (compactRows.get(l.y) ? demand : Math.max(l.h, demand)) : l.h;
       return grown === l.h ? l : { ...l, h: grown };
     }
     if (framedIds.has(l.i)) {

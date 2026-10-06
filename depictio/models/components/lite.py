@@ -35,6 +35,7 @@ from depictio.models.components.constants import (
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
 )
+from depictio.models.components.types import CardVariant
 
 
 class BaseLiteComponent(BaseModel):
@@ -242,12 +243,17 @@ class CardLiteComponent(BaseLiteComponent):
         "small icon on a tint of `icon_color`, always shown beside the title — for a "
         "row of headline numbers whose icons tie each card to a tab.",
     )
-    variant: Literal["default", "headline"] | None = Field(
+    variant: CardVariant | None = Field(
         default=None,
-        description="`headline`: a key-figure card for a landing page. The value is drawn "
-        "large, the icon sits faint on the right at all times, a coverage strip shrinks "
-        "to its bar and a composition strip to its bar and legend line (the rest stays "
-        "in the tooltip).",
+        description="How the card is drawn. Unset takes the style of the grid section "
+        "the card sits in (`card_variant`), else `default`: coloured title and value "
+        "over the aggregation label. `headline`: a key-figure card for a landing page. "
+        "The value is drawn large, the icon sits faint on the right at all times, a "
+        "coverage strip shrinks to its bar and a composition strip to its bar and "
+        "legend line (the rest stays in the tooltip). `compact`: a low card, title and "
+        "value on one line when the card is wide enough, no strip beyond a slim bar -- "
+        "for a strip of many small numbers. `minimal`: headline type with no frame, "
+        "shadow or background -- for figures sitting on a tinted section or in prose.",
     )
     decimals: int | None = Field(
         default=None,

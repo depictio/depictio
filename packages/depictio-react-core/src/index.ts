@@ -80,6 +80,17 @@ export {
   STAT_LIST_LAYOUTS,
 } from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
+// Card styles: the grid, the editor and the card builder resolve a card's style
+// against its section's through the same helpers.
+export {
+  CARD_VARIANTS,
+  normalizeCardVariant,
+  resolveCardVariant,
+  withSectionCardVariant,
+  variantForPick,
+  compactKeepsStrip,
+} from './components/cardVariant';
+export type { CardVariant } from './components/cardVariant';
 export type {
   HistogramPayload,
   ThresholdPayload,

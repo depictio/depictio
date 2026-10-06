@@ -4,6 +4,7 @@ import type { GridApi } from 'ag-grid-community';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
+import { compactKeepsStrip, resolveCardVariant } from './cardVariant';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
 import { useTabLinkResolver } from './tabLinks';
@@ -713,7 +714,15 @@ const CardRenderer: React.FC<{
     orderedSecondary.length > 0 ||
     ((metadata.secondary_layout === 'coverage' || metadata.secondary_layout === 'gauge') &&
       coverageMax !== null);
-  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent;
+  // The grid has already folded the section's `card_variant` into `variant`
+  // (see DashboardGrid), so this only has to tell a known style from noise.
+  const variant = resolveCardVariant(metadata.variant);
+  // A compact card is one line of numbers: it keeps a strip only when the strip
+  // is a single bar. The rest of the breakdown is still one hover away in the
+  // header tooltip, and switching the card back to another style restores it.
+  const stripFitsVariant =
+    variant !== 'compact' || compactKeepsStrip(metadata.secondary_layout as string | undefined);
+  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent && stripFitsVariant;
   // The compact one-line header (value beside the title) buys height for a
   // group-comparison strip, which stacks a row per group and would otherwise
   // not fit. A plain secondary view — a box plot, a donut, a top-N list — is a
@@ -825,7 +834,7 @@ const CardRenderer: React.FC<{
         icon_name={metadata.icon_name}
         icon_color={metadata.icon_color}
         icon_style={metadata.icon_style === 'badge' ? 'badge' : 'watermark'}
-        variant={metadata.variant === 'headline' ? 'headline' : 'default'}
+        variant={variant}
         title_color={metadata.title_color}
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
@@ -859,7 +868,9 @@ const CardRenderer: React.FC<{
                   }
                   coverageValue={typeof value === 'number' ? value : null}
                   coverageMax={coverageMax}
-                  minimal={metadata.variant === 'headline'}
+                  // Every style but the default draws its strip cut down to the
+                  // bar: the figure is the point, the breakdown is the tooltip.
+                  minimal={variant !== 'default'}
                   decimals={typeof metadata.decimals === 'number' ? metadata.decimals : undefined}
                 />
               )}

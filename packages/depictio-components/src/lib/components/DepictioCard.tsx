@@ -40,8 +40,12 @@ export interface DepictioCardProps {
    *  small icon on a tint of its colour, always shown beside the title. */
   icon_style?: 'watermark' | 'badge';
   /** `headline`: a key figure for a landing page — a large value, and the
-   *  icon resting faint on the right instead of appearing on hover. */
-  variant?: 'default' | 'headline';
+   *  icon resting faint on the right instead of appearing on hover.
+   *  `compact`: a low card for a strip of many small numbers — title and value
+   *  share one line when the card is wide enough, the icon sits small beside
+   *  the title. `minimal`: headline type with no frame, shadow or background,
+   *  for figures sitting on a tinted section or among prose. */
+  variant?: 'default' | 'headline' | 'compact' | 'minimal';
   title_color?: string;
   background_color?: string;
   /** Mantine size token: xs / sm / md / lg / xl. Mirrors `dmc.Text size=...`. */
@@ -80,6 +84,11 @@ export interface DepictioCardProps {
  *  content needs. */
 const CARD_MIN_CONTENT_HEIGHT = 120;
 
+/** A compact card's floor: one line of title and value, one of caption. Low
+ *  enough that a row of them reads as a strip of numbers rather than as cards,
+ *  and still the same for every card of the row so they line up. */
+const COMPACT_MIN_CONTENT_HEIGHT = 56;
+
 /** The tallest secondary strip (a box plot over its three numbers). */
 const HEADLINE_STRIP_MIN_PX = 60;
 
@@ -104,10 +113,17 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   contentRef,
 }) => {
   const hasCustomBg = !!background_color;
-  const headline = variant === 'headline' && !inline_header;
-  const badge = icon_name && icon_style === 'badge' && !headline;
+  // The one-line header a group comparison asks for overrides every style: it
+  // is what buys the strip its height.
+  const minimal = variant === 'minimal' && !inline_header;
+  const compact = variant === 'compact' && !inline_header;
+  // A minimal card is a headline card without its frame: same type, same
+  // resting icon, same held heights, so the two line up side by side.
+  const headline = (variant === 'headline' || minimal) && !inline_header;
+  const badge = icon_name && icon_style === 'badge' && !headline && !compact;
+  const minContentHeight = compact ? COMPACT_MIN_CONTENT_HEIGHT : CARD_MIN_CONTENT_HEIGHT;
   const iconNode =
-    icon_name && !inline_header && !badge ? (
+    icon_name && !inline_header && !badge && !compact ? (
       <Box className={headline ? 'depictio-card-icon depictio-card-icon--rest' : 'depictio-card-icon'}>
         <Icon icon={icon_name} style={{ color: icon_color || title_color || 'currentColor' }} />
       </Box>
@@ -177,6 +193,50 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         {value !== null && value !== undefined ? value : '—'}
       </Text>
     </Group>
+  ) : compact ? (
+    // Title and value side by side when the card is wide enough, stacked
+    // tight when it is not (DepictioCard.css flips the row on the card's own
+    // width): a strip of small cards is often eight to a row, too narrow for
+    // both on one line.
+    <div className="depictio-card-compact-row">
+      <Group gap={6} wrap="nowrap" align="center" style={{ minWidth: 0 }}>
+        {/* No corner to hide a watermark in on a card this low: the icon
+            moves beside the title, small and in its own colour. */}
+        {icon_name && (
+          <Icon
+            icon={icon_name}
+            width={16}
+            height={16}
+            style={{ color: icon_color || title_color || 'currentColor', flexShrink: 0 }}
+          />
+        )}
+        <Text
+          size={title_font_size === 'md' ? 'xs' : title_font_size}
+          fw={600}
+          c={title_color || undefined}
+          lineClamp={2}
+          style={{ margin: 0, minWidth: 0, lineHeight: 1.25, overflowWrap: 'break-word' }}
+        >
+          {title}
+        </Text>
+      </Group>
+      <Text
+        fw={800}
+        c={title_color || undefined}
+        style={{
+          margin: 0,
+          flexShrink: 0,
+          // Scales with the card like the headline value, on a lower ceiling:
+          // the number still leads, but the card stays a line high.
+          fontSize: 'clamp(18px, 12cqw, 24px)',
+          lineHeight: 1.1,
+          letterSpacing: '-0.01em',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {value !== null && value !== undefined ? value : '—'}
+      </Text>
+    </div>
   ) : headline ? (
     <>
       <Text
@@ -261,14 +321,20 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   return (
     <Card
       withBorder
-      shadow="sm"
+      // No shadow on a minimal card: with the frame gone it would be the one
+      // edge left, floating under nothing.
+      shadow={minimal ? undefined : 'sm'}
       radius={hasCustomBg ? 8 : 'sm'}
       padding={0}
-      className="depictio-card"
+      className={
+        'depictio-card' +
+        (minimal ? ' depictio-card--minimal' : '') +
+        (compact ? ' depictio-card--compact' : '')
+      }
       style={{
         boxSizing: 'content-box',
         height: '100%',
-        minHeight: CARD_MIN_CONTENT_HEIGHT,
+        minHeight: minContentHeight,
         position: 'relative',
         // Flex column with ``justifyContent: center`` so the content cluster
         // (Card.Section) and the optional ``secondaryStrip`` are vertically
@@ -287,7 +353,10 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         // Paper-based renderers (figures, tables, interactives) use. Force
         // body so cards visually match the rest of the dashboard. Custom
         // YAML-supplied colors still win.
-        backgroundColor: background_color || 'var(--mantine-color-body)',
+        // A minimal card shows what it sits on — a tinted section, a page —
+        // unless the author gave it a colour of its own.
+        backgroundColor:
+          background_color || (minimal ? 'transparent' : 'var(--mantine-color-body)'),
       }}
     >
       {/* Icon overlay — top-right (narrow) or vertically-centred right
@@ -321,7 +390,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          minHeight: CARD_MIN_CONTENT_HEIGHT,
+          minHeight: minContentHeight,
           width: '100%',
           minWidth: 0,
           // A headline card's icon rests inside the content, level with the
@@ -336,7 +405,10 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           (e.g. box-plot) sits closer to the value, not separated by a wide
           gap. */}
       <Card.Section
-        p={hasCustomBg || headline ? '1rem' : 'xs'}
+        p={hasCustomBg || (headline && !minimal) ? '1rem' : 'xs'}
+        // A minimal card has no frame to keep its text off: a sliver of side
+        // padding lines its title up with the section heading above it.
+        px={minimal && !hasCustomBg ? 4 : compact ? 'sm' : undefined}
         pb={secondaryStrip ? 0 : undefined}
         // Clear of the resting icon, so a long value never runs under it — and
         // not on a card too narrow to keep the icon (see DepictioCard.css).
@@ -353,7 +425,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           justifyContent: 'center',
         }}
       >
-        <Stack gap={4}>
+        <Stack gap={compact ? 2 : 4}>
           {header_tooltip ? (
             <Tooltip label={header_tooltip} withArrow openDelay={300} multiline w={240}>
               <Box style={{ cursor: 'help', minWidth: 0 }}>{header}</Box>
@@ -366,6 +438,8 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
             <Text
               size="xs"
               c="dimmed"
+              // One line on a compact card, so a row of them keeps one height.
+              lineClamp={compact ? 1 : undefined}
               style={{
                 marginLeft: -2,
                 // Two lines held on a headline card, whether its caption wraps

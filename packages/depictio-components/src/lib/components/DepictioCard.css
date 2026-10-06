@@ -149,3 +149,40 @@
 .depictio-card-link:hover .depictio-card-icon--rest {
   opacity: 0.6;
 }
+
+/* ``variant: compact`` — title and value on one line, the value pushed to the
+   far edge so the two never read as one string. Below ~220px (a strip of
+   eight cards to a row) there is no room for both on a line, and the pair
+   stacks tight instead of wrapping the title a word at a time. */
+.depictio-card-compact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+@container depictio-card (min-width: 220px) {
+  .depictio-card-compact-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+}
+
+/* ``variant: minimal`` — no frame and no shadow, so the figure sits on
+   whatever is behind it. The border stays (transparent) rather than going:
+   the 1.5px it takes is what keeps a minimal card's text level with a headline
+   card's beside it. */
+.depictio-card.depictio-card--minimal {
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+/* A linked minimal card has no frame to lift: a faint wash marks it as a way
+   in instead. ``!important`` because its background is an inline style. */
+.depictio-card-link:hover .depictio-card--minimal {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  background-color: var(--mantine-color-default-hover) !important;
+}
