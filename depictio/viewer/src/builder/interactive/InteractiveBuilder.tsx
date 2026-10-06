@@ -409,19 +409,26 @@ const InteractiveBuilder: React.FC = () => {
               />
             }
           />
+        </Stack>
+      </BuilderSection>
 
-          <Stack gap={2} mt="xs">
-            <Text size="sm" fw={600}>
-              In a filter bar
-            </Text>
-            <Text size="xs" c="dimmed">
-              Used only when the control sits in a section shown as a filter bar.
-            </Text>
-          </Stack>
+      {/* Its own section rather than a sub-heading of the colours: these two
+          fields only exist for the bar, and say so in their title. */}
+      <BuilderSection
+        value="filter-bar"
+        icon="mdi:tune-variant"
+        title="In a filter bar"
+        subtitle="How the control reads when it sits in a bar on the dashboard"
+      >
+        <Stack gap="md">
+          <Text size="xs" c="dimmed">
+            Used when this control’s section is a filter bar, or a section’s own bar (see
+            Placement). In the filter panel it shows its title and icon as usual.
+          </Text>
 
           <TextInput
-            label="Short label"
-            description="Shown instead of the title, which stays in a tooltip"
+            label="Short label in the bar"
+            description="Replaces the title in the bar, where room is short (“City” for “Sampling city”). The title stays one hover away."
             placeholder={config.title?.trim() || 'Same as the title'}
             value={config.strip_label ?? ''}
             onChange={(e) => patchConfig({ strip_label: e.currentTarget.value })}
@@ -429,8 +436,8 @@ const InteractiveBuilder: React.FC = () => {
           />
 
           <SwitchField
-            label="Icon badge"
-            description="The icon in a small coloured square before the label"
+            label="Show icon badge"
+            description="The control’s icon in a small coloured square before the label. Off, the label keeps its place in line with the others."
             checked={config.strip_icon !== false}
             onChange={(checked) => patchConfig({ strip_icon: checked })}
           />

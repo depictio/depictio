@@ -16,13 +16,14 @@
  * duplicating the control per builder would only guarantee drift.
  *
  * Which list is offered depends on the component's type, exactly as the two
- * render paths are fed: interactive components join the filter panel's sections
- * or a filter bar (a grid section with `display: 'strip'`), everything else
- * joins the grid's tile sections.
+ * render paths are fed: interactive components join the filter panel's
+ * sections, a filter bar (a grid section with `display: 'strip'`, filtering the
+ * tab) or a section's own bar (`filter_bar`, filtering that section only);
+ * everything else joins the grid's tile sections.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Group, Select, Stack, Text } from '@mantine/core';
-import { fetchDashboard, isStripSection, SectionIcon } from 'depictio-react-core';
+import { fetchDashboard, hasSectionBar, isStripSection, SectionIcon } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import { useBuilderStore } from '../store/useBuilderStore';
@@ -65,11 +66,18 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({ itemValue = 'placem
 
   const kind: SectionKind = componentType === 'interactive' ? 'filter' : 'grid';
 
-  // A filter bar is a grid section, but what joins it is a filter.
-  const bars = useMemo<FilterSectionSpec[]>(
+  // A filter bar is a grid section, but what joins it is a filter: a section
+  // drawn as a bar (it filters the whole tab), or a section of tiles with a
+  // bar of its own (it filters that section only).
+  const strips = useMemo<FilterSectionSpec[]>(
     () => (dashboard ? sectionsFor(dashboard, 'grid').filter(isStripSection) : []),
     [dashboard],
   );
+  const sectionBars = useMemo<FilterSectionSpec[]>(
+    () => (dashboard ? sectionsFor(dashboard, 'grid').filter(hasSectionBar) : []),
+    [dashboard],
+  );
+  const bars = useMemo(() => [...strips, ...sectionBars], [strips, sectionBars]);
 
   const specs = useMemo<FilterSectionSpec[]>(() => {
     if (!dashboard) return [];
@@ -81,7 +89,7 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({ itemValue = 'placem
       ...implicitNames(dashboard, kind).map((name) => ({ name })),
     ];
     if (kind === 'grid') return own.filter((s) => !isStripSection(s));
-    // A bar wins a name it shares with a panel section (see `isStripMember`).
+    // A bar wins a name it shares with a panel section (see `isBarMember`).
     const barNames = new Set(bars.map((b) => b.name));
     return own.filter((s) => !barNames.has(s.name));
   }, [dashboard, kind, bars]);
@@ -98,17 +106,28 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({ itemValue = 'placem
     const item = (name: string) => ({ value: name, label: name });
     if (barNames.length === 0) return names.map(item);
     return [
-      { group: 'Filter panel', items: names.map(item) },
-      { group: 'Filter bar on the dashboard', items: barNames.map(item) },
+      { group: 'Filter panel · filters the tab', items: names.map(item) },
+      ...(strips.length
+        ? [{ group: 'Filter bar · filters the tab', items: strips.map((b) => item(b.name)) }]
+        : []),
+      ...(sectionBars.length
+        ? [
+            {
+              group: 'A section’s own bar · filters that section',
+              items: sectionBars.map((b) => item(b.name)),
+            },
+          ]
+        : []),
     ];
-  }, [specs, bars, kind, current]);
+  }, [specs, bars, strips, sectionBars, kind, current]);
   const optionCount = specs.length + (kind === 'filter' ? bars.length : 0) + (current ? 1 : 0);
 
   const specByName = useMemo(
     () => new Map([...specs, ...bars].map((s) => [s.name, s])),
     [specs, bars],
   );
-  const inBar = bars.some((b) => b.name === current);
+  const inStrip = strips.some((b) => b.name === current);
+  const inSectionBar = sectionBars.some((b) => b.name === current);
 
   // `placement: 'top'` controls render in the footer strip, which has no
   // sections at all.
@@ -126,11 +145,13 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({ itemValue = 'placem
         disabled
           ? 'Footer controls are not grouped into sections.'
           : kind === 'filter'
-            ? inBar
-              ? 'Draws this filter in a filter bar on the dashboard, in one row with the others there.'
-              : config.group
-                ? 'Groups this filter under a collapsible header. Changing it clears the group, which cannot span two sections.'
-                : 'Groups this filter under a collapsible header in the filter panel, or puts it in a filter bar.'
+            ? inSectionBar
+              ? `Shown in the bar under the “${current}” heading. Its value narrows only that section’s tiles; the rest of the tab ignores it.`
+              : inStrip
+                ? `Shown in the filter bar “${current}”, in one row with its other filters. Its value filters the whole tab, like the filter panel’s.`
+                : config.group
+                  ? 'Groups this filter under a collapsible header. Changing it clears the group, which cannot span two sections.'
+                  : 'A filter-panel section groups it under a collapsible header; a bar shows it on the dashboard instead. Panel filters and filter bars filter the whole tab, a section’s own bar only that section.'
             : 'Groups this component under a collapsible header in the dashboard.'
       }
       placeholder="No section"
@@ -177,7 +198,7 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({ itemValue = 'placem
       title="Placement"
       subtitle={
         kind === 'filter'
-          ? 'The filter-panel section or filter bar this control joins'
+          ? 'The filter-panel section or the bar this control joins, and so what it filters'
           : 'The dashboard section this component joins'
       }
     >

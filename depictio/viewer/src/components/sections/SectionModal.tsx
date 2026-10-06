@@ -12,9 +12,10 @@
  * way back, and `SectionsModal` closes while it is open — a modal on top of a
  * modal is not a stack anyone wants to navigate.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Group, Modal, Stack, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { interactiveTitle, stripLabel } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import SectionForm from './SectionForm';
@@ -82,6 +83,23 @@ const SectionModal: React.FC<SectionModalProps> = ({
 
   const handleChange = useCallback((next: FilterSectionSpec | null) => setSpec(next), []);
 
+  // The filters naming this grid section: what its bar would hold. Footer
+  // filters (`placement: 'top'`) keep their own place whatever the section.
+  const filterLabels = useMemo(
+    () =>
+      target && draftKind === 'grid'
+        ? (dashboard?.stored_metadata ?? [])
+            .filter(
+              (m) =>
+                m.component_type === 'interactive' &&
+                m.section === target.name &&
+                m.placement !== 'top',
+            )
+            .map((m) => stripLabel(m, interactiveTitle(m)))
+        : [],
+    [dashboard?.stored_metadata, target, draftKind],
+  );
+
   const submit = () => {
     if (!spec) return;
     if (editing) {
@@ -145,6 +163,7 @@ const SectionModal: React.FC<SectionModalProps> = ({
             onChange={handleChange}
             tabNames={tabNames}
             currentTabName={currentTabName}
+            filterLabels={filterLabels}
           />
         )}
 
