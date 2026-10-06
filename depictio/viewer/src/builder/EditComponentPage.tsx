@@ -15,8 +15,8 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchDashboard } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import { BrandScope, fetchDashboard } from 'depictio-react-core';
+import type { BrandTheme, StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
 import StepDesign from './steps/StepDesign';
 import BrandMark from '../chrome/BrandMark';
@@ -35,11 +35,15 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
   const loadExisting = useBuilderStore((s) => s.loadExisting);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // The dashboard's brand, so the preview draws in the colours the component
+  // will have once saved rather than the instance defaults.
+  const [brandTheme, setBrandTheme] = useState<BrandTheme | null>(null);
 
   useEffect(() => {
     init({ mode: 'edit', dashboardId, componentId });
     fetchDashboard(dashboardId)
       .then((dash) => {
+        setBrandTheme(dash.brand_theme ?? null);
         const meta = (dash.stored_metadata || []).find(
           (m: StoredMetadata) => String(m.index) === String(componentId),
         );
@@ -61,6 +65,7 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
   };
 
   return (
+    <BrandScope theme={brandTheme}>
     <AppShell padding="md" header={{ height: 50 }}>
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
@@ -91,6 +96,7 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
         </Container>
       </AppShell.Main>
     </AppShell>
+    </BrandScope>
   );
 };
 
