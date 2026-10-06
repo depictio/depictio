@@ -273,10 +273,11 @@ const STYLE_OPTIONS = [
  * entry so opening the form does not drop it.
  */
 function linkOptions(tabs: DashboardSummary[], current: string | undefined) {
-  const items = tabs.map((t) => {
-    const name = tabDisplayName(t);
-    return { value: `tab:${name}`, label: name };
-  });
+  // Two tabs may share a name, and Mantine rejects duplicate options.
+  const items = [...new Set(tabs.map(tabDisplayName))].map((name) => ({
+    value: `tab:${name}`,
+    label: name,
+  }));
   if (current && !items.some((o) => o.value === current)) {
     items.unshift({ value: current, label: `${current} (custom)` });
   }

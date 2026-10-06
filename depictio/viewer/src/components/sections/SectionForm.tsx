@@ -70,10 +70,8 @@ const SectionForm: React.FC<SectionFormProps> = ({
   // more (renamed, or written in YAML for another run), so editing an
   // unrelated field never drops them.
   const tabOptions = useMemo(() => {
-    const names = [...tabNames];
-    for (const name of initial?.exclude_tabs ?? []) {
-      if (!names.includes(name)) names.push(name);
-    }
+    // A Set, as two tabs may share a name and Mantine rejects duplicate options.
+    const names = [...new Set([...tabNames, ...(initial?.exclude_tabs ?? [])])];
     return names.map((name) => ({
       value: name,
       label: name === currentTabName ? `${name} (this tab)` : name,

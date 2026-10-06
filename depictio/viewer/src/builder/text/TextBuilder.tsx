@@ -61,10 +61,11 @@ const FRAME_OPTIONS = [
  */
 function accentOptions(tabs: DashboardSummary[], current: string | undefined) {
   const palette = SECTION_COLOR_OPTIONS.filter((o) => o.value);
-  const tabItems = tabs.map((t) => {
-    const name = tabDisplayName(t);
-    return { value: `tab:${name}`, label: name };
-  });
+  // Two tabs may share a name, and Mantine rejects duplicate options.
+  const tabItems = [...new Set(tabs.map(tabDisplayName))].map((name) => ({
+    value: `tab:${name}`,
+    label: name,
+  }));
   const known = new Set([...palette, ...tabItems].map((o) => o.value));
   const groups: { group: string; items: { value: string; label: string }[] }[] = [];
   if (current && !known.has(current)) {
