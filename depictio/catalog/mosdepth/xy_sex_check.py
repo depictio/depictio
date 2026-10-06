@@ -29,6 +29,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.mosdepth import keep_one_stage
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -54,25 +55,6 @@ _REQUIRED_COLUMNS = ("Sample", "Chromosome X", "Chromosome Y")
 #: first of these stages the sample has, else its alphabetically first one.
 #: Recalibration rewrites base qualities, not alignments, so the passes carry
 #: the same depth; keeping both doubled every sum and every track lane.
-STAGE_PREFERENCE = ("recal", "md", "sorted")
-
-
-def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
-    """Rows of one mosdepth pass per sample (see ``STAGE_PREFERENCE``)."""
-    rank = pl.col("stage").replace_strict(
-        {s: i for i, s in enumerate(STAGE_PREFERENCE)},
-        default=len(STAGE_PREFERENCE),
-        return_dtype=pl.Int64,
-    )
-    kept = (
-        df.select("sample", "stage")
-        .unique()
-        .with_columns(rank.alias("_rank"))
-        .sort(["sample", "_rank", "stage"])
-        .unique(subset="sample", keep="first", maintain_order=True)
-        .select("sample", "stage")
-    )
-    return df.join(kept, on=["sample", "stage"], how="semi")
 
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.

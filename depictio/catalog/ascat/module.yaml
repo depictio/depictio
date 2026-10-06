@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../module.schema.json
-# ASCAT — multi-output tool, so a folder. Lightweight: identity is derived from
+# ASCAT: multi-output tool, so a folder. Lightweight: identity is derived from
 # the nf-core meta.yml that `nf_core_url` points at (not duplicated).
 # nf-core/sarek publishes ASCAT under `variant_calling/ascat/<sample>/`.
 id: ascat

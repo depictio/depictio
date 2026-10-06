@@ -43,6 +43,7 @@ import json
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.demux_barcodes import classify
 
 #: Data-collection tag the template must scan ``Stats.json`` into, one line per row.
 RAW_DC_TAG = "bcl2fastq_stats_raw"
@@ -79,11 +80,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 #: Barcodes kept per lane, most frequent first.
 TOP_N_PER_LANE = 100
 
-SWAP_BOTH = "Both indexes in use"
-SWAP_I7 = "Only i7 in use"
-SWAP_I5 = "Only i5 in use"
-SWAP_NONE = "Neither index in use"
-SWAP_NO_INDEX = "Poly-G or N index"
 
 RAW_LINE_COL = "raw"
 SOURCE_PATH_COL = "source_path"
@@ -128,26 +124,6 @@ def _split(barcode: str) -> tuple[str, str]:
     """(i7, i5) of an ``i7+i5`` barcode; i5 is empty on a single-index run."""
     i7, _, i5 = barcode.partition("+")
     return i7, i5
-
-
-def _no_index(seq: str) -> bool:
-    """A read with no usable index: all G (two-colour dark cycles) or any N."""
-    return bool(seq) and ("N" in seq or set(seq) == {"G"})
-
-
-def classify(i7: str, i5: str, used_i7: set[str], used_i5: set[str]) -> tuple[bool, bool, str]:
-    """(i7 in use, i5 in use, swap class) of one unknown barcode."""
-    i7_in = i7 in used_i7
-    i5_in = bool(i5) and i5 in used_i5
-    if _no_index(i7) or _no_index(i5):
-        return i7_in, i5_in, SWAP_NO_INDEX
-    if i7_in and i5_in:
-        return i7_in, i5_in, SWAP_BOTH
-    if i7_in:
-        return i7_in, i5_in, SWAP_I7
-    if i5_in:
-        return i7_in, i5_in, SWAP_I5
-    return i7_in, i5_in, SWAP_NONE
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

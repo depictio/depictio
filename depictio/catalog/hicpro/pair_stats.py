@@ -78,6 +78,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.frames import empty_frame
 
 #: Data-collection tag the recipe reads. A template reusing this recipe must
 #: scan HiC-Pro's `stats/` key/value files into a DC with this tag.
@@ -175,15 +176,11 @@ def _ratio(numerator: str, denominator: str, name: str) -> pl.Expr:
     )
 
 
-def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=OUTPUT_SCHEMA)
-
-
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Pivot HiC-Pro's key/value stat files into one funnel row per sample."""
     raw = sources["stats"]
     if raw.is_empty() or "column_1" not in raw.columns:
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     tidy = raw.select(
         pl.col("source_path")
@@ -194,7 +191,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("column_2").str.strip_chars().cast(pl.Float64, strict=False).alias("value"),
     ).filter(pl.col("sample").is_not_null() & pl.col("metric").is_in(list(_COUNTS)))
     if tidy.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     tidy = tidy.with_columns(pl.col("metric").replace_strict(_COUNTS, default=None))
     wide = tidy.pivot(on="metric", index="sample", values="value", aggregate_function="max")

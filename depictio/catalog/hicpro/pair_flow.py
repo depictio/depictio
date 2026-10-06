@@ -36,6 +36,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.frames import empty_frame
 
 #: Same raw scan as `hicpro/pair_stats.py`.
 RAW_DC_TAG = "hicpro_stats_raw"
@@ -93,15 +94,11 @@ _METRICS = (
 )
 
 
-def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=OUTPUT_SCHEMA)
-
-
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Turn HiC-Pro's stat files into one weighted row per read-pair fate."""
     raw = sources["stats"]
     if raw.is_empty() or "column_1" not in raw.columns:
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     tidy = raw.select(
         pl.col("source_path")
@@ -112,7 +109,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("column_2").str.strip_chars().cast(pl.Float64, strict=False).alias("value"),
     ).filter(pl.col("sample").is_not_null() & pl.col("metric").is_in(_METRICS))
     if tidy.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     wide = tidy.pivot(on="metric", index="sample", values="value", aggregate_function="max")
 

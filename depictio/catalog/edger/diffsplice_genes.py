@@ -31,6 +31,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.fdr import fdr_cutoff
 
 _READ = {"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]}
 
@@ -101,18 +102,8 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "direction": pl.Utf8,
 }
 
-DEFAULT_FDR = 0.05
 FDR_ZERO_NEG_LOG10 = 300.0
 _CONTRAST = r"contrast_(.+)\.usage\.(?:gene|simes|exon)\.csv$"
-
-
-def fdr_cutoff(params: dict[str, str] | None) -> float:
-    raw = str((params or {}).get("fdr") or "").strip()
-    try:
-        value = float(raw)
-    except ValueError:
-        return DEFAULT_FDR
-    return value if 0 < value < 1 else DEFAULT_FDR
 
 
 def _contrast() -> pl.Expr:

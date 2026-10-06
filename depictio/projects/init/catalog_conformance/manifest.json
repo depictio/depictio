@@ -692,7 +692,7 @@
     "wittyer_summary": "recipe"
   },
   "staged_raw_files": {
-    "funcscan_samplesheet": "input/samplesheetsample_01.csv",
+    "funcscan_samplesheet": "input/samplesheet_sample_01.csv",
     "metaphlan_profile": "metaphlan/sample_01_profile.txt",
     "mosdepth_amplicon_coverage": "mosdepth/amplicon/all_samples.mosdepth.coverage.tsv",
     "salmon_merged_gene_counts": "salmon/salmon.merged.gene_counts.tsv"

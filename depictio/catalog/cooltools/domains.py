@@ -50,6 +50,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.cooltools import float_col
+from depictio.recipes.lib.frames import empty_frame
 
 #: Same raw scan as `cooltools/insulation.py`.
 RAW_DC_TAG = "cooltools_insulation_raw"
@@ -94,10 +95,6 @@ MIN_VALID_FRACTION = 0.5
 _PATH_RE = r"([^/\\]+)\.(\d+)_balanced_insulation\.tsv$"
 #: A window-suffixed boundary column, e.g. `is_boundary_300000` -> `300000`.
 _WINDOW_COL_RE = r"^is_boundary_(\d+)$"
-
-
-def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
 
 def _domains_for_window(bins: pl.DataFrame, window: int) -> pl.DataFrame | None:
@@ -154,7 +151,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Derive TAD intervals from the insulation track's boundary calls."""
     raw = sources["insulation"]
     if raw.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     bins = raw.with_columns(
         pl.col("source_path").str.extract(_PATH_RE, 1).alias("sample"),
@@ -163,7 +160,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("end").cast(pl.Int64, strict=False),
     ).filter(pl.col("sample").is_not_null())
     if bins.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     # Mappable-bin prefix sum per region: the number of good bins strictly
     # before each bin, so a domain's good-bin count is one subtraction.
@@ -182,7 +179,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     per_window = [d for w in windows if (d := _domains_for_window(bins, w)) is not None]
     if not per_window:
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     domains = pl.concat(per_window, how="vertical_relaxed")
     domains = (

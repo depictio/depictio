@@ -1,4 +1,4 @@
-# GENERATED FILE — do not edit by hand.
+# GENERATED FILE: do not edit by hand.
 #
 # Rebuild with:
 #   uv run python -m depictio.projects.init.catalog_conformance.scripts.generate_project
@@ -41,8 +41,8 @@ workflows:
   data_collections:
   - id: 0d79647cae26fa9d03f238dd
     data_collection_tag: adapterremoval_settings
-    description: Trimming and collapsing statistics — recipe output (adapterremoval/settings.py), seeded
-      from the catalog fixture
+    description: 'Trimming and collapsing statistics: recipe output (adapterremoval/settings.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -55,7 +55,7 @@ workflows:
           separator: "\t"
   - id: 10ea452e48d10fe976eda340
     data_collection_tag: ampcombi_clusters
-    description: Peptide clusters — recipe output (ampcombi/clusters.py), seeded from the catalog fixture
+    description: 'Peptide clusters: recipe output (ampcombi/clusters.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -68,7 +68,7 @@ workflows:
           separator: "\t"
   - id: 392b4bfceb44ae11be8c345d
     data_collection_tag: ampcombi_embedding
-    description: Property embedding — recipe output (ampcombi/embedding.py), seeded from the catalog fixture
+    description: 'Property embedding: recipe output (ampcombi/embedding.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -81,7 +81,7 @@ workflows:
           separator: "\t"
   - id: cee943549921a773ac9ebacf
     data_collection_tag: ampcombi_summary
-    description: AMP candidates — recipe output (ampcombi/summary.py), seeded from the catalog fixture
+    description: 'AMP candidates: recipe output (ampcombi/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -94,8 +94,8 @@ workflows:
           separator: "\t"
   - id: b3c50d3e2a37df11eae67dbf
     data_collection_tag: anota2seq_regulation
-    description: Translational regulation mode per gene — recipe output (anota2seq/regulation.py), seeded
-      from the catalog fixture
+    description: 'Translational regulation mode per gene: recipe output (anota2seq/regulation.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -108,8 +108,8 @@ workflows:
           separator: "\t"
   - id: 2f8237067a10dd54de0cf0f2
     data_collection_tag: anota2seq_results
-    description: anota2seq results per analysis — recipe output (anota2seq/results.py), seeded from the
-      catalog fixture
+    description: 'anota2seq results per analysis: recipe output (anota2seq/results.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -122,8 +122,8 @@ workflows:
           separator: "\t"
   - id: 0e9247d213d5481abcfb1fdc
     data_collection_tag: arriba_fusion_links
-    description: Arriba breakpoint links — recipe output (arriba/fusion_links.py), seeded from the catalog
-      fixture
+    description: 'Arriba breakpoint links: recipe output (arriba/fusion_links.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -136,7 +136,7 @@ workflows:
           separator: "\t"
   - id: 0308f20bba0b9a5cf68d3585
     data_collection_tag: arriba_fusions
-    description: Arriba fusion calls — recipe output (arriba/fusions.py), seeded from the catalog fixture
+    description: 'Arriba fusion calls: recipe output (arriba/fusions.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -149,8 +149,8 @@ workflows:
           separator: "\t"
   - id: ad8ccc90c88c10e3ff581a22
     data_collection_tag: ascat_cnv_segments
-    description: Allele-specific copy-number segments — recipe output (ascat/cnv_segments.py), seeded
-      from the catalog fixture
+    description: 'Allele-specific copy-number segments: recipe output (ascat/cnv_segments.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -163,8 +163,8 @@ workflows:
           separator: "\t"
   - id: 6bd1b3a56d0919a2f4754eef
     data_collection_tag: ascat_purity_ploidy
-    description: Tumour purity and ploidy — recipe output (ascat/purity_ploidy.py), seeded from the catalog
-      fixture
+    description: 'Tumour purity and ploidy: recipe output (ascat/purity_ploidy.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -177,8 +177,8 @@ workflows:
           separator: "\t"
   - id: 38315a2e3025322d7b4e211a
     data_collection_tag: ataqv_chromosome_counts
-    description: Reads per reference sequence — recipe output (ataqv/chromosome_counts.py), seeded from
-      the catalog fixture
+    description: 'Reads per reference sequence: recipe output (ataqv/chromosome_counts.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -191,8 +191,8 @@ workflows:
           separator: "\t"
   - id: 5926d7bfb6ffeb4df23f8329
     data_collection_tag: ataqv_fragment_length
-    description: Fragment length distribution — recipe output (ataqv/fragment_length.py), seeded from
-      the catalog fixture
+    description: 'Fragment length distribution: recipe output (ataqv/fragment_length.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -205,7 +205,7 @@ workflows:
           separator: "\t"
   - id: fc9a9fe3677f23d87c21b5e8
     data_collection_tag: ataqv_metrics
-    description: ATAC quality metrics — recipe output (ataqv/metrics.py), seeded from the catalog fixture
+    description: 'ATAC quality metrics: recipe output (ataqv/metrics.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -218,8 +218,8 @@ workflows:
           separator: "\t"
   - id: ca868ff71e44dddc630ad228
     data_collection_tag: ataqv_tss_coverage
-    description: TSS coverage profile — recipe output (ataqv/tss_coverage.py), seeded from the catalog
-      fixture
+    description: 'TSS coverage profile: recipe output (ataqv/tss_coverage.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -232,8 +232,8 @@ workflows:
           separator: "\t"
   - id: cae2bfb221036fd6e986a562
     data_collection_tag: bambu_counts_gene
-    description: Gene-level quantification — recipe output (bambu/counts_gene.py), seeded from the catalog
-      fixture
+    description: 'Gene-level quantification: recipe output (bambu/counts_gene.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -246,8 +246,8 @@ workflows:
           separator: "\t"
   - id: b9c7850744328570b783e413
     data_collection_tag: bambu_counts_gene_long
-    description: Gene counts per sample — recipe output (bambu/counts_gene_long.py), seeded from the catalog
-      fixture
+    description: 'Gene counts per sample: recipe output (bambu/counts_gene_long.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -260,8 +260,8 @@ workflows:
           separator: "\t"
   - id: dc4f57722a4140d5942b4251
     data_collection_tag: bambu_counts_transcript
-    description: Transcript-level quantification — recipe output (bambu/counts_transcript.py), seeded
-      from the catalog fixture
+    description: 'Transcript-level quantification: recipe output (bambu/counts_transcript.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -274,8 +274,8 @@ workflows:
           separator: "\t"
   - id: fa8862c6ada86255610b11b5
     data_collection_tag: bambu_counts_transcript_long
-    description: Transcript counts per sample — recipe output (bambu/counts_transcript_long.py), seeded
-      from the catalog fixture
+    description: 'Transcript counts per sample: recipe output (bambu/counts_transcript_long.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -288,8 +288,8 @@ workflows:
           separator: "\t"
   - id: c0362b58e9ac7072c486527e
     data_collection_tag: bambu_sample_correlation
-    description: Sample correlation matrix — recipe output (bambu/sample_correlation.py), seeded from
-      the catalog fixture
+    description: 'Sample correlation matrix: recipe output (bambu/sample_correlation.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -302,8 +302,8 @@ workflows:
           separator: "\t"
   - id: 8ae32ebc1957013185026db7
     data_collection_tag: bambu_sample_pca
-    description: Sample structure and library readings — recipe output (bambu/sample_pca.py), seeded from
-      the catalog fixture
+    description: 'Sample structure and library readings: recipe output (bambu/sample_pca.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -316,8 +316,8 @@ workflows:
           separator: "\t"
   - id: 08d34ef9ea472b2572e7b08d
     data_collection_tag: bambu_top_variable_genes
-    description: Most variable genes — recipe output (bambu/top_variable_genes.py), seeded from the catalog
-      fixture
+    description: 'Most variable genes: recipe output (bambu/top_variable_genes.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -330,8 +330,8 @@ workflows:
           separator: "\t"
   - id: 64123a4398fe9fdf2471c01e
     data_collection_tag: bcftools_stats_sections
-    description: Variant distributions per caller — recipe output (bcftools/stats_sections.py), seeded
-      from the catalog fixture
+    description: 'Variant distributions per caller: recipe output (bcftools/stats_sections.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -344,8 +344,8 @@ workflows:
           separator: "\t"
   - id: ad4d31999070d244b8c8fdde
     data_collection_tag: bcftools_stats_summary
-    description: Per-caller variant counts — recipe output (bcftools/stats_summary.py), seeded from the
-      catalog fixture
+    description: 'Per-caller variant counts: recipe output (bcftools/stats_summary.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -358,8 +358,8 @@ workflows:
           separator: "\t"
   - id: ba7bb24632c71b21f427eda0
     data_collection_tag: bcftools_stats_tstv
-    description: Per-caller Ts/Tv ratio — recipe output (bcftools/stats_tstv.py), seeded from the catalog
-      fixture
+    description: 'Per-caller Ts/Tv ratio: recipe output (bcftools/stats_tstv.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -372,8 +372,8 @@ workflows:
           separator: "\t"
   - id: 92c2952d70907bd709e4ae9b
     data_collection_tag: bcl2fastq_demux_stats
-    description: Reads per library and lane — recipe output (bcl2fastq/demux_stats.py), seeded from the
-      catalog fixture
+    description: 'Reads per library and lane: recipe output (bcl2fastq/demux_stats.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -386,8 +386,8 @@ workflows:
           separator: "\t"
   - id: 8e11112b3c0a4531a71b74a2
     data_collection_tag: bcl2fastq_lane_summary
-    description: Lane run health — recipe output (bcl2fastq/lane_summary.py), seeded from the catalog
-      fixture
+    description: 'Lane run health: recipe output (bcl2fastq/lane_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -400,8 +400,8 @@ workflows:
           separator: "\t"
   - id: 943797cebf82283fce1f10c8
     data_collection_tag: bcl2fastq_read_quality
-    description: Base quality per lane and read — recipe output (bcl2fastq/read_quality.py), seeded from
-      the catalog fixture
+    description: 'Base quality per lane and read: recipe output (bcl2fastq/read_quality.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -414,8 +414,8 @@ workflows:
           separator: "\t"
   - id: 7d143d1f8aaed5eb44cf0a3e
     data_collection_tag: bcl2fastq_unknown_barcodes
-    description: Top unknown barcodes — recipe output (bcl2fastq/unknown_barcodes.py), seeded from the
-      catalog fixture
+    description: 'Top unknown barcodes: recipe output (bcl2fastq/unknown_barcodes.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -428,8 +428,8 @@ workflows:
           separator: "\t"
   - id: 1eb4045fa19990d38e167e06
     data_collection_tag: bclconvert_demux_stats
-    description: Reads per library and lane — recipe output (bclconvert/demux_stats.py), seeded from the
-      catalog fixture
+    description: 'Reads per library and lane: recipe output (bclconvert/demux_stats.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -442,8 +442,8 @@ workflows:
           separator: "\t"
   - id: c5da30adf24ab73bf59bfe24
     data_collection_tag: bclconvert_lane_summary
-    description: Lane run health — recipe output (bclconvert/lane_summary.py), seeded from the catalog
-      fixture
+    description: 'Lane run health: recipe output (bclconvert/lane_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -456,8 +456,8 @@ workflows:
           separator: "\t"
   - id: 810b070fc6c23b78912a8a37
     data_collection_tag: bclconvert_read_quality
-    description: Base quality per lane and read — recipe output (bclconvert/read_quality.py), seeded from
-      the catalog fixture
+    description: 'Base quality per lane and read: recipe output (bclconvert/read_quality.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -470,8 +470,8 @@ workflows:
           separator: "\t"
   - id: 2532a6389f4d398940ea3b3f
     data_collection_tag: bclconvert_unknown_barcodes
-    description: Top unknown barcodes — recipe output (bclconvert/unknown_barcodes.py), seeded from the
-      catalog fixture
+    description: 'Top unknown barcodes: recipe output (bclconvert/unknown_barcodes.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -484,8 +484,8 @@ workflows:
           separator: "\t"
   - id: b7b13156eb5a7f03ece015b3
     data_collection_tag: bismark_alignment_summary
-    description: Alignment summary — recipe output (bismark/alignment_summary.py), seeded from the catalog
-      fixture
+    description: 'Alignment summary: recipe output (bismark/alignment_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -498,8 +498,8 @@ workflows:
           separator: "\t"
   - id: 85d2818702a4c4d5d7f338ba
     data_collection_tag: bismark_binned_methylation
-    description: Binned CpG methylation — recipe output (bismark/binned_methylation.py), seeded from the
-      catalog fixture
+    description: 'Binned CpG methylation: recipe output (bismark/binned_methylation.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -512,8 +512,8 @@ workflows:
           separator: "\t"
   - id: e5dff60339a2e48e92ea1eda
     data_collection_tag: bismark_deduplication_summary
-    description: Deduplication summary — recipe output (bismark/deduplication_summary.py), seeded from
-      the catalog fixture
+    description: 'Deduplication summary: recipe output (bismark/deduplication_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -526,8 +526,8 @@ workflows:
           separator: "\t"
   - id: ea8c6e020d9ac2e7f5897139
     data_collection_tag: bismark_mbias_all_contexts
-    description: M-bias, every context and read — recipe output (bismark/mbias_all_contexts.py), seeded
-      from the catalog fixture
+    description: 'M-bias, every context and read: recipe output (bismark/mbias_all_contexts.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -540,7 +540,7 @@ workflows:
           separator: "\t"
   - id: 78fef4a4579c99e5b6bf6204
     data_collection_tag: bismark_mbias_curve
-    description: CpG M-bias curve — recipe output (bismark/mbias_curve.py), seeded from the catalog fixture
+    description: 'CpG M-bias curve: recipe output (bismark/mbias_curve.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -553,8 +553,8 @@ workflows:
           separator: "\t"
   - id: fe0707eb2c0894ee724998d2
     data_collection_tag: bismark_methylation_context_summary
-    description: Methylation by context — recipe output (bismark/methylation_context_summary.py), seeded
-      from the catalog fixture
+    description: 'Methylation by context: recipe output (bismark/methylation_context_summary.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -567,8 +567,8 @@ workflows:
           separator: "\t"
   - id: 1a8e77f7035d584a40d652cf
     data_collection_tag: bismark_methylation_density
-    description: Per-CpG methylation density — recipe output (bismark/methylation_density.py), seeded
-      from the catalog fixture
+    description: 'Per-CpG methylation density: recipe output (bismark/methylation_density.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -581,8 +581,8 @@ workflows:
           separator: "\t"
   - id: a6387780f318ec23d1ac8556
     data_collection_tag: bismark_summary_report
-    description: Run summary report — recipe output (bismark/summary_report.py), seeded from the catalog
-      fixture
+    description: 'Run summary report: recipe output (bismark/summary_report.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -595,8 +595,8 @@ workflows:
           separator: "\t"
   - id: 8d7df357d90663bbd73c6c19
     data_collection_tag: bismark_top_variable_windows
-    description: Most variable methylation windows — recipe output (bismark/top_variable_windows.py),
-      seeded from the catalog fixture
+    description: 'Most variable methylation windows: recipe output (bismark/top_variable_windows.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -609,8 +609,8 @@ workflows:
           separator: "\t"
   - id: 49bda4e70e85b9cee0f48509
     data_collection_tag: bismark_window_correlation
-    description: Library methylation correlation — recipe output (bismark/window_correlation.py), seeded
-      from the catalog fixture
+    description: 'Library methylation correlation: recipe output (bismark/window_correlation.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -623,8 +623,8 @@ workflows:
           separator: "\t"
   - id: 3c8148810d3683835ed54f80
     data_collection_tag: bismark_window_group_compare
-    description: Window methylation group comparison — recipe output (bismark/window_group_compare.py),
-      seeded from the catalog fixture
+    description: 'Window methylation group comparison: recipe output (bismark/window_group_compare.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -637,8 +637,8 @@ workflows:
           separator: "\t"
   - id: 67e65e9b51a4519b4f926d84
     data_collection_tag: bismark_window_pca
-    description: Library PCA over binned methylation — recipe output (bismark/window_pca.py), seeded from
-      the catalog fixture
+    description: 'Library PCA over binned methylation: recipe output (bismark/window_pca.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -651,8 +651,8 @@ workflows:
           separator: "\t"
   - id: 3888c664f84f2ee7ebb83021
     data_collection_tag: bowtie2_spikein_factors
-    description: Spike-in normalisation factors — recipe output (bowtie2/spikein_factors.py), seeded from
-      the catalog fixture
+    description: 'Spike-in normalisation factors: recipe output (bowtie2/spikein_factors.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -665,8 +665,8 @@ workflows:
           separator: "\t"
   - id: 554814ab5da7a583417c2f50
     data_collection_tag: busco_batch_summary
-    description: BUSCO completeness per assembly — recipe output (busco/batch_summary.py), seeded from
-      the catalog fixture
+    description: 'BUSCO completeness per assembly: recipe output (busco/batch_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -679,8 +679,8 @@ workflows:
           separator: "\t"
   - id: 7d8dd46e37a6d91466825d67
     data_collection_tag: busco_composition
-    description: BUSCO class composition — recipe output (busco/composition.py), seeded from the catalog
-      fixture
+    description: 'BUSCO class composition: recipe output (busco/composition.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -693,8 +693,8 @@ workflows:
           separator: "\t"
   - id: 1d2f57a820d0ba846caf14b3
     data_collection_tag: cellbender_metrics
-    description: Ambient-RNA removal metrics — recipe output (cellbender/metrics.py), seeded from the
-      catalog fixture
+    description: 'Ambient-RNA removal metrics: recipe output (cellbender/metrics.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -707,8 +707,8 @@ workflows:
           separator: "\t"
   - id: b49eba88b7f55c770aa3cb35
     data_collection_tag: cellranger_aligner_summary
-    description: Aligner route summary — recipe output (cellranger/aligner_summary.py), seeded from the
-      catalog fixture
+    description: 'Aligner route summary: recipe output (cellranger/aligner_summary.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -721,8 +721,8 @@ workflows:
           separator: "\t"
   - id: ca9822fd6d6c64709c464cc6
     data_collection_tag: cellranger_barcode_rank
-    description: Barcode-rank curve — recipe output (cellranger/barcode_rank.py), seeded from the catalog
-      fixture
+    description: 'Barcode-rank curve: recipe output (cellranger/barcode_rank.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -735,8 +735,8 @@ workflows:
           separator: "\t"
   - id: 4bcb6200370bf453afc85eea
     data_collection_tag: cellranger_cell_calls_by_method
-    description: Cell calls by method — recipe output (cellranger/cell_calls_by_method.py), seeded from
-      the catalog fixture
+    description: 'Cell calls by method: recipe output (cellranger/cell_calls_by_method.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -749,8 +749,8 @@ workflows:
           separator: "\t"
   - id: 2a79186d05112ada5a872306
     data_collection_tag: cellranger_cell_cycle
-    description: Cell-cycle phase — recipe output (cellranger/cell_cycle.py), seeded from the catalog
-      fixture
+    description: 'Cell-cycle phase: recipe output (cellranger/cell_cycle.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -763,8 +763,8 @@ workflows:
           separator: "\t"
   - id: c351dd1aa2064d2d2603d0f9
     data_collection_tag: cellranger_cell_expression
-    description: Cell x marker-gene expression matrix — recipe output (cellranger/cell_expression.py),
-      seeded from the catalog fixture
+    description: 'Cell x marker-gene expression matrix: recipe output (cellranger/cell_expression.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -777,8 +777,8 @@ workflows:
           separator: "\t"
   - id: 23d510b980ae7a38e421e3b8
     data_collection_tag: cellranger_cell_expression_long
-    description: Marker expression per cell, long — recipe output (cellranger/cell_expression_long.py),
-      seeded from the catalog fixture
+    description: 'Marker expression per cell, long: recipe output (cellranger/cell_expression_long.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -791,8 +791,8 @@ workflows:
           separator: "\t"
   - id: 821c8e7e9e9acfb4eb710c91
     data_collection_tag: cellranger_cell_funnel
-    description: Cell-calling funnel — recipe output (cellranger/cell_funnel.py), seeded from the catalog
-      fixture
+    description: 'Cell-calling funnel: recipe output (cellranger/cell_funnel.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -805,8 +805,8 @@ workflows:
           separator: "\t"
   - id: 011e17cf20faf44d6a963991
     data_collection_tag: cellranger_cell_qc
-    description: Per-cell QC, clusters and embeddings — recipe output (cellranger/cell_qc.py), seeded
-      from the catalog fixture
+    description: 'Per-cell QC, clusters and embeddings: recipe output (cellranger/cell_qc.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -819,8 +819,8 @@ workflows:
           separator: "\t"
   - id: 4c48d1a64909c4d292561d16
     data_collection_tag: cellranger_cluster_summary
-    description: Cluster summary — recipe output (cellranger/cluster_summary.py), seeded from the catalog
-      fixture
+    description: 'Cluster summary: recipe output (cellranger/cluster_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -833,8 +833,8 @@ workflows:
           separator: "\t"
   - id: 7cafdc098477998ff110166d
     data_collection_tag: cellranger_diffexp
-    description: Cluster marker genes — recipe output (cellranger/diffexp.py), seeded from the catalog
-      fixture
+    description: 'Cluster marker genes: recipe output (cellranger/diffexp.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -847,8 +847,8 @@ workflows:
           separator: "\t"
   - id: fc1598239945e18169c6b337
     data_collection_tag: cellranger_embedding
-    description: Cell embeddings and clusters — recipe output (cellranger/embedding.py), seeded from the
-      catalog fixture
+    description: 'Cell embeddings and clusters: recipe output (cellranger/embedding.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -861,8 +861,8 @@ workflows:
           separator: "\t"
   - id: 51d75197ab055796145080af
     data_collection_tag: cellranger_hvg_dispersion
-    description: Highly variable genes — recipe output (cellranger/hvg_dispersion.py), seeded from the
-      catalog fixture
+    description: 'Highly variable genes: recipe output (cellranger/hvg_dispersion.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -875,8 +875,8 @@ workflows:
           separator: "\t"
   - id: ed5cc2d14a9224a3d91df6f8
     data_collection_tag: cellranger_library_metrics_long
-    description: Library QC metrics, thresholded — recipe output (cellranger/library_metrics_long.py),
-      seeded from the catalog fixture
+    description: 'Library QC metrics, thresholded: recipe output (cellranger/library_metrics_long.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -889,8 +889,8 @@ workflows:
           separator: "\t"
   - id: 3b48154f54fff93c98f20fd3
     data_collection_tag: cellranger_mapping_breakdown
-    description: Read mapping region breakdown — recipe output (cellranger/mapping_breakdown.py), seeded
-      from the catalog fixture
+    description: 'Read mapping region breakdown: recipe output (cellranger/mapping_breakdown.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -903,8 +903,8 @@ workflows:
           separator: "\t"
   - id: 0b6b39e64b2e13aa4b5c7f5f
     data_collection_tag: cellranger_marker_expression
-    description: Marker gene expression per cluster — recipe output (cellranger/marker_expression.py),
-      seeded from the catalog fixture
+    description: 'Marker gene expression per cluster: recipe output (cellranger/marker_expression.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -917,8 +917,8 @@ workflows:
           separator: "\t"
   - id: 2b56b950464df273e82a5b51
     data_collection_tag: cellranger_marker_matrix
-    description: Marker gene expression matrix — recipe output (cellranger/marker_matrix.py), seeded from
-      the catalog fixture
+    description: 'Marker gene expression matrix: recipe output (cellranger/marker_matrix.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -931,8 +931,8 @@ workflows:
           separator: "\t"
   - id: de698c73725f6bd53a89434d
     data_collection_tag: cellranger_metrics_summary
-    description: Cell Ranger metrics — recipe output (cellranger/metrics_summary.py), seeded from the
-      catalog fixture
+    description: 'Cell Ranger metrics: recipe output (cellranger/metrics_summary.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -945,8 +945,8 @@ workflows:
           separator: "\t"
   - id: ce290dc3fb9a181370fa6902
     data_collection_tag: cellranger_pca_variance
-    description: PCA variance explained — recipe output (cellranger/pca_variance.py), seeded from the
-      catalog fixture
+    description: 'PCA variance explained: recipe output (cellranger/pca_variance.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -959,8 +959,8 @@ workflows:
           separator: "\t"
   - id: 9c48145284d6ef487c92f635
     data_collection_tag: checkm2_quality_report
-    description: Bin completeness and contamination — recipe output (checkm2/quality_report.py), seeded
-      from the catalog fixture
+    description: 'Bin completeness and contamination: recipe output (checkm2/quality_report.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -973,8 +973,8 @@ workflows:
           separator: "\t"
   - id: af3563ea717c8054a3aaca9c
     data_collection_tag: cnvkit_cnv_profile
-    description: Copy-number profile — recipe output (cnvkit/cnv_profile.py), seeded from the catalog
-      fixture
+    description: 'Copy-number profile: recipe output (cnvkit/cnv_profile.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -987,8 +987,8 @@ workflows:
           separator: "\t"
   - id: 219986a769755a6fafbfa0f1
     data_collection_tag: combgc_region_track
-    description: BGC region coordinates — recipe output (combgc/region_track.py), seeded from the catalog
-      fixture
+    description: 'BGC region coordinates: recipe output (combgc/region_track.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1001,7 +1001,7 @@ workflows:
           separator: "\t"
   - id: 388b6dc6693134432c3cd55c
     data_collection_tag: combgc_summary
-    description: BGC regions — recipe output (combgc/summary.py), seeded from the catalog fixture
+    description: 'BGC regions: recipe output (combgc/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1014,8 +1014,8 @@ workflows:
           separator: "\t"
   - id: 22cbd2ae8c73d8473c261f76
     data_collection_tag: combgc_tool_overlap
-    description: Caller concordance — recipe output (combgc/tool_overlap.py), seeded from the catalog
-      fixture
+    description: 'Caller concordance: recipe output (combgc/tool_overlap.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1028,8 +1028,8 @@ workflows:
           separator: "\t"
   - id: a2af30215e9f664983f79703
     data_collection_tag: controlfreec_cnv_ratio
-    description: Copy-number ratio windows — recipe output (controlfreec/cnv_ratio.py), seeded from the
-      catalog fixture
+    description: 'Copy-number ratio windows: recipe output (controlfreec/cnv_ratio.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1042,8 +1042,8 @@ workflows:
           separator: "\t"
   - id: 3272fb3faf14527ab138ceb0
     data_collection_tag: cooler_contact_matrix
-    description: Binned contact matrix — recipe output (cooler/contact_matrix.py), seeded from the catalog
-      fixture
+    description: 'Binned contact matrix: recipe output (cooler/contact_matrix.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1056,8 +1056,8 @@ workflows:
           separator: "\t"
   - id: a0264d84f1d57202e6a26056
     data_collection_tag: cooltools_distance_profile
-    description: Contact probability P(s) — recipe output (cooltools/distance_profile.py), seeded from
-      the catalog fixture
+    description: 'Contact probability P(s): recipe output (cooltools/distance_profile.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1070,7 +1070,7 @@ workflows:
           separator: "\t"
   - id: 52139186f8ba18b996fd2c24
     data_collection_tag: cooltools_domains
-    description: TAD domains — recipe output (cooltools/domains.py), seeded from the catalog fixture
+    description: 'TAD domains: recipe output (cooltools/domains.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1083,8 +1083,8 @@ workflows:
           separator: "\t"
   - id: 77097f3d65c3250e96566cb5
     data_collection_tag: cooltools_eigenvalues
-    description: Compartment eigenvalues — recipe output (cooltools/eigenvalues.py), seeded from the catalog
-      fixture
+    description: 'Compartment eigenvalues: recipe output (cooltools/eigenvalues.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1097,8 +1097,8 @@ workflows:
           separator: "\t"
   - id: b80f5baa659fad68cf8d9223
     data_collection_tag: cooltools_eigenvector
-    description: A/B compartment track — recipe output (cooltools/eigenvector.py), seeded from the catalog
-      fixture
+    description: 'A/B compartment track: recipe output (cooltools/eigenvector.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1111,8 +1111,8 @@ workflows:
           separator: "\t"
   - id: 8d6617d15e31231d25d2e0fc
     data_collection_tag: cooltools_insulation
-    description: TAD insulation score — recipe output (cooltools/insulation.py), seeded from the catalog
-      fixture
+    description: 'TAD insulation score: recipe output (cooltools/insulation.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1125,8 +1125,8 @@ workflows:
           separator: "\t"
   - id: 6a61a5069e63b608a6ec2593
     data_collection_tag: ctatsplicing_cancer_introns
-    description: Cancer intron candidates — recipe output (ctatsplicing/cancer_introns.py), seeded from
-      the catalog fixture
+    description: 'Cancer intron candidates: recipe output (ctatsplicing/cancer_introns.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1139,7 +1139,7 @@ workflows:
           separator: "\t"
   - id: d640f213a39844689444a00e
     data_collection_tag: ctatsplicing_introns
-    description: Splice junctions — recipe output (ctatsplicing/introns.py), seeded from the catalog fixture
+    description: 'Splice junctions: recipe output (ctatsplicing/introns.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1152,8 +1152,8 @@ workflows:
           separator: "\t"
   - id: 283937285b0911b6ccf3768f
     data_collection_tag: cutandrun_caller_agreement
-    description: Peak caller agreement — recipe output (cutandrun/caller_agreement.py), seeded from the
-      catalog fixture
+    description: 'Peak caller agreement: recipe output (cutandrun/caller_agreement.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1166,8 +1166,8 @@ workflows:
           separator: "\t"
   - id: f610cd05cf18024a73257a7b
     data_collection_tag: cutandrun_frip
-    description: Fraction of coverage in peaks — recipe output (cutandrun/frip.py), seeded from the catalog
-      fixture
+    description: 'Fraction of coverage in peaks: recipe output (cutandrun/frip.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1180,7 +1180,7 @@ workflows:
           separator: "\t"
   - id: 42d257c94f896aa33592758e
     data_collection_tag: cutandrun_samples
-    description: Sample hub — recipe output (cutandrun/samples.py), seeded from the catalog fixture
+    description: 'Sample hub: recipe output (cutandrun/samples.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1193,8 +1193,8 @@ workflows:
           separator: "\t"
   - id: 1b3fc0679b82bc78d39a7716
     data_collection_tag: damageprofiler_authenticity
-    description: Authenticity plane — recipe output (damageprofiler/authenticity.py), seeded from the
-      catalog fixture
+    description: 'Authenticity plane: recipe output (damageprofiler/authenticity.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1207,8 +1207,8 @@ workflows:
           separator: "\t"
   - id: c7653479d9060a71d3ff2487
     data_collection_tag: damageprofiler_lgdistribution
-    description: Fragment length distribution — recipe output (damageprofiler/lgdistribution.py), seeded
-      from the catalog fixture
+    description: 'Fragment length distribution: recipe output (damageprofiler/lgdistribution.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1221,8 +1221,8 @@ workflows:
           separator: "\t"
   - id: ccae4ba1e8772d4aec6ccb9d
     data_collection_tag: damageprofiler_misincorporation
-    description: Misincorporation profile — recipe output (damageprofiler/misincorporation.py), seeded
-      from the catalog fixture
+    description: 'Misincorporation profile: recipe output (damageprofiler/misincorporation.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1235,7 +1235,7 @@ workflows:
           separator: "\t"
   - id: b4f3bca32040610e7f9758b8
     data_collection_tag: dbcan_overview
-    description: CAZyme annotations — recipe output (dbcan/overview.py), seeded from the catalog fixture
+    description: 'CAZyme annotations: recipe output (dbcan/overview.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1248,7 +1248,7 @@ workflows:
           separator: "\t"
   - id: 08a74c31263c031ad65b71ed
     data_collection_tag: dbcan_substrates
-    description: CGC substrates — recipe output (dbcan/substrates.py), seeded from the catalog fixture
+    description: 'CGC substrates: recipe output (dbcan/substrates.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1261,8 +1261,8 @@ workflows:
           separator: "\t"
   - id: b0790afe72957376fdcad4d2
     data_collection_tag: dbcan_tool_overlap
-    description: Annotation concordance — recipe output (dbcan/tool_overlap.py), seeded from the catalog
-      fixture
+    description: 'Annotation concordance: recipe output (dbcan/tool_overlap.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1275,8 +1275,8 @@ workflows:
           separator: "\t"
   - id: 214f1f24ca1caaecc59a73c7
     data_collection_tag: deeptools_correlation_matrix
-    description: Sample correlation matrix — recipe output (deeptools/correlation_matrix.py), seeded from
-      the catalog fixture
+    description: 'Sample correlation matrix: recipe output (deeptools/correlation_matrix.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1289,8 +1289,8 @@ workflows:
           separator: "\t"
   - id: eba4f02f1831508a2d2e6528
     data_collection_tag: deeptools_fingerprint_metrics
-    description: Fingerprint metrics — recipe output (deeptools/fingerprint_metrics.py), seeded from the
-      catalog fixture
+    description: 'Fingerprint metrics: recipe output (deeptools/fingerprint_metrics.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1303,8 +1303,8 @@ workflows:
           separator: "\t"
   - id: a3653ebbaf038b47c48eb9c9
     data_collection_tag: deeptools_plot_profile
-    description: Metagene signal profile — recipe output (deeptools/plot_profile.py), seeded from the
-      catalog fixture
+    description: 'Metagene signal profile: recipe output (deeptools/plot_profile.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1317,7 +1317,7 @@ workflows:
           separator: "\t"
   - id: 166b264da35e97335ec3f6c5
     data_collection_tag: deeptools_sample_pca
-    description: Sample PCA — recipe output (deeptools/sample_pca.py), seeded from the catalog fixture
+    description: 'Sample PCA: recipe output (deeptools/sample_pca.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1330,7 +1330,7 @@ workflows:
           separator: "\t"
   - id: 01bc24909cffb9993d107cee
     data_collection_tag: deseq2_qc_pca
-    description: DESeq2 QC PCA — recipe output (deseq2/qc_pca.py), seeded from the catalog fixture
+    description: 'DESeq2 QC PCA: recipe output (deseq2/qc_pca.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1343,8 +1343,8 @@ workflows:
           separator: "\t"
   - id: fc5fa5144af28e385185d137
     data_collection_tag: deseq2_qc_sample_dists
-    description: DESeq2 QC sample distances — recipe output (deseq2/qc_sample_dists.py), seeded from the
-      catalog fixture
+    description: 'DESeq2 QC sample distances: recipe output (deseq2/qc_sample_dists.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1357,8 +1357,8 @@ workflows:
           separator: "\t"
   - id: 10908a70f616f6a105ea4291
     data_collection_tag: deseq2_results_annotated
-    description: Annotated results — recipe output (deseq2/results_annotated.py), seeded from the catalog
-      fixture
+    description: 'Annotated results: recipe output (deseq2/results_annotated.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1371,8 +1371,8 @@ workflows:
           separator: "\t"
   - id: 32d9b8873e1202ae8bfba322
     data_collection_tag: deseq2_results
-    description: Differential results — recipe output (deseq2/results_long.py), seeded from the catalog
-      fixture
+    description: 'Differential results: recipe output (deseq2/results_long.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1385,8 +1385,8 @@ workflows:
           separator: "\t"
   - id: e9c5dcb201969683a5868b81
     data_collection_tag: deseq2_vst_distribution
-    description: Sample expression distributions — recipe output (deseq2/vst_distribution.py), seeded
-      from the catalog fixture
+    description: 'Sample expression distributions: recipe output (deseq2/vst_distribution.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1399,7 +1399,7 @@ workflows:
           separator: "\t"
   - id: d97c1fa079415bb09846679e
     data_collection_tag: deseq2_vst_pca
-    description: Sample PCA — recipe output (deseq2/vst_pca.py), seeded from the catalog fixture
+    description: 'Sample PCA: recipe output (deseq2/vst_pca.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1412,8 +1412,8 @@ workflows:
           separator: "\t"
   - id: 707624558c70837c221d3ae0
     data_collection_tag: deseq2_sample_distance
-    description: Sample distances — recipe output (deseq2/vst_sample_distance.py), seeded from the catalog
-      fixture
+    description: 'Sample distances: recipe output (deseq2/vst_sample_distance.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1426,8 +1426,8 @@ workflows:
           separator: "\t"
   - id: 71cf2aa5bbcd54243e6cc328
     data_collection_tag: deseq2_vst_heatmap
-    description: Top variable features — recipe output (deseq2/vst_top_variable.py), seeded from the catalog
-      fixture
+    description: 'Top variable features: recipe output (deseq2/vst_top_variable.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1440,8 +1440,8 @@ workflows:
           separator: "\t"
   - id: 8b0db46dad87812ed9a9428c
     data_collection_tag: dexseq_dtu
-    description: Differential transcript usage — recipe output (dexseq/dtu.py), seeded from the catalog
-      fixture
+    description: 'Differential transcript usage: recipe output (dexseq/dtu.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1454,8 +1454,8 @@ workflows:
           separator: "\t"
   - id: 27ec7f3b7fa0bdb08900c424
     data_collection_tag: dexseq_exon_genes
-    description: Differential exon usage per gene — recipe output (dexseq/exon_genes.py), seeded from
-      the catalog fixture
+    description: 'Differential exon usage per gene: recipe output (dexseq/exon_genes.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1468,8 +1468,8 @@ workflows:
           separator: "\t"
   - id: dfb5cc863c292aa7e5631bc3
     data_collection_tag: dexseq_results
-    description: Differential exon/transcript usage — recipe output (dexseq/results.py), seeded from the
-      catalog fixture
+    description: 'Differential exon/transcript usage: recipe output (dexseq/results.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1482,8 +1482,8 @@ workflows:
           separator: "\t"
   - id: 32e93f88aeeaeb8697eae936
     data_collection_tag: edger_diffsplice_genes
-    description: Differential exon usage per gene (edgeR) — recipe output (edger/diffsplice_genes.py),
-      seeded from the catalog fixture
+    description: 'Differential exon usage per gene (edgeR): recipe output (edger/diffsplice_genes.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1496,8 +1496,8 @@ workflows:
           separator: "\t"
   - id: 070c9d7912b8d46d81133701
     data_collection_tag: enchantr_clonal_abundance
-    description: Clonal rank abundance — recipe output (enchantr/clonal_abundance.py), seeded from the
-      catalog fixture
+    description: 'Clonal rank abundance: recipe output (enchantr/clonal_abundance.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1510,8 +1510,8 @@ workflows:
           separator: "\t"
   - id: 0c131176efad9a7b6632a106
     data_collection_tag: enchantr_clonal_diversity
-    description: Clonal diversity profile — recipe output (enchantr/clonal_diversity.py), seeded from
-      the catalog fixture
+    description: 'Clonal diversity profile: recipe output (enchantr/clonal_diversity.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1524,8 +1524,8 @@ workflows:
           separator: "\t"
   - id: 87cc5ee50209b5c2e9dbf928
     data_collection_tag: enchantr_clonal_overlap
-    description: Clonal overlap matrix — recipe output (enchantr/clonal_overlap.py), seeded from the catalog
-      fixture
+    description: 'Clonal overlap matrix: recipe output (enchantr/clonal_overlap.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1538,7 +1538,7 @@ workflows:
           separator: "\t"
   - id: 885f6aa1b0ef28eba0807ff8
     data_collection_tag: enchantr_clone_sets
-    description: Shared clone sets — recipe output (enchantr/clone_sets.py), seeded from the catalog fixture
+    description: 'Shared clone sets: recipe output (enchantr/clone_sets.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1551,7 +1551,7 @@ workflows:
           separator: "\t"
   - id: 4f5ab0c7c7a5e3c53f33ab0f
     data_collection_tag: enchantr_clone_sizes
-    description: Clone sizes — recipe output (enchantr/clone_sizes.py), seeded from the catalog fixture
+    description: 'Clone sizes: recipe output (enchantr/clone_sizes.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1564,8 +1564,8 @@ workflows:
           separator: "\t"
   - id: ac410f49654ecac8d6272eea
     data_collection_tag: enchantr_diversity_orders
-    description: Hill diversity at the named orders — recipe output (enchantr/diversity_orders.py), seeded
-      from the catalog fixture
+    description: 'Hill diversity at the named orders: recipe output (enchantr/diversity_orders.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1578,8 +1578,8 @@ workflows:
           separator: "\t"
   - id: ad3693a3cdd30d3d8b307d54
     data_collection_tag: enchantr_repertoire_summary
-    description: Repertoire summary — recipe output (enchantr/repertoire_summary.py), seeded from the
-      catalog fixture
+    description: 'Repertoire summary: recipe output (enchantr/repertoire_summary.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1592,8 +1592,8 @@ workflows:
           separator: "\t"
   - id: 0638c098832895856474a4a8
     data_collection_tag: enchantr_sequence_counts
-    description: Sequence processing counts — recipe output (enchantr/sequence_counts.py), seeded from
-      the catalog fixture
+    description: 'Sequence processing counts: recipe output (enchantr/sequence_counts.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1606,8 +1606,8 @@ workflows:
           separator: "\t"
   - id: 4b3e9f15fcf353eca050986c
     data_collection_tag: enchantr_sequence_fates
-    description: Sequence attrition flow — recipe output (enchantr/sequence_fates.py), seeded from the
-      catalog fixture
+    description: 'Sequence attrition flow: recipe output (enchantr/sequence_fates.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1620,8 +1620,8 @@ workflows:
           separator: "\t"
   - id: e003b9d2ec089d72d730c33c
     data_collection_tag: enchantr_threshold_summary
-    description: Clonal distance threshold — recipe output (enchantr/threshold_summary.py), seeded from
-      the catalog fixture
+    description: 'Clonal distance threshold: recipe output (enchantr/threshold_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1634,8 +1634,8 @@ workflows:
           separator: "\t"
   - id: da04195f87be722e919c9b6e
     data_collection_tag: enchantr_v_gene_matrix
-    description: V gene usage matrix — recipe output (enchantr/v_gene_matrix.py), seeded from the catalog
-      fixture
+    description: 'V gene usage matrix: recipe output (enchantr/v_gene_matrix.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1648,7 +1648,7 @@ workflows:
           separator: "\t"
   - id: 8cdbcc4479bfecb452b99f20
     data_collection_tag: enchantr_v_gene_usage
-    description: V gene usage — recipe output (enchantr/v_gene_usage.py), seeded from the catalog fixture
+    description: 'V gene usage: recipe output (enchantr/v_gene_usage.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1661,7 +1661,7 @@ workflows:
           separator: "\t"
   - id: cabc0bfa90cda6020742a9e2
     data_collection_tag: endorspy_endogenous
-    description: Endogenous DNA — recipe output (endorspy/endogenous.py), seeded from the catalog fixture
+    description: 'Endogenous DNA: recipe output (endorspy/endogenous.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1674,8 +1674,8 @@ workflows:
           separator: "\t"
   - id: 27f16c6cb818184c24636983
     data_collection_tag: funcscan_contig_annotation
-    description: Contig annotation — recipe output (funcscan/contig_annotation.py), seeded from the catalog
-      fixture
+    description: 'Contig annotation: recipe output (funcscan/contig_annotation.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1688,8 +1688,8 @@ workflows:
           separator: "\t"
   - id: 828a2c89d2d1f3f605d3a55e
     data_collection_tag: funcscan_screening_summary
-    description: Screening hub — recipe output (funcscan/screening_summary.py), seeded from the catalog
-      fixture
+    description: 'Screening hub: recipe output (funcscan/screening_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1702,8 +1702,8 @@ workflows:
           separator: "\t"
   - id: 2723132ba702c0e795e08938
     data_collection_tag: funcscan_software_versions
-    description: Software versions — recipe output (funcscan/software_versions.py), seeded from the catalog
-      fixture
+    description: 'Software versions: recipe output (funcscan/software_versions.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1716,8 +1716,8 @@ workflows:
           separator: "\t"
   - id: 105d1de776b485fa9f7b3426
     data_collection_tag: fusioncatcher_fusion_genes
-    description: FusionCatcher fusion genes — recipe output (fusioncatcher/fusion_genes.py), seeded from
-      the catalog fixture
+    description: 'FusionCatcher fusion genes: recipe output (fusioncatcher/fusion_genes.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1730,8 +1730,8 @@ workflows:
           separator: "\t"
   - id: 5f880fb71dc10d52703dabed
     data_collection_tag: fusioninspector_fusions
-    description: Validated fusions — recipe output (fusioninspector/fusions.py), seeded from the catalog
-      fixture
+    description: 'Validated fusions: recipe output (fusioninspector/fusions.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1744,8 +1744,8 @@ workflows:
           separator: "\t"
   - id: 400fdfc8ef56a18f6d0e9538
     data_collection_tag: fusioninspector_protein_domains
-    description: Fusion protein domains — recipe output (fusioninspector/protein_domains.py), seeded from
-      the catalog fixture
+    description: 'Fusion protein domains: recipe output (fusioninspector/protein_domains.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1758,8 +1758,8 @@ workflows:
           separator: "\t"
   - id: 7853406c35eb4e0efff31271
     data_collection_tag: fusionreport_caller_evidence
-    description: Caller evidence — recipe output (fusionreport/caller_evidence.py), seeded from the catalog
-      fixture
+    description: 'Caller evidence: recipe output (fusionreport/caller_evidence.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1772,7 +1772,7 @@ workflows:
           separator: "\t"
   - id: 8502aac25656ede7157aa42a
     data_collection_tag: fusionreport_fusions
-    description: Fusion consensus — recipe output (fusionreport/fusions.py), seeded from the catalog fixture
+    description: 'Fusion consensus: recipe output (fusionreport/fusions.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1785,8 +1785,8 @@ workflows:
           separator: "\t"
   - id: 50260a74b85ad5c22aedf814
     data_collection_tag: genomescope_summary
-    description: Genome profile from reads — recipe output (genomescope/summary.py), seeded from the catalog
-      fixture
+    description: 'Genome profile from reads: recipe output (genomescope/summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1799,7 +1799,7 @@ workflows:
           separator: "\t"
   - id: 71f2bf3c63fa90d05c18ff0f
     data_collection_tag: gsea_report
-    description: GSEA enrichment report — recipe output (gsea/report.py), seeded from the catalog fixture
+    description: 'GSEA enrichment report: recipe output (gsea/report.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1812,8 +1812,8 @@ workflows:
           separator: "\t"
   - id: e4aee26a8c61e499e6d14389
     data_collection_tag: gtdbtk_rank_composition
-    description: Recovered community per binning run — recipe output (gtdbtk/rank_composition.py), seeded
-      from the catalog fixture
+    description: 'Recovered community per binning run: recipe output (gtdbtk/rank_composition.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1826,7 +1826,7 @@ workflows:
           separator: "\t"
   - id: 6ca66aa87f0775ce1f20c8d5
     data_collection_tag: gtdbtk_summary
-    description: Bin taxonomy — recipe output (gtdbtk/summary.py), seeded from the catalog fixture
+    description: 'Bin taxonomy: recipe output (gtdbtk/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1839,7 +1839,7 @@ workflows:
           separator: "\t"
   - id: 3242665931c911c7b2f0e925
     data_collection_tag: gtf_transcripts
-    description: Transcript structures — recipe output (gtf/transcripts.py), seeded from the catalog fixture
+    description: 'Transcript structures: recipe output (gtf/transcripts.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1852,8 +1852,8 @@ workflows:
           separator: "\t"
   - id: 5f43421c2f06de14c9a91a05
     data_collection_tag: hamronization_class_matrix
-    description: Drug class by sample matrix — recipe output (hamronization/class_matrix.py), seeded from
-      the catalog fixture
+    description: 'Drug class by sample matrix: recipe output (hamronization/class_matrix.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1866,8 +1866,8 @@ workflows:
           separator: "\t"
   - id: a8a58ea4ddc3fb818bf93cd4
     data_collection_tag: hamronization_gene_matrix
-    description: Gene by sample matrix — recipe output (hamronization/gene_matrix.py), seeded from the
-      catalog fixture
+    description: 'Gene by sample matrix: recipe output (hamronization/gene_matrix.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1880,8 +1880,8 @@ workflows:
           separator: "\t"
   - id: 244e3e4377a9815d0e60316f
     data_collection_tag: hamronization_gene_presence
-    description: Gene support — recipe output (hamronization/gene_presence.py), seeded from the catalog
-      fixture
+    description: 'Gene support: recipe output (hamronization/gene_presence.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1894,7 +1894,7 @@ workflows:
           separator: "\t"
   - id: c6e6efd9f5cf0d9e12c057ff
     data_collection_tag: hamronization_report
-    description: ARG hits — recipe output (hamronization/report.py), seeded from the catalog fixture
+    description: 'ARG hits: recipe output (hamronization/report.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1907,8 +1907,8 @@ workflows:
           separator: "\t"
   - id: 6c20e5123091364d24b3a434
     data_collection_tag: hamronization_tool_overlap
-    description: Tool concordance — recipe output (hamronization/tool_overlap.py), seeded from the catalog
-      fixture
+    description: 'Tool concordance: recipe output (hamronization/tool_overlap.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1921,7 +1921,7 @@ workflows:
           separator: "\t"
   - id: 7dfb6a2a8decc2592e83e7e9
     data_collection_tag: happy_roc
-    description: hap.py threshold sweep — recipe output (happy/roc.py), seeded from the catalog fixture
+    description: 'hap.py threshold sweep: recipe output (happy/roc.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1934,7 +1934,7 @@ workflows:
           separator: "\t"
   - id: 8f15e6d58e41b27de15e8772
     data_collection_tag: happy_summary
-    description: hap.py pooled summary — recipe output (happy/summary.py), seeded from the catalog fixture
+    description: 'hap.py pooled summary: recipe output (happy/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1947,8 +1947,8 @@ workflows:
           separator: "\t"
   - id: 772a7d453671a9b3c936a241
     data_collection_tag: hicexplorer_distance_decay
-    description: Contact probability vs distance — recipe output (hicexplorer/distance_decay.py), seeded
-      from the catalog fixture
+    description: 'Contact probability vs distance: recipe output (hicexplorer/distance_decay.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1961,7 +1961,7 @@ workflows:
           separator: "\t"
   - id: ebcda6935d39e143043954b3
     data_collection_tag: hicpro_pair_flow
-    description: Read-pair fates — recipe output (hicpro/pair_flow.py), seeded from the catalog fixture
+    description: 'Read-pair fates: recipe output (hicpro/pair_flow.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1974,7 +1974,7 @@ workflows:
           separator: "\t"
   - id: 143945ed6492e9e1120b9d04
     data_collection_tag: hicpro_pair_stats
-    description: Valid-pair funnel — recipe output (hicpro/pair_stats.py), seeded from the catalog fixture
+    description: 'Valid-pair funnel: recipe output (hicpro/pair_stats.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -1987,7 +1987,7 @@ workflows:
           separator: "\t"
   - id: 82f223a5c7b53ddf6a7cfec1
     data_collection_tag: homer_annotated_peaks
-    description: Peak annotation — recipe output (homer/annotate_peaks.py), seeded from the catalog fixture
+    description: 'Peak annotation: recipe output (homer/annotate_peaks.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2000,8 +2000,8 @@ workflows:
           separator: "\t"
   - id: 1232fdcf331fb33f9cb6e00f
     data_collection_tag: homer_tss_distance_profile
-    description: Distance to nearest TSS — recipe output (homer/tss_distance_profile.py), seeded from
-      the catalog fixture
+    description: 'Distance to nearest TSS: recipe output (homer/tss_distance_profile.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2014,8 +2014,8 @@ workflows:
           separator: "\t"
   - id: 64fe17bb59a78b03100f1b60
     data_collection_tag: interop_summary
-    description: SAV run summary per lane and read — recipe output (interop/summary.py), seeded from the
-      catalog fixture
+    description: 'SAV run summary per lane and read: recipe output (interop/summary.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2028,7 +2028,7 @@ workflows:
           separator: "\t"
   - id: f7cf57984ff91bc0a9c56aa2
     data_collection_tag: ivar_variants_long
-    description: Variant calls — recipe output (ivar/variants_long.py), seeded from the catalog fixture
+    description: 'Variant calls: recipe output (ivar/variants_long.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2041,8 +2041,8 @@ workflows:
           separator: "\t"
   - id: 9a59c6bdeebed50d2680a3d4
     data_collection_tag: jellyfish_histogram
-    description: Read k-mer spectrum — recipe output (jellyfish/histogram.py), seeded from the catalog
-      fixture
+    description: 'Read k-mer spectrum: recipe output (jellyfish/histogram.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2055,8 +2055,8 @@ workflows:
           separator: "\t"
   - id: fc7c9cdd7b097514eb4c7008
     data_collection_tag: kallisto_run_metrics
-    description: Run headline numbers (kallisto | bustools) — recipe output (kallisto/run_metrics.py),
-      seeded from the catalog fixture
+    description: 'Run headline numbers (kallisto | bustools): recipe output (kallisto/run_metrics.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2069,7 +2069,7 @@ workflows:
           separator: "\t"
   - id: 556ba42754f15c8bf0db5401
     data_collection_tag: macs2_broad_peaks
-    description: Broad peak calls — recipe output (macs2/broad_peaks.py), seeded from the catalog fixture
+    description: 'Broad peak calls: recipe output (macs2/broad_peaks.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2082,8 +2082,8 @@ workflows:
           separator: "\t"
   - id: 4d046a7978f7b050a09579be
     data_collection_tag: macs2_consensus_boolean
-    description: Consensus peak overlap — recipe output (macs2/consensus_boolean.py), seeded from the
-      catalog fixture
+    description: 'Consensus peak overlap: recipe output (macs2/consensus_boolean.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2096,8 +2096,8 @@ workflows:
           separator: "\t"
   - id: ce09f3486f71cd658f6f20fa
     data_collection_tag: macs2_consensus_fc
-    description: Consensus fold enrichment — recipe output (macs2/consensus_fc.py), seeded from the catalog
-      fixture
+    description: 'Consensus fold enrichment: recipe output (macs2/consensus_fc.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2110,7 +2110,7 @@ workflows:
           separator: "\t"
   - id: 18e1b8d2599b3eb208ebef74
     data_collection_tag: macs2_peak_summary
-    description: Peak QC summary — recipe output (macs2/peak_summary.py), seeded from the catalog fixture
+    description: 'Peak QC summary: recipe output (macs2/peak_summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2123,7 +2123,7 @@ workflows:
           separator: "\t"
   - id: b11ed0eb520af6dc3f8d13c8
     data_collection_tag: macs2_peaks
-    description: Peak calls — recipe output (macs2/peaks.py), seeded from the catalog fixture
+    description: 'Peak calls: recipe output (macs2/peaks.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2136,8 +2136,8 @@ workflows:
           separator: "\t"
   - id: 81c4e3374f0bd91d07e650e6
     data_collection_tag: macs2_summit_profile
-    description: Summit-centred peak profile — recipe output (macs2/summit_profile.py), seeded from the
-      catalog fixture
+    description: 'Summit-centred peak profile: recipe output (macs2/summit_profile.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2150,7 +2150,7 @@ workflows:
           separator: "\t"
   - id: ee47ce6c439ae57193b56e1d
     data_collection_tag: mag_bin_summary
-    description: Bin summary — recipe output (mag/bin_summary.py), seeded from the catalog fixture
+    description: 'Bin summary: recipe output (mag/bin_summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2163,7 +2163,7 @@ workflows:
           separator: "\t"
   - id: 4548450f866f2514159f8f06
     data_collection_tag: mag_contig_depths
-    description: Contig coverage — recipe output (mag/contig_depths.py), seeded from the catalog fixture
+    description: 'Contig coverage: recipe output (mag/contig_depths.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2176,7 +2176,7 @@ workflows:
           separator: "\t"
   - id: bd89d37fb5301417e476c957
     data_collection_tag: melon_ranks
-    description: Genome-copy composition — recipe output (melon/ranks.py), seeded from the catalog fixture
+    description: 'Genome-copy composition: recipe output (melon/ranks.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2189,8 +2189,8 @@ workflows:
           separator: "\t"
   - id: 934017d897d6cdd4fa1c10b2
     data_collection_tag: merqury_assembly_qv
-    description: Assembly QV and k-mer completeness — recipe output (merqury/assembly_qv.py), seeded from
-      the catalog fixture
+    description: 'Assembly QV and k-mer completeness: recipe output (merqury/assembly_qv.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2203,8 +2203,8 @@ workflows:
           separator: "\t"
   - id: 8ad2cb00e1adfa3e846494ae
     data_collection_tag: merqury_copy_number_composition
-    description: Read k-mer copy number in the assembly — recipe output (merqury/copy_number_composition.py),
-      seeded from the catalog fixture
+    description: 'Read k-mer copy number in the assembly: recipe output (merqury/copy_number_composition.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2217,7 +2217,7 @@ workflows:
           separator: "\t"
   - id: 0994c4b2f2352356d90e46e1
     data_collection_tag: merqury_sequence_qv
-    description: Per-sequence QV — recipe output (merqury/sequence_qv.py), seeded from the catalog fixture
+    description: 'Per-sequence QV: recipe output (merqury/sequence_qv.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2230,8 +2230,8 @@ workflows:
           separator: "\t"
   - id: e8b5c6d6130e4c91030d4934
     data_collection_tag: mhcquant_fragment_ions
-    description: Fragment-ion annotation — recipe output (mhcquant/fragment_ions.py), seeded from the
-      catalog fixture
+    description: 'Fragment-ion annotation: recipe output (mhcquant/fragment_ions.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2244,8 +2244,8 @@ workflows:
           separator: "\t"
   - id: 4c6e157b31f7dcccae876042
     data_collection_tag: mhcquant_length_distribution
-    description: Peptide length distribution — recipe output (mhcquant/length_distribution.py), seeded
-      from the catalog fixture
+    description: 'Peptide length distribution: recipe output (mhcquant/length_distribution.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2258,8 +2258,8 @@ workflows:
           separator: "\t"
   - id: 3f17e027a0ed416663004de0
     data_collection_tag: mhcquant_motif_matrix
-    description: Positional amino-acid frequencies — recipe output (mhcquant/motif_matrix.py), seeded
-      from the catalog fixture
+    description: 'Positional amino-acid frequencies: recipe output (mhcquant/motif_matrix.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2272,8 +2272,8 @@ workflows:
           separator: "\t"
   - id: 05e76e24ef0215260772c28b
     data_collection_tag: mhcquant_peptide_composition
-    description: Peptide composition — recipe output (mhcquant/peptide_composition.py), seeded from the
-      catalog fixture
+    description: 'Peptide composition: recipe output (mhcquant/peptide_composition.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2286,7 +2286,7 @@ workflows:
           separator: "\t"
   - id: be2208d184aa72fc2d30da9d
     data_collection_tag: mhcquant_peptides
-    description: Identified peptides — recipe output (mhcquant/peptides.py), seeded from the catalog fixture
+    description: 'Identified peptides: recipe output (mhcquant/peptides.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2299,8 +2299,8 @@ workflows:
           separator: "\t"
   - id: d86c7b4002fac87a120ad9e5
     data_collection_tag: mhcquant_replicate_detection
-    description: Replicate detection matrix — recipe output (mhcquant/replicate_detection.py), seeded
-      from the catalog fixture
+    description: 'Replicate detection matrix: recipe output (mhcquant/replicate_detection.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2313,8 +2313,8 @@ workflows:
           separator: "\t"
   - id: cc99c5e8b2240b5927f6ddfe
     data_collection_tag: mhcquant_replicate_intensity
-    description: Peptide intensity per replicate — recipe output (mhcquant/replicate_intensity.py), seeded
-      from the catalog fixture
+    description: 'Peptide intensity per replicate: recipe output (mhcquant/replicate_intensity.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2327,8 +2327,8 @@ workflows:
           separator: "\t"
   - id: 694f84bef7c021c1f493b50b
     data_collection_tag: mhcquant_replicate_pairs
-    description: Replicate intensity pairs — recipe output (mhcquant/replicate_pairs.py), seeded from
-      the catalog fixture
+    description: 'Replicate intensity pairs: recipe output (mhcquant/replicate_pairs.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2341,8 +2341,8 @@ workflows:
           separator: "\t"
   - id: 9f873dc64433ce8c09fc0cbb
     data_collection_tag: mhcquant_sample_summary
-    description: Immunopeptidome summary — recipe output (mhcquant/sample_summary.py), seeded from the
-      catalog fixture
+    description: 'Immunopeptidome summary: recipe output (mhcquant/sample_summary.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2355,8 +2355,8 @@ workflows:
           separator: "\t"
   - id: 8fc27a0072c429a7e30bc500
     data_collection_tag: mhcquant_source_proteins
-    description: Source proteins — recipe output (mhcquant/source_proteins.py), seeded from the catalog
-      fixture
+    description: 'Source proteins: recipe output (mhcquant/source_proteins.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2369,8 +2369,8 @@ workflows:
           separator: "\t"
   - id: cef6b14d03022d90fac39217
     data_collection_tag: mirdeep2_novel_precursors
-    description: Novel miRNA precursors — recipe output (mirdeep2/novel_precursors.py), seeded from the
-      catalog fixture
+    description: 'Novel miRNA precursors: recipe output (mirdeep2/novel_precursors.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2383,8 +2383,8 @@ workflows:
           separator: "\t"
   - id: 600c9ff68fbcbb62d8107bec
     data_collection_tag: mirdeep2_predictions
-    description: miRNA precursor predictions — recipe output (mirdeep2/predictions.py), seeded from the
-      catalog fixture
+    description: 'miRNA precursor predictions: recipe output (mirdeep2/predictions.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2397,8 +2397,8 @@ workflows:
           separator: "\t"
   - id: c2f9bb98eaca96be71bd93b3
     data_collection_tag: mirdeep2_score_summary
-    description: miRDeep2 score-cutoff summary — recipe output (mirdeep2/score_summary.py), seeded from
-      the catalog fixture
+    description: 'miRDeep2 score-cutoff summary: recipe output (mirdeep2/score_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2411,8 +2411,8 @@ workflows:
           separator: "\t"
   - id: bb39b3b1a592b10f977f978d
     data_collection_tag: mirtop_isomir_composition
-    description: isomiR composition per sample — recipe output (mirtop/isomir_composition.py), seeded
-      from the catalog fixture
+    description: 'isomiR composition per sample: recipe output (mirtop/isomir_composition.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2425,8 +2425,8 @@ workflows:
           separator: "\t"
   - id: 4ac9010cb4733fac376a4057
     data_collection_tag: mirtop_isomir_landscape
-    description: isomiR landscape of the top miRNAs — recipe output (mirtop/isomir_landscape.py), seeded
-      from the catalog fixture
+    description: 'isomiR landscape of the top miRNAs: recipe output (mirtop/isomir_landscape.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2439,8 +2439,8 @@ workflows:
           separator: "\t"
   - id: cc648a5b32d355b6e0edab6c
     data_collection_tag: mirtop_mirna_counts
-    description: miRNA expression per sample — recipe output (mirtop/mirna_counts.py), seeded from the
-      catalog fixture
+    description: 'miRNA expression per sample: recipe output (mirtop/mirna_counts.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2453,7 +2453,7 @@ workflows:
           separator: "\t"
   - id: 23960fee9629d3dabd67f362
     data_collection_tag: mirtop_mirna_summary
-    description: miRNA summary — recipe output (mirtop/mirna_summary.py), seeded from the catalog fixture
+    description: 'miRNA summary: recipe output (mirtop/mirna_summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2466,8 +2466,8 @@ workflows:
           separator: "\t"
   - id: 56e95e299581acedd941e09d
     data_collection_tag: mirtop_sample_matrix
-    description: Samples by miRNAs expression matrix — recipe output (mirtop/sample_matrix.py), seeded
-      from the catalog fixture
+    description: 'Samples by miRNAs expression matrix: recipe output (mirtop/sample_matrix.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2480,8 +2480,8 @@ workflows:
           separator: "\t"
   - id: 3fc038a1653e4c1c2799d928
     data_collection_tag: mirtop_sample_pca
-    description: Sample PCA on miRNA expression — recipe output (mirtop/sample_pca.py), seeded from the
-      catalog fixture
+    description: 'Sample PCA on miRNA expression: recipe output (mirtop/sample_pca.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2494,8 +2494,8 @@ workflows:
           separator: "\t"
   - id: 3d359161adafb69ab0cf8b41
     data_collection_tag: mirtop_top_variable_heatmap
-    description: Top variable miRNAs — recipe output (mirtop/top_variable_heatmap.py), seeded from the
-      catalog fixture
+    description: 'Top variable miRNAs: recipe output (mirtop/top_variable_heatmap.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2508,8 +2508,8 @@ workflows:
           separator: "\t"
   - id: 125be31f418373fc3af51f4d
     data_collection_tag: mosdepth_amplicon_heatmap
-    description: Amplicon coverage matrix — recipe output (mosdepth/complex_heatmap_canonical.py), seeded
-      from the catalog fixture
+    description: 'Amplicon coverage matrix: recipe output (mosdepth/complex_heatmap_canonical.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2522,8 +2522,8 @@ workflows:
           separator: "\t"
   - id: e74743af38abd00631cdb34e
     data_collection_tag: mosdepth_genome_coverage
-    description: Genome coverage — recipe output (mosdepth/coverage_track_canonical.py), seeded from the
-      catalog fixture
+    description: 'Genome coverage: recipe output (mosdepth/coverage_track_canonical.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2536,8 +2536,8 @@ workflows:
           separator: "\t"
   - id: 370d9bb55c6fab29a12c5aa0
     data_collection_tag: mosdepth_regions
-    description: Coverage along the genome — recipe output (mosdepth/regions.py), seeded from the catalog
-      fixture
+    description: 'Coverage along the genome: recipe output (mosdepth/regions.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2550,8 +2550,8 @@ workflows:
           separator: "\t"
   - id: f35183b6ee1cc7cff13356b0
     data_collection_tag: mosdepth_summary
-    description: Per-contig coverage summary — recipe output (mosdepth/summary.py), seeded from the catalog
-      fixture
+    description: 'Per-contig coverage summary: recipe output (mosdepth/summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2564,8 +2564,8 @@ workflows:
           separator: "\t"
   - id: 4e3ddaae6a4e785f70c41a50
     data_collection_tag: mosdepth_xy_sex_check
-    description: X and Y coverage sex check — recipe output (mosdepth/xy_sex_check.py), seeded from the
-      catalog fixture
+    description: 'X and Y coverage sex check: recipe output (mosdepth/xy_sex_check.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2578,8 +2578,8 @@ workflows:
           separator: "\t"
   - id: 9ff46dc39e0d725873116eb4
     data_collection_tag: multiqc_mirtrace_complexity
-    description: miRNA complexity curve — recipe output (multiqc/mirtrace_complexity.py), seeded from
-      the catalog fixture
+    description: 'miRNA complexity curve: recipe output (multiqc/mirtrace_complexity.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2592,8 +2592,8 @@ workflows:
           separator: "\t"
   - id: ff223995eead0abc5ece481f
     data_collection_tag: multiqc_mirtrace_composition
-    description: Small RNA library composition — recipe output (multiqc/mirtrace_composition.py), seeded
-      from the catalog fixture
+    description: 'Small RNA library composition: recipe output (multiqc/mirtrace_composition.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2606,8 +2606,8 @@ workflows:
           separator: "\t"
   - id: 8dee61437bb5879d63900369
     data_collection_tag: multiqc_mirtrace_length
-    description: Read length distribution — recipe output (multiqc/mirtrace_length.py), seeded from the
-      catalog fixture
+    description: 'Read length distribution: recipe output (multiqc/mirtrace_length.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2620,8 +2620,8 @@ workflows:
           separator: "\t"
   - id: 3cf123b9eb22bf9491168b2d
     data_collection_tag: multiqc_summary_metrics
-    description: Variant-calling summary — recipe output (multiqc/summary_metrics.py), seeded from the
-      catalog fixture
+    description: 'Variant-calling summary: recipe output (multiqc/summary_metrics.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2634,7 +2634,7 @@ workflows:
           separator: "\t"
   - id: 944063061e6adc6bf3c710f3
     data_collection_tag: nanoplot_nanostats
-    description: Long-read summary — recipe output (nanoplot/nanostats.py), seeded from the catalog fixture
+    description: 'Long-read summary: recipe output (nanoplot/nanostats.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2647,8 +2647,8 @@ workflows:
           separator: "\t"
   - id: ed9d57e451021fc1618cc349
     data_collection_tag: nanoplot_nanostats_quality
-    description: Yield above quality cutoffs — recipe output (nanoplot/nanostats_quality.py), seeded from
-      the catalog fixture
+    description: 'Yield above quality cutoffs: recipe output (nanoplot/nanostats_quality.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2661,8 +2661,8 @@ workflows:
           separator: "\t"
   - id: 08a79b4e8079f80a7509bc8e
     data_collection_tag: nextclade_report
-    description: Clade assignment — recipe output (nextclade/nextclade_results.py), seeded from the catalog
-      fixture
+    description: 'Clade assignment: recipe output (nextclade/nextclade_results.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2675,8 +2675,8 @@ workflows:
           separator: "\t"
   - id: 6d60044d1cca13f5dfab8456
     data_collection_tag: qiime2_bray_curtis
-    description: Sample distance matrix — recipe output (nf-core/ampliseq/bray_curtis_canonical.py), seeded
-      from the catalog fixture
+    description: 'Sample distance matrix: recipe output (nf-core/ampliseq/bray_curtis_canonical.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2689,8 +2689,8 @@ workflows:
           separator: "\t"
   - id: 9525f9aeb7255a53004b6273
     data_collection_tag: qiime2_clustered_heatmap
-    description: Clustered abundance heatmap — recipe output (nf-core/ampliseq/complex_heatmap_canonical.py),
-      seeded from the catalog fixture
+    description: 'Clustered abundance heatmap: recipe output (nf-core/ampliseq/complex_heatmap_canonical.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2703,8 +2703,8 @@ workflows:
           separator: "\t"
   - id: 1304ff22d61cd7d217491544
     data_collection_tag: qiime2_ma
-    description: Differential-abundance MA plot — recipe output (nf-core/ampliseq/ma_canonical.py), seeded
-      from the catalog fixture
+    description: 'Differential-abundance MA plot: recipe output (nf-core/ampliseq/ma_canonical.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2717,8 +2717,8 @@ workflows:
           separator: "\t"
   - id: a61dbb35ce24950dac9c240a
     data_collection_tag: qiime2_sunburst_canonical
-    description: Taxonomic hierarchy — recipe output (nf-core/ampliseq/sunburst_canonical.py), seeded
-      from the catalog fixture
+    description: 'Taxonomic hierarchy: recipe output (nf-core/ampliseq/sunburst_canonical.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2731,8 +2731,8 @@ workflows:
           separator: "\t"
   - id: 40d0e43149b0392ea5b2d98a
     data_collection_tag: qiime2_rel_abundance
-    description: Relative abundance — recipe output (nf-core/ampliseq/taxonomy_rel_abundance.py), seeded
-      from the catalog fixture
+    description: 'Relative abundance: recipe output (nf-core/ampliseq/taxonomy_rel_abundance.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2745,8 +2745,8 @@ workflows:
           separator: "\t"
   - id: 21d7e662493c672338b43566
     data_collection_tag: qiime2_tree_metadata
-    description: ASV taxonomy table — recipe output (nf-core/ampliseq/tree_metadata_canonical.py), seeded
-      from the catalog fixture
+    description: 'ASV taxonomy table: recipe output (nf-core/ampliseq/tree_metadata_canonical.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2759,8 +2759,8 @@ workflows:
           separator: "\t"
   - id: 1dcce553641691a85fef1ef7
     data_collection_tag: ivar_oncoplot_matrix
-    description: Mutation matrix — recipe output (nf-core/viralrecon/oncoplot_canonical.py), seeded from
-      the catalog fixture
+    description: 'Mutation matrix: recipe output (nf-core/viralrecon/oncoplot_canonical.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2773,7 +2773,7 @@ workflows:
           separator: "\t"
   - id: 452111cf8d68b2477b233062
     data_collection_tag: nonpareil_curves
-    description: Coverage curve — recipe output (nonpareil/curves.py), seeded from the catalog fixture
+    description: 'Coverage curve: recipe output (nonpareil/curves.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2786,8 +2786,8 @@ workflows:
           separator: "\t"
   - id: 85e5b6660aa3e3c3675eea9e
     data_collection_tag: nonpareil_summary
-    description: Coverage and diversity per library — recipe output (nonpareil/summary.py), seeded from
-      the catalog fixture
+    description: 'Coverage and diversity per library: recipe output (nonpareil/summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2800,8 +2800,8 @@ workflows:
           separator: "\t"
   - id: 1b6688793ebadfc493f3819a
     data_collection_tag: openms_comet_fdr_curve
-    description: Identifications against FDR — recipe output (openms/comet_fdr_curve.py), seeded from
-      the catalog fixture
+    description: 'Identifications against FDR: recipe output (openms/comet_fdr_curve.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2814,8 +2814,8 @@ workflows:
           separator: "\t"
   - id: bf1a892eaaccbbe2a3a37e19
     data_collection_tag: openms_comet_psms
-    description: Comet search yield per raw file — recipe output (openms/comet_psms.py), seeded from the
-      catalog fixture
+    description: 'Comet search yield per raw file: recipe output (openms/comet_psms.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2828,8 +2828,8 @@ workflows:
           separator: "\t"
   - id: 503f301de57d976501111a94
     data_collection_tag: pangolin_report
-    description: Lineage report — recipe output (pangolin/pangolin_lineages.py), seeded from the catalog
-      fixture
+    description: 'Lineage report: recipe output (pangolin/pangolin_lineages.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2842,8 +2842,8 @@ workflows:
           separator: "\t"
   - id: 52842a032a0e9259bfc5a4e5
     data_collection_tag: picard_markduplicates_metrics
-    description: Duplication metrics — recipe output (picard/markduplicates_metrics.py), seeded from the
-      catalog fixture
+    description: 'Duplication metrics: recipe output (picard/markduplicates_metrics.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2856,8 +2856,8 @@ workflows:
           separator: "\t"
   - id: d5f5524c28407901e69df39b
     data_collection_tag: preseq_complexity_curve
-    description: Library complexity curve — recipe output (preseq/complexity_curve.py), seeded from the
-      catalog fixture
+    description: 'Library complexity curve: recipe output (preseq/complexity_curve.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2870,7 +2870,7 @@ workflows:
           separator: "\t"
   - id: ec6f05d5a16bae777b324019
     data_collection_tag: prokka_gene_track
-    description: Bin locus map — recipe output (prokka/gene_track.py), seeded from the catalog fixture
+    description: 'Bin locus map: recipe output (prokka/gene_track.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2883,7 +2883,7 @@ workflows:
           separator: "\t"
   - id: 13e9713225e902d57423b226
     data_collection_tag: prokka_summary
-    description: Bin annotation summary — recipe output (prokka/summary.py), seeded from the catalog fixture
+    description: 'Bin annotation summary: recipe output (prokka/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2896,8 +2896,8 @@ workflows:
           separator: "\t"
   - id: 228cea763825ecfbc77f047f
     data_collection_tag: qcatch_metrics_summary
-    description: QC summary (QCatch) — recipe output (qcatch/metrics_summary.py), seeded from the catalog
-      fixture
+    description: 'QC summary (QCatch): recipe output (qcatch/metrics_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2910,8 +2910,8 @@ workflows:
           separator: "\t"
   - id: 5d8c077c82bf9cf520696a31
     data_collection_tag: qiime2_alpha_diversity
-    description: Alpha diversity — recipe output (qiime2/alpha_diversity_multi_canonical.py), seeded from
-      the catalog fixture
+    description: 'Alpha diversity: recipe output (qiime2/alpha_diversity_multi_canonical.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2924,8 +2924,8 @@ workflows:
           separator: "\t"
   - id: fc135f0717eafe511f9f0e92
     data_collection_tag: qiime2_alpha_rarefaction
-    description: Alpha rarefaction — recipe output (qiime2/alpha_rarefaction.py), seeded from the catalog
-      fixture
+    description: 'Alpha rarefaction: recipe output (qiime2/alpha_rarefaction.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2938,8 +2938,8 @@ workflows:
           separator: "\t"
   - id: fef32565ee13c15167a1348c
     data_collection_tag: qiime2_alpha_rarefaction_summary
-    description: Rarefaction summary — recipe output (qiime2/alpha_rarefaction_summary.py), seeded from
-      the catalog fixture
+    description: 'Rarefaction summary: recipe output (qiime2/alpha_rarefaction_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2952,7 +2952,7 @@ workflows:
           separator: "\t"
   - id: a66102058930b45a0d14e53a
     data_collection_tag: qiime2_ancombc
-    description: Differential abundance — recipe output (qiime2/ancombc.py), seeded from the catalog fixture
+    description: 'Differential abundance: recipe output (qiime2/ancombc.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2965,8 +2965,8 @@ workflows:
           separator: "\t"
   - id: 25858881944e9dca5d327606
     data_collection_tag: qiime2_embedding_pcoa
-    description: Beta-diversity ordination — recipe output (qiime2/embedding_pcoa.py), seeded from the
-      catalog fixture
+    description: 'Beta-diversity ordination: recipe output (qiime2/embedding_pcoa.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2979,8 +2979,8 @@ workflows:
           separator: "\t"
   - id: 509a3ae1bc75b630fc256f9a
     data_collection_tag: qiime2_rarefaction_canonical
-    description: Rarefaction curves — recipe output (qiime2/rarefaction_canonical.py), seeded from the
-      catalog fixture
+    description: 'Rarefaction curves: recipe output (qiime2/rarefaction_canonical.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -2993,8 +2993,8 @@ workflows:
           separator: "\t"
   - id: 699d5b99fbfd6ea1284b97db
     data_collection_tag: qiime2_stacked_taxonomy_canonical
-    description: Taxonomic composition, Taxa barplot — recipe output (qiime2/stacked_taxonomy_canonical.py),
-      seeded from the catalog fixture
+    description: 'Taxonomic composition, Taxa barplot: recipe output (qiime2/stacked_taxonomy_canonical.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3007,8 +3007,8 @@ workflows:
           separator: "\t"
   - id: 05f969cd3e8e71e3f5f44e03
     data_collection_tag: qiime2_taxonomy_composition
-    description: Taxon counts per sample — recipe output (qiime2/taxonomy_composition.py), seeded from
-      the catalog fixture
+    description: 'Taxon counts per sample: recipe output (qiime2/taxonomy_composition.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3021,8 +3021,8 @@ workflows:
           separator: "\t"
   - id: 91160b8b0941b0eabd936b82
     data_collection_tag: qiime2_taxonomy_heatmap
-    description: Abundance matrix — recipe output (qiime2/taxonomy_heatmap.py), seeded from the catalog
-      fixture
+    description: 'Abundance matrix: recipe output (qiime2/taxonomy_heatmap.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3035,8 +3035,8 @@ workflows:
           separator: "\t"
   - id: 451b6ba6a70ebeabeb41fe8c
     data_collection_tag: qualimap_bamqc_genome_results
-    description: BamQC genome coverage — recipe output (qualimap/bamqc_genome_results.py), seeded from
-      the catalog fixture
+    description: 'BamQC genome coverage: recipe output (qualimap/bamqc_genome_results.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3049,8 +3049,8 @@ workflows:
           separator: "\t"
   - id: 910198fd68a7d7a32f68098e
     data_collection_tag: qualimap_coverage_across_reference
-    description: Coverage across the reference — recipe output (qualimap/coverage_across_reference.py),
-      seeded from the catalog fixture
+    description: 'Coverage across the reference: recipe output (qualimap/coverage_across_reference.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3063,8 +3063,8 @@ workflows:
           separator: "\t"
   - id: 9141909442f4a9d03e165769
     data_collection_tag: qualimap_coverage_histogram
-    description: Coverage histogram — recipe output (qualimap/coverage_histogram.py), seeded from the
-      catalog fixture
+    description: 'Coverage histogram: recipe output (qualimap/coverage_histogram.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3077,8 +3077,8 @@ workflows:
           separator: "\t"
   - id: d8ebe0fda610b9ca5862c83d
     data_collection_tag: qualimap_coverage_per_contig
-    description: Coverage per contig — recipe output (qualimap/coverage_per_contig.py), seeded from the
-      catalog fixture
+    description: 'Coverage per contig: recipe output (qualimap/coverage_per_contig.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3091,8 +3091,8 @@ workflows:
           separator: "\t"
   - id: 32114b0f39e7f6cbabe50c5d
     data_collection_tag: qualimap_genome_fraction_coverage
-    description: Genome fraction by depth — recipe output (qualimap/genome_fraction_coverage.py), seeded
-      from the catalog fixture
+    description: 'Genome fraction by depth: recipe output (qualimap/genome_fraction_coverage.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3105,8 +3105,8 @@ workflows:
           separator: "\t"
   - id: 26ccf3b4b4aed4167ab497da
     data_collection_tag: quast_assembly_report
-    description: Assembly statistics — recipe output (quast/assembly_report.py), seeded from the catalog
-      fixture
+    description: 'Assembly statistics: recipe output (quast/assembly_report.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3119,8 +3119,8 @@ workflows:
           separator: "\t"
   - id: 4f9855ab9d465317d5ae2fc7
     data_collection_tag: quast_bins_summary
-    description: Bin assembly statistics — recipe output (quast/bins_summary.py), seeded from the catalog
-      fixture
+    description: 'Bin assembly statistics: recipe output (quast/bins_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3133,8 +3133,8 @@ workflows:
           separator: "\t"
   - id: 47d472faeed5fc470c25debb
     data_collection_tag: quast_length_ladder
-    description: Contig length ladder — recipe output (quast/length_ladder.py), seeded from the catalog
-      fixture
+    description: 'Contig length ladder: recipe output (quast/length_ladder.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3147,8 +3147,8 @@ workflows:
           separator: "\t"
   - id: 9fde265ad4969bfed4afc986
     data_collection_tag: quast_reference_report
-    description: Assembly against a reference — recipe output (quast/reference_report.py), seeded from
-      the catalog fixture
+    description: 'Assembly against a reference: recipe output (quast/reference_report.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3161,7 +3161,7 @@ workflows:
           separator: "\t"
   - id: d1a04887e49814ea89e0e86f
     data_collection_tag: ribocode_orfs
-    description: RiboCode ORF calls — recipe output (ribocode/orfs.py), seeded from the catalog fixture
+    description: 'RiboCode ORF calls: recipe output (ribocode/orfs.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3174,8 +3174,8 @@ workflows:
           separator: "\t"
   - id: b2f66bbfbbdc34515bd2e6f1
     data_collection_tag: ribotish_orfs
-    description: Ribo-TISH ORF predictions — recipe output (ribotish/orfs.py), seeded from the catalog
-      fixture
+    description: 'Ribo-TISH ORF predictions: recipe output (ribotish/orfs.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3188,8 +3188,8 @@ workflows:
           separator: "\t"
   - id: 575ea7e22a65ee9c52a6a412
     data_collection_tag: ribowaltz_frames
-    description: P-site frame distribution — recipe output (ribowaltz/frames.py), seeded from the catalog
-      fixture
+    description: 'P-site frame distribution: recipe output (ribowaltz/frames.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3202,8 +3202,8 @@ workflows:
           separator: "\t"
   - id: 0ae3e8d6b5c4b7f159f2e25c
     data_collection_tag: ribowaltz_length_distribution
-    description: Footprint length distribution — recipe output (ribowaltz/length_distribution.py), seeded
-      from the catalog fixture
+    description: 'Footprint length distribution: recipe output (ribowaltz/length_distribution.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3216,8 +3216,8 @@ workflows:
           separator: "\t"
   - id: 1247040fadb3db7c903746e4
     data_collection_tag: ribowaltz_library_summary
-    description: Ribo-seq library quality — recipe output (ribowaltz/library_summary.py), seeded from
-      the catalog fixture
+    description: 'Ribo-seq library quality: recipe output (ribowaltz/library_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3230,8 +3230,8 @@ workflows:
           separator: "\t"
   - id: 809b93798f43d08f9f82df6c
     data_collection_tag: ribowaltz_metaprofile_start
-    description: Metagene profile at the start codon — recipe output (ribowaltz/metaprofile_start.py),
-      seeded from the catalog fixture
+    description: 'Metagene profile at the start codon: recipe output (ribowaltz/metaprofile_start.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3244,8 +3244,8 @@ workflows:
           separator: "\t"
   - id: 81e34d5ada207ac349aa482c
     data_collection_tag: ribowaltz_metaprofile_stop
-    description: Metagene profile at the stop codon — recipe output (ribowaltz/metaprofile_stop.py), seeded
-      from the catalog fixture
+    description: 'Metagene profile at the stop codon: recipe output (ribowaltz/metaprofile_stop.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3258,8 +3258,8 @@ workflows:
           separator: "\t"
   - id: d8cc6be1c44dcffe2ad4d885
     data_collection_tag: ribowaltz_psite_region
-    description: P-sites per transcript region — recipe output (ribowaltz/psite_region.py), seeded from
-      the catalog fixture
+    description: 'P-sites per transcript region: recipe output (ribowaltz/psite_region.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3272,8 +3272,8 @@ workflows:
           separator: "\t"
   - id: 8d135d0bdb4b2d0bbaf660b4
     data_collection_tag: rmats_events
-    description: Differential splicing events (rMATS) — recipe output (rmats/events.py), seeded from the
-      catalog fixture
+    description: 'Differential splicing events (rMATS): recipe output (rmats/events.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3286,8 +3286,8 @@ workflows:
           separator: "\t"
   - id: 56ffa60e6688973b9c1d13ae
     data_collection_tag: rseqc_read_distribution
-    description: Read distribution over the annotation — recipe output (rseqc/read_distribution.py), seeded
-      from the catalog fixture
+    description: 'Read distribution over the annotation: recipe output (rseqc/read_distribution.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3300,8 +3300,8 @@ workflows:
           separator: "\t"
   - id: 66c445ba5533899d4a79f912
     data_collection_tag: rtgtools_vcfeval_summary
-    description: vcfeval benchmark summary — recipe output (rtgtools/vcfeval_summary.py), seeded from
-      the catalog fixture
+    description: 'vcfeval benchmark summary: recipe output (rtgtools/vcfeval_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3314,8 +3314,8 @@ workflows:
           separator: "\t"
   - id: da6655fbb8a7a51586f2b38d
     data_collection_tag: salmon_gene_expression
-    description: Gene expression (long) — recipe output (salmon/gene_expression_long.py), seeded from
-      the catalog fixture
+    description: 'Gene expression (long): recipe output (salmon/gene_expression_long.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3328,7 +3328,7 @@ workflows:
           separator: "\t"
   - id: ed98a326561e8c6ddcfd723c
     data_collection_tag: salmon_sample_pca
-    description: Sample overview — recipe output (salmon/sample_pca.py), seeded from the catalog fixture
+    description: 'Sample overview: recipe output (salmon/sample_pca.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3341,8 +3341,8 @@ workflows:
           separator: "\t"
   - id: cdf044d1a7ebb8c408327ce3
     data_collection_tag: salmon_expression_heatmap
-    description: Top variable genes — recipe output (salmon/top_variable_genes.py), seeded from the catalog
-      fixture
+    description: 'Top variable genes: recipe output (salmon/top_variable_genes.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3355,7 +3355,7 @@ workflows:
           separator: "\t"
   - id: e48acdd467c52ee892640ac6
     data_collection_tag: samtools_flagstat
-    description: Alignment flagstat — recipe output (samtools/flagstat.py), seeded from the catalog fixture
+    description: 'Alignment flagstat: recipe output (samtools/flagstat.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3368,8 +3368,8 @@ workflows:
           separator: "\t"
   - id: ebdfcc8560da45ac0720df22
     data_collection_tag: samtools_stats_sections
-    description: Alignment distributions — recipe output (samtools/stats_sections.py), seeded from the
-      catalog fixture
+    description: 'Alignment distributions: recipe output (samtools/stats_sections.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3382,8 +3382,8 @@ workflows:
           separator: "\t"
   - id: c8bdfc1712ad272fa712b6b8
     data_collection_tag: seacr_consensus_peaks
-    description: Consensus peak overlap — recipe output (seacr/consensus_peaks.py), seeded from the catalog
-      fixture
+    description: 'Consensus peak overlap: recipe output (seacr/consensus_peaks.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3396,8 +3396,8 @@ workflows:
           separator: "\t"
   - id: 6cc3cce7d68038efa6f16a34
     data_collection_tag: seacr_fragment_classes
-    description: Nucleosome fragment classes — recipe output (seacr/fragment_classes.py), seeded from
-      the catalog fixture
+    description: 'Nucleosome fragment classes: recipe output (seacr/fragment_classes.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3410,8 +3410,8 @@ workflows:
           separator: "\t"
   - id: b798cb41516ff2a9a2fb699e
     data_collection_tag: seacr_fragment_lengths
-    description: Fragment length distribution — recipe output (seacr/fragment_lengths.py), seeded from
-      the catalog fixture
+    description: 'Fragment length distribution: recipe output (seacr/fragment_lengths.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3424,8 +3424,8 @@ workflows:
           separator: "\t"
   - id: b11c57daf3e9bb8a647f9ec1
     data_collection_tag: seacr_frags_profile
-    description: Fragment pile-up around the peaks — recipe output (seacr/frags_profile.py), seeded from
-      the catalog fixture
+    description: 'Fragment pile-up around the peaks: recipe output (seacr/frags_profile.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3438,7 +3438,7 @@ workflows:
           separator: "\t"
   - id: 3b043b0d7527c88994189d9d
     data_collection_tag: seacr_peak_summary
-    description: Peak QC summary — recipe output (seacr/peak_summary.py), seeded from the catalog fixture
+    description: 'Peak QC summary: recipe output (seacr/peak_summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3451,7 +3451,7 @@ workflows:
           separator: "\t"
   - id: 21e70608e547a3e43d025cb3
     data_collection_tag: seacr_peaks
-    description: Peak calls — recipe output (seacr/peaks.py), seeded from the catalog fixture
+    description: 'Peak calls: recipe output (seacr/peaks.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3464,8 +3464,8 @@ workflows:
           separator: "\t"
   - id: 243757de8c3af75e2b47fa63
     data_collection_tag: sidle_reconstructed
-    description: Reconstructed features — recipe output (sidle/reconstructed.py), seeded from the catalog
-      fixture
+    description: 'Reconstructed features: recipe output (sidle/reconstructed.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3478,8 +3478,8 @@ workflows:
           separator: "\t"
   - id: 2cdcbb18f2fef3d3c5a4de7d
     data_collection_tag: sidle_reconstruction_qc
-    description: Reconstruction confidence — recipe output (sidle/reconstruction_qc.py), seeded from the
-      catalog fixture
+    description: 'Reconstruction confidence: recipe output (sidle/reconstruction_qc.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3492,8 +3492,8 @@ workflows:
           separator: "\t"
   - id: c4331532cee047db99aa96ed
     data_collection_tag: simpleaf_barcode_rank
-    description: Barcode-rank curve (simpleaf/alevin-fry) — recipe output (simpleaf/barcode_rank.py),
-      seeded from the catalog fixture
+    description: 'Barcode-rank curve (simpleaf/alevin-fry): recipe output (simpleaf/barcode_rank.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3506,8 +3506,8 @@ workflows:
           separator: "\t"
   - id: 4b0eee4b41f443ec8d71d2cb
     data_collection_tag: simpleaf_mapping_metrics
-    description: Mapping headline numbers (simpleaf/alevin-fry) — recipe output (simpleaf/mapping_metrics.py),
-      seeded from the catalog fixture
+    description: 'Mapping headline numbers (simpleaf/alevin-fry): recipe output (simpleaf/mapping_metrics.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3520,8 +3520,8 @@ workflows:
           separator: "\t"
   - id: 9e4da6d278929c3048378758
     data_collection_tag: snpeff_ann_variants
-    description: Annotated variant calls — recipe output (snpeff/ann_variants.py), seeded from the catalog
-      fixture
+    description: 'Annotated variant calls: recipe output (snpeff/ann_variants.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3534,8 +3534,8 @@ workflows:
           separator: "\t"
   - id: 79b2f1bd3fd6edfd33742545
     data_collection_tag: snpeff_csv_stats
-    description: Annotation composition — recipe output (snpeff/csv_stats.py), seeded from the catalog
-      fixture
+    description: 'Annotation composition: recipe output (snpeff/csv_stats.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3548,8 +3548,8 @@ workflows:
           separator: "\t"
   - id: d856f2200d992c0c8b72be32
     data_collection_tag: snpeff_gene_heatmap
-    description: Gene burden heatmap — recipe output (snpeff/gene_heatmap.py), seeded from the catalog
-      fixture
+    description: 'Gene burden heatmap: recipe output (snpeff/gene_heatmap.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3562,8 +3562,8 @@ workflows:
           separator: "\t"
   - id: 6f851d433717036ed320d485
     data_collection_tag: snpeff_gene_upset
-    description: Gene overlap between callers — recipe output (snpeff/gene_upset.py), seeded from the
-      catalog fixture
+    description: 'Gene overlap between callers: recipe output (snpeff/gene_upset.py), seeded from the
+      catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3576,7 +3576,7 @@ workflows:
           separator: "\t"
   - id: 822b0c4f87915beedcddae8b
     data_collection_tag: snpeff_genes
-    description: Per-gene variant burden — recipe output (snpeff/genes.py), seeded from the catalog fixture
+    description: 'Per-gene variant burden: recipe output (snpeff/genes.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3589,7 +3589,7 @@ workflows:
           separator: "\t"
   - id: 5053237b09ae5198c74bc02b
     data_collection_tag: snpeff_oncoplot
-    description: Gene impact oncoplot — recipe output (snpeff/oncoplot.py), seeded from the catalog fixture
+    description: 'Gene impact oncoplot: recipe output (snpeff/oncoplot.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3602,8 +3602,8 @@ workflows:
           separator: "\t"
   - id: 931a3792916a7aae2cb6a64f
     data_collection_tag: snpeff_protein_lollipop
-    description: Coding variants along the protein — recipe output (snpeff/protein_lollipop.py), seeded
-      from the catalog fixture
+    description: 'Coding variants along the protein: recipe output (snpeff/protein_lollipop.py), seeded
+      from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3616,8 +3616,8 @@ workflows:
           separator: "\t"
   - id: c499343a7c94a5d4a6bf14ca
     data_collection_tag: snpeff_variant_upset
-    description: Variant overlap between callsets — recipe output (snpeff/variant_upset.py), seeded from
-      the catalog fixture
+    description: 'Variant overlap between callsets: recipe output (snpeff/variant_upset.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3630,8 +3630,8 @@ workflows:
           separator: "\t"
   - id: b6cadfd2d7681afe6f2a40df
     data_collection_tag: sompy_regions
-    description: som.py allele-fraction strata — recipe output (sompy/regions.py), seeded from the catalog
-      fixture
+    description: 'som.py allele-fraction strata: recipe output (sompy/regions.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3644,8 +3644,8 @@ workflows:
           separator: "\t"
   - id: 18c6df01271b54827815a327
     data_collection_tag: sompy_summary
-    description: som.py benchmark summary — recipe output (sompy/summary.py), seeded from the catalog
-      fixture
+    description: 'som.py benchmark summary: recipe output (sompy/summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3658,7 +3658,7 @@ workflows:
           separator: "\t"
   - id: b0a8a881d06a3a7a9e364cb8
     data_collection_tag: starfusion_fusions
-    description: STAR-Fusion calls — recipe output (starfusion/fusions.py), seeded from the catalog fixture
+    description: 'STAR-Fusion calls: recipe output (starfusion/fusions.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3671,8 +3671,8 @@ workflows:
           separator: "\t"
   - id: abcb42bad5b860c51f463dcf
     data_collection_tag: suppa_local_events
-    description: Differential splicing of local events (SUPPA2) — recipe output (suppa/local_events.py),
-      seeded from the catalog fixture
+    description: 'Differential splicing of local events (SUPPA2): recipe output (suppa/local_events.py),
+      seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3685,8 +3685,8 @@ workflows:
           separator: "\t"
   - id: 5e879bae6dfa087c7a8a0804
     data_collection_tag: svanalyzer_svbenchmark
-    description: svbenchmark SV summary — recipe output (svanalyzer/svbenchmark.py), seeded from the catalog
-      fixture
+    description: 'svbenchmark SV summary: recipe output (svanalyzer/svbenchmark.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3699,7 +3699,7 @@ workflows:
           separator: "\t"
   - id: fc644bd1303a23bdd9321b05
     data_collection_tag: sylph_ani
-    description: Containment ANI — recipe output (sylph/ani.py), seeded from the catalog fixture
+    description: 'Containment ANI: recipe output (sylph/ani.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3712,7 +3712,7 @@ workflows:
           separator: "\t"
   - id: 67161da7e85d138b6fdc1cc5
     data_collection_tag: sylph_profile
-    description: Taxonomic profile — recipe output (sylph/profile.py), seeded from the catalog fixture
+    description: 'Taxonomic profile: recipe output (sylph/profile.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3725,8 +3725,8 @@ workflows:
           separator: "\t"
   - id: a70964eb5ccbd30038c351f3
     data_collection_tag: taxpasta_embedding
-    description: Profiler ordination — recipe output (taxpasta/embedding.py), seeded from the catalog
-      fixture
+    description: 'Profiler ordination: recipe output (taxpasta/embedding.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3739,8 +3739,8 @@ workflows:
           separator: "\t"
   - id: 4da7079158524fd7e344e281
     data_collection_tag: taxpasta_lineage
-    description: Cross-profiler lineages — recipe output (taxpasta/lineage.py), seeded from the catalog
-      fixture
+    description: 'Cross-profiler lineages: recipe output (taxpasta/lineage.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3753,7 +3753,7 @@ workflows:
           separator: "\t"
   - id: 1e448464b1b9dfdae1ad1d24
     data_collection_tag: taxpasta_matrix
-    description: Taxon by run matrix — recipe output (taxpasta/matrix.py), seeded from the catalog fixture
+    description: 'Taxon by run matrix: recipe output (taxpasta/matrix.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3766,8 +3766,8 @@ workflows:
           separator: "\t"
   - id: 33e29e7bc4b45b93e65ab481
     data_collection_tag: taxpasta_presence
-    description: Profiler detection overlap — recipe output (taxpasta/presence.py), seeded from the catalog
-      fixture
+    description: 'Profiler detection overlap: recipe output (taxpasta/presence.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3780,8 +3780,8 @@ workflows:
           separator: "\t"
   - id: 0760ff0680fa294c7f5d951f
     data_collection_tag: taxpasta_profiles
-    description: Cross-profiler abundances — recipe output (taxpasta/profiles.py), seeded from the catalog
-      fixture
+    description: 'Cross-profiler abundances: recipe output (taxpasta/profiles.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3794,8 +3794,8 @@ workflows:
           separator: "\t"
   - id: d23a201667e3090a02d1596a
     data_collection_tag: taxpasta_sample_summary
-    description: Per-run profile statistics — recipe output (taxpasta/sample_summary.py), seeded from
-      the catalog fixture
+    description: 'Per-run profile statistics: recipe output (taxpasta/sample_summary.py), seeded from
+      the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3808,7 +3808,7 @@ workflows:
           separator: "\t"
   - id: 6badabd9545cadd3f6250bdf
     data_collection_tag: truvari_summary
-    description: Truvari SV summary — recipe output (truvari/summary.py), seeded from the catalog fixture
+    description: 'Truvari SV summary: recipe output (truvari/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3821,7 +3821,7 @@ workflows:
           separator: "\t"
   - id: f0cdc7563bdd62c127677bb0
     data_collection_tag: vcf_variants
-    description: Variant calls — recipe output (vcf/variants.py), seeded from the catalog fixture
+    description: 'Variant calls: recipe output (vcf/variants.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3834,8 +3834,8 @@ workflows:
           separator: "\t"
   - id: b44d2f23de65272439209410
     data_collection_tag: vcftools_filter_summary
-    description: Filter breakdown — recipe output (vcftools/filter_summary.py), seeded from the catalog
-      fixture
+    description: 'Filter breakdown: recipe output (vcftools/filter_summary.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3848,8 +3848,8 @@ workflows:
           separator: "\t"
   - id: 43777dcd683a3dc7bd213d51
     data_collection_tag: vcftools_tstv_qual
-    description: Ts/Tv by quality threshold — recipe output (vcftools/tstv_qual.py), seeded from the catalog
-      fixture
+    description: 'Ts/Tv by quality threshold: recipe output (vcftools/tstv_qual.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3862,8 +3862,8 @@ workflows:
           separator: "\t"
   - id: 9620c72d2bb2e54b7a1aff85
     data_collection_tag: vsearch_sintax_abundance
-    description: SINTAX composition — recipe output (vsearch/sintax_abundance.py), seeded from the catalog
-      fixture
+    description: 'SINTAX composition: recipe output (vsearch/sintax_abundance.py), seeded from the catalog
+      fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3876,7 +3876,7 @@ workflows:
           separator: "\t"
   - id: 38b53c76db4df0bb7c781007
     data_collection_tag: wittyer_summary
-    description: Wittyer CNV summary — recipe output (wittyer/summary.py), seeded from the catalog fixture
+    description: 'Wittyer CNV summary: recipe output (wittyer/summary.py), seeded from the catalog fixture'
     config:
       type: Table
       metatype: Aggregate
@@ -3889,7 +3889,7 @@ workflows:
           separator: "\t"
   - id: 356fb8ce2e829105547aa364
     data_collection_tag: funcscan_samplesheet
-    description: Samplesheet — raw nf-core/funcscan output, recognised by find
+    description: 'Samplesheet: raw nf-core/funcscan output, recognised by find'
     config:
       type: Table
       metatype: Aggregate
@@ -3897,7 +3897,7 @@ workflows:
         mode: recursive
         scan_parameters:
           regex_config:
-            pattern: input/samplesheetsample_01\.csv
+            pattern: input/samplesheet_sample_01\.csv
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -3907,7 +3907,7 @@ workflows:
           fasta: String
   - id: 1a4e0ceb9acb74eb0809fde7
     data_collection_tag: metaphlan_profile
-    description: Taxonomic profile — raw MetaPhlAn output, recognised by find
+    description: 'Taxonomic profile: raw MetaPhlAn output, recognised by find'
     config:
       type: Table
       metatype: Aggregate
@@ -3927,7 +3927,7 @@ workflows:
           additional_species: String
   - id: 514e95803abf5b1bcbc9f60d
     data_collection_tag: mosdepth_amplicon_coverage
-    description: Amplicon coverage — raw mosdepth output, recognised by find
+    description: 'Amplicon coverage: raw mosdepth output, recognised by find'
     config:
       type: Table
       metatype: Aggregate
@@ -3949,7 +3949,7 @@ workflows:
           sample: String
   - id: be9b8656f7e0e94a58645458
     data_collection_tag: salmon_merged_gene_counts
-    description: Merged gene counts — raw Salmon output, recognised by find
+    description: 'Merged gene counts: raw Salmon output, recognised by find'
     config:
       type: Table
       metatype: Aggregate

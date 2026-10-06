@@ -29,6 +29,7 @@ import re
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.fdr import fdr_cutoff
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -78,19 +79,9 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "direction": pl.Utf8,
 }
 
-DEFAULT_FDR = 0.05
 PADJ_ZERO_NEG_LOG10 = 300.0
 _CONTRAST = r"(?:DEXSeqResults|perGeneQValue)\.(.+)\.[ct]sv$"
 _FOLD = re.compile(r"^log2fold_(.+)_(.+)$")
-
-
-def fdr_cutoff(params: dict[str, str] | None) -> float:
-    raw = str((params or {}).get("fdr") or "").strip()
-    try:
-        value = float(raw)
-    except ValueError:
-        return DEFAULT_FDR
-    return value if 0 < value < 1 else DEFAULT_FDR
 
 
 def oriented_fold(df: pl.DataFrame) -> pl.Expr:

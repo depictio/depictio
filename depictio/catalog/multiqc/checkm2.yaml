@@ -2,7 +2,7 @@ id: multiqc_checkm2
 name: Bin quality (CheckM2)
 origin_tool: CheckM2
 mode: checkm2
-description: Per-bin completeness and contamination estimates, CheckM2, via MultiQC. No standalone CheckM2 report ships in this megatest run; these numbers only reach Depictio through this panel.
+description: Per-bin completeness and contamination estimates, CheckM2, via MultiQC. Where a pipeline publishes no standalone CheckM2 report, these numbers only reach Depictio through this MultiQC panel.
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

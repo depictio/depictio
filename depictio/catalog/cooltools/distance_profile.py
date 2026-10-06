@@ -46,6 +46,7 @@ import math
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.frames import empty_frame
 
 #: Same two raw scans as `cooler/contact_matrix.py`.
 CONTACTS_DC_TAG = "cooler_contacts_raw"
@@ -96,16 +97,12 @@ _CONTACTS_RE = r"([^/\\]+)\.(\d+)_balanced\.txt$"
 _BINS_RE = r"cooler_bins_(\d+)\.bed$"
 
 
-def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=OUTPUT_SCHEMA)
-
-
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Recompute P(s) and its log-log slope from the balanced contact dump."""
     contacts = sources["contacts"]
     bins = sources["bins"]
     if contacts.is_empty() or bins.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     contacts = contacts.with_columns(
         pl.col("source_path").str.extract(_CONTACTS_RE, 1).alias("sample"),
@@ -115,7 +112,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("count").cast(pl.Float64),
     ).filter(pl.col("sample").is_not_null())
     if contacts.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     finest = contacts["resolution"].min()
     contacts = contacts.filter(pl.col("resolution") == finest)
@@ -129,7 +126,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .select(["bin_id", "chrom"])
     )
     if bins.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     # Observed: summed balanced value per (sample, chromosome, separation).
     observed = (
@@ -142,7 +139,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .rename({"chrom1": "chrom"})
     )
     if observed.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     # Possible: every separation a chromosome can hold, whether or not the
     # sparse dump wrote a pixel for it.
@@ -215,7 +212,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .sort(["sample", "chrom", "distance"])
     )
     if binned.is_empty():
-        return _empty()
+        return empty_frame(OUTPUT_SCHEMA)
 
     binned = binned.with_columns(
         (

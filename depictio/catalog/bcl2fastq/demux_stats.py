@@ -55,11 +55,10 @@ Output schema:
 
 from __future__ import annotations
 
-import json
-
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.bcl2fastq_reports import lanes, load_reports, quality
 
 #: Data-collection tag the template must scan ``Stats.json`` into, one line per row.
 RAW_DC_TAG = "bcl2fastq_stats_raw"
@@ -94,59 +93,11 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "pct_one_mismatch_index": pl.Float64,
 }
 
-RAW_LINE_COL = "raw"
-SOURCE_PATH_COL = "source_path"
-
-
-def _load_reports(raw: pl.DataFrame) -> list[dict]:
-    """Rebuild each scanned ``Stats.json`` from its lines."""
-    if raw.is_empty():
-        raise ValueError("bcl2fastq: the scanned Stats.json reports are empty")
-    for column in (RAW_LINE_COL, SOURCE_PATH_COL):
-        if column not in raw.columns:
-            raise ValueError(
-                f"bcl2fastq: no {column} column, the collection must scan one line "
-                f"per row with include_file_paths: source_path"
-            )
-    reports: list[dict] = []
-    for (path,), group in raw.group_by([SOURCE_PATH_COL], maintain_order=True):
-        text = "\n".join(line or "" for line in group[RAW_LINE_COL].to_list())
-        try:
-            reports.append(json.loads(text))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"bcl2fastq: {path} is not valid JSON: {exc}") from exc
-    return reports
-
-
-def _lanes(reports: list[dict]) -> list[tuple[str, dict]]:
-    """(flowcell, lane entry) pairs, the first report of a lane winning."""
-    seen: set[tuple[str, int]] = set()
-    out: list[tuple[str, dict]] = []
-    for report in reports:
-        flowcell = str(report.get("Flowcell") or "")
-        for lane in report.get("ConversionResults") or []:
-            key = (flowcell, int(lane.get("LaneNumber", 0)))
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append((flowcell, lane))
-    return out
-
-
-def _quality(read_metrics: list[dict]) -> tuple[float, float | None, float | None]:
-    """(yield in bases, percent at Q30 or above, mean Phred) over every read."""
-    yield_bp = float(sum(m.get("Yield", 0) for m in read_metrics))
-    q30 = float(sum(m.get("YieldQ30", 0) for m in read_metrics))
-    qsum = float(sum(m.get("QualityScoreSum", 0) for m in read_metrics))
-    if yield_bp <= 0:
-        return 0.0, None, None
-    return yield_bp, 100.0 * q30 / yield_bp, qsum / yield_bp
-
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """One row per (lane, library) plus the lane's Undetermined row."""
     rows: list[dict] = []
-    for flowcell, lane in _lanes(_load_reports(sources["stats"])):
+    for flowcell, lane in lanes(load_reports(sources["stats"])):
         lane_no = int(lane.get("LaneNumber", 0))
         entries: list[dict] = []
         for lib in lane.get("DemuxResults") or []:
@@ -184,7 +135,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
         lane_total = sum(e["reads"] for e in entries)
         for e in entries:
-            yield_bp, pct_q30, mean_q = _quality(e["metrics"])
+            yield_bp, pct_q30, mean_q = quality(e["metrics"])
             reads = e["reads"]
             rows.append(
                 {
