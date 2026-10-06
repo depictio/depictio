@@ -18,12 +18,15 @@ interface Props {
   previewSlot: React.ReactNode;
   /** Hide the columns-description (e.g. multiqc has no tabular schema). */
   hideColumns?: boolean;
+  /** The form already carries Placement as one of its sections. */
+  ownsPlacement?: boolean;
 }
 
 const DesignShell: React.FC<Props> = ({
   formSlot,
   previewSlot,
   hideColumns,
+  ownsPlacement,
 }) => {
   return (
     <Stack gap="lg" pt="md">
@@ -34,7 +37,7 @@ const DesignShell: React.FC<Props> = ({
               columns. It hides itself when the dashboard has no sections. */}
           <Stack gap="md" style={{ height: '100%' }}>
             <Box>{formSlot}</Box>
-            <PlacementSection standalone />
+            {!ownsPlacement && <PlacementSection standalone />}
           </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 24, md: 1 }} visibleFrom="md">

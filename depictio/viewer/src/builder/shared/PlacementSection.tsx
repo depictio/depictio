@@ -11,32 +11,29 @@
  * with only "No section" in it is a dead end, the same reason
  * `GridItemEditOverlay` hides its own menu in that case.
  *
- * One component, two mount points: `DesignShell` supplies its own surrounding
- * `Accordion` for the seven builders that go through it, and the figure builder
- * slots the item into the accordion already in its control column. `section`
- * lives on the base component model, so duplicating the control per builder
- * would only guarantee drift.
+ * One component, slotted as the last item of every builder's
+ * `BuilderSections`. `section` lives on the base component model, so
+ * duplicating the control per builder would only guarantee drift.
  *
  * Which list is offered depends on the component's type, exactly as the two
  * render paths are fed: interactive components join the filter panel's sections,
  * everything else joins the grid's.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Accordion, Group, Select, Stack, Text } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Group, Select, Stack, Text } from '@mantine/core';
 import { fetchDashboard, SectionIcon } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import { useBuilderStore } from '../store/useBuilderStore';
+import { BuilderSection, BuilderSections } from './BuilderSections';
 import { implicitNames, sectionsFor } from '../../components/sections/sectionMutations';
 import type { SectionKind } from '../../components/sections/sectionMutations';
 
 export interface PlacementSectionProps {
-  /** Accordion item value — keep it out of the accordion's `defaultValue` so
-   *  the section stays collapsed. */
+  /** Section value — keep it out of the builder's `required` list so the
+   *  section starts collapsed. */
   itemValue?: string;
-  /** Wrap the item in its own `Accordion`. Callers that already own one
-   *  (the figure builder) leave this off and slot the item into theirs. */
+  /** Wrap the item in its own `BuilderSections`. */
   standalone?: boolean;
 }
 
@@ -154,28 +151,30 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({
   );
 
   const item = (
-    <Accordion.Item value={itemValue}>
-      <Accordion.Control icon={<Icon icon="mdi:format-list-group" width={18} height={18} />}>
-        <Text fw={700} size="sm">
-          Placement
+    <BuilderSection
+      value={itemValue}
+      icon="mdi:format-list-group"
+      title="Placement"
+      subtitle={
+        kind === 'filter'
+          ? 'The filter-panel section this control joins'
+          : 'The dashboard section this component joins'
+      }
+    >
+      <Stack gap="sm">
+        {select}
+        <Text size="xs" c="dimmed">
+          Optional — you can also move this component between sections later,
+          from its menu on the dashboard.
         </Text>
-      </Accordion.Control>
-      <Accordion.Panel>
-        <Stack gap="sm">
-          {select}
-          <Text size="xs" c="dimmed">
-            Optional — you can also move this component between sections later,
-            from its menu on the dashboard.
-          </Text>
-        </Stack>
-      </Accordion.Panel>
-    </Accordion.Item>
+      </Stack>
+    </BuilderSection>
   );
 
   return standalone ? (
-    <Accordion variant="separated" radius="md">
+    <BuilderSections builder="placement" required={[]}>
       {item}
-    </Accordion>
+    </BuilderSections>
   ) : (
     item
   );
