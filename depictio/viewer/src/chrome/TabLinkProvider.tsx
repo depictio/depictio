@@ -16,7 +16,9 @@ import { resolveTabColor, resolveTabIcon } from './Sidebar';
  *
  * Mounted inside `BrandScope` so a link takes the same icon and colour the
  * sidebar pill of that tab shows, brand defaults included. A tab answers to
- * its displayed name; the parent also answers to the dashboard title.
+ * its displayed name; the parent also answers to the dashboard title. Every
+ * tab also answers to its dashboard id, which is how a highlight that the
+ * editor made finds its tab again after a rename.
  */
 const TabLinkProvider: React.FC<{
   tabs: DashboardSummary[];
@@ -39,13 +41,14 @@ const TabLinkProvider: React.FC<{
       const image = d.tab_icon && isImagePath(d.tab_icon) ? d.tab_icon : null;
       const target: TabLinkTarget = {
         href: dashboardHref(d.dashboard_id, mode),
+        dashboardId: d.dashboard_id,
         label,
         icon: image ?? resolveTabIcon(d, isParent),
         color: resolveTabColor(d, isParent, brand),
         description: d.subtitle?.trim() || null,
         group: groupOf.get(d.dashboard_id) ?? null,
       };
-      for (const name of [label, d.title]) {
+      for (const name of [label, d.title, d.dashboard_id]) {
         const key = name ? tabLinkKey(name) : '';
         if (key && !byKey.has(key)) byKey.set(key, target);
       }

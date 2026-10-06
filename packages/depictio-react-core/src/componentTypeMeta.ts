@@ -43,6 +43,8 @@ export const COMPONENT_TYPE_VISUALS: Record<string, ComponentTypeVisual> = {
   map:          { label: 'Map',          icon: 'mdi:map-marker-multiple',       color: brandColors.violet },
   text:         { label: 'Text',         icon: 'mdi:text-box-edit',             color: TEXT_ACCENT },
   advanced_viz: { label: 'Advanced viz', icon: 'mdi:chart-scatter-plot-hexbin', color: ADVANCED_VIZ_ACCENT },
+  // Another tab's figure, shown again: the figure's colour, a highlight's mark.
+  highlight:    { label: 'Highlight',    icon: 'mdi:star-four-points-outline',  color: brandColors.purple },
 };
 
 const UNKNOWN: ComponentTypeVisual = {

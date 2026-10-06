@@ -57,9 +57,10 @@ const StepDesign: React.FC = () => {
     if (!state.componentType) return false;
     if (!state.dashboardId || !state.componentId) return false;
     if (state.mode === 'create') {
-      // Text components are stand-alone — no workflow/DC binding required.
-      if (state.componentType !== 'text' && (!state.wfId || !state.dcId))
-        return false;
+      // Text and highlight components are stand-alone — no workflow/DC
+      // binding required (a highlight's figure has its own, on its tab).
+      const unbound = state.componentType === 'text' || state.componentType === 'highlight';
+      if (!unbound && (!state.wfId || !state.dcId)) return false;
     }
     return true;
   }, [state]);

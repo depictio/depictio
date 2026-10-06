@@ -1,13 +1,17 @@
 import React, { lazy, Suspense, useContext, useRef } from 'react';
+import { ActionIcon, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
-import { InteractiveFilter, StoredMetadata } from '../api';
+import { FigureStyleRequest, InteractiveFilter, StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
 import { compactKeepsStrip, resolveCardVariant, stripIsMinimal } from './cardVariant';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
 import { useTabLinkResolver } from './tabLinks';
+import type { TabLinkTarget } from './tabLinks';
+import HighlightBlock from './HighlightBlock';
 import { describeAggregation } from './card/describe';
 import LazyMount, { CellPlaceholder } from './LazyMount';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
@@ -242,6 +246,50 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
+    );
+  }
+
+  if (metadata.component_type === 'highlight' && dashboardId) {
+    // Another tab's figure, looked up there and drawn here with this tab's
+    // filters. A figure goes through FigureBlock, rendered by the server from
+    // its own tab in the highlight's style; an advanced visualisation is drawn
+    // as on its tab, its header's link to that tab in the chrome.
+    return (
+      <HighlightBlock metadata={metadata} extraActions={extraActions} showDragHandle={showDragHandle}>
+        {({ metadata: shown, renderSource, styleRequest, sourceLink }) =>
+          shown.component_type === 'advanced_viz' ? (
+            <LazyMount>
+              <AdvancedVizDispatch
+                metadata={shown}
+                filters={filters}
+                refreshTick={refreshTick}
+                extraActions={
+                  <>
+                    {sourceLink && <SourceTabAction link={sourceLink} />}
+                    {extraActions}
+                  </>
+                }
+                showDragHandle={showDragHandle}
+                groupRender={groupRender}
+              />
+            </LazyMount>
+          ) : (
+            <FigureBlock
+              dashboardId={dashboardId}
+              metadata={shown}
+              filters={filters}
+              refreshTick={refreshTick}
+              activeHighlight={activeHighlight}
+              groupRender={groupRender}
+              extraActions={extraActions}
+              showDragHandle={showDragHandle}
+              renderSource={renderSource}
+              styleRequest={styleRequest}
+              sourceLink={sourceLink}
+            />
+          )
+        }
+      </HighlightBlock>
     );
   }
 
@@ -554,6 +602,10 @@ const FigureBlock: React.FC<{
   groupRender?: GroupRenderState;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  /** A highlight's figure: rendered from its own tab, in the given style. */
+  renderSource?: { dashboardId: string; componentId: string };
+  styleRequest?: FigureStyleRequest;
+  sourceLink?: TabLinkTarget | null;
 }> = ({
   dashboardId,
   metadata,
@@ -564,6 +616,9 @@ const FigureBlock: React.FC<{
   groupRender,
   extraActions,
   showDragHandle,
+  renderSource,
+  styleRequest,
+  sourceLink,
 }) => {
   const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
   // Only scatter / scatter_3d traces carry the per-row customdata we need for
@@ -605,11 +660,31 @@ const FigureBlock: React.FC<{
         activeHighlight={activeHighlight}
         groupRender={groupRender}
         onLoadAllState={setLoadAllState}
+        renderSource={renderSource}
+        styleRequest={styleRequest}
+        sourceLink={sourceLink}
       />
     </Suspense>,
     { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },
   );
 };
+
+/** The chrome's link to the tab a highlighted visualisation comes from. A
+ *  highlighted figure carries the same link in its card header instead. */
+const SourceTabAction: React.FC<{ link: TabLinkTarget }> = ({ link }) => (
+  <Tooltip label={`Open in ${link.label}`} withArrow openDelay={300}>
+    <ActionIcon
+      component="a"
+      href={link.href}
+      variant="subtle"
+      size="sm"
+      aria-label={`Open in ${link.label}`}
+      data-testid="highlight-source-action"
+    >
+      <Icon icon="mdi:arrow-top-right" width={15} />
+    </ActionIcon>
+  </Tooltip>
+);
 
 /** A filter is "source-active" for this component when an entry exists with
  *  matching `index`, the expected `source` discriminator, and a non-empty

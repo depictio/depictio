@@ -27,7 +27,9 @@ export type ComponentType =
   | 'image'
   | 'map'
   | 'text'
-  | 'advanced_viz';
+  | 'advanced_viz'
+  // Edited only: made from a figure's "Highlight on…", not from the type grid.
+  | 'highlight';
 
 export type FigureMode = 'ui' | 'code';
 

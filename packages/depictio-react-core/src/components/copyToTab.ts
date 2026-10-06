@@ -18,10 +18,12 @@ import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
  * that tab's state, a grouped control would arrive without the rest of its
  * group card, and a persistent filter section is already how a filter is
  * shared across tabs. A floating map is left out too: it lives in the
- * family-wide map panel, not in a tab's grid.
+ * family-wide map panel, not in a tab's grid. A highlight copies as the
+ * reference it is: the copy shows the same figure.
  */
 const COPYABLE_TYPES = new Set([
   'text',
+  'highlight',
   'card',
   'figure',
   'table',

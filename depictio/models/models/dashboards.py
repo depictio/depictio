@@ -34,6 +34,7 @@ from pydantic import (
 from depictio.models.components.lite import (
     CardLiteComponent,
     FigureLiteComponent,
+    HighlightLiteComponent,
     ImageLiteComponent,
     InteractiveLiteComponent,
     LiteComponent,
@@ -130,6 +131,17 @@ FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
     "icon_color",
     "hide_legend",
 )
+
+# Where a highlight's figure lives (see HighlightLiteComponent).
+HIGHLIGHT_SOURCE_FIELDS: tuple[str, ...] = (
+    "source_tab",
+    "source_dashboard_id",
+    "source_component",
+)
+
+# Component types bound to no data collection of their own: neither export nor
+# import gives them a workflow or a collection.
+UNBOUND_COMPONENT_TYPES: frozenset[str] = frozenset({"text", "highlight"})
 
 
 class FilterSectionSpec(BaseModel):
@@ -402,6 +414,7 @@ class DashboardDataLite(BaseModel):
     # Map component_type string → typed Lite model for domain validation
     _COMPONENT_TYPE_MAP: ClassVar[dict[str, type[BaseModel]]] = {
         "figure": FigureLiteComponent,
+        "highlight": HighlightLiteComponent,
         "card": CardLiteComponent,
         "interactive": InteractiveLiteComponent,
         "table": TableLiteComponent,
@@ -1045,7 +1058,7 @@ class DashboardDataLite(BaseModel):
             # from a leftover `dc_config` produced a component the import could
             # not resolve — there is no `workflow_tag` to resolve it against — so
             # every text component was silently dropped on the way back in.
-            if comp_type == "text":
+            if comp_type in UNBOUND_COMPONENT_TYPES:
                 workflow_tag = ""
                 data_collection_tag = ""
 
@@ -1071,12 +1084,12 @@ class DashboardDataLite(BaseModel):
             )
 
             # Log warning if mandatory tags are missing
-            if comp_type != "text" and not workflow_tag:
+            if comp_type not in UNBOUND_COMPONENT_TYPES and not workflow_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing workflow_tag. "
                     f"Component has wf_id: {comp.get('wf_id') is not None}"
                 )
-            if comp_type != "text" and not data_collection_tag:
+            if comp_type not in UNBOUND_COMPONENT_TYPES and not data_collection_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing data_collection_tag. "
                     f"Component has dc_id: {comp.get('dc_id') is not None}"
@@ -1276,6 +1289,18 @@ class DashboardDataLite(BaseModel):
                     lite_comp["surface"] = comp["surface"]
                 if comp.get("accent"):
                     lite_comp["accent"] = comp["accent"]
+
+            elif comp_type == "highlight":
+                # The tab's name is what survives a move to another instance;
+                # its id is written only when there is no name to go by.
+                for field in HIGHLIGHT_SOURCE_FIELDS:
+                    if field == "source_dashboard_id" and comp.get("source_tab"):
+                        continue
+                    if comp.get(field):
+                        lite_comp[field] = str(comp[field])
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
 
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
@@ -1632,6 +1657,13 @@ class DashboardDataLite(BaseModel):
                     cfg = {**cfg, "viz_kind": viz_kind}
                 full_comp["viz_kind"] = viz_kind
                 full_comp["config"] = cfg
+
+            elif comp_type == "highlight":
+                # Rendered by HighlightBlock.tsx, which looks the figure up on
+                # its tab; nothing here binds to data.
+                for field in (*HIGHLIGHT_SOURCE_FIELDS, *FIGURE_DISPLAY_FIELDS):
+                    if comp_dict.get(field) is not None:
+                        full_comp[field] = comp_dict[field]
 
             elif comp_type == "text":
                 # Section-header text tile: TextRenderer.tsx reads `order` (H1-H6),

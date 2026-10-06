@@ -63,6 +63,8 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildText(state, base, existing);
     case 'advanced_viz':
       return buildAdvancedViz(state, base, existing);
+    case 'highlight':
+      return buildHighlight(state, base, existing);
     default:
       return { ...existing, ...base };
   }
@@ -363,6 +365,34 @@ function buildImage(
     image_column: c.image_column,
     s3_base_folder: c.s3_base_folder,
     title: c.title ?? '',
+  };
+}
+
+/**
+ * A highlight: where its figure lives, and the look it draws it with (the
+ * same fields as a figure's, each unset to follow the figure). No binding of
+ * its own: the figure has it, on its tab.
+ */
+function buildHighlight(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  const c = as<{
+    source_tab?: string | null;
+    source_dashboard_id?: string | null;
+    source_component?: string | null;
+  }>(state.config);
+  return {
+    ...existing,
+    ...base,
+    ...figureDisplay(state.config),
+    wf_id: undefined,
+    dc_id: undefined,
+    project_id: undefined,
+    source_tab: c.source_tab?.trim() || undefined,
+    source_dashboard_id: c.source_dashboard_id?.trim() || undefined,
+    source_component: c.source_component?.trim() || undefined,
   };
 }
 

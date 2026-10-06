@@ -17,12 +17,14 @@ import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar'
  *   - Duplicate: fires `onDuplicate` — parent clones metadata + layout, POSTs /save
  *   - Copy to tab…: fires `onCopyToTab` — parent adds a copy to the picked
  *                sibling tab's document and saves that tab
+ *   - Highlight on…: fires `onHighlightOnTab` — parent adds a highlight of
+ *                this figure (a reference, not a copy) to the picked tab
  *   - Delete:    fires `onDelete` — parent is responsible for the actual API call
  *
  * "Move to section" is a second page inside the same dropdown rather than a
  * fourth action: the list is as long as the dashboard has sections, and it
  * would otherwise be the thing that pushes Delete off the bottom of a viewport.
- * "Copy to tab…" opens a page of sibling tabs the same way.
+ * "Copy to tab…" and "Highlight on…" open a page of sibling tabs the same way.
  *
  * Hidden via the `editMode` prop so the same renderer tree can be reused for
  * read-only mode.
@@ -89,6 +91,11 @@ interface GridItemEditOverlayProps {
    *  `canCopyToTab`); omitted or empty hides "Copy to tab…". */
   copyTargets?: DashboardSummary[];
   onCopyToTab?: (componentId: string, targetDashboardId: string) => void;
+  /** Tabs this figure can be highlighted on, the current one left out. The
+   *  caller omits it for a component a highlight cannot show (see
+   *  `canHighlight`); omitted or empty hides "Highlight on…". */
+  highlightTargets?: DashboardSummary[];
+  onHighlightOnTab?: (componentId: string, targetDashboardId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -106,13 +113,15 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   onFontScale,
   copyTargets,
   onCopyToTab,
+  highlightTargets,
+  onHighlightOnTab,
 }) => {
   // The dropdown shows one page at a time: the actions, the section list or
   // the tab list. A dashboard can declare any number of sections and tabs, and
   // a flat list would grow the menu until it ran off the viewport — the
   // actions the user reaches for most (Edit, Delete) would be the ones that
   // moved.
-  const [page, setPage] = useState<'actions' | 'sections' | 'tabs'>('actions');
+  const [page, setPage] = useState<'actions' | 'sections' | 'tabs' | 'highlight'>('actions');
   // Tabs are listed with the icon and colour their sidebar pill wears.
   const brand = useBranding();
   const isDark = useComputedColorScheme('light') === 'dark';
@@ -144,6 +153,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   const showMoveToSection = !!onMoveToSection && !!sections?.length;
 
   const showCopyToTab = !!onCopyToTab && !!copyTargets?.length;
+  const showHighlightOn = !!onHighlightOnTab && !!highlightTargets?.length;
 
   // Per-figure font-size multiplier (#854 follow-up). Figures only: their
   // whole Plotly layout font (axis labels, ticks, legend) follows it.
@@ -215,6 +225,17 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                 Copy to tab…
               </Menu.Item>
             )}
+            {showHighlightOn && (
+              <Menu.Item
+                closeMenuOnClick={false}
+                leftSection={<Icon icon="mdi:star-four-points-outline" width={14} />}
+                rightSection={<Icon icon="mdi:chevron-right" width={14} />}
+                onClick={() => setPage('highlight')}
+                data-testid="highlight-on-tab"
+              >
+                Highlight on…
+              </Menu.Item>
+            )}
             {showFontScale && (
               <>
                 <Menu.Divider />
@@ -270,7 +291,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
               Delete
             </Menu.Item>
           </>
-        ) : page === 'tabs' ? (
+        ) : page === 'tabs' || page === 'highlight' ? (
           <>
             <Menu.Item
               closeMenuOnClick={false}
@@ -280,9 +301,14 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
               Back
             </Menu.Item>
             <Menu.Divider />
-            <Menu.Label>Copy to tab</Menu.Label>
+            <Menu.Label>{page === 'tabs' ? 'Copy to tab' : 'Highlight on tab'}</Menu.Label>
+            {page === 'highlight' && (
+              <Text size="xs" c="dimmed" px="sm" pb={6} maw={220}>
+                Shows this figure there, restyled; edits made here show there too.
+              </Text>
+            )}
             <ScrollArea.Autosize mah={240} type="auto">
-              {copyTargets?.map((tab) => {
+              {(page === 'tabs' ? copyTargets : highlightTargets)?.map((tab) => {
                 const isParent = !tab.parent_dashboard_id;
                 // The same icon as the tab's sidebar pill, image icons included.
                 const image = tabImageSrc(tab, isParent, isDark);
@@ -306,7 +332,11 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                         />
                       )
                     }
-                    onClick={() => onCopyToTab?.(componentId, tab.dashboard_id)}
+                    onClick={() =>
+                      page === 'tabs'
+                        ? onCopyToTab?.(componentId, tab.dashboard_id)
+                        : onHighlightOnTab?.(componentId, tab.dashboard_id)
+                    }
                   >
                     {tabDisplayName(tab)}
                   </Menu.Item>

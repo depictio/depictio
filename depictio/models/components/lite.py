@@ -739,6 +739,84 @@ class TextLiteComponent(BaseLiteComponent):
     data_collection_tag: str = Field(default="", description="Unused for text components")
 
 
+class HighlightLiteComponent(BaseLiteComponent):
+    """A figure from another tab of the dashboard, shown again on this one.
+
+    A landing page's showcase tiles are figures that live on the tab that
+    explains them. A highlight shows one of them without copying it: the
+    figure is drawn from its own definition on its own tab, so an edit there
+    shows here too, and this tile only says how to draw it (style, header,
+    legend). Filters apply to it as to any figure on this tab, and its header
+    links to the tab it comes from.
+
+    The source can be a figure or an advanced visualisation. A figure is
+    restyled (`figure_style`, `minimal` unless set); an advanced
+    visualisation is drawn as it is on its tab.
+
+    Example YAML:
+        - component_type: highlight
+          title: Faith PD per locality
+          subtitle: at the deepest rarefaction depth
+          source_tab: Alpha Diversity
+          source_component: trec-fig-alpha-plateau
+          icon_name: mdi:chart-scatter-plot
+          layout: {x: 0, y: 0, w: 6, h: 7}
+    """
+
+    component_type: Literal["highlight"] = "highlight"
+
+    source_tab: str | None = Field(
+        default=None,
+        description="The tab the figure lives on, by the name its sidebar entry shows "
+        "(the parent tab also answers to the dashboard title). Survives an export to "
+        "another instance, where tab ids change.",
+    )
+    source_dashboard_id: str | None = Field(
+        default=None,
+        description="The tab's dashboard id, which the editor writes. Tried before "
+        "`source_tab`, which takes over when the id is unknown (after a re-import).",
+    )
+    source_component: str = Field(
+        ...,
+        description="The figure on that tab: its `index`, else its title (case and "
+        "spacing ignored). Template figures have a readable index; a figure made in "
+        "the editor is best named by its title, since its index is a UUID that a "
+        "re-import replaces.",
+    )
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="Style the figure is drawn in here. Unset: `minimal`, whatever the "
+        "source tab draws it in.",
+    )
+    subtitle: str | None = Field(
+        default=None, description="Dimmed words after the title; unset takes the source's."
+    )
+    icon_name: str | None = Field(
+        default=None, description="Iconify id of the header badge; unset takes the source's."
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Mantine palette name or CSS colour of the badge; unset takes the "
+        "source's, else the brand's primary.",
+    )
+    hide_legend: bool | None = Field(
+        default=None, description="Draw the figure without its legend here."
+    )
+
+    # The figure is bound to its data on its own tab; the highlight is not.
+    workflow_tag: str = Field(default="", description="Unused for highlights")
+    data_collection_tag: str = Field(default="", description="Unused for highlights")
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "HighlightLiteComponent":
+        """A highlight needs a tab to look on and a figure to look for."""
+        if not (self.source_tab or "").strip() and not (self.source_dashboard_id or "").strip():
+            raise ValueError("a highlight needs `source_tab` (or `source_dashboard_id`)")
+        if not self.source_component.strip():
+            raise ValueError("a highlight needs `source_component`")
+        return self
+
+
 class TableLiteComponent(BaseLiteComponent):
     """Lite table component for user definition.
 
@@ -1035,6 +1113,7 @@ LiteComponent = (
     | InteractiveLiteComponent
     | TableLiteComponent
     | TextLiteComponent
+    | HighlightLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent

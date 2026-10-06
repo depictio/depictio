@@ -113,6 +113,17 @@ export {
 } from './components/figureStyle';
 export type { FigureStyle } from './components/figureStyle';
 export { default as FigureHeader } from './components/FigureHeader';
+// Highlights: another tab's figure shown again (component_type 'highlight').
+export {
+  canHighlight,
+  findHighlightSource,
+  highlightMetadata,
+  highlightOnTab,
+  highlightSourceRef,
+  highlightStyleRequest,
+  resolveHighlightTab,
+} from './components/highlightTile';
+export type { HighlightOnTabInput, HighlightRef } from './components/highlightTile';
 export type { FigureHeaderProps } from './components/FigureHeader';
 export type {
   HistogramPayload,

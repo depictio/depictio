@@ -12,6 +12,8 @@ import { createContext, useContext } from 'react';
  */
 export interface TabLinkTarget {
   href: string;
+  /** The tab's dashboard id. Optional: a host that only links has no use for it. */
+  dashboardId?: string;
   /** The tab's displayed name. */
   label: string;
   /** Iconify name or image path, as the tab declares it. */
@@ -24,7 +26,8 @@ export interface TabLinkTarget {
   group?: string | null;
 }
 
-/** Resolves a tab name (case-insensitive) to its link, or null if unknown. */
+/** Resolves a tab name (case-insensitive), or a tab's dashboard id, to its
+ *  link; null if unknown. */
 export type TabLinkResolver = (name: string) => TabLinkTarget | null;
 
 export const TabLinkContext = createContext<TabLinkResolver | null>(null);

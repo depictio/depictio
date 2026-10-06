@@ -68,10 +68,12 @@ import {
   fetchAllDashboards,
   bulkComputeCards,
   canCopyToTab,
+  canHighlight,
   copyComponentToTab,
   createTab,
   deleteTab,
   groupTabs,
+  highlightOnTab,
   reorderTabs,
   tabDisplayName,
   tabLinkKey,
@@ -1316,6 +1318,65 @@ const EditorApp: React.FC = () => {
     },
     [tabSiblings],
   );
+
+  /**
+   * Highlight on: add a highlight of the figure to another tab, a reference
+   * that renders the figure from this tab rather than a copy of it. Fetched
+   * and saved like a copy; this tab's document is not touched.
+   */
+  const handleHighlightOnTab = useCallback(
+    async (componentId: string, targetId: string) => {
+      const cur = dashboardRef.current;
+      const source = cur?.stored_metadata?.find((m) => m.index === componentId);
+      const targetTab = tabSiblings.find((d) => d.dashboard_id === targetId);
+      const sourceTab = tabSiblings.find((d) => d.dashboard_id === dashboardId);
+      if (!cur || !source || !targetTab || !dashboardId) return;
+      const targetName = tabDisplayName(targetTab);
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        const target = await fetchDashboard(targetId);
+        const { dashboard: next } = highlightOnTab({
+          source,
+          sourceComponents: cur.stored_metadata,
+          sourceDashboardId: dashboardId,
+          sourceTabName: sourceTab ? tabDisplayName(sourceTab) : cur.title ?? '',
+          sourceLayoutData: cur.right_panel_layout_data,
+          target,
+          newId,
+        });
+        await saveDashboard(targetId, next);
+        notifications.show({
+          color: 'teal',
+          title: `Highlighted on “${targetName}”`,
+          message: (
+            <Stack gap={2}>
+              <Text size="sm">
+                {next.grid_sections?.length
+                  ? 'Above that tab’s sections: “Move to section” there files it, its menu’s Edit sets its title and style.'
+                  : 'At the bottom of that tab. Its menu’s Edit sets its title and style.'}
+              </Text>
+              <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
+                Open “{targetName}”
+              </Anchor>
+            </Stack>
+          ),
+          autoClose: 6000,
+        });
+      } catch (err) {
+        console.error('[EditorApp] highlight on tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: `Highlight on “${targetName}” failed`,
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [tabSiblings, dashboardId],
+  );
   const parentTab = useMemo(
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
@@ -2279,6 +2340,7 @@ const EditorApp: React.FC = () => {
                 onDuplicateComponent={handleDuplicateComponent}
                 copyTargets={copyTargets}
                 onCopyToTab={handleCopyToTab}
+                onHighlightOnTab={handleHighlightOnTab}
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
@@ -2490,6 +2552,8 @@ interface RightComponentGridProps {
   /** Sibling tabs a component can be copied to, and the copy itself. */
   copyTargets: DashboardSummary[];
   onCopyToTab: (componentId: string, targetDashboardId: string) => void;
+  /** Adds a highlight of a figure to another tab (same targets as a copy). */
+  onHighlightOnTab: (componentId: string, targetDashboardId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
   groupRender?: GroupRenderState;
@@ -2534,6 +2598,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   copyTargets,
   onCopyToTab,
+  onHighlightOnTab,
   onAddComponent,
   activeHighlight,
   groupRender,
@@ -2624,6 +2689,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onFontScale={onComponentFontScale}
           copyTargets={canCopyToTab(metadata) ? copyTargets : undefined}
           onCopyToTab={onCopyToTab}
+          highlightTargets={canHighlight(metadata) ? copyTargets : undefined}
+          onHighlightOnTab={onHighlightOnTab}
         />
       )}
     />

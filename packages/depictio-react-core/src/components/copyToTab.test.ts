@@ -41,6 +41,7 @@ const copy = (target: DashboardData, source: StoredMetadata = card, layout: unkn
 describe('canCopyToTab', () => {
   it('offers the grid types and holds back filters and floating maps', () => {
     expect(canCopyToTab({ component_type: 'text' })).toBe(true);
+    expect(canCopyToTab({ component_type: 'highlight' })).toBe(true);
     expect(canCopyToTab({ component_type: 'card' })).toBe(true);
     expect(canCopyToTab({ component_type: 'map', placement: 'grid' })).toBe(true);
     expect(canCopyToTab({ component_type: 'interactive' })).toBe(false);

@@ -8,6 +8,10 @@
  * fields live on the figure's metadata (`figure_style`, `title`, `subtitle`,
  * `icon_name`, `icon_color`, `hide_legend`), not in its Plotly kwargs, so they
  * work the same for a figure written as code.
+ *
+ * A highlight's builder uses it too (`highlight`): there an unset style means
+ * minimal rather than the section's, and an unset field takes the figure's
+ * own, which `inherited` shows as the placeholder.
  */
 import React from 'react';
 import {
@@ -50,12 +54,19 @@ interface FigureStyleConfig {
   hide_legend?: boolean | null;
 }
 
-const FigureStyleSection: React.FC = () => {
+const FigureStyleSection: React.FC<{
+  highlight?: boolean;
+  /** What an unset title and subtitle show: the highlighted figure's. */
+  inherited?: { title?: string; subtitle?: string };
+}> = ({ highlight = false, inherited }) => {
   const config = useBuilderStore((s) => s.config) as FigureStyleConfig;
   const patchConfig = useBuilderStore((s) => s.patchConfig);
-  const sectionStyle = useSectionFigureStyle();
+  const fromSection = useSectionFigureStyle();
+  // What the tile is drawn in when it sets no style of its own.
+  const sectionStyle: FigureStyle | null = highlight ? null : fromSection;
+  const implicit: FigureStyle = highlight ? 'minimal' : (sectionStyle ?? 'default');
   const ownStyle = normalizeFigureStyle(config.figure_style);
-  const shown = ownStyle ?? sectionStyle ?? 'default';
+  const shown = ownStyle ?? implicit;
 
   return (
     <BuilderSection
@@ -78,9 +89,7 @@ const FigureStyleSection: React.FC = () => {
           )}
           <SegmentedControl
             value={shown}
-            onChange={(val) =>
-              patchConfig({ figure_style: figureStyleForPick(val, sectionStyle) })
-            }
+            onChange={(val) => patchConfig({ figure_style: figureStyleForPick(val, implicit) })}
             data={STYLE_OPTIONS}
             fullWidth
             data-testid="figure-style-control"
@@ -90,7 +99,7 @@ const FigureStyleSection: React.FC = () => {
         <TextInput
           label="Title"
           description="The card's heading. In the minimal style it replaces the plot's own title."
-          placeholder="e.g. Phylum composition"
+          placeholder={inherited?.title || 'e.g. Phylum composition'}
           value={config.title ?? ''}
           onChange={(e) => patchConfig({ title: e.currentTarget.value })}
           leftSection={<Icon icon="mdi:format-title" width={14} />}
@@ -99,7 +108,7 @@ const FigureStyleSection: React.FC = () => {
         <TextInput
           label="Subtitle"
           description="A dimmed line beside the title, shown in the minimal style."
-          placeholder="e.g. relative abundance per sample"
+          placeholder={inherited?.subtitle || 'e.g. relative abundance per sample'}
           value={config.subtitle ?? ''}
           onChange={(e) => patchConfig({ subtitle: e.currentTarget.value })}
           leftSection={<Icon icon="mdi:text-short" width={14} />}
