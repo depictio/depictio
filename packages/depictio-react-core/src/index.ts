@@ -497,6 +497,7 @@ export {
 } from './api';
 export type {
   AdminBrandingState,
+  BulkComputeOptions,
   BrandPreset,
   FloatingComponent,
   FloatingComponentsResponse,
@@ -583,6 +584,8 @@ export {
   groupsToFilters,
   groupsRenderPayload,
   nextGroupColor,
+  uniqueGroupName,
+  defaultGroupName,
   readSelectionGroups,
   writeSelectionGroups,
 } from './selectionGroups';
@@ -845,8 +848,29 @@ export {
   resolveGuideSettings,
   tileActions,
 } from './guide/guideModel';
-export { foldableSectionsOf, pickFilterDemo } from './guide/demoSources';
-export type { GuideDemoSection, GuideFilterDemoPick } from './guide/demoSources';
+export {
+  actionsTileRank,
+  analysisCardRank,
+  analysisFigureRank,
+  analysisTableRank,
+  demoSectionsOf,
+  familyOrder,
+  figureDrawsGroups,
+  foldableSectionsOf,
+  hasCards,
+  pickFilterDemo,
+  pickFromFamily,
+  selectionColumnOf,
+} from './guide/demoSources';
+export type {
+  GuideDemoSection,
+  GuideFamilyDoc,
+  GuideFamilyPick,
+  GuideFilterDemoPick,
+} from './guide/demoSources';
+// Tiles drawn a second time elsewhere on the page (the Guide) measure under a
+// scope of their own, so the canvas grid never takes their heights.
+export { AutofitScope } from './components/autofit';
 export {
   editActionsFor,
   GUIDE_TILE_TYPES,

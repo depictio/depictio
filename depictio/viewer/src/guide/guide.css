@@ -117,18 +117,65 @@
   min-height: 0;
 }
 
-/* The Components part's tile: the real chrome around a schematic body, with
- * its hover-only row kept on screen — the demo is there to show the row. */
+/* A live tile in a demo: one of the dashboard's components, drawn by the real
+ * renderer, in a cell shaped as the grid shapes one (a column the renderer
+ * fills, clipping what overflows). */
 .depictio-guide-demo-tile {
   position: relative;
-  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.depictio-guide-demo-tile .depictio-component-actions > * {
+.depictio-guide-demo-cell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* The Components part keeps the hover-only row on screen: the demo is there to
+ * show the row. The Analysis demo's tiles behave as on the canvas. */
+.depictio-guide-demo-tile:not(.is-analysis) .depictio-component-actions > * {
   opacity: 1;
   pointer-events: auto;
 }
-.depictio-guide-demo-tile .depictio-component-actions::before {
+.depictio-guide-demo-tile:not(.is-analysis) .depictio-component-actions::before {
   opacity: 1;
+}
+
+/* The Read-a-tab demo: the dashboard's grid, inside the demo's inset. */
+.depictio-guide-grid {
+  min-width: 0;
+}
+
+/* A line of the actions lists that has its icon on the live tile: pointing at
+ * it rings the icon, so it reads as something to point at. */
+.depictio-guide-legend-row {
+  border-radius: var(--mantine-radius-sm);
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+.depictio-guide-legend-row.is-live {
+  cursor: pointer;
+}
+.depictio-guide-legend-row.is-live:hover,
+.depictio-guide-legend-row.is-live:focus-visible {
+  background: var(--mantine-color-default-hover);
+  outline: none;
+}
+.depictio-guide-legend-row.is-absent > :first-child {
+  opacity: 0.45;
+}
+
+/* What an editor menu item would have done. */
+.depictio-guide-note {
+  border-left: 3px solid var(--mantine-primary-color-filled);
+}
+
+/* The Analysis demo's steps: the one to take now is outlined. */
+.depictio-guide-step.is-active {
+  border-color: var(--depictio-guide-step-color);
+  box-shadow: 0 0 0 1px var(--depictio-guide-step-color);
 }
 .depictio-guide-tile-body {
   border: 1px solid var(--mantine-color-default-border);
@@ -200,11 +247,15 @@
 }
 
 /* While its row is ringed, a tile shows its hover-only actions as if hovered
- * (the rules this mirrors are in react-core's chrome/chrome.css). */
+ * (the rules this mirrors are in react-core's chrome/chrome.css), and its
+ * plot its hover-only toolbar. */
 .depictio-component-chrome.depictio-guide-reveal .depictio-component-actions > * {
   opacity: 1;
   pointer-events: auto;
 }
 .depictio-component-chrome.depictio-guide-reveal .depictio-component-actions::before {
+  opacity: 1;
+}
+.depictio-component-chrome.depictio-guide-reveal .js-plotly-plot .plotly .modebar {
   opacity: 1;
 }

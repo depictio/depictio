@@ -162,26 +162,29 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * Ring `els` for a couple of seconds, scrolling the first into view. `reveal`
- * gets a class for the same time — the tile chrome uses it to keep its
- * hover-only action row on screen.
+ * Ring `els` for a couple of seconds, scrolling the first into view (unless
+ * `scroll` is false: a ring that answers a hover must not move the page under
+ * the pointer). `reveal` gets a class for the same time — the tile chrome uses
+ * it to keep its hover-only action row on screen.
  */
 export function ringElements(
   els: HTMLElement[],
-  opts: { reveal?: HTMLElement | null; scroll?: ScrollLogicalPosition } = {},
+  opts: { reveal?: HTMLElement | null; scroll?: ScrollLogicalPosition | false } = {},
 ): void {
   active?.();
   if (els.length === 0) return;
   const reduced = prefersReducedMotion();
   const lead = els[0];
 
-  // Centring something taller than the screen would scroll its top away.
-  const tall = lead.getBoundingClientRect().height > window.innerHeight * 0.6;
-  lead.scrollIntoView({
-    block: tall ? 'start' : (opts.scroll ?? 'nearest'),
-    inline: 'nearest',
-    behavior: reduced ? 'auto' : 'smooth',
-  });
+  if (opts.scroll !== false) {
+    // Centring something taller than the screen would scroll its top away.
+    const tall = lead.getBoundingClientRect().height > window.innerHeight * 0.6;
+    lead.scrollIntoView({
+      block: tall ? 'start' : (opts.scroll ?? 'nearest'),
+      inline: 'nearest',
+      behavior: reduced ? 'auto' : 'smooth',
+    });
+  }
   opts.reveal?.classList.add('depictio-guide-reveal');
 
   const rings = els.map((el) => {

@@ -41,6 +41,7 @@ const LoadAllButton: React.FC<{ state: LoadAllState }> = ({ state }) => {
         loading={state.loading}
         onClick={state.toggle}
         aria-label={state.full ? 'Back to reduced view' : `Load all ${state.noun}`}
+        data-tile-action="loadAll"
       >
         <Icon
           icon={state.full ? LOAD_ALL_ACTIVE_ICON : STYLE.icon}

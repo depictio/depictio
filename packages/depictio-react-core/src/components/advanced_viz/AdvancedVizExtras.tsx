@@ -117,6 +117,7 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
           size="sm"
           aria-label={TILE_ACTION_STYLE.settings.label}
           title={TILE_ACTION_STYLE.settings.label}
+          data-tile-action="settings"
           onClick={() => setOpened((v) => !v)}
         >
           <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
@@ -225,6 +226,7 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
           size="sm"
           aria-label="Show underlying data"
           title={TILE_ACTION_STYLE.data.label}
+          data-tile-action="data"
           onClick={() => setOpened((v) => !v)}
         >
           <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />

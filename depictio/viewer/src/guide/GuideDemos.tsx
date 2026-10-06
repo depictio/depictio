@@ -1,8 +1,7 @@
 /**
- * The Guide's live demos: small working copies of the real controls, built
- * from the same Mantine pieces and, where the dashboard has them, its real
- * names, icons and colours. They act on themselves only — nothing here
- * filters, folds or saves anything on the dashboard.
+ * The Guide's smaller demos: the tab list and "Your view", built from the
+ * same pieces as the real controls. They act on themselves only. The demos
+ * made of the dashboard's own components are in `demos/`.
  */
 import React, { useState } from 'react';
 import {
@@ -11,19 +10,13 @@ import {
   Button,
   Group,
   SegmentedControl,
-  SimpleGrid,
   Stack,
   Tabs,
   Text,
   useComputedColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import {
-  UI_SCALE_STEPS,
-  useBranding,
-  useGroupingColor,
-  useGroupingColorVar,
-} from 'depictio-react-core';
+import { UI_SCALE_STEPS, useBranding } from 'depictio-react-core';
 import type { GuideModel } from 'depictio-react-core';
 
 import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar';
@@ -134,92 +127,6 @@ export const TabPillsDemo: React.FC<{
         ))}
       </Tabs.List>
     </Tabs>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Analysis
-// ---------------------------------------------------------------------------
-
-/**
- * The header's Analysis button and what turning it on does to the tiles: the
- * ones a selection can be made on get the dashed outline and the group marker,
- * in the same colour as the real ones.
- */
-export const AnalysisDemo: React.FC = () => {
-  const [on, setOn] = useState(false);
-  const color = useGroupingColor();
-  const colorVar = useGroupingColorVar();
-  const tiles: { label: string; selectable: boolean; kind: 'dots' | 'bars' | 'value' }[] = [
-    { label: 'Scatter', selectable: true, kind: 'dots' },
-    { label: 'Bar chart', selectable: false, kind: 'bars' },
-    { label: 'Map', selectable: true, kind: 'dots' },
-  ];
-  return (
-    <Stack gap="sm">
-      <Group justify="space-between" wrap="nowrap">
-        <Text size="sm" c="dimmed">
-          In the header
-        </Text>
-        <Button
-          size="xs"
-          color={color}
-          variant={on ? 'filled' : 'light'}
-          leftSection={<Icon icon="mdi:select-group" width={14} height={14} />}
-          onClick={() => setOn((v) => !v)}
-          aria-pressed={on}
-        >
-          Analysis
-        </Button>
-      </Group>
-      <SimpleGrid
-        cols={3}
-        spacing="xs"
-        style={{ '--depictio-grouping-color': colorVar } as React.CSSProperties}
-      >
-        {tiles.map((t) => (
-          <Box
-            key={t.label}
-            className={'depictio-guide-tile' + (on && t.selectable ? ' is-selectable' : '')}
-            h={76}
-          >
-            {t.kind === 'dots' ? (
-              <Box className="depictio-guide-dots" style={{ position: 'absolute', inset: 0 }}>
-                {[
-                  [18, 60],
-                  [30, 40],
-                  [44, 55],
-                  [58, 30],
-                  [70, 48],
-                  [80, 22],
-                ].map(([x, y], i) => (
-                  <span key={i} style={{ left: `${x}%`, top: `${y}%` }} />
-                ))}
-              </Box>
-            ) : (
-              <Box className="depictio-guide-bars" pt={22} pb={6}>
-                {[40, 70, 55].map((h, i) => (
-                  <span key={i} style={{ height: `${h}%` }} />
-                ))}
-              </Box>
-            )}
-            <Text size="10px" c="dimmed" style={{ position: 'absolute', left: 8, top: 6 }}>
-              {t.label}
-            </Text>
-            {on && t.selectable && (
-              <Box style={{ position: 'absolute', right: 6, top: 4, color: colorVar }}>
-                <Icon icon="mdi:select-group" width={16} height={16} />
-              </Box>
-            )}
-          </Box>
-        ))}
-      </SimpleGrid>
-      <Text size="xs" c="dimmed" mih={18} aria-live="polite">
-        {on
-          ? 'Outlined tiles take a selection: lasso some points, then save them as a group.'
-          : 'Turn it on to see which tiles take a selection.'}
-      </Text>
-    </Stack>
   );
 };
 

@@ -39,8 +39,9 @@ import type {
   StoredMetadata,
 } from 'depictio-react-core';
 
-import { AnalysisDemo, DemoFrame, TabPillsDemo, YourViewDemo } from './GuideDemos';
+import { DemoFrame, TabPillsDemo, YourViewDemo } from './GuideDemos';
 import { ActionsDemo } from './demos/ActionsDemo';
+import { AnalysisDemo } from './demos/AnalysisDemo';
 import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
 import { SectionsDemo } from './demos/SectionsDemo';
 import { CANVAS_SELECTOR, findGuideTarget, type GuideTarget } from './showMe';
@@ -386,6 +387,8 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // A demo tile in fullscreen: Esc is the browser's, to leave it.
+      if (document.fullscreenElement) return;
       if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       onClose();
     };
@@ -482,10 +485,10 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       sectionsSource === null
         ? 'An example · fold a section'
         : sectionsSource?.scope === 'pinned'
-          ? 'A pinned section · fold it'
+          ? `Live · a pinned section, from ${sectionsSource.tabLabel}`
           : sectionsSource?.scope === 'sibling'
-            ? `From ${sectionsSource.tabLabel} · fold a section`
-            : 'Fold a section',
+            ? `Live · from ${sectionsSource.tabLabel} · fold a section`
+            : `Live · ${tabName}'s own · fold a section`,
     demo: <SectionsDemo source={sectionsSource} />,
     note: headingsOnly && (
       <Note testId="guide-headings-note">
@@ -620,7 +623,10 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
         </Kbd>{' '}
         stays on screen, filled, while that component's selection filters the tab.
       </>,
-      <>Pick a kind of component: the tile shows its row, the lists say what each icon does.</>,
+      <>
+        Pick a kind: the tile is one of this dashboard's own, live, and every icon on it works.
+        Point at a line of the lists to find its icon on the tile.
+      </>,
       isEdit && (
         <>
           In the editor every tile also has a grip to move it, a corner to resize it and a{' '}
@@ -628,8 +634,8 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
         </>
       ),
     ],
-    demoLabel: isEdit ? 'Hover the icons · open the ⋮ menu' : 'Hover the icons',
-    demo: <ActionsDemo model={model} components={components} mode={mode} />,
+    demoLabel: isEdit ? 'Live · try its icons and the ⋮ menu' : 'Live · try its icons',
+    demo: <ActionsDemo model={model} family={sources.family} mode={mode} />,
     showMe: {
       target: 'actions',
       label: 'Show me on a component',
@@ -644,27 +650,19 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       navLabel: 'Analysis',
       icon: 'mdi:select-group',
       title: 'Compare groups with Analysis',
-      subtitle: 'Save selections as groups, colour or split every figure, compare groups',
+      subtitle: 'Save selections as groups, then compare them on the figures and cards',
       points: [
         <>
           <Kbd icon="mdi:select-group">Analysis</Kbd> in the header turns the mode on and opens its
-          panel. The tiles you can select on get a dashed outline.
+          panel; the tiles a selection can be made on get a dashed outline.
         </>,
-        analysis.selectable > 0 ? (
-          <>
-            Select some points on one of them ({plural(analysis.selectable, 'tile')} on this tab),
-            then save the selection as a group.
-          </>
-        ) : (
-          <>No tile on this tab takes a selection; groups saved on another tab still apply here.</>
-        ),
         <>
-          With groups saved, colour or split every figure by them, and read each card's numbers
-          group by group.
+          Select points or rows, save them as a group, then colour or split the figures by group
+          and read each card group by group. Try it below.
         </>,
       ],
-      demoLabel: 'Turn it on',
-      demo: <AnalysisDemo />,
+      demoLabel: 'Live · three steps',
+      demo: <AnalysisDemo source={sources.analysis} />,
       showMe: {
         target: 'analysis',
         label: 'Show me Analysis',

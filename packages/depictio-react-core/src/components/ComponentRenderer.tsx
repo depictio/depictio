@@ -694,6 +694,7 @@ const SourceTabAction: React.FC<{ link: TabLinkTarget }> = ({ link }) => (
       size="sm"
       aria-label={`Open in ${link.label}`}
       data-testid="highlight-source-action"
+      data-tile-action="source"
     >
       <Icon icon={TILE_ACTION_STYLE.source.icon} width={15} />
     </ActionIcon>

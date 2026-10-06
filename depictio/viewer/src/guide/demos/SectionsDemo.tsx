@@ -1,21 +1,27 @@
 /**
- * The "Read a tab" demo: real sections, folding and unfolding in the real
- * section chrome, with the real "Collapse all / Expand all" above them.
+ * The "Read a tab" demo: the tab's own sections, drawn by the grid that draws
+ * them on the canvas.
  *
- * The sections are the dashboard's own — this tab's when it has some that
- * fold, else the family's pinned ones, else the first sibling tab's —
- * and they hold what they hold on the dashboard: their key figures (computed
- * by the endpoint the dashboard uses) and the kind and title of every other
- * tile. Folded, a section reads its key figures in its header, as it does on
- * the page. Only a dashboard with no foldable section anywhere gets the
- * self-contained example.
+ * Not a picture of a section: `DashboardGrid` itself, handed the sections'
+ * members and the tab's stored layout, so the header, the fold, the folded
+ * summary, "Collapse all" and every tile are the dashboard's, the cards with
+ * their values from the endpoint the dashboard computes them with. The
+ * sections are this tab's when it has some that fold, else the family's
+ * pinned ones, else the first sibling tab's; the one holding key figures
+ * opens, the other is folded, so both states are on screen at once.
+ *
+ * What it does stays here: the fold is kept in memory rather than with the
+ * reader's folds for the tab, and a filter or a selection made inside it is
+ * the demo's own (see `GuideSandbox`). Only a dashboard with no section that
+ * folds anywhere gets the self-contained example.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Accordion, Box, Button, Group, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
-  bulkComputeCards,
   componentTypeVisual,
+  DashboardGrid,
+  hasCards,
   SectionAccordion,
   SectionAccordionItem,
   SectionHeader,
@@ -23,10 +29,83 @@ import {
 } from 'depictio-react-core';
 import type { FilterSectionSpec, GuideDemoSection, StoredMetadata } from 'depictio-react-core';
 
+import { GuideSandbox } from '../GuideSandbox';
 import type { SectionsDemoSource } from '../useGuideSources';
+import { useCardIds, useDemoCards, useDemoFilters } from './demoState';
 
-/** Tiles shown inside an open demo section; the rest are counted. */
-const MEMBER_LIMIT = 6;
+export const SectionsDemo: React.FC<{ source: SectionsDemoSource | null | undefined }> = ({
+  source,
+}) => {
+  if (source === undefined) {
+    return (
+      <Stack gap={6}>
+        <Skeleton h={52} radius="md" />
+        <Skeleton h={160} radius="md" />
+      </Stack>
+    );
+  }
+  return source ? <LiveSections source={source} /> : <ExampleSections />;
+};
+
+// ---------------------------------------------------------------------------
+// The dashboard's sections
+// ---------------------------------------------------------------------------
+
+const LiveSections: React.FC<{ source: SectionsDemoSource }> = ({ source }) => {
+  const { sections } = source;
+  const members = useMemo(() => sections.flatMap((s) => s.members), [sections]);
+  // The section with key figures opens; a lone section opens too, its header
+  // folding it at a click.
+  const open = sections.find(hasCards) ?? sections[0];
+  const specs = useMemo<FilterSectionSpec[]>(
+    () =>
+      sections.map((s) => ({
+        ...s.spec,
+        collapsed: sections.length > 1 && s !== open,
+      })),
+    [sections, open],
+  );
+  const { filters, settled, onFilterChange } = useDemoFilters(members);
+  const cardIds = useCardIds(members);
+  const cards = useDemoCards(source.dashboardId, cardIds, settled);
+  const keyFigures = open.members.filter((m) => m.component_type === 'card').length;
+
+  return (
+    <GuideSandbox metadata={members}>
+      <Stack gap={6} data-testid="guide-sections-demo">
+        <Box className="depictio-guide-grid">
+          <DashboardGrid
+            dashboardId={source.dashboardId}
+            metadataList={members}
+            layoutData={source.layoutData}
+            gridSections={specs}
+            filters={settled}
+            controlFilters={filters}
+            onFilterChange={onFilterChange}
+            onResetFilters={(indices) =>
+              indices.forEach((index) => onFilterChange({ index, value: null }))
+            }
+            cardValues={cards.values}
+            cardSecondaryValues={cards.secondary}
+            cardValuesLoading={cards.loading}
+            collapseStorageKey={null}
+          />
+        </Box>
+        <Text size="xs" c="dimmed" data-testid="guide-sections-hint">
+          {keyFigures > 0
+            ? `Click “${open.spec.name}” to fold it: folded, its header still reads its ${
+                keyFigures === 1 ? 'key figure' : `${keyFigures} key figures`
+              }. Click again to open it.`
+            : 'Click a header to fold or unfold its section.'}
+        </Text>
+      </Stack>
+    </GuideSandbox>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// For a dashboard with no section that folds anywhere
+// ---------------------------------------------------------------------------
 
 const fmt = (v: unknown) =>
   typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(v ?? '…');
@@ -34,7 +113,7 @@ const fmt = (v: unknown) =>
 const titleOf = (m: StoredMetadata) =>
   String(m.title || m.column_name || componentTypeVisual(m.component_type).label);
 
-/** One tile of a demo section, as small as it can be and still be recognised. */
+/** One tile of an example section, as small as it can be and still be recognised. */
 const MemberTile: React.FC<{ m: StoredMetadata; value: unknown }> = ({ m, value }) => {
   if (m.component_type === 'card') {
     const color = (m.icon_color as string | undefined) || undefined;
@@ -68,13 +147,12 @@ const MemberTile: React.FC<{ m: StoredMetadata; value: unknown }> = ({ m, value 
         </Text>
       </Group>
       <Text size="sm" fw={500} lineClamp={1}>
-        {m.component_type === 'text' && !m.title ? 'Notes' : titleOf(m)}
+        {titleOf(m)}
       </Text>
     </Box>
   );
 };
 
-/** For a dashboard with no section that folds anywhere: two made-up ones. */
 const EXAMPLE: { sections: GuideDemoSection[]; values: Record<string, unknown> } = (() => {
   const card = (index: string, title: string, icon: string, color: string): StoredMetadata =>
     ({ index, component_type: 'card', title, icon_name: icon, icon_color: color }) as StoredMetadata;
@@ -111,58 +189,26 @@ const EXAMPLE: { sections: GuideDemoSection[]; values: Record<string, unknown> }
   };
 })();
 
-/** The section cards' values, unfiltered, from the tab that owns them. */
-function useSectionValues(source: SectionsDemoSource | null): Record<string, unknown> {
-  const [values, setValues] = useState<Record<string, unknown>>({});
-  const ids = useMemo(
-    () =>
-      source
-        ? source.sections.flatMap((s) =>
-            s.members.filter((m) => m.component_type === 'card').map((m) => m.index),
-          )
-        : [],
-    [source],
-  );
-  const key = ids.join('|');
-  useEffect(() => {
-    if (!source || ids.length === 0) return;
-    const ctrl = new AbortController();
-    bulkComputeCards(source.dashboardId, [], ids, undefined, ctrl.signal)
-      .then((res) => setValues(res.values ?? {}))
-      .catch(() => undefined);
-    return () => ctrl.abort();
-    // `key` is the card ids' identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source?.dashboardId, key]);
-  return values;
-}
-
-export const SectionsDemo: React.FC<{ source: SectionsDemoSource | null | undefined }> = ({
-  source,
-}) => {
-  const live = useSectionValues(source ?? null);
-  const sections = source ? source.sections : EXAMPLE.sections;
-  const values = source ? live : EXAMPLE.values;
+/** Two made-up sections in the real section chrome, for a dashboard that has
+ *  no section to show. */
+const ExampleSections: React.FC = () => {
+  const { sections, values } = EXAMPLE;
   const keys = sections.map((s) => s.spec.name);
-  // The first opens, the rest are folded: both states on screen at once. A
-  // lone section starts folded, on the state the reader cannot guess: its
-  // header still reading its key numbers.
-  const [open, setOpen] = useState<string[] | null>(null);
-  const shown = open ?? (keys.length > 1 ? keys.slice(0, 1) : []);
-  const anyOpen = shown.length > 0;
-
-  if (source === undefined) {
-    return (
-      <Stack gap={6}>
-        <Skeleton h={52} radius="md" />
-        <Skeleton h={52} radius="md" />
-      </Stack>
-    );
-  }
-
+  const [open, setOpen] = useState<string[]>(keys.slice(0, 1));
+  const anyOpen = open.length > 0;
   return (
     <Stack gap={4} data-testid="guide-sections-demo">
-      <Group justify="flex-end">
+      <Group justify="space-between" wrap="nowrap">
+        <Group gap={6} wrap="nowrap">
+          <Icon
+            icon="mdi:eye-off-outline"
+            width={14}
+            style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0 }}
+          />
+          <Text size="xs" c="dimmed">
+            No section of this dashboard folds: an example
+          </Text>
+        </Group>
         <Button
           variant="subtle"
           color="gray"
@@ -178,40 +224,32 @@ export const SectionsDemo: React.FC<{ source: SectionsDemoSource | null | undefi
           {anyOpen ? 'Collapse all' : 'Expand all'}
         </Button>
       </Group>
-      <SectionAccordion value={shown} onChange={setOpen}>
-        {sections.map(({ spec, members }) => {
-          const tiles = members.filter((m) => m.component_type !== 'text' || members.length === 1);
-          return (
-            <SectionAccordionItem key={spec.name} value={spec.name} color={spec.color}>
-              <Accordion.Control>
-                <SectionHeader
-                  spec={spec}
-                  name={spec.name}
-                  trailing={
-                    shown.includes(spec.name) ? undefined : (
-                      <SectionSummary
-                        section={{ key: spec.name, sectionName: spec.name, spec, members }}
-                        cardValues={values}
-                      />
-                    )
-                  }
-                />
-              </Accordion.Control>
-              <Accordion.Panel>
-                <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs">
-                  {tiles.slice(0, MEMBER_LIMIT).map((m) => (
-                    <MemberTile key={m.index} m={m} value={values[m.index]} />
-                  ))}
-                </SimpleGrid>
-                {tiles.length > MEMBER_LIMIT && (
-                  <Text size="xs" c="dimmed" mt={6}>
-                    and {tiles.length - MEMBER_LIMIT} more
-                  </Text>
-                )}
-              </Accordion.Panel>
-            </SectionAccordionItem>
-          );
-        })}
+      <SectionAccordion value={open} onChange={setOpen}>
+        {sections.map(({ spec, members }) => (
+          <SectionAccordionItem key={spec.name} value={spec.name} color={spec.color}>
+            <Accordion.Control>
+              <SectionHeader
+                spec={spec}
+                name={spec.name}
+                trailing={
+                  open.includes(spec.name) ? undefined : (
+                    <SectionSummary
+                      section={{ key: spec.name, sectionName: spec.name, spec, members }}
+                      cardValues={values}
+                    />
+                  )
+                }
+              />
+            </Accordion.Control>
+            <Accordion.Panel>
+              <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs">
+                {members.map((m) => (
+                  <MemberTile key={m.index} m={m} value={values[m.index]} />
+                ))}
+              </SimpleGrid>
+            </Accordion.Panel>
+          </SectionAccordionItem>
+        ))}
       </SectionAccordion>
     </Stack>
   );

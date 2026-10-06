@@ -278,9 +278,15 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const groupingActions = extraChildren.filter(isGroupingAction);
   const otherActions = extraChildren.filter((c) => !isGroupingAction(c));
 
-  const wrapAction = (child: React.ReactNode, key: string, extraClass = '') => (
+  const wrapAction = (
+    child: React.ReactNode,
+    key: string,
+    extraClass = '',
+    tileAction?: string,
+  ) => (
     <span
       key={key}
+      data-tile-action={tileAction}
       // The escape from the hover-only default has to live on THIS span, not on
       // the action inside it: the rule that hides the row targets
       // `.depictio-component-actions > *`, and `opacity` applies to the whole
@@ -335,6 +341,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             child != null && React.isValidElement(child) && child.type === SelectionHintAction
               ? ' depictio-selection-hint'
               : '',
+            'group',
           ),
         )}
         {/* Drag handle sits alongside the other action icons. drag is gated
@@ -349,6 +356,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // bubble up.
           <span
             className="react-grid-dragHandle depictio-drag-handle"
+            data-tile-action="drag"
             style={{ display: 'inline-flex', alignItems: 'center' }}
           >
             <ActionIcon
@@ -373,6 +381,10 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           return (
             <span
               key={a}
+              // Names the action for anything pointing at it from outside
+              // the row (the Guide's legend rings the icon it describes).
+              // The renderers' own actions carry the same attribute.
+              data-tile-action={a}
               className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
               style={{ display: 'inline-flex', alignItems: 'center' }}
               onMouseDown={(e) => e.stopPropagation()}

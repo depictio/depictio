@@ -137,6 +137,7 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
           size="sm"
           aria-label="Show underlying data"
           title={TILE_ACTION_STYLE.data.label}
+          data-tile-action="data"
           data-no-drag
           onClick={() => setOpened((v) => !v)}
         >

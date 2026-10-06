@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type DependencyList, type RefObject } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type DependencyList,
+  type RefObject,
+} from 'react';
 
 import { ROW_SPLIT } from '../gridConfig';
 import { resolveCardVariant } from './cardVariant';
@@ -38,6 +46,21 @@ const measuredHeights = new Map<string, number>();
 export const autofitHeights = (): ReadonlyMap<string, number> => measuredHeights;
 
 /**
+ * A namespace for the heights published below it.
+ *
+ * Heights are keyed by component index, and the index is the dashboard's. A
+ * second copy of a tile drawn elsewhere on the page (the dashboard Guide shows
+ * the dashboard's own components) measures at its own width, and publishing
+ * that under the tile's index would resize the tile on the canvas. Under a
+ * scope, a renderer publishes as `<scope><index>`, and a grid under the same
+ * scope reads back only its own: the canvas never sees the copy, nor the copy
+ * the canvas. The default scope is empty, which is the key as it always was.
+ */
+const AutofitScopeContext = createContext('');
+
+export const AutofitScope = AutofitScopeContext.Provider;
+
+/**
  * Observe `nodeRef` and publish the height its content needs under `index`.
  *
  * The node handed in must be height-auto: it is the whole reason this works.
@@ -59,20 +82,22 @@ export function useAutofitHeight(
   // every render, and a card renders again on every bulk-compute tick.
   const toTileHeightRef = useRef(toTileHeight);
   toTileHeightRef.current = toTileHeight;
+  const scope = useContext(AutofitScopeContext);
 
   useEffect(() => {
     const node = nodeRef.current;
     if (!node || !index || typeof ResizeObserver === 'undefined') return;
+    const key = scope + index;
     const publish = () => {
       const content = node.scrollHeight;
       const height = toTileHeightRef.current ? toTileHeightRef.current(content) : content;
       // Only on change: the grid re-renders on receipt, which re-runs the
       // observer, and an unconditional dispatch would loop.
-      if (measuredHeights.get(index) === height) return;
-      measuredHeights.set(index, height);
+      if (measuredHeights.get(key) === height) return;
+      measuredHeights.set(key, height);
       window.dispatchEvent(
         new CustomEvent<AutofitDetail>(AUTOFIT_EVENT, {
-          detail: { index, height },
+          detail: { index: key, height },
         }),
       );
     };
@@ -88,7 +113,7 @@ export function useAutofitHeight(
     // The caller's `deps` are spread in so a renderer can force a re-measure on
     // a content change the observer cannot see; the observer covers the rest.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, nodeRef, ...deps]);
+  }, [scope, index, nodeRef, ...deps]);
 }
 
 /**
@@ -235,23 +260,28 @@ export function fitLayoutHeights<T extends SizedItem>(
  */
 export function useAutofitHeights(): Record<string, number> {
   const [heights, setHeights] = useState<Record<string, number>>({});
+  const scope = useContext(AutofitScopeContext);
   useEffect(() => {
+    // Under a scope, only that scope's keys, read back as plain indices.
+    const own = (key: string) => (key.startsWith(scope) ? key.slice(scope.length) : null);
     const onMeasure = (event: Event) => {
       const detail = (event as CustomEvent<AutofitDetail>).detail;
-      if (!detail?.index) return;
+      const index = detail?.index ? own(detail.index) : null;
+      if (!index) return;
       setHeights((prev) =>
-        prev[detail.index] === detail.height ? prev : { ...prev, [detail.index]: detail.height },
+        prev[index] === detail.height ? prev : { ...prev, [index]: detail.height },
       );
     };
     window.addEventListener(AUTOFIT_EVENT, onMeasure);
     setHeights((prev) => {
       let next = prev;
-      for (const [index, height] of autofitHeights()) {
-        if (next[index] !== height) next = { ...next, [index]: height };
+      for (const [key, height] of autofitHeights()) {
+        const index = own(key);
+        if (index && next[index] !== height) next = { ...next, [index]: height };
       }
       return next;
     });
     return () => window.removeEventListener(AUTOFIT_EVENT, onMeasure);
-  }, []);
+  }, [scope]);
   return heights;
 }

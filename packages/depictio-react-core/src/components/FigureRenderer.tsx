@@ -8,11 +8,6 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
-// Vite resolve.alias in depictio/viewer/vite.config.ts rewrites bare
-// `plotly.js` to `plotly.js/dist/plotly`, so this import grabs the prebuilt
-// browser UMD bundle that react-plotly.js itself uses internally — no
-// `buffer/` source walk, no extra bundle weight, single Plotly instance.
-import Plotly from 'plotly.js';
 
 import {
   renderFigure,
@@ -39,6 +34,7 @@ import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
+import { usePlotSelectionReset } from './usePlotSelectionReset';
 import { useUiScale } from '../uiScale';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
@@ -282,67 +278,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     emitSelection([]);
   };
 
-  // Plotly graph div captured on init/update so we can imperatively clear the
-  // visual lasso/box selection when the user clicks the chrome reset button.
-  // react-plotly.js is a controlled wrapper for `data` + `layout`, but the
-  // drawn selection lives in Plotly's internal UI state (`layout.selections`
-  // and per-trace `selectedpoints`) which isn't reflected back into our props.
-  // Forcing those to null via `relayout` / `restyle` is the documented escape
-  // hatch.
-  const gdRef = useRef<HTMLElement | null>(null);
-
-  const hasOwnSelection = useMemo(() => {
-    return filters.some(
-      (f) =>
-        f.index === metadata.index &&
-        f.source === 'scatter_selection' &&
-        Array.isArray(f.value) &&
-        f.value.length > 0,
-    );
-  }, [filters, metadata.index]);
-
-  // Track whether THIS component had its own selection on the previous render
-  // so we only fire the clear effect on the true→false transition (someone
-  // pressed the chrome reset button or deselected externally). Without this
-  // gate the effect would also run on first mount before any selection ever
-  // existed.
-  const prevHadOwnSelection = useRef(false);
-
-  useEffect(() => {
-    const wasActive = prevHadOwnSelection.current;
-    prevHadOwnSelection.current = hasOwnSelection;
-    if (!wasActive || hasOwnSelection) return;
-
-    const gd = gdRef.current;
-    if (!gd) return;
-
-    // Plotly methods accept a string selector or HTMLElement. The Plot's gd
-    // is the chart container; relayout({selections: null}) wipes drawn
-    // selection shapes (lasso/box outline) and restyle({selectedpoints:
-    // null}) restores the un-dimmed look on every trace. Wrapped in
-    // try/catch because the gd may have unmounted between scheduling and
-    // running, and Plotly raises on a detached div.
-    try {
-      // Casts: @types/plotly.js wants Plotly types on gd but the wrapper
-      // exposes a regular HTMLElement that Plotly accepts at runtime; and
-      // `selections` / `selectedpoints` aren't in the typed layout/style
-      // surface but Plotly accepts them as a known clear-state idiom.
-      const target = gd as unknown as Parameters<typeof Plotly.relayout>[0];
-      Plotly.relayout(target, { selections: null } as Partial<Plotly.Layout>).catch(() => {});
-      const data = (gd as unknown as { data?: unknown[] }).data;
-      const traceCount = Array.isArray(data) ? data.length : 0;
-      if (traceCount > 0) {
-        const indices = Array.from({ length: traceCount }, (_, i) => i);
-        Plotly.restyle(
-          target,
-          { selectedpoints: [null] } as Partial<Plotly.PlotData>,
-          indices,
-        ).catch(() => {});
-      }
-    } catch {
-      // best-effort: gd may have unmounted between schedule and run
-    }
-  }, [hasOwnSelection]);
+  // The graph div, so the drawn lasso/box can be wiped when this figure's own
+  // selection is cleared from outside (the chrome's reset button).
+  const gdRef = usePlotSelectionReset(filters, metadata.index);
 
   // ── New-item highlight pipeline ───────────────────────────────────────────
   // Only wired for scatter visualisations — histograms / box / bar aggregate

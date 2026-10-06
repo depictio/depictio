@@ -62,7 +62,19 @@ export interface GuideOwnControl {
   icon: string;
   label: string;
   meaning: string;
+  /**
+   * Where it is in a live tile, as a selector inside the tile: what the Guide
+   * rings when a reader points at the line. Absent where the control has no
+   * element of its own (a gesture), or none worth pointing at.
+   */
+  target?: string;
+  /** Only on a tile with selection on: Plotly's toolbar carries its select
+   *  buttons either way, so the element alone does not say it works. */
+  selection?: true;
 }
+
+/** Plotly's own toolbar buttons, by the title Plotly gives them. */
+const modebarButton = (title: string) => `.modebar-btn[data-title="${title}"]`;
 
 export interface GuideEditAction extends TileActionStyle {
   key: EditMenuStyleKey | 'drag' | 'resize';
@@ -158,18 +170,23 @@ const PLOT_TOOLBAR: GuideOwnControl[] = [
     icon: 'mdi:magnify-plus-outline',
     label: 'Zoom and pan',
     meaning: "Plotly's toolbar, top right on hover: drag to zoom, then pan; double-click resets.",
+    target: `${modebarButton('Zoom')}, ${modebarButton('Pan')}, .modebar-group`,
   },
   {
     icon: 'mdi:camera-outline',
     label: 'Download image',
     meaning: 'The camera in the same toolbar saves the plot as a PNG.',
+    target: '.modebar-btn[data-title^="Download plot"]',
   },
   {
     icon: 'mdi:format-list-bulleted',
     label: 'Legend',
     meaning: 'Click an entry to hide it, double-click to show it alone.',
+    target: '.legend',
   },
 ];
+
+const LASSO = `${modebarButton('Lasso Select')}, ${modebarButton('Box Select')}`;
 
 const OWN: Record<GuideTileType, GuideOwnControl[]> = {
   figure: [
@@ -178,11 +195,14 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:lasso',
       label: 'Lasso or box select',
       meaning: 'On a scatter plot with selection on, the points you draw around filter the tab.',
+      target: LASSO,
+      selection: true,
     },
     {
       icon: 'mdi:arrow-top-right',
       label: 'Link to a tab',
       meaning: 'A figure that sums up a tab, or comes from one, links to it from its header.',
+      target: '.depictio-figure-header-source',
     },
   ],
   card: [
@@ -190,16 +210,19 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:cursor-default-outline',
       label: 'Hover the title',
       meaning: "How the number is computed, and the author's note.",
+      target: '.depictio-card .mantine-Card-section',
     },
     {
       icon: 'mdi:chart-box-outline',
       label: 'The strip under the value',
       meaning: 'The distribution or the top values behind the number, when the card has one.',
+      target: '.depictio-card .mantine-Card-section + *',
     },
     {
       icon: 'mdi:arrow-top-right',
       label: 'Link to a tab',
       meaning: 'A card the author linked opens the tab that explains it.',
+      target: 'a.depictio-card-link',
     },
   ],
   table: [
@@ -207,11 +230,13 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:sort',
       label: 'Sort and filter columns',
       meaning: "Click a header to sort; its menu filters the column. Drag a header's edge to resize.",
+      target: '.ag-header-row-column',
     },
     {
       icon: 'mdi:checkbox-marked-outline',
       label: 'Select rows',
       meaning: 'With row selection on, the rows you tick filter the rest of the tab.',
+      target: '.ag-pinned-left-cols-container, .ag-selection-checkbox',
     },
   ],
   map: [
@@ -219,11 +244,14 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:magnify-plus-outline',
       label: 'Zoom and pan',
       meaning: 'Scroll to zoom, drag to pan; the toolbar on hover resets the view.',
+      target: '.modebar-group, .maplibregl-ctrl-group',
     },
     {
       icon: 'mdi:lasso',
       label: 'Lasso or click',
       meaning: 'With selection on, the stations you draw around or click filter the tab.',
+      target: LASSO,
+      selection: true,
     },
   ],
   multiqc: [
@@ -232,6 +260,7 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:toggle-switch-outline',
       label: 'General statistics',
       meaning: 'Switch between reads (Mean, R1, R2) and between a table and violins.',
+      target: '.mantine-SegmentedControl-root',
     },
   ],
   advanced_viz: [
@@ -240,6 +269,8 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:lasso',
       label: 'Select',
       meaning: 'On views with selection on (an embedding, a Manhattan), a selection filters the tab.',
+      target: LASSO,
+      selection: true,
     },
   ],
   text: [
@@ -247,6 +278,7 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:link-variant',
       label: 'Links to tabs',
       meaning: 'A link to another tab opens it; middle-click opens it in a new browser tab.',
+      target: 'a[href]',
     },
   ],
   image: [
@@ -254,11 +286,13 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:sort-ascending',
       label: 'Sort the grid',
       meaning: 'By a column of the data, in either direction.',
+      target: '.mantine-Select-root',
     },
     {
       icon: 'mdi:magnify',
       label: 'Preview',
       meaning: 'Opens the image full size; with selection on, a click selects it instead.',
+      target: 'img',
     },
   ],
   interactive: [
@@ -266,6 +300,7 @@ const OWN: Record<GuideTileType, GuideOwnControl[]> = {
       icon: 'mdi:form-dropdown',
       label: 'Pick values',
       meaning: 'Every component reading the same data follows; the panel counts what is set.',
+      target: '.mantine-InputWrapper-root, .mantine-Slider-root, .mantine-SegmentedControl-root',
     },
   ],
 };

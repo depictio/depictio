@@ -102,6 +102,9 @@ interface GridItemEditOverlayProps {
    *  `canHighlight`); omitted or empty hides "Highlight on…". */
   highlightTargets?: DashboardSummary[];
   onHighlightOnTab?: (componentId: string, targetDashboardId: string) => void;
+  /** Replaces the default "Edit" (a navigation to the builder). The Guide
+   *  shows the real menu and says what each item does instead of doing it. */
+  onEdit?: (componentId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -121,6 +124,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   onCopyToTab,
   highlightTargets,
   onHighlightOnTab,
+  onEdit,
 }) => {
   // The dropdown shows one page at a time: the actions, the section list or
   // the tab list. A dashboard can declare any number of sections and tabs, and
@@ -135,6 +139,10 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   if (!editMode) return null;
 
   const handleEdit = () => {
+    if (onEdit) {
+      onEdit(componentId);
+      return;
+    }
     window.location.assign(
       `/dashboard-edit/${dashboardId}/component/edit/${componentId}`,
     );
@@ -185,7 +193,12 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
       }}
     >
       <Menu.Target>
-        <ActionIcon variant="subtle" size="sm" aria-label={TILE_ACTION_STYLE.menu.label}>
+        <ActionIcon
+          variant="subtle"
+          size="sm"
+          aria-label={TILE_ACTION_STYLE.menu.label}
+          data-tile-action="menu"
+        >
           <Icon icon={TILE_ACTION_STYLE.menu.icon} width={16} />
         </ActionIcon>
       </Menu.Target>

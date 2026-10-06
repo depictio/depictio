@@ -147,6 +147,13 @@ interface DashboardGridProps {
   filterScopes?: FilterScopes;
   /** Clears the given filters (by index): a bar's "Reset". */
   onResetFilters?: (indices: string[]) => void;
+  /**
+   * Where the sections' fold state is kept. Defaults to the dashboard's own
+   * key, so a reader's folds survive a reload. `null` keeps it in memory: a
+   * grid drawing the dashboard's sections somewhere else (the Guide) must not
+   * fold or unfold them on the dashboard.
+   */
+  collapseStorageKey?: string | null;
 }
 
 /**
@@ -212,6 +219,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   controlFilters,
   filterScopes,
   onResetFilters,
+  collapseStorageKey,
 }) => {
   // Filter-bar members ride along in `metadataList` so they bucket into their
   // section, but they are drawn by the bar and never laid out on the grid:
@@ -373,7 +381,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     [gridSections],
   );
   const sectionCollapse = useCollapseState(
-    `grid-section-collapsed:${dashboardId}`,
+    collapseStorageKey === undefined ? `grid-section-collapsed:${dashboardId}` : collapseStorageKey,
     sectionsCollapsedByDefault,
   );
 

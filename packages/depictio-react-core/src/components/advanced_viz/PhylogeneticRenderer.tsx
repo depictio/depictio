@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js';
 import {
   ActionIcon,
@@ -1194,7 +1194,11 @@ const PhyloTreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     viewRef.current = { stamp: viewStampRef.current, x: [...xr], y: [...yr] };
   };
 
-  const safeIndex = String(metadata.index).replace(/[^A-Za-z0-9_-]/g, '-');
+  // Per instance too: the same tree drawn twice on a page (the Guide shows
+  // the dashboard's own components beside the canvas) must not find, zoom or
+  // restyle the other copy.
+  const instance = useId().replace(/[^A-Za-z0-9_-]/g, '');
+  const safeIndex = `${String(metadata.index).replace(/[^A-Za-z0-9_-]/g, '-')}-${instance}`;
   const plotDivId = `phylo-plot-${safeIndex}`;
   const rootId = `phylo-root-${safeIndex}`;
   // The Settings content is rendered by the chrome, outside this component's
