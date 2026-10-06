@@ -378,9 +378,6 @@ prof_files/
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
 dev/flask-login/.env
-dev/token/private_key.pem
-dev/token/public_key.pem
-dev/token/token.txt
 dev/celery/jobs.json
 dev/dev_design_visu/data/
 dev/dev_delta/
