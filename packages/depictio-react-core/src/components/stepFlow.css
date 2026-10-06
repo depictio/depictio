@@ -77,6 +77,23 @@
   line-height: 1.35;
 }
 
+/* The links behind a step, one per line under its value: quieter than the
+   value, so the step still reads as what was done first. */
+.depictio-step-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.depictio-step-link {
+  max-width: 100%;
+}
+
 /* Too narrow to go across: down the tile, the rail between the marks. */
 @container (max-width: 600px) {
   .depictio-step-flow {

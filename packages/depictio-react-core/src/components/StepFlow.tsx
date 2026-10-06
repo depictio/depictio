@@ -1,6 +1,6 @@
 import React from 'react';
 
-import type { Fact } from './blockMarkdown';
+import { splitStepValue, type Fact } from './blockMarkdown';
 import Glyph from './Glyph';
 import './stepFlow.css';
 
@@ -30,7 +30,9 @@ const StepFlow: React.FC<{
         } as React.CSSProperties
       }
     >
-      {steps.map((step, i) => (
+      {steps.map((step, i) => {
+        const { text, links } = splitStepValue(step.value);
+        return (
         <li key={i} className="depictio-step">
           <span className="depictio-step-rail" aria-hidden>
             <span className="depictio-step-mark">
@@ -40,10 +42,22 @@ const StepFlow: React.FC<{
           </span>
           <span className="depictio-step-body">
             <span className="depictio-step-label">{step.label}</span>
-            <span className="depictio-step-value">{inline(step.value)}</span>
+            <span className="depictio-step-value">{inline(text)}</span>
+            {links.length > 0 && (
+              // One link per line under the value: the parameters and the
+              // tabs behind a step, listed rather than run into its text.
+              <span className="depictio-step-links">
+                {links.map((link, j) => (
+                  <span key={j} className="depictio-step-link">
+                    {inline(link)}
+                  </span>
+                ))}
+              </span>
+            )}
           </span>
         </li>
-      ))}
+        );
+      })}
     </ol>
   </div>
 );

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { isLinksOnly, parseBlocks, parseFact, parseLinkRow, parseStatRow } from './blockMarkdown';
+import {
+  isLinksOnly,
+  parseBlocks,
+  parseFact,
+  parseLinkRow,
+  parseStatRow,
+  splitStepValue,
+} from './blockMarkdown';
 
 describe('parseBlocks', () => {
   it('keeps a body without block syntax as one paragraph, line breaks included', () => {
@@ -160,5 +167,20 @@ describe('parseLinkRow', () => {
     expect(parseLinkRow('[A](tab:A)')).toBeNull();
     expect(parseLinkRow('See [A](tab:A) and [B](tab:B) for more')).toBeNull();
     expect(parseLinkRow('**Note** the [A](tab:A) tab')).toBeNull();
+  });
+});
+
+describe('splitStepValue', () => {
+  it('sets trailing links apart from the prose', () => {
+    expect(splitStepValue('DADA2 to ASVs · Q ≥ 25 · [Settings](params:dada2) · [QC](tab:Sequencing QC)')).toEqual({
+      text: 'DADA2 to ASVs · Q ≥ 25',
+      links: ['[Settings](params:dada2)', '[QC](tab:Sequencing QC)'],
+    });
+  });
+  it('leaves a link inside the prose where it is', () => {
+    expect(splitStepValue('[SILVA](params:silva) + PR2')).toEqual({ text: '[SILVA](params:silva) + PR2', links: [] });
+  });
+  it('keeps a value made only of a link as text', () => {
+    expect(splitStepValue('[Ordination](tab:Ordination)').links).toEqual([]);
   });
 });

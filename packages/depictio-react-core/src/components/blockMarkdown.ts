@@ -170,6 +170,27 @@ export function parseLinkRow(text: string): LinkRow | null {
   return { label: m ? m[1].trim() : null, links };
 }
 
+/**
+ * A step's value split into its prose and the links that follow it:
+ * `DADA2 to ASVs · [Settings](params:dada2) · [QC](tab:QC)` gives the text
+ * `DADA2 to ASVs` and the two links. Only `·`-separated segments made of a
+ * single link count as trailing links; a link inside the prose stays there.
+ * Set apart so a step reads as what was done, then where to look, rather
+ * than as one run of text and links.
+ */
+export function splitStepValue(value: string): { text: string; links: string[] } {
+  const segments = value.split(/\s+·\s+/);
+  const links: string[] = [];
+  while (segments.length > 1) {
+    const last = segments[segments.length - 1].trim();
+    const only = last.match(LINK);
+    if (!only || only.length !== 1 || only[0] !== last) break;
+    links.unshift(last);
+    segments.pop();
+  }
+  return { text: segments.join(' · '), links };
+}
+
 /** One row of a result list: `**41%** Claim — context [Tab](tab:Name)`. */
 export interface StatRow {
   stat: string;
