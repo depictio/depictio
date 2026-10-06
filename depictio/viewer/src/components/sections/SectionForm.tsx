@@ -20,11 +20,23 @@ import {
   TextInput,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { SectionIcon } from 'depictio-react-core';
-import type { FilterSectionSpec } from 'depictio-react-core';
+import { normalizeCardVariant, SectionIcon } from 'depictio-react-core';
+import type { CardVariant, FilterSectionSpec } from 'depictio-react-core';
 
 import { SECTION_COLOR_OPTIONS, iconOptionsWith } from './sectionIcons';
 import type { SectionKind } from './sectionMutations';
+
+/** `inherit` is "each card keeps its own style": the field left unset. A
+ *  named sentinel rather than an empty string, which a Select cannot tell
+ *  apart from no selection. */
+const INHERIT = 'inherit';
+const CARD_STYLE_OPTIONS: { value: CardVariant | typeof INHERIT; label: string }[] = [
+  { value: INHERIT, label: 'Each card’s own style' },
+  { value: 'default', label: 'Default' },
+  { value: 'headline', label: 'Headline' },
+  { value: 'compact', label: 'Compact' },
+  { value: 'minimal', label: 'Minimal' },
+];
 
 export interface SectionFormProps {
   /** null = a new section. */
@@ -65,6 +77,9 @@ const SectionForm: React.FC<SectionFormProps> = ({
   );
   const [plain, setPlain] = useState(initial?.appearance === 'plain');
   const [excludeTabs, setExcludeTabs] = useState<string[]>(initial?.exclude_tabs ?? []);
+  const [cardVariant, setCardVariant] = useState<CardVariant | null>(
+    normalizeCardVariant(initial?.card_variant),
+  );
 
   // Names already excluded stay on offer even when no tab carries them any
   // more (renamed, or written in YAML for another run), so editing an
@@ -103,6 +118,8 @@ const SectionForm: React.FC<SectionFormProps> = ({
             appearance: kind === 'grid' && plain ? 'plain' : undefined,
             // Same rule as `pin`: only a persistent section shows on other tabs.
             exclude_tabs: persistent && excludeTabs.length ? excludeTabs : undefined,
+            // Grid sections only, and unwritten when each card keeps its own.
+            card_variant: kind === 'grid' && cardVariant ? cardVariant : undefined,
           }
         : null,
     );
@@ -119,6 +136,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
     kind,
     plain,
     excludeTabs,
+    cardVariant,
   ]);
 
   return (
@@ -233,6 +251,19 @@ const SectionForm: React.FC<SectionFormProps> = ({
           description="A light heading over the tiles: no frame, no fold, always open. For a section whose tiles are already cards, like a landing page's key figures."
           checked={plain}
           onChange={(e) => setPlain(e.currentTarget.checked)}
+        />
+      )}
+
+      {kind === 'grid' && (
+        <Select
+          label="Card style"
+          description="How the section's metric cards are drawn. A card that picks its own style in its builder keeps it. Headline: large figures for a landing page. Compact: low cards, title and value on one line. Minimal: no frame, for cards on a tinted section."
+          data={CARD_STYLE_OPTIONS}
+          value={cardVariant ?? INHERIT}
+          onChange={(v) => setCardVariant(normalizeCardVariant(v))}
+          allowDeselect={false}
+          comboboxProps={{ withinPortal: false }}
+          leftSection={<Icon icon="mdi:card-text-outline" width={16} />}
         />
       )}
 

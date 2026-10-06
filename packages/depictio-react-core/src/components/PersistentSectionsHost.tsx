@@ -16,6 +16,7 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
+import { withSectionCardVariant } from './cardVariant';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
 import { fitLayoutHeights, GRID_ROW_GAP_PX, SPLIT_ROW_PX, useAutofitHeights } from './autofit';
 
@@ -252,7 +253,9 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
       >
         {renderable.map(({ section, members }) => {
           const key = hostSectionKey(section);
-          const metas = members.map((m) => m.metadata);
+          // In the style each card is drawn in, so the fitting below treats a
+          // row of compact cards the way the owner tab's grid does.
+          const metas = members.map((m) => withSectionCardVariant(m.metadata, section.spec));
           // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
           const stored = toSplitRows(normalizeLayout(metas, section.layouts, false));
           const gridWidth = Math.max(100, containerWidth - sectionInset);
@@ -362,7 +365,9 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                               // endpoints take the dashboard id as a path param
                               // and gate on the same project permission.
                               dashboardId={member.dashboard_id}
-                              metadata={member.metadata}
+                              // Same rule as the owner tab's grid: the
+                              // section's card style unless the card sets one.
+                              metadata={withSectionCardVariant(member.metadata, section.spec)}
                               filters={filters}
                               onFilterChange={onFilterChange}
                               refreshTick={refreshTick}

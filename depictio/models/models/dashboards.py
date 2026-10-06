@@ -41,6 +41,7 @@ from depictio.models.components.lite import (
     MultiQCLiteComponent,
     TableLiteComponent,
 )
+from depictio.models.components.types import CardVariant
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
@@ -183,6 +184,14 @@ class FilterSectionSpec(BaseModel):
         "section is not shown on. A landing tab that already summarises the sample "
         "sheet does not need it pinned under its own key figures. Ignored unless "
         "`persistent` is set.",
+    )
+    card_variant: CardVariant | None = Field(
+        default=None,
+        description="The style every card in this section is drawn in, unless the card "
+        "sets its own `variant`: one setting turns a row of key figures into headline "
+        "(or compact, or minimal) cards, and a card added to the section later "
+        "matches them without being told. Unset leaves each card to its own `variant`. "
+        "Grid sections only.",
     )
 
 

@@ -36,6 +36,7 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
+import { withSectionCardVariant } from './cardVariant';
 import {
   fitLayoutHeights,
   useAutofitHeights,
@@ -429,7 +430,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   const readOnly = !(isDraggable || isResizable);
 
   const layoutsForSection = useCallback(
-    (members: StoredMetadata[]): Layout[] => {
+    (members: StoredMetadata[], spec?: FilterSectionSpec): Layout[] => {
       const ids = new Set(members.map((m) => m.index));
       const mine = layouts.filter((l) => ids.has(l.i));
       // `y` is stored per dashboard, not per section, so a section whose members
@@ -447,8 +448,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // measurement that quietly overrode a drag would both fight them and get
       // persisted — `onLayoutChange` exists there and nowhere else. Gating here
       // means the fitted height can never be written back to a dashboard.
+      // Cards are fitted in the style they are drawn in, their section's
+      // included: a row of compact cards is the one row of cards that may
+      // shrink (see `fitLayoutHeights`).
       const sized = readOnly
-        ? fitLayoutHeights(members, toSplitRows(mine), autoHeights, true, SPLIT_ROW_PX)
+        ? fitLayoutHeights(
+            members.map((m) => withSectionCardVariant(m, spec)),
+            toSplitRows(mine),
+            autoHeights,
+            true,
+            SPLIT_ROW_PX,
+          )
         : mine;
       const packed = compactVerticallyForStatic(sized);
       // Lone-row widening runs HERE, against the section's own members — never
@@ -485,7 +495,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         // of its own grid, so slicing here would persist the un-rebased
         // positions for every section the user hasn't dragged yet.
         const sectionLayout =
-          sectionLayoutsRef.current.get(section.key) ?? layoutsForSection(section.members);
+          sectionLayoutsRef.current.get(section.key) ??
+          layoutsForSection(section.members, section.spec);
 
         let sectionBottom = 0;
         for (const item of sectionLayout) {
@@ -542,7 +553,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             >
               <ComponentRenderer
                 dashboardId={dashboardId}
-                metadata={m}
+                // A card that sets no style of its own takes its section's.
+                // Resolved here, where the section is known, rather than
+                // written onto the card: a card added to the section later, or
+                // a section restyled later, follows without a migration.
+                metadata={withSectionCardVariant(m, section.spec)}
                 filters={filters}
                 onFilterChange={onFilterChange}
                 cardValue={cardValues?.[m.index]}
@@ -599,7 +614,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     ) : (
     <ResponsiveGridLayout
       className="layout"
-      layouts={responsiveLayouts(layoutsForSection(section.members))}
+      layouts={responsiveLayouts(layoutsForSection(section.members, section.spec))}
       // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
       // grid down to narrow content widths so opening the panels shrinks
       // components instead of wrapping them; fewer columns are a phone-only
