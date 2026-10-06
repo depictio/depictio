@@ -7,7 +7,11 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
-import { defaultInteractiveTitle, readMultiqcSelection } from 'depictio-react-core';
+import {
+  defaultInteractiveTitle,
+  normalizeCardVariant,
+  readMultiqcSelection,
+} from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 import { buildAdvancedVizConfigBlob, mergedPresetConfig } from './advanced_viz/configBlob';
@@ -152,7 +156,10 @@ function buildCard(
     // Display block. Set after `...existing` even when empty: undefined drops
     // the key, so clearing a field in the form clears it on the saved card
     // rather than letting the previous value ride through.
-    variant: c.variant === 'headline' ? 'headline' : undefined,
+    // Any known style, `default` included: the builder only stores `default`
+    // to opt a card out of its section's style. An unknown value is dropped
+    // rather than saved as a style no renderer draws.
+    variant: normalizeCardVariant(c.variant) ?? undefined,
     caption: c.caption?.trim() || undefined,
     decimals: typeof c.decimals === 'number' ? c.decimals : undefined,
     link: c.link?.trim() || undefined,

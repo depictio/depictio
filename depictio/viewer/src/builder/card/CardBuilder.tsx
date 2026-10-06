@@ -2,7 +2,7 @@
  * Card builder form. Mirrors design_card() in
  * depictio/dash/modules/card_component/design_ui.py — title, column,
  * aggregation, colors, icon, font size, with a live preview on the right.
- * The display block (headline style, caption, decimals, link, description)
+ * The display block (card style, caption, decimals, link, description)
  * is what a key figure on a landing page needs.
  */
 import React, { useEffect, useMemo } from 'react';
@@ -19,12 +19,18 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { isBreakdownLayout, tabDisplayName } from 'depictio-react-core';
-import type { DashboardSummary } from 'depictio-react-core';
+import {
+  isBreakdownLayout,
+  normalizeCardVariant,
+  tabDisplayName,
+  variantForPick,
+} from 'depictio-react-core';
+import type { CardVariant, DashboardSummary } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
 import { useTabFamily } from '../shared/useTabFamily';
+import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import CardPreview from './CardPreview';
 import { cardMethodsForType } from '../aggFunctions';
 import { autoCardTitle } from './cardTitle';
@@ -261,11 +267,18 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): Record<string, unkno
   }
 }
 
-/** `variant` in the model: unset (default) or `headline`. */
-const STYLE_OPTIONS = [
+/** `variant` in the model. `default` is stored as unset, except to opt a card
+ *  out of a section that draws its cards in another style. */
+const STYLE_OPTIONS: { value: CardVariant; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 'headline', label: 'Headline' },
+  { value: 'compact', label: 'Compact' },
+  { value: 'minimal', label: 'Minimal' },
 ];
+
+const STYLE_LABEL: Record<CardVariant, string> = Object.fromEntries(
+  STYLE_OPTIONS.map((o) => [o.value, o.label]),
+) as Record<CardVariant, string>;
 
 /**
  * Link targets: each tab as `tab:<name>`, the form the card's `link` takes. A
@@ -313,6 +326,8 @@ const CardBuilder: React.FC = () => {
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const cols = useBuilderStore((s) => s.cols);
   const tabs = useTabFamily();
+  const sectionVariant = useSectionCardVariant();
+  const ownVariant = normalizeCardVariant(config.variant);
   const dashboardId = useBuilderStore((s) => s.dashboardId);
   const link = config.link?.trim() || undefined;
   // A card linking to the tab it sits on would go nowhere.
@@ -668,12 +683,22 @@ const CardBuilder: React.FC = () => {
           Style
         </Text>
         <Text size="xs" c="dimmed">
-          Headline is a key figure for a landing page: the value drawn large, the icon resting
-          faint beside it, a strip cut down to its bar.
+          Headline: a key figure for a landing page, the value large and the icon resting
+          beside it. Compact: a low card, title and value on one line, for a strip of many
+          numbers. Minimal: headline type with no frame, for a card on a tinted section.
         </Text>
+        {sectionVariant && (
+          <Text size="xs" c="grape" data-testid="card-style-section-hint">
+            {ownVariant && ownVariant !== sectionVariant
+              ? `This section draws its cards as ${STYLE_LABEL[sectionVariant]}; this card overrides it. Pick ${STYLE_LABEL[sectionVariant]} to follow the section again.`
+              : `This section draws its cards as ${STYLE_LABEL[sectionVariant]}; pick a style here to override.`}
+          </Text>
+        )}
         <SegmentedControl
-          value={config.variant === 'headline' ? 'headline' : 'default'}
-          onChange={(val) => patchConfig({ variant: val === 'headline' ? 'headline' : null })}
+          // What the card will look like on the grid: its own style, else its
+          // section's, else the default.
+          value={ownVariant ?? sectionVariant ?? 'default'}
+          onChange={(val) => patchConfig({ variant: variantForPick(val, sectionVariant) })}
           data={STYLE_OPTIONS}
           fullWidth
         />

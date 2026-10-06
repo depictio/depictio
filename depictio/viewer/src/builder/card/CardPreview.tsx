@@ -24,14 +24,17 @@ import { DepictioCard } from 'depictio-components';
 import { useBuilderStore } from '../store/useBuilderStore';
 import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
+import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import { autoCardTitle } from './cardTitle';
 import {
   SecondaryMetrics,
   fetchBreakdown,
   fetchCardHeroValue,
   fetchCardMetric,
+  compactKeepsStrip,
   isBreakdownLayout,
   isNumericLayout,
+  resolveCardVariant,
   type BreakdownPayloadDTO,
   type InteractiveFilter,
   type SecondaryLayout,
@@ -296,6 +299,8 @@ const CardPreview: React.FC = () => {
   const cols = useBuilderStore((s) => s.cols);
   const dcId = useBuilderStore((s) => s.dcId);
   const previewFilters = useBuilderPreviewFilters();
+  // Drawn the way the grid will: the card's own style, else its section's.
+  const sectionVariant = useSectionCardVariant();
 
   const layout: SecondaryLayout = config.secondary_layout ?? 'vertical';
   // Hooks must run unconditionally, so this sits above the early return for an
@@ -363,7 +368,7 @@ const CardPreview: React.FC = () => {
       : staticValue;
   const decimals = typeof config.decimals === 'number' ? config.decimals : undefined;
   const value = formatValue(rawValue, decimals);
-  const headline = config.variant === 'headline';
+  const variant = resolveCardVariant(config.variant, sectionVariant);
   // Same header text as the saved card (ComponentRenderer): a caption takes
   // the aggregation label's line, and the label moves to the header tooltip
   // beside the author's description.
@@ -417,9 +422,11 @@ const CardPreview: React.FC = () => {
     }
   }
 
+  // Same rule as the saved card (ComponentRenderer): a compact card keeps only
+  // a single-bar strip.
   const showStrip =
-    stripRows.length > 0 ||
-    typeof coverageMax === 'number';
+    (variant !== 'compact' || compactKeepsStrip(layout)) &&
+    (stripRows.length > 0 || typeof coverageMax === 'number');
   // Only box_plot still estimates (quartiles aren't precomputed). The
   // categorical strips now show server-computed numbers, so claiming they are
   // estimates would be the inaccurate statement.
@@ -474,7 +481,7 @@ const CardPreview: React.FC = () => {
             title_color={config.title_color}
             title_font_size={config.title_font_size ?? 'md'}
             value_font_size="xl"
-            variant={headline ? 'headline' : 'default'}
+            variant={variant}
             aggregation_description={caption || aggLabel}
             header_tooltip={headerTooltip}
             secondaryStrip={
@@ -484,7 +491,7 @@ const CardPreview: React.FC = () => {
                   layout={layout}
                   coverageValue={coverageValue}
                   coverageMax={coverageMax}
-                  minimal={headline}
+                  minimal={variant !== 'default'}
                   decimals={decimals}
                 />
               ) : undefined
