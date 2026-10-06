@@ -145,13 +145,12 @@ A smaller wart in the same command: the import summary prints the component coun
 **main** dashboard only ("Components: 14") while it actually writes every tab in the
 file.
 
-## 9. Seeding is not part of templating yet
+## 9. Templates are not seeded at boot
 
-None of the seven templates ships `.db_seeds`, `STATIC_IDS` or `db_init` registration, so
-none of them appears on a fresh deployment. The export-then-remap flow that would produce
-those seeds is the one variantbenchmarking still lacks, and export-derived seeds churn
-component indices on every re-import. This is the single largest gap between "the
-template ingests" and "the template ships".
+Only the latest ampliseq and viralrecon ship `.db_seeds`, `STATIC_IDS` and a `db_init`
+registration: they are the nf-core reference projects of a fresh deployment. Every other
+template reaches an instance through a CLI import of a run, by design. Export-derived seeds
+churn component indices on every re-import, so each seeded template is an ongoing upkeep.
 
 ## 10. Visualisation kinds the life-science outputs actually wanted
 

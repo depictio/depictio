@@ -10,7 +10,6 @@ main_dashboard:
   icon_color: green
   workflow_system: nf-core
   advanced_viz_controls: header
-  dashboard_id: 846b0f3c1e4a2d7f8e5bba01
   # Persistent: the germline sample and somatic caller pickers render in every
   # tab's filter panel and the values picked in them survive tab switches. They
   # are declared here rather than on the Germline / Somatic tabs so a run that
@@ -266,7 +265,6 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   advanced_viz_controls: header
-  dashboard_id: 846b0f3c1e4a2d7f8e5bba20
   # The persistent `Callsets` section from the Overview lands above these.
   filter_sections:
   - name: Score ranges
@@ -583,7 +581,6 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   advanced_viz_controls: header
-  dashboard_id: 846b0f3c1e4a2d7f8e5bba21
   # The persistent `Callsets` section from the Overview lands above these. The
   # caller picked there also narrows the allele-fraction strata and the
   # rtg-tools cross-check through the template's `links`.
@@ -979,7 +976,6 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   advanced_viz_controls: header
-  dashboard_id: 846b0f3c1e4a2d7f8e5bba22
   # Every data collection on this tab is optional: the public megatest has no
   # sv/ or cnv/ output, so on the reference dataset the importer hides the
   # components and drops the tab. It comes back as soon as a run ships the
