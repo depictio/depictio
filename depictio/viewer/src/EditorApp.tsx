@@ -107,6 +107,8 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  buildGuideModel,
+  resolveGuideSettings,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -138,6 +140,8 @@ import NotesFooter from './components/NotesFooter';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
+import { DashboardGuide, useGuideRoute, useGuideShowMe } from './guide';
+import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -245,6 +249,16 @@ const EditorApp: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  // The section the settings open on when something asks for one (the Guide's
+  // "Open Your view"); unset, they open on the one last visited.
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
+  const openSettingsAt = useCallback(
+    (section?: SettingsSectionKey) => {
+      setSettingsSection(section);
+      openSettings();
+    },
+    [openSettings],
+  );
   const contentScaleStyle = useContentScaleStyle();
   const contentMaxWidth = useContentMaxWidth();
   // Bumped after a plot_theme save lands so figure components refetch and pick
@@ -1731,16 +1745,18 @@ const EditorApp: React.FC = () => {
   // action renderer and `groupRender`: it reads both.
   const topSectionsHost =
     topGridSections.length > 0 ? (
-      <PersistentSectionsHost
-        sections={topGridSections}
-        familyId={crossTab.familyId}
-        slot="top"
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        groupRender={groupRender}
-        bulkOptions={groupsApi.bulkOptions}
-        renderSectionActions={renderPersistentSectionAction}
-      />
+      <div data-guide-target="pinned-sections">
+        <PersistentSectionsHost
+          sections={topGridSections}
+          familyId={crossTab.familyId}
+          slot="top"
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          groupRender={groupRender}
+          bulkOptions={groupsApi.bulkOptions}
+          renderSectionActions={renderPersistentSectionAction}
+        />
+      </div>
     ) : null;
 
   // The panel's list also holds the persistent sections a sibling tab owns.
@@ -1811,6 +1827,125 @@ const EditorApp: React.FC = () => {
     }
   }, [dashboardId]);
 
+  // ---- Guide --------------------------------------------------------------
+  // The same page the viewer offers, plus the author's switch for it. Both
+  // settings live on the main tab, for the whole family.
+  const guideSettings = useMemo(
+    () => resolveGuideSettings(dashboard, tabSiblings),
+    [dashboard, tabSiblings],
+  );
+  const guide = useGuideRoute(Boolean(dashboard) && !loading && !error && guideSettings.enabled);
+  const editorComponents = useMemo(
+    () => [...cardComponents, ...otherComponents],
+    [cardComponents, otherComponents],
+  );
+  const guideModel = useMemo(
+    () =>
+      guide.open && dashboard
+        ? buildGuideModel({
+            tabs: tabSiblings,
+            currentId: dashboardId,
+            components: editorComponents,
+            gridSections: dashboard.grid_sections as FilterSectionSpec[] | undefined,
+            fannedOutSections: foreignGridSections,
+            panelComponents: leftComponents,
+            panelSections: panelFilterSections,
+            floating: crossTab.floating,
+            // The header's own condition for the Analysis button.
+            analysisAvailable: Boolean(dashboard),
+            inspector: Boolean(inspectorControl),
+            mode: 'edit',
+          })
+        : null,
+    [
+      guide.open,
+      dashboard,
+      tabSiblings,
+      dashboardId,
+      editorComponents,
+      foreignGridSections,
+      leftComponents,
+      panelFilterSections,
+      crossTab.floating,
+      inspectorControl,
+    ],
+  );
+  const guideSelectionIds = useMemo(
+    () => guideModel?.selection.filter((s) => !s.floating).map((s) => s.index) ?? [],
+    [guideModel],
+  );
+  const showGuideTarget = useGuideShowMe({
+    closeGuide: guide.closeGuide,
+    isNarrow: Boolean(isNarrow),
+    desktopOpened,
+    mobileOpened,
+    toggleDesktop,
+    toggleMobile,
+    selectionIds: guideSelectionIds,
+  });
+  const openGuideFromSidebar = useCallback(() => {
+    guide.openGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  const closeGuideFromSidebar = useCallback(() => {
+    guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  useEffect(() => {
+    if (guide.open) setAnalysisOpen(false);
+  }, [guide.open]);
+
+  /**
+   * The Guide's author settings, from the settings' Guide section. They are
+   * the main tab's: there, the full-document save every tab default takes;
+   * from a child tab, the targeted tab patch on the main tab, shown at once in
+   * the family list the Guide reads them from and refetched if it fails.
+   */
+  const handleGuideSettingsChange = useCallback(
+    async (patch: Partial<GuideAuthorSettings>) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const parentId =
+        typeof cur.parent_dashboard_id === 'string' ? cur.parent_dashboard_id : null;
+      const mainId = parentId || dashboardId;
+      setAllDashboards((prev) =>
+        prev.map((d) => (d.dashboard_id === mainId ? { ...d, ...patch } : d)),
+      );
+      setSaveStatus('saving');
+      if (!parentId) {
+        const next = { ...cur, ...patch };
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = null;
+        }
+        applyDashboard(next);
+        try {
+          await saveDashboard(dashboardId, next);
+          setSaveStatus('saved');
+        } catch (err) {
+          console.error('[EditorApp] guide settings save failed:', err);
+          setSaveStatus('error');
+        }
+        return;
+      }
+      try {
+        await updateTab(mainId, patch);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] guide settings save failed:', err);
+        setSaveStatus('error');
+        notifications.show({
+          color: 'red',
+          title: "Couldn't save the Guide settings",
+          message: err instanceof Error ? err.message : String(err),
+        });
+        void refreshTabList();
+      }
+    },
+    [dashboardId, applyDashboard, refreshTabList],
+  );
+
   return (
     <>
     <InspectorProviders control={inspectorControl}>
@@ -1843,9 +1978,14 @@ const EditorApp: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onOpenSettings={openSettings}
+          onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={countActiveFilters(filters) + groupSummaryRows.length}
+          guide={
+            guideSettings.enabled && dashboard
+              ? { open: guide.open, href: guide.href, onToggle: guide.toggleGuide }
+              : undefined
+          }
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
@@ -1914,6 +2054,16 @@ const EditorApp: React.FC = () => {
           onNewGroup={tabGroupActions.onNewGroup}
           onMoveTabToGroup={tabGroupActions.onMoveTabToGroup}
           brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+          guide={
+            guideSettings.enabled && dashboard
+              ? {
+                  open: guide.open,
+                  href: guide.href,
+                  onOpen: openGuideFromSidebar,
+                  onClose: closeGuideFromSidebar,
+                }
+              : undefined
+          }
         />
       </AppShell.Navbar>
 
@@ -1944,12 +2094,15 @@ const EditorApp: React.FC = () => {
         )}
         {dashboard && !loading && !error && (
           <div
+            // Under the Guide: kept mounted for when it closes (see App.tsx).
+            aria-hidden={guide.open || undefined}
             style={{
               display: 'flex',
               flexDirection: 'column',
               height: '100%',
               width: '100%',
               overflow: 'hidden',
+              visibility: guide.open ? 'hidden' : undefined,
             }}
           >
           <div
@@ -2088,16 +2241,18 @@ const EditorApp: React.FC = () => {
                 refreshTick={plotThemeTick}
               />
               {bottomGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={bottomGridSections}
-                  familyId={crossTab.familyId}
-                  slot="bottom"
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                  renderSectionActions={renderPersistentSectionAction}
-                />
+                <div data-guide-target="pinned-sections">
+                  <PersistentSectionsHost
+                    sections={bottomGridSections}
+                    familyId={crossTab.familyId}
+                    slot="bottom"
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                    groupRender={groupRender}
+                    bulkOptions={groupsApi.bulkOptions}
+                    renderSectionActions={renderPersistentSectionAction}
+                  />
+                </div>
               )}
             </Box>
           </div>
@@ -2153,20 +2308,36 @@ const EditorApp: React.FC = () => {
             />
           </Drawer>
         )}
-        {dashboard && dashboardId && !inspectorEnabled && (
-          <NotesFooter
-            dashboardId={dashboardId}
-            initialContent={(dashboard.notes_content as string) ?? ''}
-            permissions={dashboard.permissions as DashboardPermissions | undefined}
-          />
-        )}
-        {dashboard && dashboardId && (
-          <MapPanelSurface
-            panel={mapPanel}
-            // Floating maps render data: include group filters.
-            filters={combinedFilters}
-            onFilterChange={handleFilterChange}
-            renderEditActions={renderMapPanelEditActions}
+        {/* Fixed furniture above the Guide's layer, hidden with the canvas. */}
+        <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+          {dashboard && dashboardId && !inspectorEnabled && (
+            <NotesFooter
+              dashboardId={dashboardId}
+              initialContent={(dashboard.notes_content as string) ?? ''}
+              permissions={dashboard.permissions as DashboardPermissions | undefined}
+            />
+          )}
+          {dashboard && dashboardId && (
+            <MapPanelSurface
+              panel={mapPanel}
+              // Floating maps render data: include group filters.
+              filters={combinedFilters}
+              onFilterChange={handleFilterChange}
+              renderEditActions={renderMapPanelEditActions}
+            />
+          )}
+        </div>
+        {guide.open && guideModel && dashboard && (
+          <DashboardGuide
+            model={guideModel}
+            dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+            tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+            intro={guideSettings.intro}
+            mode="edit"
+            onClose={guide.closeGuide}
+            onShowMe={showGuideTarget}
+            onOpenYourView={() => openSettingsAt('view')}
+            selectionIds={guideSelectionIds}
           />
         )}
       </AppShell.Main>
@@ -2185,6 +2356,13 @@ const EditorApp: React.FC = () => {
         onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
         onChangeTabDefaults={handleTabDefaultsChange}
+        guide={{
+          // Read whether or not the Guide is on: the switch is how it comes
+          // back.
+          settings: { show_guide: guideSettings.enabled, guide_intro: guideSettings.intro },
+          onChange: handleGuideSettingsChange,
+        }}
+        initialSection={settingsSection}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />

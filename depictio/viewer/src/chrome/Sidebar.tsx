@@ -32,7 +32,7 @@ import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
-import { dashboardHref } from '../dashboards/lib/dashboardLinks';
+import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
 /**
@@ -173,6 +173,9 @@ export function resolveTabColor(
  *  Add menu (or runs its one action) rather than navigating. Mirrors Dash's
  *  `__add_tab__` (`tab_callbacks.py:148-161`). */
 const ADD_TAB_VALUE = '__add_tab__';
+/** The Guide's pill: a page of the dashboard rather than a tab of it, so it
+ *  takes the list's selection while it is open. */
+const GUIDE_VALUE = '__guide__';
 
 export type TabMoveDirection = 'up' | 'down';
 
@@ -201,6 +204,15 @@ interface SidebarProps {
    *  bottom of the sidebar, just above the footer divider; when the dashboard
    *  doesn't set one it inherits the instance logo. */
   brandTheme?: BrandTheme | null;
+  /** The dashboard Guide's entry, closing the list. Omitted when the author
+   *  turned the Guide off. */
+  guide?: {
+    open: boolean;
+    /** The Guide's URL, so the pill is a real link (middle-click, bookmark). */
+    href: string;
+    onOpen: () => void;
+    onClose: () => void;
+  };
 }
 
 /**
@@ -226,6 +238,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onNewGroup,
   onMoveTabToGroup,
   brandTheme,
+  guide,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -333,10 +346,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     const isParent = !d.parent_dashboard_id;
     const iconColor = resolveTabColor(d, isParent, brand);
     const isActive = d.dashboard_id === activeId;
+    // The open Guide takes the list's fill, so the current tab draws as any
+    // other until it closes.
+    const isFilled = isActive && !guide?.open;
     const label = isParent
       ? d.main_tab_name || d.title || d.dashboard_id
       : d.title || d.dashboard_id;
-    const yamlImage = tabImageSrc(d, isParent, theme === 'dark', isActive);
+    const yamlImage = tabImageSrc(d, isParent, theme === 'dark', isFilled);
     const iconName = resolveTabIcon(d, isParent);
     const leftSection = yamlImage ? (
       <span
@@ -361,7 +377,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         width={18}
         height={18}
         style={{
-          color: isActive ? 'var(--mantine-color-white)' : `var(--mantine-color-${iconColor}-6)`,
+          color: isFilled ? 'var(--mantine-color-white)' : `var(--mantine-color-${iconColor}-6)`,
           flexShrink: 0,
         }}
       />
@@ -401,7 +417,21 @@ const Sidebar: React.FC<SidebarProps> = ({
         // Render the tab as an anchor so browser-level open-in-new-tab
         // (middle/Cmd+Click) works natively.
         renderRoot={(props) => (
-          <a {...props} href={dashboardHref(d.dashboard_id, linkMode)} />
+          <a
+            {...props}
+            href={dashboardHref(d.dashboard_id, linkMode)}
+            // With the Guide open, the tab it was opened from is one click
+            // away: a plain click closes the Guide rather than reloading the
+            // tab underneath it.
+            onClick={
+              isActive && guide?.open
+                ? (e: React.MouseEvent<HTMLAnchorElement>) => {
+                    props.onClick?.(e);
+                    dashboardLinkClickHandler(guide.onClose)(e);
+                  }
+                : props.onClick
+            }
+          />
         )}
       >
         <TabLabel label={label} />
@@ -453,7 +483,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               orientation="vertical"
               variant="pills"
               placement="left"
-              value={activeId}
+              value={guide?.open ? GUIDE_VALUE : activeId}
               onChange={handleTabChange}
               styles={{
                 // `width: '100%'` makes the vertical list fill the navbar
@@ -470,7 +500,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 tabLabel: { flex: 1, minWidth: 0 },
               }}
             >
-              <Tabs.List>
+              <Tabs.List data-guide-target="tabs">
                 {sections.map((section) => (
                   <React.Fragment
                     key={section.group === null ? 'ungrouped' : `group:${section.group}`}
@@ -527,7 +557,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                     share the pill: a menu offers either, and with only one
                     on offer the pill is that action. Click intercepts via
                     ADD_TAB_VALUE in `handleTabChange`. */}
-                {isEdit && (onAddTab || onNewGroup) && <Divider my={6} mx="xs" />}
+                {((isEdit && (onAddTab || onNewGroup)) || guide) && (
+                  <Divider my={6} mx="xs" />
+                )}
                 {isEdit && (onAddTab || onNewGroup) && (
                   <Menu
                     position="right-start"
@@ -582,6 +614,38 @@ const Sidebar: React.FC<SidebarProps> = ({
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>
+                )}
+                {/* The Guide, under the same rule: about the dashboard, not
+                    one more tab of it. A link to the Guide's URL so it can be
+                    opened apart or bookmarked; a plain click opens it in
+                    place, and closes it again when it is the open page. */}
+                {guide && (
+                  <Tabs.Tab
+                    key={GUIDE_VALUE}
+                    value={GUIDE_VALUE}
+                    leftSection={
+                      <Icon
+                        icon="mdi:help-circle-outline"
+                        width={18}
+                        height={18}
+                        style={{ flexShrink: 0 }}
+                      />
+                    }
+                    pl="xs"
+                    data-testid="sidebar-guide"
+                    renderRoot={(props) => (
+                      <a
+                        {...props}
+                        href={guide.href}
+                        onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                          props.onClick?.(e);
+                          dashboardLinkClickHandler(guide.open ? guide.onClose : guide.onOpen)(e);
+                        }}
+                      />
+                    )}
+                  >
+                    <span className="depictio-chrome-tab-label">Guide</span>
+                  </Tabs.Tab>
                 )}
               </Tabs.List>
             </Tabs>

@@ -1,0 +1,144 @@
+/**
+ * The dashboard Guide: its page layer, the "Show me" ring, and the few bits of
+ * its demos Mantine props cannot express.
+ */
+
+/* The Guide replaces the tab's canvas, header and sidebar staying put. It is
+ * laid over the canvas rather than swapped for it, so the tab stays mounted
+ * (and its figures loaded) underneath: closing the Guide is instant, and "Show
+ * me" points at real elements. The app hides the canvas while the Guide is up,
+ * so nothing in it can paint through. The offsets are AppShell's own, which
+ * follow the sidebar, the header and an inspector aside. Below the AppShell's
+ * header and navbar (z 100+), so on a phone the sidebar still slides over it. */
+.depictio-guide-layer {
+  position: fixed;
+  top: var(--app-shell-header-offset, 0px);
+  left: var(--app-shell-navbar-offset, 0px);
+  right: var(--app-shell-aside-offset, 0px);
+  bottom: 0;
+  z-index: 90;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--mantine-color-body);
+  transition: left 300ms ease;
+}
+
+/* Under a Guide part's text: a quiet inset where the demo lives. */
+.depictio-guide-demo {
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-default-hover);
+  border: 1px solid var(--mantine-color-default-border);
+}
+
+/* The Tabs part: the family as sidebar pills, in a grid rather than a column,
+ * with each group's heading across the full row. */
+.depictio-guide-tabs .mantine-Tabs-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 8px;
+}
+.depictio-guide-tabs .mantine-Tabs-tab {
+  justify-content: flex-start;
+  align-items: flex-start;
+  height: auto;
+  padding-block: 8px;
+}
+.depictio-guide-tabs .mantine-Tabs-tabSection {
+  margin-top: 1px;
+}
+.depictio-guide-tabs .mantine-Tabs-tabLabel {
+  min-width: 0;
+  flex: 1;
+}
+.depictio-guide-tab-subtitle {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.35;
+  color: var(--mantine-color-dimmed);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.depictio-guide-tabs .mantine-Tabs-tab[data-active] .depictio-guide-tab-subtitle {
+  color: inherit;
+  opacity: 0.85;
+}
+.depictio-guide-tabs-heading {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+}
+
+/* A demo tile, drawn like a dashboard tile at a smaller size. */
+.depictio-guide-tile {
+  position: relative;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+  overflow: hidden;
+}
+/* Analysis on: the tile chrome's own capability marker (chrome.css). */
+.depictio-guide-tile.is-selectable {
+  outline: 2px dashed var(--depictio-grouping-color);
+  outline-offset: -2px;
+}
+.depictio-guide-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6%;
+  height: 100%;
+  padding: 0 10%;
+}
+.depictio-guide-bars > span {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: var(--mantine-primary-color-light);
+}
+.depictio-guide-dots > span {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mantine-primary-color-filled);
+  opacity: 0.55;
+}
+
+/* "Show me": a ring around the real element, pulsing twice, then gone. */
+.depictio-guide-ring {
+  position: fixed;
+  z-index: 1050;
+  pointer-events: none;
+  border: 2px solid var(--depictio-guide-ring);
+  border-radius: 10px;
+  box-shadow: 0 0 0 0 var(--depictio-guide-ring);
+  animation: depictio-guide-pulse 1s ease-out 2;
+  transition: opacity 300ms ease;
+}
+.depictio-guide-ring.is-leaving {
+  opacity: 0;
+}
+@keyframes depictio-guide-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--depictio-guide-ring) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--depictio-guide-ring) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .depictio-guide-ring {
+    animation: none;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--depictio-guide-ring) 30%, transparent);
+  }
+}
+
+/* While its row is ringed, a tile shows its hover-only actions as if hovered
+ * (the rules this mirrors are in react-core's chrome/chrome.css). */
+.depictio-component-chrome.depictio-guide-reveal .depictio-component-actions > * {
+  opacity: 1;
+  pointer-events: auto;
+}
+.depictio-component-chrome.depictio-guide-reveal .depictio-component-actions::before {
+  opacity: 1;
+}

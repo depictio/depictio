@@ -144,6 +144,13 @@ export { default as InteractiveGroupCard } from './components/InteractiveGroupCa
 // viewer's authoring UI — so a section named "QC" never looks different
 // depending on where you meet it.
 export { default as SectionIcon, sectionColorVar } from './components/SectionIcon';
+// The section chrome itself, for surfaces that show a section without a grid
+// behind it (the dashboard Guide's demo).
+export {
+  SectionAccordion,
+  SectionAccordionItem,
+  SectionHeader,
+} from './components/SectionAccordion';
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
@@ -712,3 +719,25 @@ export type {
   ParsedAdminUrl,
 } from './adminUrlState';
 export { Z_LAYERS } from './zLayers';
+// The dashboard Guide: what it says about a tab, read from the dashboard.
+export {
+  buildGuideModel,
+  GUIDE_ACTIONS,
+  GUIDE_EDIT_ACTIONS,
+  resolveGuideSettings,
+  tileActions,
+} from './guide/guideModel';
+export type {
+  GuideAction,
+  GuideActionKey,
+  GuideEditActionKey,
+  GuideFilterSection,
+  GuideGridSection,
+  GuideModel,
+  GuideModelInput,
+  GuideSelectionKind,
+  GuideSelectionSource,
+  GuideSettings,
+  GuideTab,
+  GuideTabGroup,
+} from './guide/guideModel';

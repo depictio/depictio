@@ -17,6 +17,7 @@ import {
   Stack,
   Switch,
   Text,
+  Textarea,
   Tooltip,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
@@ -300,6 +301,85 @@ const TabDefaultsBlock: React.FC<{
 );
 
 // ---------------------------------------------------------------------------
+// Guide (editor)
+// ---------------------------------------------------------------------------
+
+/** The Guide's two author settings. Stored on the main tab, for the family. */
+export interface GuideAuthorSettings {
+  show_guide: boolean;
+  guide_intro: string;
+}
+
+/**
+ * Whether readers are offered the Guide, and an optional note at its top.
+ *
+ * The note is typed freely, so it is saved once the author pauses or leaves
+ * the field rather than on every keystroke; a later change from outside (the
+ * main tab saved from another tab) replaces it only while it is not being
+ * edited.
+ */
+const GuideSettingsBlock: React.FC<{
+  settings: GuideAuthorSettings;
+  onChange: (patch: Partial<GuideAuthorSettings>) => void;
+}> = ({ settings, onChange }) => {
+  const [draft, setDraft] = React.useState(settings.guide_intro);
+  const focused = React.useRef(false);
+  const timer = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => {
+    if (!focused.current) setDraft(settings.guide_intro);
+  }, [settings.guide_intro]);
+  React.useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const commit = (value: string) => {
+    window.clearTimeout(timer.current);
+    if (value !== settings.guide_intro) onChange({ guide_intro: value });
+  };
+
+  return (
+    <Stack gap="sm" data-testid="guide-settings-section">
+      <Text size="xs" c="dimmed" lh={1.35}>
+        The Guide shows readers how to move around this dashboard, filter it and read its
+        components, from the sidebar and the header's ?. Set here once for every tab.
+      </Text>
+      <SwitchField
+        label="Show the Guide"
+        description="Offer the Guide in the sidebar and the header. Turned off, both entries go and a link to it opens the tab instead."
+        checked={settings.show_guide}
+        onChange={(checked) => onChange({ show_guide: checked })}
+        testId="guide-show-switch"
+      />
+      <Field
+        label="Introduction"
+        description="An optional note at the top of the Guide, in Markdown: what the dashboard is for, where to start."
+      >
+        <Textarea
+          value={draft}
+          disabled={!settings.show_guide}
+          autosize
+          minRows={3}
+          maxRows={10}
+          placeholder="Start on the Overview tab, then…"
+          onFocus={() => {
+            focused.current = true;
+          }}
+          onBlur={(e) => {
+            focused.current = false;
+            commit(e.currentTarget.value);
+          }}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setDraft(value);
+            window.clearTimeout(timer.current);
+            timer.current = window.setTimeout(() => commit(value), SAVE_DEBOUNCE_MS * 2);
+          }}
+          data-testid="guide-intro-input"
+        />
+      </Field>
+    </Stack>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Branding (editor)
 // ---------------------------------------------------------------------------
 
@@ -543,7 +623,16 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 // Sections
 // ---------------------------------------------------------------------------
 
-type SectionKey = 'about' | 'view' | 'tab-defaults' | 'filtering' | 'branding' | 'feedback';
+type SectionKey =
+  | 'about'
+  | 'view'
+  | 'tab-defaults'
+  | 'filtering'
+  | 'guide'
+  | 'branding'
+  | 'feedback';
+/** A settings section, for opening the settings on it (`initialSection`). */
+export type SettingsSectionKey = SectionKey;
 type Surface = 'viewer' | 'editor';
 
 /** One settings section: what both layouts draw, so neither carries its own
@@ -614,11 +703,15 @@ const DEFAULT_OPEN: Record<Surface, SectionKey[]> = {
 const AccordionLayout: React.FC<{
   sections: SettingsSection[];
   surface: Surface;
-}> = ({ sections, surface }) => {
+  initialSection?: SectionKey;
+}> = ({ sections, surface, initialSection }) => {
   const storageKey = `depictio-settings-drawer-open:${surface}`;
-  const [open, setOpen] = React.useState<string[]>(
-    () => readStored(storageKey, isStringArray) ?? DEFAULT_OPEN[surface],
-  );
+  const [open, setOpen] = React.useState<string[]>(() => {
+    const stored = readStored(storageKey, isStringArray) ?? DEFAULT_OPEN[surface];
+    return initialSection && !stored.includes(initialSection)
+      ? [...stored, initialSection]
+      : stored;
+  });
   return (
     <Accordion
       multiple
@@ -676,10 +769,13 @@ const RAIL_WIDTH = 220;
 const NavLayout: React.FC<{
   sections: SettingsSection[];
   surface: Surface;
-}> = ({ sections, surface }) => {
+  /** Open on this section rather than the remembered one (the Guide's "Open
+   *  Your view"). Read once: the modal remounts its body on every open. */
+  initialSection?: SectionKey;
+}> = ({ sections, surface, initialSection }) => {
   const storageKey = `depictio-settings-active:${surface}`;
-  const [stored, setStored] = React.useState<string | null>(() =>
-    readStored(storageKey, isString),
+  const [stored, setStored] = React.useState<string | null>(
+    () => initialSection ?? readStored(storageKey, isString),
   );
   const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
 
@@ -836,6 +932,14 @@ interface SettingsDrawerProps {
    *  tab header) on its dashboard document, and shows the Tab defaults
    *  section. */
   onChangeTabDefaults?: (patch: TabDefaults) => void;
+  /** Editor only: the Guide's settings for the family, and shows the Guide
+   *  section. */
+  guide?: {
+    settings: GuideAuthorSettings;
+    onChange: (patch: Partial<GuideAuthorSettings>) => void;
+  };
+  /** The section to open on, instead of the one last visited. */
+  initialSection?: SettingsSectionKey;
 }
 
 /**
@@ -849,6 +953,7 @@ interface SettingsDrawerProps {
  * 3. Tab defaults (editor): page width, filter panel and tab name the tab
  *    opens with, for everyone; a reader's own choice still wins.
  * 4. Filtering (editor): the funnel-filtering default (#939).
+ *    Guide (editor): whether readers are offered the Guide, and its intro.
  * 5. Branding (editor): the dashboard's brand override (#397 — logo, colors,
  *    surfaces and figure palette, inheriting the main tab or instance).
  * 6. Feedback: the deployment's feedback link, when one is configured.
@@ -871,6 +976,8 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onToggleFunnelFiltering,
   onUploadLogo,
   onChangeTabDefaults,
+  guide,
+  initialSection,
 }) => {
   const surface: Surface =
     onChangeBrandTheme || onToggleFunnelFiltering || onChangeTabDefaults ? 'editor' : 'viewer';
@@ -930,6 +1037,15 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       ),
     });
   }
+  if (guide) {
+    sections.push({
+      key: 'guide',
+      icon: 'mdi:help-circle-outline',
+      title: 'Guide',
+      subtitle: "The readers' guide to this dashboard, for every tab",
+      body: <GuideSettingsBlock settings={guide.settings} onChange={guide.onChange} />,
+    });
+  }
   if (onChangeBrandTheme) {
     sections.push({
       key: 'branding',
@@ -980,14 +1096,14 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         title={title}
         {...rootProps}
       >
-        <AccordionLayout sections={sections} surface={surface} />
+        <AccordionLayout sections={sections} surface={surface} initialSection={initialSection} />
       </Drawer>
     );
   }
 
   return (
     <SettingsModal opened={opened} onClose={onClose} title={title} rootProps={rootProps}>
-      <NavLayout sections={sections} surface={surface} />
+      <NavLayout sections={sections} surface={surface} initialSection={initialSection} />
     </SettingsModal>
   );
 };

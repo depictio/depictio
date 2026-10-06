@@ -403,6 +403,11 @@ export interface DashboardData {
   content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
   /** False: no tab name above the canvas (a tab that opens on its own title). */
   show_tab_header?: boolean;
+  /** The Guide page: offered unless the main tab sets this to false. Only the
+   *  main tab's value counts (see `resolveGuideSettings`). */
+  show_guide?: boolean;
+  /** Author note (markdown) atop the Guide; the main tab's. */
+  guide_intro?: string;
   /** Sidebar category of a child tab; null when ungrouped. */
   tab_group?: string | null;
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
@@ -556,6 +561,10 @@ export interface DashboardSummary {
   tab_group?: string | null;
   icon?: string;
   icon_color?: string;
+  /** The Guide's settings, meaningful on the main tab's entry only. Absent
+   *  from servers that predate them, which reads as "Guide on, no intro". */
+  show_guide?: boolean;
+  guide_intro?: string;
 }
 
 export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
@@ -1866,6 +1875,9 @@ export interface UpdateTabPayload {
   tab_group?: string | null;
   /** Only allowed on main tabs — backend rejects with 400 for child tabs. */
   main_tab_name?: string;
+  /** The Guide's settings, for the whole dashboard. Main tabs only. */
+  show_guide?: boolean;
+  guide_intro?: string;
 }
 
 export async function updateTab(

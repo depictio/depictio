@@ -56,6 +56,8 @@ import {
   BrandScope,
   Z_LAYERS,
   tabLinkKey,
+  buildGuideModel,
+  resolveGuideSettings,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -103,6 +105,8 @@ import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
+import { DashboardGuide, useGuideRoute, useGuideShowMe } from './guide';
+import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 
 /**
  * Top-level SPA. Layout:
@@ -207,6 +211,16 @@ const App: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  // The section the settings open on when something asks for one (the Guide's
+  // "Open Your view"); unset, they open on the one last visited.
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
+  const openSettingsAt = useCallback(
+    (section?: SettingsSectionKey) => {
+      setSettingsSection(section);
+      openSettings();
+    },
+    [openSettings],
+  );
   const contentScaleStyle = useContentScaleStyle();
   const contentMaxWidth = useContentMaxWidth();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
@@ -794,17 +808,19 @@ const App: React.FC = () => {
   // Declared here, below `groupRender` and `handleFilterChange`: it reads both.
   const topSectionsHost =
     topGridSections.length > 0 ? (
-      <PersistentSectionsHost
-        sections={topGridSections}
-        familyId={crossTab.familyId}
-        slot="top"
-        filters={deferredFilters}
-        onFilterChange={handleFilterChange}
-        refreshTick={refreshTick}
-        groupRender={groupRender}
-        bulkOptions={groupsApi.bulkOptions}
-        onResetFilters={handleResetAllFilters}
-      />
+      <div data-guide-target="pinned-sections">
+        <PersistentSectionsHost
+          sections={topGridSections}
+          familyId={crossTab.familyId}
+          slot="top"
+          filters={deferredFilters}
+          onFilterChange={handleFilterChange}
+          refreshTick={refreshTick}
+          groupRender={groupRender}
+          bulkOptions={groupsApi.bulkOptions}
+          onResetFilters={handleResetAllFilters}
+        />
+      </div>
     ) : null;
 
   // The Grouping panel's body. Mounted once, inside the header "Analysis"
@@ -928,6 +944,73 @@ const App: React.FC = () => {
     ],
   );
 
+  // ---- Guide --------------------------------------------------------------
+  // On unless the author turned it off on the main tab. Its page is drawn over
+  // the canvas, which stays mounted underneath (see guide/guide.css).
+  const guideSettings = useMemo(
+    () => resolveGuideSettings(dashboard, tabSiblings),
+    [dashboard, tabSiblings],
+  );
+  const guide = useGuideRoute(Boolean(dashboard) && !loading && !error && guideSettings.enabled);
+  const guideModel = useMemo(
+    () =>
+      guide.open && dashboard
+        ? buildGuideModel({
+            tabs: tabSiblings,
+            currentId: dashboardId,
+            components: rightComponents,
+            gridSections: dashboard.grid_sections as FilterSectionSpec[] | undefined,
+            fannedOutSections: foreignGridSections,
+            panelComponents: leftComponents,
+            panelSections: panelFilterSections,
+            floating: crossTab.floating,
+            // The header's own condition for the Analysis button.
+            analysisAvailable: Boolean(dashboard),
+            inspector: Boolean(inspectorControl),
+            mode: 'view',
+          })
+        : null,
+    [
+      guide.open,
+      dashboard,
+      tabSiblings,
+      dashboardId,
+      rightComponents,
+      foreignGridSections,
+      leftComponents,
+      panelFilterSections,
+      crossTab.floating,
+      inspectorControl,
+    ],
+  );
+  const guideSelectionIds = useMemo(
+    () => guideModel?.selection.filter((s) => !s.floating).map((s) => s.index) ?? [],
+    [guideModel],
+  );
+  const showGuideTarget = useGuideShowMe({
+    closeGuide: guide.closeGuide,
+    isNarrow: Boolean(isNarrow),
+    desktopOpened,
+    mobileOpened,
+    toggleDesktop,
+    toggleMobile,
+    selectionIds: guideSelectionIds,
+  });
+  // On a phone the sidebar is an overlay: leave it open over the Guide and the
+  // Guide is behind it.
+  const openGuideFromSidebar = useCallback(() => {
+    guide.openGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  const closeGuideFromSidebar = useCallback(() => {
+    guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  // The Analysis panel is docked beside the canvas: the Guide takes its place.
+  useEffect(() => {
+    if (guide.open) setAnalysisOpen(false);
+  }, [guide.open]);
+
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={summaryMetadata}
@@ -967,11 +1050,16 @@ const App: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onOpenSettings={openSettings}
+          onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={activeFilterCount}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
+          guide={
+            guideSettings.enabled && dashboard
+              ? { open: guide.open, href: guide.href, onToggle: guide.toggleGuide }
+              : undefined
+          }
           titleExtras={
             dashboard && !loading && !error ? (
               <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
@@ -1024,7 +1112,21 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme} />
+        <Sidebar
+          tabs={tabSiblings}
+          activeId={dashboardId}
+          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+          guide={
+            guideSettings.enabled && dashboard
+              ? {
+                  open: guide.open,
+                  href: guide.href,
+                  onOpen: openGuideFromSidebar,
+                  onClose: closeGuideFromSidebar,
+                }
+              : undefined
+          }
+        />
       </AppShell.Navbar>
 
       <AppShell.Main
@@ -1119,12 +1221,16 @@ const App: React.FC = () => {
         {error && <Text c="red" p="lg">{error}</Text>}
         {dashboard && !loading && !error && (
           <div
+            // Under the Guide: kept mounted (and its figures loaded) for when
+            // the Guide closes, but neither painted nor in the focus order.
+            aria-hidden={guide.open || undefined}
             style={{
               display: 'flex',
               flexDirection: 'column',
               height: '100%',
               width: '100%',
               overflow: 'hidden',
+              visibility: guide.open ? 'hidden' : undefined,
             }}
           >
           <div
@@ -1311,17 +1417,19 @@ const App: React.FC = () => {
                 )}
               </Box>
               {bottomGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={bottomGridSections}
-                  familyId={crossTab.familyId}
-                  slot="bottom"
-                  filters={deferredFilters}
-                  onFilterChange={handleFilterChange}
-                  refreshTick={refreshTick}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                  onResetFilters={handleResetAllFilters}
-                />
+                <div data-guide-target="pinned-sections" style={{ flexShrink: 0 }}>
+                  <PersistentSectionsHost
+                    sections={bottomGridSections}
+                    familyId={crossTab.familyId}
+                    slot="bottom"
+                    filters={deferredFilters}
+                    onFilterChange={handleFilterChange}
+                    refreshTick={refreshTick}
+                    groupRender={groupRender}
+                    bulkOptions={groupsApi.bulkOptions}
+                    onResetFilters={handleResetAllFilters}
+                  />
+                </div>
               )}
             </Box>
           </div>
@@ -1393,21 +1501,38 @@ const App: React.FC = () => {
             groups={groupsApi.groups}
           />
         )}
-        {dashboard && dashboardId && !inspectorEnabled && (
-          <NotesFooter
-            dashboardId={dashboardId}
-            initialContent={(dashboard.notes_content as string) ?? ''}
-            permissions={dashboard.permissions as DashboardPermissions | undefined}
-          />
-        )}
-        {dashboard && dashboardId && (
-          <MapPanelSurface
-            panel={mapPanel}
-            // Floating maps render data: give them group filters too (see the
-            // docked MapPanelDock above).
-            filters={combinedFilters}
-            onFilterChange={handleFilterChange}
-            refreshTick={refreshTick}
+        {/* The page's fixed furniture sits above the Guide's layer; hidden
+            with the canvas while the Guide is up. */}
+        <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+          {dashboard && dashboardId && !inspectorEnabled && (
+            <NotesFooter
+              dashboardId={dashboardId}
+              initialContent={(dashboard.notes_content as string) ?? ''}
+              permissions={dashboard.permissions as DashboardPermissions | undefined}
+            />
+          )}
+          {dashboard && dashboardId && (
+            <MapPanelSurface
+              panel={mapPanel}
+              // Floating maps render data: give them group filters too (see the
+              // docked MapPanelDock above).
+              filters={combinedFilters}
+              onFilterChange={handleFilterChange}
+              refreshTick={refreshTick}
+            />
+          )}
+        </div>
+        {guide.open && guideModel && dashboard && (
+          <DashboardGuide
+            model={guideModel}
+            dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+            tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+            intro={guideSettings.intro}
+            mode="view"
+            onClose={guide.closeGuide}
+            onShowMe={showGuideTarget}
+            onOpenYourView={() => openSettingsAt('view')}
+            selectionIds={guideSelectionIds}
           />
         )}
       </AppShell.Main>
@@ -1422,6 +1547,7 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        initialSection={settingsSection}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
