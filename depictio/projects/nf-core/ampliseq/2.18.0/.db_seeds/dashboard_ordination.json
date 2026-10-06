@@ -14,90 +14,6 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "ord-sample-filter",
-      "component_type": "interactive",
-      "title": "Sample ID",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "metadata",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
-        "data_collection_tag": "metadata",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
-      "title_align": "left",
-      "section": "Ordination filters",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "sample",
-      "column_type": "object",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "placement": "left",
-      "group": "Ordination scope",
-      "timescale": null,
-      "show_marks": null,
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "ord-habitat-filter",
-      "component_type": "interactive",
-      "title": "Habitat",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "metadata",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
-        "data_collection_tag": "metadata",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
-      "title_align": "left",
-      "section": "Ordination filters",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "habitat",
-      "column_type": "object",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "placement": "left",
-      "group": "Ordination scope",
-      "timescale": null,
-      "show_marks": null,
-      "custom_color": "#984EA3",
-      "icon_name": "mdi:earth",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
       "index": "ord-phylum-filter",
       "component_type": "interactive",
       "title": "Phylum",
@@ -135,267 +51,10 @@
       "group": "Ordination scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#1f9e89",
       "icon_name": "mdi:filter-variant",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "ord-section-header",
-      "component_type": "text",
-      "title": "Sample relationships",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Ordination summary",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Beta diversity: how similar the samples are to each other, rather than how diverse each one is on its own. The cards summarise the PCoA coordinates the projection below was computed from.",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "ord-samples",
-      "component_type": "card",
-      "title": "Samples projected",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "embedding_pcoa",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
-        "data_collection_tag": "embedding_pcoa",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "qiime2/embedding_pcoa",
-      "catalog_source": {
-        "toolId": "qiime2",
-        "toolName": "QIIME 2",
-        "outputId": "qiime2_embedding_pcoa",
-        "use": "qiime2/embedding_pcoa",
-        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
-      },
-      "section": "Ordination summary",
-      "aggregation": "nunique",
-      "column_name": "sample_id",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "top_n",
-      "breakdown_col": "habitat",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:flask",
-      "icon_color": "#E91E63",
-      "title_color": "#E91E63",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "ord-groups",
-      "component_type": "card",
-      "title": "Habitat groups",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "embedding_pcoa",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
-        "data_collection_tag": "embedding_pcoa",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "qiime2/embedding_pcoa",
-      "catalog_source": {
-        "toolId": "qiime2",
-        "toolName": "QIIME 2",
-        "outputId": "qiime2_embedding_pcoa",
-        "use": "qiime2/embedding_pcoa",
-        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
-      },
-      "section": "Ordination summary",
-      "aggregation": "nunique",
-      "column_name": "habitat",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "donut",
-      "breakdown_col": "habitat",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:earth",
-      "icon_color": "#984EA3",
-      "title_color": "#984EA3",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "ord-dim1",
-      "component_type": "card",
-      "title": "PCoA axis 1 (distribution)",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "embedding_pcoa",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
-        "data_collection_tag": "embedding_pcoa",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "qiime2/embedding_pcoa",
-      "catalog_source": {
-        "toolId": "qiime2",
-        "toolName": "QIIME 2",
-        "outputId": "qiime2_embedding_pcoa",
-        "use": "qiime2/embedding_pcoa",
-        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
-      },
-      "section": "Ordination summary",
-      "aggregation": "median",
-      "column_name": "dim_1",
-      "column_type": "float64",
-      "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
-      "filter_expr": null,
-      "secondary_layout": "box_plot",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:arrow-left-right",
-      "icon_color": "#1976D2",
-      "title_color": "#1976D2",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "ord-dim2",
-      "component_type": "card",
-      "title": "PCoA axis 2 (distribution)",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "embedding_pcoa",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
-        "data_collection_tag": "embedding_pcoa",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "qiime2/embedding_pcoa",
-      "catalog_source": {
-        "toolId": "qiime2",
-        "toolName": "QIIME 2",
-        "outputId": "qiime2_embedding_pcoa",
-        "use": "qiime2/embedding_pcoa",
-        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
-      },
-      "section": "Ordination summary",
-      "aggregation": "median",
-      "column_name": "dim_2",
-      "column_type": "float64",
-      "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
-      "filter_expr": null,
-      "secondary_layout": "box_plot",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:arrow-up-down",
-      "icon_color": "#00BCD4",
-      "title_color": "#00BCD4",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -418,7 +77,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The PCoA embeds each sample in two dimensions so that the closer two points sit, the more similar their communities. The Bray-Curtis panel beside it is the raw pairwise distance matrix that projection was computed from, which is where a sample that is an outlier to everything shows up as a bright row.",
+      "body": "Beta diversity: the PCoA embeds each sample in two dimensions so that the closer two points sit, the more similar their communities. The Bray-Curtis matrix beside it is the pairwise distance the projection was computed from, where a sample unlike every other shows up as a bright row.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -459,6 +118,7 @@
       "section": "Sample relationships",
       "viz_kind": "embedding",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "embedding",
         "sample_id_col": "sample_id",
         "dim_1_col": "dim_1",
@@ -529,6 +189,7 @@
       "section": "Sample relationships",
       "viz_kind": "complex_heatmap",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "complex_heatmap",
         "matrix_wf_id": {
           "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
@@ -538,6 +199,7 @@
         },
         "index_column": "sample",
         "value_columns": null,
+        "value_columns_pattern": null,
         "row_annotation_cols": [],
         "col_annotations": {
           "habitat": {
@@ -559,8 +221,8 @@
         "annotation_source_dc_tag": null,
         "col_annotation_colors": {
           "habitat": {
-            "Groundwater": "#45B8AC",
             "Riverwater": "#348ABD",
+            "Groundwater": "#45B8AC",
             "Sediment": "#8B5A2B",
             "Soil": "#E24A33"
           }
@@ -570,7 +232,7 @@
         "cluster_method": "ward",
         "cluster_metric": "euclidean",
         "normalize": "none",
-        "colorscale": "Viridis"
+        "colorscale": "Blues"
       },
       "wf_tag": "nextflow/ampliseq"
     },
@@ -594,7 +256,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Phyla in rows, samples in columns, both axes clustered. Selecting samples on the left removes columns from this matrix and selecting Phylum removes rows, so the dendrograms recompute on the subset. Narrowing to a single sample or a single phylum leaves nothing to cluster, and the matrix is then drawn unclustered rather than failing.",
+      "body": "Phyla in rows, samples in columns, both axes clustered. Samples that cluster together share a community profile; compare the blocks with the Habitat groups.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -635,6 +297,7 @@
       "section": "Clustered abundance",
       "viz_kind": "complex_heatmap",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "complex_heatmap",
         "matrix_wf_id": {
           "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
@@ -644,6 +307,7 @@
         },
         "index_column": "Phylum",
         "value_columns": null,
+        "value_columns_pattern": null,
         "row_annotation_cols": [
           "Kingdom"
         ],
@@ -667,8 +331,8 @@
         "annotation_source_dc_tag": null,
         "col_annotation_colors": {
           "habitat": {
-            "Groundwater": "#45B8AC",
             "Riverwater": "#348ABD",
+            "Groundwater": "#45B8AC",
             "Sediment": "#8B5A2B",
             "Soil": "#E24A33"
           }
@@ -686,25 +350,9 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ord-sample-filter",
-      "x": 0,
-      "y": 0,
-      "w": 1,
-      "h": 3,
-      "static": false
-    },
-    {
-      "i": "box-ord-habitat-filter",
-      "x": 0,
-      "y": 3,
-      "w": 1,
-      "h": 2,
-      "static": false
-    },
-    {
       "i": "box-ord-phylum-filter",
       "x": 0,
-      "y": 5,
+      "y": 0,
       "w": 1,
       "h": 3,
       "static": false
@@ -712,7 +360,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-ord-section-header",
+      "i": "box-ord-relationships-header",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -727,56 +375,9 @@
       ]
     },
     {
-      "i": "box-ord-samples",
-      "x": 0,
-      "y": 1,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-ord-groups",
-      "x": 2,
-      "y": 1,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-ord-dim1",
-      "x": 4,
-      "y": 1,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-ord-dim2",
-      "x": 6,
-      "y": 1,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-ord-relationships-header",
-      "x": 0,
-      "y": 0,
-      "w": 8,
-      "h": 2,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
       "i": "box-ord-embedding",
       "x": 0,
-      "y": 2,
+      "y": 1,
       "w": 4,
       "h": 7,
       "static": false,
@@ -791,7 +392,7 @@
     {
       "i": "box-ord-bray-curtis",
       "x": 4,
-      "y": 2,
+      "y": 1,
       "w": 4,
       "h": 7,
       "static": false,
@@ -808,7 +409,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -821,7 +422,7 @@
     {
       "i": "box-ord-complex-heatmap",
       "x": 0,
-      "y": 2,
+      "y": 1,
       "w": 8,
       "h": 9,
       "static": false,
@@ -839,22 +440,13 @@
       "name": "Ordination filters",
       "icon": "mdi:filter-variant",
       "color": "pink",
-      "description": "Sample scope reaches the heatmap columns, Phylum its rows",
+      "description": "Phylum narrows the heatmap rows; samples come from the persistent filters above",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
     }
   ],
   "grid_sections": [
-    {
-      "name": "Ordination summary",
-      "icon": "mdi:counter",
-      "color": "pink",
-      "description": "What the projection was computed from",
-      "collapsed": false,
-      "persistent": false,
-      "pin": "top"
-    },
     {
       "name": "Sample relationships",
       "icon": "mdi:chart-scatter-plot",
@@ -875,6 +467,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "header",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,

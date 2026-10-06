@@ -51,6 +51,8 @@
       "group": "Taxonomy scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#377EB8",
       "icon_name": "mdi:bacteria",
       "wf_tag": "nextflow/ampliseq"
@@ -93,6 +95,8 @@
       "group": "Taxonomy scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#8BC34A",
       "icon_name": "mdi:bacteria-outline",
       "wf_tag": "nextflow/ampliseq"
@@ -171,6 +175,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:dna",
       "icon_color": "#9C27B0",
       "title_color": "#9C27B0",
@@ -229,6 +234,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:check-circle-outline",
       "icon_color": "#2E7D32",
       "title_color": "#2E7D32",
@@ -289,6 +295,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:check-decagram",
       "icon_color": "#1976D2",
       "title_color": "#1976D2",
@@ -347,6 +354,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:format-list-group",
       "icon_color": "#7B1FA2",
       "title_color": "#7B1FA2",
@@ -407,6 +415,7 @@
       "section": "Tree",
       "viz_kind": "phylogenetic",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "phylogenetic",
         "tree_wf_id": {
           "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
@@ -508,8 +517,8 @@
       "sortable": true,
       "filterable": true,
       "compact": false,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
+      "row_selection_enabled": true,
+      "row_selection_column": "taxon",
       "wf_tag": "nextflow/ampliseq"
     }
   ],
@@ -682,6 +691,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "header",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
