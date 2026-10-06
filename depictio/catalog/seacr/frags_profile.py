@@ -90,11 +90,32 @@ BIN_BP = 100
 HALF_WINDOW = 3000
 TOP_N = 500
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="fragments", dc_ref=RAW_DC_TAG),
-    RecipeSource(ref="peaks", dc_ref=PEAKS_DC_TAG),
+    RecipeSource(
+        ref="fragments",
+        input_schema={
+            "source_path": pl.Utf8,
+            "chr": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
+    RecipeSource(
+        ref="peaks",
+        input_schema={
+            "sample": pl.Utf8,
+            "peak_id": pl.Utf8,
+            "chr": pl.Utf8,
+            "summit": pl.Int64,
+            "total_signal": pl.Float64,
+        },
+        dc_ref=PEAKS_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,

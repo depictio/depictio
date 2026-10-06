@@ -40,10 +40,21 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "preseq_ccurve_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="curves", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="curves",
+        dc_ref=RAW_DC_TAG,
+        # The scan reads every column as text (infer_schema_length: 0).
+        input_schema={
+            "source_path": pl.Utf8,
+            "total_reads": pl.Utf8,
+            "distinct_reads": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_reads": pl.Float64,

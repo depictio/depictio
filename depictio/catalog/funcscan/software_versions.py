@@ -25,7 +25,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: `software_versions` is a nested mapping whose dtype depends on how MultiQC wrote it.
     RecipeSource(
         ref="report",
         # The report sits at multiqc/multiqc_data/ in a plain run and one level
@@ -35,6 +37,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "process": pl.Utf8,
     "tool": pl.Utf8,

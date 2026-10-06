@@ -28,7 +28,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: a square distance matrix whose column names are the sample ids.
     RecipeSource(
         ref="dists",
         glob_pattern="**/*sample.dists.txt",
@@ -37,6 +39,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }

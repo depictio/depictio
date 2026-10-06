@@ -35,8 +35,13 @@ from depictio.recipes.lib.mag_bins import file_stem, label_lookup
 
 RAW_DC_TAG = "gtdbtk_summary_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="summaries", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="summaries",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"classification": pl.Utf8, "source_path": pl.Utf8},
+    ),
 ]
 
 #: Ranks counted, root first. Species is excluded (see the module docstring).
@@ -49,6 +54,7 @@ COUNTED_RANKS: tuple[tuple[str, str], ...] = (
     ("g", "genus"),
 )
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "sample": pl.Utf8,

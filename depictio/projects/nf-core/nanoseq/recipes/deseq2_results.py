@@ -32,10 +32,24 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.bambu import DESEQ2_COLUMNS, contrast_label, deseq2_on_bambu
 
 RAW_DC_TAG = "deseq2_results_raw"
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="raw", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="raw",
+        input_schema={
+            "baseMean": pl.Utf8,
+            "log2FoldChange": pl.Utf8,
+            "lfcSE": pl.Utf8,
+            "pvalue": pl.Utf8,
+            "padj": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
     RecipeSource(
         ref="samplesheet",
+        input_schema={
+            "sample": pl.Utf8,
+        },
         path="pipeline_info/samplesheet.valid.csv",
         format="CSV",
         read_kwargs={"infer_schema_length": 0},
@@ -43,6 +57,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = dict(DESEQ2_COLUMNS)
 
 

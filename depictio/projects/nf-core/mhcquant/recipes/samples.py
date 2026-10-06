@@ -29,7 +29,10 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: a comma-separated sheet is read as one column and re-split
+    # by _fix_delimiter, so the required columns only exist after transform() starts.
     RecipeSource(
         ref="samplesheet",
         path="input/samplesheet.tsv",
@@ -38,6 +41,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "run_id": pl.Utf8,

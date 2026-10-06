@@ -43,11 +43,24 @@ from depictio.models.models.transforms import RecipeSource
 QV_DC_TAG = "merqury_qv_raw"
 COMPLETENESS_DC_TAG = "merqury_completeness_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="qv", dc_ref=QV_DC_TAG),
-    RecipeSource(ref="completeness", dc_ref=COMPLETENESS_DC_TAG, optional=True),
+    # Headerless scan: the value columns are positional, so only the path column is named.
+    RecipeSource(
+        ref="qv",
+        dc_ref=QV_DC_TAG,
+        input_schema={"source_path": pl.Utf8},
+    ),
+    # Headerless scan: the value columns are positional, so only the path column is named.
+    RecipeSource(
+        ref="completeness",
+        dc_ref=COMPLETENESS_DC_TAG,
+        optional=True,
+        input_schema={"source_path": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "merqury_name": pl.Utf8,

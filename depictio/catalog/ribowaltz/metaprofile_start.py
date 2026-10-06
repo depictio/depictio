@@ -19,15 +19,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="profile",
         glob_pattern="**/*.ribowaltz.metaprofile_psite.tsv",
         format="tsv",
+        input_schema={
+            "sample": pl.Utf8,
+            "region": pl.Utf8,
+            "x": pl.Int64,
+            "y": pl.Float64,
+        },
         read_kwargs={"infer_schema_length": 10000},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "position": pl.Int64,

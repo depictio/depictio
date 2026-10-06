@@ -20,7 +20,20 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="sections", dc_ref="bcftools_stats_sections")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="sections",
+        dc_ref="bcftools_stats_sections",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "section": pl.Utf8,
+            "label": pl.Utf8,
+            "count": pl.Int64,
+        },
+    )
+]
 
 #: Each strand-specific substitution folded onto its pyrimidine reference.
 FOLD: dict[str, str] = {
@@ -39,6 +52,7 @@ FOLD: dict[str, str] = {
 }
 TRANSITIONS = ["C>T", "T>C"]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,

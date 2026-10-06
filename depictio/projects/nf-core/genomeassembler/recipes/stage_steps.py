@@ -42,10 +42,26 @@ from depictio.models.models.transforms import RecipeSource
 
 ASSEMBLIES_DC_TAG = "assemblies"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="assemblies", dc_ref=ASSEMBLIES_DC_TAG),
+    RecipeSource(
+        ref="assemblies",
+        dc_ref=ASSEMBLIES_DC_TAG,
+        input_schema={
+            "assembly_id": pl.Utf8,
+            "sample": pl.Utf8,
+            "stage": pl.Utf8,
+            "stage_rank": pl.Int64,
+            "qv": pl.Float64,
+            "n50": pl.Int64,
+            "total_length": pl.Int64,
+            "kmer_completeness": pl.Float64,
+            "busco_complete": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "route": pl.Utf8,
     "assembly_id": pl.Utf8,

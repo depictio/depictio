@@ -19,9 +19,18 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="ions",
+        input_schema={
+            "Peptide": pl.Utf8,
+            "Theoretical_mass": pl.Utf8,
+            "Experimental_mass": pl.Utf8,
+            "Ion_name": pl.Utf8,
+            "Intensity": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         glob_pattern="intermediate_results/ion_annotations/*_matching_ions.tsv",
         format="tsv",
         read_kwargs={"infer_schema_length": 0},
@@ -29,6 +38,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,

@@ -52,16 +52,70 @@ SIMPLEAF_MAPPING_DC_TAG = "simpleaf_mapping_metrics"
 KALLISTO_RUN_DC_TAG = "kallisto_run_metrics"
 KALLISTO_CELLBENDER_DC_TAG = "kallisto_cellbender_metrics"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="cellranger_metrics", dc_ref=CELLRANGER_METRICS_DC_TAG),
-    RecipeSource(ref="cellranger_cellbender", dc_ref=CELLRANGER_CELLBENDER_DC_TAG, optional=True),
-    RecipeSource(ref="qcatch_metrics", dc_ref=QCATCH_METRICS_DC_TAG, optional=True),
-    RecipeSource(ref="simpleaf_cellbender", dc_ref=SIMPLEAF_CELLBENDER_DC_TAG, optional=True),
-    RecipeSource(ref="simpleaf_mapping", dc_ref=SIMPLEAF_MAPPING_DC_TAG, optional=True),
-    RecipeSource(ref="kallisto_run", dc_ref=KALLISTO_RUN_DC_TAG, optional=True),
-    RecipeSource(ref="kallisto_cellbender", dc_ref=KALLISTO_CELLBENDER_DC_TAG, optional=True),
+    RecipeSource(
+        ref="cellranger_metrics",
+        dc_ref=CELLRANGER_METRICS_DC_TAG,
+        input_schema={
+            "estimated_cells": pl.Int64,
+            "median_umi_counts_per_cell": pl.Int64,
+            "reads_mapped_confidently_transcriptome_pct": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="cellranger_cellbender",
+        dc_ref=CELLRANGER_CELLBENDER_DC_TAG,
+        optional=True,
+        input_schema={
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="qcatch_metrics",
+        dc_ref=QCATCH_METRICS_DC_TAG,
+        optional=True,
+        input_schema={
+            "retained_cells": pl.Int64,
+            "median_umi_per_retained_cell": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="simpleaf_cellbender",
+        dc_ref=SIMPLEAF_CELLBENDER_DC_TAG,
+        optional=True,
+        input_schema={
+            "found_cells": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="simpleaf_mapping",
+        dc_ref=SIMPLEAF_MAPPING_DC_TAG,
+        optional=True,
+        input_schema={
+            "mapping_rate": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="kallisto_run",
+        dc_ref=KALLISTO_RUN_DC_TAG,
+        optional=True,
+        input_schema={
+            "cells_called": pl.Int64,
+            "p_pseudoaligned": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="kallisto_cellbender",
+        dc_ref=KALLISTO_CELLBENDER_DC_TAG,
+        optional=True,
+        input_schema={
+            "found_cells": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "aligner": pl.Utf8,
     "cells_called": pl.Int64,

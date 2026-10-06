@@ -27,7 +27,14 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.vcf import sample_and_caller
 
 RAW_DC_TAG = "snpeff_csv_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="raw",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"raw_line": pl.Utf8, "source_path": pl.Utf8},
+    )
+]
 
 #: SnpEff section title -> the `section` value tiles filter on. "Variantss by
 #: type" is SnpEff's own typo, kept verbatim on the left so the match works.
@@ -43,6 +50,7 @@ _SECTIONS: dict[str, str] = {
 #: Percent`, and only these four of its keys are counts.
 _ZYGOSITY_KEYS = ["Reference", "Het", "Hom", "Missing"]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,

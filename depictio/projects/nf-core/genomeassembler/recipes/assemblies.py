@@ -71,14 +71,60 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # The samplesheet is passed through whole (any column set; `sample` falls back to the
+    # first column), so no column is required.
     RecipeSource(ref="samplesheet", dc_ref="samplesheet", optional=True),
-    RecipeSource(ref="idxstats", dc_ref="samtools_idxstats_raw", optional=True),
-    RecipeSource(ref="merqury", dc_ref="merqury_assembly_qv", optional=True),
-    RecipeSource(ref="busco", dc_ref="busco_batch_summary", optional=True),
-    RecipeSource(ref="quast_ref", dc_ref="quast_reference_report", optional=True),
+    # idxstats is a headerless text scan: only source_path is named, the sequence name and
+    # length are the first two other columns by position.
+    RecipeSource(
+        ref="idxstats",
+        dc_ref="samtools_idxstats_raw",
+        optional=True,
+        input_schema={"source_path": pl.Utf8},
+    ),
+    RecipeSource(
+        ref="merqury",
+        dc_ref="merqury_assembly_qv",
+        optional=True,
+        input_schema={
+            "assembly_id": pl.Utf8,
+            "qv": pl.Float64,
+            "error_rate": pl.Float64,
+            "kmer_completeness": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="busco",
+        dc_ref="busco_batch_summary",
+        optional=True,
+        input_schema={
+            "assembly_id": pl.Utf8,
+            "lineage": pl.Utf8,
+            "complete_pct": pl.Float64,
+            "single_pct": pl.Float64,
+            "duplicated_pct": pl.Float64,
+            "fragmented_pct": pl.Float64,
+            "missing_pct": pl.Float64,
+            "n_markers": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="quast_ref",
+        dc_ref="quast_reference_report",
+        optional=True,
+        input_schema={
+            "report_id": pl.Utf8,
+            "genome_fraction": pl.Float64,
+            "misassemblies": pl.Int64,
+            "mismatches_per_100kbp": pl.Float64,
+            "nga50": pl.Int64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "sample": pl.Utf8,

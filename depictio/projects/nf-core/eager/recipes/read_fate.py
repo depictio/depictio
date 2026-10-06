@@ -58,12 +58,35 @@ LANES_DC_TAG = "eager_lane_stats"
 FLAGSTAT_DC_TAG = "samtools_flagstat"
 DEDUP_DC_TAG = "picard_markduplicates_metrics"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lanes", dc_ref=LANES_DC_TAG),
-    RecipeSource(ref="flagstat", dc_ref=FLAGSTAT_DC_TAG),
+    RecipeSource(
+        ref="lanes",
+        dc_ref=LANES_DC_TAG,
+        input_schema={
+            "sample_id": pl.Utf8,
+            "total_reads": pl.Int64,
+            "retained_reads": pl.Int64,
+            "collapsed_pairs": pl.Int64,
+            "discarded_reads": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="flagstat",
+        dc_ref=FLAGSTAT_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "stage": pl.Utf8,
+            "total_reads": pl.Int64,
+            "mapped_reads": pl.Int64,
+        },
+    ),
+    # No input_schema on dedup: it is optional and the recipe checks for
+    # duplicate_reads itself, so a report without it still draws the flow.
     RecipeSource(ref="dedup", dc_ref=DEDUP_DC_TAG, optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "step_sequencing": pl.Utf8,

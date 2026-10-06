@@ -12,11 +12,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="genes", dc_ref="snpeff_genes")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="genes",
+        dc_ref="snpeff_genes",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "gene_name": pl.Utf8,
+            "n_coding": pl.Int64,
+            "n_variants": pl.Int64,
+        },
+    )
+]
 
 #: A clustered heatmap stops being readable well before a hundred rows.
 TOP_GENES = 40
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"gene_name": pl.Utf8}
 # One numeric column per callset, known only at ingest.
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}

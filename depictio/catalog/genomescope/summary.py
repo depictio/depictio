@@ -50,10 +50,13 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "genomescope_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
+    # The text column is whichever column is not source_path, so only the path is named.
+    RecipeSource(ref="lines", dc_ref=RAW_DC_TAG, input_schema={"source_path": pl.Utf8}),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "read_set": pl.Utf8,
     "genomescope_version": pl.Utf8,

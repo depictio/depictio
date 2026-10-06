@@ -28,7 +28,23 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "mosdepth_summary_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="summary", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="summary",
+        dc_ref=RAW_DC_TAG,
+        # The scan reads every column as text (infer_schema_length: 0).
+        input_schema={
+            "chrom": pl.Utf8,
+            "length": pl.Utf8,
+            "bases": pl.Utf8,
+            "mean": pl.Utf8,
+            "min": pl.Utf8,
+            "max": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    )
+]
 
 #: Primary contigs (with or without the UCSC ``chr`` prefix) plus mosdepth's
 #: whole-run roll-up row.
@@ -71,6 +87,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,  # md / recal on sarek; "all" when the file name has no stage

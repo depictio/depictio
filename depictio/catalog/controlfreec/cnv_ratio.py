@@ -59,10 +59,20 @@ from depictio.recipes.lib.cnv_profile import (
 
 RATIO_DC_TAG = "controlfreec_ratio_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="ratio", dc_ref=RATIO_DC_TAG),
+    RecipeSource(
+        ref="ratio",
+        input_schema={
+            "Chromosome": pl.Utf8,
+            "Start": pl.Int64,
+            "Ratio": pl.Float64,
+        },
+        dc_ref=RATIO_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 

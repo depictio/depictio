@@ -53,10 +53,23 @@ from depictio.recipes.lib.cnv_profile import (
 
 SEGMENTS_DC_TAG = "ascat_segments_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="segments", dc_ref=SEGMENTS_DC_TAG),
+    # `sample` is read when present, else taken from source_path, so neither is required.
+    RecipeSource(
+        ref="segments",
+        dc_ref=SEGMENTS_DC_TAG,
+        input_schema={
+            "chr": pl.Utf8,
+            "startpos": pl.Int64,
+            "endpos": pl.Int64,
+            "nMajor": pl.Int64,
+            "nMinor": pl.Int64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 

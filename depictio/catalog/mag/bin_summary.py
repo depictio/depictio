@@ -65,15 +65,24 @@ CHECKM2_DC_TAG = "checkm2_quality_report"
 GTDBTK_DC_TAG = "gtdbtk_summary"
 PROKKA_DC_TAG = "prokka_summary"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="quast", dc_ref=QUAST_DC_TAG, optional=True),
-    RecipeSource(ref="checkm2", dc_ref=CHECKM2_DC_TAG, optional=True),
-    RecipeSource(ref="gtdbtk", dc_ref=GTDBTK_DC_TAG, optional=True),
-    RecipeSource(ref="prokka", dc_ref=PROKKA_DC_TAG, optional=True),
+    # Only the join key is required: `_take` nulls any other column a source lacks.
+    RecipeSource(ref="quast", dc_ref=QUAST_DC_TAG, optional=True, input_schema={"bin_id": pl.Utf8}),
+    RecipeSource(
+        ref="checkm2", dc_ref=CHECKM2_DC_TAG, optional=True, input_schema={"bin_id": pl.Utf8}
+    ),
+    RecipeSource(
+        ref="gtdbtk", dc_ref=GTDBTK_DC_TAG, optional=True, input_schema={"bin_id": pl.Utf8}
+    ),
+    RecipeSource(
+        ref="prokka", dc_ref=PROKKA_DC_TAG, optional=True, input_schema={"bin_id": pl.Utf8}
+    ),
 ]
 
 _RANK_COLUMNS = ("domain", "phylum", "class_name", "order", "family", "genus", "species")
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,

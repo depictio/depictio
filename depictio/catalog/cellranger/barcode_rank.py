@@ -67,12 +67,37 @@ RAW_MATRIX_DC_TAG = "cellranger_raw_matrix_raw"
 RAW_BARCODES_DC_TAG = "cellranger_raw_barcodes_raw"
 FILTERED_BARCODES_DC_TAG = "cellranger_filtered_barcodes_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="raw_counts", dc_ref=RAW_MATRIX_DC_TAG),
-    RecipeSource(ref="raw_barcodes", dc_ref=RAW_BARCODES_DC_TAG),
-    RecipeSource(ref="filtered_barcodes", dc_ref=FILTERED_BARCODES_DC_TAG),
+    RecipeSource(
+        ref="raw_counts",
+        dc_ref=RAW_MATRIX_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "barcode_idx": pl.Int64,
+            "count": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="raw_barcodes",
+        dc_ref=RAW_BARCODES_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "barcode_idx": pl.Int64,
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="filtered_barcodes",
+        dc_ref=FILTERED_BARCODES_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "barcode": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "rank": pl.Int64,

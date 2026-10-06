@@ -57,10 +57,21 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "cellranger_diffexp_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="diffexp", dc_ref=RAW_DC_TAG),
+    # The per-cluster `Cluster N ...` columns are named by the data, so only the fixed ones are declared.
+    RecipeSource(
+        ref="diffexp",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Feature ID": pl.Utf8,
+            "Feature Name": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Utf8,

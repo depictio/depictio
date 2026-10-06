@@ -38,9 +38,11 @@ from depictio.recipes.lib.bambu import (
     sample_names,
 )
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="header",
+        # No input_schema: this line holds the run-dependent sample names.
         glob_pattern="**/bambu/counts_gene.txt",
         format="tsv",
         read_kwargs={
@@ -52,12 +54,14 @@ SOURCES: list[RecipeSource] = [
     ),
     RecipeSource(
         ref="counts",
+        # No input_schema: generic column_N names, one count column per sample.
         glob_pattern="**/bambu/counts_gene.txt",
         format="tsv",
         read_kwargs={"has_header": False, "skip_rows": 1, "infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "condition": pl.Utf8,

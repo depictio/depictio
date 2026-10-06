@@ -32,10 +32,23 @@ from depictio.models.models.transforms import RecipeSource
 
 METRICS_DC_TAG = "cellranger_metrics"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="metrics", dc_ref=METRICS_DC_TAG),
+    RecipeSource(
+        ref="metrics",
+        dc_ref=METRICS_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "sequencing_saturation_frac": pl.Float64,
+            "fraction_reads_in_cells_frac": pl.Float64,
+            "valid_barcodes_frac": pl.Float64,
+            "q30_rna_read_frac": pl.Float64,
+            "reads_mapped_confidently_transcriptome_frac": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "metric": pl.Utf8,

@@ -66,11 +66,18 @@ RAW_DC_TAG = "qualimap_coverage_across_reference_raw"
 #: Data-collection tag of the BamQC summary reports, read for the contig map.
 CONTIG_DC_TAG = "qualimap_bamqc_genome_results_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="windows", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="windows",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"raw": pl.Utf8, "source_path": pl.Utf8},
+    ),
+    # No input_schema: the block is optional and a frame without these columns falls back to the whole-genome axis.
     RecipeSource(ref="reports", dc_ref=CONTIG_DC_TAG, optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,

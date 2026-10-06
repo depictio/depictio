@@ -35,10 +35,21 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "merqury_spectra_cn_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="spectra", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="spectra",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "Copies": pl.Utf8,
+            "kmer_multiplicity": pl.Int64,
+            "Count": pl.Int64,
+            "source_path": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "copy_class": pl.Utf8,

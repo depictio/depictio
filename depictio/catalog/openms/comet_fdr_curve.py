@@ -17,9 +17,15 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="pin",
+        input_schema={
+            "source_path": pl.Utf8,
+            "Label": pl.Utf8,
+            "Xcorr": pl.Utf8,
+        },
         glob_pattern="**/*_pin.tsv",
         format="tsv",
         read_kwargs={
@@ -32,6 +38,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "run_id": pl.Utf8,
     "q_value": pl.Float64,

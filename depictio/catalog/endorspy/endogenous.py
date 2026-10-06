@@ -57,10 +57,19 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the template must scan the JSON files into.
 RAW_DC_TAG = "endorspy_endogenous_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="reports",
+        input_schema={
+            "raw": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "endogenous_dna": pl.Float64,

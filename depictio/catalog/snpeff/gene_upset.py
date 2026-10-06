@@ -17,12 +17,20 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="genes", dc_ref="snpeff_genes")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="genes",
+        dc_ref="snpeff_genes",
+        input_schema={"gene_name": pl.Utf8, "caller": pl.Utf8, "n_coding": pl.Int64},
+    )
+]
 
 #: An UpSet over the full gene universe is unreadable; the busiest genes carry
 #: the intersections.
 MAX_GENES = 3_000
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"gene_name": pl.Utf8}
 # Caller columns are one per caller in the run, known only at ingest.
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}

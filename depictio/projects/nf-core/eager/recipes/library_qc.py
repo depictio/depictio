@@ -41,13 +41,48 @@ DEDUP_DC_TAG = "picard_markduplicates_metrics"
 BAMQC_DC_TAG = "qualimap_bamqc_genome_results"
 DAMAGE_DC_TAG = "damageprofiler_authenticity"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="endogenous", dc_ref=ENDOGENOUS_DC_TAG),
-    RecipeSource(ref="dedup", dc_ref=DEDUP_DC_TAG, optional=True),
-    RecipeSource(ref="bamqc", dc_ref=BAMQC_DC_TAG, optional=True),
-    RecipeSource(ref="damage", dc_ref=DAMAGE_DC_TAG, optional=True),
+    RecipeSource(
+        ref="endogenous",
+        dc_ref=ENDOGENOUS_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "endogenous_dna": pl.Float64,
+            "endogenous_dna_post": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="dedup",
+        dc_ref=DEDUP_DC_TAG,
+        optional=True,
+        input_schema={"sample": pl.Utf8, "percent_duplication": pl.Float64},
+    ),
+    RecipeSource(
+        ref="bamqc",
+        dc_ref=BAMQC_DC_TAG,
+        optional=True,
+        input_schema={
+            "sample": pl.Utf8,
+            "mean_coverage": pl.Float64,
+            "mean_mapping_quality": pl.Float64,
+            "general_error_rate": pl.Float64,
+            "gc_percentage": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="damage",
+        dc_ref=DAMAGE_DC_TAG,
+        optional=True,
+        input_schema={
+            "sample": pl.Utf8,
+            "ct_5p_first": pl.Float64,
+            "mean_length": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "endogenous_dna": pl.Float64,

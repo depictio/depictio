@@ -57,10 +57,19 @@ from depictio.models.models.transforms import RecipeSource
 #: docstring). Any pipeline reusing this recipe declares a DC with this tag.
 RAW_DC_TAG = "damageprofiler_misincorporation_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="misinc", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="misinc",
+        input_schema={
+            "Pos": pl.Int64,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "end": pl.Utf8,

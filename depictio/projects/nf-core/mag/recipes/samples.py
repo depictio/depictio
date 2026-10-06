@@ -22,15 +22,18 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
         path="input/samplesheet.full.v4.csv",
         format="CSV",
         read_kwargs={"infer_schema_length": 0},
+        input_schema={"sample": pl.Utf8, "group": pl.Utf8, "short_reads_platform": pl.Utf8},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "group": pl.Utf8,

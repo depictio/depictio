@@ -40,11 +40,28 @@ from depictio.recipes.lib.sample_hub import annotate_from_hub
 MATRIX_DC_TAG = "bismark_binned_methylation"
 SAMPLES_DC_TAG = "samples"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="windows", dc_ref=MATRIX_DC_TAG),
-    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
+    RecipeSource(
+        ref="windows",
+        dc_ref=MATRIX_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "chromosome": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "methylation_pct": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="samples",
+        dc_ref=SAMPLES_DC_TAG,
+        optional=True,
+        input_schema={"sample_id": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,

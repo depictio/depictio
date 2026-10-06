@@ -15,8 +15,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="quality", dc_ref="bclconvert_quality_raw")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="quality",
+        dc_ref="bclconvert_quality_raw",
+        input_schema={
+            "Lane": pl.Utf8,
+            "ReadNumber": pl.Utf8,
+            "Yield": pl.Utf8,
+            "YieldQ30": pl.Utf8,
+            "QualityScoreSum": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    ),
+]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "flowcell": pl.Utf8,
     "lane": pl.Int64,

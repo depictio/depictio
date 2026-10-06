@@ -60,7 +60,9 @@ from depictio.models.models.transforms import RecipeSource
 
 _PATH_COL = "_pca_source_path"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the columns are one sample id column plus PCn components whose names carry the variance.
     RecipeSource(
         ref="pca",
         glob_pattern="**/*pca.vals.txt",
@@ -73,6 +75,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,

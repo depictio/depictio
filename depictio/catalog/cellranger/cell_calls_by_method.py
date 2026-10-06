@@ -52,12 +52,47 @@ SIMPLEAF_CELLBENDER_DC_TAG = "simpleaf_cellbender_barcodes_raw"
 KALLISTO_DC_TAG = "kallisto_barcodes_raw"
 KALLISTO_CELLBENDER_DC_TAG = "kallisto_cellbender_barcodes_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="cellranger", dc_ref=CELLRANGER_DC_TAG),
-    RecipeSource(ref="cellranger_cellbender", dc_ref=CELLRANGER_CELLBENDER_DC_TAG, optional=True),
-    RecipeSource(ref="simpleaf_cellbender", dc_ref=SIMPLEAF_CELLBENDER_DC_TAG, optional=True),
-    RecipeSource(ref="kallisto", dc_ref=KALLISTO_DC_TAG, optional=True),
-    RecipeSource(ref="kallisto_cellbender", dc_ref=KALLISTO_CELLBENDER_DC_TAG, optional=True),
+    RecipeSource(
+        ref="cellranger",
+        dc_ref=CELLRANGER_DC_TAG,
+        input_schema={
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="cellranger_cellbender",
+        dc_ref=CELLRANGER_CELLBENDER_DC_TAG,
+        optional=True,
+        input_schema={
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="simpleaf_cellbender",
+        dc_ref=SIMPLEAF_CELLBENDER_DC_TAG,
+        optional=True,
+        input_schema={
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="kallisto",
+        dc_ref=KALLISTO_DC_TAG,
+        optional=True,
+        input_schema={
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="kallisto_cellbender",
+        dc_ref=KALLISTO_CELLBENDER_DC_TAG,
+        optional=True,
+        input_schema={
+            "barcode": pl.Utf8,
+        },
+    ),
 ]
 
 _CALLER_COLUMNS = [
@@ -68,6 +103,7 @@ _CALLER_COLUMNS = [
     "kallisto_cellbender",
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "barcode_core": pl.Utf8,
     "cellranger": pl.Boolean,

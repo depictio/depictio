@@ -28,8 +28,17 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.nanoplot import RAW_LINE_COL, SOURCE_PATH_COL, sample_of_report
 
 RAW_DC_TAG = "nanoplot_nanostats_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="raw",
+        dc_ref=RAW_DC_TAG,
+        # One text line per row; the report is parsed line by line.
+        input_schema={RAW_LINE_COL: pl.Utf8, SOURCE_PATH_COL: pl.Utf8},
+    )
+]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "q_cutoff": pl.Int64,

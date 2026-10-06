@@ -44,16 +44,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="joined",
+        input_schema={
+            "miRNA": pl.Utf8,
+            "Variant": pl.Utf8,
+        },
         glob_pattern="**/mirtop/joined_samples_mirtop.tsv",
         format="tsv",
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA"]},
     ),
+    # No input_schema: the design columns are run-dependent, read by position, not by name.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "mirna": pl.Utf8,

@@ -31,10 +31,25 @@ from depictio.models.models.transforms import RecipeSource
 
 CELL_QC_DC_TAG = "cellranger_cell_qc"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="cells", dc_ref=CELL_QC_DC_TAG),
+    RecipeSource(
+        ref="cells",
+        dc_ref=CELL_QC_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "graphclust": pl.Utf8,
+            "cluster_label": pl.Utf8,
+            "n_umi": pl.Int64,
+            "n_genes": pl.Int64,
+            "pct_mito": pl.Float64,
+            "qc_status": pl.Utf8,
+            "cellbender_cell": pl.Boolean,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "graphclust": pl.Utf8,

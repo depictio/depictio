@@ -62,8 +62,16 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the template must scan the summary files into, one line per row.
 RAW_DC_TAG = "interop_summary_raw"
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="summary", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="summary",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"raw": pl.Utf8, "source_path": pl.Utf8},
+    )
+]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "run_id": pl.Utf8,
     "lane": pl.Int64,

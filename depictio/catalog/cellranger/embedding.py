@@ -41,13 +41,51 @@ UMAP_DC_TAG = "cellranger_umap_raw"
 TSNE_DC_TAG = "cellranger_tsne_raw"
 PCA_DC_TAG = "cellranger_pca_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="clusters", dc_ref=CLUSTERS_DC_TAG),
-    RecipeSource(ref="umap", dc_ref=UMAP_DC_TAG),
-    RecipeSource(ref="tsne", dc_ref=TSNE_DC_TAG),
-    RecipeSource(ref="pca", dc_ref=PCA_DC_TAG),
+    RecipeSource(
+        ref="clusters",
+        dc_ref=CLUSTERS_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "Cluster": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="umap",
+        dc_ref=UMAP_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "UMAP-1": pl.Float64,
+            "UMAP-2": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="tsne",
+        dc_ref=TSNE_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "TSNE-1": pl.Float64,
+            "TSNE-2": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="pca",
+        dc_ref=PCA_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "PC-1": pl.Float64,
+            "PC-2": pl.Float64,
+            "PC-3": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,

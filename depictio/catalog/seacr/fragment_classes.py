@@ -56,10 +56,20 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads: the output of `seacr/fragment_lengths.py`.
 FRAGMENTS_DC_TAG = "seacr_fragment_lengths"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="fragments", dc_ref=FRAGMENTS_DC_TAG),
+    RecipeSource(
+        ref="fragments",
+        input_schema={
+            "sample": pl.Utf8,
+            "fragment_length": pl.Int64,
+            "count": pl.Int64,
+        },
+        dc_ref=FRAGMENTS_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,

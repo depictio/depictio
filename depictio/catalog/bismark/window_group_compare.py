@@ -85,11 +85,18 @@ from depictio.recipes.lib.genomic_bins import window_id_expr
 INDEX_DC_TAG = "bismark_bedgraph_index"
 SAMPLES_DC_TAG = "samples"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="index", dc_ref=INDEX_DC_TAG),
-    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
+    RecipeSource(ref="index", dc_ref=INDEX_DC_TAG, input_schema={"source_path": pl.Utf8}),
+    RecipeSource(
+        ref="samples",
+        dc_ref=SAMPLES_DC_TAG,
+        optional=True,
+        input_schema={"sample_id": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "window_id": pl.Utf8,
     "chromosome": pl.Utf8,

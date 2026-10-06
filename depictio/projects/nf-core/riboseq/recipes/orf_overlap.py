@@ -26,11 +26,39 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="ribotish", dc_ref="ribotish_orfs", optional=True),
-    RecipeSource(ref="ribocode", dc_ref="ribocode_orfs", optional=True),
+    RecipeSource(
+        ref="ribotish",
+        input_schema={
+            "sample": pl.Utf8,
+            "orf_id": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "gene_name": pl.Utf8,
+            "gene_type": pl.Utf8,
+            "orf_class": pl.Utf8,
+            "aa_length": pl.Int64,
+        },
+        dc_ref="ribotish_orfs",
+        optional=True,
+    ),
+    RecipeSource(
+        ref="ribocode",
+        input_schema={
+            "sample": pl.Utf8,
+            "orf_id": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "gene_name": pl.Utf8,
+            "gene_type": pl.Utf8,
+            "orf_class": pl.Utf8,
+            "aa_length": pl.Int64,
+        },
+        dc_ref="ribocode_orfs",
+        optional=True,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "orf_id": pl.Utf8,
     "gene_id": pl.Utf8,

@@ -46,11 +46,25 @@ from depictio.recipes.lib.scrnaseq_panels import resolve_marker_panel
 CELL_EXPRESSION_DC_TAG = "cellranger_cell_expression"
 DIFFEXP_DC_TAG = "cellranger_diffexp"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="wide", dc_ref=CELL_EXPRESSION_DC_TAG),
+    RecipeSource(
+        ref="wide",
+        dc_ref=CELL_EXPRESSION_DC_TAG,
+        # The gene columns are named by the data, so only the fixed ones are declared.
+        input_schema={
+            "sample": pl.Utf8,
+            "barcode": pl.Utf8,
+            "cluster_label": pl.Utf8,
+            "qc_status": pl.Utf8,
+        },
+    ),
+    # The diffexp columns are read inside `resolve_marker_panel`, which tolerates
+    # a table without them, so none are declared here.
     RecipeSource(ref="diffexp", dc_ref=DIFFEXP_DC_TAG, optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,

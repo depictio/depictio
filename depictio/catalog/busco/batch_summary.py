@@ -48,10 +48,16 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "busco_batch_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="summaries", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="summaries",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"Input_file": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "input_file": pl.Utf8,

@@ -57,11 +57,35 @@ from depictio.recipes.lib.cnv_profile import (
 BINS_DC_TAG = "cnvkit_bins_raw"
 SEGMENTS_DC_TAG = "cnvkit_segments_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="bins", dc_ref=BINS_DC_TAG, optional=True),
-    RecipeSource(ref="segments", dc_ref=SEGMENTS_DC_TAG, optional=True),
+    # The sample comes from a `sample` or a `source_path` column (one of the two), and
+    # gene, depth, cn and baf are optional, so only the four coordinate columns are fixed.
+    RecipeSource(
+        ref="bins",
+        dc_ref=BINS_DC_TAG,
+        optional=True,
+        input_schema={
+            "chromosome": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "log2": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="segments",
+        dc_ref=SEGMENTS_DC_TAG,
+        optional=True,
+        input_schema={
+            "chromosome": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "log2": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 

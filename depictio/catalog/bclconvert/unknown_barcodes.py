@@ -20,11 +20,30 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="unknown", dc_ref="bclconvert_unknown_raw"),
-    RecipeSource(ref="demux", dc_ref="bclconvert_demux_raw"),
+    RecipeSource(
+        ref="unknown",
+        dc_ref="bclconvert_unknown_raw",
+        input_schema={
+            "Lane": pl.Utf8,
+            "# Reads": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="demux",
+        dc_ref="bclconvert_demux_raw",
+        input_schema={
+            "SampleID": pl.Utf8,
+            "Lane": pl.Utf8,
+            "# Reads": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "flowcell": pl.Utf8,
     "lane": pl.Int64,

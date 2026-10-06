@@ -46,11 +46,31 @@ from depictio.models.models.transforms import RecipeSource
 MISINCORPORATION_DC_TAG = "damageprofiler_misincorporation"
 LGDISTRIBUTION_DC_TAG = "damageprofiler_lgdistribution"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="damage", dc_ref=MISINCORPORATION_DC_TAG),
-    RecipeSource(ref="lengths", dc_ref=LGDISTRIBUTION_DC_TAG),
+    RecipeSource(
+        ref="damage",
+        input_schema={
+            "sample": pl.Utf8,
+            "end": pl.Utf8,
+            "position": pl.Int64,
+            "base_change": pl.Utf8,
+            "frequency": pl.Float64,
+        },
+        dc_ref=MISINCORPORATION_DC_TAG,
+    ),
+    RecipeSource(
+        ref="lengths",
+        input_schema={
+            "sample": pl.Utf8,
+            "length": pl.Int64,
+            "occurrences": pl.Int64,
+        },
+        dc_ref=LGDISTRIBUTION_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "ct_5p_first": pl.Float64,

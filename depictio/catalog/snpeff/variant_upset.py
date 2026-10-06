@@ -19,7 +19,20 @@ from depictio.models.models.transforms import RecipeSource
 #: Depth is a second axis here (the same individual sequenced twice), so a set
 #: is a caller-and-depth pair and the plot reads as depth sensitivity, not as a
 #: truth comparison. Set columns are therefore "<caller> <sample>".
-SOURCES: list[RecipeSource] = [RecipeSource(ref="variants", dc_ref="snpeff_ann_variants")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="variants",
+        dc_ref="snpeff_ann_variants",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "variant_key": pl.Utf8,
+            "variant_type": pl.Utf8,
+            "is_pass": pl.Boolean,
+        },
+    )
+]
 
 #: An UpSet over 300k rows is unreadable and slow to compute. Structural
 #: variants dominate nothing here but carry symbolic alleles whose keys never
@@ -27,6 +40,7 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="variants", dc_ref="snpeff_ann_v
 #: singletons.
 MAX_VARIANTS = 60_000
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"variant_key": pl.Utf8}
 # Set columns are one per caller-and-sample pair, known only at ingest.
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}

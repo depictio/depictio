@@ -29,13 +29,25 @@ from depictio.recipes.lib.genomic_bins import window_matrix
 
 MATRIX_DC_TAG = "bismark_binned_methylation"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="windows", dc_ref=MATRIX_DC_TAG),
+    RecipeSource(
+        ref="windows",
+        dc_ref=MATRIX_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "chromosome": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "methylation_pct": pl.Float64,
+        },
+    ),
 ]
 
 # Every column but the row label is a library of the run, so only the index is
 # declarable here; the rest is checked against the fixture, as in
 # `deeptools/correlation_matrix.py`.
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }

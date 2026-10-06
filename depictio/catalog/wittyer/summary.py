@@ -41,6 +41,7 @@ def truth_set_expr(file_col: str = "File", tool_col: str = "Tool") -> pl.Expr:
     )
 
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "precision": pl.Float64,

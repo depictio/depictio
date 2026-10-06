@@ -24,15 +24,25 @@ from depictio.models.models.transforms import RecipeSource
 
 _COLUMNS = ["sequence_id", "sample_id", "subject_id", "locus", "productive", "junction_length"]
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rearrangements",
+        input_schema={
+            "sequence_id": pl.Utf8,
+            "sample_id": pl.Utf8,
+            "subject_id": pl.Utf8,
+            "locus": pl.Utf8,
+            "productive": pl.Utf8,
+            "junction_length": pl.Utf8,
+        },
         glob_pattern="**/*__repertoire-pass.tsv",
         format="TSV",
         read_kwargs={"columns": _COLUMNS, "infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,

@@ -49,16 +49,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="design",
         path="pipeline_info/design_controls.csv",
         format="CSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "control_id": pl.Utf8,
+            "antibody": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
+    # The metadata sheet is user supplied: its id and group columns are chosen by parameter,
+    # so no column name is fixed.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "role": pl.Utf8,

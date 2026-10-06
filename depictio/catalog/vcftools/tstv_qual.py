@@ -21,11 +21,26 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.vcf import finite_float, sample_and_caller
 
 RAW_DC_TAG = "vcftools_tstv_qual_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="raw",
+        dc_ref=RAW_DC_TAG,
+        # The scan reads every column as text (infer_schema_length: 0).
+        input_schema={
+            "source_path": pl.Utf8,
+            "QUAL_THRESHOLD": pl.Utf8,
+            "N_Ts_GT_QUAL_THRESHOLD": pl.Utf8,
+            "N_Tv_GT_QUAL_THRESHOLD": pl.Utf8,
+            "Ts/Tv_GT_QUAL_THRESHOLD": pl.Utf8,
+        },
+    )
+]
 
 #: Points kept per series. The curve is smooth; 200 steps redraw it exactly.
 MAX_POINTS = 200
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,

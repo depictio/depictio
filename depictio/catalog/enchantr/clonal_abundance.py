@@ -23,9 +23,19 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="abundance",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "clone_id": pl.Utf8,
+            "rank": pl.Utf8,
+            "p": pl.Utf8,
+            "p_sd": pl.Utf8,
+            "lower": pl.Utf8,
+            "upper": pl.Utf8,
+        },
         path=(
             "clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/"
             "clonal_abundance.tsv"
@@ -38,6 +48,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,

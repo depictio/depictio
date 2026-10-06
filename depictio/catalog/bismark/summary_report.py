@@ -68,16 +68,24 @@ from depictio.recipes.lib.sample_hub import annotate_from_hub
 
 SAMPLES_DC_TAG = "samples"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summary",
         glob_pattern="**/bismark_summary_report.txt",
         format="TSV",
+        # No input_schema: the header is matched case-insensitively through _HEADER_MAP.
         read_kwargs={"infer_schema_length": 0},
     ),
-    RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
+    RecipeSource(
+        ref="samples",
+        dc_ref=SAMPLES_DC_TAG,
+        optional=True,
+        input_schema={"sample_id": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_reads": pl.Int64,

@@ -74,10 +74,17 @@ from depictio.recipes.lib.mag_bins import (
 #: scan its CheckM2 reports into a DC with this tag (see module docstring).
 RAW_DC_TAG = "checkm2_quality_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
+    # Only the path column is named: the report headers are matched by normalised spelling (_column).
+    RecipeSource(
+        ref="reports",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"source_path": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,

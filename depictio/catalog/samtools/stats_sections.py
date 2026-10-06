@@ -47,7 +47,14 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.sample_ids import strip_stage_suffixes
 
 RAW_DC_TAG = "samtools_stats_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="raw",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"raw_line": pl.Utf8, "source_path": pl.Utf8},
+    )
+]
 
 #: Column holding one full report line (raw DC scanned with a separator that
 #: never occurs in the file).
@@ -55,6 +62,7 @@ RAW_LINE_COL = "raw_line"
 #: Column carrying the report's path (``include_file_paths`` on the raw DC).
 SOURCE_PATH_COL = "source_path"
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "section": pl.Utf8,

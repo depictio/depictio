@@ -23,15 +23,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summary",
         path="reports/combgc/combgc_complete_summary.tsv",
         format="TSV",
+        # Only the interval columns are required; every other column is nulled when absent.
+        input_schema={
+            "contig_id": pl.Utf8,
+            "BGC_start": pl.Int64,
+            "BGC_end": pl.Int64,
+        },
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""], "quote_char": None},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "contig": pl.Utf8,

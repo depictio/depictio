@@ -22,10 +22,21 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.hamronization import primary_class
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="report", dc_ref="hamronization_report"),
+    RecipeSource(
+        ref="report",
+        input_schema={
+            "sample": pl.Utf8,
+            "tool": pl.Utf8,
+            "gene_symbol": pl.Utf8,
+            "drug_class": pl.Utf8,
+        },
+        dc_ref="hamronization_report",
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "drug_class": pl.Utf8,
     "top_tool": pl.Utf8,

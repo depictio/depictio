@@ -27,10 +27,23 @@ from depictio.models.models.transforms import RecipeSource
 
 SUMMARY_DC_TAG = "busco_batch_summary"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="summary", dc_ref=SUMMARY_DC_TAG),
+    RecipeSource(
+        ref="summary",
+        dc_ref=SUMMARY_DC_TAG,
+        input_schema={
+            "assembly_id": pl.Utf8,
+            "lineage": pl.Utf8,
+            "single_pct": pl.Float64,
+            "duplicated_pct": pl.Float64,
+            "fragmented_pct": pl.Float64,
+            "missing_pct": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "lineage": pl.Utf8,

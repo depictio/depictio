@@ -27,13 +27,47 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="arg", dc_ref="hamronization_report", optional=True),
-    RecipeSource(ref="amp", dc_ref="ampcombi_summary", optional=True),
-    RecipeSource(ref="bgc", dc_ref="combgc_summary", optional=True),
-    RecipeSource(ref="cazyme", dc_ref="dbcan_overview", optional=True),
+    RecipeSource(
+        ref="arg",
+        input_schema={
+            "sample": pl.Utf8,
+            "contig": pl.Utf8,
+        },
+        dc_ref="hamronization_report",
+        optional=True,
+    ),
+    RecipeSource(
+        ref="amp",
+        input_schema={
+            "sample": pl.Utf8,
+            "contig": pl.Utf8,
+        },
+        dc_ref="ampcombi_summary",
+        optional=True,
+    ),
+    RecipeSource(
+        ref="bgc",
+        input_schema={
+            "sample": pl.Utf8,
+            "contig": pl.Utf8,
+        },
+        dc_ref="combgc_summary",
+        optional=True,
+    ),
+    RecipeSource(
+        ref="cazyme",
+        input_schema={
+            "sample": pl.Utf8,
+            "contig": pl.Utf8,
+        },
+        dc_ref="dbcan_overview",
+        optional=True,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "contig": pl.Utf8,

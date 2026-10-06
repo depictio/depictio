@@ -34,6 +34,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="results",
@@ -41,6 +42,12 @@ SOURCES: list[RecipeSource] = [
         format="tsv",
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
         source_path="source_path",
+        input_schema={
+            "gene_id": pl.Utf8,
+            "apvEff": pl.Utf8,
+            "apvRvmP": pl.Utf8,
+            "apvRvmPAdj": pl.Utf8,
+        },
     ),
     RecipeSource(
         ref="genes",
@@ -48,9 +55,11 @@ SOURCES: list[RecipeSource] = [
         format="tsv",
         optional=True,
         read_kwargs={"columns": ["gene_id", "gene_name"], "infer_schema_length": 0},
+        input_schema={"gene_id": pl.Utf8, "gene_name": pl.Utf8},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "analysis": pl.Utf8,

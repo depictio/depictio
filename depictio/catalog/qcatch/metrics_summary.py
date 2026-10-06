@@ -42,10 +42,26 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "qcatch_metrics_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="metrics", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="metrics",
+        input_schema={
+            "source_path": pl.Utf8,
+            "Number of retained cells": pl.Utf8,
+            "Number of all processed cells": pl.Utf8,
+            "Mean reads per retained cell": pl.Utf8,
+            "Median UMI per retained cell": pl.Utf8,
+            "Median genes per retained cell": pl.Utf8,
+            "Total genes detected for retained cells": pl.Utf8,
+            "Mapping rate": pl.Utf8,
+            "Sequencing saturation": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "retained_cells": pl.Int64,

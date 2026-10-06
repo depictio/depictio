@@ -40,6 +40,7 @@ def truth_set_expr(file_col: str = "File", tool_col: str = "Tool") -> pl.Expr:
     )
 
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "caller": pl.Utf8,
     "label": pl.Utf8,  # callset id in the pipeline samplesheet

@@ -33,9 +33,16 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="events",
+        input_schema={
+            "event": pl.Utf8,
+            "dpsi_raw": pl.Utf8,
+            "pvalue_raw": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         glob_pattern="**/*_local_diffsplice.dpsi",
         format="tsv",
         read_kwargs={
@@ -48,6 +55,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "event_id": pl.Utf8,

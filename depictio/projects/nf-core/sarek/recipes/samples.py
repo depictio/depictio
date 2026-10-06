@@ -40,12 +40,14 @@ _CSV_KWARGS = {"infer_schema_length": 0}
 #: Design manifests, most complete first.
 _DESIGN_REFS = ("recalibrated", "markduplicates", "markduplicates_no_table")
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     *(
         RecipeSource(
             ref=ref,
             path=f"csv/{ref}.csv",
             format="CSV",
+            input_schema={"sample": pl.Utf8},
             read_kwargs=_CSV_KWARGS,
             optional=True,
         )
@@ -55,11 +57,13 @@ SOURCES: list[RecipeSource] = [
         ref="variantcalled",
         path="csv/variantcalled.csv",
         format="CSV",
+        input_schema={"sample": pl.Utf8},
         read_kwargs=_CSV_KWARGS,
         optional=True,
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "patient": pl.Utf8,

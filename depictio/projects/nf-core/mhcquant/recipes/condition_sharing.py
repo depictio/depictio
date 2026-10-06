@@ -22,11 +22,26 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peptides", dc_ref="mhcquant_peptides"),
-    RecipeSource(ref="samples", dc_ref="samples"),
+    RecipeSource(
+        ref="peptides",
+        dc_ref="mhcquant_peptides",
+        input_schema={
+            "sample": pl.Utf8,
+            "sequence": pl.Utf8,
+            "length": pl.Int64,
+            "length_class": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="samples",
+        dc_ref="samples",
+        input_schema={"sample_id": pl.Utf8, "Condition": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sequence": pl.Utf8,
     "length": pl.Int64,

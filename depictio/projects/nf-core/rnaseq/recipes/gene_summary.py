@@ -36,7 +36,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: a gene x library matrix whose column names are the sample ids.
     RecipeSource(
         ref="matrix",
         path="salmon/salmon.merged.gene_tpm.tsv",
@@ -45,6 +47,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,

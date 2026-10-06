@@ -44,10 +44,20 @@ from depictio.recipes.lib.quast_report import column_map, scalar_expressions, th
 
 RAW_DC_TAG = "quast_bins_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="summaries", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="summaries",
+        # The other QUAST columns are matched by folded name, so only Assembly is declared.
+        input_schema={
+            "Assembly": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,

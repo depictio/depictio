@@ -51,11 +51,29 @@ from depictio.models.models.transforms import RecipeSource
 CONTACTS_DC_TAG = "cooler_contacts_raw"
 BINS_DC_TAG = "cooler_bins_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="contacts", dc_ref=CONTACTS_DC_TAG),
-    RecipeSource(ref="bins", dc_ref=BINS_DC_TAG),
+    RecipeSource(
+        ref="contacts",
+        input_schema={
+            "source_path": pl.Utf8,
+            "bin1_id": pl.Utf8,
+            "bin2_id": pl.Utf8,
+            "count": pl.Utf8,
+        },
+        dc_ref=CONTACTS_DC_TAG,
+    ),
+    RecipeSource(
+        ref="bins",
+        input_schema={
+            "source_path": pl.Utf8,
+            "chrom": pl.Utf8,
+        },
+        dc_ref=BINS_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,

@@ -52,10 +52,36 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="predictions", dc_ref="mirdeep2_predictions"),
+    RecipeSource(
+        ref="predictions",
+        dc_ref="mirdeep2_predictions",
+        input_schema={
+            "sample": pl.Utf8,
+            "category": pl.Utf8,
+            "chromosome": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "strand": pl.Utf8,
+            "score": pl.Float64,
+            "true_positive_pct": pl.Float64,
+            "total_reads": pl.Int64,
+            "mature_reads": pl.Int64,
+            "star_reads": pl.Int64,
+            "loop_reads": pl.Int64,
+            "randfold_significant": pl.Utf8,
+            "rfam_alert": pl.Utf8,
+            "seed_match": pl.Utf8,
+            "mature_sequence": pl.Utf8,
+            "star_sequence": pl.Utf8,
+            "precursor_sequence": pl.Utf8,
+            "precursor_length": pl.Int64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "precursor_id": pl.Utf8,
     "chromosome": pl.Utf8,

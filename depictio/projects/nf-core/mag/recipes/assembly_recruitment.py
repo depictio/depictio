@@ -37,10 +37,23 @@ from depictio.models.models.transforms import RecipeSource
 
 DEPTHS_DC_TAG = "contig_depths"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="depths", dc_ref=DEPTHS_DC_TAG),
+    RecipeSource(
+        ref="depths",
+        dc_ref=DEPTHS_DC_TAG,
+        input_schema={
+            "assembly_id": pl.Utf8,
+            "assembler": pl.Utf8,
+            "sample": pl.Utf8,
+            "contig_length": pl.Int64,
+            "read_sample": pl.Utf8,
+            "depth": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "assembler": pl.Utf8,

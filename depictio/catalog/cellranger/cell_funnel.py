@@ -45,11 +45,28 @@ from depictio.recipes.lib.cellranger_samples import with_sample_column
 CELL_QC_DC_TAG = "cellranger_cell_qc"
 RAW_BARCODES_DC_TAG = "cellranger_raw_barcodes_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="cell_qc", dc_ref=CELL_QC_DC_TAG),
-    RecipeSource(ref="raw_barcodes", dc_ref=RAW_BARCODES_DC_TAG),
+    RecipeSource(
+        ref="cell_qc",
+        dc_ref=CELL_QC_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "barcode": pl.Utf8,
+            "qc_status": pl.Utf8,
+            "cellbender_cell": pl.Boolean,
+        },
+    ),
+    RecipeSource(
+        ref="raw_barcodes",
+        dc_ref=RAW_BARCODES_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcodes_observed": pl.Int64,

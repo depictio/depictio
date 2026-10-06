@@ -56,12 +56,28 @@ PEAKS_DC_TAG = "seacr_peaks"
 FRAGMENTS_DC_TAG = "seacr_fragment_lengths"
 FACTORS_DC_TAG = "bowtie2_spikein_factors"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=PEAKS_DC_TAG),
-    RecipeSource(ref="fragments", dc_ref=FRAGMENTS_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=PEAKS_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "total_signal": pl.Float64,
+            "start": pl.Int64,
+            "end": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="fragments",
+        dc_ref=FRAGMENTS_DC_TAG,
+        input_schema={"sample": pl.Utf8, "fragment_length": pl.Int64, "count": pl.Int64},
+    ),
+    # No input_schema: the spike-in factors are optional and a frame without them is ignored.
     RecipeSource(ref="factors", dc_ref=FACTORS_DC_TAG, optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,

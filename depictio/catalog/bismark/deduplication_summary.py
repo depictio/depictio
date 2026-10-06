@@ -41,10 +41,16 @@ from depictio.recipes.lib.bismark_reports import report_lines
 
 RAW_DC_TAG = "bismark_dedup_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="lines",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"line": pl.Utf8, "source_path": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_alignments": pl.Int64,

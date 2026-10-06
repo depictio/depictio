@@ -28,13 +28,53 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="summary", dc_ref="bcftools_stats_summary"),
-    RecipeSource(ref="tstv", dc_ref="bcftools_stats_tstv"),
-    RecipeSource(ref="variants", dc_ref="snpeff_ann_variants", optional=True),
-    RecipeSource(ref="calls", dc_ref="vcf_variants"),
+    RecipeSource(
+        ref="summary",
+        dc_ref="bcftools_stats_summary",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "n_records": pl.Int64,
+            "n_snps": pl.Int64,
+            "snp_fraction": pl.Float64,
+            "n_multiallelic_sites": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="tstv",
+        dc_ref="bcftools_stats_tstv",
+        input_schema={"sample": pl.Utf8, "caller": pl.Utf8, "ts_tv": pl.Float64},
+    ),
+    RecipeSource(
+        ref="variants",
+        dc_ref="snpeff_ann_variants",
+        optional=True,
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "is_pass": pl.Boolean,
+            "gt": pl.Utf8,
+            "dp": pl.Int64,
+            "vaf": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="calls",
+        dc_ref="vcf_variants",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "is_pass": pl.Boolean,
+            "gt": pl.Utf8,
+            "dp": pl.Int64,
+            "vaf": pl.Float64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "callset": pl.Utf8,
     "sample": pl.Utf8,

@@ -43,8 +43,24 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
+    RecipeSource(
+        ref="profiles",
+        dc_ref="taxpasta_profiles",
+        input_schema={
+            "profiler": pl.Utf8,
+            "database": pl.Utf8,
+            "profiler_db": pl.Utf8,
+            "sample": pl.Utf8,
+            "platform": pl.Utf8,
+            "taxonomy_id": pl.Utf8,
+            "name": pl.Utf8,
+            "rank": pl.Utf8,
+            "count": pl.Float64,
+            "rel_abundance": pl.Float64,
+        },
+    ),
     RecipeSource(
         ref="reports",
         # `**/`: the profiler and database directories sit at whatever depth the
@@ -64,6 +80,7 @@ SOURCES: list[RecipeSource] = [
             "infer_schema_length": 0,
         },
         optional=True,
+        input_schema={"line": pl.Utf8},
     ),
 ]
 
@@ -77,6 +94,7 @@ RANKS: tuple[str, ...] = (
     "species",
 )
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "profiler": pl.Utf8,
     "database": pl.Utf8,

@@ -43,16 +43,27 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
+        input_schema={
+            "sample": pl.Utf8,
+            "fasta": pl.Utf8,
+        },
         path="pipeline_info/samplesheet.valid.csv",
         format="CSV",
         read_kwargs={"infer_schema_length": 0},
     ),
-    RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
+    RecipeSource(
+        ref="metadata",
+        # No input_schema: the design table's columns are run-dependent.
+        dc_ref="metadata",
+        optional=True,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "condition": pl.Utf8,

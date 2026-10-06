@@ -30,13 +30,16 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema for counts: the columns are gene ids plus one per library, named by the run.
     RecipeSource(
         ref="counts",
         path="quantification/inframe_psite/gene_counts.tsv",
         format="tsv",
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA"]},
     ),
+    # No input_schema for samplesheet: the id column is found by name or position, `type` is optional.
     RecipeSource(
         ref="samplesheet",
         path="input/samplesheet.csv",
@@ -45,6 +48,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,

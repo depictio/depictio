@@ -19,15 +19,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="lengths",
         glob_pattern="**/*.ribowaltz.length_distribution.tsv",
         format="tsv",
+        input_schema={
+            "sample": pl.Utf8,
+            "length": pl.Int64,
+            "count": pl.Int64,
+        },
         read_kwargs={"infer_schema_length": 10000},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "length": pl.Int64,

@@ -46,11 +46,27 @@ from depictio.models.models.transforms import RecipeSource
 MAPINFO_DC_TAG = "simpleaf_mapinfo_raw"
 QUANTJSON_DC_TAG = "simpleaf_quantjson_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="map_info", dc_ref=MAPINFO_DC_TAG),
-    RecipeSource(ref="quant_json", dc_ref=QUANTJSON_DC_TAG),
+    RecipeSource(
+        ref="map_info",
+        input_schema={
+            "raw": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=MAPINFO_DC_TAG,
+    ),
+    RecipeSource(
+        ref="quant_json",
+        input_schema={
+            "raw": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=QUANTJSON_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "num_processed": pl.Int64,

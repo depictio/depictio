@@ -59,10 +59,27 @@ from depictio.recipes.lib.mag_bins import bin_id_lookup, file_stem
 
 RAW_DC_TAG = "prokka_gff_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="features", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="features",
+        input_schema={
+            "seqid": pl.Utf8,
+            "source": pl.Utf8,
+            "ftype": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "score": pl.Utf8,
+            "strand": pl.Utf8,
+            "phase": pl.Utf8,
+            "attributes": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,

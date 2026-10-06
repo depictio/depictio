@@ -59,16 +59,41 @@ SETTINGS_DC_TAG = "adapterremoval_settings"
 #: concatenated, which lets a multi-batch project ship one sheet per batch.
 SAMPLESHEET_GLOB = "input/*.tsv"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lanes", dc_ref=SETTINGS_DC_TAG),
+    RecipeSource(
+        ref="lanes",
+        dc_ref=SETTINGS_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "total_read_pairs": pl.Int64,
+            "total_reads": pl.Int64,
+            "discarded_reads": pl.Int64,
+            "collapsed_pairs": pl.Int64,
+            "retained_reads": pl.Int64,
+            "retained_nucleotides": pl.Int64,
+            "average_retained_length": pl.Float64,
+            "collapse_rate": pl.Float64,
+            "discard_rate": pl.Float64,
+        },
+    ),
     RecipeSource(
         ref="samplesheet",
         glob_pattern=SAMPLESHEET_GLOB,
         format="tsv",
+        input_schema={
+            "Sample_Name": pl.Utf8,
+            "Library_ID": pl.Utf8,
+            "Lane": pl.Utf8,
+            "SeqType": pl.Utf8,
+            "Strandedness": pl.Utf8,
+            "R1": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "lane_id": pl.Utf8,
     "sample_id": pl.Utf8,

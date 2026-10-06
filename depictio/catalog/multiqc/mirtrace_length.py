@@ -27,15 +27,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="report",
+        input_schema={
+            "anchor": pl.Utf8,
+            "type": pl.Utf8,
+            "plot_input_data": pl.Utf8,
+        },
         glob_pattern="**/*_data/multiqc.parquet",
         format="parquet",
         read_kwargs={"columns": ["anchor", "type", "plot_input_data"]},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "length": pl.Int64,

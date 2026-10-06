@@ -34,11 +34,23 @@ from depictio.recipes.lib.genomic_bins import window_id_expr
 
 MATRIX_DC_TAG = "bismark_binned_methylation"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="windows", dc_ref=MATRIX_DC_TAG),
+    RecipeSource(
+        ref="windows",
+        dc_ref=MATRIX_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "chromosome": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "methylation_pct": pl.Float64,
+        },
+    ),
 ]
 
 # Every remaining column is a library of the run; see `window_correlation.py`.
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "window_id": pl.Utf8,
     "chromosome": pl.Utf8,

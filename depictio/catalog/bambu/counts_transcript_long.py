@@ -27,15 +27,21 @@ from depictio.recipes.lib.bambu import (
 )
 from depictio.recipes.lib.sample_ids import strip_stage_suffixes
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="counts",
+        input_schema={
+            "TXNAME": pl.Utf8,
+            "GENEID": pl.Utf8,
+        },
         glob_pattern="**/bambu/counts_transcript.txt",
         format="tsv",
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,

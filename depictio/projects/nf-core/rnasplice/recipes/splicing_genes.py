@@ -30,12 +30,67 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="dexseq_exon", dc_ref="dexseq_exon_genes", optional=True),
-    RecipeSource(ref="dexseq_dtu", dc_ref="dexseq_dtu", optional=True),
-    RecipeSource(ref="edger", dc_ref="edger_genes", optional=True),
-    RecipeSource(ref="rmats", dc_ref="rmats_events", optional=True),
-    RecipeSource(ref="suppa", dc_ref="suppa_events", optional=True),
+    RecipeSource(
+        ref="dexseq_exon",
+        dc_ref="dexseq_exon_genes",
+        optional=True,
+        input_schema={
+            "contrast": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "log2fc": pl.Float64,
+            "padj": pl.Float64,
+            "significant": pl.Boolean,
+        },
+    ),
+    RecipeSource(
+        ref="dexseq_dtu",
+        dc_ref="dexseq_dtu",
+        optional=True,
+        input_schema={
+            "contrast": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "gene_padj": pl.Float64,
+            "gene_significant": pl.Boolean,
+        },
+    ),
+    RecipeSource(
+        ref="edger",
+        dc_ref="edger_genes",
+        optional=True,
+        input_schema={
+            "contrast": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "log2fc": pl.Float64,
+            "fdr": pl.Float64,
+            "significant": pl.Boolean,
+        },
+    ),
+    RecipeSource(
+        ref="rmats",
+        dc_ref="rmats_events",
+        optional=True,
+        input_schema={
+            "contrast": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "abs_dpsi": pl.Float64,
+            "fdr": pl.Float64,
+            "significant": pl.Boolean,
+        },
+    ),
+    RecipeSource(
+        ref="suppa",
+        dc_ref="suppa_events",
+        optional=True,
+        input_schema={
+            "contrast": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "abs_dpsi": pl.Float64,
+            "pvalue": pl.Float64,
+            "significant": pl.Boolean,
+        },
+    ),
 ]
 
 TOOLS: dict[str, str] = {
@@ -46,6 +101,7 @@ TOOLS: dict[str, str] = {
     "suppa": "SUPPA2",
 }
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,

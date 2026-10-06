@@ -53,10 +53,27 @@ from depictio.models.models.transforms import RecipeSource
 # (what a recipe glob source goes through) has no `include_file_paths`.
 RAW_DC_TAG = "gsea_report_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="report", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="report",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "NAME": pl.Utf8,
+            "SIZE": pl.Int64,
+            "ES": pl.Float64,
+            "NES": pl.Float64,
+            "NOM p-val": pl.Float64,
+            "FDR q-val": pl.Float64,
+            "FWER p-val": pl.Float64,
+            "RANK AT MAX": pl.Int64,
+            "LEADING EDGE": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "phenotype": pl.Utf8,

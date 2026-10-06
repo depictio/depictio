@@ -67,10 +67,25 @@ from depictio.recipes.lib.sample_ids import strip_stage_suffixes
 #: module docstring). Any pipeline reusing this recipe declares a DC with this tag.
 RAW_DC_TAG = "gtf_transcripts_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="gtf", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="gtf",
+        dc_ref=RAW_DC_TAG,
+        # The scan reads every column as text (infer_schema_length: 0). source_path is
+        # left out: transform() explains how the scan must be declared when it is missing.
+        input_schema={
+            "seqname": pl.Utf8,
+            "feature": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "strand": pl.Utf8,
+            "attributes": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "transcript_id": pl.Utf8,
     "gene_id": pl.Utf8,

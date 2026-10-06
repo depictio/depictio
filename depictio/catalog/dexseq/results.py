@@ -28,15 +28,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="results",
+        # The log2fold_* and dex.padj$gene columns are matched by pattern, so they are not declared.
+        input_schema={
+            "featureID": pl.Utf8,
+            "groupID": pl.Utf8,
+            "pvalue": pl.Utf8,
+        },
         glob_pattern="**/dexseq/*.results.txt",
         format="csv",
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "feature_id": pl.Utf8,
     "gene_id": pl.Utf8,

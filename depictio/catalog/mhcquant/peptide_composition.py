@@ -15,8 +15,22 @@ from depictio.models.models.transforms import RecipeSource
 
 PEPTIDES_DC_TAG = "mhcquant_peptides"
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="peptides", dc_ref=PEPTIDES_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="peptides",
+        input_schema={
+            "sample": pl.Utf8,
+            "peptide": pl.Utf8,
+            "length_class": pl.Utf8,
+            "charge_state": pl.Utf8,
+            "modification_state": pl.Utf8,
+        },
+        dc_ref=PEPTIDES_DC_TAG,
+    )
+]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "rank": pl.Utf8,

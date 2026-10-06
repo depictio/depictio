@@ -51,10 +51,16 @@ from depictio.models.models.transforms import RecipeSource
 #: docstring). Any pipeline reusing this recipe declares a DC with this tag.
 RAW_DC_TAG = "samtools_flagstat_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="lines",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"raw": pl.Utf8, "source_path": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,

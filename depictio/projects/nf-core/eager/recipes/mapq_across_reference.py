@@ -46,11 +46,20 @@ from depictio.recipes.lib.qualimap_raw import (
 RAW_DC_TAG = "qualimap_mapq_across_reference_raw"
 CONTIG_DC_TAG = "qualimap_bamqc_genome_results_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="windows", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="windows",
+        dc_ref=RAW_DC_TAG,
+        # One text line per row, split by the recipe (see qualimap_raw.split_columns).
+        input_schema={"raw": pl.Utf8, "source_path": pl.Utf8},
+    ),
+    # No input_schema on reports: the optional genome_results blob is parsed line by
+    # line, and _contig_starts already falls back when its columns are absent.
     RecipeSource(ref="reports", dc_ref=CONTIG_DC_TAG, optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,

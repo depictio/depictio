@@ -30,9 +30,19 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="transcripts",
+        # The log2fold_<A>_<B> column is named after the contrast, so it is not declared.
+        input_schema={
+            "source_path": pl.Utf8,
+            "groupID": pl.Utf8,
+            "featureID": pl.Utf8,
+            "exonBaseMean": pl.Utf8,
+            "pvalue": pl.Utf8,
+            "padj": pl.Utf8,
+        },
         glob_pattern="**/DEXSeqResults.*.tsv",
         format="tsv",
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
@@ -40,6 +50,11 @@ SOURCES: list[RecipeSource] = [
     ),
     RecipeSource(
         ref="genes",
+        input_schema={
+            "source_path": pl.Utf8,
+            "groupID": pl.Utf8,
+            "padj": pl.Utf8,
+        },
         glob_pattern="**/perGeneQValue.*.tsv",
         format="tsv",
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
@@ -47,6 +62,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,

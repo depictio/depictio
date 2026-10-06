@@ -22,11 +22,21 @@ from depictio.models.models.transforms import RecipeSource
 
 MARKER_EXPRESSION_DC_TAG = "cellranger_marker_expression"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="markers", dc_ref=MARKER_EXPRESSION_DC_TAG),
+    RecipeSource(
+        ref="markers",
+        dc_ref=MARKER_EXPRESSION_DC_TAG,
+        input_schema={
+            "cluster_label": pl.Utf8,
+            "gene": pl.Utf8,
+            "mean_expression": pl.Float64,
+        },
+    ),
 ]
 
 #: only `gene` is guaranteed; the per-cluster value columns are data-dependent.
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene": pl.Utf8,
 }

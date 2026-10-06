@@ -22,11 +22,21 @@ from depictio.recipes.lib.nonpareil import attribute_library, samplesheet_lookup
 
 # Recipes are loaded by file path, not as a package, so a sibling recipe cannot be
 # imported: the source declaration is repeated rather than shared with curves.py.
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summaries",
         glob_pattern="nonpareil/*all_samples.tsv",
         format="tsv",
+        input_schema={
+            "library": pl.Utf8,
+            "kappa": pl.Float64,
+            "coverage": pl.Float64,
+            "lr": pl.Float64,
+            "model_r": pl.Float64,
+            "lr_star": pl.Float64,
+            "diversity": pl.Float64,
+        },
         read_kwargs={
             "has_header": False,
             "skip_rows": 1,
@@ -42,9 +52,11 @@ SOURCES: list[RecipeSource] = [
             "truncate_ragged_lines": True,
         },
     ),
+    # No input_schema on samples: the id and platform columns are matched by alias.
     RecipeSource(ref="samples", dc_ref="samplesheet", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "library": pl.Utf8,

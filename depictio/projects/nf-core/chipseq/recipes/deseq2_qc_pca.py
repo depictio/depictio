@@ -44,7 +44,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: one sample id column plus PCn components whose names carry the variance.
     RecipeSource(
         ref="pca",
         glob_pattern="**/*pca.vals_mqc.tsv",
@@ -57,6 +59,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "consensus_set": pl.Utf8,

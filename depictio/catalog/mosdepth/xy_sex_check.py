@@ -30,8 +30,16 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="xy", glob_pattern="**/mosdepth-xy-coverage-plot.txt", format="tsv")
+    RecipeSource(
+        ref="xy",
+        glob_pattern="**/mosdepth-xy-coverage-plot.txt",
+        format="tsv",
+        # "Chromosome X" / "Chromosome Y" are left out: transform() reports them with an
+        # explanation of when MultiQC omits them, which a generic check would pre-empt.
+        input_schema={"Sample": pl.Utf8},
+    )
 ]
 
 #: X/Y mean-depth ratio at or above which the library reads as XX. See the
@@ -67,6 +75,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,  # md (duplicate-marked) or recal (BQSR-recalibrated)

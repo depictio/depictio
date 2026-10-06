@@ -16,11 +16,29 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="variants", dc_ref="snpeff_ann_variants")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="variants",
+        dc_ref="snpeff_ann_variants",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "gene": pl.Utf8,
+            "aa_pos": pl.Int64,
+            "impact": pl.Utf8,
+            "consequence": pl.Utf8,
+            "hgvs_p": pl.Utf8,
+            "variant_key": pl.Utf8,
+            "vaf": pl.Float64,
+        },
+    )
+]
 
 #: Genes kept, ranked by how many coding variants they carry across the run.
 TOP_GENES = 40
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,

@@ -30,9 +30,14 @@ from depictio.models.models.transforms import RecipeSource
 
 IONS_DC_TAG = "mhcquant_fragment_ions"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="peptides",
+        input_schema={
+            "sequence": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         glob_pattern="*.tsv",
         format="tsv",
         # `start`/`end` hold `;`-joined positions for shared peptides and the
@@ -41,9 +46,20 @@ SOURCES: list[RecipeSource] = [
         source_path="source_path",
     ),
     # Fragment-ion summary, only written by runs with --annotate_ions.
-    RecipeSource(ref="ions", dc_ref=IONS_DC_TAG, optional=True),
+    RecipeSource(
+        ref="ions",
+        input_schema={
+            "sample": pl.Utf8,
+            "peptide": pl.Utf8,
+            "fragment_ions": pl.Int64,
+            "fragment_error_ppm": pl.Float64,
+        },
+        dc_ref=IONS_DC_TAG,
+        optional=True,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,

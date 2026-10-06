@@ -49,10 +49,19 @@ from depictio.models.models.transforms import RecipeSource
 # attached, and this recipe consumes it by tag.
 RAW_DC_TAG = "rseqc_read_distribution_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="report", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="report",
+        input_schema={
+            "source_path": pl.Utf8,
+            "line": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "rank": pl.Utf8,

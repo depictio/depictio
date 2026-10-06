@@ -40,10 +40,14 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "samtools_idxstats_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="idxstats", dc_ref=RAW_DC_TAG),
+    # A headerless text scan: only source_path is named, the sequence name and length
+    # are the first two other columns by position.
+    RecipeSource(ref="idxstats", dc_ref=RAW_DC_TAG, input_schema={"source_path": pl.Utf8}),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "sample": pl.Utf8,

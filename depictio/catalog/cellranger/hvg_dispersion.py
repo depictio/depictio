@@ -53,13 +53,48 @@ SELECTED_DC_TAG = "cellranger_features_selected_raw"
 MATRIX_DC_TAG = "cellranger_filtered_matrix_raw"
 FEATURES_DC_TAG = "cellranger_filtered_features_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="dispersion", dc_ref=DISPERSION_DC_TAG),
-    RecipeSource(ref="selected", dc_ref=SELECTED_DC_TAG, optional=True),
-    RecipeSource(ref="matrix", dc_ref=MATRIX_DC_TAG),
-    RecipeSource(ref="features", dc_ref=FEATURES_DC_TAG),
+    RecipeSource(
+        ref="dispersion",
+        dc_ref=DISPERSION_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Feature": pl.Utf8,
+            "Normalized.Dispersion": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="selected",
+        dc_ref=SELECTED_DC_TAG,
+        optional=True,
+        input_schema={
+            "source_path": pl.Utf8,
+            "feature": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="matrix",
+        dc_ref=MATRIX_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "gene_idx": pl.Int64,
+            "barcode_idx": pl.Int64,
+            "count": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="features",
+        dc_ref=FEATURES_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "gene_idx": pl.Int64,
+            "feature_name": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene": pl.Utf8,

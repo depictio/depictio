@@ -123,21 +123,107 @@ PCA_DC_TAG = "cellranger_pca_raw"
 CELLBENDER_CELLS_DC_TAG = "cellranger_cellbender_barcodes_raw"
 DIFFEXP_RAW_DC_TAG = "cellranger_diffexp_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="matrix", dc_ref=MATRIX_DC_TAG),
-    RecipeSource(ref="features", dc_ref=FEATURES_DC_TAG),
-    RecipeSource(ref="barcode_index", dc_ref=BARCODE_INDEX_DC_TAG),
-    RecipeSource(ref="graphclust", dc_ref=GRAPHCLUST_DC_TAG),
-    RecipeSource(ref="kmeans", dc_ref=KMEANS_DC_TAG),
-    RecipeSource(ref="umap", dc_ref=UMAP_DC_TAG),
-    RecipeSource(ref="tsne", dc_ref=TSNE_DC_TAG),
-    RecipeSource(ref="pca", dc_ref=PCA_DC_TAG),
-    RecipeSource(ref="cellbender_cells", dc_ref=CELLBENDER_CELLS_DC_TAG),
-    RecipeSource(ref="diffexp", dc_ref=DIFFEXP_RAW_DC_TAG),
+    RecipeSource(
+        ref="matrix",
+        dc_ref=MATRIX_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "gene_idx": pl.Int64,
+            "barcode_idx": pl.Int64,
+            "count": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="features",
+        dc_ref=FEATURES_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "gene_idx": pl.Int64,
+            "feature_name": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="barcode_index",
+        dc_ref=BARCODE_INDEX_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "barcode_idx": pl.Int64,
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="graphclust",
+        dc_ref=GRAPHCLUST_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "Cluster": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="kmeans",
+        dc_ref=KMEANS_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "Cluster": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="umap",
+        dc_ref=UMAP_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "UMAP-1": pl.Float64,
+            "UMAP-2": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="tsne",
+        dc_ref=TSNE_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "TSNE-1": pl.Float64,
+            "TSNE-2": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="pca",
+        dc_ref=PCA_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Barcode": pl.Utf8,
+            "PC-1": pl.Float64,
+            "PC-2": pl.Float64,
+            "PC-3": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="cellbender_cells",
+        dc_ref=CELLBENDER_CELLS_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "barcode": pl.Utf8,
+        },
+    ),
+    # The per-cluster `Cluster N ...` columns are named by the data, so only the fixed ones are declared.
+    RecipeSource(
+        ref="diffexp",
+        dc_ref=DIFFEXP_RAW_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Feature Name": pl.Utf8,
+        },
+    ),
 ]
 
 _KMEANS_KS = list(range(2, 11))
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,

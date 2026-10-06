@@ -12,11 +12,28 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="genes", dc_ref="snpeff_genes")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="genes",
+        dc_ref="snpeff_genes",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "gene_name": pl.Utf8,
+            "n_high": pl.Int64,
+            "n_moderate": pl.Int64,
+            "n_low": pl.Int64,
+            "n_coding": pl.Int64,
+            "n_variants": pl.Int64,
+        },
+    )
+]
 
 #: An oncoplot is read row by row; thirty genes is the usual ceiling.
 TOP_GENES = 30
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "gene": pl.Utf8,

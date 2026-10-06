@@ -34,11 +34,21 @@ from depictio.models.models.transforms import RecipeSource
 
 _READ = {"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]}
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="genes",
         glob_pattern="**/contrast_*.usage.gene.csv",
         format="csv",
+        input_schema={
+            "Geneid": pl.Utf8,
+            "Chr": pl.Utf8,
+            "Strand": pl.Utf8,
+            "NExons": pl.Utf8,
+            "gene.F": pl.Utf8,
+            "FDR": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         read_kwargs=_READ,
         source_path="source_path",
     ),
@@ -46,6 +56,11 @@ SOURCES: list[RecipeSource] = [
         ref="simes",
         glob_pattern="**/contrast_*.usage.simes.csv",
         format="csv",
+        input_schema={
+            "Geneid": pl.Utf8,
+            "FDR": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         read_kwargs=_READ,
         source_path="source_path",
     ),
@@ -53,11 +68,21 @@ SOURCES: list[RecipeSource] = [
         ref="exons",
         glob_pattern="**/contrast_*.usage.exon.csv",
         format="csv",
+        input_schema={
+            "Geneid": pl.Utf8,
+            "Chr": pl.Utf8,
+            "Start": pl.Utf8,
+            "End": pl.Utf8,
+            "logFC": pl.Utf8,
+            "FDR": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         read_kwargs=_READ,
         source_path="source_path",
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,

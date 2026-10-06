@@ -61,10 +61,21 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the template must scan the tables into.
 RAW_DC_TAG = "damageprofiler_lgdistribution_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="lengths", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="lengths",
+        input_schema={
+            "Std": pl.Utf8,
+            "Length": pl.Int64,
+            "Occurrences": pl.Int64,
+            "source_path": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "strand": pl.Utf8,

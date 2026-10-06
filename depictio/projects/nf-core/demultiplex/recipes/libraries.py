@@ -50,12 +50,48 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="demux", dc_ref="demux_stats"),
-    RecipeSource(ref="qc", dc_ref="fastp_library_qc", optional=True),
+    RecipeSource(
+        ref="demux",
+        dc_ref="demux_stats",
+        input_schema={
+            "sample": pl.Utf8,
+            "flowcell": pl.Utf8,
+            "lane": pl.Int64,
+            "index": pl.Utf8,
+            "is_undetermined": pl.Boolean,
+            "reads": pl.Int64,
+            "yield_mb": pl.Float64,
+            "pct_q30": pl.Float64,
+            "mean_quality": pl.Float64,
+            "pct_perfect_index": pl.Float64,
+        },
+    ),
+    RecipeSource(
+        ref="qc",
+        dc_ref="fastp_library_qc",
+        optional=True,
+        input_schema={
+            "sample": pl.Utf8,
+            "lane": pl.Int64,
+            "fastq_id": pl.Utf8,
+            "reads_before": pl.Int64,
+            "reads_after": pl.Int64,
+            "pct_passed": pl.Float64,
+            "pct_duplication": pl.Float64,
+            "pct_adapter_trimmed": pl.Float64,
+            "gc_pct": pl.Float64,
+            "pct_q30_after": pl.Float64,
+            "insert_size_peak": pl.Int64,
+        },
+    ),
+    # The metadata sheet is user supplied: its first column is the library id and every
+    # other column is passed through, so no column name is fixed.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "flowcell": pl.Utf8,

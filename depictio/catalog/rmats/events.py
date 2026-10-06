@@ -38,16 +38,37 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="events",
         glob_pattern="**/*.MATS.JCEC.txt",
         format="tsv",
+        # The columns shared by all five event types; the region coordinates differ per
+        # type and are looked up when present. The read is all text (infer_schema_length: 0).
+        input_schema={
+            "ID": pl.Utf8,
+            "GeneID": pl.Utf8,
+            "geneSymbol": pl.Utf8,
+            "chr": pl.Utf8,
+            "strand": pl.Utf8,
+            "IncLevel1": pl.Utf8,
+            "IncLevel2": pl.Utf8,
+            "IncLevelDifference": pl.Utf8,
+            "PValue": pl.Utf8,
+            "FDR": pl.Utf8,
+            "IJC_SAMPLE_1": pl.Utf8,
+            "SJC_SAMPLE_1": pl.Utf8,
+            "IJC_SAMPLE_2": pl.Utf8,
+            "SJC_SAMPLE_2": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
         source_path="source_path",
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "event_id": pl.Utf8,

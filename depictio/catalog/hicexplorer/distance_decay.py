@@ -44,10 +44,23 @@ from depictio.models.models.transforms import RecipeSource
 #: scan the per-sample distcount files into a DC with this tag (see module docstring).
 RAW_DC_TAG = "hicexplorer_distance_decay_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="decay", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="decay",
+        input_schema={
+            "Matrix": pl.Utf8,
+            "Chromosome": pl.Utf8,
+            "Distance": pl.Int64,
+            "Contacts": pl.Float64,
+            "Number_bins": pl.Int64,
+            "Scale_factor": pl.Float64,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,

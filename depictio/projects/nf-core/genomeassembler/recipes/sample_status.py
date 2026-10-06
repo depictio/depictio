@@ -30,11 +30,27 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # The samplesheet is passed through whole (any column set; `sample` falls back to the
+    # first column), so no column is required.
     RecipeSource(ref="samplesheet", dc_ref="samplesheet"),
-    RecipeSource(ref="assemblies", dc_ref="assemblies", optional=True),
+    RecipeSource(
+        ref="assemblies",
+        dc_ref="assemblies",
+        optional=True,
+        input_schema={
+            "sample": pl.Utf8,
+            "stage": pl.Utf8,
+            "stage_rank": pl.Int64,
+            "qv": pl.Float64,
+            "busco_complete": pl.Float64,
+            "n50": pl.Int64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "assembler_used": pl.Utf8,

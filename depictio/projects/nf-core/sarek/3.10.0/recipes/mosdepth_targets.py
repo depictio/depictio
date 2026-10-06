@@ -26,7 +26,20 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "mosdepth_regions_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="regions", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="regions",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "chrom": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "coverage": pl.Float64,
+            "source_path": pl.Utf8,
+        },
+    )
+]
 
 PRIMARY_CONTIG_RE = r"^(?:chr)?(?:\d{1,2}|X|Y|M|MT)$"
 _NAME_RE = r"^(.+)\.([^.]+)\.regions\.bed(?:\.gz)?$"
@@ -59,6 +72,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "chrom": pl.Utf8,
     "pos": pl.Int64,  # target start, 0-based

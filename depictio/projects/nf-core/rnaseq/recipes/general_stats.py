@@ -37,7 +37,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: MultiQC writes a run-dependent column set, each metric is read when present and the sample name is the first column.
     RecipeSource(
         ref="stats",
         glob_pattern="multiqc/**/multiqc_general_stats.txt",
@@ -70,6 +72,7 @@ _QUALIMAP_REGIONS = (
     "qualimap_rnaseq-reads_aligned_intergenic",
 )
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,

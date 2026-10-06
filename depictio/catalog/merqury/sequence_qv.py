@@ -33,10 +33,17 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "merqury_sequence_qv_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="sequences", dc_ref=RAW_DC_TAG),
+    # Headerless scan: the value columns are positional, so only the path column is named.
+    RecipeSource(
+        ref="sequences",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"source_path": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "sequence": pl.Utf8,

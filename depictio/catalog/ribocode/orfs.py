@@ -24,16 +24,32 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="orfs",
         glob_pattern="**/*_collapsed.txt",
         format="tsv",
+        input_schema={
+            "transcript_id": pl.Utf8,
+            "gene_id": pl.Utf8,
+            "gene_name": pl.Utf8,
+            "gene_type": pl.Utf8,
+            "chrom": pl.Utf8,
+            "strand": pl.Utf8,
+            "ORF_gstop": pl.Utf8,
+            "ORF_type": pl.Utf8,
+            "ORF_length": pl.Utf8,
+            "Psites_sum_frame0": pl.Utf8,
+            "adjusted_pval": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0, "null_values": ["None", "NA", ""]},
         source_path="source_path",
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "orf_id": pl.Utf8,

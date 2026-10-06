@@ -40,12 +40,42 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="counts", dc_ref="mirtop_mirna_counts"),
-    RecipeSource(ref="composition", dc_ref="mirtrace_composition", optional=True),
-    RecipeSource(ref="predictions", dc_ref="mirdeep2_predictions", optional=True),
+    RecipeSource(
+        ref="counts",
+        input_schema={
+            "sample": pl.Utf8,
+            "reads": pl.Int64,
+            "cpm": pl.Float64,
+            "reference_pct": pl.Float64,
+        },
+        dc_ref="mirtop_mirna_counts",
+    ),
+    RecipeSource(
+        ref="composition",
+        input_schema={
+            "sample": pl.Utf8,
+            "rank": pl.Utf8,
+            "taxon": pl.Utf8,
+            "abundance": pl.Float64,
+            "percent": pl.Float64,
+        },
+        dc_ref="mirtrace_composition",
+        optional=True,
+    ),
+    RecipeSource(
+        ref="predictions",
+        input_schema={
+            "sample": pl.Utf8,
+            "category": pl.Utf8,
+        },
+        dc_ref="mirdeep2_predictions",
+        optional=True,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "mirna_reads": pl.Int64,

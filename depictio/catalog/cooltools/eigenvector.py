@@ -68,10 +68,25 @@ from depictio.recipes.lib.cooltools import float_col
 #: scan the per-sample vecs files into a DC with this tag (see module docstring).
 RAW_DC_TAG = "cooltools_eigenvector_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="vecs", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="vecs",
+        input_schema={
+            "source_path": pl.Utf8,
+            "chrom": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "weight": pl.Utf8,
+            "E1": pl.Utf8,
+            "E2": pl.Utf8,
+            "E3": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,

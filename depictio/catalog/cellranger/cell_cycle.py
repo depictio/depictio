@@ -59,13 +59,48 @@ FEATURES_DC_TAG = "cellranger_filtered_features_raw"
 BARCODE_INDEX_DC_TAG = "cellranger_filtered_barcode_index_raw"
 CELL_QC_DC_TAG = "cellranger_cell_qc"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="matrix", dc_ref=MATRIX_DC_TAG),
-    RecipeSource(ref="features", dc_ref=FEATURES_DC_TAG),
-    RecipeSource(ref="barcode_index", dc_ref=BARCODE_INDEX_DC_TAG),
-    RecipeSource(ref="cell_qc", dc_ref=CELL_QC_DC_TAG),
+    RecipeSource(
+        ref="matrix",
+        dc_ref=MATRIX_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "gene_idx": pl.Int64,
+            "barcode_idx": pl.Int64,
+            "count": pl.Int64,
+        },
+    ),
+    RecipeSource(
+        ref="features",
+        dc_ref=FEATURES_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "gene_idx": pl.Int64,
+            "feature_name": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="barcode_index",
+        dc_ref=BARCODE_INDEX_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "barcode_idx": pl.Int64,
+            "barcode": pl.Utf8,
+        },
+    ),
+    RecipeSource(
+        ref="cell_qc",
+        dc_ref=CELL_QC_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "barcode": pl.Utf8,
+            "cluster_label": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,

@@ -83,10 +83,16 @@ from depictio.models.models.transforms import RecipeSource
 #: scan HiC-Pro's `stats/` key/value files into a DC with this tag.
 RAW_DC_TAG = "hicpro_stats_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="stats", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="stats",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"source_path": pl.Utf8, "column_1": pl.Utf8, "column_2": pl.Utf8},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_pairs": pl.Int64,

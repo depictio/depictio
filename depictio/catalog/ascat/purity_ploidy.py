@@ -38,10 +38,17 @@ from depictio.models.models.transforms import RecipeSource
 
 PURITY_PLOIDY_DC_TAG = "ascat_purityploidy_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="purityploidy", dc_ref=PURITY_PLOIDY_DC_TAG),
+    # `sample` is read when present, else taken from source_path, so neither is required.
+    RecipeSource(
+        ref="purityploidy",
+        dc_ref=PURITY_PLOIDY_DC_TAG,
+        input_schema={"AberrantCellFraction": pl.Float64, "Ploidy": pl.Float64},
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "purity": pl.Float64,

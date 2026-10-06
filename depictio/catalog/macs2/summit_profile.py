@@ -50,10 +50,22 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads: the tidy per-peak narrowPeak table.
 SOURCE_DC_TAG = "macs2_peaks"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=SOURCE_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=SOURCE_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "chr": pl.Utf8,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "summit": pl.Int64,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "offset_bp": pl.Int64,

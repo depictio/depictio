@@ -30,15 +30,25 @@ from depictio.models.models.transforms import RecipeSource
 #: concatenated, which lets a multi-batch project ship one sheet per batch.
 SAMPLESHEET_GLOB = "input/*.tsv"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
         glob_pattern=SAMPLESHEET_GLOB,
         format="tsv",
+        input_schema={
+            "Sample_Name": pl.Utf8,
+            "Library_ID": pl.Utf8,
+            "Lane": pl.Utf8,
+            "Organism": pl.Utf8,
+            "SeqType": pl.Utf8,
+            "UDG_Treatment": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "sample_name": pl.Utf8,

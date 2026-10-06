@@ -16,8 +16,21 @@ from depictio.models.models.transforms import RecipeSource
 
 REPLICATES_DC_TAG = "mhcquant_replicate_intensity"
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="replicates", dc_ref=REPLICATES_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="replicates",
+        input_schema={
+            "sample": pl.Utf8,
+            "peptide": pl.Utf8,
+            "replicate": pl.Int64,
+            "log10_intensity": pl.Float64,
+        },
+        dc_ref=REPLICATES_DC_TAG,
+    )
+]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,

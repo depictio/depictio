@@ -32,10 +32,23 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "cellranger_metrics_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="metrics", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="metrics",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "source_path": pl.Utf8,
+            "Reads Mapped Confidently to Exonic Regions": pl.Utf8,
+            "Reads Mapped Confidently to Intronic Regions": pl.Utf8,
+            "Reads Mapped Confidently to Intergenic Regions": pl.Utf8,
+            "Reads Mapped Antisense to Gene": pl.Utf8,
+            "Reads Mapped to Genome": pl.Utf8,
+        },
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "region": pl.Utf8,

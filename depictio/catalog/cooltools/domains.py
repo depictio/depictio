@@ -54,10 +54,23 @@ from depictio.recipes.lib.cooltools import float_col
 #: Same raw scan as `cooltools/insulation.py`.
 RAW_DC_TAG = "cooltools_insulation_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="insulation", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="insulation",
+        input_schema={
+            "source_path": pl.Utf8,
+            "chrom": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "region": pl.Utf8,
+            "is_bad_bin": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,

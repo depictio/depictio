@@ -34,7 +34,21 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "mosdepth_regions_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="regions", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="regions",
+        dc_ref=RAW_DC_TAG,
+        # The scan reads every column as text (infer_schema_length: 0).
+        input_schema={
+            "chrom": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "coverage": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    )
+]
 
 #: Width of one genomic window, in base pairs. A coverage tile stays readable
 #: and stays within the renderer's point budget at roughly 15 000 rows; this
@@ -83,6 +97,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "chromosome": pl.Utf8,
     "position": pl.Int64,  # window start

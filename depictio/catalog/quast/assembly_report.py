@@ -51,10 +51,19 @@ from depictio.recipes.lib.quast_report import (
 
 RAW_DC_TAG = "quast_assembly_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="reports",
+        # The other QUAST columns are matched by folded name, so only Assembly is declared.
+        input_schema={
+            "Assembly": pl.Utf8,
+        },
+        dc_ref=RAW_DC_TAG,
+    ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "assembler": pl.Utf8,

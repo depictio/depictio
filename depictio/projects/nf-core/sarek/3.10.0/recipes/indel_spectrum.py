@@ -21,10 +21,24 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-SOURCES: list[RecipeSource] = [RecipeSource(ref="sections", dc_ref="bcftools_stats_sections")]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="sections",
+        dc_ref="bcftools_stats_sections",
+        input_schema={
+            "sample": pl.Utf8,
+            "caller": pl.Utf8,
+            "section": pl.Utf8,
+            "bin": pl.Float64,
+            "count": pl.Int64,
+        },
+    )
+]
 
 MAX_LENGTH = 20
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,

@@ -17,8 +17,24 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.vcf import finite_float, sample_and_caller
 
 RAW_DC_TAG = "vcftools_filter_summary_raw"
-SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="raw",
+        dc_ref=RAW_DC_TAG,
+        # The scan reads every column as text (infer_schema_length: 0).
+        input_schema={
+            "source_path": pl.Utf8,
+            "FILTER": pl.Utf8,
+            "N_VARIANTS": pl.Utf8,
+            "N_Ts": pl.Utf8,
+            "N_Tv": pl.Utf8,
+            "Ts/Tv": pl.Utf8,
+        },
+    )
+]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,

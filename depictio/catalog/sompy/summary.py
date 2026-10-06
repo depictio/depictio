@@ -45,11 +45,12 @@ def truth_set_expr(file_col: str = "File", tool_col: str = "Tool") -> pl.Expr:
     )
 
 
-# som.py always emits the binomial confidence intervals, so they are required
-# output columns — the `metric_ci_bars` render (catalog/sompy/summary.yaml) binds them.
 #: Truth-set size in the pipeline's harmonised table; absent from older tables.
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"tp_base": pl.Int64}
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+# som.py always emits the binomial confidence intervals, so they are required
+# output columns — the `metric_ci_bars` render (catalog/sompy/summary.yaml) binds them.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "caller": pl.Utf8,
     "label": pl.Utf8,  # callset id in the pipeline samplesheet

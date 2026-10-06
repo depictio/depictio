@@ -54,8 +54,14 @@ from depictio.recipes.lib.mag_bins import file_stem, label_lookup
 
 RAW_DC_TAG = "gtdbtk_summary_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="summaries", dc_ref=RAW_DC_TAG),
+    # The optional GTDB-Tk columns (classification, closest_genome_*) are read when present.
+    RecipeSource(
+        ref="summaries",
+        dc_ref=RAW_DC_TAG,
+        input_schema={"user_genome": pl.Utf8, "source_path": pl.Utf8},
+    ),
 ]
 
 #: GTDB rank prefix -> output column, root first. `class` is a Python keyword,
@@ -70,6 +76,7 @@ RANKS: tuple[tuple[str, str], ...] = (
     ("s", "species"),
 )
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,
