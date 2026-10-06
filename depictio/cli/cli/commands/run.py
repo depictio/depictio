@@ -141,6 +141,7 @@ def _write_result_json(
     viewer_url: str | None,
     template_id: str | None,
     locations: list[str] | None = None,
+    composed: dict | None = None,
 ) -> None:
     """Write how the run ended for ``--result-json``; never fails the run.
 
@@ -172,6 +173,8 @@ def _write_result_json(
         ],
         "template_id": template_id,
     }
+    if composed is not None:
+        result["composed"] = composed
     try:
         Path(path).expanduser().write_text(json.dumps(result, indent=2))
     except OSError as e:
@@ -1210,6 +1213,11 @@ class IngestOptions:
     template: str | None = None
     project_config_path: str = ""
     project_name: str | None = None
+    # Compose the template from the catalog even when a bundled one fits, and
+    # which files the catalog does not recognise to ingest as well.
+    compose: bool = False
+    include_unknown: bool = False
+    include: tuple[str, ...] = ()
     # A data manifest (URL or local file) filling a manifest-driven template.
     manifest: str | None = None
     # TAG=LOCATION overrides of a data collection's scan, applied after resolution.
@@ -1291,6 +1299,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     template = opts.template
     project_config_path = opts.project_config_path
     project_name = opts.project_name
+    compose = opts.compose
+    include_unknown = opts.include_unknown
+    include = list(opts.include)
     manifest = opts.manifest
     bind = list(opts.bind)
     var = list(opts.var)
@@ -1442,13 +1453,85 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # template too. This is the fallback for a pipeline whose manifest the
     # trigger could not forward (an older Nextflow, a hand-run CLI, a
     # non-Nextflow engine).
-    if detected_info is not None and not template and not project_config_path:
+    if detected_info is not None and not template and not project_config_path and not compose:
         from depictio.cli.cli.utils.templates import select_template_for_run
 
         detected_template = select_template_for_run(detected_info)
         if detected_template:
             template = detected_template
             rich_print_checked_statement(f"Auto-selected template: {escape(template)}", "success")
+
+    if compose and (template or project_config_path):
+        rich_print_checked_statement(
+            "--compose builds the template itself: drop --template / --project-config-path.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    # No template fits (or --compose): compose one from the files the catalog
+    # recognises, the way MultiQC builds a report from what it finds. The
+    # result is an ordinary template directory, so everything below is the
+    # template path every bundled pipeline takes.
+    composed = None
+    # The catalog is matched against a walk of the directory: a local one.
+    if (
+        data_root
+        and not remote_data_root
+        and not manifest
+        and not template
+        and not project_config_path
+    ):
+        from depictio.cli.cli.utils.compose import (
+            ComposedTemplate,
+            compose_template,
+            print_report,
+        )
+
+        if compose:
+            reason = "--compose"
+        elif detected_info is None or not detected_info.pipeline_name:
+            reason = (
+                f"Could not tell which pipeline produced {escape(data_root)} "
+                "(no Nextflow pipeline_info/ or Snakemake metadata naming one)"
+            )
+        else:
+            reason = f"No bundled template ships for {escape(detected_info.pipeline_name)}"
+        rich_print_section_separator("Step 0-: Composing a template from the catalog")
+        rich_print_checked_statement(
+            f"{reason}: composing the dashboard from the files the catalog recognises",
+            "info",
+        )
+        result = compose_template(
+            data_root,
+            include_unknown=include_unknown,
+            include=include or (),
+            project_name=project_name,
+            pipeline_name=detected_info.pipeline_name if detected_info else None,
+            pipeline_version=detected_info.pipeline_version if detected_info else None,
+            engine=detected_info.engine if detected_info else None,
+        )
+        print_report(result)
+        if not isinstance(result, ComposedTemplate):
+            found = result.unrecognised_total
+            hint = (
+                f" It holds {found} tabular file(s): --include-unknown ingests them."
+                if found
+                else ""
+            )
+            rich_print_checked_statement(
+                f"Nothing in {escape(data_root)} is recognised by the catalog.{hint} Or pass "
+                "--template (a template id or the path to a template.yaml), or "
+                "--project-config-path with a depictio project YAML.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+        composed = result
+        template = str(result.template_dir)
+        rich_print_checked_statement(
+            f"Composed template: {escape(str(result.template_dir))} "
+            f"(tabs: {escape(', '.join(result.tabs))})",
+            "success",
+        )
 
     # Whichever path chose the template, say so when the run is another major
     # release of the pipeline: the import then prunes what the run lacks
@@ -2714,6 +2797,15 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
         dashboards=imported_dashboards,
         viewer_url=viewer_url,
         template_id=template_metadata.template_id if template_metadata else None,
+        composed={
+            "template_dir": str(composed.template_dir),
+            "tabs": composed.tabs,
+            "unrecognised": len(
+                [p for p in composed.composition.unrecognised if not p.get("_include")]
+            ),
+        }
+        if composed is not None
+        else None,
     )
     if dry_run:
         rich_print_checked_statement(
@@ -2770,7 +2862,7 @@ def register_run_command(app: typer.Typer):
                 "--template",
                 help="Template to build the project from, e.g. nf-core/ampliseq/2.16.0, or "
                 "nf-core/ampliseq/latest for the newest shipped version. Default: detected "
-                "from DATA_DIR. Not with --project-config-path.",
+                "from DATA_DIR, else composed from the catalog. Not with --project-config-path.",
             ),
         ] = None,
         manifest: Annotated[
@@ -2950,6 +3042,35 @@ def register_run_command(app: typer.Typer):
                 rich_help_panel=STEPS_PANEL,
             ),
         ] = False,
+        compose: Annotated[
+            bool,
+            typer.Option(
+                "--compose",
+                help="Compose the template from what the catalog recognises in DATA_DIR, "
+                "even when a bundled template fits. Without it, composing is the fallback "
+                "when none does.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = False,
+        include_unknown: Annotated[
+            bool,
+            typer.Option(
+                "--include-unknown",
+                help="When composing: also ingest the tabular files the catalog does not "
+                "recognise, in an 'Other data' tab.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = False,
+        include: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--include",
+                metavar="GLOB",
+                help="When composing: ingest the unrecognised files matching this glob, "
+                "relative to DATA_DIR (e.g. 'stats/*.tsv'). Repeatable.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = None,
         pipeline_id: Annotated[
             str | None,
             typer.Option(
@@ -3268,6 +3389,9 @@ def register_run_command(app: typer.Typer):
             repartition=repartition,
             async_upsert=async_upsert,
             result_json=result_json,
+            compose=compose,
+            include_unknown=include_unknown,
+            include=tuple(include or ()),
         )
         try:
             with ProjectLock() as lock, ingestion_record() as record:

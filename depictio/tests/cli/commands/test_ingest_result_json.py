@@ -1,4 +1,4 @@
-"""`depictio ingest --result-json`: how an ingestion ended, for scripts.
+"""`depictio ingest --result-json`, and composition when no template fits.
 
 The result file says, for scripts, what an ingestion made: the project and its
 dashboards, or the project a second ingestion of the same directory found. Every
@@ -132,3 +132,35 @@ def test_without_result_json_nothing_is_written_or_looked_up(app, data_root, mak
 
     assert result.exit_code == 2
     http_get.assert_not_called()
+
+
+def test_a_directory_nothing_recognises_says_what_would_work(app, data_root):
+    """No pipeline identity and nothing the catalog knows: composing has nothing to build."""
+    (data_root / "notes.md").write_text("not a table\n")
+
+    result = CliRunner().invoke(app, ["ingest", str(data_root)])
+
+    assert result.exit_code == 1
+    output = " ".join(result.output.split())
+    assert f"Could not tell which pipeline produced {data_root}" in output
+    assert "is recognised by the catalog" in output
+    assert "--template" in output
+    assert "--project-config-path" in output
+
+
+def test_a_directory_with_only_unknown_tables_points_at_include_unknown(app, data_root):
+    (data_root / "stats.tsv").write_text("sample\treads\nA\t10\nB\t20\n")
+
+    result = CliRunner().invoke(app, ["ingest", str(data_root)])
+
+    assert result.exit_code == 1
+    assert "--include-unknown ingests them" in " ".join(result.output.split())
+
+
+def test_compose_and_template_do_not_go_together(app, data_root):
+    result = CliRunner().invoke(
+        app, ["ingest", str(data_root), "--template", "nf-core/rnaseq/latest", "--compose"]
+    )
+
+    assert result.exit_code == 1
+    assert "--compose builds the template itself" in " ".join(result.output.split())
