@@ -99,6 +99,7 @@ function buildCard(
       | 'completeness'
       | 'attrition';
     breakdown_col?: string | null;
+    trend_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
     threshold_value?: number | null;
@@ -134,6 +135,8 @@ function buildCard(
     aggregations: (c.aggregations ?? null) as unknown as string[] | undefined,
     secondary_layout: c.secondary_layout ?? 'vertical',
     breakdown_col: (c.breakdown_col ?? null) as unknown as string | undefined,
+    // The trend layout's ordered axis; without it a trend card renders no line.
+    trend_col: (c.trend_col ?? null) as unknown as string | undefined,
     coverage_max: (c.coverage_max ?? null) as unknown as number | undefined,
     top_n_count: typeof c.top_n_count === 'number' ? c.top_n_count : 3,
     // QC layouts. Same ``null``-not-``undefined`` rule as the block above: the
