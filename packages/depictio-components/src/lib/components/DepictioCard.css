@@ -107,6 +107,26 @@
   height: 44px;
 }
 
+/* The headline body keeps clear of the resting icon. `!important` because the
+   card section's own padding is an inline style. */
+.depictio-card-clear-icon {
+  padding-right: 72px !important;
+}
+
+/* A headline card too narrow for both (a phone's pair of key figures): the
+   title gets the room back. With the icon in place it wrapped in one card of
+   the pair and not the other, and the two values no longer lined up. */
+@container depictio-card (max-width: 220px) {
+  .depictio-card-icon--rest,
+  .depictio-card:hover .depictio-card-icon--rest {
+    display: none;
+  }
+
+  .depictio-card-clear-icon {
+    padding-right: 1rem !important;
+  }
+}
+
 /* A card with a `link` (wrapped in .depictio-card-link by the renderer):
    lifted on hover like a tab tile, so a key figure reads as a way in. */
 .depictio-card-link {

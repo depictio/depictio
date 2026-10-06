@@ -53,6 +53,80 @@ export interface GridTile {
 }
 
 /**
+ * The `lg` layout rescaled to `cols` columns.
+ *
+ * Scale the column EDGES, never `x` and `w` separately: rounding each of those
+ * on its own lets a row that tiled exactly at `lg` stop tiling. Four `w: 2`
+ * cards at x 0/2/4/6 would scale to widths 2/2/2/2 at 6 columns but to x
+ * 0/2/3/4, so the last three overlap, and react-grid-layout then breaks the
+ * row apart to resolve the collision. Rounding the shared edge once gives both
+ * neighbours the same answer, so a boundary that coincided still coincides.
+ *
+ * Edges still land between columns when a full row of equal tiles does not
+ * divide the new count: those four cards come out 2/1/2/1 wide in six
+ * columns. Such a row wraps instead, into lines of equal tiles — as many per
+ * line as divide both the row and the columns (two lines of two, there). The
+ * rows below move down by the lines it gained.
+ */
+export function scaleLayout<T extends GridTile>(lg: T[], cols: number): T[] {
+  const edge = (v: number) => Math.round((v * cols) / GRID_MAX_COLS);
+  const out = lg.map((item) => {
+    // Every tile keeps at least one column, so a row with more tiles than the
+    // breakpoint has columns still collides — there is no honest way to fit
+    // five cards into two columns, and the grid stacks them instead.
+    const x = Math.min(cols - 1, Math.max(0, edge(item.x)));
+    const right = Math.min(cols, Math.max(x + 1, edge(item.x + item.w)));
+    return { ...item, x, w: right - x };
+  });
+
+  const rowYs = [...new Set(lg.map((t) => t.y))].sort((a, b) => a - b);
+  let shift = 0;
+  const shiftFrom: Array<[number, number]> = [];
+  for (const y of rowYs) {
+    const row = lg.filter((t) => t.y === y).sort((a, b) => a.x - b.x);
+    const n = row.length;
+    const w0 = row[0].w;
+    const even =
+      n > 1 &&
+      row.every((t, k) => t.w === w0 && t.x === k * w0) &&
+      n * w0 === GRID_MAX_COLS &&
+      (w0 * cols) % GRID_MAX_COLS !== 0;
+    if (!even) continue;
+    let perLine = 1;
+    for (let k = n; k >= 1; k--) {
+      if (cols % k === 0 && n % k === 0) {
+        perLine = k;
+        break;
+      }
+    }
+    const lineH = Math.max(...row.map((t) => t.h));
+    const width = cols / perLine;
+    row.forEach((t, k) => {
+      const at = lg.indexOf(t);
+      out[at] = {
+        ...out[at],
+        x: (k % perLine) * width,
+        w: width,
+        y: y + Math.floor(k / perLine) * lineH,
+      };
+    });
+    const gained = (n / perLine - 1) * lineH;
+    if (gained > 0) {
+      shift += gained;
+      shiftFrom.push([y, shift]);
+    }
+  }
+  if (shiftFrom.length === 0) return out;
+  // Tiles below a wrapped row move down by every line gained above them.
+  return out.map((t, k) => {
+    const y0 = lg[k].y;
+    let by = 0;
+    for (const [rowY, total] of shiftFrom) if (y0 > rowY) by = total;
+    return by ? { ...t, y: t.y + by } : t;
+  });
+}
+
+/**
  * A phone's layout: the tiles in reading order, a quarter-width tile half a
  * row (so a row of four cards becomes two rows of two) and anything wider the
  * full row.

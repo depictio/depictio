@@ -6,6 +6,7 @@ import {
   GRID_MAX_COLS,
   GRID_WIDEST_BREAKPOINT,
   phoneLayout,
+  scaleLayout,
 } from '../gridConfig';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -120,19 +121,10 @@ interface DashboardGridProps {
  * scaling it. A half-width tile (w 4 of 8) therefore stays w 4 and becomes a
  * full row at `sm` (4 of 4), so the same dashboard read as half-width in one
  * surface and full-width in another purely because their containers sit either
- * side of a breakpoint. Scaling proportionally keeps a half-width tile half a
- * row everywhere, while still degrading to fewer, wider columns on a phone.
- *
- * Scale the column EDGES, never `x` and `w` separately: rounding each of those
- * on its own lets a row that tiled exactly at `lg` stop tiling. Four `w: 2`
- * cards at x 0/2/4/6 scale to widths 2/2/2/2 at `md` (6 columns) but to x
- * 0/2/3/4, so the last three overlap, and react-grid-layout then breaks the row
- * apart to resolve the collision. Rounding the shared edge once gives both
- * neighbours the same answer, so a boundary that coincided still coincides.
+ * side of a breakpoint. Scaling proportionally (`scaleLayout`) keeps a
+ * half-width tile half a row everywhere, while still degrading to fewer, wider
+ * columns on a phone.
  */
-// Grid geometry, mirrored by the ResponsiveGridLayout props below. Lives in
-// `autofit` because every grid that shows fitted tiles converts against it.
-
 /** One layout per breakpoint, proportionally rescaled from the `lg` one.
  *  Exported because every grid that shows stored tiles needs it: handing
  *  react-grid-layout only `lg` lets it generate the narrower breakpoints
@@ -144,20 +136,10 @@ export function responsiveLayouts(
   /** Phone rows per fitted tile (`fitPhoneRows`); the rest keep their height. */
   phoneRows?: Readonly<Record<string, number>>,
 ): Record<string, Layout[]> {
-  const scale = (cols: number) =>
-    lg.map((item) => {
-      const edge = (v: number) => Math.round((v * cols) / GRID_MAX_COLS);
-      // Every tile keeps at least one column, so a row with more tiles than the
-      // breakpoint has columns still collides — there is no honest way to fit
-      // five cards into two columns, and the grid stacks them instead.
-      const x = Math.min(cols - 1, Math.max(0, edge(item.x)));
-      const right = Math.min(cols, Math.max(x + 1, edge(item.x + item.w)));
-      return { ...item, x, w: right - x };
-    });
   return {
     lg,
-    md: scale(GRID_COL_COUNTS.md),
-    sm: scale(GRID_COL_COUNTS.sm),
+    md: scaleLayout(lg, GRID_COL_COUNTS.md),
+    sm: scaleLayout(lg, GRID_COL_COUNTS.sm),
     xs: phoneLayout(lg, GRID_COL_COUNTS.xs, phoneRows),
   };
 }

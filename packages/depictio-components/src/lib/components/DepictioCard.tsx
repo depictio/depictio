@@ -338,8 +338,9 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       <Card.Section
         p={hasCustomBg || headline ? '1rem' : 'xs'}
         pb={secondaryStrip ? 0 : undefined}
-        // Clear of the resting icon, so a long value never runs under it.
-        pr={headline && icon_name ? 72 : undefined}
+        // Clear of the resting icon, so a long value never runs under it — and
+        // not on a card too narrow to keep the icon (see DepictioCard.css).
+        className={headline && icon_name ? 'depictio-card-clear-icon' : undefined}
         style={{
           // ``flex: 0 0 auto`` so Card.Section sizes to its content rather
           // than stretching to fill the card. The outer Card's
@@ -362,7 +363,20 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           )}
 
           {aggregation_description && (
-            <Text size="xs" c="dimmed" style={{ marginLeft: -2 }}>
+            <Text
+              size="xs"
+              c="dimmed"
+              style={{
+                marginLeft: -2,
+                // Two lines held on a headline card, whether its caption wraps
+                // or not: a row of cards centres its contents, and a caption a
+                // line shorter than its neighbours' moved the whole card off
+                // their line.
+                ...(headline
+                  ? { minHeight: 'calc(2 * var(--mantine-line-height-xs) * var(--mantine-font-size-xs))' }
+                  : {}),
+              }}
+            >
               {aggregation_description}
             </Text>
           )}
