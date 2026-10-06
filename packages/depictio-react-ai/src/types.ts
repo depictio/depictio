@@ -76,26 +76,43 @@ export interface ComponentFromPromptResponse {
   routing?: RoutingInfo | null;
 }
 
-export interface SuggestFiguresRequest {
-  data_collection_id: string;
-  /** How many suggestions to ask for (server clamps to 1..8). */
+/** Body of POST /ai/suggest-components: "what would you add to this
+ *  dashboard?". Both pins are optional; `null` (or absent) means Auto, and
+ *  the server then mixes types and collections, dashboard collections first.
+ *  `useSuggestComponents` fills `dashboard_id` from its hook argument. */
+export interface SuggestComponentsRequest {
+  dashboard_id: string;
+  component_type?: ComponentType | null;
+  data_collection_id?: string | null;
+  /** How many suggestions to ask for (server clamps to 1..8, default 4). */
   n?: number;
 }
 
-/** One Plotly Express configuration proposed by `/ai/suggest-figures`.
- *  `dict_kwargs` is already in the builder's figure grammar, so a picked
- *  suggestion drops straight into the create flow. `code` is display-only
- *  Python synthesized server-side — never executed client-side. */
-export interface PlotSuggestion {
-  visu_type: string;
-  dict_kwargs: Record<string, unknown>;
+/** One typed component proposed by `/ai/suggest-components`. `component` is
+ *  the validated lite dict (the same shape `/ai/component-from-prompt`
+ *  returns in `parsed`), so a picked suggestion drops straight into the
+ *  builder through `applyLiteComponent`. `code` is display-only Python for
+ *  figures, synthesized server-side and never executed client-side.
+ *  `origin` says whether the model proposed it or the server ranked it
+ *  deterministically from the collection's schema. */
+export interface ComponentSuggestion {
+  component_type: ComponentType;
+  /** Null for text, which reads no collection. */
+  data_collection_id: string | null;
+  data_collection_tag: string | null;
+  workflow_id: string | null;
   title: string;
-  explanation: string;
-  code: string;
+  rationale: string;
+  component: Record<string, unknown>;
+  code?: string | null;
+  origin: 'llm' | 'ranked';
 }
 
-export interface SuggestFiguresResponse {
-  suggestions: PlotSuggestion[];
+export interface SuggestComponentsResponse {
+  suggestions: ComponentSuggestion[];
+  /** Things the server could not do, e.g. the LLM call failed and only the
+   *  ranked suggestions are shown. */
+  warnings: string[];
 }
 
 export interface ExecutionStep {

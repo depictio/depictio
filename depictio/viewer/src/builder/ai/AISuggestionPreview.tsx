@@ -13,19 +13,27 @@ import { useComputedColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 import { previewFigure } from 'depictio-react-core';
 import type { FigureResponse } from 'depictio-react-core';
-import type { PlotSuggestion } from 'depictio-react-ai';
 import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 
 const PLOT_HEIGHT = 240;
 
+/** The figure grammar of one suggestion, read off its lite component
+ *  (`visu_type`, `dict_kwargs`), plus where to render it. */
 interface Props {
-  suggestion: PlotSuggestion;
+  visuType: string;
+  dictKwargs: Record<string, unknown>;
   dcId: string;
   wfId: string | null;
   dashboardId: string | null;
 }
 
-const AISuggestionPreview: React.FC<Props> = ({ suggestion, dcId, wfId, dashboardId }) => {
+const AISuggestionPreview: React.FC<Props> = ({
+  visuType,
+  dictKwargs,
+  dcId,
+  wfId,
+  dashboardId,
+}) => {
   const [figure, setFigure] = useState<FigureResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +44,8 @@ const AISuggestionPreview: React.FC<Props> = ({ suggestion, dcId, wfId, dashboar
   const inputKey = JSON.stringify({
     dcId,
     wfId,
-    visuType: suggestion.visu_type,
-    dictKwargs: suggestion.dict_kwargs,
+    visuType,
+    dictKwargs,
     colorScheme,
     filters: previewFilters,
   });
@@ -53,8 +61,8 @@ const AISuggestionPreview: React.FC<Props> = ({ suggestion, dcId, wfId, dashboar
         wf_id: wfId ?? undefined,
         dc_id: dcId,
         mode: 'ui',
-        visu_type: suggestion.visu_type,
-        dict_kwargs: suggestion.dict_kwargs,
+        visu_type: visuType,
+        dict_kwargs: dictKwargs,
         code_content: null,
       },
       filters: previewFilters,
