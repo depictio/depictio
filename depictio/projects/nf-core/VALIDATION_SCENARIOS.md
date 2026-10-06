@@ -549,7 +549,7 @@ calls when the annotated VCFs are absent. mosdepth reads one pass per sample.
 **Megatest:** `s3://nf-core-awsmegatests/scrnaseq/results-3fc17b4f971a89e47c88337de71d0e777ffad8cc/aligner_cellranger/`
 (tag 4.2.0, run_root `aligner_cellranger/`, manifest megatest.yaml)
 
-**MultiQC:** run wrote 1.35 -> used as-is
+**MultiQC:** run wrote 1.34 -> used as-is
 
 **Template requirements:**
 - Always: `samples` (hub), `cellranger_metrics_summary`, `cellranger_barcode_rank` (`knee_plot`
@@ -982,11 +982,14 @@ an Overview tab instead
 
 ---
 
-## rnasplice 1.0.4 (pending)
+## rnasplice 1.0.4 (cluster `test_full` run)
 
 **Megatest:** `s3://nf-core-awsmegatests/rnasplice/results-1d0494ae3402d1a46e0adadad24f81a0ff855c77/`
 is not usable: 494 objects, only 80 of them with data, no MultiQC and none of the differential
 splicing output.
+
+**MultiQC:** run wrote 1.18 (cluster `test_full` run, no parquet) -> parquet rebuilt with
+`depictio.dev_scripts.multiqc_reprocess` (6 modules, 78 sample rows). The AWS megatest holds none.
 
 **Status:** the template waits for an EMBL cluster `test_full` run (two-condition design). If that
 run fails twice, seqinspector 1.1.2 takes its place: its megatest

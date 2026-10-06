@@ -4,9 +4,12 @@ Every shipped template was built against exactly one dataset: the AWS megatest r
 `megatest.yaml` pins. This table answers the other question - **which other datasets
 could exercise the same template**, using the `test*` profiles nf-core already ships.
 
-Scope: the 12 pipelines under `depictio/projects/nf-core/`, each at the release the
-template targets - 126 profiles over 123 rows (a few cloud aliases such as rnaseq's
-`test_full` / `test_full_aws` share a row).
+Scope: 25 templates ship under `depictio/projects/nf-core/` (25 pipeline directories). The
+per-profile survey covers the first 12 of them, each at the release the template targets - 126
+profiles over 123 rows (a few cloud aliases such as rnaseq's `test_full` / `test_full_aws`
+share a row). The 7 lot 2 pipelines (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic) are
+listed in section 1 and the 6 wave 3 pipelines in section 3, with the dataset each was validated
+on; their `test*` profiles are not surveyed yet.
 
 Survey date **2026-09-11**. Sources: `nf-co.re/pipelines.json` (latest releases, tag
 shas), `raw.githubusercontent.com/nf-core/<pipeline>/<tag>/` (`nextflow.config`,
@@ -17,8 +20,9 @@ the samplesheets themselves (row counts are recounted, not copied), and the loca
 Related: `MEGATEST_STATUS.md` (what each S3 bucket holds), `VALIDATION_SCENARIOS.md`
 (analytical scenarios per pipeline), `TEMPLATE_BOTTLENECKS.md` (platform gaps).
 
-The per-profile survey below predates lot 2 and wave 3. The five wave 3 templates are listed in
-section 3 with the dataset each was validated on; their `test*` profiles are not surveyed yet.
+The per-profile survey below predates lot 2 and wave 3. The lot 2 templates are listed in section 1
+and the six wave 3 templates in section 3, with the dataset each was validated on; their `test*`
+profiles are not surveyed yet (marked "not surveyed" in the tables).
 
 ## Verdicts
 
@@ -70,6 +74,13 @@ a result.
 | taxprofiler | 2.0.1 | 2.0.1 | no | `70ecc15e` | 1.34 | 9 | flat | 12 (7) |
 | variantbenchmarking | 1.4.0 (+ 3 categories) | 1.5.0 | **yes** | `8b21c017` ² | 1.32, absent from the megatest | 16 | flat | 9 (8) |
 | viralrecon | 3.0.0 | 3.0.0 | no | partial prefix ³ | 1.31 | 8 | **sequencing-runs** | 14 (12) |
+| sarek | 3.10.0 | 3.10.0 | no | `8ccac7ad` (`test_full_germline_ncbench_agilent/`) | 1.35 | not surveyed | flat | 37 (20) |
+| scrnaseq | 4.2.0 | 4.2.0 | no | `3fc17b4f` (`aligner_cellranger/`, plus simpleaf and kallisto routes) | 1.34 | not surveyed | flat | 56 (22) |
+| mag | 5.5.0 | 5.5.0 | no | `171cf369` (5.5.0 release candidate; the tagged run `56abab5b` crashed) | none published, reprocessed with 1.35 | not surveyed | flat | 21 (19) |
+| nanoseq | 3.0.0 | 3.1.0 | **yes** | `1e60482a` | **pre-parquet**, reprocessed with 1.35 | not surveyed | flat | 22 (3) |
+| eager | 2.4.5 | 2.5.3 | **yes** | `42c9d5f8` | **pre-parquet** (`multiqc_data.json` only), reprocessed with 1.35 | not surveyed | flat | 39 (5) |
+| methylseq | 2.3.0 | 4.2.0 | **yes** | `93bc5811` (`bismark/`) | **pre-parquet**, reprocessed with 1.35 | not surveyed | flat | 29 (2) |
+| hic | 2.0.0 | 2.1.0 | **yes** | `b4d89cfa` | **pre-parquet** (`mqc_*.txt`), reprocessed with 1.35 | not surveyed | flat | 19 (0) |
 
 ¹ ampliseq is at the latest release, but 2.15.0, 2.16.1 and 2.17.0 are nf-core releases
 with no template directory - running one of those exits 1.
@@ -339,7 +350,7 @@ all - even the "tiny" `test_nanopore` pulls its FAST5/summary from `ngi-igenomes
 
 ---
 
-## 3. Wave 3 templates
+## 3. Wave 3 templates (six pipelines)
 
 Built on 2026-09-23 against the AWS megatest of each pipeline's latest release. None of these
 pipelines publishes the design of its run, so each template reads it from a table vendored next
@@ -354,9 +365,9 @@ files, template lint and a CLI dry run.
 | genomeassembler | 2.0.0 | 2.0.0 | no | `a72d47d9` | none | flat | 24 (20) | 10 assembly strategies, half of them without assembly QC on this partial run; samplesheet vendored and read as the design table |
 | mhcquant | 3.2.0 | 3.2.0 | no | `6ec12c97` | 1.33 (custom content only) | flat | 15 (4) | `test_full`: PRIDE PXD011628, 2 samples x 3 raw replicates, one per condition; samplesheet vendored under `input/` |
 | demultiplex | 1.8.0 | 1.8.0 | no | `daade37c` | 1.35 | flat | 18 (13) | `test_full`: one flowcell, one lane, 18 libraries, bcl2fastq route; library design vendored in the template directory |
-| rnasplice | 1.0.4 (pending) | 1.0.4 | | `1d0494ae` (truncated) | none | | | waits for an EMBL cluster `test_full` run; fallback seqinspector 1.1.2 (megatest `6aa08aab`) |
+| rnasplice | 1.0.4 | 1.0.4 | no | none usable: `1d0494ae` is truncated, so `results_sha` is null | 1.18 on the cluster run, no parquet, rebuilt with `multiqc_reprocess` | flat | 12 (6) | EMBL cluster `test_full` run: 6 samples, two conditions, two mirrored contrasts, GRCh37; design table vendored under `input/metadata.tsv` |
 
-With these, 24 templates ship, 25 once rnasplice lands.
+With these, 25 templates ship (one directory per pipeline under `depictio/projects/nf-core/`).
 
 ---
 

@@ -188,11 +188,9 @@ template lint, CLI dry run 8/8).
 | mhcquant | 3.2.0 | `6ec12c97f7889a3e1f09ab89930723045c6bac68` | `.` | 1.33, custom content only |
 | demultiplex | 1.8.0 | `daade37c4a75a4c1709ccf12434deb3424141319` | `.` | 1.35 native parquet |
 
-rnasplice 1.0.4 is **pending**: its megatest prefix `1d0494ae` holds 494 objects of which only
-80 carry data, with no MultiQC and no differential splicing output, so the template waits for an
-EMBL cluster `test_full` run. If that run fails twice, seqinspector 1.1.2 (`6aa08aab`, complete,
-five MultiQC parquets) takes its place. With rnasplice, the shipped set reaches 25 templates;
-24 are built today.
+rnasplice 1.0.4 is built from a cluster `test_full` run rather than the megatest: its megatest
+prefix `1d0494ae` holds 494 objects of which only 80 carry data, with no MultiQC and no
+differential splicing output. With rnasplice, the shipped set is 25 templates.
 
 What changed in the manifests of the reworked templates:
 

@@ -536,7 +536,7 @@ explicit `mappings:` block on the `samples -> multiqc_data` link (20 name varian
 per sample). A template that cannot enumerate its variants up front (any pipeline
 whose caller or stage set is a parameter) still needs the resolver fixed.
 
-**2026-09-23 (wave 3), fixed in this PR.** When the samples hub is known, each MultiQC name
+**2026-09-23 (wave 3), fixed in #1102.** When the samples hub is known, each MultiQC name
 is now attached to the hub id it belongs to (`canonicalize_to_hub`): exact match, then the
 name with read, lane, trimming and stage suffixes stripped, then the longest hub id that
 prefixes the name at a token boundary. sarek dropped its `mappings:` table and methylseq's
@@ -641,7 +641,7 @@ no hg19 gene asset, no GFF3 route for other organisms, and with a built-in assem
 and unplaced contigs are not drawn, while a locus typed on a contig the assembly does not
 list can still fail the spec.
 
-## 22. `coverage_track` crashed on a numeric `sample_col` (fixed in this PR)
+## 22. `coverage_track` crashed on a numeric `sample_col` (fixed in #1102)
 
 hic's insulation and E1 tracks wanted one line per window size or per resolution, both
 integer columns. The header "Samples" MultiSelect was fed the raw values and Mantine's
@@ -677,7 +677,7 @@ labels its axes with raw column names and two of rnaseq's overlap at width 8 (RS
 the kind should read `columns_description` for its axis titles like the record card
 does.
 
-## 25. A direct link and a region link on one pair of collections (fixed in this PR)
+## 25. A direct link and a region link on one pair of collections (fixed in #1102)
 
 sarek declared a `stage` link and the locus region link between `mosdepth_windows` and
 `mosdepth_targets`. `_find_link_for_resolution` (`links_endpoints/routes.py`) looked a
@@ -702,7 +702,7 @@ in the GenomeSpy lazy VCF source. Not a template matter.
 whose pool exists in the bundle; a Playwright check that every lane of a multi-file
 track reaches `loaded`.
 
-## 27. A slider walked a value link as two values (fixed in this PR)
+## 27. A slider walked a value link as two values (fixed in #1102)
 
 atacseq's Peak locus navigator emits a position range on `macs2_broad_peaks`;
 `extend_filters_via_links` sent it through the direct `peak_id` link to
@@ -715,7 +715,7 @@ hop, and later hops receive the discrete join values as before. The atacseq temp
 had disabled the link as a workaround; re-enabling it needs a backend restart and a
 live check of the HOMER track under a region, a q-value range and a peak lasso.
 
-## 28. `scatter_xy` density on a log axis killed the tab (fixed in this PR)
+## 28. `scatter_xy` density on a log axis killed the tab (fixed in #1102)
 
 mag's Contigs tab crashed headless Chromium in 8 loads out of 9 whenever the
 length-vs-depth scatter drew its density view on log axes, including through the
@@ -726,7 +726,7 @@ drawn as a `heatmap` with explicit edges in data units, which a linear and a log
 axis map the same way. mag's scatter is pinned to points mode until the fix is seen
 live; any log-axis scatter past the threshold gains the same protection.
 
-## 29. Template variables did not reach recipes (fixed in this PR)
+## 29. Template variables did not reach recipes (fixed in #1102)
 
 A recipe received its sources and nothing else, so any per-run choice it needed, such as a
 marker gene panel or a fragment-length cut-off, could only be a constant inside the recipe.
