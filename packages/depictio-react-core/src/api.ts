@@ -365,6 +365,8 @@ export interface FilterSectionSpec {
   pin?: 'top' | 'bottom' | null;
   /** Tabs (displayed names) a persistent section is not shown on. */
   exclude_tabs?: string[] | null;
+  /** `plain`: a light heading, always open, no frame (grid sections). */
+  appearance?: 'box' | 'plain' | null;
 }
 
 export interface DashboardData {

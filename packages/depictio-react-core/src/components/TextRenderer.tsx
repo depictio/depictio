@@ -173,7 +173,9 @@ const FactStrip: React.FC<{
   accentColor: string | null;
   inline: (text: string) => React.ReactNode[];
 }> = ({ facts, accentColor, inline }) => (
-  <div style={{ ...CARD_FRAME, overflow: 'hidden', width: '100%' }}>
+  // Margins hold the prose around it off the frame: a paragraph set flush
+  // under a bordered strip reads as its caption.
+  <div style={{ ...CARD_FRAME, overflow: 'hidden', width: '100%', margin: '6px 0 10px' }}>
     <div
       style={{
         display: 'grid',
@@ -278,7 +280,9 @@ const MarkdownBody: React.FC<{
                 key={idx}
                 order={(block.level + 2) as 3 | 4 | 5}
                 ta={alignment}
-                style={{ margin: idx === 0 ? 0 : '8px 0 0', lineHeight: 1.2 }}
+                // Air above a heading that follows other blocks, so it opens
+                // what comes next rather than closing what came before.
+                style={{ margin: idx === 0 ? '0 0 2px' : '14px 0 2px', lineHeight: 1.2 }}
               >
                 {inline(block.text)}
               </Title>

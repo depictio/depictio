@@ -171,6 +171,12 @@ class FilterSectionSpec(BaseModel):
         "table, a legend) usually wants: present everywhere without preceding the "
         "tab's own introduction. Ignored unless `persistent` is set.",
     )
+    appearance: Literal["box", "plain"] = Field(
+        default="box",
+        description="`box` (default): a bordered, foldable section with a header bar. "
+        "`plain`: a light heading over the tiles, always open, no frame -- for a "
+        "landing page whose tiles carry their own cards. Grid sections only.",
+    )
     exclude_tabs: list[str] | None = Field(
         default=None,
         description="Tabs (by displayed name, the owning tab included) a persistent "

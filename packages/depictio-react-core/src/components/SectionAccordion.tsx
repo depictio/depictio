@@ -68,11 +68,14 @@ export const SectionAccordionItem: React.FC<{
   actions?: React.ReactNode;
   /** Exactly an `Accordion.Control` followed by an `Accordion.Panel`. */
   children: React.ReactNode;
-}> = ({ value, color, actions, children }) => {
+  /** `appearance: plain`: no frame, no chevron, a heading over its tiles. */
+  plain?: boolean;
+}> = ({ value, color, actions, children, plain = false }) => {
   const [control, panel] = React.Children.toArray(children);
   return (
     <Accordion.Item
       value={value}
+      className={plain ? 'is-plain' : undefined}
       style={
         color
           ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)
@@ -103,7 +106,27 @@ export const SectionHeader: React.FC<{
   badge?: React.ReactNode;
   /** Pushed to the far end of the row, e.g. a folded section's metrics. */
   trailing?: React.ReactNode;
-}> = ({ spec, name, badge, trailing }) => (
+}> = ({ spec, name, badge, trailing }) =>
+  spec?.appearance === 'plain' ? (
+    // A plain section is a heading, not a bar: title and description on one
+    // baseline, the icon a small marker before them.
+    <Group gap={8} wrap="wrap" align="baseline" style={{ minWidth: 0, rowGap: 0 }}>
+      {spec.icon ? (
+        <span style={{ alignSelf: 'center', display: 'inline-flex' }}>
+          <SectionIcon spec={spec} />
+        </span>
+      ) : null}
+      <Text fw={700} style={{ fontSize: 17, lineHeight: 1.3 }}>
+        {name}
+      </Text>
+      {badge}
+      {spec.description ? (
+        <Text size="sm" c="dimmed" style={{ lineHeight: 1.3 }}>
+          {spec.description}
+        </Text>
+      ) : null}
+    </Group>
+  ) : (
   <Group justify="space-between" wrap="nowrap" gap="sm" pr="xs" style={{ minWidth: 0 }}>
     {/* The icon goes INSIDE the label, not in `Accordion.Control`'s `icon`
         prop: Mantine renders that prop's node after the label and gives it a

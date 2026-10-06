@@ -110,3 +110,42 @@
 .depictio-section-accordion.is-compact .depictio-section-content {
   padding: var(--mantine-spacing-xs) 6px var(--mantine-spacing-xs) 0;
 }
+
+/* ------------------------------------------------------- appearance: plain */
+
+/* A heading over tiles that carry their own cards (a landing page's key
+   figures, findings, tab tiles): no frame, no rail, no fold. The box would be
+   a second frame around every card and a header bar's worth of height per
+   section. Selectors repeat the dashboard ones above plus `.is-plain`, so
+   they win on specificity rather than on order. */
+.depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain {
+  border: none;
+  background: transparent;
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain + .depictio-section-item,
+.depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item.is-plain {
+  margin-top: var(--mantine-spacing-xl);
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain .depictio-section-control,
+.depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain[data-active] .depictio-section-control {
+  padding: 0 0 10px;
+  border-bottom: none;
+  background: transparent;
+  /* Always open: the header is a label, not a toggle. */
+  pointer-events: none;
+  cursor: default;
+}
+
+.depictio-section-item.is-plain .mantine-Accordion-chevron {
+  display: none;
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain .depictio-section-content {
+  padding: 0;
+}
+
+.depictio-section-item.is-plain .mantine-Accordion-label {
+  padding-block: 0;
+}

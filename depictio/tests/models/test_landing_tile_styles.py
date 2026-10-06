@@ -82,3 +82,10 @@ def test_persistent_section_exclude_tabs():
     spec = FilterSectionSpec(name="Samples", persistent=True, exclude_tabs=["Overview"])
     assert spec.exclude_tabs == ["Overview"]
     assert FilterSectionSpec(name="x").exclude_tabs is None
+
+
+def test_section_appearance_defaults_to_box():
+    from depictio.models.models.dashboards import FilterSectionSpec
+
+    assert FilterSectionSpec(name="x").appearance == "box"
+    assert FilterSectionSpec(name="x", appearance="plain").appearance == "plain"

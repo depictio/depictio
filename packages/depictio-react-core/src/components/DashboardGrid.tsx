@@ -664,14 +664,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // one you want is the one already applied.
   const anySectionOpen = named.some((s) => sectionCollapse.isOpen(s.key));
 
+  const isPlain = (s: ComponentSection) => s.spec?.appearance === 'plain';
   const renderSections = (list: ComponentSection[]) =>
     list.length === 0 ? null : (
       <SectionAccordion
-        value={list.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
+        // A plain section has no fold: always open, and left out of the
+        // persisted collapse state.
+        value={list
+          .filter((s) => isPlain(s) || sectionCollapse.isOpen(s.key))
+          .map((s) => s.key)}
         onChange={(open) =>
           applyAccordionValue(
             open,
-            list.map((s) => s.key),
+            list.filter((s) => !isPlain(s)).map((s) => s.key),
             sectionCollapse,
           )
         }
@@ -682,6 +687,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             value={section.key}
             color={section.spec?.color}
             actions={renderSectionActions?.(section.sectionName ?? null)}
+            plain={isPlain(section)}
           >
             <Accordion.Control>
               <SectionHeader
@@ -691,7 +697,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 // screen as the cards themselves. Folding a section must not
                 // cost you the figures it was showing.
                 trailing={
-                  !sectionCollapse.isOpen(section.key) ? (
+                  !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
                     <SectionSummary section={section} cardValues={cardValues} />
                   ) : undefined
                 }
@@ -701,7 +707,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               {/* Plain wrapper so the width available inside the section box
                   can be read off the DOM — see `sectionInset`. Absent until
                   the section has been opened once: see `renderedSections`. */}
-              {renderedSections.has(section.key) && (
+              {(isPlain(section) || renderedSections.has(section.key)) && (
                 <div data-section-grid>{renderGrid(section)}</div>
               )}
             </Accordion.Panel>
