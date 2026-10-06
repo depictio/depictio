@@ -289,6 +289,8 @@ export interface StoredMetadata {
   icon_style?: 'watermark' | 'badge';
   /** One line under the value, replacing the aggregation label. */
   caption?: string;
+  /** Click target: `tab:<name>` for a sibling tab, or a URL. */
+  link?: string;
   /** `headline`: large value, resting icon mark, bar-only strip. */
   variant?: 'default' | 'headline';
   metric_theme?: string;
@@ -361,6 +363,8 @@ export interface FilterSectionSpec {
    *  including the one that owns it. Unset means 'top'. Ignored unless
    *  `persistent` is set. */
   pin?: 'top' | 'bottom' | null;
+  /** Tabs (displayed names) a persistent section is not shown on. */
+  exclude_tabs?: string[] | null;
 }
 
 export interface DashboardData {

@@ -248,6 +248,12 @@ class CardLiteComponent(BaseLiteComponent):
         "large, the icon sits faint on the right at all times, and a composition or "
         "coverage strip shrinks to its bar (its numbers stay in the tooltip).",
     )
+    link: str | None = Field(
+        default=None,
+        description="Where clicking the card goes: `tab:<name>` for a sibling tab (by its "
+        "displayed name, resolved per instance like a text tile's tab links), or a URL. "
+        "A key figure on a landing page opens the tab that explains it.",
+    )
 
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero

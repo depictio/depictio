@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import { GRID_BREAKPOINTS, GRID_COL_COUNTS } from '../gridConfig';
-import { Accordion } from '@mantine/core';
+import { Accordion, Badge, Button, Group } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import type { BulkComputeOptions, InteractiveFilter, PersistentSection } from '../api';
 import type { GroupRenderState } from '../selectionGroups';
 import { bulkComputeCards } from '../api';
+import { countActiveFilters } from '../activeFilters';
 import { useCollapseState } from '../hooks/useCollapseState';
 import {
   applyAccordionValue,
@@ -45,6 +47,9 @@ export interface PersistentSectionsHostProps {
    *  fanned out here can only be changed on the tab that owns it, so the editor
    *  puts a jump to that tab where the "…" sits on an editable section. */
   renderSectionActions?: (section: PersistentSection) => React.ReactNode;
+  /** Clears every filter. With filters active, a pinned section's header says
+   *  so ("Filtered", "14 / 85") and offers this as its way back. */
+  onResetFilters?: () => void;
 }
 
 /** A section fanned out from another tab is keyed by owner + name: two tabs
@@ -78,6 +83,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   groupRender,
   bulkOptions,
   renderSectionActions,
+  onResetFilters,
 }) => {
   const renderable = useMemo(
     () =>
@@ -180,6 +186,31 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardIdsKey, JSON.stringify(filters), refreshTick]);
 
+  // The same cards without filters: the denominator of the folded header's
+  // "14 / 85". Fetched only while filters are active, and once per data
+  // refresh, since the unfiltered values do not move with the filters.
+  const filtered = countActiveFilters(filters) > 0;
+  const [baseValues, setBaseValues] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    if (!filtered || cardIdsByOwner.size === 0 || baseValues) return;
+    let cancelled = false;
+    Promise.all(
+      [...cardIdsByOwner.entries()].map(([owner, ids]) =>
+        bulkComputeCards(owner, [], ids).catch(() => null),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const values: Record<string, unknown> = {};
+      for (const res of results) if (res) Object.assign(values, res.values);
+      setBaseValues(values);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, cardIdsKey, baseValues]);
+  useEffect(() => setBaseValues(null), [cardIdsKey, refreshTick]);
+
   // Measure our own wrapper; the accordion box chrome is accounted for with a
   // probe, mirroring DashboardGrid's `sectionInset`.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -226,12 +257,36 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
               key={key}
               value={key}
               color={section.spec.color}
-              actions={renderSectionActions?.(section)}
+              actions={
+                filtered && onResetFilters ? (
+                  <Group gap={6} wrap="nowrap">
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color="gray"
+                      leftSection={<Icon icon="mdi:filter-remove-outline" width={14} />}
+                      onClick={onResetFilters}
+                    >
+                      Reset filters
+                    </Button>
+                    {renderSectionActions?.(section)}
+                  </Group>
+                ) : (
+                  renderSectionActions?.(section)
+                )
+              }
             >
               <Accordion.Control>
                 <SectionHeader
                   spec={section.spec}
                   name={section.spec.name}
+                  badge={
+                    filtered ? (
+                      <Badge size="xs" variant="light" color={section.spec.color || 'blue'}>
+                        Filtered
+                      </Badge>
+                    ) : undefined
+                  }
                   // Folded, the section still tells you what it holds — same
                   // chips as DashboardGrid's own sections. PersistentSection
                   // members are adapted to the ComponentSection shape the
@@ -246,6 +301,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                           members: members.map((m) => m.metadata),
                         }}
                         cardValues={cardValues}
+                        baseValues={filtered && baseValues ? baseValues : undefined}
                       />
                     ) : undefined
                   }

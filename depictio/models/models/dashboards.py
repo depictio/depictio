@@ -171,6 +171,13 @@ class FilterSectionSpec(BaseModel):
         "table, a legend) usually wants: present everywhere without preceding the "
         "tab's own introduction. Ignored unless `persistent` is set.",
     )
+    exclude_tabs: list[str] | None = Field(
+        default=None,
+        description="Tabs (by displayed name, the owning tab included) a persistent "
+        "section is not shown on. A landing tab that already summarises the sample "
+        "sheet does not need it pinned under its own key figures. Ignored unless "
+        "`persistent` is set.",
+    )
 
 
 class DashboardDataLite(BaseModel):
@@ -1047,6 +1054,7 @@ class DashboardDataLite(BaseModel):
                         "icon_style",
                         "caption",
                         "variant",
+                        "link",
                     ],
                 )
                 if display:
@@ -1363,6 +1371,7 @@ class DashboardDataLite(BaseModel):
                     "icon_style",
                     "caption",
                     "variant",
+                    "link",
                 ]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]

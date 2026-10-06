@@ -772,7 +772,10 @@ const SUMMARY_CHIP_LIMIT = 4;
 export const SectionSummary: React.FC<{
   section: ComponentSection;
   cardValues?: Record<string, unknown>;
-}> = ({ section, cardValues }) => {
+  /** The same cards computed without filters. Where a value differs, the
+   *  chip reads "14 / 85": how much of the whole the filters leave. */
+  baseValues?: Record<string, unknown>;
+}> = ({ section, cardValues, baseValues }) => {
   const cards = section.members.filter(
     (m) => m.component_type === 'card' && cardValues?.[m.index] !== undefined,
   );
@@ -815,6 +818,13 @@ export const SectionSummary: React.FC<{
             </Text>
             <Text size="md" fw={700} lh={1.2} style={{ whiteSpace: 'nowrap' }}>
               {formatValue(cardValues?.[m.index])}
+              {baseValues?.[m.index] !== undefined &&
+              baseValues[m.index] !== cardValues?.[m.index] ? (
+                <Text span size="sm" fw={500} c="dimmed">
+                  {' / '}
+                  {formatValue(baseValues[m.index])}
+                </Text>
+              ) : null}
             </Text>
           </div>
         </Group>

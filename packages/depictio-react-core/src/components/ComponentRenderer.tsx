@@ -6,6 +6,7 @@ import { InteractiveFilter, StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
+import { useTabLinkResolver } from './tabLinks';
 import LazyMount, { CellPlaceholder } from './LazyMount';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -772,16 +773,26 @@ const CardRenderer: React.FC<{
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
   // without flicker. Brief transitions smooth out the dim/restore swing.
   const dimming = loading && value != null;
-  return (
-    <div
-      style={{
-        opacity: dimming ? 0.6 : 1,
-        transition: 'opacity 120ms ease-out',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+  // `link`: a key figure opens the tab (or page) that explains it. A `tab:`
+  // target resolves like a text tile's tab links; unknown here (the editor
+  // preview, a tab this instance lacks) it stays a plain card.
+  const resolveTab = useTabLinkResolver();
+  const rawLink = typeof metadata.link === 'string' ? metadata.link.trim() : '';
+  const linkTarget = rawLink.startsWith('tab:') ? resolveTab?.(rawLink.slice(4)) ?? null : null;
+  const href = linkTarget
+    ? linkTarget.href
+    : /^(https?:\/\/|\/)/.test(rawLink)
+      ? rawLink
+      : null;
+  const external = Boolean(href && /^https?:\/\//.test(href));
+  const wrapperStyle: React.CSSProperties = {
+    opacity: dimming ? 0.6 : 1,
+    transition: 'opacity 120ms ease-out',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  };
+  const card = (
       <DepictioCard
         contentRef={contentRef}
         title={metadata.title || inferCardTitle(metadata)}
@@ -837,7 +848,20 @@ const CardRenderer: React.FC<{
           ) : undefined
         }
       />
-    </div>
+  );
+  return href ? (
+    <a
+      href={href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      className="depictio-card-link"
+      title={linkTarget ? `Open ${linkTarget.label}` : undefined}
+      style={{ ...wrapperStyle, color: 'inherit', textDecoration: 'none' }}
+    >
+      {card}
+    </a>
+  ) : (
+    <div style={wrapperStyle}>{card}</div>
   );
 };
 

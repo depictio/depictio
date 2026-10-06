@@ -55,9 +55,11 @@ import {
   SaveGroupContext,
   BrandScope,
   Z_LAYERS,
+  tabLinkKey,
 } from 'depictio-react-core';
 import type {
   DashboardData,
+  FilterSectionSpec,
   DashboardPermissions,
   DashboardSummary,
   CrossTabComponentsResponse,
@@ -444,9 +446,31 @@ const App: React.FC = () => {
   // Persistent sections owned by *other* tabs. The current tab's own persistent
   // sections render natively (grid ones in DashboardGrid, filter ones in the
   // panel) — fanning them out too would draw them twice.
+  // The tab's displayed name, which `exclude_tabs` lists: the parent answers to
+  // its main-tab label, a child to its title.
+  const currentTabKey = useMemo(() => {
+    if (!dashboard) return '';
+    const mainName = (dashboard as { main_tab_name?: unknown }).main_tab_name;
+    const name = dashboard.parent_dashboard_id
+      ? dashboard.title
+      : (typeof mainName === 'string' && mainName) || dashboard.title;
+    return name ? tabLinkKey(name) : '';
+  }, [dashboard]);
+  const excludedHere = useCallback(
+    (spec: FilterSectionSpec | null | undefined) =>
+      Boolean(
+        currentTabKey &&
+          spec?.persistent &&
+          spec.exclude_tabs?.some((t) => tabLinkKey(t) === currentTabKey),
+      ),
+    [currentTabKey],
+  );
   const foreignPersistentSections = useMemo(
-    () => crossTab.persistentSections.filter((s) => s.owner_dashboard_id !== dashboardId),
-    [crossTab.persistentSections, dashboardId],
+    () =>
+      crossTab.persistentSections.filter(
+        (s) => s.owner_dashboard_id !== dashboardId && !excludedHere(s.spec),
+      ),
+    [crossTab.persistentSections, dashboardId, excludedHere],
   );
   const foreignFilterSections = useMemo(
     () => foreignPersistentSections.filter((s) => s.kind === 'filter'),
@@ -774,6 +798,7 @@ const App: React.FC = () => {
         refreshTick={refreshTick}
         groupRender={groupRender}
         bulkOptions={groupsApi.bulkOptions}
+        onResetFilters={handleResetAllFilters}
       />
     ) : null;
 
@@ -825,9 +850,24 @@ const App: React.FC = () => {
   // View mode uses the SAME DashboardGrid + saved-layout source as the editor;
   // only `editMode`/`isDraggable`/`isResizable` differ. Identical visual output
   // for any given dashboard, regardless of which URL the user lands on.
+  // A persistent section this tab owns but is excluded from (`exclude_tabs`)
+  // drops out here: the owner draws its own sections natively, not through the
+  // cross-tab host that filters the foreign ones.
+  const excludedOwnSections = useMemo(
+    () =>
+      new Set(
+        ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) || [])
+          .filter((s) => excludedHere(s))
+          .map((s) => s.name),
+      ),
+    [dashboard, excludedHere],
+  );
   const rightComponents = useMemo(
-    () => [...cardComponents, ...otherComponents],
-    [cardComponents, otherComponents],
+    () =>
+      [...cardComponents, ...otherComponents].filter(
+        (m) => !(typeof m.section === 'string' && excludedOwnSections.has(m.section)),
+      ),
+    [cardComponents, otherComponents, excludedOwnSections],
   );
 
   // Same count the panel badges, hoisted so the narrow-screen header button can
@@ -1275,6 +1315,7 @@ const App: React.FC = () => {
                   refreshTick={refreshTick}
                   groupRender={groupRender}
                   bulkOptions={groupsApi.bulkOptions}
+                  onResetFilters={handleResetAllFilters}
                 />
               )}
             </Box>

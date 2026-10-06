@@ -67,3 +67,18 @@ def test_card_headline_variant_round_trip():
     assert _dash(kpi).to_full()["stored_metadata"][0]["variant"] == "headline"
     card = DashboardDataLite.from_full(_dash(kpi).to_full()).components[0]
     assert card.display["variant"] == "headline"
+
+
+def test_card_link_round_trip():
+    kpi = {**KPI, "display": {**KPI["display"], "link": "tab:Sampling Campaign"}}
+    assert _dash(kpi).to_full()["stored_metadata"][0]["link"] == "tab:Sampling Campaign"
+    card = DashboardDataLite.from_full(_dash(kpi).to_full()).components[0]
+    assert card.display["link"] == "tab:Sampling Campaign"
+
+
+def test_persistent_section_exclude_tabs():
+    from depictio.models.models.dashboards import FilterSectionSpec
+
+    spec = FilterSectionSpec(name="Samples", persistent=True, exclude_tabs=["Overview"])
+    assert spec.exclude_tabs == ["Overview"]
+    assert FilterSectionSpec(name="x").exclude_tabs is None

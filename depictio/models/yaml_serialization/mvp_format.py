@@ -84,6 +84,7 @@ CARD_STYLING_FIELDS = (
     "icon_style",
     "caption",
     "variant",
+    "link",
     "metric_theme",
     "background_color",
 )

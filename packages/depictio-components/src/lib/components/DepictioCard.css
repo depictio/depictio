@@ -104,3 +104,26 @@
   width: 44px;
   height: 44px;
 }
+
+/* A card with a `link` (wrapped in .depictio-card-link by the renderer):
+   lifted on hover like a tab tile, so a key figure reads as a way in. */
+.depictio-card-link {
+  cursor: pointer;
+}
+
+.depictio-card-link .depictio-card {
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+.depictio-card-link:hover .depictio-card {
+  border-color: var(--mantine-color-default-border) !important;
+  box-shadow: var(--mantine-shadow-md) !important;
+  transform: translateY(-1px);
+}
+
+.depictio-card-link:hover .depictio-card-icon--rest {
+  opacity: 0.6;
+}
