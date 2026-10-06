@@ -498,7 +498,7 @@ jobs:
       - name: Export to Docker Compose
         run: |
           uv run --python 3.12 --extra local depictio local down
-          uv run --python 3.12 --extra local depictio local export-compose --out "$RUNNER_TEMP/export"
+          uv run --python 3.12 --extra local depictio local export --out "$RUNNER_TEMP/export"
           ls -la "$RUNNER_TEMP/export"
 
       - name: docker compose up on the exported data
@@ -1046,7 +1046,7 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing dashboard validate (offline)..."
 
-          depictio-cli dashboard validate ../projects/init/iris/dashboards/overview.yaml
+          depictio-cli dashboard validate --offline ../projects/init/iris/dashboards/overview.yaml
 
           echo "✅ Dashboard validate passed"
 
@@ -1684,7 +1684,7 @@ jobs:
           # template.yaml now declares a phylogenetic_tree_canonical DC (scan: single
           # filename → tree.nwk) and a phylogenetic_tree_metadata_canonical DC whose
           # recipe consumes taxonomy.tsv + rel-table-ASV.tsv. Without these files
-          # `depictio-cli run --template` fails at Project validation
+          # `depictio-cli ingest --template` fails at Project validation
           # (ScanSingle.filename: file does not exist) before any step runs.
           fetch "qiime2/phylogenetic_tree/tree.nwk" "data/qiime2/phylogenetic_tree/tree.nwk"
           fetch "qiime2/taxonomy/taxonomy.tsv" "data/qiime2/taxonomy/taxonomy.tsv"
@@ -1731,9 +1731,9 @@ jobs:
           cd depictio/cli
           source venv/bin/activate
           DATA_DIR="$(pwd)/../../ampliseq-testdata"
-          echo "🚀 Running full template pipeline: depictio run --template..."
+          echo "🚀 Running full template pipeline: depictio ingest --template..."
 
-          depictio-cli run \
+          depictio-cli ingest \
             --template nf-core/ampliseq/latest \
             --data-root "$DATA_DIR" \
             --project-name "Ampliseq CI Template Test" \
