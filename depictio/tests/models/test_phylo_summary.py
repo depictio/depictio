@@ -142,6 +142,13 @@ def test_summary_and_header_round_trip():
     assert {k: getattr(again, k) for k in HEADER} == HEADER
 
 
+def test_description_round_trips():
+    about = "One tip per phylum, placed at its largest clean clade."
+    full = _dash(_component({**TREE, **SUMMARY}, description=about)).to_full()
+    assert full["stored_metadata"][0]["description"] == about
+    assert DashboardDataLite.from_full(full).components[0].description == about
+
+
 def test_export_leaves_defaults_out():
     yaml_text = _dash(_component({**TREE, **SUMMARY}, **HEADER)).to_yaml()
     exported = DashboardDataLite.from_full(

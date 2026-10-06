@@ -1177,6 +1177,11 @@ class DashboardDataLite(BaseModel):
 
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
+            # The prose behind the title (its hover). `to_full` reads it back
+            # for every type, so leaving it out here lost it on a round trip.
+            description = comp.get("description")
+            if isinstance(description, str) and description.strip():
+                lite_comp["description"] = description
 
             if comp_type == "figure":
                 lite_comp["visu_type"] = comp.get("visu_type", "scatter")
