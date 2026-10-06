@@ -337,6 +337,11 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Filter bar only (a grid section with `display: 'strip'`): the short label
+   *  shown instead of the title. */
+  strip_label?: string | null;
+  /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
+  strip_icon?: boolean | null;
   /** Per-component font-size multiplier (figures: scales the whole Plotly
    *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
    *  content scale; 1/undefined = no override. */
@@ -379,7 +384,14 @@ export interface FilterSectionSpec {
   /** Grid sections: the style every card in the section is drawn in unless
    *  the card sets its own `variant`. Unset leaves each card to its own. */
   card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | null;
+  /** Grid sections: `strip` draws the section as a filter bar — the
+   *  interactive components naming it leave the filter panel and render as one
+   *  compact row. Unset (or `grid`) is one tile each on the grid. */
+  display?: 'grid' | 'strip' | null;
 }
+
+/** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
+export type CategoryColors = Record<string, Record<string, string>>;
 
 export interface DashboardData {
   _id?: string;
@@ -393,6 +405,13 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
+  /** Fixed colours per categorical value (column → value → colour), so one
+   *  category reads the same in a filter bar, a figure and a card. Unset on
+   *  dashboards that pin none. Resolve through `categoryColor`. */
+  category_colors?: CategoryColors | null;
+  /** A child tab's main-tab `category_colors`, resolved by the server on read
+   *  and never saved back. The tab's own map is laid over it. */
+  inherited_category_colors?: CategoryColors | null;
   /** Funnel filtering (issue #939): on by default, authors opt out per
    *  dashboard. Absent on payloads cached before the field existed, which is
    *  why every reader tests `!== false` rather than `Boolean(...)`. */

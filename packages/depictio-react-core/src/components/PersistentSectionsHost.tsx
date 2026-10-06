@@ -4,7 +4,12 @@ import { GRID_BREAKPOINTS, GRID_COL_COUNTS, toSplitRows } from '../gridConfig';
 import { Accordion, Badge, Button, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import type { BulkComputeOptions, InteractiveFilter, PersistentSection } from '../api';
+import type {
+  BulkComputeOptions,
+  InteractiveFilter,
+  PersistentSection,
+  StoredMetadata,
+} from '../api';
 import type { GroupRenderState } from '../selectionGroups';
 import { bulkComputeCards } from '../api';
 import { countActiveFilters } from '../activeFilters';
@@ -19,6 +24,8 @@ import ComponentRenderer from './ComponentRenderer';
 import { withSectionCardVariant } from './cardVariant';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
 import { fitLayoutHeights, GRID_ROW_GAP_PX, SPLIT_ROW_PX, useAutofitHeights } from './autofit';
+import { FilterStripSection } from './interactive/strip/FilterStrip';
+import { isStripSection, sectionRuns } from './interactive/strip/stripLayout';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -51,6 +58,9 @@ export interface PersistentSectionsHostProps {
   /** Clears every filter. With filters active, a pinned section's header says
    *  so ("Filtered", "14 / 85") and offers this as its way back. */
   onResetFilters?: () => void;
+  /** What a fanned-out filter bar's controls display — the instant filters,
+   *  where `filters` is the debounced copy the data fetches use. */
+  controlFilters?: InteractiveFilter[];
 }
 
 /** A section fanned out from another tab is keyed by owner + name: two tabs
@@ -85,6 +95,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   bulkOptions,
   renderSectionActions,
   onResetFilters,
+  controlFilters,
 }) => {
   const renderable = useMemo(
     () =>
@@ -240,153 +251,193 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
 
   if (renderable.length === 0) return null;
 
-  const keys = renderable.map((s) => hostSectionKey(s.section));
+  // One owner tab's members as a read-only grid. `metas` are the members'
+  // metadata in the style their section draws them in.
+  const renderGrid = (
+    metas: StoredMetadata[],
+    members: PersistentSection['components'],
+    section: PersistentSection,
+    gridWidth: number,
+  ) => {
+    const stored = toSplitRows(normalizeLayout(metas, section.layouts, false));
+    return (
+      <ResponsiveGridLayout
+      className="layout"
+      // Fitted here as in DashboardGrid: a pinned section is
+      // still a grid of tiles, and a text tile that sizes
+      // itself on the tab that declares it has to do the same
+      // on every tab that shows it. Always on — this host is
+      // read-only, so a measurement can never be persisted.
+      // Rescaled for every breakpoint by the same helper the
+      // main grid uses: passing `lg` alone let react-grid-layout
+      // generate the others, and its clamp collided the second
+      // half-width tile with the first, stacking a two-table row
+      // below 1440px.
+      layouts={responsiveLayouts(
+        fitLayoutHeights(metas, stored, autoHeights, true, SPLIT_ROW_PX),
+      )}
+      breakpoints={GRID_BREAKPOINTS}
+      cols={GRID_COL_COUNTS}
+      rowHeight={SPLIT_ROW_PX}
+      width={gridWidth}
+      // Same asymmetric gap as the main grid, from the same
+      // constants: gridConfig.ts's header warns these two
+      // surfaces must not drift.
+      margin={[12, GRID_ROW_GAP_PX]}
+      containerPadding={[0, 0]}
+      isDraggable={false}
+      isResizable={false}
+      compactType="vertical"
+    >
+      {members.map((member) => (
+        <div
+          key={member.metadata.index}
+          data-component-id={member.metadata.index}
+          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+        >
+          <div
+            style={{
+              overflow: 'hidden',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <ComponentRenderer
+              // The OWNER tab, not the tab being viewed: data
+              // endpoints take the dashboard id as a path param
+              // and gate on the same project permission.
+              dashboardId={member.dashboard_id}
+              // Same rule as the owner tab's grid: the
+              // section's card style unless the card sets one.
+              metadata={withSectionCardVariant(member.metadata, section.spec)}
+              filters={filters}
+              onFilterChange={onFilterChange}
+              refreshTick={refreshTick}
+              groupRender={groupRender}
+              cardValue={cardValues[member.metadata.index]}
+              cardSecondaryValues={cardSecondaryValues[member.metadata.index]}
+              cardLoading={cardsLoading}
+            />
+          </div>
+        </div>
+      ))}
+    </ResponsiveGridLayout>
+    );
+  };
+
+  // A filter bar renders on its own, without the accordion item: no header,
+  // no fold. Its non-interactive members, if any, sit under it as a grid.
+  const renderStrip = ({ section, members }: (typeof renderable)[number]) => {
+    const key = hostSectionKey(section);
+    const bar = members.filter((m) => m.metadata.component_type === 'interactive');
+    const others = members.filter((m) => m.metadata.component_type !== 'interactive');
+    const metas = others.map((m) => withSectionCardVariant(m.metadata, section.spec));
+    return (
+      <FilterStripSection
+        key={key}
+        name={section.spec.name}
+        spec={section.spec}
+        members={bar.map((m) => m.metadata)}
+        filters={controlFilters ?? filters}
+        onFilterChange={onFilterChange}
+        rest={others.length > 0 ? renderGrid(metas, others, section, containerWidth) : null}
+      />
+    );
+  };
+
+  const runs = sectionRuns(renderable, (s) => isStripSection(s.section.spec));
 
   return (
     // `flexShrink: 0`: the viewer mounts this inside a fixed-height column
     // flex container, which would otherwise squeeze a shrinkable host down to
     // zero height as soon as the tab's own grid fills the column.
     <div ref={wrapperRef} style={{ width: '100%', overflowX: 'hidden', flexShrink: 0 }}>
-      <SectionAccordion
-        value={keys.filter((k) => collapse.isOpen(k))}
-        onChange={(open) => applyAccordionValue(open, keys, collapse)}
-      >
-        {renderable.map(({ section, members }) => {
-          const key = hostSectionKey(section);
-          // In the style each card is drawn in, so the fitting below treats a
-          // row of compact cards the way the owner tab's grid does.
-          const metas = members.map((m) => withSectionCardVariant(m.metadata, section.spec));
-          // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
-          const stored = toSplitRows(normalizeLayout(metas, section.layouts, false));
-          const gridWidth = Math.max(100, containerWidth - sectionInset);
-          return (
-            <SectionAccordionItem
-              key={key}
-              value={key}
-              color={section.spec.color}
-              actions={
-                filtered && onResetFilters ? (
-                  <Group gap={6} wrap="nowrap">
-                    <Button
-                      size="compact-xs"
-                      variant="subtle"
-                      color="gray"
-                      leftSection={<Icon icon="mdi:filter-remove-outline" width={14} />}
-                      onClick={onResetFilters}
-                    >
-                      Reset filters
-                    </Button>
-                    {renderSectionActions?.(section)}
-                  </Group>
-                ) : (
-                  renderSectionActions?.(section)
-                )
-              }
-            >
-              <Accordion.Control>
-                <SectionHeader
-                  spec={section.spec}
-                  name={section.spec.name}
-                  badge={
-                    filtered ? (
-                      <Badge size="xs" variant="light" color={section.spec.color || 'blue'}>
-                        Filtered
-                      </Badge>
-                    ) : undefined
-                  }
-                  // Folded, the section still tells you what it holds — same
-                  // chips as DashboardGrid's own sections. PersistentSection
-                  // members are adapted to the ComponentSection shape the
-                  // summary expects.
-                  trailing={
-                    !collapse.isOpen(key) ? (
-                      <SectionSummary
-                        section={{
-                          key,
-                          sectionName: section.spec.name,
-                          spec: section.spec,
-                          members: metas,
-                        }}
-                        cardValues={cardValues}
-                        baseValues={filtered && baseValues ? baseValues : undefined}
-                      />
-                    ) : undefined
-                  }
-                />
-              </Accordion.Control>
-              <Accordion.Panel>
-                {renderedKeys.has(key) && (
-                  <div data-persistent-section-grid>
-                    <ResponsiveGridLayout
-                      className="layout"
-                      // Fitted here as in DashboardGrid: a pinned section is
-                      // still a grid of tiles, and a text tile that sizes
-                      // itself on the tab that declares it has to do the same
-                      // on every tab that shows it. Always on — this host is
-                      // read-only, so a measurement can never be persisted.
-                      // Rescaled for every breakpoint by the same helper the
-                      // main grid uses: passing `lg` alone let react-grid-layout
-                      // generate the others, and its clamp collided the second
-                      // half-width tile with the first, stacking a two-table row
-                      // below 1440px.
-                      layouts={responsiveLayouts(
-                        fitLayoutHeights(metas, stored, autoHeights, true, SPLIT_ROW_PX),
-                      )}
-                      breakpoints={GRID_BREAKPOINTS}
-                      cols={GRID_COL_COUNTS}
-                      rowHeight={SPLIT_ROW_PX}
-                      width={gridWidth}
-                      // Same asymmetric gap as the main grid, from the same
-                      // constants: gridConfig.ts's header warns these two
-                      // surfaces must not drift.
-                      margin={[12, GRID_ROW_GAP_PX]}
-                      containerPadding={[0, 0]}
-                      isDraggable={false}
-                      isResizable={false}
-                      compactType="vertical"
-                    >
-                      {members.map((member) => (
-                        <div
-                          key={member.metadata.index}
-                          data-component-id={member.metadata.index}
-                          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      {runs.map((run) => {
+        if (run.strip) return renderStrip(run.section);
+        const keys = run.sections.map((s) => hostSectionKey(s.section));
+        return (
+          <SectionAccordion
+            key={keys[0]}
+            value={keys.filter((k) => collapse.isOpen(k))}
+            onChange={(open) => applyAccordionValue(open, keys, collapse)}
+          >
+            {run.sections.map(({ section, members }) => {
+              const key = hostSectionKey(section);
+              // In the style each card is drawn in, so the fitting below treats a
+              // row of compact cards the way the owner tab's grid does.
+              // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
+              const metas = members.map((m) => withSectionCardVariant(m.metadata, section.spec));
+              const gridWidth = Math.max(100, containerWidth - sectionInset);
+              return (
+                <SectionAccordionItem
+                  key={key}
+                  value={key}
+                  color={section.spec.color}
+                  actions={
+                    filtered && onResetFilters ? (
+                      <Group gap={6} wrap="nowrap">
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          color="gray"
+                          leftSection={<Icon icon="mdi:filter-remove-outline" width={14} />}
+                          onClick={onResetFilters}
                         >
-                          <div
-                            style={{
-                              overflow: 'hidden',
-                              flex: 1,
-                              minHeight: 0,
-                              display: 'flex',
-                              flexDirection: 'column',
+                          Reset filters
+                        </Button>
+                        {renderSectionActions?.(section)}
+                      </Group>
+                    ) : (
+                      renderSectionActions?.(section)
+                    )
+                  }
+                >
+                  <Accordion.Control>
+                    <SectionHeader
+                      spec={section.spec}
+                      name={section.spec.name}
+                      badge={
+                        filtered ? (
+                          <Badge size="xs" variant="light" color={section.spec.color || 'blue'}>
+                            Filtered
+                          </Badge>
+                        ) : undefined
+                      }
+                      // Folded, the section still tells you what it holds — same
+                      // chips as DashboardGrid's own sections. PersistentSection
+                      // members are adapted to the ComponentSection shape the
+                      // summary expects.
+                      trailing={
+                        !collapse.isOpen(key) ? (
+                          <SectionSummary
+                            section={{
+                              key,
+                              sectionName: section.spec.name,
+                              spec: section.spec,
+                              members: metas,
                             }}
-                          >
-                            <ComponentRenderer
-                              // The OWNER tab, not the tab being viewed: data
-                              // endpoints take the dashboard id as a path param
-                              // and gate on the same project permission.
-                              dashboardId={member.dashboard_id}
-                              // Same rule as the owner tab's grid: the
-                              // section's card style unless the card sets one.
-                              metadata={withSectionCardVariant(member.metadata, section.spec)}
-                              filters={filters}
-                              onFilterChange={onFilterChange}
-                              refreshTick={refreshTick}
-                              groupRender={groupRender}
-                              cardValue={cardValues[member.metadata.index]}
-                              cardSecondaryValues={cardSecondaryValues[member.metadata.index]}
-                              cardLoading={cardsLoading}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </ResponsiveGridLayout>
-                  </div>
-                )}
-              </Accordion.Panel>
-            </SectionAccordionItem>
-          );
-        })}
-      </SectionAccordion>
+                            cardValues={cardValues}
+                            baseValues={filtered && baseValues ? baseValues : undefined}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    {renderedKeys.has(key) && (
+                      <div data-persistent-section-grid>
+                        {renderGrid(metas, members, section, gridWidth)}
+                      </div>
+                    )}
+                  </Accordion.Panel>
+                </SectionAccordionItem>
+              );
+            })}
+          </SectionAccordion>
+        );
+      })}
     </div>
   );
 };

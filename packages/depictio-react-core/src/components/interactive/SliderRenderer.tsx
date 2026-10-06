@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Text, Slider } from '@mantine/core';
 import { CompactControlSlot } from 'depictio-components';
 
-import { ColumnRange, fetchColumnRange, InteractiveFilter, StoredMetadata } from '../../api';
+import { InteractiveFilter, StoredMetadata } from '../../api';
 import ComponentSkeleton from '../ComponentSkeleton';
 import {
   InteractiveFrame,
@@ -11,7 +11,8 @@ import {
   SLIDER_MARKS_CLASS,
   interactiveAccent,
 } from './frame';
-import { buildNumericScale, formatSliderValue } from './numericScale';
+import { buildNumericScale, formatSliderValue, sliderBounds } from './numericScale';
+import { useColumnRange } from './useInteractiveData';
 
 /**
  * Single-value Slider renderer for the React viewer.
@@ -22,12 +23,9 @@ import { buildNumericScale, formatSliderValue } from './numericScale';
  * On change emits `{index, value, column_name, interactive_component_type: 'Slider'}`
  * upstream.
  *
- * Mirrors the data-fetch + module-level cache pattern used by RangeSliderRenderer in
- * ComponentRenderer.tsx so multiple Slider instances on the same (dc_id, column) share
- * one in-flight fetch.
+ * Bounds come from `useColumnRange`, the one cache every slider on the same
+ * (dc_id, column) shares — the filter bar's included.
  */
-
-const rangeCache = new Map<string, Promise<ColumnRange>>();
 
 const SliderRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -36,15 +34,6 @@ const SliderRenderer: React.FC<{
   /** Compact rendering — drops the inner Paper, defaults marks to hidden. */
   compact?: boolean;
 }> = ({ metadata, filters, onChange, compact }) => {
-  const [bounds, setBounds] = useState<{
-    min: number;
-    max: number;
-    dtype?: string | null;
-    unique?: number | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const defaultState = (metadata.default_state || {}) as Record<string, unknown>;
   const useLogScale = ((defaultState.scale as string) || 'linear') === 'log10';
   const marksNumber = Math.max(
@@ -52,53 +41,17 @@ const SliderRenderer: React.FC<{
     typeof defaultState.marks_number === 'number' ? (defaultState.marks_number as number) : 5,
   );
 
-  useEffect(() => {
-    if (!metadata.dc_id || !metadata.column_name) {
-      setLoading(false);
-      return;
-    }
-    const cacheKey = `${metadata.dc_id}|${metadata.column_name}`;
-    let p = rangeCache.get(cacheKey);
-    if (!p) {
-      p = fetchColumnRange(metadata.dc_id, metadata.column_name);
-      rangeCache.set(cacheKey, p);
-    }
-    let cancelled = false;
-    p.then((res) => {
-      if (cancelled) return;
-      if (typeof res.min !== 'number' || typeof res.max !== 'number') {
-        setError(
-          `No numeric min/max available for column "${metadata.column_name}".`,
-        );
-        return;
-      }
-      // Apply log10 transformation to bounds — matches Dash utils.py:791-793.
-      const rawMin = res.min;
-      const rawMax = res.max;
-      if (useLogScale) {
-        if (rawMin <= 0 || rawMax <= 0) {
-          setError(
-            `Cannot apply log10 scale to column "${metadata.column_name}" — non-positive bounds.`,
-          );
-          return;
-        }
-        setBounds({ min: Math.log10(rawMin), max: Math.log10(rawMax) });
-      } else {
-        setBounds({ min: rawMin, max: rawMax, dtype: res.dtype, unique: res.unique });
-      }
-    })
-      .catch((err) => {
-        console.warn('[SliderRenderer] fetchColumnRange failed:', err);
-        rangeCache.delete(cacheKey);
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [metadata.dc_id, metadata.column_name, useLogScale]);
+  const { data: range, loading, error: fetchError } = useColumnRange(
+    metadata.dc_id,
+    metadata.column_name,
+  );
+  // Log bounds are transformed (matches Dash utils.py:791-793), which is why a
+  // non-positive end is an error rather than a fallback.
+  const { bounds, error: boundsError } = useMemo(
+    () => sliderBounds(range, metadata.column_name, useLogScale),
+    [range, metadata.column_name, useLogScale],
+  );
+  const error = fetchError ?? boundsError;
 
   const filterEntry = filters.find((f) => f.index === metadata.index);
   const selectedValue =

@@ -91,7 +91,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
  *   None   -> false
  *   else   -> bool(value)
  */
-function coerceBool(raw: unknown): boolean {
+export function coerceBool(raw: unknown): boolean {
   if (raw === null || raw === undefined) return false;
   if (typeof raw === 'boolean') return raw;
   if (typeof raw === 'string') {

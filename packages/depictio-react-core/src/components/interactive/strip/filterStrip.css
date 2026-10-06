@@ -1,0 +1,355 @@
+/*
+ * The filter bar: one card, one row of filters, a thin rule between them.
+ *
+ * Wrapping is plain flex-wrap, so the bar takes one row where the filters fit,
+ * two where they don't, and one filter per row on a phone. The rules between
+ * filters are each item's own start border, and the row is pulled out past the
+ * card's padding by exactly half a gap plus that border: whichever item starts
+ * a row has its rule land outside the clip box, so a wrapped row never opens on
+ * a stray line. `overflow-x: clip` (not `hidden`) leaves the vertical axis
+ * visible, which the chips' raised shadow and the slider readout need.
+ */
+
+.depictio-filter-strip {
+  --strip-gap: 28px;
+  --strip-row-gap: 10px;
+  --strip-control-height: 40px;
+  container-type: inline-size;
+  container-name: depictio-filter-strip;
+  padding: 16px 20px;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+  box-shadow: var(--mantine-shadow-xs);
+}
+
+.depictio-filter-strip__clip {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.depictio-filter-strip__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--strip-row-gap);
+  margin-inline: calc(-1 * var(--strip-gap) / 2 - 1px);
+}
+
+.depictio-filter-strip__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  min-height: var(--strip-control-height);
+  padding-inline: calc(var(--strip-gap) / 2);
+  border-inline-start: 1px solid var(--mantine-color-default-border);
+  /* Overridden per kind below. */
+  flex: 1 1 260px;
+}
+
+/* Chips start from their natural width, so a row wraps before any label or
+   chip has to give way, then share what the row has left. */
+.depictio-filter-strip__item[data-kind='categorical'] {
+  flex: 1 1 auto;
+  max-width: 480px;
+}
+
+/* The chips spread over their track, so a track only grows as far as its
+   chips can fill: a yes/no pair left alone on a wrapped row would otherwise
+   stretch across the whole bar. */
+.depictio-filter-strip__item[data-kind='categorical']:has(.depictio-strip-chip:nth-child(3)) {
+  max-width: 600px;
+}
+
+.depictio-filter-strip__item[data-kind='categorical']:has(.depictio-strip-chip:nth-child(4)) {
+  max-width: 780px;
+}
+
+.depictio-filter-strip__item[data-kind='categorical']:has(.depictio-strip-chip:nth-child(6)) {
+  max-width: none;
+}
+
+/* Past the chip limit: a select, which needs no more than a slider. */
+.depictio-filter-strip__item[data-kind='categorical']:has(.depictio-strip-select) {
+  flex: 1 1 300px;
+  max-width: 480px;
+}
+
+.depictio-filter-strip__item[data-kind='range'],
+.depictio-filter-strip__item[data-kind='slider'] {
+  flex: 1 1 240px;
+  max-width: 460px;
+}
+
+.depictio-filter-strip__item[data-kind='toggle'],
+.depictio-filter-strip__item[data-kind='date'],
+.depictio-filter-strip__item[data-kind='unsupported'] {
+  flex: 0 1 auto;
+}
+
+/* ------------------------------------------------------------------ label */
+
+/* The label keeps its width (up to a cap, then ellipsis): when an item is
+   squeezed, its track scrolls rather than its name collapsing. */
+.depictio-filter-strip__label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.depictio-filter-strip__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--strip-accent);
+  color: var(--mantine-color-white);
+}
+
+.depictio-filter-strip__name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--mantine-color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depictio-filter-strip__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.depictio-filter-strip__item[data-kind='toggle'] .depictio-filter-strip__control,
+.depictio-filter-strip__item[data-kind='date'] .depictio-filter-strip__control {
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------------------- chips */
+
+.depictio-strip-track {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--strip-control-height);
+  padding: 4px;
+  border-radius: var(--mantine-radius-md);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  /* Narrower than its chips, the track scrolls rather than wrapping: a second
+     line of chips would double the bar's height for one filter. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.depictio-strip-track::-webkit-scrollbar {
+  display: none;
+}
+
+.depictio-strip-chip {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 0 auto;
+  padding: 4px 14px;
+  border-radius: calc(var(--mantine-radius-md) - 2px);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.depictio-strip-chip:hover {
+  color: var(--mantine-color-text);
+}
+
+.depictio-strip-chip[aria-pressed='true'] {
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-4));
+  color: var(--mantine-color-text);
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.depictio-strip-chip:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.depictio-strip-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.depictio-strip-chip__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-color);
+}
+
+/* Unselected chips dim their dot with their label, so the selected ones are
+   the only full-strength colour in the row once something is picked. */
+.depictio-strip-track[data-has-selection='true']
+  .depictio-strip-chip[aria-pressed='false']
+  .depictio-strip-chip__dot {
+  opacity: 0.45;
+}
+
+/* A select standing in for a long list of chips, drawn as the same grey
+   track so the bar keeps one look. */
+.depictio-strip-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.depictio-strip-select .depictio-strip-select__input {
+  min-height: var(--strip-control-height);
+  border-color: transparent;
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+/* ----------------------------------------------------------------- sliders */
+
+.depictio-strip-slider {
+  flex: 1 1 auto;
+  min-width: 80px;
+}
+
+/* Half a thumb of room at each end, so a thumb resting on an end stays inside
+   the bar's clip when the slider starts a row (always, on a phone). */
+.depictio-filter-strip__item[data-kind='range'] .depictio-filter-strip__control,
+.depictio-filter-strip__item[data-kind='slider'] .depictio-filter-strip__control {
+  padding-inline: 8px;
+}
+
+.depictio-strip-slider .depictio-strip-slider__thumb {
+  background-color: var(--mantine-color-body);
+  border-width: 2px;
+  border-color: var(--strip-accent);
+}
+
+.depictio-strip-slider .depictio-strip-slider__bar {
+  background-color: var(--strip-accent);
+}
+
+/* The current values: shown while the slider is in use or narrowed, quiet
+   otherwise. Positioned under the track so showing them moves nothing. */
+.depictio-strip-readout {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(50% + 12px);
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.depictio-filter-strip__item:hover .depictio-strip-readout,
+.depictio-filter-strip__item:focus-within .depictio-strip-readout,
+.depictio-filter-strip__item[data-active='true'] .depictio-strip-readout {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------- edit mode */
+
+.depictio-strip-section__edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-inline: 4px;
+}
+
+.depictio-strip-section + .depictio-section-accordion,
+.depictio-section-accordion + .depictio-strip-section,
+.depictio-strip-section + .depictio-strip-section {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+.depictio-strip-section__rest {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+/* ------------------------------------------------------------------ phone */
+
+/* One filter per row, its label above its control: beside it, the label would
+   leave a three-chip track too narrow for its chips. */
+@container depictio-filter-strip (max-width: 560px) {
+  /* As specific as the chip-count caps above, and later, so it wins them. */
+  .depictio-filter-strip .depictio-filter-strip__row > .depictio-filter-strip__item[data-kind] {
+    flex: 1 1 100%;
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* A switch stays beside its label; alone under it, it reads as a stray. */
+  .depictio-filter-strip .depictio-filter-strip__row > .depictio-filter-strip__item[data-kind='toggle'] {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Every item starts a row here, so the start rules are all clipped; a rule
+     above each item but the first takes over. */
+  .depictio-filter-strip__item + .depictio-filter-strip__item {
+    padding-top: var(--strip-row-gap);
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+
+  .depictio-filter-strip__item[data-kind='range'],
+  .depictio-filter-strip__item[data-kind='slider'] {
+    padding-bottom: 12px;
+  }
+
+  .depictio-filter-strip__label {
+    gap: 10px;
+    max-width: none;
+  }
+
+  .depictio-filter-strip__badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+  }
+
+  .depictio-filter-strip__badge svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .depictio-filter-strip__name {
+    font-size: 14px;
+  }
+}

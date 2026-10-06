@@ -37,6 +37,13 @@ import {
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
 import { withSectionCardVariant } from './cardVariant';
+import { FilterStripSection } from './interactive/strip/FilterStrip';
+import {
+  isStripMember,
+  isStripSection,
+  sectionRuns,
+  stripSectionNames,
+} from './interactive/strip/stripLayout';
 import {
   fitLayoutHeights,
   useAutofitHeights,
@@ -113,6 +120,20 @@ interface DashboardGridProps {
    * from where it is seen.
    */
   renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+  /**
+   * Editor-only per-filter actions for the members of a filter bar (a grid
+   * section with `display: 'strip'`). Separate from `renderItemOverlay`
+   * because a filter's menu offers the filter sections and bars it can move
+   * to, not the grid's tile sections.
+   */
+  renderStripItemOverlay?: (metadata: StoredMetadata) => React.ReactNode;
+  /**
+   * The filters a filter bar's controls display, when they should differ from
+   * `filters`. The apps hand the grid a debounced copy (and with group filters
+   * folded in) so figures don't refetch per keystroke; a control has to show a
+   * click at once, as the filter panel's do.
+   */
+  controlFilters?: InteractiveFilter[];
 }
 
 /**
@@ -174,13 +195,23 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   gridSections,
   beforeSections,
   renderSectionActions,
+  renderStripItemOverlay,
+  controlFilters,
 }) => {
+  // Filter-bar members ride along in `metadataList` so they bucket into their
+  // section, but they are drawn by the bar and never laid out on the grid:
+  // their coordinates (if any) live in the left panel's layout, and an item
+  // without one here would be auto-placed — and then persisted by the editor.
+  const stripNames = useMemo(() => stripSectionNames(gridSections), [gridSections]);
+  const onGrid = useCallback((m: StoredMetadata) => !isStripMember(m, stripNames), [stripNames]);
+  const gridMetadata = useMemo(() => metadataList.filter(onGrid), [metadataList, onGrid]);
+
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
   // the memoised grid cells and re-render every Plotly figure on the dashboard.
   const layouts = useMemo(
-    () => normalizeLayout(metadataList, layoutData, isDraggable || isResizable, false),
-    [metadataList, layoutData, isDraggable, isResizable],
+    () => normalizeLayout(gridMetadata, layoutData, isDraggable || isResizable, false),
+    [gridMetadata, layoutData, isDraggable, isResizable],
   );
 
   // Measure our own container so the grid never overflows the parent pane.
@@ -430,7 +461,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   const readOnly = !(isDraggable || isResizable);
 
   const layoutsForSection = useCallback(
-    (members: StoredMetadata[], spec?: FilterSectionSpec): Layout[] => {
+    (allMembers: StoredMetadata[], spec?: FilterSectionSpec): Layout[] => {
+      const members = allMembers.filter(onGrid);
       const ids = new Set(members.map((m) => m.index));
       const mine = layouts.filter((l) => ids.has(l.i));
       // `y` is stored per dashboard, not per section, so a section whose members
@@ -469,7 +501,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // neighbour gets widened.
       return readOnly ? widenLoneRows(packed, rowMateSet(mine)) : packed;
     },
-    [layouts, readOnly, autoHeights],
+    [layouts, readOnly, autoHeights, onGrid],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -528,7 +560,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     for (const section of sections) {
       byKey.set(
         section.key,
-        section.members.map((m) => (
+        section.members.filter(onGrid).map((m) => (
           // Outer div = the cloned target react-resizable injects the
           // resize-handle <span>s into. It must NOT clip overflow or the
           // top-edge handles (nw/n/ne) get sliced off — the inner div clips
@@ -590,6 +622,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     renderItemOverlay,
     editMode,
     isDraggable,
+    onGrid,
   ]);
 
   // Explicit width rather than `WidthProvider`: that HOC installs its own
@@ -597,8 +630,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // panel-transition sync above. Sectioned grids sit inside the section box
   // and get the room left inside it; the unsectioned bucket has no box and
   // spans the wrapper.
+  // A filter bar's other members sit under the bar, outside any section box.
   const gridWidth = (section: ComponentSection) =>
-    section.sectionName ? Math.max(100, containerWidth - sectionInset) : containerWidth;
+    section.sectionName && !isStripSection(section.spec)
+      ? Math.max(100, containerWidth - sectionInset)
+      : containerWidth;
 
   const renderGrid = (section: ComponentSection) =>
     section.members.length === 0 ? (
@@ -677,12 +713,44 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // one you want is the one already applied.
   // Plain sections have no fold, so they neither count nor get the button.
   const isPlain = (s: ComponentSection) => s.spec?.appearance === 'plain';
-  const foldable = named.filter((s) => !isPlain(s));
+  // A filter bar is neither: no header, no fold.
+  const isStrip = (s: ComponentSection) => isStripSection(s.spec);
+  const foldable = named.filter((s) => !isPlain(s) && !isStrip(s));
   const anySectionOpen = foldable.some((s) => sectionCollapse.isOpen(s.key));
 
+  const renderStripSection = (section: ComponentSection) => {
+    const rest = section.members.filter(onGrid);
+    return (
+      <FilterStripSection
+        key={section.key}
+        name={section.sectionName ?? ''}
+        spec={section.spec}
+        members={section.members.filter((m) => !onGrid(m))}
+        filters={controlFilters ?? filters}
+        onFilterChange={onFilterChange}
+        editMode={editMode}
+        actions={editMode ? renderSectionActions?.(section.sectionName ?? null) : undefined}
+        renderItemActions={editMode ? renderStripItemOverlay : undefined}
+        rest={rest.length > 0 ? renderGrid(section) : null}
+      />
+    );
+  };
+
+  // Filter bars break the accordion: each renders on its own, and the
+  // sections between two bars share one accordion as before.
   const renderSections = (list: ComponentSection[]) =>
+    list.length === 0
+      ? null
+      : sectionRuns(list, isStrip).map((run) =>
+          run.strip
+            ? renderStripSection(run.section)
+            : renderAccordion(run.sections),
+        );
+
+  const renderAccordion = (list: ComponentSection[]) =>
     list.length === 0 ? null : (
       <SectionAccordion
+        key={list[0].key}
         // A plain section has no fold: always open, and left out of the
         // persisted collapse state.
         value={list

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Text } from '@mantine/core';
+import { Skeleton, Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { CompactControlSlot } from 'depictio-components';
 import ComponentSkeleton from '../ComponentSkeleton';
@@ -90,7 +90,10 @@ const DatePickerRenderer: React.FC<{
   onChange?: (filter: InteractiveFilter) => void;
   /** Compact rendering — drops the frame, relies on the parent group's card. */
   compact?: boolean;
-}> = ({ metadata, filters, onChange, compact }) => {
+  /** The picker alone — no frame, no title, at the small size. For hosts that
+   *  draw their own label, like the filter bar. */
+  bare?: boolean;
+}> = ({ metadata, filters, onChange, compact, bare }) => {
   const [bounds, setBounds] = useState<{ min: Date | null; max: Date | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +174,10 @@ const DatePickerRenderer: React.FC<{
     }
   }, [filterEntry, selected, bounds]);
 
+  // Bare: the host frames and labels the control, so only the control (or
+  // what stands in for it) is returned.
   if (loading) {
+    if (bare) return <Skeleton height={30} width={220} radius="md" />;
     return (
       <InteractiveFrame compact={compact}>
         <ComponentSkeleton variant="control" />
@@ -180,13 +186,12 @@ const DatePickerRenderer: React.FC<{
   }
 
   if (error || !bounds) {
-    return (
-      <InteractiveFrame compact={compact}>
-        <Text size="xs" c="red" className="dashboard-error">
-          {error || 'Date range unavailable'}
-        </Text>
-      </InteractiveFrame>
+    const message = (
+      <Text size="xs" c="red" className="dashboard-error">
+        {error || 'Date range unavailable'}
+      </Text>
     );
+    return bare ? message : <InteractiveFrame compact={compact}>{message}</InteractiveFrame>;
   }
 
   // pickerValue holds either the parent's filter (synced via the effect
@@ -194,58 +199,62 @@ const DatePickerRenderer: React.FC<{
   // source of truth that Mantine reads from.
   const value: [Date | null, Date | null] = pickerValue;
 
+  const picker = (
+    <DatePickerInput
+      type="range"
+      value={value}
+      // Mantine's default renders a range as "September 12, 2023 - November
+      // 30, 2024", which needs more width than the Filters panel has and so
+      // wraps to a second line. ISO dates halve that and are the format the
+      // filter is stored and shared in anyway (see `toIsoDateString`), so the
+      // input now reads the same as the value it emits.
+      valueFormat="YYYY-MM-DD"
+      minDate={bounds.min ?? undefined}
+      maxDate={bounds.max ?? undefined}
+      clearable={false}
+      w={bare ? 220 : '100%'}
+      size={bare || compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
+      allowSingleDateInRange
+      onChange={(next: [Date | null, Date | null] | null) => {
+        const [a, b] = (next ?? [null, null]) as [Date | null, Date | null];
+        // Always reflect Mantine's intermediate value locally so the
+        // controlled picker actually advances through partial picks.
+        // Without this, the controlled `value` prop is constant and
+        // Mantine restarts on every click (the user can only ever pick
+        // a "start" date and never the "end").
+        setPickerValue([a, b]);
+        // Wait until both ends are picked before emitting upward.
+        if (!a || !b) return;
+        const isoA = toIsoDateString(a);
+        const isoB = toIsoDateString(b);
+        const isFull =
+          !!bounds.min &&
+          !!bounds.max &&
+          isoA === toIsoDateString(bounds.min) &&
+          isoB === toIsoDateString(bounds.max);
+        onChange?.({
+          index: metadata.index,
+          // Mirror the Dash "drop filter when equal to full bounds" pattern
+          // by emitting null in that case (filter inactive). Otherwise emit
+          // [iso, iso] strings to match the persisted Dash format.
+          value: isFull ? null : [isoA, isoB],
+          column_name: metadata.column_name,
+          interactive_component_type: 'DateRangePicker',
+          filter_expr: metadata.filter_expr,
+        });
+      }}
+      styles={{
+        input: metadata.icon_color ? { borderColor: metadata.icon_color } : undefined,
+      }}
+    />
+  );
+
+  if (bare) return picker;
+
   return (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
-      <CompactControlSlot compact={compact}>
-      <DatePickerInput
-        type="range"
-        value={value}
-        // Mantine's default renders a range as "September 12, 2023 - November
-        // 30, 2024", which needs more width than the Filters panel has and so
-        // wraps to a second line. ISO dates halve that and are the format the
-        // filter is stored and shared in anyway (see `toIsoDateString`), so the
-        // input now reads the same as the value it emits.
-        valueFormat="YYYY-MM-DD"
-        minDate={bounds.min ?? undefined}
-        maxDate={bounds.max ?? undefined}
-        clearable={false}
-        w="100%"
-        size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
-        allowSingleDateInRange
-        onChange={(next: [Date | null, Date | null] | null) => {
-          const [a, b] = (next ?? [null, null]) as [Date | null, Date | null];
-          // Always reflect Mantine's intermediate value locally so the
-          // controlled picker actually advances through partial picks.
-          // Without this, the controlled `value` prop is constant and
-          // Mantine restarts on every click (the user can only ever pick
-          // a "start" date and never the "end").
-          setPickerValue([a, b]);
-          // Wait until both ends are picked before emitting upward.
-          if (!a || !b) return;
-          const isoA = toIsoDateString(a);
-          const isoB = toIsoDateString(b);
-          const isFull =
-            !!bounds.min &&
-            !!bounds.max &&
-            isoA === toIsoDateString(bounds.min) &&
-            isoB === toIsoDateString(bounds.max);
-          onChange?.({
-            index: metadata.index,
-            // Mirror the Dash "drop filter when equal to full bounds" pattern
-            // by emitting null in that case (filter inactive). Otherwise emit
-            // [iso, iso] strings to match the persisted Dash format.
-            value: isFull ? null : [isoA, isoB],
-            column_name: metadata.column_name,
-            interactive_component_type: 'DateRangePicker',
-            filter_expr: metadata.filter_expr,
-          });
-        }}
-        styles={{
-          input: metadata.icon_color ? { borderColor: metadata.icon_color } : undefined,
-        }}
-      />
-      </CompactControlSlot>
+      <CompactControlSlot compact={compact}>{picker}</CompactControlSlot>
     </InteractiveFrame>
   );
 };

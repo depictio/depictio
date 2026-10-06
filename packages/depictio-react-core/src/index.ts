@@ -154,6 +154,59 @@ export {
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+
+// Filter bar: a grid section with `display: 'strip'` drawn as one compact row
+// of its interactive components. The placement rules are exported so the apps
+// route those components out of the filter panel by the same predicate the
+// grid uses to draw them.
+export {
+  FilterStrip,
+  FilterStripSection,
+} from './components/interactive/strip/FilterStrip';
+export type {
+  FilterStripProps,
+  FilterStripSectionProps,
+} from './components/interactive/strip/FilterStrip';
+export {
+  isStripMember,
+  isStripSection,
+  partitionStripMembers,
+  sectionRuns,
+  stripControlKind,
+  stripLabel,
+  stripSectionNames,
+  stripShowsIcon,
+} from './components/interactive/strip/stripLayout';
+export type { StripControlKind } from './components/interactive/strip/stripLayout';
+export {
+  MAX_STRIP_CHIPS,
+  categoricalDisplay,
+  chipSelectionMode,
+  filterEvent,
+  orderCategoricalOptions,
+  selectedValues,
+  toggleChip,
+} from './components/interactive/categoricalOptions';
+export { useColumnRange, useUniqueValues } from './components/interactive/useInteractiveData';
+
+// Category colours (`DashboardData.category_colors`): one categorical value,
+// one colour, on every surface. The pure resolver is what the figure code
+// shares with the filter bar; the hook binds it to the dashboard and theme.
+export {
+  NEUTRAL_CATEGORY_COLOR,
+  categoryColor,
+  categoryColorMap,
+  dashboardColorway,
+  pinnedCategoryColor,
+  sortCategoryValues,
+} from './categoryColors';
+export type { CategoryColorSource } from './categoryColors';
+export {
+  CategoryColorsContext,
+  useCategoryColorMap,
+  useCategoryColorSource,
+  useCategoryPalette,
+} from './hooks/useCategoryColors';
 export { extractLayoutItems, stripBoxPrefix } from './utils/leftPanelLayout';
 export { countActiveFilters } from './activeFilters';
 export {
@@ -579,6 +632,7 @@ export type {
   StoredMetadata,
   DashboardData,
   FilterSectionSpec,
+  CategoryColors,
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
