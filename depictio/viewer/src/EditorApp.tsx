@@ -49,6 +49,7 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
+import TabLinkProvider from './chrome/TabLinkProvider';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
@@ -1817,6 +1818,9 @@ const EditorApp: React.FC = () => {
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
     <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+    {/* Tab links in text resolve here too, so the canvas shows them as the
+        viewer does rather than as plain text. */}
+    <TabLinkProvider tabs={tabSiblings} mode="edit">
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -2218,6 +2222,7 @@ const EditorApp: React.FC = () => {
         currentTabName={activeTab ? tabDisplayName(activeTab) : undefined}
       />
     </AppShell>
+    </TabLinkProvider>
     </BrandScope>
     </SaveGroupContext.Provider>
     </InspectorProviders>

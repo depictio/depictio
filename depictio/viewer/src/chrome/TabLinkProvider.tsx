@@ -18,10 +18,12 @@ import { resolveTabColor, resolveTabIcon } from './Sidebar';
  * sidebar pill of that tab shows, brand defaults included. A tab answers to
  * its displayed name; the parent also answers to the dashboard title.
  */
-const TabLinkProvider: React.FC<{ tabs: DashboardSummary[]; children: React.ReactNode }> = ({
-  tabs,
-  children,
-}) => {
+const TabLinkProvider: React.FC<{
+  tabs: DashboardSummary[];
+  /** The editor links to the tab's editor, so an author stays in edit mode. */
+  mode?: 'view' | 'edit';
+  children: React.ReactNode;
+}> = ({ tabs, mode = 'view', children }) => {
   const brand = useBranding();
   const resolve = useMemo<TabLinkResolver>(() => {
     const byKey = new Map<string, TabLinkTarget>();
@@ -36,7 +38,7 @@ const TabLinkProvider: React.FC<{ tabs: DashboardSummary[]; children: React.Reac
       const label = (isParent ? d.main_tab_name || d.title : d.title) || '';
       const image = d.tab_icon && isImagePath(d.tab_icon) ? d.tab_icon : null;
       const target: TabLinkTarget = {
-        href: dashboardHref(d.dashboard_id),
+        href: dashboardHref(d.dashboard_id, mode),
         label,
         icon: image ?? resolveTabIcon(d, isParent),
         color: resolveTabColor(d, isParent, brand),
@@ -49,7 +51,7 @@ const TabLinkProvider: React.FC<{ tabs: DashboardSummary[]; children: React.Reac
       }
     }
     return (name: string) => byKey.get(tabLinkKey(name)) ?? null;
-  }, [tabs, brand]);
+  }, [tabs, brand, mode]);
   return <TabLinkContext.Provider value={resolve}>{children}</TabLinkContext.Provider>;
 };
 

@@ -112,7 +112,7 @@
   line-height: 0;
   color: var(--mantine-color-dimmed) !important;
   text-decoration: none;
-  opacity: 0.75;
+  opacity: 0.8;
   transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
 }
 
@@ -128,6 +128,12 @@
   width: 14px;
   height: 14px;
   margin: 0 !important;
+}
+
+/* A run parameter's icon follows the link: dimmed, the accent on hover. A
+   tab's icon keeps the tab's own colour, as in the sidebar, so it reads as
+   the tab it opens. */
+.depictio-step-link > button svg {
   color: inherit !important;
 }
 
