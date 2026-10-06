@@ -36,7 +36,6 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
-import { withSectionCardVariant } from './cardVariant';
 import { FilterStripSection } from './interactive/strip/FilterStrip';
 import {
   isStripMember,
@@ -44,6 +43,7 @@ import {
   sectionRuns,
   stripSectionNames,
 } from './interactive/strip/stripLayout';
+import { withSectionStyles } from './figureStyle';
 import {
   fitLayoutHeights,
   useAutofitHeights,
@@ -485,7 +485,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // shrink (see `fitLayoutHeights`).
       const sized = readOnly
         ? fitLayoutHeights(
-            members.map((m) => withSectionCardVariant(m, spec)),
+            members.map((m) => withSectionStyles(m, spec)),
             toSplitRows(mine),
             autoHeights,
             true,
@@ -585,11 +585,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             >
               <ComponentRenderer
                 dashboardId={dashboardId}
-                // A card that sets no style of its own takes its section's.
+                // A card or figure that sets no style of its own takes its section's.
                 // Resolved here, where the section is known, rather than
                 // written onto the card: a card added to the section later, or
                 // a section restyled later, follows without a migration.
-                metadata={withSectionCardVariant(m, section.spec)}
+                metadata={withSectionStyles(m, section.spec)}
                 filters={filters}
                 onFilterChange={onFilterChange}
                 cardValue={cardValues?.[m.index]}

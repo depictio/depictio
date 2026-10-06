@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Stack, Text, Group, Box, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import IconBadge from './IconBadge';
 import './DepictioCard.css';
 
 /**
@@ -319,24 +320,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         // The badge leads the title: a row of headline cards reads by colour
         // and glyph before a word of it is read.
         <Group gap={10} wrap="nowrap" align="center" style={{ marginLeft: -2, minWidth: 0 }}>
-          <Box
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              flex: 'none',
-              display: 'grid',
-              placeItems: 'center',
-              background: `color-mix(in srgb, ${icon_color || title_color || 'var(--mantine-color-gray-6)'} 13%, var(--mantine-color-body))`,
-            }}
-          >
-            <Icon
-              icon={icon_name as string}
-              width={18}
-              height={18}
-              style={{ color: icon_color || title_color || 'currentColor' }}
-            />
-          </Box>
+          <IconBadge icon={icon_name as string} color={icon_color || title_color || undefined} />
           <Text
             size={title_font_size}
             fw={700}

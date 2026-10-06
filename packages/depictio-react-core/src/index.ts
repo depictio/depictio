@@ -101,6 +101,19 @@ export {
   stripIsMinimal,
 } from './components/cardVariant';
 export type { CardVariant } from './components/cardVariant';
+// Figure styles: same rule, for a figure's `figure_style` and its section's.
+export {
+  FIGURE_STYLES,
+  normalizeFigureStyle,
+  resolveFigureStyle,
+  withSectionFigureStyle,
+  withSectionStyles,
+  figureStyleForPick,
+  figurePlotConfig,
+} from './components/figureStyle';
+export type { FigureStyle } from './components/figureStyle';
+export { default as FigureHeader } from './components/FigureHeader';
+export type { FigureHeaderProps } from './components/FigureHeader';
 export type {
   HistogramPayload,
   ThresholdPayload,
@@ -457,6 +470,7 @@ export type {
   CatalogPreviewPayload,
   BreakdownPayloadDTO,
   CatalogSource,
+  FigureStyleRequest,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

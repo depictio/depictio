@@ -1,0 +1,159 @@
+/**
+ * The figure builder's "Card header & style" section: the style the tile is
+ * drawn in, and the header a `minimal` tile shows above its plot (title,
+ * subtitle, icon badge).
+ *
+ * Shared by both modes: UI mode lists it with the parameter sections, code
+ * mode under the preview, since the editor takes the controls column. The
+ * fields live on the figure's metadata (`figure_style`, `title`, `subtitle`,
+ * `icon_name`, `icon_color`, `hide_legend`), not in its Plotly kwargs, so they
+ * work the same for a figure written as code.
+ */
+import React from 'react';
+import {
+  ColorSwatch,
+  Group,
+  SegmentedControl,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core';
+import { Icon } from '@iconify/react';
+import { figureStyleForPick, normalizeFigureStyle } from 'depictio-react-core';
+import type { FigureStyle } from 'depictio-react-core';
+
+import { useBuilderStore } from '../store/useBuilderStore';
+import { BuilderSection, Field, SwitchField } from '../shared/BuilderSections';
+import { useSectionFigureStyle } from '../shared/useSectionCardVariant';
+import {
+  SECTION_COLOR_OPTIONS,
+  iconOptionsWith,
+} from '../../components/sections/sectionIcons';
+
+const STYLE_LABEL: Record<FigureStyle, string> = {
+  default: 'Default',
+  minimal: 'Minimal',
+};
+
+const STYLE_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'minimal', label: 'Minimal' },
+];
+
+interface FigureStyleConfig {
+  figure_style?: string | null;
+  title?: string;
+  subtitle?: string;
+  icon_name?: string | null;
+  icon_color?: string | null;
+  hide_legend?: boolean | null;
+}
+
+const FigureStyleSection: React.FC = () => {
+  const config = useBuilderStore((s) => s.config) as FigureStyleConfig;
+  const patchConfig = useBuilderStore((s) => s.patchConfig);
+  const sectionStyle = useSectionFigureStyle();
+  const ownStyle = normalizeFigureStyle(config.figure_style);
+  const shown = ownStyle ?? sectionStyle ?? 'default';
+
+  return (
+    <BuilderSection
+      value="showcase"
+      icon="mdi:card-text-outline"
+      title="Card header & style"
+      subtitle="Minimal look, title, subtitle and icon"
+    >
+      <Stack gap="md">
+        <Field
+          label="Style"
+          description="Minimal: the showcase look of a landing page. The title moves to the card header beside an icon, the plot gets a faint dashed grid, large markers, the legend under it and a toolbar only on hover."
+        >
+          {sectionStyle && (
+            <Text size="xs" c="grape" data-testid="figure-style-section-hint">
+              {ownStyle && ownStyle !== sectionStyle
+                ? `This section draws its figures as ${STYLE_LABEL[sectionStyle]}; this figure overrides it. Pick ${STYLE_LABEL[sectionStyle]} to follow the section again.`
+                : `This section draws its figures as ${STYLE_LABEL[sectionStyle]}; pick a style here to override.`}
+            </Text>
+          )}
+          <SegmentedControl
+            value={shown}
+            onChange={(val) =>
+              patchConfig({ figure_style: figureStyleForPick(val, sectionStyle) })
+            }
+            data={STYLE_OPTIONS}
+            fullWidth
+            data-testid="figure-style-control"
+          />
+        </Field>
+
+        <TextInput
+          label="Title"
+          description="The card's heading. In the minimal style it replaces the plot's own title."
+          placeholder="e.g. Phylum composition"
+          value={config.title ?? ''}
+          onChange={(e) => patchConfig({ title: e.currentTarget.value })}
+          leftSection={<Icon icon="mdi:format-title" width={14} />}
+        />
+
+        <TextInput
+          label="Subtitle"
+          description="A dimmed line beside the title, shown in the minimal style."
+          placeholder="e.g. relative abundance per sample"
+          value={config.subtitle ?? ''}
+          onChange={(e) => patchConfig({ subtitle: e.currentTarget.value })}
+          leftSection={<Icon icon="mdi:text-short" width={14} />}
+        />
+
+        <Group grow align="flex-start">
+          <Select
+            label="Icon"
+            placeholder="No icon"
+            data={iconOptionsWith(config.icon_name)}
+            value={config.icon_name || null}
+            onChange={(v) => patchConfig({ icon_name: v })}
+            searchable
+            clearable
+            comboboxProps={{ withinPortal: false }}
+            leftSection={<Icon icon={config.icon_name || 'mdi:shape-outline'} width={14} />}
+            renderOption={({ option }) => (
+              <Group gap="xs" wrap="nowrap">
+                <Icon icon={option.value} width={16} />
+                <Text size="sm">{option.label}</Text>
+              </Group>
+            )}
+          />
+          <Select
+            label="Icon colour"
+            data={SECTION_COLOR_OPTIONS}
+            value={config.icon_color ?? ''}
+            onChange={(v) => patchConfig({ icon_color: v || null })}
+            allowDeselect={false}
+            comboboxProps={{ withinPortal: false }}
+            leftSection={<Icon icon="mdi:palette" width={14} />}
+            renderOption={({ option }) => (
+              <Group gap="xs" wrap="nowrap">
+                <ColorSwatch
+                  size={14}
+                  color={option.value ? `var(--mantine-color-${option.value}-6)` : 'transparent'}
+                  withShadow={false}
+                />
+                <Text size="sm">{option.label}</Text>
+              </Group>
+            )}
+          />
+        </Group>
+
+        <SwitchField
+          label="Hide the legend"
+          description="For a tile whose colours the page explains already, such as a highlight next to its legend."
+          checked={Boolean(config.hide_legend)}
+          onChange={(checked) => patchConfig({ hide_legend: checked || null })}
+          testId="figure-hide-legend"
+        />
+      </Stack>
+    </BuilderSection>
+  );
+};
+
+export default FigureStyleSection;

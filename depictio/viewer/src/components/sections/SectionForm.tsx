@@ -20,8 +20,8 @@ import {
   TextInput,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { normalizeCardVariant, SectionIcon } from 'depictio-react-core';
-import type { CardVariant, FilterSectionSpec } from 'depictio-react-core';
+import { normalizeCardVariant, normalizeFigureStyle, SectionIcon } from 'depictio-react-core';
+import type { CardVariant, FigureStyle, FilterSectionSpec } from 'depictio-react-core';
 
 import { SECTION_COLOR_OPTIONS, iconOptionsWith } from './sectionIcons';
 import type { SectionKind } from './sectionMutations';
@@ -38,6 +38,12 @@ const CARD_STYLE_OPTIONS: { value: CardVariant | typeof INHERIT; label: string }
   { value: 'minimal', label: 'Minimal' },
   { value: 'accent', label: 'Accent' },
   { value: 'split', label: 'Split' },
+];
+
+const FIGURE_STYLE_OPTIONS: { value: FigureStyle | typeof INHERIT; label: string }[] = [
+  { value: INHERIT, label: 'Each figure’s own style' },
+  { value: 'default', label: 'Default' },
+  { value: 'minimal', label: 'Minimal (showcase)' },
 ];
 
 export interface SectionFormProps {
@@ -85,6 +91,9 @@ const SectionForm: React.FC<SectionFormProps> = ({
   // Grid sections only: tiles on the grid, or one compact filter bar.
   const [strip, setStrip] = useState(initial?.display === 'strip');
   const isStrip = kind === 'grid' && strip;
+  const [figureStyle, setFigureStyle] = useState<FigureStyle | null>(
+    normalizeFigureStyle(initial?.figure_style),
+  );
 
   // Names already excluded stay on offer even when no tab carries them any
   // more (renamed, or written in YAML for another run), so editing an
@@ -131,6 +140,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
             display: isStrip ? 'strip' : undefined,
             // A bar never folds.
             ...(isStrip ? { collapsed: false } : {}),
+            figure_style: kind === 'grid' && figureStyle && !isStrip ? figureStyle : undefined,
           }
         : null,
     );
@@ -149,6 +159,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
     excludeTabs,
     cardVariant,
     isStrip,
+    figureStyle,
   ]);
 
   return (
@@ -315,6 +326,20 @@ const SectionForm: React.FC<SectionFormProps> = ({
           allowDeselect={false}
           comboboxProps={{ withinPortal: false }}
           leftSection={<Icon icon="mdi:card-text-outline" width={16} />}
+        />
+      )}
+
+      {kind === 'grid' && !isStrip && (
+        <Select
+          label="Figure style"
+          description="How the section's figures are drawn. A figure that picks its own style in its builder keeps it. Minimal: the showcase look of a landing page, the title and an icon in the card header, a faint grid and the legend under the plot."
+          data={FIGURE_STYLE_OPTIONS}
+          value={figureStyle ?? INHERIT}
+          onChange={(v) => setFigureStyle(normalizeFigureStyle(v))}
+          allowDeselect={false}
+          comboboxProps={{ withinPortal: false }}
+          leftSection={<Icon icon="mdi:chart-scatter-plot" width={16} />}
+          data-testid="section-figure-style"
         />
       )}
 

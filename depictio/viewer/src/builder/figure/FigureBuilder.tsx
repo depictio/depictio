@@ -15,6 +15,7 @@ import CrossFilterSection from '../shared/CrossFilterSection';
 import { BuilderSections } from '../shared/BuilderSections';
 import FigureUIMode from './FigureUIMode';
 import FigurePreview from './FigurePreview';
+import FigureStyleSection from './FigureStyleSection';
 import StickyPreview from '../shared/StickyPreview';
 
 const FigureCodeMode = React.lazy(() => import('./FigureCodeMode'));
@@ -132,19 +133,24 @@ const FigureBuilder: React.FC = () => {
              *  is taken by the editor, so the section sits under the preview
              *  instead, in the same column directly below the chart, easy to
              *  reach without the eyes leaving the preview area. Gated to
-             *  scatter-like visus only (see supportsCrossFilter above). */}
-            {figureMode === 'code' && supportsCrossFilter && (
+             *  scatter-like visus only (see supportsCrossFilter above). The
+             *  card header & style section joins it there for the same
+             *  reason. */}
+            {figureMode === 'code' && (
               <Box mt="sm">
                 <BuilderSections builder="figure-code" required={[]}>
-                  <CrossFilterSection
-                    enabled={Boolean(config.selection_enabled)}
-                    onEnabledChange={(checked) =>
-                      patchConfig({ selection_enabled: checked })
-                    }
-                    column={config.selection_column}
-                    onColumnChange={(name) => patchConfig({ selection_column: name })}
-                    columnDescription="Column to extract from selected points"
-                  />
+                  {supportsCrossFilter && (
+                    <CrossFilterSection
+                      enabled={Boolean(config.selection_enabled)}
+                      onEnabledChange={(checked) =>
+                        patchConfig({ selection_enabled: checked })
+                      }
+                      column={config.selection_column}
+                      onColumnChange={(name) => patchConfig({ selection_column: name })}
+                      columnDescription="Column to extract from selected points"
+                    />
+                  )}
+                  <FigureStyleSection />
                 </BuilderSections>
               </Box>
             )}

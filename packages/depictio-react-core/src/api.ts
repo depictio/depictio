@@ -346,6 +346,15 @@ export interface StoredMetadata {
    *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
    *  content scale; 1/undefined = no override. */
   font_scale?: number;
+  /** Figures: how the tile is drawn (see `FigureStyle` in
+   *  components/figureStyle.ts). Unset takes its grid section's
+   *  `figure_style`. `minimal`: the title in a card header with an icon badge
+   *  and an inline subtitle, the plot restyled server-side. */
+  figure_style?: 'default' | 'minimal' | (string & {});
+  /** Figures: a few dimmed words after the title in the `minimal` header. */
+  subtitle?: string;
+  /** Figures: draw without the legend. */
+  hide_legend?: boolean;
   // Table
   /** Column allowlist for table components — when non-empty, only these
    *  columns are rendered (empty / undefined = show all columns). */
@@ -388,6 +397,9 @@ export interface FilterSectionSpec {
    *  interactive components naming it leave the filter panel and render as one
    *  compact row. Unset (or `grid`) is one tile each on the grid. */
   display?: 'grid' | 'strip' | null;
+  /** Grid sections: the style every figure in the section is drawn in unless
+   *  the figure sets its own `figure_style`. */
+  figure_style?: 'default' | 'minimal' | null;
 }
 
 /** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
@@ -1018,6 +1030,18 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Draw the figure in this style rather than its own (a highlight showing a
+   *  figure from another tab). Sent only when set. */
+  style?: FigureStyleRequest;
+}
+
+/** The `style` override of a render request; see `figure_style_payload` in
+ *  depictio/api/v1/services/figure/style_presets.py. */
+export interface FigureStyleRequest {
+  figure_style?: 'default' | 'minimal';
+  /** The card header shows the title, so the plot drops its own. */
+  header_title?: boolean;
+  hide_legend?: boolean;
 }
 
 export async function renderFigure(
@@ -1046,6 +1070,7 @@ export async function renderFigure(
   if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
     groupBody.grouping_display = 'facet';
   }
+  if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
@@ -2148,8 +2173,11 @@ export interface FigurePreviewRequest {
   filters?: InteractiveFilter[];
   theme?: 'light' | 'dark';
   /** Owning dashboard — lets the server fold the dashboard's `brand_theme`
-   *  figure defaults into the preview so it matches the saved render. */
+   *  figure defaults, its `category_colors` and its sections' figure style into
+   *  the preview so it matches the saved render. */
   dashboard_id?: string;
+  /** Style override, as on `renderFigure`. */
+  style?: FigureStyleRequest;
 }
 
 export async function previewFigure(

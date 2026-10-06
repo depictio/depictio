@@ -21,7 +21,7 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
-import { withSectionCardVariant } from './cardVariant';
+import { withSectionStyles } from './figureStyle';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
 import { fitLayoutHeights, GRID_ROW_GAP_PX, SPLIT_ROW_PX, useAutofitHeights } from './autofit';
 import { FilterStripSection } from './interactive/strip/FilterStrip';
@@ -311,7 +311,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
               dashboardId={member.dashboard_id}
               // Same rule as the owner tab's grid: the
               // section's card style unless the card sets one.
-              metadata={withSectionCardVariant(member.metadata, section.spec)}
+              metadata={withSectionStyles(member.metadata, section.spec)}
               filters={filters}
               onFilterChange={onFilterChange}
               refreshTick={refreshTick}
@@ -333,7 +333,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     const key = hostSectionKey(section);
     const bar = members.filter((m) => m.metadata.component_type === 'interactive');
     const others = members.filter((m) => m.metadata.component_type !== 'interactive');
-    const metas = others.map((m) => withSectionCardVariant(m.metadata, section.spec));
+    const metas = others.map((m) => withSectionStyles(m.metadata, section.spec));
     return (
       <FilterStripSection
         key={key}
@@ -368,7 +368,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
               // In the style each card is drawn in, so the fitting below treats a
               // row of compact cards the way the owner tab's grid does.
               // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
-              const metas = members.map((m) => withSectionCardVariant(m.metadata, section.spec));
+              const metas = members.map((m) => withSectionStyles(m.metadata, section.spec));
               const gridWidth = Math.max(100, containerWidth - sectionInset);
               return (
                 <SectionAccordionItem

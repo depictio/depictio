@@ -10,6 +10,7 @@ import type { StoredMetadata } from 'depictio-react-core';
 import {
   defaultInteractiveTitle,
   normalizeCardVariant,
+  normalizeFigureStyle,
   readMultiqcSelection,
 } from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
@@ -167,6 +168,31 @@ function buildCard(
   };
 }
 
+/**
+ * The tile's look, as the "Card header & style" section sets it: the same in
+ * both modes, since it sits on the metadata rather than in the Plotly kwargs.
+ * Every key is written, an empty field as undefined, so clearing a field in
+ * the builder clears it on the saved figure instead of `existing` keeping it.
+ */
+function figureDisplay(config: unknown): Partial<StoredMetadata> {
+  const c = as<{
+    title?: string;
+    subtitle?: string;
+    figure_style?: string | null;
+    icon_name?: string | null;
+    icon_color?: string | null;
+    hide_legend?: boolean | null;
+  }>(config);
+  return {
+    title: c.title?.trim() || undefined,
+    subtitle: c.subtitle?.trim() || undefined,
+    figure_style: normalizeFigureStyle(c.figure_style) ?? undefined,
+    icon_name: c.icon_name || undefined,
+    icon_color: c.icon_color || undefined,
+    hide_legend: c.hide_legend ? true : undefined,
+  };
+}
+
 function buildFigure(
   state: BuilderState,
   base: StoredMetadata,
@@ -182,10 +208,12 @@ function buildFigure(
     max_points?: number | null;
   }>(state.config);
   const maxPoints = typeof c.max_points === 'number' ? c.max_points : null;
+  const display = figureDisplay(state.config);
   if (state.figureMode === 'code') {
     return {
       ...existing,
       ...base,
+      ...display,
       mode: 'code',
       code_content: state.codeContent,
       visu_type: state.visuType, // hint for renderers
@@ -198,6 +226,7 @@ function buildFigure(
   return {
     ...existing,
     ...base,
+    ...display,
     mode: 'ui',
     visu_type: state.visuType,
     dict_kwargs: state.dictKwargs,

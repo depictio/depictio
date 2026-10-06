@@ -36,6 +36,7 @@ import ParameterField from './ParameterField';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import PlacementSection from '../shared/PlacementSection';
 import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
+import FigureStyleSection from './FigureStyleSection';
 
 type CategoryKey = 'core' | 'common' | 'specific' | 'advanced';
 
@@ -362,6 +363,8 @@ const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) 
           />
         </BuilderSection>
       )}
+
+      <FigureStyleSection />
 
       {/* Placement lives in the control column with everything
           else, not full-width beneath the preview. Self-hiding when the

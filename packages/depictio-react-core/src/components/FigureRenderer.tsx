@@ -14,7 +14,14 @@ import Plot from 'react-plotly.js';
 // `buffer/` source walk, no extra bundle weight, single Plotly instance.
 import Plotly from 'plotly.js';
 
-import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import {
+  renderFigure,
+  InteractiveFilter,
+  StoredMetadata,
+  FigureResponse,
+  FigureStyleRequest,
+  RenderFigureOptions,
+} from '../api';
 import {
   GROUP_DECLINED_REASONS,
   groupBadgeLabel,
@@ -37,6 +44,10 @@ import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { CARD_FRAME } from './cardFrame';
+import FigureHeader from './FigureHeader';
+import { figurePlotConfig, resolveFigureStyle } from './figureStyle';
+import type { TabLinkTarget } from './tabLinks';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -56,6 +67,14 @@ interface FigureRendererProps {
   /** Selection groups to color the figure by. Folded into the render request;
    *  the server annotates rows and colors traces by group membership. */
   groupRender?: GroupRenderState;
+  /** Render another component's figure in this tile: a highlight showing a
+   *  figure that lives on another tab. Everything else (load status, the
+   *  selection this tile emits) stays keyed on `metadata.index`. */
+  renderSource?: { dashboardId: string; componentId: string };
+  /** Style the server draws the plot in, over the figure's own. */
+  styleRequest?: FigureStyleRequest;
+  /** The tab the figure comes from, linked from a showcase header. */
+  sourceLink?: TabLinkTarget | null;
 }
 
 /**
@@ -79,6 +98,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   activeHighlight,
   onLoadAllState,
   groupRender,
+  renderSource,
+  styleRequest,
+  sourceLink,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -95,6 +117,12 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     typeof metadata.font_scale === 'number' && metadata.font_scale > 0 ? metadata.font_scale : 1;
   const effectiveFontScale = uiScale * componentFontScale;
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
+  // `minimal`: the showcase look. The server restyles the plot; the viewer
+  // draws the card around it — header with badge and subtitle, card frame,
+  // toolbar on hover only.
+  const showcase = resolveFigureStyle(metadata.figure_style) === 'minimal';
+  const renderDashboardId = renderSource?.dashboardId ?? dashboardId;
+  const renderComponentId = renderSource?.componentId ?? metadata.index;
 
   // Cross-filtering only fires meaningful events on scatter-like traces —
   // histograms / bars / pies aggregate input rows into bins, so Plotly's
@@ -151,24 +179,31 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     setError(null);
     // Queued so a dense dashboard doesn't fire every figure's render at once;
     // the vertical position is the priority, so the top of the page paints first.
+    const options: RenderFigureOptions | undefined =
+      groupRender || styleRequest
+        ? {
+            ...(groupRender
+              ? {
+                  groups: groupRender.groups,
+                  colorByGroup: groupRender.colorByGroup,
+                  colorByColumn: groupRender.colorByColumn,
+                  display: groupRender.display,
+                  showOther: groupRender.showOther,
+                }
+              : {}),
+            ...(styleRequest ? { style: styleRequest } : {}),
+          }
+        : undefined;
     enqueueFetch(
       () =>
         renderFigure(
-          dashboardId,
-          metadata.index,
+          renderDashboardId,
+          renderComponentId,
           filtersForFetch,
           theme,
           fullLoad,
           ctrl.signal,
-          groupRender
-            ? {
-                groups: groupRender.groups,
-                colorByGroup: groupRender.colorByGroup,
-                colorByColumn: groupRender.colorByColumn,
-                display: groupRender.display,
-                showOther: groupRender.showOther,
-              }
-            : undefined,
+          options,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -196,7 +231,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null)]);
+  }, [renderDashboardId, renderComponentId, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(styleRequest ?? null)]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -535,11 +570,17 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     );
   }, [onLoadAllState, renderMeta, fullLoad, loading]);
 
+  const subtitle = typeof metadata.subtitle === 'string' ? metadata.subtitle.trim() : '';
+  const iconName = typeof metadata.icon_name === 'string' ? metadata.icon_name : '';
+  const iconColor = typeof metadata.icon_color === 'string' ? metadata.icon_color : '';
+  const showcaseHeader =
+    showcase && Boolean(metadata.title || subtitle || iconName || reductionBadge || groupedBadge || sourceLink);
+
   return (
     <Paper
       ref={containerRef}
-      p="sm"
-      withBorder
+      p={showcase ? 'md' : 'sm'}
+      withBorder={!showcase}
       radius="md"
       style={{
         flex: 1,
@@ -547,18 +588,40 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        // The metric cards' frame, so a showcase figure sits in a row of
+        // headline cards as one more of them.
+        ...(showcase ? CARD_FRAME : {}),
       }}
     >
-      {(metadata.title || reductionBadge || groupedBadge) && (
-        <Group gap="xs" mb="xs" wrap="nowrap">
-          {metadata.title && (
-            <Text fw={600} size="sm">
-              {metadata.title}
-            </Text>
-          )}
-          {reductionBadge}
-          {groupedBadge}
-        </Group>
+      {showcaseHeader ? (
+        <FigureHeader
+          title={metadata.title}
+          subtitle={subtitle}
+          icon={iconName || undefined}
+          iconColor={iconColor || undefined}
+          source={sourceLink}
+          badges={
+            reductionBadge || groupedBadge ? (
+              <>
+                {reductionBadge}
+                {groupedBadge}
+              </>
+            ) : undefined
+          }
+        />
+      ) : (
+        !showcase &&
+        (metadata.title || reductionBadge || groupedBadge) && (
+          <Group gap="xs" mb="xs" wrap="nowrap">
+            {metadata.title && (
+              <Text fw={600} size="sm">
+                {metadata.title}
+              </Text>
+            )}
+            {reductionBadge}
+            {groupedBadge}
+          </Group>
+        )
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
       {error && isInitialLoad && (
@@ -572,7 +635,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             data={figureData as any[]}
             layout={layout}
             revision={refreshTick ?? 0}
-            config={{ displaylogo: false, responsive: true }}
+            config={figurePlotConfig(showcase ? 'minimal' : 'default')}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
             onInitialized={(_fig, gd) => {
