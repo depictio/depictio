@@ -129,6 +129,11 @@ class Paths:
     def cli_config(self) -> Path:
         return self.home / "cli" / f"{ADMIN_EMAIL.split('@')[0]}_config.yaml"
 
+    @property
+    def last_ingestion(self) -> Path:
+        """What the last `depictio run` started by `up` reported (--result-json)."""
+        return self.home / "last_ingestion.json"
+
     def bin(self, name: str) -> Path:
         return self.env / "bin" / name
 
@@ -325,10 +330,14 @@ def save_ports(paths: Paths, ports: dict[str, int]) -> None:
     paths.ports.write_text(json.dumps(ports, indent=2))
 
 
-def parse_examples(value: str | None, template: str | None) -> str:
-    """--examples as DEPICTIO_SEED_PROJECTS takes it, or 'none'."""
+def parse_examples(value: str | None, ingesting: bool) -> str:
+    """--examples as DEPICTIO_SEED_PROJECTS takes it, or 'none'.
+
+    The default seeds the examples only when there is no data of one's own to
+    ingest: next to it they are noise.
+    """
     if value is None:
-        return "none" if template else ",".join(EXAMPLES)
+        return "none" if ingesting else ",".join(EXAMPLES)
     names = [name.strip().lower() for name in value.split(",") if name.strip()]
     if names == ["none"]:
         return "none"
@@ -988,26 +997,45 @@ def start_stack(
 
 def ingest(
     paths: Paths,
-    template: str,
+    template: str | None,
     data_root: Path,
     variables: list[str] | None = None,
     project_name: str | None = None,
+    refresh: bool = False,
+    result_json: Path | None = None,
 ) -> int:
-    """Ingest ``data_root`` into the local server with `depictio run`; returns its exit code."""
+    """Ingest ``data_root`` into the local server with `depictio run`; returns its exit code.
+
+    Without ``template``, `run` picks the bundled template from the run's own
+    provenance (``pipeline_info/``). ``refresh`` re-ingests a project that
+    already exists and resets its dashboards to the template's; without it `run`
+    exits 2 on such a project and changes nothing. ``result_json`` is where `run`
+    writes how it ended.
+    """
     cmd = [
         sys.executable,
         "-m",
         "depictio.cli",
         "run",
-        "--template",
-        template,
         "--data-root",
         str(data_root.resolve()),
         "--CLI-config-path",
         str(paths.cli_config),
     ]
+    if template:
+        # A template given as a path is read by the child: make it absolute so the
+        # log names the file that was used.
+        local_template = Path(template).expanduser()
+        cmd += [
+            "--template",
+            str(local_template.resolve()) if local_template.exists() else template,
+        ]
     if project_name:
         cmd += ["--project-name", project_name]
+    if refresh:
+        cmd += ["--update-config", "--overwrite"]
+    if result_json is not None:
+        cmd += ["--result-json", str(result_json)]
     for var in variables or []:
         cmd += ["--var", _absolutize_path_var(var)]
     return subprocess.call(cmd, env=_ingestion_env())

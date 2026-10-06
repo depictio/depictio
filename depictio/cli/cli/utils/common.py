@@ -1,4 +1,5 @@
 import atexit
+import functools
 import os
 from datetime import datetime
 
@@ -115,17 +116,59 @@ def describe_api_target(yaml_config_path: str) -> str:
     Never raises. It is only ever called while already reporting another error,
     and a failure to read the config is itself part of the answer.
     """
+    path, _ = resolve_cli_config_path(yaml_config_path)
     try:
         config = load_depictio_config(yaml_config_path=yaml_config_path, quiet=True)
     except Exception as exc:
         logger.debug(f"Could not resolve the API base URL to report it: {exc}")
-        return f"an unreadable configuration at {yaml_config_path}"
-    return f"{config.api_base_url}, read from {yaml_config_path}"
+        return f"an unreadable configuration at {path}"
+    return f"{config.api_base_url}, read from {path}"
 
 
 # CLI config paths considered "default" - only these are overridden by
 # DEPICTIO_CLI_CONFIG_PATH, so an explicit --CLI-config-path is never clobbered.
 _DEFAULT_CLI_CONFIG_PATHS = ("~/.depictio/cli.yaml", "~/.depictio/CLI.yaml")
+
+
+def _local_server_cli_config() -> str | None:
+    """The CLI config of the server `depictio local up` runs, while its API runs."""
+    try:
+        from depictio.cli.cli.local_stack import Paths, local_home, running_status
+
+        paths = Paths(local_home())
+        if paths.cli_config.is_file() and running_status(paths).get("api"):
+            return str(paths.cli_config)
+    except Exception as exc:
+        logger.debug(f"Could not check for a local server: {exc}")
+    return None
+
+
+@functools.cache
+def _announce_local_server_config(default_path: str, local_path: str) -> None:
+    """Say once per command, not at every config load, that the local server's is used."""
+    rich_print_checked_statement(
+        f"No {default_path}: using the local server's configuration ({local_path})", "info"
+    )
+
+
+def resolve_cli_config_path(yaml_config_path: str) -> tuple[str, str]:
+    """The CLI config file a command reads, and what chose it.
+
+    A path left at its default gives way to DEPICTIO_CLI_CONFIG_PATH; then, when
+    that default file does not exist, to the config of a running `depictio local
+    up` server, so `depictio run --data-root` works against it with no flag. An
+    explicit --CLI-config-path is always used as given.
+    """
+    at_default = yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS
+    env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
+    if env_path and at_default:
+        return os.path.expanduser(env_path), "DEPICTIO_CLI_CONFIG_PATH"
+    expanded = os.path.expanduser(yaml_config_path)
+    if at_default and not os.path.isfile(expanded):
+        local_config = _local_server_cli_config()
+        if local_config:
+            return local_config, "the local server"
+    return expanded, "--CLI-config-path"
 
 
 def _apply_env_overrides(config: dict) -> dict:
@@ -172,19 +215,14 @@ def load_depictio_config(
     try:
         if not quiet:
             rich_print_checked_statement("Loading Depictio configuration...", "loading")
-        # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
-        # at a default - an explicit --CLI-config-path always wins.
-        env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
-        from_env = bool(env_path) and yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS
-        if from_env:
-            yaml_config_path = env_path  # type: ignore[assignment]
-        expanded = os.path.expanduser(yaml_config_path)
+        expanded, source = resolve_cli_config_path(yaml_config_path)
+        if source == "the local server" and not quiet:
+            _announce_local_server_config(yaml_config_path, expanded)
         # `get_config` signals a missing/unsuitable file with ValueError, not
         # FileNotFoundError, so checking here is what turns a typo into a usable
         # message instead of a traceback. That matters most for an automated
         # trigger, where the path usually arrives from DEPICTIO_CLI_CONFIG_PATH.
         if not os.path.isfile(expanded):
-            source = "DEPICTIO_CLI_CONFIG_PATH" if from_env else "--CLI-config-path"
             logger.error(f"Depictio CLI configuration file not found: {expanded} (from {source})")
             rich_print_checked_statement(
                 f"Depictio CLI configuration file not found: {expanded} (from {source}). "

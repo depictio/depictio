@@ -102,23 +102,24 @@ def test_the_server_and_ingestion_reach_127_0_0_1_without_the_proxy(paths, monke
 
 
 @pytest.mark.parametrize(
-    ("value", "template", "expected"),
+    ("value", "ingesting", "expected"),
     [
-        (None, None, "iris,penguins"),
-        (None, "nf-core/rnaseq/latest", "none"),
-        ("penguins", None, "penguins"),
-        ("Iris, penguins,iris", None, "iris,penguins"),
-        ("none", "nf-core/rnaseq/latest", "none"),
+        (None, False, "iris,penguins"),
+        (None, True, "none"),
+        ("penguins", False, "penguins"),
+        ("penguins", True, "penguins"),
+        ("Iris, penguins,iris", False, "iris,penguins"),
+        ("none", True, "none"),
     ],
 )
-def test_parse_examples(value, template, expected):
-    assert parse_examples(value, template) == expected
+def test_parse_examples(value, ingesting, expected):
+    assert parse_examples(value, ingesting) == expected
 
 
 @pytest.mark.parametrize("value", ["all", "ampliseq", "iris,none", ""])
 def test_parse_examples_rejects_anything_but_the_shipped_examples(value):
     with pytest.raises(LocalStackError, match="iris, penguins, iris,penguins or none"):
-        parse_examples(value, None)
+        parse_examples(value, False)
 
 
 def test_pick_ports_reuses_the_previous_run_ports():

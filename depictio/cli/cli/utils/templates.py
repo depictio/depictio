@@ -124,8 +124,12 @@ def locate_template(template_id: str) -> Path:
     highest version directory shipping a template, so callers never need to
     hardcode a pinned version.
 
+    A path also works: a template YAML file, or a directory holding
+    ``template.yaml``. That is how a template written or adapted outside the
+    package (a copy of a bundled one, edited) is run without rebuilding it.
+
     Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0'), or a path.
 
     Returns:
         Path to the template YAML file.
@@ -133,6 +137,12 @@ def locate_template(template_id: str) -> Path:
     Raises:
         FileNotFoundError: If no template YAML exists.
     """
+    local = Path(template_id).expanduser()
+    if local.is_file():
+        return local.resolve()
+    if (local / "template.yaml").is_file():
+        return (local / "template.yaml").resolve()
+
     roots = _projects_roots()
     searched: list[Path] = []
     for projects_dir in roots:
@@ -147,7 +157,8 @@ def locate_template(template_id: str) -> Path:
     available = _list_available_templates(roots[0])
     available_str = ", ".join(available) if available else "none found"
     raise FileNotFoundError(
-        f"Template '{template_id}' not found at {searched[0]}. Available templates: {available_str}"
+        f"Template '{template_id}' not found at {searched[0]}, and it is not a path to a "
+        f"template.yaml either. Available templates: {available_str}"
     )
 
 

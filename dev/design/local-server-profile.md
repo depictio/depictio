@@ -10,19 +10,29 @@ becomes a real deployment, the same data moves to Docker Compose.
 # the only prerequisite: uv  (curl -LsSf https://astral.sh/uv/install.sh | sh)
 uv tool install "depictio[local]"     # once published on PyPI; puts `depictio` on PATH
 depictio local up                      # iris and penguins examples
+depictio local up --data-root results/ # template picked from results/pipeline_info/
 depictio local up --template nf-core/rnaseq/latest --data-root results/ \
     --var SAMPLESHEET_FILE=samplesheet.csv
+depictio local up --data-root results/ --refresh   # ingest again, reset the dashboards
 
 depictio local status | down | wipe
 depictio local export-compose --out depictio-docker   # hand over to Docker Compose
 ```
 
-`up` starts the stack, ingests the directory, then opens
-`http://127.0.0.1:8058/dashboards`. Without `--template` it seeds the iris and
-penguins examples (`--examples iris|penguins|iris,penguins|none`). It ends with a
-short summary: the dashboards URL, where the data and logs are, how to add data,
-how to point the CLI at this server, and how to stop it. Over SSH, or on Linux
-without a display, it prints the `ssh -L` tunnel to open instead of a browser.
+`up` starts the stack (or reuses the running one), ingests the directory, then
+opens the dashboard it made. `--template` is optional: without it `depictio run`
+picks the bundled template from the run's `pipeline_info/`, and it also takes the
+path to a `template.yaml`. Ingesting the same directory again changes nothing and
+opens the existing project's dashboard; `--refresh` ingests it again and resets
+its dashboards to the template's. Another directory that gets the same project
+name (a template names its project) stops there and asks for `--project-name`. `up` reads what happened from the file `run
+--result-json` writes (`<home>/last_ingestion.json`). Without `--data-root` it
+seeds the iris and penguins examples (`--examples
+iris|penguins|iris,penguins|none`). It ends with a short summary: the URL, where
+the data and logs are, how to add data, how to point the CLI at this server, and
+how to stop it. While the server runs, `depictio run` with no CLI config of its
+own uses the server's. Over SSH, or on Linux without a display, it prints the
+`ssh -L` tunnel to open instead of a browser.
 
 ## Chosen approach: the same services, as native processes
 

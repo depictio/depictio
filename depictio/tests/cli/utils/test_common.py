@@ -15,6 +15,7 @@ from depictio.cli.cli.utils.common import (
     format_timestamp,
     generate_api_headers,
     load_depictio_config,
+    resolve_cli_config_path,
     validate_depictio_cli_config,
 )
 from depictio.models.models.cli import CLIConfig
@@ -344,6 +345,59 @@ class TestCommon:
             config = load_depictio_config(str(explicit))
 
             assert config.api_base_url == "https://from-explicit.example.org"
+
+    class TestLocalServerFallback:
+        """With no CLI config of one's own, a running `depictio local up` server is used.
+
+        HOME and DEPICTIO_LOCAL_HOME point under ``tmp_path``: the real
+        ``~/.depictio`` is never read.
+        """
+
+        @pytest.fixture
+        def local_config(self, tmp_path, monkeypatch, sample_cli_config):
+            for var in (
+                "DEPICTIO_CLI_TOKEN",
+                "DEPICTIO_CLI_API_BASE_URL",
+                "DEPICTIO_CLI_CONFIG_PATH",
+            ):
+                monkeypatch.delenv(var, raising=False)
+            monkeypatch.setenv("HOME", str(tmp_path / "home"))
+            monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+            config = copy.deepcopy(sample_cli_config)
+            config["api_base_url"] = "http://127.0.0.1:8058"
+            path = tmp_path / "local" / "cli" / "admin_config.yaml"
+            path.parent.mkdir(parents=True)
+            path.write_text(yaml.safe_dump(config))
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+                yield path
+
+        def test_running_local_server_is_used(self, local_config):
+            with patch("depictio.cli.cli.local_stack.running_status", return_value={"api": True}):
+                assert resolve_cli_config_path("~/.depictio/CLI.yaml") == (
+                    str(local_config),
+                    "the local server",
+                )
+                assert load_depictio_config().api_base_url == "http://127.0.0.1:8058"
+
+        def test_stopped_local_server_is_not(self, local_config):
+            with patch("depictio.cli.cli.local_stack.running_status", return_value={"api": False}):
+                path, source = resolve_cli_config_path("~/.depictio/CLI.yaml")
+            assert (path, source) == (
+                os.path.expanduser("~/.depictio/CLI.yaml"),
+                "--CLI-config-path",
+            )
+
+        def test_own_default_config_wins(self, local_config, tmp_path):
+            own = tmp_path / "home" / ".depictio" / "CLI.yaml"
+            own.parent.mkdir(parents=True)
+            own.write_text(local_config.read_text())
+            with patch("depictio.cli.cli.local_stack.running_status", return_value={"api": True}):
+                assert resolve_cli_config_path("~/.depictio/CLI.yaml")[0] == str(own)
+
+        def test_explicit_path_is_never_replaced(self, local_config, tmp_path):
+            with patch("depictio.cli.cli.local_stack.running_status", return_value={"api": True}):
+                missing = str(tmp_path / "missing.yaml")
+                assert resolve_cli_config_path(missing) == (missing, "--CLI-config-path")
 
     class TestQuietSuppressesTheLoadingLine:
         """``quiet=True`` loads the same config without announcing it.

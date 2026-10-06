@@ -1,3 +1,4 @@
+import json
 import os
 import shlex
 import sys
@@ -68,14 +69,19 @@ def _has_display() -> bool:
     return True
 
 
-def _check_up_flags(template: str | None, data_root: Path | None, examples: str | None) -> str:
+def _check_up_flags(
+    template: str | None, data_root: Path | None, examples: str | None, refresh: bool
+) -> str:
     """Reject flags that do not go together, before anything starts; returns the seed."""
-    if (template is None) != (data_root is None):
-        _fail("--template and --data-root go together")
-    if data_root is not None and not data_root.is_dir():
+    if data_root is None:
+        if template is not None:
+            _fail("--template needs --data-root, the directory to ingest")
+        if refresh:
+            _fail("--refresh needs --data-root, the directory to ingest again")
+    elif not data_root.is_dir():
         _fail(f"--data-root {data_root} is not a directory")
     try:
-        return parse_examples(examples, template)
+        return parse_examples(examples, data_root is not None)
     except LocalStackError as exc:
         _fail(str(exc))
 
@@ -160,22 +166,70 @@ def _wait_for_examples(paths: Paths, state: State, asked: list[str]) -> list[str
     return [name for name in requested_examples(state) if name not in absent]
 
 
+def _read_result(path: Path) -> dict | None:
+    """What `depictio run --result-json` wrote, or None (an older CLI, an early failure)."""
+    try:
+        result = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return result if isinstance(result, dict) else None
+
+
 def _ingest(
     paths: Paths,
-    template: str,
+    template: str | None,
     data_root: Path,
     variables: list[str] | None,
     project_name: str | None,
-) -> None:
-    """Ingest with `depictio run`; on failure the server keeps running."""
-    _info(f"Ingesting {data_root} with template {template}")
+    refresh: bool,
+) -> dict | None:
+    """Ingest with `depictio run`; on failure the server keeps running.
+
+    Returns what `run` reported, to open the dashboard it made. Ingesting a
+    directory a second time is not a failure: `run` changes nothing and names the
+    existing project, which is then what gets opened.
+    """
+    how = f"with template {template}" if template else "(template picked from the run)"
+    _info(f"{'Re-ingesting' if refresh else 'Ingesting'} {data_root} {how}")
+    result_file = paths.last_ingestion
+    result_file.unlink(missing_ok=True)
     try:
-        code = ingest(paths, template, data_root, variables, project_name)
+        code = ingest(paths, template, data_root, variables, project_name, refresh, result_file)
     except KeyboardInterrupt:
         _warn("Ingestion interrupted; the server is still running (depictio local down to stop)")
         raise typer.Exit(code=130)
+    result = _read_result(result_file)
+    if code == 2 and result and result.get("status") == "exists":
+        project = result.get("project") or {}
+        name = project.get("name") or "a project"
+        locations = {Path(location).resolve() for location in project.get("locations") or []}
+        if locations and data_root.resolve() not in locations:
+            # Same project name (a template names its project), another run: --refresh
+            # would replace that project's data with this directory's.
+            _fail(
+                f"A project named {name} already exists, for another directory: pass "
+                f"--project-name to ingest {data_root} as a project of its own"
+            )
+        _info(
+            f"{data_root} is already ingested, as {name}: showing it. "
+            "--refresh ingests it again and resets its dashboards to the template's"
+        )
+        return result
     if code != 0:
         _fail("Ingestion failed; the server is still running (depictio local down to stop)")
+    return result
+
+
+def _landing(result: dict | None) -> str:
+    """The page to open: the ingested dashboard, else its project, else the list."""
+    if result:
+        dashboards = [d for d in result.get("dashboards") or [] if d.get("id")]
+        if dashboards:
+            return f"/dashboard/{dashboards[0]['id']}"
+        project_id = (result.get("project") or {}).get("id")
+        if project_id:
+            return f"/projects/{project_id}"
+    return "/dashboards"
 
 
 def _print_summary(
@@ -184,30 +238,32 @@ def _print_summary(
     examples: list[str],
     template: str | None,
     data_root: Path | None,
+    result: dict | None,
 ) -> None:
-    rich_print_checked_statement(f"Depictio is ready: {state.url}/dashboards", "success")
+    rich_print_checked_statement(f"Depictio is ready: {state.url}{_landing(result)}", "success")
     rows = []
     if examples:
         rows.append(("Examples", ", ".join(examples)))
-    if template and data_root is not None:
-        rows.append(("Ingested", f"{data_root.resolve()} ({template})"))
+    if data_root is not None:
+        used = (result or {}).get("template_id") or template
+        rows.append(("Ingested", f"{data_root.resolve()}" + (f" ({used})" if used else "")))
     rows += [
         ("Data", f"{paths.home} (logs in {paths.logs})"),
-        ("Add data", "depictio local up --template <template> --data-root <dir>"),
+        ("Add data", "depictio local up --data-root <dir> [--template <template>]"),
         ("CLI on this server", f"export DEPICTIO_CLI_CONFIG_PATH={paths.cli_config}"),
         ("Stop", "depictio local down"),
     ]
     _print_rows(rows)
 
 
-def _open_dashboards(state: State) -> None:
+def _open(state: State, page: str) -> None:
     if _has_display():
-        webbrowser.open(f"{state.url}/dashboards")
+        webbrowser.open(f"{state.url}{page}")
         return
     api_port = state.ports["api"]
     _info(
         f"No browser here: from your machine, run ssh -L {api_port}:127.0.0.1:{api_port} "
-        f"<host>, then open {state.url}/dashboards"
+        f"<host>, then open {state.url}{page}"
     )
 
 
@@ -215,12 +271,24 @@ def _open_dashboards(state: State) -> None:
 def up(
     template: Annotated[
         str | None,
-        typer.Option("--template", help="Template to ingest, e.g. nf-core/rnaseq/latest"),
+        typer.Option(
+            "--template",
+            help="Template to ingest --data-root with, e.g. nf-core/rnaseq/latest or the path "
+            "to a template.yaml. Default: picked from the run's pipeline_info/",
+        ),
     ] = None,
     data_root: Annotated[
         Path | None,
-        typer.Option("--data-root", help="Pipeline results directory to ingest with --template"),
+        typer.Option("--data-root", help="Pipeline results directory to ingest"),
     ] = None,
+    refresh: Annotated[
+        bool,
+        typer.Option(
+            "--refresh",
+            help="Ingest --data-root again when it already was, and reset its dashboards "
+            "to the template's (edits made since are lost)",
+        ),
+    ] = False,
     project_name: Annotated[
         str | None, typer.Option("--project-name", help="Name of the ingested project")
     ] = None,
@@ -249,7 +317,11 @@ def up(
         ),
     ] = None,
     open_browser: Annotated[
-        bool, typer.Option("--open/--no-open", help="Open the dashboards page in a browser")
+        bool,
+        typer.Option(
+            "--open/--no-open",
+            help="Open the ingested dashboard (else the dashboards page) in a browser",
+        ),
     ] = True,
     screenshots: Annotated[
         bool | None,
@@ -260,17 +332,18 @@ def up(
         ),
     ] = None,
 ):
-    """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
-    seed = _check_up_flags(template, data_root, examples)
+    """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest --data-root."""
+    seed = _check_up_flags(template, data_root, examples, refresh)
     paths = Paths(local_home())
     paths.ensure_dirs()
     state = _start_or_reuse(paths, port, seed, examples is not None, screenshots)
     present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
-    if template and data_root is not None:
-        _ingest(paths, template, data_root, variables, project_name)
-    _print_summary(paths, state, present, template, data_root)
+    result = None
+    if data_root is not None:
+        result = _ingest(paths, template, data_root, variables, project_name, refresh)
+    _print_summary(paths, state, present, template, data_root, result)
     if open_browser:
-        _open_dashboards(state)
+        _open(state, _landing(result))
 
 
 @app.command()

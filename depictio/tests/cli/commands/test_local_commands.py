@@ -1,6 +1,8 @@
 """`depictio local up/down/status/export-compose`, with every process launch faked."""
 
+import json
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -73,7 +75,7 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     assert f"Depictio is ready: {state.url}/dashboards" in out
     assert "Examples: iris, penguins" in out
     assert f"export DEPICTIO_CLI_CONFIG_PATH={stack.paths.cli_config}" in out
-    assert "depictio local up --template <template> --data-root <dir>" in out
+    assert "depictio local up --data-root <dir> [--template <template>]" in out
     assert "depictio local down" in out
     assert state.start_times == dict.fromkeys(PROCESS_ORDER, 123.0)
     assert state.first_run
@@ -158,6 +160,139 @@ def test_ingestion_runs_the_cli_module_without_remote_overrides(stack, tmp_path,
     assert cmd[:4] == [sys.executable, "-m", "depictio.cli", "run"]
     assert cmd[cmd.index("--CLI-config-path") + 1] == str(stack.paths.cli_config)
     assert not [k for k in env if k.startswith("DEPICTIO_CLI_")]
+
+
+def _fake_run(monkeypatch, code: int, result: dict | None):
+    """Stand in for the `depictio run` child: exit ``code`` after writing ``result``."""
+
+    def call(cmd, env):
+        if result is not None:
+            Path(cmd[cmd.index("--result-json") + 1]).write_text(json.dumps(result))
+        return code
+
+    fake = MagicMock(side_effect=call)
+    monkeypatch.setattr(local_stack.subprocess, "call", fake)
+    return fake
+
+
+_INGESTED = {
+    "status": "success",
+    "project": {"name": "nf-core/rnaseq/3.26.0 - results", "id": "p1", "url": None},
+    "dashboards": [{"title": "RNA-seq", "id": "d1", "url": None}],
+    "template_id": "nf-core/rnaseq/3.26.0",
+}
+
+
+def test_data_root_alone_lets_run_pick_the_template_and_opens_the_dashboard(
+    stack, tmp_path, monkeypatch
+):
+    call = _fake_run(monkeypatch, 0, _INGESTED)
+    monkeypatch.setattr(local_cmd, "_has_display", lambda: True)
+
+    result, out = _invoke("up", "--data-root", str(tmp_path))
+
+    assert result.exit_code == 0, out
+    cmd = call.call_args.args[0]
+    assert "--template" not in cmd
+    assert "--update-config" not in cmd
+    url = State.load(stack.paths).url
+    assert f"Depictio is ready: {url}/dashboard/d1" in out
+    assert f"Ingested: {tmp_path.resolve()} (nf-core/rnaseq/3.26.0)" in out
+    stack.webbrowser.open.assert_called_once_with(f"{url}/dashboard/d1")
+    # Own data to look at: the examples are not seeded next to it.
+    assert State.load(stack.paths).examples == "none"
+
+
+def test_a_template_path_reaches_run_absolute(stack, tmp_path, monkeypatch):
+    call = _fake_run(monkeypatch, 0, _INGESTED)
+    template = tmp_path / "template.yaml"
+    template.write_text("template: {}\n")
+    monkeypatch.chdir(tmp_path)
+
+    result, out = _invoke(
+        "up", "--template", "template.yaml", "--data-root", str(tmp_path), "--no-open"
+    )
+
+    assert result.exit_code == 0, out
+    cmd = call.call_args.args[0]
+    assert cmd[cmd.index("--template") + 1] == str(template.resolve())
+
+
+def _exists(locations: list[str]) -> dict:
+    return {
+        **_INGESTED,
+        "status": "exists",
+        "project": {**_INGESTED["project"], "locations": locations},
+    }
+
+
+def test_ingesting_the_same_directory_again_shows_the_existing_project(
+    stack, tmp_path, monkeypatch
+):
+    _fake_run(monkeypatch, 2, _exists([str(tmp_path)]))
+
+    result, out = _invoke("up", "--data-root", str(tmp_path), "--no-open")
+
+    assert result.exit_code == 0, out
+    assert "is already ingested, as nf-core/rnaseq/3.26.0 - results: showing it" in out
+    assert "--refresh" in out
+    assert f"Depictio is ready: {State.load(stack.paths).url}/dashboard/d1" in out
+
+
+def test_another_run_under_a_taken_project_name_is_not_called_ingested(
+    stack, tmp_path, monkeypatch
+):
+    _fake_run(monkeypatch, 2, _exists(["/data/an_earlier_run"]))
+
+    result, out = _invoke("up", "--data-root", str(tmp_path), "--no-open")
+
+    assert result.exit_code == 1
+    assert "already exists, for another directory: pass --project-name" in out
+    assert "is already ingested" not in out
+
+
+def test_refresh_reingests_and_resets_the_dashboards(stack, tmp_path, monkeypatch):
+    call = _fake_run(monkeypatch, 0, _INGESTED)
+
+    result, out = _invoke("up", "--data-root", str(tmp_path), "--refresh", "--no-open")
+
+    assert result.exit_code == 0, out
+    cmd = call.call_args.args[0]
+    assert "--update-config" in cmd and "--overwrite" in cmd
+
+
+def test_a_failed_ingestion_still_fails(stack, tmp_path, monkeypatch):
+    # Exit 2 without an "exists" result is not the already-ingested case.
+    _fake_run(monkeypatch, 2, None)
+
+    result, out = _invoke("up", "--data-root", str(tmp_path), "--no-open")
+
+    assert result.exit_code == 1
+    assert "Ingestion failed" in out
+
+
+def test_without_dashboards_the_project_page_opens(stack, tmp_path, monkeypatch):
+    _fake_run(monkeypatch, 0, {**_INGESTED, "dashboards": []})
+
+    result, out = _invoke("up", "--data-root", str(tmp_path), "--no-open")
+
+    assert result.exit_code == 0, out
+    assert f"Depictio is ready: {State.load(stack.paths).url}/projects/p1" in out
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--template", "nf-core/rnaseq/latest"], "--template needs --data-root"),
+        (["--refresh"], "--refresh needs --data-root"),
+    ],
+)
+def test_flags_that_need_a_data_root(stack, args, message):
+    result, out = _invoke("up", *args, "--no-open")
+
+    assert result.exit_code == 1
+    assert message in out
+    stack.start_services.assert_not_called()
 
 
 def test_open_over_ssh_prints_a_tunnel_instead(stack, monkeypatch):
