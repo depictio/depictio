@@ -195,6 +195,31 @@ def test_a_size_mapped_to_a_column_is_kept():
     assert marker["size"] == [4, 8, 16]
 
 
+@pytest.mark.parametrize("symbol", ["line-ns", "cross-thin", "circle-open", "x-thin-open"])
+def test_a_marker_drawn_by_its_outline_is_left_as_drawn(symbol):
+    """A median tick or an open circle is its outline: zeroing it erases the mark."""
+    marker = apply_figure_style(_scatter(symbol=symbol, size=30, line={"width": 3}), "minimal")[
+        "data"
+    ][0]["marker"]
+    assert marker["size"] == 30
+    assert marker["line"]["width"] == 3
+
+
+def test_strip_points_are_sized_as_a_scatters():
+    df = pd.DataFrame({"v": [1.0, 2.0, 3.0, 4.0], "city": ["A", "A", "B", "B"]})
+    fig = json.loads(px.strip(df, x="v", y="city").to_json())
+    trace = apply_figure_style(fig, "minimal")["data"][0]
+    assert trace["marker"]["size"] == 12
+    # The strip's box stays hidden: no outline drawn around its points.
+    assert "width" not in (trace.get("line") or {})
+
+
+def test_box_outliers_stay_small():
+    df = pd.DataFrame({"v": [1.0, 2.0, 3.0, 40.0], "city": ["A"] * 4})
+    fig = json.loads(px.box(df, x="city", y="v").to_json())
+    assert apply_figure_style(fig, "minimal")["data"][0]["marker"]["size"] == 5
+
+
 def test_bars_lose_their_outline_and_the_category_axis_its_grid():
     fig = {
         "data": [

@@ -62,6 +62,9 @@ _MARKER_SIZE_FLOOR = 4
 
 # Trace types whose markers the preset resizes.
 _SCATTER_TYPES = frozenset({"scatter", "scattergl", "scatterpolar", "scatterpolargl"})
+# Marker symbols drawn by their outline (a median tick, a cross, an open
+# circle): the preset's outline-free look would erase them.
+_LINE_SYMBOL = re.compile(r"^(line-|asterisk|hash|y-)|-thin|-open")
 # Trace types that put categories on one axis and values on the other.
 _CATEGORICAL_TYPES = frozenset({"bar", "box", "violin", "histogram", "funnel"})
 
@@ -242,9 +245,21 @@ def _marker_size(points: int) -> int:
     return _MARKER_SIZE_FLOOR
 
 
+def _drawn_by_line(trace: dict) -> bool:
+    symbol = (trace.get("marker") or {}).get("symbol")
+    return isinstance(symbol, str) and bool(_LINE_SYMBOL.search(symbol))
+
+
+def _is_strip(trace: dict) -> bool:
+    """A strip plot (px.strip): a box trace showing every point, its box hidden."""
+    return trace.get("boxpoints") == "all" and trace.get("hoveron") == "points"
+
+
 def _style_traces(traces: list[dict], layout: dict) -> None:
     scatter_points = sum(
-        _point_count(t) for t in traces if t.get("type", "scatter") in _SCATTER_TYPES
+        _point_count(t)
+        for t in traces
+        if t.get("type", "scatter") in _SCATTER_TYPES or _is_strip(t)
     )
     marker_size = _marker_size(scatter_points)
     has_bars = False
@@ -253,7 +268,10 @@ def _style_traces(traces: list[dict], layout: dict) -> None:
         kind = trace.get("type", "scatter")
         if kind in _SCATTER_TYPES:
             mode = trace.get("mode") or "markers"
-            if "markers" in mode:
+            if "markers" in mode and _drawn_by_line(trace):
+                # Its size and outline are the mark itself: left as drawn.
+                pass
+            elif "markers" in mode:
                 marker = _sub(trace, "marker")
                 # A size or opacity array maps a column: that is data, not style.
                 if not isinstance(marker.get("size"), (list, tuple, dict)):
@@ -272,11 +290,15 @@ def _style_traces(traces: list[dict], layout: dict) -> None:
             marker = _sub(trace, "marker")
             _sub(marker, "line")["width"] = 0
         elif kind in ("box", "violin"):
-            _sub(trace, "line")["width"] = 1.5
+            strip = _is_strip(trace)
+            if not strip:
+                _sub(trace, "line")["width"] = 1.5
             marker = _sub(trace, "marker")
             if not isinstance(marker.get("size"), (list, tuple, dict)):
-                marker["size"] = 5
-            marker["opacity"] = 0.75
+                # A strip's points are the plot, sized as a scatter's; a box's
+                # are its outliers, kept small beside it.
+                marker["size"] = marker_size if strip else 5
+            marker["opacity"] = 0.85 if strip else 0.75
             _sub(marker, "line")["width"] = 0
 
     if has_bars:
