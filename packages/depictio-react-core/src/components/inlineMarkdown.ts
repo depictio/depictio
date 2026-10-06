@@ -7,6 +7,7 @@
  *   \`code\`              -> code
  *   `[label](https://…)`  -> link
  *   `[label](tab:Name)`   -> link to the sibling tab called Name (see tabLinks.ts)
+ *   `![](icon:mdi:dna)`   -> an Iconify icon, inline (image syntax, icon scheme)
  *
  * We deliberately do NOT pull in react-markdown / remark / rehype — the body
  * is a single paragraph, and a regex pass is ~40 lines vs ~30 KB of deps.
@@ -21,7 +22,8 @@ export type InlineToken =
   | { type: 'bold'; value: string }
   | { type: 'italic'; value: string }
   | { type: 'code'; value: string }
-  | { type: 'link'; value: string; href: string; external: boolean };
+  | { type: 'link'; value: string; href: string; external: boolean }
+  | { type: 'icon'; name: string };
 
 // The href half is a scheme allowlist, not a catch-all: dashboard bodies are
 // authored content, and a permissive matcher would accept `javascript:`. Only
@@ -31,8 +33,12 @@ export type InlineToken =
 // ("Environment (CTD)"), since that is how tabs get named.
 const TAB_TARGET = String.raw`tab:(?:[^()\n]|\([^()\n]*\))+`;
 const LINK_HREF = String.raw`(?:https?:\/\/[^)\s]+|\/[^)\s]*|${TAB_TARGET})`;
+// An Iconify id: `prefix:name`, lower-case letters, digits and dashes only.
+const ICON_NAME = String.raw`[a-z0-9-]+:[a-z0-9-]+`;
+const ICON = new RegExp(String.raw`^!\[[^\]\n]*\]\(icon:(${ICON_NAME})\)$`);
 const PATTERN = new RegExp(
   [
+    String.raw`!\[[^\]\n]*\]\(icon:${ICON_NAME}\)`, // ![](icon:mdi:dna)
     '`[^`\\n]+`', // `code`
     '\\*\\*[^*\\n]+\\*\\*', // **bold**
     '\\*[^*\\n]+\\*', // *italic*
@@ -61,6 +67,11 @@ export const parseInlineMarkdown = (input: string): InlineToken[] => {
     }
     if (part.startsWith('`') && part.endsWith('`') && part.length >= 3) {
       tokens.push({ type: 'code', value: part.slice(1, -1) });
+      continue;
+    }
+    const icon = part.startsWith('![') ? ICON.exec(part) : null;
+    if (icon) {
+      tokens.push({ type: 'icon', name: icon[1] });
       continue;
     }
     const link = part.startsWith('[') ? LINK_PARTS.exec(part) : null;

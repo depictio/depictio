@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseBlocks } from './blockMarkdown';
+import { isLinksOnly, parseBlocks, parseFact } from './blockMarkdown';
 
 describe('parseBlocks', () => {
   it('keeps a body without block syntax as one paragraph, line breaks included', () => {
@@ -70,5 +70,39 @@ describe('parseBlocks', () => {
 
   it('normalises CRLF line endings', () => {
     expect(parseBlocks('- a\r\n- b')).toEqual([{ type: 'list', ordered: false, items: ['a', 'b'] }]);
+  });
+});
+
+describe('parseFact', () => {
+  it('reads an icon, a bold label and a value', () => {
+    expect(parseFact('![](icon:mdi:dna) **Pipeline** nf-core/ampliseq 2.18.0')).toEqual({
+      icon: 'mdi:dna',
+      label: 'Pipeline',
+      value: 'nf-core/ampliseq 2.18.0',
+    });
+  });
+
+  it('takes a colon after the label and no icon', () => {
+    expect(parseFact('**Taxonomy**: SILVA 138.2')).toEqual({
+      icon: null,
+      label: 'Taxonomy',
+      value: 'SILVA 138.2',
+    });
+  });
+
+  it('refuses an item that only opens in bold', () => {
+    expect(parseFact('**Locality drives the community.**')).toBeNull();
+    expect(parseFact('plain item')).toBeNull();
+  });
+});
+
+describe('isLinksOnly', () => {
+  it('accepts one or several links', () => {
+    expect(isLinksOnly('[Ordination](tab:Ordination & Clustering)')).toBe(true);
+    expect(isLinksOnly('[CTD](tab:Environment (CTD)) · [QC](tab:Sequencing QC)')).toBe(true);
+  });
+
+  it('refuses prose around a link', () => {
+    expect(isLinksOnly('see [Ordination](tab:Ordination & Clustering)')).toBe(false);
   });
 });

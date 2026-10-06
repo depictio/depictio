@@ -85,6 +85,7 @@ import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
 import TabLinkProvider from './chrome/TabLinkProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
+import { useContentWidthStyle } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -205,6 +206,7 @@ const App: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const contentScaleStyle = useContentScaleStyle();
+  const contentWidthStyle = useContentWidthStyle();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -1184,6 +1186,8 @@ const App: React.FC = () => {
                 // Content font-size preference — scales the dashboard tiles
                 // below, never the surrounding chrome (header, sidebar, panel).
                 ...contentScaleStyle,
+                // Page-width preference: centres the canvas at a reading width.
+                ...contentWidthStyle,
               }}
             >
               {/* The tab's own description, ahead of everything the canvas

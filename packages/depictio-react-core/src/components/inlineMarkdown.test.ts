@@ -93,3 +93,18 @@ describe('parseInlineMarkdown', () => {
     ]);
   });
 });
+
+describe('inline icons', () => {
+  it('reads an icon in image syntax', () => {
+    expect(parseInlineMarkdown('![](icon:mdi:dna) Pipeline')).toEqual([
+      { type: 'icon', name: 'mdi:dna' },
+      { type: 'text', value: ' Pipeline' },
+    ]);
+  });
+
+  it('reads no icon from a real image or a malformed name', () => {
+    for (const input of ['![x](https://example.org/a.png)', '![](icon:MDI DNA)']) {
+      expect(parseInlineMarkdown(input).some((t) => t.type === 'icon')).toBe(false);
+    }
+  });
+});

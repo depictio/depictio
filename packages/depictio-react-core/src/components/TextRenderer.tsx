@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core';
 
 import { StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
-import { parseBlocks } from './blockMarkdown';
+import { Block, Fact, isLinksOnly, parseBlocks, parseFact } from './blockMarkdown';
 import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
 import TabTiles from './TabTiles';
@@ -30,6 +30,15 @@ const renderInlineMarkdown = (
         return <strong key={idx}>{token.value}</strong>;
       case 'italic':
         return <em key={idx}>{token.value}</em>;
+      case 'icon':
+        return (
+          <Glyph
+            key={idx}
+            icon={token.name}
+            size={16}
+            style={{ display: 'inline-block', verticalAlign: '-0.15em' }}
+          />
+        );
       case 'code':
         return (
           <code
@@ -148,22 +157,80 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
 };
 
 /**
+ * A list of `![](icon:…) **Label** value` items, drawn as a grid of facts: the
+ * icon on a tint, a small label over its value. What a study's method box is
+ * made of (pipeline, markers, reference databases), legible at a glance where
+ * a run of bold-led lines reads as a paragraph.
+ */
+const FactGrid: React.FC<{
+  facts: Fact[];
+  accentColor: string | null;
+  inline: (text: string) => React.ReactNode[];
+}> = ({ facts, accentColor, inline }) => {
+  const tint = accentColor ?? 'var(--mantine-color-gray-6)';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(170px, 100%), 1fr))',
+        gap: '12px 18px',
+        width: '100%',
+      }}
+    >
+      {facts.map((fact, i) => (
+        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+          {fact.icon ? (
+            <span
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                flex: 'none',
+                display: 'grid',
+                placeItems: 'center',
+                background: `color-mix(in srgb, ${tint} 14%, var(--mantine-color-body))`,
+              }}
+            >
+              <Glyph icon={fact.icon} color={accentColor ?? 'gray'} size={18} />
+            </span>
+          ) : null}
+          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <Text
+              size="xs"
+              c="dimmed"
+              fw={600}
+              tt="uppercase"
+              style={{ letterSpacing: '0.04em', lineHeight: 1.3 }}
+            >
+              {fact.label}
+            </Text>
+            <Text size="sm" fw={500} style={{ lineHeight: 1.35, wordBreak: 'break-word' }}>
+              {inline(fact.value)}
+            </Text>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/**
  * A body's blocks (see `blockMarkdown.ts`). A body with no block syntax is one
  * paragraph and renders as the single pre-wrapped paragraph bodies always were.
  * Headings start one level below the tile's own title scale (`#` → H3), so a
  * body never outshouts the title above it.
  */
 const MarkdownBody: React.FC<{
-  body: string;
+  blocks: Block[];
   alignment: 'left' | 'center' | 'right';
   /** Set on an accented tile: its leading heading becomes the headline figure. */
   accentColor?: string | null;
-}> = ({ body, alignment, accentColor = null }) => {
+}> = ({ blocks, alignment, accentColor = null }) => {
   const resolveTab = useTabLinkResolver();
   const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
   return (
     <>
-      {parseBlocks(body).map((block, idx) => {
+      {blocks.map((block, idx) => {
         switch (block.type) {
           case 'heading':
             if (accentColor && idx === 0) {
@@ -198,6 +265,17 @@ const MarkdownBody: React.FC<{
               </Title>
             );
           case 'list': {
+            const facts = block.ordered ? [] : block.items.map(parseFact);
+            if (facts.length && facts.every(Boolean)) {
+              return (
+                <FactGrid
+                  key={idx}
+                  facts={facts as Fact[]}
+                  accentColor={accentColor}
+                  inline={inline}
+                />
+              );
+            }
             const tiles = resolveTab ? block.items.map(parseTabTile) : [];
             if (tiles.length && tiles.every(Boolean)) {
               return (
@@ -306,6 +384,24 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   const accentColor = resolveAccent(metadata.accent, resolveTab);
   const frame = surfaceStyle(surface, accentColor);
 
+  // On a framed tile, a closing paragraph of links is the card's footer: it
+  // sits on the bottom edge, so the links of a row of cards line up however
+  // long each card's prose runs.
+  const allBlocks = body ? parseBlocks(body) : [];
+  const last = allBlocks[allBlocks.length - 1];
+  const footer =
+    surface !== 'none' && allBlocks.length > 1 && last?.type === 'paragraph' && isLinksOnly(last.text)
+      ? last
+      : null;
+  const blocks = footer ? allBlocks.slice(0, -1) : allBlocks;
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const [footerPx, setFooterPx] = useState(0);
+  useLayoutEffect(() => {
+    // Outside the measured prose (it is pushed to the bottom, so measuring it
+    // with the prose would report the tile), so its height is added back.
+    setFooterPx(footerRef.current ? footerRef.current.offsetHeight + 12 : 0);
+  }, [footer?.type === 'paragraph' ? footer.text : null]);
+
   // Measure the prose itself, not the tile. The Stack below is `h="100%"`, so
   // it always reports the height it was given; this inner wrapper is
   // height-auto, so its scrollHeight is what the text actually needs.
@@ -314,9 +410,10 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   useAutofitHeight(
     index,
     contentRef,
-    [rawTitle, body, order, alignment, surface],
-    // The frame's padding and borders sit outside the measured prose.
-    frame.extra ? (h) => h + frame.extra : undefined,
+    [rawTitle, body, order, alignment, surface, footerPx],
+    // The frame's padding and borders, and a footer, sit outside the measured
+    // prose.
+    frame.extra || footerPx ? (h) => h + frame.extra + footerPx : undefined,
   );
 
   return (
@@ -361,14 +458,19 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           Section title
         </Title>
       ) : null}
-      {body ? (
+      {blocks.length ? (
         <MarkdownBody
-          body={body}
+          blocks={blocks}
           alignment={alignment}
           accentColor={surface !== 'none' ? accentColor : null}
         />
       ) : null}
       </div>
+      {footer ? (
+        <div ref={footerRef} style={{ marginTop: 'auto', paddingTop: 12 }}>
+          <MarkdownBody blocks={[footer]} alignment={alignment} />
+        </div>
+      ) : null}
     </Stack>
   );
 };

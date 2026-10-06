@@ -29,6 +29,7 @@ import DashboardInfoBody from './DashboardInfoBody';
 import { useBranding } from '../branding';
 import { useFeedbackLink } from '../feedback';
 import { useUiScalePref } from '../hooks/useUiScalePref';
+import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks/useContentWidthPref';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -37,6 +38,29 @@ const LOGO_MAX_BYTES = 2 * 1024 * 1024;
  *  before writing. Long enough to coalesce a drag, short enough that letting
  *  go feels like it saved. */
 const SAVE_DEBOUNCE_MS = 600;
+
+/** Page width (Full / Wide / Comfortable): the same preference as the header
+ *  toggle, here with its options spelled out. */
+const PageWidthBlock: React.FC = () => {
+  const { width, set } = useContentWidthPref();
+  return (
+    <Stack gap={6} data-testid="page-width-section">
+      <Text fw={500} size="sm">
+        Page width
+      </Text>
+      <Text size="xs" c="dimmed">
+        Caps how wide the dashboard runs on a large screen. Saved in this browser.
+      </Text>
+      <SegmentedControl
+        size="xs"
+        value={width}
+        onChange={(value) => set(value as ContentWidth)}
+        data={CONTENT_WIDTHS.map((w) => ({ value: w.value, label: w.label }))}
+        data-testid="page-width-control"
+      />
+    </Stack>
+  );
+};
 
 /** A− / percent / A+ control for the dashboard content font-size preference
  *  (#854). Scales figures, tables and the other dashboard tiles — never the
@@ -418,6 +442,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           </Text>
         </Group>
         <FontSizeBlock />
+        <PageWidthBlock />
         {onChangeBrandTheme && (
           <>
             <Divider />

@@ -113,3 +113,30 @@ export function parseBlocks(input: string): Block[] {
   flush();
   return blocks;
 }
+
+/** One fact of a fact list: `![](icon:mdi:dna) **Label** value`. */
+export interface Fact {
+  icon: string | null;
+  label: string;
+  value: string;
+}
+
+const FACT = /^(?:!\[[^\]\n]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)\s*)?\*\*([^*\n]+?)\*\*:?\s+(\S.*)$/;
+
+/**
+ * Reads a list item as a fact (an optional icon, a bold label, a value), or
+ * null. A list renders as a fact grid only when every item reads, so a list
+ * that merely opens one item in bold stays a list.
+ */
+export function parseFact(item: string): Fact | null {
+  const m = FACT.exec(item.trim());
+  if (!m) return null;
+  return { icon: m[1] ?? null, label: m[2].trim(), value: m[3].trim() };
+}
+
+const LINKS_ONLY = /^(?:\s*\[[^\]\n]+\]\([^)\n]+(?:\([^)\n]*\))?[^)\n]*\)\s*[·|,]?)+\s*$/;
+
+/** True for a paragraph made of links and nothing else: a card's footer. */
+export function isLinksOnly(text: string): boolean {
+  return LINKS_ONLY.test(text);
+}

@@ -6,6 +6,7 @@ import { Icon } from '@iconify/react';
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { useFeedbackLink } from '../feedback';
+import { CONTENT_WIDTHS, useContentWidthPref } from '../hooks/useContentWidthPref';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  *  Dash YAML and aren't valid Iconify names. */
@@ -329,6 +330,7 @@ const Header: React.FC<HeaderProps> = ({
             </Menu.Dropdown>
           </Menu>
         )}
+        <PageWidthToggle />
         {mode === 'edit' && onSave && (
           <Tooltip
             label="You can only save dashboards you own. Duplicate this one to get your own copy."
@@ -429,3 +431,32 @@ const Header: React.FC<HeaderProps> = ({
 };
 
 export default Header;
+
+/**
+ * Cycles the page width (Full → Wide → Comfortable). A header icon rather
+ * than a Settings row only: it is reached for at the moment the sidebar and
+ * filters are folded away and the canvas suddenly runs edge to edge.
+ */
+const PageWidthToggle: React.FC = () => {
+  const { width, cycle } = useContentWidthPref();
+  const current = CONTENT_WIDTHS.find((w) => w.value === width) ?? CONTENT_WIDTHS[0];
+  const next = CONTENT_WIDTHS[(CONTENT_WIDTHS.indexOf(current) + 1) % CONTENT_WIDTHS.length];
+  return (
+    <Tooltip label={`Page width: ${current.label} (click for ${next.label})`} withArrow>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size="md"
+        onClick={cycle}
+        aria-label={`Page width: ${current.label}. Switch to ${next.label}`}
+        data-testid="page-width-toggle"
+      >
+        <Icon
+          icon={width === 'full' ? 'mdi:arrow-collapse-horizontal' : 'mdi:arrow-expand-horizontal'}
+          width={18}
+        />
+      </ActionIcon>
+    </Tooltip>
+  );
+};
+
