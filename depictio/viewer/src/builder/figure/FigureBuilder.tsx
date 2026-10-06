@@ -7,11 +7,12 @@
  * Execute result.
  */
 import React, { Suspense, useEffect } from 'react';
-import { Accordion, Box, Center, Loader, SegmentedControl, Stack, Tooltip } from '@mantine/core';
+import { Box, Center, Loader, SegmentedControl, Stack, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useBuilderStore } from '../store/useBuilderStore';
 import { useDashboardAccess } from '../../hooks/useDashboardAccess';
 import CrossFilterSection from '../shared/CrossFilterSection';
+import { BuilderSections } from '../shared/BuilderSections';
 import FigureUIMode from './FigureUIMode';
 import FigurePreview from './FigurePreview';
 import StickyPreview from '../shared/StickyPreview';
@@ -133,17 +134,19 @@ const FigureBuilder: React.FC = () => {
              *  reach without the eyes leaving the preview area. Gated to
              *  scatter-like visus only (see supportsCrossFilter above). */}
             {figureMode === 'code' && supportsCrossFilter && (
-              <Accordion variant="separated" radius="md" multiple mt="sm">
-                <CrossFilterSection
-                  enabled={Boolean(config.selection_enabled)}
-                  onEnabledChange={(checked) =>
-                    patchConfig({ selection_enabled: checked })
-                  }
-                  column={config.selection_column}
-                  onColumnChange={(name) => patchConfig({ selection_column: name })}
-                  columnDescription="Column to extract from selected points"
-                />
-              </Accordion>
+              <Box mt="sm">
+                <BuilderSections builder="figure-code" required={[]}>
+                  <CrossFilterSection
+                    enabled={Boolean(config.selection_enabled)}
+                    onEnabledChange={(checked) =>
+                      patchConfig({ selection_enabled: checked })
+                    }
+                    column={config.selection_column}
+                    onColumnChange={(name) => patchConfig({ selection_column: name })}
+                    columnDescription="Column to extract from selected points"
+                  />
+                </BuilderSections>
+              </Box>
             )}
           </StickyPreview>
         </Box>
