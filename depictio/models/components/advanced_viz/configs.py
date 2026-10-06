@@ -675,6 +675,43 @@ class UpsetPlotConfig(_BaseVizConfig):
         default=True,
         description="Master toggle for the set-size bars and annotation tracks",
     )
+    set_category_column: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The categorical column the sets are values of: the column the matrix "
+            "was pivoted on (``locality``, ``habitat``). The set-size bars, the "
+            "matrix dots and, with ``color_intersections_by='set'``, the bar of "
+            "each single-set intersection take that column's dashboard "
+            "``category_colors``, so a set is the same colour here as on every "
+            "other tile. Null finds the column by value: the one "
+            "``category_colors`` column that pins every set drawn. A set with no "
+            "colour there keeps the plain look, and ``set_colors`` wins per set."
+        ),
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on an intersection (its bar or its matrix column) emit "
+            "a dashboard filter on the rows it counts, as a lasso does on a "
+            "scatter. Clicking it again, or the tile's Reset selection, clears "
+            "it. Requires ``selection_column``."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Column of the matrix whose values the selection emits: the values "
+            "the intersection's rows hold there. The filter narrows every tile "
+            "whose data has a column of that name (and those linked to it), so "
+            "pick the identifier the other tiles share: a taxon's ``Phylum`` "
+            "rather than a lineage string only the matrix carries."
+        ),
+    )
 
     @field_validator("set_columns_pattern")
     @classmethod
@@ -687,6 +724,22 @@ class UpsetPlotConfig(_BaseVizConfig):
             raise ValueError(
                 "set_columns and set_columns_pattern are mutually exclusive: list the "
                 "sets or name them by pattern, not both"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _selection_names_its_column(self) -> UpsetPlotConfig:
+        # Nothing else in the config names the matrix's element column, so an
+        # opt-in without one would validate, persist, and do nothing.
+        if self.selection_enabled and not self.selection_column:
+            raise ValueError(
+                "selection_enabled needs selection_column: the column whose values "
+                "a clicked intersection emits as the filter"
+            )
+        if self.selection_column and self.set_columns and self.selection_column in self.set_columns:
+            raise ValueError(
+                f"selection_column {self.selection_column!r} is one of the set columns; "
+                "it must name the elements (a 0/1 membership column selects nothing)"
             )
         return self
 
