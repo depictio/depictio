@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isLinksOnly, parseBlocks, parseFact, parseStatRow } from './blockMarkdown';
+import { isLinksOnly, parseBlocks, parseFact, parseLinkRow, parseStatRow } from './blockMarkdown';
 
 describe('parseBlocks', () => {
   it('keeps a body without block syntax as one paragraph, line breaks included', () => {
@@ -139,5 +139,26 @@ describe('parseStatRow', () => {
   it('rejects a fact: no digit, or no context nor link', () => {
     expect(parseStatRow('**Pipeline** nf-core/ampliseq 2.18.0')).toBeNull();
     expect(parseStatRow('**16S** amplicons only')).toBeNull();
+  });
+});
+
+describe('parseLinkRow', () => {
+  it('reads a labelled row of links, parentheses in tab names included', () => {
+    expect(
+      parseLinkRow('**Also** · [Env (CTD)](tab:Environment (CTD)) · [QC](tab:Sequencing QC)'),
+    ).toEqual({
+      label: 'Also',
+      links: ['[Env (CTD)](tab:Environment (CTD))', '[QC](tab:Sequencing QC)'],
+    });
+  });
+
+  it('reads two or more bare links', () => {
+    expect(parseLinkRow('[A](tab:A) | [B](https://example.org)')?.links).toHaveLength(2);
+  });
+
+  it('leaves a lone link, and prose with links, as paragraphs', () => {
+    expect(parseLinkRow('[A](tab:A)')).toBeNull();
+    expect(parseLinkRow('See [A](tab:A) and [B](tab:B) for more')).toBeNull();
+    expect(parseLinkRow('**Note** the [A](tab:A) tab')).toBeNull();
   });
 });

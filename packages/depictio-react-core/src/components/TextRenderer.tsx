@@ -7,8 +7,10 @@ import {
   Block,
   Fact,
   isLinksOnly,
+  LinkRow,
   parseBlocks,
   parseFact,
+  parseLinkRow,
   parseStatRow,
   StatRow,
 } from './blockMarkdown';
@@ -281,6 +283,49 @@ const StatList: React.FC<{
 );
 
 /**
+ * A paragraph of links (see `parseLinkRow`), drawn as one small row: the
+ * label dimmed, each link kept whole on its line. A link to a tab this
+ * dashboard does not have is dropped rather than left as dead text — a run
+ * without that tab's data never gets it, and the row stays true to what is
+ * there.
+ */
+const LinkLine: React.FC<{
+  row: LinkRow;
+  alignment: 'left' | 'center' | 'right';
+  inline: (text: string) => React.ReactNode[];
+  resolveTab: TabLinkResolver | null;
+}> = ({ row, alignment, inline, resolveTab }) => {
+  const links = row.links.filter((link) => {
+    const tab = /\]\(tab:(.+)\)$/.exec(link)?.[1];
+    return !tab || !resolveTab || resolveTab(tab) !== null;
+  });
+  if (!links.length) return null;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent:
+          alignment === 'center' ? 'center' : alignment === 'right' ? 'flex-end' : 'flex-start',
+        gap: '4px 18px',
+        fontSize: 'var(--mantine-font-size-sm)',
+        lineHeight: 1.5,
+      }}
+    >
+      {row.label ? (
+        <span style={{ color: 'var(--mantine-color-dimmed)', fontWeight: 600 }}>{row.label}</span>
+      ) : null}
+      {links.map((link, i) => (
+        <span key={i} style={{ whiteSpace: 'nowrap' }}>
+          {inline(link)}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+/**
  * A body's blocks (see `blockMarkdown.ts`). A body with no block syntax is one
  * paragraph and renders as the single pre-wrapped paragraph bodies always were.
  * Headings start one level below the tile's own title scale (`#` → H3), so a
@@ -410,7 +455,19 @@ const MarkdownBody: React.FC<{
             );
           case 'rule':
             return <Divider key={idx} my={4} />;
-          default:
+          default: {
+            const linkRow = parseLinkRow(block.text);
+            if (linkRow) {
+              return (
+                <LinkLine
+                  key={idx}
+                  row={linkRow}
+                  alignment={alignment}
+                  inline={inline}
+                  resolveTab={resolveTab}
+                />
+              );
+            }
             if (framed) {
               // On a card: the line under its number is that number's caption,
               // dimmed like a metric card's; the prose after it is card text.
@@ -432,6 +489,7 @@ const MarkdownBody: React.FC<{
                 {inline(block.text)}
               </Text>
             );
+          }
         }
       })}
     </>

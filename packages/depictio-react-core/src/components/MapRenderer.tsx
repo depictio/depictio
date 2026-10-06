@@ -253,12 +253,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     if (userMovedRef.current || !fitSpec || !boxSize) return;
     // Plotly's margins come off the container before the map subplot gets what
     // is left, so the fit has to be against the drawing area rather than the
-    // div. On a titled grid tile that is a 30px strip, which on a short panel
-    // would be a real slice of the height.
+    // div. The top margin is always given back (see the layout below).
     const margin = (figure?.layout?.margin as Record<string, unknown>) || {};
     const width = boxSize.width - numberOr(margin.l, 0) - numberOr(margin.r, 0);
-    const height =
-      boxSize.height - (bare ? 0 : numberOr(margin.t, 30)) - numberOr(margin.b, 0);
+    const height = boxSize.height - numberOr(margin.b, 0);
     if (width < 1 || height < 1) return;
     const next = computeMapFit(fitSpec, width, height);
     // The last fit is mirrored in a ref rather than read out of state, so the
@@ -269,7 +267,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     const applied: AppliedFit = { ...next, revision: `fit-${fitRevRef.current}` };
     appliedFitRef.current = applied;
     setAppliedFit(applied);
-  }, [fitSpec, boxSize, figure, bare]);
+  }, [fitSpec, boxSize, figure]);
 
   /** Plotly reports every user pan / zoom / rotate through relayout, keyed
    *  under the map subplot. Our own re-fits go through props and reach the map
@@ -483,18 +481,17 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       margin: {
         l: 0,
         r: 0,
-        t: 30,
         b: 0,
         ...((figure?.layout?.margin as Record<string, unknown>) || {}),
-        // A bare host already shows the title in its own header, so the figure
-        // gives that strip back to the map instead of repeating it. This has to
-        // land AFTER the server's margin: `render_map` reserves 30px whenever
-        // the component has a title, which on a docked map was a fifth of the
-        // height held open for a title Plotly is never asked to draw.
-        ...(bare ? { t: 0 } : {}),
+        // The title is always drawn above the figure — by a bare host's own
+        // header, or by this component's — so the figure gives its strip back
+        // to the map instead of repeating it. This has to land AFTER the
+        // server's margin: `render_map` reserves 30px and sets a Plotly title
+        // whenever the component has one, which read as the name twice.
+        t: 0,
       },
     };
-    if (bare) base.title = undefined;
+    base.title = undefined;
     if (selectionEnabled && !base.dragmode) {
       // Respect a YAML-level ``selection_mode`` ('lasso' | 'select' | 'pan').
       // Default 'lasso' matches the Dash map component default.

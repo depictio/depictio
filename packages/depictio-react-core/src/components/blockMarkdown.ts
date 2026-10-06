@@ -141,6 +141,35 @@ export function isLinksOnly(text: string): boolean {
   return LINKS_ONLY.test(text);
 }
 
+/**
+ * A paragraph of links and nothing else, optionally led by a bold label:
+ * `**Also** · [A](tab:A) · [B](https://…)`. Drawn as one compact row of
+ * links rather than as prose.
+ */
+export interface LinkRow {
+  label: string | null;
+  /** Each link's markdown, `[label](href)`. */
+  links: string[];
+}
+
+const LINK = /\[[^\]\n]+\]\((?:[^()\n]|\([^()\n]*\))+\)/g;
+const LINK_ROW_LABEL = /^\*\*([^*\n]+)\*\*\s*[·:|]?\s*/;
+
+/**
+ * Reads a paragraph as a link row, or null. Needs a label or at least two
+ * links: a lone link is a sentence's worth of prose and stays one.
+ */
+export function parseLinkRow(text: string): LinkRow | null {
+  const t = text.trim();
+  const m = LINK_ROW_LABEL.exec(t);
+  const rest = m ? t.slice(m[0].length) : t;
+  const links = rest.match(LINK) ?? [];
+  if (!links.length || (!m && links.length < 2)) return null;
+  // Nothing between the links but separators.
+  if (rest.replace(LINK, '').replace(/[\s·|,]/g, '') !== '') return null;
+  return { label: m ? m[1].trim() : null, links };
+}
+
 /** One row of a result list: `**41%** Claim — context [Tab](tab:Name)`. */
 export interface StatRow {
   stat: string;
