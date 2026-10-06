@@ -180,6 +180,14 @@ def _apply_minimal(
         "bordercolor": palette["hover_border"],
         "font": {"size": 12, "color": palette["hover_font"]},
     }
+    # The toolbar shows on hover only (the viewer's Plotly config); with no
+    # band of its own it floats over the card like the chrome's icons do.
+    layout["modebar"] = {
+        **(layout.get("modebar") or {}),
+        "bgcolor": "rgba(0,0,0,0)",
+        "color": palette["tick"],
+        "activecolor": palette["label"],
+    }
     # Tight on every side: automargin on the axes and the legend's own push
     # grow them to whatever the ticks, axis titles and legend need.
     # Annotations push no margin of their own, so the room a title or a facet

@@ -144,6 +144,7 @@ def test_minimal_layout():
     assert legend["title"] == {"text": ""}
     assert legend["itemsizing"] == "constant"
     assert layout["hoverlabel"]["bgcolor"] == "#ffffff"
+    assert layout["modebar"]["bgcolor"] == "rgba(0,0,0,0)"
     for key in ("xaxis", "yaxis"):
         axis = layout[key]
         assert axis["showline"] is False
