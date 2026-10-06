@@ -7,6 +7,7 @@ import { useAutofitHeight } from './autofit';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
 import { useTabLinkResolver } from './tabLinks';
+import { describeAggregation } from './card/describe';
 import LazyMount, { CellPlaceholder } from './LazyMount';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -757,6 +758,30 @@ const CardRenderer: React.FC<{
     return base;
   })();
 
+  // The hover on the title: what the figure is (the author's description) and
+  // how it was computed — the line under the value says it as "(Median)", and
+  // when a caption takes that line the hover is the only place it is said.
+  const description =
+    typeof metadata.description === 'string' && metadata.description.trim()
+      ? metadata.description.trim()
+      : '';
+  const how = [
+    describeAggregation(metadata.aggregation, metadata.column_name),
+    // What the visible line adds after its " · ": a top-N share, a % of total.
+    aggDesc?.includes(' · ') ? aggDesc.slice(aggDesc.indexOf(' · ') + 3) : null,
+    filterApplied ? 'filters applied' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const howHidden = compactHeader || Boolean(caption);
+  const headerTooltip =
+    description || (howHidden && how) ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {description ? <span>{description}</span> : null}
+        {howHidden && how ? <span style={{ opacity: description ? 0.75 : 1 }}>{how}</span> : null}
+      </div>
+    ) : undefined;
+
   // Cards size the grid to themselves, the way text tiles size it to their
   // prose. The height an author picked is a guess made against the content the
   // card had then, and a card that later gains a breakdown (a group-by, a top-N
@@ -813,7 +838,7 @@ const CardRenderer: React.FC<{
         // displaces is still one hover away on the header.
         aggregation_description={compactHeader ? undefined : caption || aggDesc}
         inline_header={compactHeader}
-        header_tooltip={compactHeader || caption ? aggDesc : undefined}
+        header_tooltip={headerTooltip}
         filter_applied={filterApplied}
         secondaryStrip={
           showSecondaryMetrics || groupCompare !== undefined ? (

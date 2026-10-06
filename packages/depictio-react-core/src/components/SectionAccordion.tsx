@@ -108,24 +108,27 @@ export const SectionHeader: React.FC<{
   trailing?: React.ReactNode;
 }> = ({ spec, name, badge, trailing }) =>
   spec?.appearance === 'plain' ? (
-    // A plain section is a heading, not a bar: title and description on one
-    // baseline, the icon a small marker before them.
-    <Group gap={8} wrap="wrap" align="baseline" style={{ minWidth: 0, rowGap: 0 }}>
-      {spec.icon ? (
-        <span style={{ alignSelf: 'center', display: 'inline-flex' }}>
-          <SectionIcon spec={spec} />
-        </span>
-      ) : null}
-      <Text fw={700} style={{ fontSize: 17, lineHeight: 1.3 }}>
-        {name}
-      </Text>
-      {badge}
+    // A plain section is a heading, not a bar: a title at a page heading's
+    // size over its description, the icon a marker before the title. Sized to
+    // be found while scrolling — on a landing page these headings are its
+    // table of contents.
+    <div style={{ minWidth: 0 }}>
+      <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0 }}>
+        {spec.icon ? <SectionIcon spec={spec} size={24} /> : null}
+        <Text fw={700} style={{ fontSize: 22, lineHeight: 1.25, letterSpacing: '-0.01em' }}>
+          {name}
+        </Text>
+        {badge}
+      </Group>
       {spec.description ? (
-        <Text size="sm" c="dimmed" style={{ lineHeight: 1.3 }}>
+        <Text
+          c="dimmed"
+          style={{ fontSize: 15, lineHeight: 1.45, marginTop: 2, paddingLeft: spec.icon ? 34 : 0 }}
+        >
           {spec.description}
         </Text>
       ) : null}
-    </Group>
+    </div>
   ) : (
   <Group justify="space-between" wrap="nowrap" gap="sm" pr="xs" style={{ minWidth: 0 }}>
     {/* The icon goes INSIDE the label, not in `Accordion.Control`'s `icon`

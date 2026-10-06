@@ -103,6 +103,12 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   const hasCustomBg = !!background_color;
   const headline = variant === 'headline' && !inline_header;
   const badge = icon_name && icon_style === 'badge' && !headline;
+  const iconNode =
+    icon_name && !inline_header && !badge ? (
+      <Box className={headline ? 'depictio-card-icon depictio-card-icon--rest' : 'depictio-card-icon'}>
+        <Icon icon={icon_name} style={{ color: icon_color || title_color || 'currentColor' }} />
+      </Box>
+    ) : null;
 
   const header = inline_header ? (
     // Title left, value right: glued side by side the two bold texts read as
@@ -269,9 +275,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         // disappeared.
         display: 'flex',
         flexDirection: 'column',
-        // A headline card sits in a row of them: top-aligned, so titles and
-        // values line up across the row whatever each card carries below.
-        justifyContent: headline ? 'flex-start' : 'center',
+        justifyContent: 'center',
         // Border is set in DepictioCard.css with !important to win over
         // Mantine's ``withBorder`` shorthand. See the .depictio-card rule.
         //
@@ -288,14 +292,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           Inline ``width``/``height`` removed so the CSS controls sizing —
           @iconify/react renders an <svg> we can size via .depictio-card-icon
           svg{...} rules. */}
-      {icon_name && !inline_header && !badge && (
-        <Box className={headline ? 'depictio-card-icon depictio-card-icon--rest' : 'depictio-card-icon'}>
-          <Icon
-            icon={icon_name}
-            style={{ color: icon_color || title_color || 'currentColor' }}
-          />
-        </Box>
-      )}
+      {!headline && iconNode}
 
       {/* The card's content, in one height-auto box.
           Two jobs. It is what a caller measures: the frame above is
@@ -320,12 +317,16 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           flex: '0 0 auto',
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: headline ? 'flex-start' : 'center',
+          justifyContent: 'center',
           minHeight: CARD_MIN_CONTENT_HEIGHT,
           width: '100%',
           minWidth: 0,
+          // A headline card's icon rests inside the content, level with the
+          // title wherever the centred content lands in the tile.
+          position: headline ? 'relative' : undefined,
         }}
       >
+      {headline && iconNode}
       {/* Content section — flex column, vertically centered, padding xs.
           Matches dmc.CardSection(p='xs', justifyContent='center'). When a
           ``secondaryStrip`` is present, drop the bottom padding so the strip

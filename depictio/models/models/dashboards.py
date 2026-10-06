@@ -295,10 +295,10 @@ class DashboardDataLite(BaseModel):
         description="Show the tab's name (and subtitle) above its canvas. Off for a "
         "tab whose content opens on its own title.",
     )
-    content_width_default: Literal["full", "wide", "comfortable"] = Field(
+    content_width_default: Literal["full", "wide", "comfortable", "compact"] = Field(
         default="full",
         description="Initial page width before the viewer has picked one: 'full', "
-        "'wide' (1600px) or 'comfortable' (1240px).",
+        "'wide' (1600px), 'comfortable' (1240px) or 'compact' (1080px).",
     )
 
     # Left filter panel presentation (ordering + icons for named sections)
@@ -1659,7 +1659,7 @@ class DashboardData(MongoModel):
     # Initial left-panel state before the viewer has toggled it.
     filter_panel_default: Literal["open", "collapsed"] = "open"
     # Initial page width before the viewer has picked one.
-    content_width_default: Literal["full", "wide", "comfortable"] = "full"
+    content_width_default: Literal["full", "wide", "comfortable", "compact"] = "full"
     # Whether the tab's name is drawn above its canvas.
     show_tab_header: bool = True
     # Dashboard-level brand override (logo, palette, surfaces, figure

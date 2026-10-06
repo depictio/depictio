@@ -125,12 +125,13 @@
 
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain + .depictio-section-item,
 .depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item.is-plain {
-  margin-top: var(--mantine-spacing-xl);
+  margin-top: calc(var(--mantine-spacing-xl) * 1.5);
 }
 
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain .depictio-section-control,
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain[data-active] .depictio-section-control {
-  padding: 0 0 10px;
+  /* Room under the heading, so a tile that lifts on hover never meets it. */
+  padding: 0 0 16px;
   border-bottom: none;
   background: transparent;
   /* Always open: the header is a label, not a toggle. */

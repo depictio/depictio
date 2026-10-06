@@ -1,16 +1,14 @@
 .depictio-tab-tile {
   transition:
     background-color 120ms ease-out,
-    border-color 120ms ease-out,
-    transform 120ms ease-out,
-    box-shadow 120ms ease-out;
+    border-color 120ms ease-out;
 }
 
+/* Hover stays inside the tile's own box: no lift, which brought the tile's
+   edge up against the heading above it. */
 .depictio-tab-tile:hover {
   background: var(--tile-tint) !important;
   border-color: var(--tile-edge) !important;
-  transform: translateY(-1px);
-  box-shadow: var(--mantine-shadow-md) !important;
 }
 
 .depictio-tab-tile:focus-visible {

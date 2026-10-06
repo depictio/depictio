@@ -93,7 +93,8 @@
    container query so its placement wins at every width. */
 .depictio-card-icon--rest,
 .depictio-card:hover .depictio-card-icon--rest {
-  /* Top-right, level with the title: the card is top-aligned. */
+  /* Top-right of the content box (the card renders it there), level with
+     the title. */
   opacity: 0.32;
   top: 16px;
   right: 16px;

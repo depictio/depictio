@@ -24,3 +24,8 @@ def test_comfortable_survives_yaml_and_full_round_trips():
 def test_unknown_value_rejected():
     with pytest.raises(ValidationError):
         DashboardDataLite(title="Test", components=[], content_width_default="narrow")
+
+
+def test_compact_is_accepted():
+    dash = DashboardDataLite(title="Test", components=[], content_width_default="compact")
+    assert DashboardDataLite.from_yaml(dash.to_yaml()).content_width_default == "compact"

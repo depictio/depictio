@@ -218,6 +218,53 @@ const FactLine: React.FC<{
 );
 
 /**
+ * The same facts on a framed tile: a two-column table, labels over a hairline
+ * per row. A card beside the prose (a study's method and run parameters) is
+ * read as a reference, down a column, where a line of facts is read across.
+ */
+const FactTable: React.FC<{
+  facts: Fact[];
+  inline: (text: string) => React.ReactNode[];
+}> = ({ facts, inline }) => (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'max-content minmax(0, 1fr)',
+      columnGap: 18,
+      width: '100%',
+      fontSize: 'var(--mantine-font-size-sm)',
+      lineHeight: 1.4,
+    }}
+  >
+    {facts.map((fact, i) => {
+      const cell: React.CSSProperties = {
+        padding: '7px 0',
+        borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
+      };
+      return (
+        <React.Fragment key={i}>
+          <span
+            style={{
+              ...cell,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              color: 'var(--mantine-color-dimmed)',
+            }}
+          >
+            {fact.icon ? (
+              <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
+            ) : null}
+            {fact.label}
+          </span>
+          <span style={{ ...cell, fontWeight: 600, minWidth: 0 }}>{inline(fact.value)}</span>
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
+
+/**
  * A list of `**41%** Claim — context [Tab](tab:Name)` items, drawn as result
  * rows: the figure in its tab's colour, the claim over its context, the way
  * in on the right. Reads like an abstract's key results, set apart from the
@@ -325,6 +372,11 @@ const LinkLine: React.FC<{
   );
 };
 
+/** A short heading carrying a number: `41%`, `7.08`, `×3`, `n = 85`. */
+function isFigure(text: string): boolean {
+  return /\d/.test(text) && text.trim().length <= 12;
+}
+
 /**
  * A body's blocks (see `blockMarkdown.ts`). A body with no block syntax is one
  * paragraph and renders as the single pre-wrapped paragraph bodies always were.
@@ -342,12 +394,16 @@ const MarkdownBody: React.FC<{
 }> = ({ blocks, alignment, accentColor = null, framed = false }) => {
   const resolveTab = useTabLinkResolver();
   const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
+  // A framed tile opening on a figure (`# 41%`) sets it as a headline number;
+  // a framed tile opening on a word (`### Study`) keeps it a heading.
+  const first = blocks[0];
+  const figureHead = framed && first?.type === 'heading' && isFigure(first.text);
   return (
     <>
       {blocks.map((block, idx) => {
         switch (block.type) {
           case 'heading':
-            if (framed && idx === 0) {
+            if (figureHead && idx === 0) {
               // A finding card opens on its number ("# 41%"), set as a
               // headline metric card sets its value.
               return (
@@ -393,7 +449,11 @@ const MarkdownBody: React.FC<{
             }
             const facts = block.ordered ? [] : block.items.map(parseFact);
             if (facts.length && facts.every(Boolean)) {
-              return <FactLine key={idx} facts={facts as Fact[]} inline={inline} />;
+              return framed ? (
+                <FactTable key={idx} facts={facts as Fact[]} inline={inline} />
+              ) : (
+                <FactLine key={idx} facts={facts as Fact[]} inline={inline} />
+              );
             }
             const tiles = resolveTab ? block.items.map(parseTabTile) : [];
             if (tiles.length && tiles.every(Boolean)) {
@@ -471,7 +531,7 @@ const MarkdownBody: React.FC<{
             if (framed) {
               // On a card: the line under its number is that number's caption,
               // dimmed like a metric card's; the prose after it is card text.
-              const caption = idx === 1 && blocks[0]?.type === 'heading';
+              const caption = idx === 1 && figureHead;
               return (
                 <Text
                   key={idx}

@@ -39,8 +39,9 @@ const LOGO_MAX_BYTES = 2 * 1024 * 1024;
  *  go feels like it saved. */
 const SAVE_DEBOUNCE_MS = 600;
 
-/** Page width (Full / Wide / Comfortable): the same preference as the header
- *  toggle, here with its options spelled out. */
+/** Page width (Full / Wide / Comfortable / Compact). Lives here only: a
+ *  header button for it was one more control in a bar that already carries
+ *  the dashboard's own actions. */
 const PageWidthBlock: React.FC = () => {
   const { width, set } = useContentWidthPref();
   return (
@@ -49,7 +50,8 @@ const PageWidthBlock: React.FC = () => {
         Page width
       </Text>
       <Text size="xs" c="dimmed">
-        Caps how wide the dashboard runs on a large screen. Saved in this browser.
+        Caps how wide the dashboard runs on a large screen: Wide 1600px, Comfortable 1240px,
+        Compact 1080px. Each tab remembers its own; saved in this browser.
       </Text>
       <SegmentedControl
         size="xs"

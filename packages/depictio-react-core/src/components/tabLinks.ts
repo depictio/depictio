@@ -56,3 +56,15 @@ export function parseTabTile(item: string): TabTileItem | null {
   if (!m) return null;
   return { label: m[1].trim(), tab: m[2].trim(), text: m[3] ? m[3].trim() : null };
 }
+
+/**
+ * How many columns a row of `count` tiles takes in `width` pixels: as many as
+ * fit at `minPx`, then evened out so the last row is never one tile on its
+ * own (five tiles where four fit go three and two, not four and one).
+ */
+export function balancedColumns(count: number, width: number, minPx: number, gapPx: number): number {
+  if (count <= 0) return 1;
+  const fit = Math.max(1, Math.floor((width + gapPx) / (minPx + gapPx)));
+  const rows = Math.ceil(count / fit);
+  return Math.ceil(count / rows);
+}

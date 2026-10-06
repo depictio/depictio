@@ -1,10 +1,15 @@
 import React from 'react';
 import { Text, UnstyledButton } from '@mantine/core';
+import { useElementSize } from '@mantine/hooks';
 
 import Glyph, { glyphColorVar } from './Glyph';
-import { TabLinkResolver, TabTileItem } from './tabLinks';
+import { balancedColumns, TabLinkResolver, TabTileItem } from './tabLinks';
 import { CARD_FRAME } from './cardFrame';
 import './tabTiles.css';
+
+/** The narrowest a tile gets before the row wraps, and the gap between tiles. */
+const TILE_MIN_PX = 220;
+const TILE_GAP_PX = 12;
 
 /**
  * A list of tab links drawn as a grid of tiles: the tab's name, what it
@@ -29,13 +34,20 @@ const TabTiles: React.FC<{
     const target = resolveTab(item.tab);
     return target ? [{ item, target }] : [];
   });
+  const { ref, width } = useElementSize();
   if (!present.length) return null;
+  // Before the first measurement, one column per tile up to four: the common
+  // case, and what the measured layout usually confirms.
+  const columns = width
+    ? balancedColumns(present.length, width, TILE_MIN_PX, TILE_GAP_PX)
+    : Math.min(present.length, 4);
   return (
     <div
+      ref={ref}
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))',
-        gap: 10,
+        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gap: TILE_GAP_PX,
         width: '100%',
       }}
     >
@@ -44,7 +56,7 @@ const TabTiles: React.FC<{
         const line = item.text ?? target.description ?? null;
         const inner = (
           <>
-            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
               {ordered ? (
                 <Text
                   size="xs"
@@ -77,10 +89,10 @@ const TabTiles: React.FC<{
           ...CARD_FRAME,
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
-          padding: '14px 16px',
+          gap: 14,
+          padding: '18px 20px',
           textAlign: 'left',
-          minHeight: 72,
+          minHeight: 84,
           ['--tile-tint' as string]: `color-mix(in srgb, ${color} 6%, var(--mantine-color-body))`,
           ['--tile-edge' as string]: color,
         };

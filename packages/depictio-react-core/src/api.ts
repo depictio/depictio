@@ -390,7 +390,7 @@ export interface DashboardData {
   /** Initial left filter panel state before the viewer has toggled it. */
   filter_panel_default?: 'open' | 'collapsed';
   /** Page width the tab opens at before the viewer picks one. */
-  content_width_default?: 'full' | 'wide' | 'comfortable';
+  content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
   /** False: no tab name above the canvas (a tab that opens on its own title). */
   show_tab_header?: boolean;
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure

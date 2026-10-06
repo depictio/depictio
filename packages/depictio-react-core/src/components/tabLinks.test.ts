@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseTabTile, tabLinkKey } from './tabLinks';
+import { balancedColumns, parseTabTile, tabLinkKey } from './tabLinks';
 
 describe('parseTabTile', () => {
   it('reads a bare tab link', () => {
@@ -33,5 +33,18 @@ describe('parseTabTile', () => {
 describe('tabLinkKey', () => {
   it('ignores case and repeated spaces', () => {
     expect(tabLinkKey('  Community  &  Diversity ')).toBe(tabLinkKey('community & diversity'));
+  });
+});
+
+describe('balancedColumns', () => {
+  it('evens out a last row that would hold one tile', () => {
+    // 4 fit in 940px at 220 + 12; five go 3 + 2.
+    expect(balancedColumns(5, 940, 220, 12)).toBe(3);
+    expect(balancedColumns(4, 940, 220, 12)).toBe(4);
+    expect(balancedColumns(3, 940, 220, 12)).toBe(3);
+  });
+
+  it('falls back to one column when nothing fits', () => {
+    expect(balancedColumns(4, 150, 220, 12)).toBe(1);
   });
 });

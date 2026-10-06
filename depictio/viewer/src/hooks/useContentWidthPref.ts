@@ -10,12 +10,14 @@ import { useCallback, useEffect, useState } from 'react';
  * screen in front of the reader, not about the dashboard.
  */
 
-export type ContentWidth = 'full' | 'wide' | 'comfortable';
+export type ContentWidth = 'full' | 'wide' | 'comfortable' | 'compact';
 
 export const CONTENT_WIDTHS: { value: ContentWidth; label: string; maxPx: number | null }[] = [
   { value: 'full', label: 'Full', maxPx: null },
   { value: 'wide', label: 'Wide', maxPx: 1600 },
   { value: 'comfortable', label: 'Comfortable', maxPx: 1240 },
+  // A reading column: a landing page of prose and cards.
+  { value: 'compact', label: 'Compact', maxPx: 1080 },
 ];
 
 const STORAGE_KEY = 'depictio-content-width';
@@ -29,9 +31,8 @@ function isWidth(value: unknown): value is ContentWidth {
 
 /**
  * The tab the preference applies to, and the width its author asked for
- * (`content_width_default`). Set by the app when a tab mounts; the header
- * toggle and the settings drawer read and write through it without needing
- * the dashboard themselves.
+ * (`content_width_default`). Set by the app when a tab mounts; the settings
+ * drawer reads and writes through it without needing the dashboard itself.
  *
  * The viewer's choice is remembered per tab, like the filter panel's: an
  * author who opens a landing page at a reading width should not have that

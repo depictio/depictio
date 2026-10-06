@@ -6,7 +6,6 @@ import { Icon } from '@iconify/react';
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { useFeedbackLink } from '../feedback';
-import { CONTENT_WIDTHS, useContentWidthPref } from '../hooks/useContentWidthPref';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  *  Dash YAML and aren't valid Iconify names. */
@@ -330,7 +329,6 @@ const Header: React.FC<HeaderProps> = ({
             </Menu.Dropdown>
           </Menu>
         )}
-        <PageWidthToggle />
         {mode === 'edit' && onSave && (
           <Tooltip
             label="You can only save dashboards you own. Duplicate this one to get your own copy."
@@ -431,50 +429,4 @@ const Header: React.FC<HeaderProps> = ({
 };
 
 export default Header;
-
-/**
- * Cycles the page width (Full → Wide → Comfortable). A header icon rather
- * than a Settings row only: it is reached for at the moment the sidebar and
- * filters are folded away and the canvas suddenly runs edge to edge.
- */
-const PageWidthToggle: React.FC = () => {
-  const { width, set } = useContentWidthPref();
-  const current = CONTENT_WIDTHS.find((w) => w.value === width) ?? CONTENT_WIDTHS[0];
-  return (
-    <Menu position="bottom-end" withArrow shadow="md" width={210}>
-      <Menu.Target>
-        <Tooltip label={`Page width: ${current.label}`} withArrow>
-          <ActionIcon
-            variant={width === 'full' ? 'subtle' : 'light'}
-            color="gray"
-            size="md"
-            aria-label={`Page width: ${current.label}`}
-            data-testid="page-width-toggle"
-          >
-            <Icon icon="mdi:arrow-expand-horizontal" width={18} />
-          </ActionIcon>
-        </Tooltip>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Label>Page width</Menu.Label>
-        {CONTENT_WIDTHS.map((w) => (
-          <Menu.Item
-            key={w.value}
-            onClick={() => set(w.value)}
-            rightSection={
-              w.value === width ? <Icon icon="mdi:check" width={14} /> : null
-            }
-            leftSection={
-              <span style={{ fontSize: 11, color: 'var(--mantine-color-dimmed)', width: 44 }}>
-                {w.maxPx ? `${w.maxPx}px` : 'window'}
-              </span>
-            }
-          >
-            {w.label}
-          </Menu.Item>
-        ))}
-      </Menu.Dropdown>
-    </Menu>
-  );
-};
 
