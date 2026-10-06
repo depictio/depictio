@@ -257,6 +257,14 @@ class DashboardDataLite(BaseModel):
         default=None, description="Icon for child tabs (e.g., 'mdi:chart-bar')"
     )
     tab_icon_color: str | None = Field(default=None, description="Color for tab icon")
+    # A dashboard with a dozen tabs reads better in categories (context, then
+    # analysis, then QC) than as one flat list. Tabs naming the same group are
+    # listed together under it in the sidebar; the main tab is never grouped.
+    tab_group: str | None = Field(
+        default=None,
+        description="Sidebar category for a child tab (e.g. 'Analysis'). Tabs naming the "
+        "same group are listed together under that heading; unset means ungrouped.",
+    )
 
     # Dashboard display icon (shown on the management page card)
     icon: str | None = Field(default=None, description="Dashboard icon identifier")
@@ -430,6 +438,7 @@ class DashboardDataLite(BaseModel):
         "tab_order",
         "tab_icon",
         "tab_icon_color",
+        "tab_group",
         "is_main_tab",
         "parent_dashboard_tag",
         "icon",
@@ -478,6 +487,7 @@ class DashboardDataLite(BaseModel):
             "main_tab_name": "",
             "tab_icon": "",
             "tab_icon_color": "",
+            "tab_group": "",
             "icon": "mdi:view-dashboard",
             "icon_color": "orange",
             "icon_variant": "filled",
@@ -1225,6 +1235,7 @@ class DashboardDataLite(BaseModel):
             main_tab_name=dashboard_data.get("main_tab_name"),
             tab_icon=dashboard_data.get("tab_icon"),
             tab_icon_color=dashboard_data.get("tab_icon_color"),
+            tab_group=dashboard_data.get("tab_group"),
             # Dashboard display icon fields
             icon=dashboard_data.get("icon"),
             icon_color=dashboard_data.get("icon_color"),
@@ -1307,6 +1318,7 @@ class DashboardDataLite(BaseModel):
             "main_tab_name": self.main_tab_name,
             "tab_icon": self.tab_icon,
             "tab_icon_color": self.tab_icon_color,
+            "tab_group": self.tab_group,
             # Left-panel section presentation, carried through so the viewer can
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
@@ -1728,6 +1740,7 @@ class DashboardData(MongoModel):
     main_tab_name: Optional[str] = None  # Custom name for main tab (defaults to "Main" if None)
     tab_icon: Optional[str] = None  # Icon for child tabs (e.g., "mdi:chart-bar")
     tab_icon_color: Optional[str] = None  # Color for tab icon
+    tab_group: Optional[str] = None  # Sidebar category for child tabs (None = ungrouped)
     parent_dashboard_title: Optional[str] = (
         None  # Populated at runtime for child tabs (header display)
     )

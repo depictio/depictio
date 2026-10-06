@@ -113,6 +113,7 @@ def get_child_tabs(parent_dashboard_id: PyObjectId) -> list[dict[str, Any]]:
         "tab_order": 1,
         "tab_icon": 1,
         "tab_icon_color": 1,
+        "tab_group": 1,
         "is_main_tab": 1,
         "parent_dashboard_id": 1,
         # Include icon fields for fallback inheritance
@@ -217,6 +218,7 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         "main_tab_name": 1,
         "tab_icon": 1,
         "tab_icon_color": 1,
+        "tab_group": 1,
     }
     if admin_mode:
         projection["stored_metadata"] = 1

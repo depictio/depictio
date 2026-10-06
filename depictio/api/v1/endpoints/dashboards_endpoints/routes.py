@@ -894,10 +894,10 @@ async def update_tab(
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
-    Update tab properties (title, icon, icon_color, main_tab_name).
+    Update tab properties (title, icon, icon_color, group, main_tab_name).
 
     For main tabs, you can also update main_tab_name.
-    For child tabs, you can update title, tab_icon, and tab_icon_color.
+    For child tabs, you can update title, tab_icon, tab_icon_color and tab_group.
 
     Args:
         dashboard_id: The dashboard/tab ID to update
@@ -905,6 +905,7 @@ async def update_tab(
             - title: New tab title (for child tabs or dashboard title for main tabs)
             - tab_icon: Icon name (e.g., "mdi:chart-bar")
             - tab_icon_color: Color for the icon
+            - tab_group: Sidebar category name; null or blank ungroups the tab
             - main_tab_name: Custom name for the main tab (main tabs only)
 
     Returns:
@@ -940,6 +941,10 @@ async def update_tab(
         update_fields["tab_icon"] = data["tab_icon"]
     if "tab_icon_color" in data:
         update_fields["tab_icon_color"] = data["tab_icon_color"]
+    if "tab_group" in data:
+        # Stored as None rather than "" so an emptied field ungroups the tab
+        # instead of opening a group with no name.
+        update_fields["tab_group"] = str(data["tab_group"] or "").strip() or None
 
     # main_tab_name can only be set on main tabs
     if "main_tab_name" in data:
@@ -1148,6 +1153,7 @@ async def get_tabs(
         "main_tab_name": main_tab.get("main_tab_name"),
         "tab_icon": main_tab.get("tab_icon"),
         "tab_icon_color": main_tab.get("tab_icon_color"),
+        "tab_group": main_tab.get("tab_group"),
         # Dashboard's own icon and color (for main tab to inherit)
         "icon": main_tab.get("icon", "mdi:view-dashboard"),
         "icon_color": main_tab.get("icon_color", "orange"),
@@ -6427,6 +6433,7 @@ async def export_dashboard_as_json(
             "main_tab_name": dashboard_doc.get("main_tab_name"),
             "tab_icon": dashboard_doc.get("tab_icon"),
             "tab_icon_color": dashboard_doc.get("tab_icon_color"),
+            "tab_group": dashboard_doc.get("tab_group"),
             "stored_metadata": dashboard_doc.get("stored_metadata", []),
             "stored_layout_data": dashboard_doc.get("stored_layout_data", []),
         },
@@ -6556,6 +6563,7 @@ async def import_dashboard_from_json(
         "main_tab_name": dashboard_data.get("main_tab_name"),
         "tab_icon": dashboard_data.get("tab_icon"),
         "tab_icon_color": dashboard_data.get("tab_icon_color"),
+        "tab_group": dashboard_data.get("tab_group"),
         "stored_metadata": dashboard_data.get("stored_metadata", []),
         "stored_layout_data": dashboard_data.get("stored_layout_data", []),
         "stored_children_data": dashboard_data.get("stored_children_data", []),

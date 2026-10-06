@@ -289,6 +289,7 @@ _FIELD_ORDER = [
     "main_tab_name",
     "tab_icon",
     "tab_icon_color",
+    "tab_group",
     "parent_dashboard_title",
     "creation_time",
     "screenshot_ts",
