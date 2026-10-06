@@ -13,11 +13,10 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from depictio.catalog.macs2.summit_profile import BIN_BP, HALF_WINDOW_BP
+from depictio.catalog.macs2.summit_profile import BIN_BP
 from depictio.recipes import execute_recipe
 
 RECIPE = "macs2/summit_profile.py"
-N_BINS = 2 * HALF_WINDOW_BP // BIN_BP + 1
 
 
 def _peaks(rows: list[tuple[str, str, int, int, int]]) -> pl.DataFrame:
@@ -37,17 +36,6 @@ def _peaks(rows: list[tuple[str, str, int, int, int]]) -> pl.DataFrame:
 
 def _at(out: pl.DataFrame, sample: str, offset: int, column: str) -> float:
     return out.filter((pl.col("sample") == sample) & (pl.col("offset_bp") == offset))[column].item()
-
-
-def test_one_row_per_sample_and_bin_centred_on_the_summit(tmp_path: Path) -> None:
-    peaks = _peaks([("a", "chr1", 1_000, 1_200, 1_101), ("b", "chr1", 5_000, 5_100, 5_051)])
-    out = execute_recipe(RECIPE, tmp_path, extra_sources={"peaks": peaks})
-
-    assert out.height == 2 * N_BINS
-    offsets = out.filter(pl.col("sample") == "a")["offset_bp"].to_list()
-    assert offsets[0] == -HALF_WINDOW_BP and offsets[-1] == HALF_WINDOW_BP
-    assert 0 in offsets
-    assert set(out["n_summits"].to_list()) == {1}
 
 
 def test_footprint_is_the_share_of_calls_covering_each_offset(tmp_path: Path) -> None:

@@ -1,24 +1,20 @@
-"""The Nonpareil curve is reconstructed, not invented.
+"""Nonpareil recipes: the curve is reconstructed, not invented, and a zero effort has no multiple.
 
-``depictio/recipes/lib/nonpareil.py`` rebuilds a coverage curve from two numbers
-Nonpareil publishes (``diversity`` and ``LRstar``), because the per-effort samples
-stay in the ``.npo`` files nf-core pipelines do not ship. A reconstruction that
-merely *looked* plausible would be worse than no tile at all, so the evidence lives
-here: the summary carries a third number, ``C``, that the fit never sees, and feeding
-each library's own sequencing effort back through the fitted model has to land on it.
-
-The rows below are the real nf-core/taxprofiler 2.0.1 megatest summary
-(``nonpareil/nonpareil_all_samples.tsv``), copied in so the test runs without the
-dataset on disk.
+`depictio/recipes/lib/nonpareil.py` rebuilds a coverage curve from two numbers Nonpareil
+publishes (`diversity` and `LRstar`). The summary carries a third number, `C`, that the fit never
+sees, and feeding each library's own sequencing effort back through the fitted model has to land
+on it. The rows are the real nf-core/taxprofiler 2.0.1 megatest summary.
 """
 
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import polars as pl
 import pytest
 
+from depictio.recipes import execute_recipe
 from depictio.recipes.lib.nonpareil import (
     attribute_library,
     coverage,
@@ -137,22 +133,12 @@ def test_libraries_are_attributed_to_their_samplesheet_sample() -> None:
     assert attribute_library("OTHER_1", lookup) == ("OTHER_1", "unknown")
 
 
-@pytest.mark.no_db
-def test_curves_recipe_expands_the_summary() -> None:
-    """End to end on the recipe itself, with the megatest summary as the source."""
-    from depictio.recipes import load_recipe, validate_schema
-
-    module = load_recipe("nonpareil/curves.py")
-    summaries = pl.DataFrame(
-        MEGATEST_ROWS,
-        schema=["library", "kappa", "coverage", "lr", "model_r", "lr_star", "diversity"],
-        orient="row",
+def test_zero_observed_effort_yields_a_null_multiple(tmp_path: Path) -> None:
+    (tmp_path / "nonpareil").mkdir()
+    (tmp_path / "nonpareil" / "nonpareil_all_samples.tsv").write_text(
+        "kappa\tC\tLR\tmodelR\tLRstar\tdiversity\n"
+        "LIB_A\t0.5\t0.6\t1000.0\t0.99\t4000.0\t17.0\n"
+        "LIB_B\t0.5\t0.0\t0.0\t0.99\t4000.0\t17.0\n"
     )
-    result = module.transform({"summaries": summaries, "samples": None})
-    validate_schema(result, module.OUTPUT_SCHEMA, "nonpareil/curves.py")
-    assert result.height == len(MEGATEST_ROWS) * module.POINTS
-    assert result["coverage"].min() >= 0.0
-    assert result["coverage"].max() <= 1.0
-    per_series = result.group_by("library").len()["len"].to_list()
-    assert set(per_series) == {module.POINTS}
-    assert module.POINTS <= 200, "the profile contract caps a series at 200 points"
+    out = execute_recipe("nonpareil/summary.py", tmp_path).sort("library")
+    assert out["effort_multiple"].to_list() == [4.0, None]

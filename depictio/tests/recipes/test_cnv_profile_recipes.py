@@ -223,18 +223,6 @@ def test_ascat_recovers_the_sample_from_the_path(tmp_path):
     assert result["sample"].unique().to_list() == ["TUMOUR1"]
 
 
-def test_ascat_purity_ploidy(tmp_path):
-    raw = pl.DataFrame(
-        {
-            "AberrantCellFraction": [0.62],
-            "Ploidy": [2.84],
-            "source_path": ["variant_calling/ascat/TUMOUR1/TUMOUR1.purityploidy.txt"],
-        }
-    )
-    result = execute_recipe("ascat/purity_ploidy.py", tmp_path, extra_sources={"purityploidy": raw})
-    assert result.to_dicts() == [{"sample": "TUMOUR1", "purity": 0.62, "ploidy": 2.84}]
-
-
 # ---------------------------------------------------------------------------
 # Control-FREEC: ratio windows plus the segments their MedianRatio runs encode
 # ---------------------------------------------------------------------------

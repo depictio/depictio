@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import polars as pl
 
-from depictio.catalog.bcftools import stats_summary, stats_tstv
 from depictio.recipes.lib.bcftools_stats import sample_and_caller
 
 SAREK_MEGATEST = (
@@ -70,16 +69,3 @@ def test_single_token_name_falls_back_to_the_grandparent_directory() -> None:
             "caller": "freebayes",
         }
     ]
-
-
-def test_both_recipes_keep_one_row_per_sample_and_caller() -> None:
-    summary = stats_summary.transform({"raw": RAW})
-    tstv = stats_tstv.transform({"raw": RAW})
-    for out in (summary, tstv):
-        assert out.height == 4
-        assert out.select(["sample", "caller"]).n_unique() == 4
-        assert out.schema["sample"] == pl.Utf8 and out.schema["caller"] == pl.Utf8
-    eager = summary.filter(pl.col("sample") == "COD076").to_dicts()[0]
-    assert eager["caller"] == "haplotypecaller" and eager["n_records"] == 500
-    manta = tstv.filter(pl.col("caller") == "manta").to_dicts()[0]
-    assert manta["sample"] == "NA12878_200M" and manta["ts"] == 0

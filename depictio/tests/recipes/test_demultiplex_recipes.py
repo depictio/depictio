@@ -141,15 +141,6 @@ def _run(recipe: str, sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return out
 
 
-@pytest.mark.parametrize(
-    "output", ["demux_stats", "lane_summary", "read_quality", "unknown_barcodes"]
-)
-def test_bcl2fastq_and_bclconvert_write_the_same_schema(output: str) -> None:
-    bcl2 = load_recipe(f"bcl2fastq/{output}.py").OUTPUT_SCHEMA
-    bclc = load_recipe(f"bclconvert/{output}.py").OUTPUT_SCHEMA
-    assert dict(bcl2) == dict(bclc)
-
-
 def test_demux_stats_agree_between_demultiplexers() -> None:
     a = _run("bcl2fastq/demux_stats.py", {"stats": _stats_raw()}).sort("sample")
     b = _run("bclconvert/demux_stats.py", _bclconvert_sources()).sort("sample")

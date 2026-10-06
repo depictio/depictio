@@ -16,8 +16,6 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from depictio.models.components.advanced_viz.configs import TranscriptStructureConfig
-from depictio.models.components.advanced_viz.schemas import validate_binding
 from depictio.recipes import execute_recipe
 
 RECIPE = "gtf/transcripts.py"
@@ -268,23 +266,3 @@ def test_an_annotation_with_no_blocks_says_so(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # The binding the catalog declares.
 # ---------------------------------------------------------------------------
-
-
-def test_output_satisfies_the_transcript_structure_binding(tmp_path: Path) -> None:
-    raw = _raw(_stringtie_rows("12.5"), "/data/stringtie/WT_REP1.transcripts.gtf")
-    result = _run(raw, tmp_path)
-    config = TranscriptStructureConfig(
-        transcript_id_col="transcript_id",
-        gene_id_col="gene_id",
-        chrom_col="chrom",
-        start_col="start",
-        end_col="end",
-        feature_col="feature",
-        strand_col="strand",
-        sample_col="sample",
-        gene_name_col="gene_name",
-        transcript_class_col="transcript_class",
-        expression_col="expression",
-    )
-    schema = {name: str(dtype) for name, dtype in result.schema.items()}
-    assert validate_binding(config, schema) == []

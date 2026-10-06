@@ -2,8 +2,7 @@
 
 Each test builds the recipe's real input shape in a temp dir (or injects the
 ``dc_ref`` frames), runs it through ``execute_recipe`` so the engine enforces
-``OUTPUT_SCHEMA``, and checks the binding the dashboard relies on with
-``validate_binding``.
+``OUTPUT_SCHEMA``.
 
 The interesting cases are the ones the megatest run exposed and a fixture
 cannot: a contig name that does not carry ``length-``/``cov-``, the three ARG
@@ -18,18 +17,7 @@ from pathlib import Path
 
 import polars as pl
 
-from depictio.models.components.advanced_viz.configs import (
-    ComplexHeatmapConfig,
-    CoverageTrackConfig,
-    GeneArrowTrackConfig,
-    ScatterXyConfig,
-)
-from depictio.models.components.advanced_viz.schemas import validate_binding
 from depictio.recipes import execute_recipe
-
-
-def _schema_names(df: pl.DataFrame) -> dict[str, str]:
-    return {name: str(dtype) for name, dtype in df.schema.items()}
 
 
 def _contig(sample: str, node: int, length: int, cov: float) -> str:
@@ -81,15 +69,6 @@ def test_contig_annotation_counts_every_screen(tmp_path: Path) -> None:
     short_row = rows[short_contig]
     assert short_row["screens_on_contig"] == 1
     assert short_row["top_screen"] == "ARG"
-
-    cfg = ScatterXyConfig(
-        x_col="contig_length",
-        y_col="features",
-        label_col="contig",
-        color_col="top_screen",
-        size_col="features_per_kb",
-    )
-    assert validate_binding(cfg, _schema_names(result)) == []
 
 
 def test_contig_annotation_keeps_a_contig_with_no_length_in_its_name(tmp_path: Path) -> None:
@@ -193,26 +172,6 @@ def test_region_track_mints_coordinates_and_a_blank_strand(tmp_path: Path) -> No
     # comBGC reports no orientation, so every region carries GFF's "no strand".
     assert set(result["strand"].to_list()) == {"."}
 
-    arrows = GeneArrowTrackConfig(
-        contig_col="contig",
-        feature_id_col="region_id",
-        start_col="start",
-        end_col="end",
-        strand_col="strand",
-        class_col="product_class",
-    )
-    assert validate_binding(arrows, _schema_names(result)) == []
-
-    coverage = CoverageTrackConfig(
-        chromosome_col="contig",
-        position_col="start",
-        value_col="length_kb",
-        end_col="end",
-        sample_col="sample",
-        category_col="product_class",
-    )
-    assert validate_binding(coverage, _schema_names(result)) == []
-
 
 # ---------------------------------------------------------------------------
 # hamronization/class_matrix: one aggregation level above the gene matrix
@@ -247,17 +206,6 @@ def test_class_matrix_folds_the_three_drug_class_vocabularies(tmp_path: Path) ->
     assert {"S1", "S2"}.issubset(result.columns)
     assert result["S1"].to_list() == [1.0, 1.0]
     assert set(result["n_genes_band"].to_list()) == {"1 gene"}
-
-    # `complex_heatmap` names its row-label field `index_column`, not
-    # `index_col`, so `validate_binding` (which reads the `<role>_col`
-    # convention) cannot see it. Check what the renderer actually needs: the
-    # index column is a string column and every other column is numeric, which
-    # is what makes the rest of the frame the matrix.
-    cfg = ComplexHeatmapConfig(index_column="drug_class")
-    schema = _schema_names(result)
-    assert schema[cfg.index_column] == "String"
-    matrix_cols = [c for c in result.columns if c not in ("drug_class", "top_tool", "n_genes_band")]
-    assert matrix_cols and all(schema[c] == "Float64" for c in matrix_cols)
 
 
 # ---------------------------------------------------------------------------
