@@ -1,8 +1,8 @@
 # nf-core/cutandrun's own roll-ups. These are NOT a tool: they are the tables
 # the pipeline assembles itself, in local processes and in `bin/`, out of the
 # outputs of SEACR, MACS2, Bowtie 2 and its own fragment counts. There is no
-# nf-core module to point at, so identity is declared in full here and the
-# provenance link is `source_url`, the same shape as comBGC in funcscan.
+# nf-core module to point at, so the provenance link is `source_url`, the same
+# shape as comBGC in funcscan.
 #
 # Three outputs live here:
 #   * `samples`          the sample hub built from the validated samplesheet,
@@ -23,6 +23,7 @@ description: >-
   MACS2, and the fraction of fragment coverage that falls inside the called
   peaks.
 homepage: https://nf-co.re/cutandrun
+biotools_url: null  # no bio.tools entry for this tool
 source_url: https://github.com/nf-core/cutandrun
 edam_topics:
   - http://edamontology.org/topic_3179 # ChIP-seq

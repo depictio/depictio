@@ -10,3 +10,7 @@ id: ribocode
 name: RiboCode
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribocode/ribocode
 homepage: https://github.com/xryanglab/RiboCode
+description: >-
+  A package for detecting the actively translated ORFs using ribosome-
+  profiling data.
+biotools_url: null  # no bio.tools entry for this tool

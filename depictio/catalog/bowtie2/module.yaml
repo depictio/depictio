@@ -1,5 +1,4 @@
-# Bowtie 2. Multi-output tool folder; identity beyond the two URLs lives in the
-# nf-core meta.yml that `nf_core_url` points at, so it is not duplicated here.
+# Bowtie 2. Multi-output tool folder.
 #
 # The output bundled today is the spike-in normalisation pair: a CUT&RUN or
 # CUT&Tag pipeline aligns every library twice, once against the target genome
@@ -11,3 +10,6 @@ name: Bowtie 2
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bowtie2/align
 homepage: https://bowtie-bio.sourceforge.net/bowtie2/
 biotools_url: https://bio.tools/bowtie2
+description: >-
+  Bowtie 2 is an ultrafast and memory-efficient tool for aligning sequencing
+  reads to long reference sequences.

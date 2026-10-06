@@ -1,7 +1,6 @@
-# Preseq — one output here (the lc_extrap complexity curve), but a folder
+# Preseq: one output here (the lc_extrap complexity curve), but a folder
 # because c_curve and bound_pop land next to it the day a pipeline publishes
-# them. Lightweight: identity comes from the nf-core meta.yml `nf_core_url`
-# points at.
+# them.
 #
 # MultiQC has a preseq module and every ChIP-family template already shows its
 # panel. This tool is not a second copy of that panel: MultiQC plots the
@@ -14,3 +13,7 @@ id: preseq
 name: Preseq
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/preseq/lcextrap
 homepage: https://github.com/smithlabcode/preseq
+description: >-
+  Software for predicting library complexity and genome coverage in high-
+  throughput sequencing.
+biotools_url: https://bio.tools/preseq

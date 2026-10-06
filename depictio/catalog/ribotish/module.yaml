@@ -10,3 +10,7 @@ id: ribotish
 name: Ribo-TISH
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribotish/predict
 homepage: https://github.com/zhpn1024/ribotish
+description: >-
+  Ribo TIS Hunter (Ribo-TISH) identifies translation activities using ribosome
+  profiling data.
+biotools_url: null  # no bio.tools entry for this tool

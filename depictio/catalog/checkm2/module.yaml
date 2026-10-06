@@ -15,3 +15,4 @@ name: CheckM2
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/checkm2/predict
 homepage: https://github.com/chklovski/CheckM2
 description: Machine-learning prediction of genome completeness and contamination for metagenome-assembled genomes.
+biotools_url: https://bio.tools/checkm2

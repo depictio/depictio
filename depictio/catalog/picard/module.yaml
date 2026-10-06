@@ -6,3 +6,6 @@ name: Picard
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/picard/markduplicates
 homepage: https://broadinstitute.github.io/picard/
 biotools_url: https://bio.tools/picard_tools
+description: >-
+  Java command-line tools for manipulating high-throughput sequencing data and
+  formats such as SAM, BAM, CRAM and VCF.

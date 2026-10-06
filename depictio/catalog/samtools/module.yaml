@@ -7,3 +7,7 @@ id: samtools
 name: SAMtools
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/samtools/flagstat
 homepage: https://www.htslib.org
+description: >-
+  Utilities for manipulating and post-processing sequence alignments in the
+  SAM, BAM and CRAM formats.
+biotools_url: https://bio.tools/samtools

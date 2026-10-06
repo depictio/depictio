@@ -12,3 +12,7 @@ id: ribowaltz
 name: riboWaltz
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribowaltz
 homepage: https://github.com/LabTranslationalArchitectomics/riboWaltz
+description: >-
+  Calculation of optimal P-site offsets, diagnostic analysis and visual
+  inspection of ribosome profiling data.
+biotools_url: https://bio.tools/ribowaltz

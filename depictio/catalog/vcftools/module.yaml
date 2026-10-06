@@ -9,3 +9,4 @@ description: >-
   quality floor is raised.
 homepage: https://vcftools.github.io/
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/vcftools
+biotools_url: https://bio.tools/vcftools

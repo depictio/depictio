@@ -10,6 +10,8 @@ id: gsea
 name: GSEA
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gsea/gsea
 homepage: https://www.gsea-msigdb.org/gsea
+description: Gene Set Enrichment Analysis (GSEA).
+biotools_url: https://bio.tools/gsea
 edam_topics:
   - http://edamontology.org/topic_3308 # Transcriptomics
   - http://edamontology.org/topic_2269 # Statistics and probability

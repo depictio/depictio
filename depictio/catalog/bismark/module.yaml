@@ -8,3 +8,7 @@ id: bismark
 name: Bismark
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bismark/align
 homepage: https://github.com/FelixKrueger/Bismark
+description: >-
+  Bismark is a tool to map bisulfite treated sequencing reads and perform
+  methylation calling in a quick and easy-to-use fashion.
+biotools_url: https://bio.tools/bismark

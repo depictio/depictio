@@ -7,5 +7,9 @@ id: openms
 name: OpenMS
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/openmsthirdparty/cometadapter
 homepage: https://openms.de
+description: >-
+  OpenMS is an open-source software C++ library for LC-MS data management and
+  analyses.
+biotools_url: https://bio.tools/openms
 edam_topics:
   - http://edamontology.org/topic_0121 # Proteomics

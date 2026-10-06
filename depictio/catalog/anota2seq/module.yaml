@@ -10,3 +10,7 @@ id: anota2seq
 name: anota2seq
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/anota2seq/anota2seqrun
 homepage: https://bioconductor.org/packages/anota2seq
+description: >-
+  Generally applicable transcriptome-wide analysis of translational efficiency
+  using anota2seq.
+biotools_url: https://bio.tools/anota2seq

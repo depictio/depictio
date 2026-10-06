@@ -2,7 +2,7 @@
   "tools": [
     {
       "biotools_url": "https://bio.tools/adapterremoval",
-      "description": "",
+      "description": "Trims adapter sequences and low-quality bases from reads and merges overlapping read pairs.",
       "dir": "depictio/catalog/adapterremoval",
       "homepage": "https://github.com/MikkelSchubert/adapterremoval",
       "id": "adapterremoval",
@@ -138,9 +138,9 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Aggregates, filters and classifies antimicrobial peptide predictions from several AMP tools into one summary per sample.",
       "dir": "depictio/catalog/ampcombi",
-      "homepage": null,
+      "homepage": "https://github.com/paleobiotechnology/AMPcombi",
       "id": "ampcombi",
       "name": "AMPcombi",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/ampcombi2/complete",
@@ -368,8 +368,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/anota2seq",
+      "description": "Generally applicable transcriptome-wide analysis of translational efficiency using anota2seq.",
       "dir": "depictio/catalog/anota2seq",
       "homepage": "https://bioconductor.org/packages/anota2seq",
       "id": "anota2seq",
@@ -597,10 +597,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/Arriba",
+      "description": "Fast and accurate gene fusion detection from RNA-Seq data.",
       "dir": "depictio/catalog/arriba",
-      "homepage": null,
+      "homepage": "https://github.com/suhrig/arriba",
       "id": "arriba",
       "name": "Arriba",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/arriba/arriba",
@@ -874,9 +874,9 @@
     },
     {
       "biotools_url": "https://bio.tools/ascat",
-      "description": "",
+      "description": "Derives allele-specific copy number profiles of tumour cells, accounting for normal cell admixture and tumour aneuploidy.",
       "dir": "depictio/catalog/ascat",
-      "homepage": null,
+      "homepage": "https://github.com/VanLoo-lab/ascat",
       "id": "ascat",
       "name": "ASCAT",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/ascat",
@@ -1018,8 +1018,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/ataqv",
+      "description": "Ataqv is a toolkit for measuring and comparing ATAC-seq results.",
       "dir": "depictio/catalog/ataqv",
       "homepage": "https://github.com/ParkerLab/ataqv",
       "id": "ataqv",
@@ -2049,7 +2049,7 @@
     },
     {
       "biotools_url": "https://bio.tools/bcftools",
-      "description": "",
+      "description": "Utilities for variant calling and for manipulating VCF and BCF files.",
       "dir": "depictio/catalog/bcftools",
       "homepage": "https://samtools.github.io/bcftools/",
       "id": "bcftools",
@@ -2270,7 +2270,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Illumina's converter from BCL base calls to demultiplexed FASTQ files.",
       "dir": "depictio/catalog/bcl2fastq",
       "homepage": "https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html",
       "id": "bcl2fastq",
@@ -2645,7 +2645,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Illumina's successor to bcl2fastq: converts BCL base calls to demultiplexed FASTQ files.",
       "dir": "depictio/catalog/bclconvert",
       "homepage": "https://support.illumina.com/sequencing/sequencing_software/bcl-convert.html",
       "id": "bclconvert",
@@ -3019,8 +3019,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/bismark",
+      "description": "Bismark is a tool to map bisulfite treated sequencing reads and perform methylation calling in a quick and easy-to-use fashion.",
       "dir": "depictio/catalog/bismark",
       "homepage": "https://github.com/FelixKrueger/Bismark",
       "id": "bismark",
@@ -4063,7 +4063,7 @@
     },
     {
       "biotools_url": "https://bio.tools/bowtie2",
-      "description": "",
+      "description": "Bowtie 2 is an ultrafast and memory-efficient tool for aligning sequencing reads to long reference sequences.",
       "dir": "depictio/catalog/bowtie2",
       "homepage": "https://bowtie-bio.sourceforge.net/bowtie2/",
       "id": "bowtie2",
@@ -4183,7 +4183,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/busco",
       "description": "Gene-content completeness of assemblies against a BUSCO lineage dataset.",
       "dir": "depictio/catalog/busco",
       "homepage": "https://busco.ezlab.org",
@@ -4384,8 +4384,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/CellBender",
+      "description": "CellBender is a software package for eliminating technical artifacts from high-throughput single-cell RNA sequencing (scRNA-seq) data.",
       "dir": "depictio/catalog/cellbender",
       "homepage": "https://cellbender.readthedocs.io/",
       "id": "cellbender",
@@ -4463,7 +4463,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "10x Genomics pipelines that align Chromium single-cell reads, count UMIs per barcode and cluster cells.",
       "dir": "depictio/catalog/cellranger",
       "homepage": "https://www.10xgenomics.com/support/software/cell-ranger",
       "id": "cellranger",
@@ -6307,7 +6307,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/checkm2",
       "description": "Machine-learning prediction of genome completeness and contamination for metagenome-assembled genomes.",
       "dir": "depictio/catalog/checkm2",
       "homepage": "https://github.com/chklovski/CheckM2",
@@ -6489,9 +6489,9 @@
     },
     {
       "biotools_url": "https://bio.tools/cnvkit",
-      "description": "",
+      "description": "Infers and visualises copy number from high-throughput DNA sequencing data.",
       "dir": "depictio/catalog/cnvkit",
-      "homepage": null,
+      "homepage": "https://cnvkit.readthedocs.io/en/stable/index.html",
       "id": "cnvkit",
       "name": "CNVkit",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/cnvkit/batch",
@@ -6857,9 +6857,9 @@
     },
     {
       "biotools_url": "https://bio.tools/freec",
-      "description": "",
+      "description": "Copy number and genotype annotation from whole genome and whole exome sequencing data.",
       "dir": "depictio/catalog/controlfreec",
-      "homepage": null,
+      "homepage": "http://boevalab.inf.ethz.ch/FREEC",
       "id": "controlfreec",
       "name": "Control-FREEC",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/controlfreec/freec",
@@ -6954,7 +6954,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Sparse binary format for genomic interaction matrices.",
       "dir": "depictio/catalog/cooler",
       "homepage": "https://cooler.readthedocs.io/",
       "id": "cooler",
@@ -7024,8 +7024,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/cooltools",
+      "description": "Analysis tools for genomic interaction data stored in .cool format.",
       "dir": "depictio/catalog/cooltools",
       "homepage": "https://cooltools.readthedocs.io/",
       "id": "cooltools",
@@ -7460,9 +7460,9 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Detection and annotation of cancer splicing aberrations.",
       "dir": "depictio/catalog/ctatsplicing",
-      "homepage": null,
+      "homepage": "https://github.com/TrinityCTAT/CTAT-SPLICING",
       "id": "ctatsplicing",
       "name": "CTAT-SPLICING",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/ctatsplicing/startocancerintrons",
@@ -8041,8 +8041,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/damageprofiler",
+      "description": "Determines DNA damage patterns in ancient DNA reads, a Java replacement for mapDamage.",
       "dir": "depictio/catalog/damageprofiler",
       "homepage": "https://github.com/Integrative-Transcriptomics/DamageProfiler",
       "id": "damageprofiler",
@@ -8333,10 +8333,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/dbcan",
+      "description": "Standalone version of dbCAN annotation tool for automated CAZyme annotation.",
       "dir": "depictio/catalog/dbcan",
-      "homepage": null,
+      "homepage": "https://bcb.unl.edu/dbCAN2/",
       "id": "dbcan",
       "name": "run_dbCAN",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/rundbcan/cazymeannotation",
@@ -8566,8 +8566,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/deeptools",
+      "description": "A set of user-friendly tools for normalization and visualization of deep- sequencing data.",
       "dir": "depictio/catalog/deeptools",
       "homepage": "https://deeptools.readthedocs.io/",
       "id": "deeptools",
@@ -8885,9 +8885,9 @@
     },
     {
       "biotools_url": "https://bio.tools/deseq2",
-      "description": "",
+      "description": "Differential gene expression analysis based on the negative binomial distribution.",
       "dir": "depictio/catalog/deseq2",
-      "homepage": null,
+      "homepage": "https://bioconductor.org/packages/release/bioc/html/DESeq2.html",
       "id": "deseq2",
       "name": "DESeq2",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/deseq2/differential",
@@ -9619,7 +9619,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/dexseq",
       "description": "Differential exon / transcript usage testing, finding genes whose exon or isoform usage shifts between conditions. nf-core/nanoseq runs it on Bambu's transcript counts; nf-core/rnasplice runs it on exon bins and on transcript-level salmon counts.",
       "dir": "depictio/catalog/dexseq",
       "homepage": "https://bioconductor.org/packages/release/bioc/html/DEXSeq.html",
@@ -9904,7 +9904,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/edger",
       "description": "Differential exon usage with edgeR's diffSpliceDGE: an exon-level test, a gene-level F-test and a Simes-combined gene test per contrast, run by nf-core/rnasplice on featureCounts exon counts.",
       "dir": "depictio/catalog/edger",
       "homepage": "https://bioconductor.org/packages/edgeR",
@@ -10813,7 +10813,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Computes the percentage of endogenous DNA and library clonality from samtools flagstat output.",
       "dir": "depictio/catalog/endorspy",
       "homepage": "https://github.com/aidaanva/endorS.py",
       "id": "endorspy",
@@ -11381,10 +11381,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/fusioncatcher",
+      "description": "FusionCatcher searches for novel/known somatic fusion genes, translocations, and chimeras in RNA-seq data.",
       "dir": "depictio/catalog/fusioncatcher",
-      "homepage": null,
+      "homepage": "https://github.com/ndaniel/fusioncatcher",
       "id": "fusioncatcher",
       "name": "FusionCatcher",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioncatcher/fusioncatcher",
@@ -11502,9 +11502,9 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Validates and characterises fusion transcript predictions by aligning reads to fusion contigs.",
       "dir": "depictio/catalog/fusioninspector",
-      "homepage": null,
+      "homepage": "https://github.com/FusionInspector/FusionInspector",
       "id": "fusioninspector",
       "name": "FusionInspector",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioninspector",
@@ -11730,9 +11730,9 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Collects and compares the calls of several fusion detection tools in one report.",
       "dir": "depictio/catalog/fusionreport",
-      "homepage": null,
+      "homepage": "https://github.com/Clinical-Genomics/fusion-report",
       "id": "fusionreport",
       "name": "fusion-report",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fusionreport/detect",
@@ -12075,8 +12075,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/gsea",
+      "description": "Gene Set Enrichment Analysis (GSEA).",
       "dir": "depictio/catalog/gsea",
       "homepage": "https://www.gsea-msigdb.org/gsea",
       "id": "gsea",
@@ -12203,7 +12203,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/GTDB-Tk",
       "description": "Taxonomic classification of metagenome-assembled genomes against the Genome Taxonomy Database.",
       "dir": "depictio/catalog/gtdbtk",
       "homepage": "https://ecogenomics.github.io/GTDBTk/",
@@ -12572,10 +12572,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/hamronization",
+      "description": "Tool to convert and summarize AMR gene detection outputs using the hAMRonization specification.",
       "dir": "depictio/catalog/hamronization",
-      "homepage": null,
+      "homepage": "https://github.com/pha4ge/hAMRonization/",
       "id": "hamronization",
       "name": "hAMRonization",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/hamronization/summarize",
@@ -12913,9 +12913,9 @@
     },
     {
       "biotools_url": "https://bio.tools/hap.py",
-      "description": "",
+      "description": "Haplotype-aware comparison of a VCF against a truth set (hap.py).",
       "dir": "depictio/catalog/happy",
-      "homepage": null,
+      "homepage": "https://github.com/Illumina/hap.py",
       "id": "happy",
       "name": "hap.py",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/happy",
@@ -13009,8 +13009,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/hicexplorer",
+      "description": "Tools to process, normalise, analyse and visualise Hi-C and other chromosome conformation capture data.",
       "dir": "depictio/catalog/hicexplorer",
       "homepage": "https://hicexplorer.readthedocs.io/",
       "id": "hicexplorer",
@@ -13077,7 +13077,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/hic-pro",
       "description": "Maps, pairs and filters Hi-C reads down to valid 3C products, then splits the survivors into cis and trans contacts. Its `stats/` directory is the run's valid-pair funnel, one small key/value file per processing stage.",
       "dir": "depictio/catalog/hicpro",
       "homepage": "https://github.com/nservant/HiC-Pro",
@@ -13328,9 +13328,9 @@
     },
     {
       "biotools_url": "https://bio.tools/homer",
-      "description": "",
+      "description": "Suite of tools for motif discovery and next-generation sequencing analysis.",
       "dir": "depictio/catalog/homer",
-      "homepage": null,
+      "homepage": "http://homer.ucsd.edu/homer/",
       "id": "homer",
       "name": "HOMER",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/homer/annotatepeaks",
@@ -13554,7 +13554,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Illumina library that parses the InterOp binary metrics a sequencer writes during a run.",
       "dir": "depictio/catalog/interop",
       "homepage": "https://illumina.github.io/interop/summary_table.html",
       "id": "interop",
@@ -13680,9 +13680,9 @@
     },
     {
       "biotools_url": "https://bio.tools/andersen-lab_ivar",
-      "description": "",
+      "description": "Functions for viral amplicon sequencing: primer trimming, variant calling and consensus building.",
       "dir": "depictio/catalog/ivar",
-      "homepage": null,
+      "homepage": "https://github.com/andersen-lab/ivar",
       "id": "ivar",
       "name": "iVar",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/ivar/variants",
@@ -13909,7 +13909,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/jellyfish",
       "description": "K-mer counting and the read k-mer spectrum.",
       "dir": "depictio/catalog/jellyfish",
       "homepage": "https://github.com/gmarcais/Jellyfish",
@@ -14007,8 +14007,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/kallisto",
+      "description": "RNA-seq quantification by pseudoalignment, wrapped with bustools in kb for single-cell data.",
       "dir": "depictio/catalog/kallisto",
       "homepage": "https://www.kallistobus.tools/",
       "id": "kallisto",
@@ -14087,9 +14087,9 @@
     },
     {
       "biotools_url": "https://bio.tools/macs",
-      "description": "",
+      "description": "Model-based analysis of ChIP-seq data, for peak calling.",
       "dir": "depictio/catalog/macs2",
-      "homepage": null,
+      "homepage": "https://github.com/macs3-project/MACS",
       "id": "macs2",
       "name": "MACS2",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/macs2/callpeak",
@@ -15060,9 +15060,9 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Taxonomic identification and quantification of long-read metagenomes using marker genes.",
       "dir": "depictio/catalog/melon",
-      "homepage": null,
+      "homepage": "https://github.com/xinehc/melon",
       "id": "melon",
       "name": "Melon",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/melon",
@@ -15159,7 +15159,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/merqury",
       "description": "K-mer based assembly consensus quality (QV), k-mer completeness and copy-number spectra.",
       "dir": "depictio/catalog/merqury",
       "homepage": "https://github.com/marbl/merqury",
@@ -15426,9 +15426,9 @@
     },
     {
       "biotools_url": "https://bio.tools/metaphlan",
-      "description": "",
+      "description": "Identify clades (phyla to species) present in the metagenome obtained from a microbiome sample and their relative abundance.",
       "dir": "depictio/catalog/metaphlan",
-      "homepage": null,
+      "homepage": "https://huttenhower.sph.harvard.edu/metaphlan/",
       "id": "metaphlan",
       "name": "MetaPhlAn",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/metaphlan/metaphlan",
@@ -16345,8 +16345,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/mirdeep2",
+      "description": "Discovers known and novel microRNA genes from small RNA sequencing reads.",
       "dir": "depictio/catalog/mirdeep2",
       "homepage": "https://github.com/rajewsky-lab/mirdeep2",
       "id": "mirdeep2",
@@ -16605,8 +16605,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/miRTop",
+      "description": "Annotates small RNA-seq reads against miRNA references in the mirGFF3 format.",
       "dir": "depictio/catalog/mirtop",
       "homepage": "https://github.com/miRTop/mirtop",
       "id": "mirtop",
@@ -17031,9 +17031,9 @@
     },
     {
       "biotools_url": "https://bio.tools/mosdepth",
-      "description": "",
+      "description": "Fast BAM/CRAM depth calculation for WGS, exome, or targeted sequencing.",
       "dir": "depictio/catalog/mosdepth",
-      "homepage": null,
+      "homepage": "https://github.com/brentp/mosdepth",
       "id": "mosdepth",
       "name": "mosdepth",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/mosdepth",
@@ -17370,7 +17370,7 @@
     },
     {
       "biotools_url": "https://bio.tools/multiqc",
-      "description": "",
+      "description": "Aggregates the logs and reports of many bioinformatics tools into one report.",
       "dir": "depictio/catalog/multiqc",
       "homepage": "https://seqera.io/multiqc/",
       "id": "multiqc",
@@ -19672,7 +19672,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/nanoplot",
       "description": "Quality control for long-read sequencing: read length, read quality and yield summaries computed from a FASTQ, a sequencing summary or an alignment.",
       "dir": "depictio/catalog/nanoplot",
       "homepage": "https://github.com/wdecoster/NanoPlot",
@@ -19962,9 +19962,9 @@
     },
     {
       "biotools_url": "https://bio.tools/nextclade",
-      "description": "",
+      "description": "SARS-CoV-2 genome clade assignment, mutation calling, and sequence quality checks.",
       "dir": "depictio/catalog/nextclade",
-      "homepage": null,
+      "homepage": "https://github.com/nextstrain/nextclade",
       "id": "nextclade",
       "name": "Nextclade",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/nextclade/run",
@@ -20053,8 +20053,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/nonpareil",
+      "description": "Estimate average coverage and create curves for metagenomic datasets.",
       "dir": "depictio/catalog/nonpareil",
       "homepage": "https://nonpareil.readthedocs.io",
       "id": "nonpareil",
@@ -20238,8 +20238,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/openms",
+      "description": "OpenMS is an open-source software C++ library for LC-MS data management and analyses.",
       "dir": "depictio/catalog/openms",
       "homepage": "https://openms.de",
       "id": "openms",
@@ -20393,9 +20393,9 @@
     },
     {
       "biotools_url": "https://bio.tools/pangolin_cov-lineages",
-      "description": "",
+      "description": "Assigns SARS-CoV-2 genomes to global outbreak lineages.",
       "dir": "depictio/catalog/pangolin",
-      "homepage": null,
+      "homepage": "https://github.com/cov-lineages/pangolin",
       "id": "pangolin",
       "name": "Pangolin",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/pangolin/run",
@@ -20471,7 +20471,7 @@
     },
     {
       "biotools_url": "https://bio.tools/picard_tools",
-      "description": "",
+      "description": "Java command-line tools for manipulating high-throughput sequencing data and formats such as SAM, BAM, CRAM and VCF.",
       "dir": "depictio/catalog/picard",
       "homepage": "https://broadinstitute.github.io/picard/",
       "id": "picard",
@@ -20594,8 +20594,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/preseq",
+      "description": "Software for predicting library complexity and genome coverage in high- throughput sequencing.",
       "dir": "depictio/catalog/preseq",
       "homepage": "https://github.com/smithlabcode/preseq",
       "id": "preseq",
@@ -20716,7 +20716,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/prokka",
       "description": "Structural and functional annotation of prokaryotic genomes and metagenome-assembled genomes.",
       "dir": "depictio/catalog/prokka",
       "homepage": "https://github.com/tseemann/prokka",
@@ -20969,8 +20969,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/qcatch",
+      "description": "Quality control and cell filtering for single-cell RNA-seq data processed by alevin-fry.",
       "dir": "depictio/catalog/qcatch",
       "homepage": "https://github.com/COMBINE-lab/qcatch",
       "id": "qcatch",
@@ -21999,8 +21999,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/qualimap",
+      "description": "Quality control of alignment sequencing data and of feature counts.",
       "dir": "depictio/catalog/qualimap",
       "homepage": "http://qualimap.conesalab.org",
       "id": "qualimap",
@@ -22469,7 +22469,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/quast",
       "description": "Reference-free assembly quality statistics for whole assemblies and for individual bins.",
       "dir": "depictio/catalog/quast",
       "homepage": "https://quast.sourceforge.net",
@@ -22967,7 +22967,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "A package for detecting the actively translated ORFs using ribosome- profiling data.",
       "dir": "depictio/catalog/ribocode",
       "homepage": "https://github.com/xryanglab/RiboCode",
       "id": "ribocode",
@@ -23071,7 +23071,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "Ribo TIS Hunter (Ribo-TISH) identifies translation activities using ribosome profiling data.",
       "dir": "depictio/catalog/ribotish",
       "homepage": "https://github.com/zhpn1024/ribotish",
       "id": "ribotish",
@@ -23173,8 +23173,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/ribowaltz",
+      "description": "Calculation of optimal P-site offsets, diagnostic analysis and visual inspection of ribosome profiling data.",
       "dir": "depictio/catalog/ribowaltz",
       "homepage": "https://github.com/LabTranslationalArchitectomics/riboWaltz",
       "id": "ribowaltz",
@@ -23568,7 +23568,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/rmats",
       "description": "Differential alternative splicing of annotated and novel events (skipped exons, retained introns, mutually exclusive exons, alternative 3' and 5' splice sites) between two groups of replicated RNA-seq samples.",
       "dir": "depictio/catalog/rmats",
       "homepage": "https://github.com/Xinglab/rmats-turbo",
@@ -23689,8 +23689,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/rseqc",
+      "description": "Modules that evaluate high-throughput sequencing data, especially RNA-seq.",
       "dir": "depictio/catalog/rseqc",
       "homepage": "https://rseqc.sourceforge.net",
       "id": "rseqc",
@@ -23759,9 +23759,9 @@
     },
     {
       "biotools_url": "https://bio.tools/rtg-tools",
-      "description": "",
+      "description": "Real Time Genomics utilities for accurate VCF comparison and manipulation.",
       "dir": "depictio/catalog/rtgtools",
-      "homepage": null,
+      "homepage": "https://www.realtimegenomics.com/products/rtg-tools",
       "id": "rtgtools",
       "name": "RTG Tools",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/rtgtools/vcfeval",
@@ -23947,9 +23947,9 @@
     },
     {
       "biotools_url": "https://bio.tools/salmon",
-      "description": "",
+      "description": "Salmon is a tool for wicked-fast transcript quantification from RNA-seq data.",
       "dir": "depictio/catalog/salmon",
-      "homepage": null,
+      "homepage": "https://salmon.readthedocs.io/en/latest/salmon.html",
       "id": "salmon",
       "name": "Salmon",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/salmon/quant",
@@ -24252,8 +24252,8 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/samtools",
+      "description": "Utilities for manipulating and post-processing sequence alignments in the SAM, BAM and CRAM formats.",
       "dir": "depictio/catalog/samtools",
       "homepage": "https://www.htslib.org",
       "id": "samtools",
@@ -24500,9 +24500,9 @@
     },
     {
       "biotools_url": "https://bio.tools/SEACR",
-      "description": "",
+      "description": "Calls peaks and enriched regions from sparse CUT&RUN and chromatin profiling data.",
       "dir": "depictio/catalog/seacr",
-      "homepage": null,
+      "homepage": "https://github.com/FredHutch/SEACR",
       "id": "seacr",
       "name": "SEACR",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/seacr/callpeak",
@@ -25394,7 +25394,7 @@
     },
     {
       "biotools_url": null,
-      "description": "",
+      "description": "SimpleAF is a program to simplify and customize the running and configuration of single-cell processing with alevin-fry.",
       "dir": "depictio/catalog/simpleaf",
       "homepage": "https://github.com/COMBINE-lab/simpleaf",
       "id": "simpleaf",
@@ -25528,7 +25528,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/snpeff",
       "description": "Functional annotation of variant calls: the consequence, the impact class, the gene and the protein change of every call, plus the run-level summaries SnpEff writes next to the annotated VCF.",
       "dir": "depictio/catalog/snpeff",
       "homepage": "https://pcingola.github.io/SnpEff/",
@@ -26058,9 +26058,9 @@
     },
     {
       "biotools_url": "https://bio.tools/hap.py",
-      "description": "",
+      "description": "Somatic variant comparison against a truth set, from the hap.py suite.",
       "dir": "depictio/catalog/sompy",
-      "homepage": null,
+      "homepage": "https://github.com/Illumina/hap.py",
       "id": "sompy",
       "name": "som.py",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/sompy",
@@ -26318,10 +26318,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/star-fusion",
+      "description": "Fast and Accurate Fusion Transcript Detection from RNA-Seq.",
       "dir": "depictio/catalog/starfusion",
-      "homepage": null,
+      "homepage": "https://github.com/STAR-Fusion/STAR-Fusion",
       "id": "starfusion",
       "name": "STAR-Fusion",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/starfusion/detect",
@@ -26438,7 +26438,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/suppa",
       "description": "Fast, alignment-free differential splicing: PSI per local event and per isoform from transcript TPMs, and the delta PSI between two conditions with an empirical significance.",
       "dir": "depictio/catalog/suppa",
       "homepage": "https://github.com/comprna/SUPPA",
@@ -26547,9 +26547,9 @@
     },
     {
       "biotools_url": "https://bio.tools/svanalyzer",
-      "description": "",
+      "description": "Tools for the analysis of structural variation in genomes.",
       "dir": "depictio/catalog/svanalyzer",
-      "homepage": null,
+      "homepage": "https://svanalyzer.readthedocs.io/en/latest/index.html",
       "id": "svanalyzer",
       "name": "SVanalyzer",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/svanalyzer/svbenchmark",
@@ -26599,10 +26599,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/sylph",
+      "description": "Sylph quickly enables querying of genomes against even low-coverage shotgun metagenomes to find nearest neighbour ANI.",
       "dir": "depictio/catalog/sylph",
-      "homepage": null,
+      "homepage": "https://github.com/bluenote-1577/sylph",
       "id": "sylph",
       "name": "sylph",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile",
@@ -26780,10 +26780,10 @@
       ]
     },
     {
-      "biotools_url": null,
-      "description": "",
+      "biotools_url": "https://bio.tools/taxpasta",
+      "description": "TAXonomic Profile Aggregation and STAndardisation.",
       "dir": "depictio/catalog/taxpasta",
-      "homepage": null,
+      "homepage": "https://taxpasta.readthedocs.io/",
       "id": "taxpasta",
       "name": "taxpasta",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
@@ -27389,9 +27389,9 @@
     },
     {
       "biotools_url": "https://bio.tools/truvari",
-      "description": "",
+      "description": "Structural variant comparison tool for VCFs.",
       "dir": "depictio/catalog/truvari",
-      "homepage": null,
+      "homepage": "https://github.com/ACEnglish/truvari",
       "id": "truvari",
       "name": "Truvari",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/truvari/bench",
@@ -27637,7 +27637,7 @@
       ]
     },
     {
-      "biotools_url": null,
+      "biotools_url": "https://bio.tools/vcftools",
       "description": "Summary statistics computed directly on a VCF: how the caller's own filters partition the calls, and how the transition/transversion ratio moves as the quality floor is raised.",
       "dir": "depictio/catalog/vcftools",
       "homepage": "https://vcftools.github.io/",
@@ -27802,9 +27802,9 @@
     },
     {
       "biotools_url": "https://bio.tools/vsearch",
-      "description": "",
+      "description": "Open-source tool for amplicon and metagenomic sequence analysis: chimera detection, clustering, dereplication and searching.",
       "dir": "depictio/catalog/vsearch",
-      "homepage": null,
+      "homepage": "https://github.com/torognes/vsearch",
       "id": "vsearch",
       "name": "VSEARCH",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/vsearch/sintax",
@@ -27927,9 +27927,9 @@
     },
     {
       "biotools_url": "https://bio.tools/wittyer",
-      "description": "",
+      "description": "Illumina tool for large variant benchmarking.",
       "dir": "depictio/catalog/wittyer",
-      "homepage": null,
+      "homepage": "https://github.com/Illumina/witty.er",
       "id": "wittyer",
       "name": "Wittyer",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/wittyer",

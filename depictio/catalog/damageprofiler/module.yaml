@@ -7,3 +7,7 @@ id: damageprofiler
 name: DamageProfiler
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/damageprofiler
 homepage: https://github.com/Integrative-Transcriptomics/DamageProfiler
+description: >-
+  Determines DNA damage patterns in ancient DNA reads, a Java replacement for
+  mapDamage.
+biotools_url: https://bio.tools/damageprofiler

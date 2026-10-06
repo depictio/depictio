@@ -8,3 +8,7 @@ id: interop
 name: Illumina InterOp
 source_url: https://github.com/Illumina/interop
 homepage: https://illumina.github.io/interop/summary_table.html
+description: >-
+  Illumina library that parses the InterOp binary metrics a sequencer writes
+  during a run.
+biotools_url: null  # no bio.tools entry for this tool

@@ -8,3 +8,5 @@ id: bcl2fastq
 name: bcl2fastq
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bcl2fastq
 homepage: https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html
+description: Illumina's converter from BCL base calls to demultiplexed FASTQ files.
+biotools_url: null  # no bio.tools entry for this tool

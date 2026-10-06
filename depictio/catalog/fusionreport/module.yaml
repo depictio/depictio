@@ -5,3 +5,8 @@
 id: fusionreport
 name: fusion-report
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusionreport/detect
+description: >-
+  Collects and compares the calls of several fusion detection tools in one
+  report.
+homepage: https://github.com/Clinical-Genomics/fusion-report
+biotools_url: null  # no bio.tools entry for this tool

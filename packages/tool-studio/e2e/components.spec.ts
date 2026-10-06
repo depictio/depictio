@@ -51,6 +51,8 @@ async function reachVisualizations(page: Page) {
   await page.getByTestId('start').click();
   await page.getByLabel('Tool id').fill('demotool');
   await page.getByLabel('Tool name').fill('Demo Tool');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByLabel('Output slug').fill('metrics');
   await page.getByLabel('Path glob').fill('**/demotool/*.csv');
   await page.getByRole('button', { name: 'Next', exact: true }).click();

@@ -4,3 +4,7 @@ id: endorspy
 name: endorS.py
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/endorspy
 homepage: https://github.com/aidaanva/endorS.py
+description: >-
+  Computes the percentage of endogenous DNA and library clonality from
+  samtools flagstat output.
+biotools_url: null  # no bio.tools entry for this tool

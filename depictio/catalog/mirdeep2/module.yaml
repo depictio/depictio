@@ -8,3 +8,5 @@ id: mirdeep2
 name: miRDeep2
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mirdeep2/mirdeep2
 homepage: https://github.com/rajewsky-lab/mirdeep2
+description: Discovers known and novel microRNA genes from small RNA sequencing reads.
+biotools_url: https://bio.tools/mirdeep2
