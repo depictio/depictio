@@ -3,6 +3,7 @@ name: RNA-seq read QC
 origin_tool: RSeQC
 mode: rseqc
 description: Where the reads land on the transcriptome (read distribution, inner distance, junction annotation and saturation, strand inference), from RSeQC via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

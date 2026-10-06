@@ -776,6 +776,7 @@ def catalog_manifest(
                 "homepage": entry.homepage,
                 "nf_core_url": entry.nf_core_url,
                 "biotools_url": entry.biotools_url,
+                "stage": entry.stage,
                 "dir": _rel(tool_dir),
                 "outputs": outs,
             }

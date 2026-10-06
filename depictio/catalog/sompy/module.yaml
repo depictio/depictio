@@ -3,3 +3,4 @@ id: sompy
 name: som.py
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/sompy
 biotools_url: https://bio.tools/hap.py
+stage: benchmarking

@@ -3,3 +3,4 @@
 id: melon
 name: Melon
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/melon
+stage: taxonomy

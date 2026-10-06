@@ -17,7 +17,7 @@ renders_as:
   - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Phylum, title: Composition by phylum} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Genus, title: Composition by genus} }
   # How much was reconstructed, from how many samples, across how many phyla.
-  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3, headline: true }
   - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
   - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }
   - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }

@@ -3,6 +3,7 @@ name: Marker-gene profile
 origin_tool: MetaPhlAn
 mode: metaphlan
 description: Clade-specific marker-gene community profile (top taxa), from MetaPhlAn via MultiQC.
+stage: taxonomy
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

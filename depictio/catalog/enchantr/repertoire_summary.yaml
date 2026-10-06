@@ -9,7 +9,7 @@ find: { path_glob: "**/repertoire_analysis_report/tables/num_clones_table.tsv" }
 recipe: enchantr/repertoire_summary.py
 fixture: repertoire_summary.tsv
 renders_as:
-  - { component: card, column: number_of_clones, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: number_of_clones, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
   - { component: card, column: sequences_per_clone, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: shannon, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: evenness, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.85 }

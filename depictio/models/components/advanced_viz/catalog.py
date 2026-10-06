@@ -27,7 +27,7 @@ from __future__ import annotations
 from fnmatch import fnmatch
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -94,6 +94,41 @@ def _check_identity_urls(
                     f"edam_{category} entries must be http://edamontology.org/{category}_NNNN URLs, "
                     f"got {url!r}"
                 )
+
+
+# Where an output sits in a pipeline, in reading order. A composed dashboard opens
+# one tab per stage present, in this order (`depictio template compose`); a tool
+# declares its stage in `module.yaml` and an output overrides it when it belongs
+# elsewhere (a MultiQC section is FastQC's QC or STAR's alignment numbers).
+Stage = Literal[
+    "qc",
+    "alignment",
+    "quantification",
+    "peaks",
+    "variants",
+    "fusions",
+    "taxonomy",
+    "annotation",
+    "immune",
+    "differential",
+    "benchmarking",
+    "other",
+]
+STAGE_ORDER: tuple[str, ...] = get_args(Stage)
+STAGE_LABELS: dict[str, str] = {
+    "qc": "Quality control",
+    "alignment": "Alignment & coverage",
+    "quantification": "Quantification",
+    "peaks": "Peaks",
+    "variants": "Variants",
+    "fusions": "Fusions",
+    "taxonomy": "Taxonomy & diversity",
+    "annotation": "Functional annotation",
+    "immune": "Immune repertoire",
+    "differential": "Differential analysis",
+    "benchmarking": "Benchmarking",
+    "other": "Other results",
+}
 
 
 # Accepted polars dtype names for `columns` (string form, as polars prints them).
@@ -226,6 +261,9 @@ class Render(BaseModel):
     # Optional tool-unique handle for `use: <tool>/<id>` (advanced_viz renders).
     id: str | None = None
     component: ComponentKind
+    # Ordering when a dashboard is composed from the catalog: lower comes first
+    # within its output; unset renders keep their declared order after the set ones.
+    priority: int | None = Field(default=None, ge=0)
     # advanced_viz
     kind: AdvancedVizKind | None = None
     # viz role -> column, or -> ordered column list for the few list-typed
@@ -251,6 +289,9 @@ class Render(BaseModel):
     attrition_cols: list[str] = Field(default_factory=list)  # stages for =attrition
     trend_col: str | None = None  # ordered axis for secondary_layout=trend
     filter_expr: str | None = None  # optional polars pre-filter
+    # A card worth a place in a composed dashboard's Overview: the run's key
+    # metrics, the way MultiQC's General Statistics picks a few columns per tool.
+    headline: bool = False
     # interactive — both are required by InteractiveLiteComponent, so a render
     # carrying neither could not be turned into a filter control at all.
     interactive_type: InteractiveType | None = None  # Select/MultiSelect/Slider/…
@@ -386,6 +427,7 @@ class Render(BaseModel):
                 self.attrition_cols,
                 self.trend_col,
                 self.filter_expr,
+                self.headline,
             )
         ):
             raise ValueError(f"card fields are only valid for component=card, not {c}")
@@ -436,6 +478,8 @@ class CatalogOutput(BaseModel):
     origin_tool: str | None = None
     mode: str | None = None
     description: str = ""
+    # Overrides the tool's `stage` for this output (see `Stage`).
+    stage: Stage | None = None
 
     find: CatalogFind
     # Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog
@@ -539,6 +583,9 @@ class CatalogTool(BaseModel):
     nf_core_url: str | None = None
     biotools_url: str | None = None
     edam_topics: list[str] = Field(default_factory=list)
+    # Where the tool's outputs sit in a pipeline (see `Stage`); an output may
+    # override it. Unset reads as "other".
+    stage: Stage | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -558,6 +605,10 @@ class CatalogEntry(CatalogTool):
 
     schema_version: int = 1
     outputs: list[CatalogOutput] = Field(min_length=1)
+
+    def stage_of(self, output: CatalogOutput) -> str:
+        """The output's stage: its own, else the tool's, else ``other``."""
+        return output.stage or self.stage or "other"
 
     @model_validator(mode="after")
     def _unique_output_ids(self) -> CatalogEntry:

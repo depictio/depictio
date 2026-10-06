@@ -13,7 +13,7 @@ renders_as:
   - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: confidence, gene: fusion, mean_expression: log_support, frac_expressing: support_fraction} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: reading_frame} }
   - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: confidence, top_n_count: 3 }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: confidence, top_n_count: 3, headline: true }
   - { component: card, column: split_reads, aggregation: sum, secondary_layout: donut, breakdown_col: fusion_type }
   - { component: card, column: support_fraction, aggregation: average, secondary_layout: histogram }
   - { component: table, row_selection_enabled: true, row_selection_column: fusion }

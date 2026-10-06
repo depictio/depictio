@@ -5,3 +5,4 @@
 id: ampcombi
 name: AMPcombi
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ampcombi2/complete
+stage: annotation

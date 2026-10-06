@@ -11,3 +11,4 @@ id: deseq2
 name: DESeq2
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/deseq2/differential
 biotools_url: https://bio.tools/deseq2 # from nf-core meta.yml identifier
+stage: differential

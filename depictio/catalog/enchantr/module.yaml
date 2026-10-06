@@ -20,3 +20,4 @@ homepage: https://immcantation.readthedocs.io
 edam_topics:
   - http://edamontology.org/topic_0804 # Immunology
   - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
+stage: immune

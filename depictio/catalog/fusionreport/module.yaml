@@ -5,3 +5,4 @@
 id: fusionreport
 name: fusion-report
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusionreport/detect
+stage: fusions

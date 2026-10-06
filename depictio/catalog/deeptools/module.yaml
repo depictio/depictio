@@ -13,3 +13,4 @@ id: deeptools
 name: deepTools
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/deeptools/plotfingerprint
 homepage: https://deeptools.readthedocs.io/
+stage: qc

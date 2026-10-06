@@ -5,3 +5,4 @@
 id: ctatsplicing
 name: CTAT-SPLICING
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ctatsplicing/startocancerintrons
+stage: fusions

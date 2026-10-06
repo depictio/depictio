@@ -35,7 +35,7 @@ renders_as:
           coloraxis_colorbar_title="Best probability",
           margin={"t": 24, "l": 56, "r": 16, "b": 48},
       )
-  - { component: card, column: cds_id, aggregation: count, secondary_layout: donut, breakdown_col: charge_class }
+  - { component: card, column: cds_id, aggregation: count, secondary_layout: donut, breakdown_col: charge_class, headline: true }
   - { component: card, column: prob_ampir, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: aa_length, aggregation: average, secondary_layout: histogram }
   - { component: card, column: prob_max, aggregation: average, secondary_layout: threshold, threshold_value: 0.8, threshold_direction: min, threshold_warn: 0.6 }

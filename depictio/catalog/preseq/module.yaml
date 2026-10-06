@@ -14,3 +14,4 @@ id: preseq
 name: Preseq
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/preseq/lcextrap
 homepage: https://github.com/smithlabcode/preseq
+stage: qc

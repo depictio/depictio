@@ -13,7 +13,7 @@ renders_as:
   - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: splice_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: splice_type, y: supporting_reads, color: large_anchor_support} }
   - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: splice_type, top_n_count: 3 }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: splice_type, top_n_count: 3, headline: true }
   - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: large_anchor_support }
   - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }
   - { component: table, row_selection_enabled: true, row_selection_column: fusion }

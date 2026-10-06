@@ -3,6 +3,7 @@ name: Abundance re-estimation
 origin_tool: Bracken
 mode: bracken
 description: Bayesian re-estimation of species abundance from the kraken2 report (top taxa), from Bracken via MultiQC.
+stage: taxonomy
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

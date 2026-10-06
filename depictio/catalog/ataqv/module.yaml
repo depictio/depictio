@@ -16,3 +16,4 @@ id: ataqv
 name: ataqv
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ataqv/ataqv
 homepage: https://github.com/ParkerLab/ataqv
+stage: qc

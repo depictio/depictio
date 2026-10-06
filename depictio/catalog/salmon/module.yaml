@@ -13,3 +13,4 @@ id: salmon
 name: Salmon
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/salmon/quant
 biotools_url: https://bio.tools/salmon # from nf-core meta.yml identifier
+stage: quantification

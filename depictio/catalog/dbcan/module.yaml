@@ -6,3 +6,4 @@
 id: dbcan
 name: run_dbCAN
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rundbcan/cazymeannotation
+stage: annotation

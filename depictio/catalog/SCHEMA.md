@@ -47,6 +47,7 @@ Both use the same fields; a folder just splits the outputs into files.
 | `source_url` | CAN | str | Where a non-nf-core definition was read from (a Snakemake wrapper dir, a Galaxy tool XML). Format-checked as http(s) only — there is no registry to check it against. |
 | `biotools_url` | CAN | str | Full `https://bio.tools/<id>` URL. |
 | `edam_topics` | CAN | list[str] | Full EDAM URLs. |
+| `stage` | CAN | one of `qc`, `alignment`, `quantification`, `peaks`, `variants`, `fusions`, `taxonomy`, `annotation`, `immune`, `differential`, `benchmarking`, `other` | Where the tool's outputs sit in a pipeline. A dashboard composed from the catalog (`depictio template compose`) opens one tab per stage present, in this order. Unset reads as `other`; an output can override it. |
 | `outputs` | **MUST** (flat file) | list[Output] | In a folder, these are the sibling files. |
 
 **Keep `module.yaml` lightweight.** For an nf-core-backed tool, declare only
@@ -68,6 +69,7 @@ existence-checking validates; the derived fields are trusted until a future
 | `find` | **MUST** | Find | How to recognise the raw file. |
 | `origin_tool` | CAN | str | The tool that actually produced the numbers, when the catalog tool aggregates other tools' output. Set on MultiQC sections (`Cutadapt`, `FastQC`, …) so a picker can show "Adapter trimming (Cutadapt)"; left unset when the tool is the producer, and when the section is pipeline-generated custom content. Declared rather than derived: MultiQC persists anchors, and the report's own module names are decorated by the pipeline. |
 | `mode` | CAN | str | Running mode / subcommand. |
+| `stage` | CAN | same vocabulary as the tool's `stage` | Overrides the tool's stage for this output, e.g. a MultiQC section carrying STAR's numbers is `alignment`, not MultiQC's `qc`. |
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Reshape that **owns the output columns**. Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy still resolves (`nf-core/<pipeline>/<name>.py`) for pipeline-version-specific reshapes. |
 | `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
@@ -100,11 +102,13 @@ existence-checking validates; the derived fields are trusted until a future
 | `threshold_value` / `threshold_direction` / `threshold_warn` | CAN | float / `min`\|`max` / float | `card`: the QC cut-off for `secondary_layout: threshold`. `min` = at-least (higher is better). |
 | `attrition_cols` / `trend_col` | CAN | list[str] / str | `card`: the ordered stages for `attrition`, the ordered axis for `trend`. |
 | `filter_expr` | CAN | str | `card`: optional polars pre-filter before aggregation. |
+| `headline` | CAN | bool | `card`: one of the run's key metrics. A composed dashboard puts headline cards in its Overview, the way MultiQC's General Statistics picks a few columns per tool. One or two per tool. |
 | `interactive_type` + `column_name` | cond. | `InteractiveType` / str | `interactive`: the widget (`Select`, `MultiSelect`, `SegmentedControl`, `Slider`, `RangeSlider`, `DateRangePicker`, `Timeline`, `Switch`) and the column it filters on. Both required — they are what depictio's interactive component needs to exist. |
 | `columns` | CAN | list[str] | `table`: the columns to display. Omit for all of them. |
 | `page_size` / `sortable` / `filterable` | CAN | int(1-500) / bool / bool | `table`: display options. |
 | `row_selection_enabled` / `row_selection_column` | CAN | bool / str | `table`: let row selection filter the rest of the dashboard, and which column it emits. |
 | `section` | CAN | str | e.g. the MultiQC section name. |
+| `priority` | CAN | int ≥ 0 | Any component: ordering when a dashboard is composed from the catalog, lower first within its output. Renders without one keep their declared order, after those with one. |
 
 ### `secondary_layout` and its companion field
 

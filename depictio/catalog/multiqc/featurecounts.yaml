@@ -3,6 +3,7 @@ name: Read assignment
 origin_tool: featureCounts
 mode: featurecounts
 description: How many reads were assigned to a feature and why the rest were not (no feature, ambiguity, multimapping), from featureCounts (Subread) via MultiQC.
+stage: quantification
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

@@ -17,3 +17,4 @@ homepage: https://q2-sidle.readthedocs.io
 edam_topics:
   - http://edamontology.org/topic_3174 # Metagenomics
   - http://edamontology.org/topic_0080 # Sequence analysis
+stage: taxonomy

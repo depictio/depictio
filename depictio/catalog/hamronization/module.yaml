@@ -5,3 +5,4 @@
 id: hamronization
 name: hAMRonization
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/hamronization/summarize
+stage: annotation
