@@ -70,9 +70,8 @@ export function useContentWidthPref() {
 
 /**
  * The content width cap in px for the chosen preference, or null for full
- * width. Applied to the filter panel and the canvas together, so an open
- * panel stays beside the content it filters instead of being stranded at the
- * window edge while the canvas centres.
+ * width. The canvas centres within the room the filter panel leaves, so
+ * the panel (open or as its rail) stays docked by the sidebar.
  */
 export function useContentMaxWidth(): number | null {
   const { width } = useContentWidthPref();

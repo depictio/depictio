@@ -1114,16 +1114,6 @@ const App: React.FC = () => {
               flex: 1,
               minHeight: 0,
               width: '100%',
-              // Page-width preference: the panel, its handle and the canvas
-              // centre as one block, the canvas capped at the chosen width.
-              ...(contentMaxWidth !== null && !isNarrow
-                ? {
-                    maxWidth: `calc(var(${FILTER_PANEL_WIDTH_VAR}) + ${
-                      (filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0) + 8 + contentMaxWidth
-                    }px)`,
-                    marginInline: 'auto',
-                  }
-                : null),
               gap: 4,
               overflow: 'hidden',
             } as React.CSSProperties}
@@ -1185,7 +1175,15 @@ const App: React.FC = () => {
             <Box
               data-testid="dashboard-content"
               style={{
+                // Page-width preference: the canvas centres in what the
+                // filter panel leaves, the panel staying by the sidebar.
                 padding: 4,
+                ...(contentMaxWidth !== null
+                  ? {
+                      paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                      transition: 'padding 200ms ease',
+                    }
+                  : null),
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',

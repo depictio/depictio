@@ -4,6 +4,7 @@ import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core'
 import { StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
 import { Block, Fact, isLinksOnly, parseBlocks, parseFact } from './blockMarkdown';
+import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
 import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
 import TabTiles from './TabTiles';
@@ -109,8 +110,13 @@ function resolveAccent(raw: unknown, resolveTab: TabLinkResolver | null): string
   return glyphColorVar(accent);
 }
 
-const RULE_PX = 3;
-const PAD_Y = 14;
+const PAD_Y = 16;
+
+/** The icon of a `tab:<name>` accent: a finding card rests its tab's mark. */
+function accentIcon(raw: unknown, resolveTab: TabLinkResolver | null): string | null {
+  if (typeof raw !== 'string' || !raw.trim().startsWith('tab:')) return null;
+  return resolveTab?.(raw.trim().slice(4))?.icon ?? null;
+}
 
 /**
  * The frame a surface draws, and the height it adds around the prose. `card`
@@ -123,16 +129,11 @@ function surfaceStyle(
   accent: string | null,
 ): { style: React.CSSProperties; extra: number } {
   if (surface === 'card') {
-    const top = accent ? RULE_PX : 1;
+    // A metric card's frame, so a finding sits in a row of key figures as one
+    // of them; the accent moves to the resting icon and the footer link.
     return {
-      style: {
-        padding: `${PAD_Y}px 18px`,
-        border: '1px solid var(--mantine-color-default-border)',
-        borderTop: accent ? `${RULE_PX}px solid ${accent}` : undefined,
-        borderRadius: 'var(--mantine-radius-md)',
-        background: 'var(--mantine-color-body)',
-      },
-      extra: PAD_Y * 2 + top + 1,
+      style: { ...CARD_FRAME, padding: `${PAD_Y}px 18px`, position: 'relative' },
+      extra: PAD_Y * 2 + 3,
     };
   }
   if (surface === 'tinted') {
@@ -156,51 +157,77 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
   lineHeight: 1.35,
 };
 
+/** Icon tints for a fact strip without an accent: each fact its own hue. */
+const FACT_HUES = ['blue', 'teal', 'grape', 'orange', 'cyan', 'pink'];
+
 /**
- * A list of `![](icon:…) **Label** value` items, drawn as a row of chips: the
- * icon, a quiet label, the value. What a study's method box is made of
- * (pipeline, markers, reference databases) reads at a glance as tags, and a
- * row of chips wraps to whatever width the tile has, from a phone to a wide
- * screen, where a grid of label-over-value cells leaves holes.
+ * A list of `![](icon:…) **Label** value` items, drawn as one strip: a card
+ * split into cells, each an icon on a tint, a small label over its value. A
+ * study's method box (pipeline, markers, reference databases) read at a
+ * glance. Cells take equal shares of the row and wrap below ~200px; the
+ * hairlines between them sit on each cell's left edge and the first column's
+ * is clipped, so the strip stays clean however many rows it wraps to.
  */
-const FactChips: React.FC<{
+const FactStrip: React.FC<{
   facts: Fact[];
   accentColor: string | null;
   inline: (text: string) => React.ReactNode[];
 }> = ({ facts, accentColor, inline }) => (
-  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, width: '100%' }}>
-    {facts.map((fact, i) => (
-      <span
-        key={i}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          minWidth: 0,
-          maxWidth: '100%',
-          padding: '4px 12px 4px 10px',
-          borderRadius: 999,
-          border: '1px solid var(--mantine-color-default-border)',
-          background: 'var(--mantine-color-body)',
-          fontSize: 'var(--mantine-font-size-sm)',
-          lineHeight: 1.4,
-        }}
-      >
-        {fact.icon ? (
-          <Glyph
-            icon={fact.icon}
-            color={accentColor ?? 'var(--mantine-primary-color-filled)'}
-            size={15}
-          />
-        ) : null}
-        <span style={{ color: 'var(--mantine-color-dimmed)', whiteSpace: 'nowrap' }}>
-          {fact.label}
-        </span>
-        <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>
-          {inline(fact.value)}
-        </span>
-      </span>
-    ))}
+  <div style={{ ...CARD_FRAME, overflow: 'hidden', width: '100%' }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
+        marginLeft: -1,
+      }}
+    >
+      {facts.map((fact, i) => {
+        const tint = accentColor ?? glyphColorVar(FACT_HUES[i % FACT_HUES.length]);
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              minWidth: 0,
+              padding: '12px 16px',
+              borderLeft: `1px solid ${CARD_RULE}`,
+            }}
+          >
+            {fact.icon ? (
+              <span
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 9,
+                  flex: 'none',
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: `color-mix(in srgb, ${tint} 13%, var(--mantine-color-body))`,
+                }}
+              >
+                <Glyph icon={fact.icon} color={tint} size={19} />
+              </span>
+            ) : null}
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <Text
+                size="xs"
+                c="dimmed"
+                fw={600}
+                tt="uppercase"
+                style={{ letterSpacing: '0.05em', lineHeight: 1.3 }}
+              >
+                {fact.label}
+              </Text>
+              <Text size="sm" fw={600} style={{ lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+                {inline(fact.value)}
+              </Text>
+            </span>
+          </div>
+        );
+      })}
+    </div>
   </div>
 );
 
@@ -213,9 +240,12 @@ const FactChips: React.FC<{
 const MarkdownBody: React.FC<{
   blocks: Block[];
   alignment: 'left' | 'center' | 'right';
-  /** Set on an accented tile: its leading heading becomes the headline figure. */
+  /** The tile's accent, for what a body tints (a fact strip's icons). */
   accentColor?: string | null;
-}> = ({ blocks, alignment, accentColor = null }) => {
+  /** On a framed tile: a leading heading becomes the headline figure, the
+   *  line under it its caption. */
+  framed?: boolean;
+}> = ({ blocks, alignment, accentColor = null, framed = false }) => {
   const resolveTab = useTabLinkResolver();
   const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
   return (
@@ -223,20 +253,19 @@ const MarkdownBody: React.FC<{
       {blocks.map((block, idx) => {
         switch (block.type) {
           case 'heading':
-            if (accentColor && idx === 0) {
-              // A finding card opens on its number ("# 41%"): large, in the
-              // accent, with figures that line up across neighbouring cards.
+            if (framed && idx === 0) {
+              // A finding card opens on its number ("# 41%"), set as a
+              // headline metric card sets its value.
               return (
                 <Text
                   key={idx}
                   ta={alignment}
-                  fw={600}
+                  fw={800}
                   style={{
-                    fontSize: block.level === 1 ? 34 : block.level === 2 ? 28 : 22,
+                    fontSize: block.level === 1 ? 40 : block.level === 2 ? 30 : 24,
                     lineHeight: 1.05,
                     letterSpacing: '-0.02em',
                     fontVariantNumeric: 'tabular-nums',
-                    color: accentColor,
                     margin: 0,
                   }}
                 >
@@ -258,7 +287,7 @@ const MarkdownBody: React.FC<{
             const facts = block.ordered ? [] : block.items.map(parseFact);
             if (facts.length && facts.every(Boolean)) {
               return (
-                <FactChips
+                <FactStrip
                   key={idx}
                   facts={facts as Fact[]}
                   accentColor={accentColor}
@@ -322,6 +351,22 @@ const MarkdownBody: React.FC<{
           case 'rule':
             return <Divider key={idx} my={4} />;
           default:
+            if (framed) {
+              // On a card: the line under its number is that number's caption,
+              // dimmed like a metric card's; the prose after it is card text.
+              const caption = idx === 1 && blocks[0]?.type === 'heading';
+              return (
+                <Text
+                  key={idx}
+                  ta={alignment}
+                  size="sm"
+                  c={caption ? 'dimmed' : undefined}
+                  style={{ ...BODY_TEXT_STYLE, lineHeight: 1.45, marginTop: caption ? -4 : 0 }}
+                >
+                  {inline(block.text)}
+                </Text>
+              );
+            }
             return (
               <Text key={idx} ta={alignment} style={BODY_TEXT_STYLE}>
                 {inline(block.text)}
@@ -373,6 +418,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
     metadata.surface === 'card' || metadata.surface === 'tinted' ? metadata.surface : 'none';
   const accentColor = resolveAccent(metadata.accent, resolveTab);
   const frame = surfaceStyle(surface, accentColor);
+  const restingIcon = surface === 'card' ? accentIcon(metadata.accent, resolveTab) : null;
 
   // On a framed tile, a closing paragraph of links is the card's footer: it
   // sits on the bottom edge, so the links of a row of cards line up however
@@ -424,6 +470,22 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
         ...frame.style,
       }}
     >
+      {restingIcon ? (
+        // The tab's mark, resting faint in the corner as a headline metric
+        // card rests its icon: which tab a finding comes from, at a glance.
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            opacity: RESTING_ICON_OPACITY,
+            pointerEvents: 'none',
+          }}
+        >
+          <Glyph icon={restingIcon} color={accentColor} size={36} />
+        </span>
+      ) : null}
       <div
         ref={contentRef}
         // 8px between blocks: paragraphs, lists and tables need air that a
@@ -453,6 +515,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           blocks={blocks}
           alignment={alignment}
           accentColor={surface !== 'none' ? accentColor : null}
+          framed={surface !== 'none'}
         />
       ) : null}
       </div>

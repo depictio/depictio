@@ -1,13 +1,32 @@
 .depictio-tab-tile {
-  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out,
+    transform 120ms ease-out,
+    box-shadow 120ms ease-out;
 }
 
 .depictio-tab-tile:hover {
   background: var(--tile-tint) !important;
   border-color: var(--tile-edge) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--mantine-shadow-md) !important;
 }
 
 .depictio-tab-tile:focus-visible {
   outline: 2px solid var(--tile-edge);
   outline-offset: 2px;
+}
+
+/* The tab's mark, resting faint like a headline metric card's icon
+   (cardFrame.ts RESTING_ICON_OPACITY), brought up on hover. */
+.depictio-tab-tile-icon {
+  flex: none;
+  display: grid;
+  opacity: 0.32;
+  transition: opacity 120ms ease-out;
+}
+
+.depictio-tab-tile:hover .depictio-tab-tile-icon {
+  opacity: 0.85;
 }
