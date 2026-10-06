@@ -47,4 +47,3 @@ plus strand matches the Ribo-TISH GenomePos end, minus strand matches start + 1.
 ## Pending (live)
 
 - Ingestion against a running stack, dashboard render, advanced-viz kinds on real rows.
-- `.db_seeds/*.json` export after the first live import.

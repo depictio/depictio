@@ -443,7 +443,7 @@ template: it takes down every advanced-viz tile in the repo equally.
   oncoplot is now reached by the persistent sample picker) and
   `bcftools_stats_summary.caller -> bcftools_stats_tstv.caller` (so the glance scope reaches
   the Ts/Tv card).
-- `test_shipped_dashboard_yamls.py -k sarek` passes. `.db_seeds` not regenerated here.
+- `test_shipped_dashboard_yamls.py -k sarek` passes.
 
 ## 2026-09-23 wave 2b
 

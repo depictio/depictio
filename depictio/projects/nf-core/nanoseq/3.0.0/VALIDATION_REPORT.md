@@ -356,7 +356,7 @@ caused by this template.
   (`ns-de-filter-padj`, `ns-de-filter-log2fc`), the only tab that renders that DC.
 - `template.yaml`: new link `samples.sample_id -> gtf_transcripts.sample` (the DC's own column
   name), so the `Isoforms` structures follow the persistent sample picker.
-- `test_shipped_dashboard_yamls.py -k nanoseq` passes. `.db_seeds` not regenerated here.
+- `test_shipped_dashboard_yamls.py -k nanoseq` passes.
 
 # Wave 2b pass, 2026-09-23 (PR #1102)
 

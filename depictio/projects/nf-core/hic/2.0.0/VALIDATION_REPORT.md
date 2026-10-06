@@ -656,5 +656,4 @@ uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
 - Not re-ingested and not checked live (no stack in this wave): the new tab, the box and
   histogram figures, the phased E1 track and the retitled region cards are unverified in
   the browser.
-- `.db_seeds` not regenerated (main-owned).
 - The navigator lost its gene lane until the `annotation` field accepts a variable.

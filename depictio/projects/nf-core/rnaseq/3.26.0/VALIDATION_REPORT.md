@@ -494,4 +494,4 @@ Still open:
 
 - Live render not checked in this wave (no stack); screenshots are stale.
 - The condition is still parsed from the `<condition>_REP<n>` sample name.
-- Conformance fixtures and `.db_seeds` need regenerating (main session).
+- Conformance fixtures need regenerating (main session).

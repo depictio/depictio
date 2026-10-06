@@ -60,4 +60,3 @@ heatmap, UpSet and inline record cards resolved. A backend restart and a re-impo
 ## Pending
 
 - Backend restart, re-import, then a live render pass of the six volcanoes and the event record.
-- `.db_seeds/*.json` export after the re-import (main-owned).

@@ -218,7 +218,6 @@ pre-commit run --files <every file this pass touched>               # all hooks 
 ## Not done (out of scope for this pass)
 
 - No `depictio-cli run` without `--dry-run` (no server started, no ingestion, per the brief).
-- No `.db_seeds/*.json` generated (only `.gitkeep`: needs a real ingested run to export from).
 - No dashboard screenshots (`docs/dashboards.md` has no image links yet).
 - No git writes, no docker, no `uv sync`/`pnpm`/`npm`/`pip` (per the worktree's hard rules).
 
@@ -322,7 +321,6 @@ uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
   the lot 2 dev viewer also needs an image rebuild before any advanced_viz tile renders. The
   project `lot2-scrnaseq` (`6aabc8dc19d44b8c1b14191e`) was therefore NOT deleted and NOT
   re-ingested: it still holds the pre-remediation dashboard.
-- `.db_seeds/*.json` is still only `.gitkeep`; it needs an ingested run to export from.
 
 ## 2026-09-22 review fixes
 
@@ -338,7 +336,7 @@ uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
   `y: 2` and `y: 4`. The knee-plot section comes second.
 - `sc-cl-av-sankey` description no longer contains `>` ("graphclust, then kmeans_6, then
   kmeans_10").
-- `test_shipped_dashboard_yamls.py -k scrnaseq` passes. `.db_seeds` not regenerated here.
+- `test_shipped_dashboard_yamls.py -k scrnaseq` passes.
 
 ## 2026-09-23 wave 2b (header controls, violin, record card, parallel coordinates)
 
@@ -445,4 +443,4 @@ Open:
   the data-derived fallback.
 - The UpSet still has no simpleaf own-call set: the megatest fetch has no per-barcode simpleaf
   (QCatch) cell list, only its metrics summary.
-- Nothing re-ingested or checked live in this pass; `.db_seeds` not regenerated.
+- Nothing re-ingested or checked live in this pass.

@@ -516,4 +516,4 @@ Still open:
 - Live render not checked: the UpSet pattern selection and the `filter_expr` card need a look
   on a running stack; screenshots are stale.
 - The `_trimmed` FastQC suffix still does not match the samplesheet `sample`.
-- Conformance fixtures and `.db_seeds` need regenerating (main session).
+- Conformance fixtures need regenerating (main session).

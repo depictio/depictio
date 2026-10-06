@@ -35,8 +35,8 @@ depictio/projects/nf-core/<pipeline>/<version>/
   dashboards/base.yaml     docs/dashboards.md (narrative; image links added later)
   VALIDATION_REPORT.md     download_test_data.sh (3-line wrapper, copy cutandrun's)
   input/<samplesheet>      pipeline_info/software_versions.yml (copied from DATA_ROOT)
-  .db_seeds/.gitkeep
 ```
+No `.db_seeds/`: only the reference projects seeded at boot (latest ampliseq, viralrecon) ship one.
 Plus the catalog tools. Target: ~90% of dashboard tiles carry a `use:`.
 
 ## Catalog authoring contract

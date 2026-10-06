@@ -128,7 +128,7 @@ dashboard into a renamed project fails with `Cannot resolve project ...: HTTP 40
   complex_heatmap worker takes its `col_annotations` from the component config, so on these
   tiles the column is currently inert. That is harmless (it is a string column, excluded from the
   value matrix) but not yet drawn.
-* No `.db_seeds`, no `STATIC_IDS`, no `db_init` registration: deferred for the whole lot.
+* No `.db_seeds`, no `STATIC_IDS`, no `db_init` registration: templates are not seeded at boot.
 * The seven screenshots under `docs/screenshots/` were captured from the live stack
   after this report was first written; `docs/dashboards.md` references all of them.
 
@@ -305,4 +305,4 @@ Still open:
   `Contrast scope`.
 - Volcano labels still read `gene_id`, not `gene_name` (S1 not done).
 - Live render not checked in this wave; screenshots are stale.
-- Conformance fixtures and `.db_seeds` need regenerating (main session).
+- Conformance fixtures need regenerating (main session).

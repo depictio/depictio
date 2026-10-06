@@ -454,7 +454,7 @@ already fetch everything the eight tabs read.
   `bismark_summary_report.pct_cpg_methylation`, a DC the strip renders.
 - `template.yaml`: new link `samples.sample_id -> bismark_window_correlation.sample` (the
   DC's own column name), so the correlation matrix follows the persistent sample picker.
-- `test_shipped_dashboard_yamls.py -k methylseq` passes. `.db_seeds` not regenerated here.
+- `test_shipped_dashboard_yamls.py -k methylseq` passes.
 
 ## 2026-09-23 wave 2b: locus section, header controls, new kinds
 
@@ -610,7 +610,7 @@ Still open:
 
 - Not seen live: the reworked tabs, the `{GROUP_COL}` bindings after substitution, the new
   filter_expr cards and the `default_value: CpG` context filter.
-- `.db_seeds` and the conformance seeds are not regenerated (main-owned). The `bismark`
+- The conformance seeds are not regenerated (main-owned). The `bismark`
   fixtures are unchanged: `summary_report.tsv` / `window_pca.tsv` still carry
   `cell_line, treatment, group`, which are now read as example design columns, not schema.
 - Without `METADATA_FILE` the CLI sets `GROUP_COL=__no_group__`; the tiles bound to it rely on
