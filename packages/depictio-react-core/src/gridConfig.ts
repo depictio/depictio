@@ -26,21 +26,21 @@ export const GRID_MAX_COLS = GRID_COL_COUNTS.lg;
 export const GRID_WIDEST_BREAKPOINT = 'lg';
 
 /**
- * Phone rows per desktop row.
+ * Rows per stored row on a read-only grid.
  *
- * A text tile reflows to about twice its lines on a phone, and a whole desktop
- * row (100px) of rounding then leaves up to that much blank under it. Phone
- * rows are half as tall with the same gap, so two of them span exactly one
- * desktop row: figures and cards keep their height to the pixel, and text
- * stops within half a row of its last line.
+ * Text tiles and cards size themselves to their content, and rounding that up
+ * to whole 100px rows left up to a row of blank under a tile — a framed card
+ * a few pixels over two rows came out three rows tall, and prose reflowed on
+ * a phone came out a row long. A read-only grid lays out in rows half as tall
+ * with the same gap, so two of them span exactly one stored row: figures keep
+ * their height to the pixel and fitted tiles stop within half a row of their
+ * content. The editor keeps whole rows, the unit layouts are stored in.
  */
-export const PHONE_ROW_SPLIT = 2;
+export const ROW_SPLIT = 2;
 
-/** Whether a grid this wide lays out for a phone (the `xs` breakpoint).
- *  Mirrors react-grid-layout's `getBreakpointFromWidth`, which takes the
- *  widest breakpoint the width strictly exceeds. */
-export function isPhoneWidth(width: number): boolean {
-  return width <= GRID_BREAKPOINTS.sm;
+/** A stored layout in read-only rows (see `ROW_SPLIT`). */
+export function toSplitRows<T extends { y: number; h: number }>(layout: readonly T[]): T[] {
+  return layout.map((l) => ({ ...l, y: l.y * ROW_SPLIT, h: l.h * ROW_SPLIT }));
 }
 
 /** The geometry a layout item carries (react-grid-layout's `Layout`). */
@@ -135,16 +135,8 @@ export function scaleLayout<T extends GridTile>(lg: T[], cols: number): T[] {
  * two columns: four quarter-width cards put three of their edges on the same
  * column, compaction then stacks those three down the right-hand side, and two
  * half-width figures stay side by side at a phone's half width.
- *
- * Heights are in phone rows (see `PHONE_ROW_SPLIT`): a tile keeps its desktop
- * height exactly, unless `phoneRows` gives the rows its content needs at this
- * width — a text tile's prose, which reflows to twice its desktop lines.
  */
-export function phoneLayout<T extends GridTile>(
-  lg: T[],
-  cols: number,
-  phoneRows: Readonly<Record<string, number>> = {},
-): T[] {
+export function phoneLayout<T extends GridTile>(lg: T[], cols: number): T[] {
   const half = Math.max(1, Math.floor(cols / 2));
   const ordered = [...lg].sort((a, b) => a.y - b.y || a.x - b.x);
   const out: T[] = [];
@@ -158,10 +150,9 @@ export function phoneLayout<T extends GridTile>(
       x = 0;
       rowH = 0;
     }
-    const h = phoneRows[item.i] ?? item.h * PHONE_ROW_SPLIT;
-    out.push({ ...item, x, y, w, h });
+    out.push({ ...item, x, y, w });
     x += w;
-    rowH = Math.max(rowH, h);
+    rowH = Math.max(rowH, item.h);
   }
   return out;
 }

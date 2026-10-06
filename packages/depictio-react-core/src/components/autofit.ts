@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DependencyList, type RefObject } from 'react';
 
-import { isPhoneWidth, PHONE_ROW_SPLIT } from '../gridConfig';
+import { ROW_SPLIT } from '../gridConfig';
 
 /**
  * The contract between a tile that knows how tall its content is and the grid
@@ -110,14 +110,8 @@ export function rowsForHeight(height: number, rowPx: number = GRID_ROW_PX): numb
   return Math.max(1, Math.ceil((height + GRID_ROW_GAP_PX) / (rowPx + GRID_ROW_GAP_PX)));
 }
 
-/** A phone row: `PHONE_ROW_SPLIT` of them and their gaps span one `GRID_ROW_PX`. */
-export const PHONE_ROW_PX =
-  (GRID_ROW_PX - (PHONE_ROW_SPLIT - 1) * GRID_ROW_GAP_PX) / PHONE_ROW_SPLIT;
-
-/** The `rowHeight` for a grid this wide: phone rows on a phone. */
-export function gridRowPx(width: number): number {
-  return isPhoneWidth(width) ? PHONE_ROW_PX : GRID_ROW_PX;
-}
+/** A read-only grid's row: `ROW_SPLIT` of them and their gaps span one `GRID_ROW_PX`. */
+export const SPLIT_ROW_PX = (GRID_ROW_PX - (ROW_SPLIT - 1) * GRID_ROW_GAP_PX) / ROW_SPLIT;
 
 /** The subset of `Layout` this module needs, so it does not depend on RGL. */
 interface SizedItem {
@@ -148,35 +142,8 @@ export function fitLayoutHeights<T extends SizedItem>(
   layouts: readonly T[],
   autoHeights: Readonly<Record<string, number>>,
   enabled = true,
-): T[] {
-  return fitRows(members, layouts, autoHeights, enabled, GRID_ROW_PX);
-}
-
-/**
- * The phone rows each fitted tile needs, for `phoneLayout`.
- *
- * The same rules as `fitLayoutHeights`, counted in phone rows against what the
- * tiles measure at phone width. Takes the stored (unfitted) layout: a card
- * grows from its authored height, which is `PHONE_ROW_SPLIT` phone rows per
- * desktop row.
- */
-export function fitPhoneRows<T extends SizedItem>(
-  members: readonly FittableMember[],
-  layouts: readonly T[],
-  autoHeights: Readonly<Record<string, number>>,
-  enabled = true,
-): Record<string, number> {
-  const inPhoneRows = layouts.map((l) => ({ ...l, h: l.h * PHONE_ROW_SPLIT }));
-  const fitted = fitRows(members, inPhoneRows, autoHeights, enabled, PHONE_ROW_PX);
-  return Object.fromEntries(fitted.map((l) => [l.i, l.h]));
-}
-
-function fitRows<T extends SizedItem>(
-  members: readonly FittableMember[],
-  layouts: readonly T[],
-  autoHeights: Readonly<Record<string, number>>,
-  enabled: boolean,
-  rowPx: number,
+  /** The grid's row height: `SPLIT_ROW_PX` for a layout in read-only rows. */
+  rowPx: number = GRID_ROW_PX,
 ): T[] {
   const fittedIds = new Set(
     enabled

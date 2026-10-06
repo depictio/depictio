@@ -7,6 +7,7 @@ import {
   GRID_WIDEST_BREAKPOINT,
   phoneLayout,
   scaleLayout,
+  toSplitRows,
 } from '../gridConfig';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -37,10 +38,10 @@ import {
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
 import {
   fitLayoutHeights,
-  fitPhoneRows,
-  gridRowPx,
   useAutofitHeights,
   GRID_ROW_GAP_PX,
+  GRID_ROW_PX,
+  SPLIT_ROW_PX,
 } from './autofit';
 
 /** Bucket key for what is left of the unsectioned components once the tab's
@@ -131,16 +132,12 @@ interface DashboardGridProps {
  *  itself, and its `correctBounds` clamps a right-hand tile onto its
  *  neighbour, which vertical compaction then pushes onto its own row — two
  *  half-width tables stack instead of sitting side by side. */
-export function responsiveLayouts(
-  lg: Layout[],
-  /** Phone rows per fitted tile (`fitPhoneRows`); the rest keep their height. */
-  phoneRows?: Readonly<Record<string, number>>,
-): Record<string, Layout[]> {
+export function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
   return {
     lg,
     md: scaleLayout(lg, GRID_COL_COUNTS.md),
     sm: scaleLayout(lg, GRID_COL_COUNTS.sm),
-    xs: phoneLayout(lg, GRID_COL_COUNTS.xs, phoneRows),
+    xs: phoneLayout(lg, GRID_COL_COUNTS.xs),
   };
 }
 
@@ -427,6 +424,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // below, too large and the tile is mostly blank. The renderers measure what
   // they actually need and we turn that into rows here.
   const autoHeights = useAutofitHeights();
+  // Nothing a read-only grid lays out is ever persisted, which is what lets it
+  // fit tiles to their content and count in half rows.
+  const readOnly = !(isDraggable || isResizable);
 
   const layoutsForSection = useCallback(
     (members: StoredMetadata[]): Layout[] => {
@@ -439,14 +439,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // react-grid-layout would converge to the same packing on its own; doing it
       // up front means the first paint is already right.
       // Convert each measured height into rows before packing, so the packing
-      // closes up around the real sizes. GRID_ROW_PX / GRID_ROW_GAP_PX mirror
-      // the `rowHeight` and vertical `margin` handed to ResponsiveGridLayout
-      // below.
+      // closes up around the real sizes, and count them in half rows
+      // (gridConfig's ROW_SPLIT) so a fitted tile stops within half a row of
+      // its content. SPLIT_ROW_PX / GRID_ROW_GAP_PX mirror the `rowHeight` and
+      // vertical `margin` handed to ResponsiveGridLayout below.
       // Viewer only. In the editor the author sets geometry by hand, and a
       // measurement that quietly overrode a drag would both fight them and get
       // persisted — `onLayoutChange` exists there and nowhere else. Gating here
       // means the fitted height can never be written back to a dashboard.
-      const sized = fitLayoutHeights(members, mine, autoHeights, !(isDraggable || isResizable));
+      const sized = readOnly
+        ? fitLayoutHeights(members, toSplitRows(mine), autoHeights, true, SPLIT_ROW_PX)
+        : mine;
       const packed = compactVerticallyForStatic(sized);
       // Lone-row widening runs HERE, against the section's own members — never
       // against the flat union, where co-authored rows from sibling sections
@@ -454,19 +457,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // Gated on `mine`, i.e. the section's positions as stored: an item the
       // author left alone on its row keeps its width, only one that lost a
       // neighbour gets widened.
-      return isDraggable || isResizable ? packed : widenLoneRows(packed, rowMateSet(mine));
+      return readOnly ? widenLoneRows(packed, rowMateSet(mine)) : packed;
     },
-    [layouts, isDraggable, isResizable, autoHeights],
-  );
-
-  // The same fit in phone rows, for the `xs` layout `responsiveLayouts` derives.
-  const phoneRowsForSection = useCallback(
-    (members: StoredMetadata[]): Record<string, number> => {
-      const ids = new Set(members.map((m) => m.index));
-      const mine = layouts.filter((l) => ids.has(l.i));
-      return fitPhoneRows(members, mine, autoHeights, !(isDraggable || isResizable));
-    },
-    [layouts, isDraggable, isResizable, autoHeights],
+    [layouts, readOnly, autoHeights],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -476,6 +469,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // arrangement with its 2-column fallback the first time someone opened
       // the dashboard on a small screen.
       if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
+      // A read-only grid counts in half rows: what it reports is not a layout
+      // that could be stored.
+      if (readOnly) return;
       sectionLayoutsRef.current.set(sectionKey, current);
 
       const merged: Layout[] = [];
@@ -500,7 +496,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       }
       onLayoutChange?.(merged);
     },
-    [onLayoutChange, layoutsForSection, sections],
+    [onLayoutChange, layoutsForSection, sections, readOnly],
   );
 
   const showOverlays = editMode && typeof renderItemOverlay === 'function';
@@ -603,10 +599,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     ) : (
     <ResponsiveGridLayout
       className="layout"
-      layouts={responsiveLayouts(
-        layoutsForSection(section.members),
-        phoneRowsForSection(section.members),
-      )}
+      layouts={responsiveLayouts(layoutsForSection(section.members))}
       // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
       // grid down to narrow content widths so opening the panels shrinks
       // components instead of wrapping them; fewer columns are a phone-only
@@ -616,8 +609,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       onBreakpointChange={(bp) => {
         breakpointRef.current = bp;
       }}
-      // Phone rows below `sm`, which the `xs` layout's heights are counted in.
-      rowHeight={gridRowPx(gridWidth(section))}
+      // Half rows when read-only: the unit `layoutsForSection` counts in.
+      rowHeight={readOnly ? SPLIT_ROW_PX : GRID_ROW_PX}
       width={gridWidth(section)}
       // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
       // between side-by-side cards / plots) but vertical drops to 4 px so

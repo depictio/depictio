@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
-import { GRID_BREAKPOINTS, GRID_COL_COUNTS } from '../gridConfig';
+import { GRID_BREAKPOINTS, GRID_COL_COUNTS, toSplitRows } from '../gridConfig';
 import { Accordion, Badge, Button, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -17,13 +17,7 @@ import {
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
-import {
-  fitLayoutHeights,
-  fitPhoneRows,
-  gridRowPx,
-  GRID_ROW_GAP_PX,
-  useAutofitHeights,
-} from './autofit';
+import { fitLayoutHeights, GRID_ROW_GAP_PX, SPLIT_ROW_PX, useAutofitHeights } from './autofit';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -259,7 +253,8 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
         {renderable.map(({ section, members }) => {
           const key = hostSectionKey(section);
           const metas = members.map((m) => m.metadata);
-          const stored = normalizeLayout(metas, section.layouts, false);
+          // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
+          const stored = toSplitRows(normalizeLayout(metas, section.layouts, false));
           const gridWidth = Math.max(100, containerWidth - sectionInset);
           return (
             <SectionAccordionItem
@@ -332,13 +327,11 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                       // half-width tile with the first, stacking a two-table row
                       // below 1440px.
                       layouts={responsiveLayouts(
-                        fitLayoutHeights(metas, stored, autoHeights),
-                        fitPhoneRows(metas, stored, autoHeights),
+                        fitLayoutHeights(metas, stored, autoHeights, true, SPLIT_ROW_PX),
                       )}
                       breakpoints={GRID_BREAKPOINTS}
                       cols={GRID_COL_COUNTS}
-                      // Phone rows below `sm`, as in DashboardGrid.
-                      rowHeight={gridRowPx(gridWidth)}
+                      rowHeight={SPLIT_ROW_PX}
                       width={gridWidth}
                       // Same asymmetric gap as the main grid, from the same
                       // constants: gridConfig.ts's header warns these two
