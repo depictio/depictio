@@ -14,8 +14,10 @@ import asyncio
 import contextlib
 import importlib.util
 import json
+import logging
 import os
 import secrets
+import shlex
 import shutil
 import signal
 import socket
@@ -26,6 +28,8 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
+
+from depictio.cli.cli_logging import logger
 
 # The major series of the images in docker-compose.yaml (mongo, redis,
 # chrislusf/seaweedfs): move them together. Redis and SeaweedFS are pinned to the
@@ -101,7 +105,10 @@ def check_platform_supported() -> None:
 
 
 def local_home() -> Path:
-    return Path(os.environ.get("DEPICTIO_LOCAL_HOME", "~/.depictio/local")).expanduser()
+    home = Path(os.environ.get("DEPICTIO_LOCAL_HOME", "~/.depictio/local")).expanduser()
+    source = "DEPICTIO_LOCAL_HOME" if "DEPICTIO_LOCAL_HOME" in os.environ else "default"
+    logger.debug("Local home: %s (%s)", home, source)
+    return home
 
 
 @dataclass
@@ -143,6 +150,7 @@ class Paths:
             private.chmod(0o700)
         for sub in DATA_DIRS:
             (self.home / sub).mkdir(parents=True, exist_ok=True)
+        logger.debug("Data directories under %s: %s", self.home, ", ".join(DATA_DIRS))
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +172,18 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     # Mac, must not reuse binaries built for the other architecture.
     wanted = {"specs": CONDA_SPECS, "platform": str(Platform.current())}
     marker = paths.env / ".depictio-specs.json"
-    if marker.exists() and json.loads(marker.read_text()) == wanted:
-        return
+    if not marker.exists():
+        logger.debug("No native binaries recorded in %s: installing %s", marker, wanted)
+    else:
+        found = json.loads(marker.read_text())
+        if found == wanted:
+            logger.debug("Native binaries in %s are current: %s", paths.env, wanted)
+            return
+        logger.debug(
+            "Native binaries in %s are %s, wanted %s: reinstalling", paths.env, found, wanted
+        )
     if paths.env.exists():
+        logger.debug("Deleting %s", paths.env)
         shutil.rmtree(paths.env)
 
     async def _install() -> None:
@@ -174,6 +191,11 @@ def ensure_binaries(paths: Paths, log=print) -> None:
             sources=["conda-forge"],
             specs=CONDA_SPECS,
             virtual_packages=VirtualPackage.detect(),
+        )
+        logger.debug(
+            "Solved %d packages: %s",
+            len(records),
+            ", ".join(f"{r.name.normalized} {r.version}" for r in records),
         )
         await install(records=records, target_prefix=str(paths.env), show_progress=False)
 
@@ -185,6 +207,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     try:
         asyncio.run(_install())
     except Exception as exc:
+        logger.debug("Solving or installing the native binaries failed", exc_info=True)
         # Without the marker, the next run starts the download over.
         raise LocalStackError(
             f"Could not download MongoDB, Redis and SeaweedFS from conda-forge: {exc}. "
@@ -224,16 +247,19 @@ class State:
         default, and url is derived from the ports rather than read.
         """
         if not paths.state.exists():
+            logger.debug("No %s: nothing recorded", paths.state)
             return None
         saved = json.loads(paths.state.read_text())
         known = {f.name for f in fields(cls)}
         state = cls(**{k: v for k, v in saved.items() if k in known})
         state.home = state.home or str(paths.home)
+        logger.debug("Loaded %s: %s", paths.state, state)
         return state
 
     def save(self, paths: Paths) -> None:
         # url is written too, for anything reading the file without this class.
         paths.state.write_text(json.dumps({**asdict(self), "url": self.url}, indent=2))
+        logger.debug("Saved %s: ports %s, pids %s", paths.state, self.ports, self.pids)
 
 
 def write_private_file(path: Path, text: str) -> None:
@@ -245,13 +271,16 @@ def write_private_file(path: Path, text: str) -> None:
 
 
 def load_secrets(paths: Paths) -> dict:
+    # The file name only: its content is never logged.
     if paths.secrets.exists():
+        logger.debug("Reading the passwords from %s", paths.secrets)
         return json.loads(paths.secrets.read_text())
     values = {
         "s3_password": secrets.token_urlsafe(24),
         "admin_password": secrets.token_urlsafe(24),
     }
     write_private_file(paths.secrets, json.dumps(values))
+    logger.debug("Generated new passwords in %s", paths.secrets)
     return values
 
 
@@ -259,6 +288,7 @@ def port_is_free(port: int) -> bool:
     # On macOS/BSD the bind below succeeds next to a listener on 0.0.0.0 (e.g. a
     # port published by the Docker dev stack), so check for a listener first.
     if tcp_ready(port):
+        logger.debug("Port %d: another program is listening on it", port)
         return False
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         # Same option the servers set, so a port left in TIME_WAIT by the previous
@@ -266,19 +296,23 @@ def port_is_free(port: int) -> bool:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
-        except OSError:
+        except OSError as exc:
+            logger.debug("Port %d: cannot bind it (%s)", port, _probe_error(exc))
             return False
     return True
 
 
 def pick_port(preferred: int, taken: set[int]) -> int:
-    if preferred not in taken and port_is_free(preferred):
+    if preferred in taken:
+        logger.debug("Port %d already goes to another service of this run", preferred)
+    elif port_is_free(preferred):
         return preferred
     while True:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         if port not in taken:
+            logger.debug("Port %d is not available: using %d instead", preferred, port)
             return port
 
 
@@ -297,6 +331,7 @@ def pick_ports(api_port: int | None, saved: dict[str, int] | None = None) -> dic
             ports[name] = api_port
         else:
             ports[name] = pick_port(preferred[name], set(ports.values()))
+    logger.info("Ports for this run: %s", ports)
     return ports
 
 
@@ -319,13 +354,17 @@ def seaweedfs_port_flags(taken: set[int]) -> list[str]:
 def load_ports(paths: Paths) -> dict[str, int]:
     """The ports of the previous run, kept across `down` (unlike state.json)."""
     if not paths.ports.exists():
+        logger.debug("No %s: preferring the default ports %s", paths.ports, DEFAULT_PORTS)
         return {}
     saved = json.loads(paths.ports.read_text())
-    return {k: v for k, v in saved.items() if k in DEFAULT_PORTS and isinstance(v, int)}
+    ports = {k: v for k, v in saved.items() if k in DEFAULT_PORTS and isinstance(v, int)}
+    logger.debug("Previous run's ports, from %s: %s", paths.ports, ports)
+    return ports
 
 
 def save_ports(paths: Paths, ports: dict[str, int]) -> None:
     paths.ports.write_text(json.dumps(ports, indent=2))
+    logger.debug("Saved %s: %s", paths.ports, ports)
 
 
 def parse_examples(value: str | None, template: str | None) -> str:
@@ -472,18 +511,43 @@ def live_pids(state: State | None) -> dict[str, int]:
     live: dict[str, int] = {}
     for name, pid in state.pids.items():
         if not pid_alive(pid):
+            logger.debug("%s (pid %d) is not running", name, pid)
             continue
         recorded, current = state.start_times.get(name), process_start_time(pid)
         # Without a record (older state) or without psutil, only liveness is checked.
         if recorded is None or current is None or abs(current - recorded) < _START_TIME_SLACK:
             live[name] = pid
+        else:
+            logger.debug(
+                "%s pid %d now belongs to another process (started at %.0f, not %.0f): left alone",
+                name,
+                pid,
+                current,
+                recorded,
+            )
     return live
 
 
+def _describe_env(env: dict[str, str] | None) -> str:
+    """What ``env`` changes from this process's environment, by variable NAME only.
+
+    Values are compared, never shown: the server environment holds the passwords.
+    """
+    if env is None:
+        return "this process's environment"
+    changed = sorted(k for k, v in env.items() if os.environ.get(k) != v)
+    removed = sorted(k for k in os.environ if k not in env)
+    text = f"{len(env) - len(changed)} inherited, set: {', '.join(changed) or 'none'}"
+    return text + (f", removed: {', '.join(removed)}" if removed else "")
+
+
 def spawn(paths: Paths, name: str, cmd: list[str], env: dict | None = None) -> subprocess.Popen:
+    log_path = paths.logs / f"{name}.log"
+    logger.debug("Starting %s: %s", name, shlex.join(cmd))
+    logger.debug("Environment of %s: %s", name, _describe_env(env))
     # The child gets its own copy of the log file descriptor, so ours can be closed.
-    with open(paths.logs / f"{name}.log", "ab") as log_file:
-        return subprocess.Popen(
+    with open(log_path, "ab") as log_file:
+        proc = subprocess.Popen(
             cmd,
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -492,16 +556,34 @@ def spawn(paths: Paths, name: str, cmd: list[str], env: dict | None = None) -> s
             cwd=paths.home,
             start_new_session=True,
         )
+    logger.info("Started %s (pid %d), output in %s", name, proc.pid, log_path)
+    return proc
 
 
 def wait_until(check, what: str, timeout: float, proc: subprocess.Popen, log_path: Path) -> None:
-    deadline = time.monotonic() + timeout
+    """Poll ``check`` until it returns True. A check may raise instead of returning
+    False: the exception says why the service is not ready, which is logged when it
+    changes and named in the timeout error."""
+    start = time.monotonic()
+    deadline = start + timeout
     hint = f" See {log_path}"
+    last_error = None
+    logger.debug("Waiting up to %.0fs for %s", timeout, what)
     while time.monotonic() < deadline:
-        if check():
+        try:
+            ready, error = check(), None
+        except Exception as exc:
+            ready, error = False, _probe_error(exc)
+        if ready:
+            logger.info("Waited %.1fs for %s", time.monotonic() - start, what)
             return
+        # Once per change, not at every poll.
+        if error != last_error:
+            logger.debug("Waiting for %s: %s", what, error or "not there yet")
+            last_error = error
         # poll() rather than kill(pid, 0): an unreaped child stays visible as a zombie.
         if proc.poll() is not None:
+            logger.debug("%s (pid %d) exited with code %s", what, proc.pid, proc.returncode)
             if proc.returncode == -signal.SIGILL:
                 hint += (
                     " It was killed by an illegal instruction: MongoDB 5+ needs AVX on "
@@ -509,13 +591,35 @@ def wait_until(check, what: str, timeout: float, proc: subprocess.Popen, log_pat
                 )
             raise LocalStackError(f"{what} exited during startup.{hint}")
         time.sleep(0.5)
-    raise LocalStackError(f"Timed out after {timeout:.0f}s waiting for {what}.{hint}")
+    detail = f" (last error: {last_error})" if last_error else ""
+    raise LocalStackError(f"Timed out after {timeout:.0f}s waiting for {what}{detail}.{hint}")
+
+
+def _probe_error(exc: BaseException) -> str:
+    """Why a probe failed, in a few words: 'Connection refused', 'HTTP 401 Unauthorized'."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"HTTP {exc.code} {exc.reason}"
+    if isinstance(exc, urllib.error.URLError):
+        if not isinstance(exc.reason, BaseException):
+            return str(exc.reason)
+        exc = exc.reason
+    # Refused or reset connections, socket timeouts ('timed out').
+    if isinstance(exc, OSError):
+        return exc.strerror or str(exc) or type(exc).__name__
+    if isinstance(exc, LocalStackError):
+        return str(exc)
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _probe_tcp(port: int) -> bool:
+    """True once something accepts connections on ``port``; raises OSError otherwise."""
+    with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+        return True
 
 
 def tcp_ready(port: int) -> bool:
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-            return True
+        return _probe_tcp(port)
     except OSError:
         return False
 
@@ -525,23 +629,35 @@ def tcp_ready(port: int) -> bool:
 _DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def http_ready(url: str) -> bool:
-    try:
-        with _DIRECT.open(url, timeout=2) as resp:
-            return resp.status < 500
-    except Exception:
-        return False
+def _probe_http(url: str) -> bool:
+    """True once ``url`` answers without an error status; raises with the reason otherwise."""
+    with _DIRECT.open(url, timeout=2) as resp:
+        return resp.status < 500
 
 
-def api_healthy(port: int) -> bool:
-    """Whether the Depictio API answers its health check on ``port``.
+def _probe_api(port: int) -> bool:
+    """True once the Depictio API answers its health check on ``port``; raises with
+    the reason otherwise.
 
     The payload is checked too, so another server answering on that port does not count.
     """
+    with _DIRECT.open(f"http://127.0.0.1:{port}/health", timeout=2) as resp:
+        payload = json.load(resp)
+        status = payload.get("status") if isinstance(payload, dict) else None
+        if resp.status != 200 or status != "healthy":
+            raise LocalStackError(
+                f"/health answered HTTP {resp.status} with status {status!r}, "
+                "not a healthy Depictio API"
+            )
+    return True
+
+
+def api_healthy(port: int) -> bool:
+    """Whether the Depictio API answers its health check on ``port``."""
     try:
-        with _DIRECT.open(f"http://127.0.0.1:{port}/health", timeout=2) as resp:
-            return resp.status == 200 and json.load(resp).get("status") == "healthy"
-    except Exception:
+        return _probe_api(port)
+    except Exception as exc:
+        logger.debug("API health check on port %d failed: %s", port, _probe_error(exc))
         return False
 
 
@@ -551,7 +667,8 @@ def start_services(
     procs: dict[str, subprocess.Popen] = {}
     try:
         _start_services(paths, ports, secret_values, env, procs)
-    except BaseException:
+    except BaseException as exc:
+        logger.debug("Startup failed (%s): stopping %s", type(exc).__name__, ", ".join(procs))
         for proc in reversed(list(procs.values())):
             _stop_child(proc)
         raise
@@ -639,13 +756,13 @@ def _start_services(
     )
 
     wait_until(
-        lambda: tcp_ready(ports["mongo"]), "MongoDB", 60, procs["mongo"], paths.logs / "mongo.log"
+        lambda: _probe_tcp(ports["mongo"]), "MongoDB", 60, procs["mongo"], paths.logs / "mongo.log"
     )
     wait_until(
-        lambda: tcp_ready(ports["redis"]), "Redis", 30, procs["redis"], paths.logs / "redis.log"
+        lambda: _probe_tcp(ports["redis"]), "Redis", 30, procs["redis"], paths.logs / "redis.log"
     )
     wait_until(
-        lambda: http_ready(f"http://127.0.0.1:{ports['s3']}/healthz"),
+        lambda: _probe_http(f"http://127.0.0.1:{ports['s3']}/healthz"),
         "SeaweedFS",
         60,
         procs["s3"],
@@ -705,7 +822,7 @@ def wait_for_api(
     paths: Paths, ports: dict[str, int], proc: subprocess.Popen, timeout: float = 300
 ) -> None:
     wait_until(
-        lambda: api_healthy(ports["api"]),
+        lambda: _probe_api(ports["api"]),
         "the Depictio API",
         timeout,
         proc,
@@ -736,6 +853,14 @@ def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
     changed = config.get("api_base_url") != url or any(
         s3.get(key) != ports["s3"] for key in ("service_port", "external_port")
     )
+    # The URL and ports only: the file also holds the admin token and the S3 password.
+    logger.debug(
+        "CLI configuration %s: API %s, S3 port %s%s",
+        paths.cli_config,
+        config.get("api_base_url"),
+        s3.get("service_port"),
+        f"; rewritten for {url} and S3 port {ports['s3']}" if changed else ", up to date",
+    )
     if changed:
         config["api_base_url"] = url
         s3["service_port"] = s3["external_port"] = ports["s3"]
@@ -751,6 +876,7 @@ def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
     """Fail when a service died while the API was starting, e.g. a crashed worker."""
     for name, proc in procs.items():
         if proc.poll() is not None:
+            logger.debug("%s (pid %d) exited with code %s", name, proc.pid, proc.returncode)
             raise LocalStackError(
                 f"The {name} process exited during startup. See {paths.logs / f'{name}.log'}"
             )
@@ -764,17 +890,31 @@ def table_status(url: str, token: str, dc_id: str) -> str:
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
-        with _DIRECT.open(request, timeout=5):
-            return "ready"
+        with _DIRECT.open(request, timeout=5) as resp:
+            status, reason = "ready", f"HTTP {resp.status}"
     except urllib.error.HTTPError as exc:
+        status, reason = "loading", _probe_error(exc)
         # The endpoint answers 404 both while the Delta table is being written and
         # when the data collection itself does not exist.
         with contextlib.suppress(OSError):
             if exc.code == 404 and b"Data collection not found" in exc.read():
-                return "absent"
-        return "loading"
-    except Exception:
-        return "loading"
+                status, reason = "absent", f"{reason}, data collection not found"
+    except Exception as exc:
+        status, reason = "loading", _probe_error(exc)
+    _debug_on_change(f"table {dc_id}", f"Delta table of {dc_id}: {status} ({reason})")
+    return status
+
+
+# The last message _debug_on_change logged for each key.
+_last_debug: dict[str, str] = {}
+
+
+def _debug_on_change(key: str, message: str) -> None:
+    """Log ``message`` unless it is what was last logged for ``key``: a poll then
+    logs a line when its outcome changes, not at every round."""
+    if _last_debug.get(key) != message:
+        _last_debug[key] = message
+        logger.debug(message)
 
 
 def requested_examples(state: State) -> list[str]:
@@ -794,11 +934,14 @@ def examples_status(paths: Paths, state: State) -> dict[str, str]:
 
     names = requested_examples(state)
     if not names:
+        logger.debug("No examples to check (requested: %r)", state.examples)
         return {}
     try:
         config = yaml.safe_load(paths.cli_config.read_text())
         token = config["user"]["token"]["access_token"]
-    except (OSError, KeyError, TypeError):
+    except (OSError, KeyError, TypeError) as exc:
+        # The exception type only: a message could quote part of the file.
+        logger.debug("No admin token in %s (%s)", paths.cli_config, type(exc).__name__)
         return {}
     not_found = "loading" if state.first_run else "absent"
     status = {}
@@ -813,11 +956,17 @@ def wait_for_examples(
     paths: Paths, state: State, timeout: float = 120, interval: float = 1.0
 ) -> dict[str, str]:
     """examples_status once no example is loading any more, or at the timeout."""
-    deadline = time.monotonic() + timeout
+    start = time.monotonic()
+    deadline = start + timeout
     status = examples_status(paths, state)
+    logger.debug("Waiting up to %.0fs for the examples: %s", timeout, status)
     while "loading" in status.values() and time.monotonic() < deadline:
         time.sleep(interval)
-        status = examples_status(paths, state)
+        previous, status = status, examples_status(paths, state)
+        if status != previous:
+            logger.debug("Examples after %.0fs: %s", time.monotonic() - start, status)
+    if "loading" in status.values():
+        logger.debug("Gave up on the examples after %.0fs: %s", time.monotonic() - start, status)
     return status
 
 
@@ -830,18 +979,27 @@ def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
     alive = alive or (lambda: pid_alive(pid))
     try:
         os.killpg(pid, signal.SIGTERM)
-    except OSError:
+        logger.debug("Sent SIGTERM to process group %d", pid)
+    except OSError as exc:
         # Not a group leader: stop the process alone.
+        logger.debug("No process group %d (%s): SIGTERM to the process", pid, _probe_error(exc))
         try:
             os.kill(pid, signal.SIGTERM)
-        except OSError:
+        except OSError as exc:
+            logger.debug("pid %d is gone (%s)", pid, _probe_error(exc))
             return
-    deadline = time.monotonic() + timeout
+    start = time.monotonic()
+    deadline = start + timeout
     while alive() and time.monotonic() < deadline:
         time.sleep(0.2)
+    if alive():
+        logger.debug("pid %d still running after %.0fs: SIGKILL", pid, timeout)
+    else:
+        logger.debug("pid %d exited %.1fs after SIGTERM", pid, time.monotonic() - start)
     # Whatever ignored SIGTERM, or outlived the leader.
     with contextlib.suppress(OSError):
         os.killpg(pid, signal.SIGKILL)
+        logger.debug("Sent SIGKILL to process group %d, for anything left in it", pid)
     if alive():
         with contextlib.suppress(OSError):
             os.kill(pid, signal.SIGKILL)
@@ -851,6 +1009,8 @@ def stop_all(paths: Paths, log=print) -> list[str]:
     """Stop the processes `up` recorded; returns the names of those that were running."""
     live = live_pids(State.load(paths))
     stopped = [name for name in reversed(PROCESS_ORDER) if name in live]
+    if not stopped:
+        logger.debug("No recorded process is running")
     for name in stopped:
         log(f"Stopping {name} (pid {live[name]})")
         terminate_group(live[name])
@@ -891,7 +1051,10 @@ def package_root() -> Path | None:
 
 def viewer_built() -> bool:
     root = package_root()
-    return root is not None and (root / "viewer" / "dist" / "index.html").is_file()
+    index = root / "viewer" / "dist" / "index.html" if root is not None else None
+    built = index is not None and index.is_file()
+    logger.debug("Viewer bundle %s: %s", index, "found" if built else "missing")
+    return built
 
 
 def seed_screenshots(paths: Paths) -> None:
@@ -901,9 +1064,12 @@ def seed_screenshots(paths: Paths) -> None:
         return
     bundled = root / "api" / "static" / "screenshots"
     target = paths.home / "screenshots"
+    copied = 0
     for png in bundled.glob("*.png"):
         if not (target / png.name).exists():
             shutil.copy2(png, target / png.name)
+            copied += 1
+    logger.debug("Copied %d bundled thumbnails from %s to %s", copied, bundled, target)
 
 
 def chromium_installed() -> bool:
@@ -917,20 +1083,29 @@ def chromium_installed() -> bool:
     result = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, timeout=60, check=False
     )
+    error = result.stderr.decode(errors="replace").strip().splitlines()
+    logger.debug(
+        "Chromium probe exited with code %d%s", result.returncode, f": {error[-1]}" if error else ""
+    )
     return result.returncode == 0
 
 
 def install_chromium() -> None:
-    if subprocess.call([sys.executable, "-m", "playwright", "install", "chromium"]) != 0:
+    cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
+    logger.debug("Running %s", shlex.join(cmd))
+    if subprocess.call(cmd) != 0:
         raise LocalStackError("Could not install Chromium for dashboard thumbnails")
 
 
 def reset(paths: Paths) -> None:
     """Delete all local data but keep the downloaded binaries."""
     for sub in DATA_DIRS:
+        logger.debug("Deleting %s", paths.home / sub)
         shutil.rmtree(paths.home / sub, ignore_errors=True)
     for f in (paths.state, paths.secrets, paths.ports):
+        logger.debug("Deleting %s", f)
         f.unlink(missing_ok=True)
+    logger.debug("Kept the native binaries in %s", paths.env)
 
 
 # ---------------------------------------------------------------------------
@@ -975,6 +1150,12 @@ def start_stack(
             examples=seed,
             first_run=not any((paths.home / "mongo").glob("*")),
         )
+        logger.debug(
+            "Examples to seed: %s; first run (empty database): %s; thumbnails: %s",
+            seed,
+            state.first_run,
+            screenshots,
+        )
         state.save(paths)
         procs = start_services(paths, ports, secret_values, env)
         state.pids = {name: proc.pid for name, proc in procs.items()}
@@ -983,7 +1164,8 @@ def start_stack(
         log(f"Services started (logs in {paths.logs}); waiting for the API")
         wait_for_api(paths, ports, procs["api"])
         check_alive(paths, procs)
-    except BaseException:
+    except BaseException as exc:
+        logger.debug("Startup failed (%s): stopping what this run started", type(exc).__name__)
         stop_all(paths, log=log)
         raise
     return state
@@ -1001,6 +1183,8 @@ def ingest(
         sys.executable,
         "-m",
         "depictio.cli",
+        # Root options, so they go before the subcommand.
+        *_verbosity_flags(),
         "run",
         "--template",
         template,
@@ -1013,7 +1197,25 @@ def ingest(
         cmd += ["--project-name", project_name]
     for var in variables or []:
         cmd += ["--var", _absolutize_path_var(var)]
-    return subprocess.call(cmd, env=_ingestion_env())
+    env = _ingestion_env()
+    logger.debug("Ingesting with: %s", shlex.join(cmd))
+    logger.debug("Environment of the ingestion: %s", _describe_env(env))
+    code = subprocess.call(cmd, env=env)
+    logger.debug("depictio run exited with code %d", code)
+    return code
+
+
+def _verbosity_flags() -> list[str]:
+    """The root flag that gives the `depictio run` child this CLI's log level.
+
+    None without -v, so the default command line is unchanged. Levels above INFO
+    are not forwarded: a logger nobody configured reads WARNING too.
+    """
+    if logger.isEnabledFor(logging.DEBUG):
+        return ["-vv"]
+    if logger.isEnabledFor(logging.INFO):
+        return ["-v"]
+    return []
 
 
 def _absolutize_path_var(var: str) -> str:

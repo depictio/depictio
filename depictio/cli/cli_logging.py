@@ -1,6 +1,7 @@
 import logging
 
-from colorlog import ColoredFormatter
+# Same format as the models logger, whose records interleave with these.
+from depictio.models.logging import make_formatter
 
 # Initialize logger without handlers
 logger = logging.getLogger("depictio-cli")
@@ -12,21 +13,8 @@ def setup_logging(verbose: bool = False, verbose_level: str = "INFO") -> logging
 
     # Clear any existing handlers
     logger.handlers.clear()
-    formatter = ColoredFormatter(
-        "%(log_color)s%(asctime)s%(reset)s - %(name)s - %(log_color)s%(levelname)s%(reset)s - %(filename)s - %(funcName)s - line %(lineno)d - %(message)s",
-        datefmt=None,
-        reset=True,
-        log_colors={
-            "DEBUG": "cyan",
-            "INFO": "green",
-            "WARNING": "yellow",
-            "ERROR": "red",
-            "CRITICAL": "red,bg_white",
-        },
-    )
-
     handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
+    handler.setFormatter(make_formatter(handler.stream))
     logger.addHandler(handler)
     if verbose:
         level_name = logging.getLevelNamesMapping().get(verbose_level, verbose_level)
