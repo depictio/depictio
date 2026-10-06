@@ -19,7 +19,7 @@ Component Architecture:
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional, get_args
 
 import yaml
 from pydantic import (
@@ -791,6 +791,13 @@ class DashboardDataLite(BaseModel):
         Sentinels are replaced by comment lines via ``_apply_section_comments()``.
         """
         comp_type = comp.get("component_type", "")
+        if comp_type == "advanced_viz" and isinstance(comp.get("config"), dict):
+            comp = {
+                **comp,
+                "config": DashboardDataLite._exportable_viz_config(
+                    comp.get("viz_kind"), comp["config"]
+                ),
+            }
 
         # Per-type mandatory field sets
         _MANDATORY_COMMON: set[str] = {"component_type", "workflow_tag", "data_collection_tag"}
@@ -1344,6 +1351,19 @@ class DashboardDataLite(BaseModel):
                     if comp.get(field):
                         lite_comp[field] = comp[field]
 
+            elif comp_type == "advanced_viz":
+                # `to_full` reads both back; without them the tile came back as
+                # an advanced_viz of no kind, which no renderer draws.
+                config = comp.get("config") or {}
+                viz_kind = comp.get("viz_kind") or config.get("viz_kind")
+                if viz_kind:
+                    lite_comp["viz_kind"] = viz_kind
+                if config:
+                    lite_comp["config"] = dict(config)
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
+
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
                 if comp.get("selected_module"):
@@ -1391,6 +1411,39 @@ class DashboardDataLite(BaseModel):
             # parent_dashboard_tag is not set here - it needs to be resolved separately
             # during export by looking up the parent dashboard title
         )
+
+    @staticmethod
+    def _exportable_viz_config(viz_kind: str | None, config: dict[str, Any]) -> dict[str, Any]:
+        """An advanced viz's config as a YAML author would write it.
+
+        A parsed config carries every field, defaults included; written out
+        as is, a tile's two meaningful settings drown in a page of defaults. Keys left at their
+        model default are dropped (the import puts them back), required ones
+        and `viz_kind` are kept. A config its model does not accept (an unknown
+        kind, a key the model lacks) is written untouched: the import only puts
+        the defaults back for a config it can validate.
+        """
+        from depictio.models.components.advanced_viz.configs import VizConfig
+
+        models = {m.model_fields["viz_kind"].default: m for m in get_args(get_args(VizConfig)[0])}
+        model = models.get(viz_kind or config.get("viz_kind"))
+        if model is None:
+            return dict(config)
+        try:
+            model.model_validate({**config, "viz_kind": model.model_fields["viz_kind"].default})
+        except ValidationError:
+            return dict(config)
+        # The kind goes first: the import discriminates the config on it.
+        out: dict[str, Any] = {"viz_kind": model.model_fields["viz_kind"].default}
+        for key, value in config.items():
+            field = model.model_fields[key]
+            if key == "viz_kind":
+                continue
+            if field.is_required():
+                out[key] = value
+            elif value != field.get_default(call_default_factory=True):
+                out[key] = value
+        return out
 
     def to_full(self) -> dict[str, Any]:
         """Convert lite format back to full dashboard dict.
@@ -1699,6 +1752,10 @@ class DashboardDataLite(BaseModel):
                     cfg = {**cfg, "viz_kind": viz_kind}
                 full_comp["viz_kind"] = viz_kind
                 full_comp["config"] = cfg
+                # The card header, as a figure carries it (see from_full).
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp_dict.get(field) is not None:
+                        full_comp[field] = comp_dict[field]
 
             elif comp_type == "highlight":
                 # Rendered by HighlightBlock.tsx, which looks the figure up on

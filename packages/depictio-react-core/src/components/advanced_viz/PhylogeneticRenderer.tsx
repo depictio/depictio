@@ -38,35 +38,15 @@ import { computeLayout, descendants, type Layout } from './phylo/layout';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { pruneToTips } from './phylo/prune';
 import { cladeExtent, collapseNodes } from './phylo/collapse';
+import { PHYLO_PALETTE } from './phylo/palette';
+import type { PhylogeneticConfig } from './phylo/config';
+import PhyloSummaryRenderer from './PhyloSummaryRenderer';
 import {
   buildTreeSelectionFilter,
   collectSubtreeTaxa,
   findSubtreeRootByLeafSet,
   treeSelectionValues,
 } from './phylo/subtree';
-
-interface PhylogeneticConfig {
-  tree_wf_id: string;
-  tree_dc_id: string;
-  metadata_wf_id?: string | null;
-  metadata_dc_id?: string | null;
-  taxon_col?: string;
-  color_col?: string | null;
-  label_col?: string | null;
-  /** Extra metadata columns to fetch alongside color_col / label_col, so
-   *  they show up in the "Colour by" Select. Use for taxonomic ranks on
-   *  ASV trees (Kingdom / Phylum / Class / Order / Family / Genus / Species). */
-  extra_color_cols?: string[] | null;
-  /** Per-column palette overrides for the "Colour by" selector. Shape:
-   *  ``{column_name: {category_value: hex}}``. Lets dashboards pin domain
-   *  palettes (e.g. dominant_habitat → Set1) consistently across tiles. */
-  category_palettes?: Record<string, Record<string, string>> | null;
-  default_layout?: Layout;
-  ladderize?: boolean;
-  show_metadata_strip?: boolean;
-  show_branch_lengths?: boolean;
-  show_internal_labels?: boolean;
-}
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: PhylogeneticConfig };
@@ -81,16 +61,7 @@ interface Props {
 
 // Muted publication-friendly palette for categorical tip colouring, used
 // when the deployment states no brand of its own.
-const PALETTE = [
-  '#4C72B0',
-  '#DD8452',
-  '#55A868',
-  '#C44E52',
-  '#8172B3',
-  '#937860',
-  '#DA8BC3',
-  '#8C8C8C',
-];
+const PALETTE = PHYLO_PALETTE;
 
 /** Cap on numeric branch-length labels. Labelling every branch is what made
  *  the toggle unusable: on anything past a few dozen tips the numbers overlap
@@ -147,7 +118,7 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
   { value: 'hierarchical', label: 'Hier' },
 ];
 
-const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const PhyloTreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
@@ -2192,5 +2163,23 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     </AdvancedVizFrame>
   );
 };
+
+/**
+ * The tree, or its summary. `collapse_rank` turns the component into the
+ * one-tip-per-lineage view of `PhyloSummaryRenderer`, built for a landing
+ * tile; unset, it is the full interactive tree, unchanged. Two components
+ * rather than a branch inside one, because they share no state: the summary
+ * has none of the tree's selection, collapse, focus or zoom.
+ */
+const PhylogeneticRenderer: React.FC<Props> = (props) =>
+  (props.metadata.config as PhylogeneticConfig | undefined)?.collapse_rank ? (
+    <PhyloSummaryRenderer
+      metadata={props.metadata}
+      filters={props.filters}
+      refreshTick={props.refreshTick}
+    />
+  ) : (
+    <PhyloTreeRenderer {...props} />
+  );
 
 export default PhylogeneticRenderer;

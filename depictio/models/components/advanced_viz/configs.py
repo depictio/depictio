@@ -823,6 +823,87 @@ class PhylogeneticConfig(_BaseVizConfig):
         default=False, description="Annotate internal nodes with their labels"
     )
 
+    # Summary mode: the tree collapsed to one tip per value of a rank, for a
+    # landing tile. Unset, the component draws the full tree as before.
+    collapse_rank: str | None = Field(
+        default=None,
+        description=(
+            "Tip-metadata column to collapse the tree to (e.g. 'Phylum'): one tip per "
+            "value, placed at the largest clade whose classified tips all carry it, "
+            "drawn as a cladogram. Unset draws the full tree."
+        ),
+    )
+    top_n: int = Field(
+        default=10,
+        ge=1,
+        le=60,
+        description="Summary mode: how many values of collapse_rank to draw, by share",
+    )
+    size_by: Literal["tips", "abundance"] = Field(
+        default="tips",
+        description=(
+            "Summary mode: what a tip's dot measures — its share of the tree's tips "
+            "(ASVs), or its mean share of a sample's reads from the abundance table"
+        ),
+    )
+    # Abundance source for size_by="abundance": a long table with one row per
+    # (sample, taxon) carrying the collapse_rank column and a relative abundance.
+    abundance_wf_id: str | None = Field(
+        default=None, description="Workflow id of the abundance table DC"
+    )
+    abundance_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the abundance table DC"
+    )
+    abundance_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the abundance table DC (resolved to ids at import)",
+    )
+    abundance_col: str = Field(
+        default="rel_abundance",
+        description="Abundance column: a sample's relative abundance of the row's taxon",
+    )
+    abundance_sample_col: str = Field(
+        default="sample",
+        description=(
+            "Sample column of the abundance table: a share is the mean over samples of "
+            "a sample's share. A table without it has its abundance column summed instead"
+        ),
+    )
+    abundance_split_col: str | None = Field(
+        default=None,
+        description=(
+            "Abundance-table column (e.g. a site) to break each share down by, drawn as "
+            "a strip of dots beside the tips"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _summary_is_coherent(self) -> PhylogeneticConfig:
+        summary_only = [
+            name
+            for name, unset in (
+                ("size_by", self.size_by == "tips"),
+                ("abundance_split_col", self.abundance_split_col is None),
+            )
+            if not unset
+        ]
+        if summary_only and not self.collapse_rank:
+            raise ValueError(
+                f"{', '.join(summary_only)} only apply to the summary: set collapse_rank "
+                "(e.g. 'Phylum') or drop them"
+            )
+        if self.collapse_rank and not (self.metadata_dc_id or self.metadata_dc_tag):
+            raise ValueError(
+                "collapse_rank reads the rank from the tip metadata: bind it with "
+                "metadata_dc_tag (or metadata_dc_id)"
+            )
+        if self.size_by == "abundance" and not (self.abundance_dc_id or self.abundance_dc_tag):
+            raise ValueError(
+                "size_by: abundance needs the abundance table: bind it with "
+                "abundance_dc_tag (or abundance_dc_id)"
+            )
+        return self
+
 
 class MAConfig(_BaseVizConfig):
     """MA (Bland-Altman) plot: mean log intensity (x) vs log fold change (y).

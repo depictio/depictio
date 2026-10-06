@@ -15,7 +15,7 @@ from pydantic import Field, model_validator
 
 from depictio.models.components.advanced_viz.configs import VizConfig
 from depictio.models.components.lite import BaseLiteComponent
-from depictio.models.components.types import AdvancedVizKind
+from depictio.models.components.types import AdvancedVizKind, FigureStyle
 
 
 class AdvancedVizLiteComponent(BaseLiteComponent):
@@ -55,6 +55,34 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
     # Per-kind configuration. Pydantic discriminates by config.viz_kind.
     config: VizConfig = Field(
         ..., description="Per-kind configuration (column bindings + display defaults)"
+    )
+
+    # The card header, as a figure has it (see FigureLiteComponent). Only the
+    # frame follows the style: what the renderer draws inside it is its own.
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="Unset takes the style of the grid section the tile sits in, else "
+        "`default`. `minimal`: the landing-page card -- the title beside an icon badge "
+        "with the subtitle inline, no border, and a link to the tab it summarises.",
+    )
+    subtitle: str | None = Field(
+        default=None, description="A few dimmed words after the title (`minimal` style)."
+    )
+    icon_name: str | None = Field(
+        default=None, description="Iconify id of the header badge (`minimal` style)."
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Mantine palette name or CSS colour of the badge; unset uses the "
+        "brand's primary colour.",
+    )
+    hide_legend: bool | None = Field(
+        default=None, description="Draw the visualisation without its legend."
+    )
+    link: str | None = Field(
+        default=None,
+        description="The tab this tile summarises, as `tab:<name>`, linked from the end "
+        "of the card header (`minimal` style).",
     )
 
     @model_validator(mode="before")
