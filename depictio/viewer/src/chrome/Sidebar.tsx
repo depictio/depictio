@@ -169,11 +169,10 @@ export function resolveTabColor(
   );
 }
 
-/** Reserved sentinel value — clicking the trailing pill triggers `onAddTab`
- *  rather than navigating. Mirrors Dash's `__add_tab__` (`tab_callbacks.py:148-161`). */
+/** Reserved sentinel value — clicking the trailing "+ Add" pill opens the
+ *  Add menu (or runs its one action) rather than navigating. Mirrors Dash's
+ *  `__add_tab__` (`tab_callbacks.py:148-161`). */
 const ADD_TAB_VALUE = '__add_tab__';
-/** Same trick for the "+ New group" pill. */
-const NEW_GROUP_VALUE = '__new_group__';
 
 export type TabMoveDirection = 'up' | 'down';
 
@@ -323,8 +322,11 @@ const Sidebar: React.FC<SidebarProps> = ({
     // synthetic "+ Add tab" pill needs an in-process handler. (Clicking the
     // already-active tab is a no-op because the anchor navigates to the same
     // URL the browser is on.)
-    if (value === ADD_TAB_VALUE) onAddTab?.();
-    else if (value === NEW_GROUP_VALUE) onNewGroup?.();
+    // With both actions on offer the pill opens the Add menu (its Menu
+    // target toggles it); with one, the pill is that action.
+    if (value !== ADD_TAB_VALUE || (onAddTab && onNewGroup)) return;
+    if (onAddTab) onAddTab();
+    else onNewGroup?.();
   };
 
   const renderTab = (d: DashboardSummary) => {
@@ -519,49 +521,67 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </React.Fragment>
                 ))}
 
-                {/* Trailing "+ Add tab" pill — visible only in edit mode.
-                    Mirrors Dash `_create_add_tab_button` (`tab_callbacks.py:148-161`).
-                    Click intercepts via ADD_TAB_VALUE in `handleTabChange`. */}
-                {/* A rule between the tabs and the actions that add to them,
-                    so "Add tab" / "New group" don't read as two more tabs. */}
+                {/* One "+ Add" pill closing the list, edit mode only, with a
+                    rule above it so it doesn't read as one more tab. A tab
+                    and a group are both things added to this list, so they
+                    share the pill: a menu offers either, and with only one
+                    on offer the pill is that action. Click intercepts via
+                    ADD_TAB_VALUE in `handleTabChange`. */}
                 {isEdit && (onAddTab || onNewGroup) && <Divider my={6} mx="xs" />}
-                {isEdit && onAddTab && (
-                  <Tabs.Tab
-                    key={ADD_TAB_VALUE}
-                    value={ADD_TAB_VALUE}
-                    leftSection={
-                      <Icon
-                        icon="mdi:plus"
-                        width={18}
-                        height={18}
-                        style={{ flexShrink: 0 }}
-                      />
-                    }
-                    pl="xs"
+                {isEdit && (onAddTab || onNewGroup) && (
+                  <Menu
+                    position="right-start"
+                    offset={6}
+                    width={240}
+                    withinPortal
+                    disabled={!(onAddTab && onNewGroup)}
                   >
-                    <span className="depictio-chrome-tab-label">Add tab</span>
-                  </Tabs.Tab>
-                )}
-                {/* "+ New group" — a group is only a name its tabs share, so
-                    without this an author had to find the Group field in a
-                    tab's Edit dialog to start one. */}
-                {isEdit && onNewGroup && (
-                  <Tabs.Tab
-                    key={NEW_GROUP_VALUE}
-                    value={NEW_GROUP_VALUE}
-                    leftSection={
-                      <Icon
-                        icon="mdi:folder-plus-outline"
-                        width={18}
-                        height={18}
-                        style={{ flexShrink: 0 }}
-                      />
-                    }
-                    pl="xs"
-                    data-testid="sidebar-new-group"
-                  >
-                    <span className="depictio-chrome-tab-label">New group</span>
-                  </Tabs.Tab>
+                    <Menu.Target>
+                      <Tabs.Tab
+                        key={ADD_TAB_VALUE}
+                        value={ADD_TAB_VALUE}
+                        leftSection={
+                          <Icon
+                            icon="mdi:plus"
+                            width={18}
+                            height={18}
+                            style={{ flexShrink: 0 }}
+                          />
+                        }
+                        pl="xs"
+                        data-testid="sidebar-add"
+                      >
+                        <span className="depictio-chrome-tab-label">
+                          {onAddTab ? 'Add tab' : 'New group'}
+                          {onAddTab && onNewGroup ? ' or group' : ''}
+                        </span>
+                      </Tabs.Tab>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item
+                        leftSection={<Icon icon="mdi:tab-plus" width={18} height={18} />}
+                        onClick={() => onAddTab?.()}
+                        data-testid="sidebar-add-tab"
+                      >
+                        <Text size="sm">New tab</Text>
+                        <Text size="xs" c="dimmed">
+                          A page of components
+                        </Text>
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={
+                          <Icon icon="mdi:folder-plus-outline" width={18} height={18} />
+                        }
+                        onClick={() => onNewGroup?.()}
+                        data-testid="sidebar-new-group"
+                      >
+                        <Text size="sm">New group</Text>
+                        <Text size="xs" c="dimmed">
+                          A heading that gathers tabs
+                        </Text>
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
                 )}
               </Tabs.List>
             </Tabs>
