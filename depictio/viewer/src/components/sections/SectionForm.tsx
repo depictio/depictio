@@ -7,10 +7,11 @@
  * or already taken), which is what lets the modal's submit button reflect
  * validity without reaching into the form.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ColorSwatch,
   Group,
+  MultiSelect,
   SegmentedControl,
   Select,
   Stack,
@@ -38,6 +39,10 @@ export interface SectionFormProps {
   taken: string[];
   /** The spec as it currently stands, or null while it cannot be submitted. */
   onChange: (spec: FilterSectionSpec | null) => void;
+  /** Displayed names of the dashboard's tabs, offered for `exclude_tabs`. */
+  tabNames?: string[];
+  /** The name of the tab being edited, marked as such in that list. */
+  currentTabName?: string;
 }
 
 const SectionForm: React.FC<SectionFormProps> = ({
@@ -46,6 +51,8 @@ const SectionForm: React.FC<SectionFormProps> = ({
   onKindChange,
   taken,
   onChange,
+  tabNames = [],
+  currentTabName,
 }) => {
   const [name, setName] = useState(initial?.name ?? '');
   const [icon, setIcon] = useState(initial?.icon ?? '');
@@ -56,6 +63,22 @@ const SectionForm: React.FC<SectionFormProps> = ({
   const [pin, setPin] = useState<'top' | 'bottom'>(
     initial?.pin === 'bottom' ? 'bottom' : 'top',
   );
+  const [plain, setPlain] = useState(initial?.appearance === 'plain');
+  const [excludeTabs, setExcludeTabs] = useState<string[]>(initial?.exclude_tabs ?? []);
+
+  // Names already excluded stay on offer even when no tab carries them any
+  // more (renamed, or written in YAML for another run), so editing an
+  // unrelated field never drops them.
+  const tabOptions = useMemo(() => {
+    const names = [...tabNames];
+    for (const name of initial?.exclude_tabs ?? []) {
+      if (!names.includes(name)) names.push(name);
+    }
+    return names.map((name) => ({
+      value: name,
+      label: name === currentTabName ? `${name} (this tab)` : name,
+    }));
+  }, [tabNames, currentTabName, initial?.exclude_tabs]);
 
   const trimmed = name.trim();
   const duplicate = taken.includes(trimmed.toLowerCase());
@@ -78,11 +101,27 @@ const SectionForm: React.FC<SectionFormProps> = ({
             // it does not round-trip into the YAML as a setting that does
             // nothing.
             pin: persistent ? pin : undefined,
+            // Grid sections only; `box` is the default and goes unwritten.
+            appearance: kind === 'grid' && plain ? 'plain' : undefined,
+            // Same rule as `pin`: only a persistent section shows on other tabs.
+            exclude_tabs: persistent && excludeTabs.length ? excludeTabs : undefined,
           }
         : null,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valid, trimmed, icon, color, description, collapsed, persistent, pin]);
+  }, [
+    valid,
+    trimmed,
+    icon,
+    color,
+    description,
+    collapsed,
+    persistent,
+    pin,
+    kind,
+    plain,
+    excludeTabs,
+  ]);
 
   return (
     <Stack gap="md">
@@ -190,12 +229,24 @@ const SectionForm: React.FC<SectionFormProps> = ({
         onChange={(e) => setDescription(e.currentTarget.value)}
       />
 
-      <Switch
-        label="Start collapsed"
-        description="Applies to first-time visitors. Anyone who has already opened this dashboard keeps the state they left it in."
-        checked={collapsed}
-        onChange={(e) => setCollapsed(e.currentTarget.checked)}
-      />
+      {kind === 'grid' && (
+        <Switch
+          label="Plain heading"
+          description="A light heading over the tiles: no frame, no fold, always open. For a section whose tiles are already cards, like a landing page's key figures."
+          checked={plain}
+          onChange={(e) => setPlain(e.currentTarget.checked)}
+        />
+      )}
+
+      {/* A plain section never folds, so there is nothing to start collapsed. */}
+      {!(kind === 'grid' && plain) && (
+        <Switch
+          label="Start collapsed"
+          description="Applies to first-time visitors. Anyone who has already opened this dashboard keeps the state they left it in."
+          checked={collapsed}
+          onChange={(e) => setCollapsed(e.currentTarget.checked)}
+        />
+      )}
 
       <Switch
         label="Show on every tab"
@@ -216,6 +267,21 @@ const SectionForm: React.FC<SectionFormProps> = ({
           onChange={(v) => setPin(v === 'bottom' ? 'bottom' : 'top')}
           allowDeselect={false}
           comboboxProps={{ withinPortal: false }}
+        />
+      )}
+
+      {persistent && (
+        <MultiSelect
+          label="Hide on these tabs"
+          description="Tabs this section is left off; the tab that owns it can be picked too. A landing tab that already sums up the same data does not need it pinned under its own figures."
+          placeholder={excludeTabs.length ? undefined : 'Shown on every tab'}
+          data={tabOptions}
+          value={excludeTabs}
+          onChange={setExcludeTabs}
+          searchable
+          clearable
+          comboboxProps={{ withinPortal: false }}
+          leftSection={<Icon icon="mdi:tab-remove" width={16} />}
         />
       )}
     </Stack>

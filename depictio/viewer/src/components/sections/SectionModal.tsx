@@ -46,6 +46,10 @@ export interface SectionModalProps {
   /** Shown as "Manage all sections" when the manager is where this came from
    *  (or simply where the user would go next). Omitted ⇒ no such action. */
   onManageAll?: () => void;
+  /** Displayed names of the dashboard's tabs, for a persistent section's
+   *  excluded tabs, and the name of the tab being edited. */
+  tabNames?: string[];
+  currentTabName?: string;
 }
 
 const SectionModal: React.FC<SectionModalProps> = ({
@@ -56,6 +60,8 @@ const SectionModal: React.FC<SectionModalProps> = ({
   onOp,
   onClose,
   onManageAll,
+  tabNames,
+  currentTabName,
 }) => {
   const editing = target !== null;
   const [draftKind, setDraftKind] = useState<SectionKind>(kind);
@@ -137,6 +143,8 @@ const SectionModal: React.FC<SectionModalProps> = ({
             onKindChange={editing ? undefined : setDraftKind}
             taken={taken}
             onChange={handleChange}
+            tabNames={tabNames}
+            currentTabName={currentTabName}
           />
         )}
 

@@ -67,6 +67,7 @@ import {
   deleteTab,
   groupTabs,
   reorderTabs,
+  tabDisplayName,
   tabGroupNames,
   updateTab,
   DashboardGrid,
@@ -1121,6 +1122,8 @@ const EditorApp: React.FC = () => {
   );
   // The family's existing groups, offered when a tab is created or edited.
   const tabGroupOptions = useMemo(() => tabGroupNames(tabSiblings), [tabSiblings]);
+  // The names `exclude_tabs` matches against, offered by the section form.
+  const tabNames = useMemo(() => tabSiblings.map(tabDisplayName), [tabSiblings]);
   const parentTab = useMemo(
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
@@ -2044,6 +2047,8 @@ const EditorApp: React.FC = () => {
         onOp={handleSectionOp}
         onClose={handleCloseSectionModal}
         onManageAll={handleManageAllSections}
+        tabNames={tabNames}
+        currentTabName={activeTab ? tabDisplayName(activeTab) : undefined}
       />
     </AppShell>
     </BrandScope>
