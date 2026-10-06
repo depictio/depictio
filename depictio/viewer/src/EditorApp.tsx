@@ -31,6 +31,7 @@ import {
   ActionIcon,
   Anchor,
   AppShell,
+  Badge,
   Button,
   Center,
   Drawer,
@@ -48,6 +49,7 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
+import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -71,6 +73,7 @@ import {
   groupTabs,
   reorderTabs,
   tabDisplayName,
+  tabLinkKey,
   tabGroupNames,
   updateTab,
   DashboardGrid,
@@ -242,6 +245,7 @@ const EditorApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const contentScaleStyle = useContentScaleStyle();
+  const contentMaxWidth = useContentMaxWidth();
   // Bumped after a plot_theme save lands so figure components refetch and pick
   // up the new dashboard-level template/colorway (the server reads plot_theme
   // from the DB at render time, so the request body doesn't change).
@@ -764,6 +768,12 @@ const EditorApp: React.FC = () => {
     [dashboardId, applyDashboard],
   );
 
+  // The width preference is per tab, opening at the author's
+  // `content_width_default` until the reader picks one, as in the viewer.
+  useEffect(() => {
+    setContentWidthScope(dashboardId ?? null, dashboard?.content_width_default);
+  }, [dashboardId, dashboard?.content_width_default]);
+
   /**
    * The tab's display defaults from the settings drawer: page width, filter
    * panel and tab header. Dashboard-level settings like funnel filtering, so
@@ -1043,13 +1053,41 @@ const EditorApp: React.FC = () => {
   // A section is edited from where it is seen: its header carries the same "…"
   // a component's chrome does. Named sections only — the unsectioned bucket has
   // no header to host it.
-  const renderGridSectionAction = (sectionName: string | null) =>
-    sectionName === null ? null : (
+  const renderGridSectionAction = (sectionName: string | null) => {
+    if (sectionName === null) return null;
+    const action = (
       <SectionActionButton
         label={`Edit “${sectionName}”`}
         onActivate={() => openSectionEditor('grid', sectionName)}
       />
     );
+    // A persistent section this tab owns but excludes: the viewer leaves it
+    // out here, the editor keeps it so it can still be edited. Marked, so the
+    // author doesn't wonder why readers of this tab never see it.
+    const spec = ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) || []).find(
+      (s) => s.name === sectionName,
+    );
+    const here = activeTab ? tabLinkKey(tabDisplayName(activeTab)) : '';
+    const hiddenHere = Boolean(
+      here && spec?.persistent && spec.exclude_tabs?.some((t) => tabLinkKey(t) === here),
+    );
+    if (!hiddenHere) return action;
+    return (
+      <Group gap={6} wrap="nowrap">
+        <Tooltip
+          label="Excluded from this tab: readers see it on the dashboard's other tabs only. Shown here so it can be edited."
+          withArrow
+          multiline
+          w={260}
+        >
+          <Badge size="sm" variant="light" color="gray" leftSection={<Icon icon="mdi:eye-off-outline" width={12} />}>
+            Hidden on this tab
+          </Badge>
+        </Tooltip>
+        {action}
+      </Group>
+    );
+  };
   // Filter names and dc_ids are resolved against the family, not just this
   // tab: a fanned-out control has no entry in this dashboard's metadata, so
   // the active-filter summary would fall back to the raw column name.
@@ -1999,6 +2037,14 @@ const EditorApp: React.FC = () => {
               data-tour-id="editor-grid"
               data-testid="dashboard-content"
               style={{
+                // The same page width as the viewer, so the author lays the
+                // tab out at the width its readers get.
+                ...(contentMaxWidth !== null
+                  ? {
+                      paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                      transition: 'padding 200ms ease',
+                    }
+                  : null),
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',
