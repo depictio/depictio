@@ -873,6 +873,7 @@ _TABLE_FIELDS = (
 class Tile:
     component: dict[str, Any]
     headline: bool = False
+    output_label: str = ""
 
 
 class _Tagger:
@@ -1016,7 +1017,7 @@ def _collection_tiles(
             if problem:
                 skipped.append(Skipped(f"{output.id} {render.component}", problem))
                 continue
-            tiles.append(Tile(built, headline=bool(render.headline)))
+            tiles.append(Tile(built, bool(render.headline), _output_label(output)))
     return tiles
 
 
@@ -1055,7 +1056,7 @@ def _unknown_tiles(
                 tagger,
                 f"{collection.tag}-filter",
                 "interactive",
-                **{**base, "section": "Other data filters"},
+                **{**base, "section": f"{proposal['path']} filters"},
                 title=pretty(column),
                 interactive_component_type="MultiSelect",
                 column_name=column,
@@ -1354,12 +1355,7 @@ def write_template(
             by_stage.setdefault(collection.stage, []).append(collection)
     tabs: list[dict[str, Any]] = []
     headline: list[tuple[int, Tile]] = []
-    tile_tools = {
-        t.component["tag"]: c.tool.name
-        for c in collections
-        if c.tool is not None
-        for t in tiles.get(c.tag, [])
-    }
+
     for stage in sorted(by_stage, key=_stage_rank):
         members = by_stage[stage]
         components: list[dict[str, Any]] = []
@@ -1445,9 +1441,17 @@ def write_template(
                 "grid_sections": sections,
                 "components": components,
             }
-            if any(c["component_type"] == "interactive" for c in components):
+            # One filter section per file: the same column name ("sample") in two
+            # files is two controls, and the section says which file each filters.
+            filter_names = list(
+                dict.fromkeys(
+                    c["section"] for c in components if c["component_type"] == "interactive"
+                )
+            )
+            if filter_names:
                 tab["filter_sections"] = [
-                    _section("Other data filters", "other", icon="mdi:filter-variant")
+                    _section(name, "other", icon="mdi:filter-variant", collapsed=True)
+                    for name in filter_names
                 ]
             tabs.append(tab)
 
@@ -1457,12 +1461,13 @@ def write_template(
     for _, tile in headline[:8]:
         copy = dict(tile.component)
         tag = tagger(f"overview-{copy['tag']}")
-        tool = tile_tools.get(copy["tag"])
+        title = copy["title"]
         copy |= {
             "tag": tag,
             "index": hashlib.sha1(tag.encode()).hexdigest()[:16],
             "section": "Key metrics",
-            "title": f"{tool}: {copy['title']}" if tool else copy["title"],
+            # Out of its tool's tab, a card says which output it reads.
+            "title": f"{tile.output_label}: {title[:1].lower()}{title[1:]}",
         }
         key_metrics.append(copy)
     general: list[dict[str, Any]] = []
@@ -1591,7 +1596,8 @@ def write_template(
 def _intro(composition: Composition, tools: list[str], tabs: list[str], multiqc: bool) -> str:
     lines = []
     if tools:
-        lines.append(f"Recognised outputs of **{len(tools)} tools**: {', '.join(tools)}.")
+        noun = "tool" if len(tools) == 1 else "tools"
+        lines.append(f"Recognised outputs of **{len(tools)} {noun}**: {', '.join(tools)}.")
     if multiqc:
         lines.append("A **MultiQC** report, every plot of which is in the MultiQC tab.")
     if tabs:

@@ -29,11 +29,18 @@ type Tab = { dashboard_id: string; title: string };
 const resultFile = process.env.COMPOSED_RESULT_JSON?.replace(/^~/, os.homedir());
 const screenshotDir = process.env.COMPOSED_SCREENSHOT_DIR;
 
+type RunResult = {
+  project: { id: string };
+  dashboards: { id: string }[];
+  composed?: { unrecognised: number };
+};
+
+function runResult(): RunResult {
+  return JSON.parse(fs.readFileSync(resultFile as string, "utf8")) as RunResult;
+}
+
 function mainDashboardId(): string {
-  const result = JSON.parse(fs.readFileSync(resultFile as string, "utf8")) as {
-    dashboards: { id: string }[];
-  };
-  return result.dashboards[0].id;
+  return runResult().dashboards[0].id;
 }
 
 test.describe("Composed dashboard (depictio local up --data-root)", () => {
@@ -101,6 +108,26 @@ test.describe("Composed dashboard (depictio local up --data-root)", () => {
           fullPage: true,
         });
       }
+    }
+  });
+
+  test("the project page lists the files left out, with a command each", async ({ page }) => {
+    const result = runResult();
+    const left = result.composed?.unrecognised ?? 0;
+    test.skip(left === 0, "This run left no file out.");
+
+    await page.goto(`/projects/${result.project.id}`);
+    await page
+      .getByRole("button", { name: "Skip tour" })
+      .click({ timeout: 5_000 })
+      .catch(() => {});
+    const panel = page.locator("[data-testid='unrecognised-files-panel']");
+    await expect(panel).toBeVisible({ timeout: 30_000 });
+    await expect(panel.locator("tbody tr")).toHaveCount(left);
+    await expect(panel.getByRole("button", { name: "Copy the command that adds this file" })).toHaveCount(left);
+    if (screenshotDir) {
+      fs.mkdirSync(screenshotDir, { recursive: true });
+      await panel.screenshot({ path: path.join(screenshotDir, "project-unrecognised-files.png") });
     }
   });
 });
