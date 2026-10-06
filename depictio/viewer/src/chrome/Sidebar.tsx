@@ -522,6 +522,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {/* Trailing "+ Add tab" pill — visible only in edit mode.
                     Mirrors Dash `_create_add_tab_button` (`tab_callbacks.py:148-161`).
                     Click intercepts via ADD_TAB_VALUE in `handleTabChange`. */}
+                {/* A rule between the tabs and the actions that add to them,
+                    so "Add tab" / "New group" don't read as two more tabs. */}
+                {isEdit && (onAddTab || onNewGroup) && <Divider my={6} mx="xs" />}
                 {isEdit && onAddTab && (
                   <Tabs.Tab
                     key={ADD_TAB_VALUE}
