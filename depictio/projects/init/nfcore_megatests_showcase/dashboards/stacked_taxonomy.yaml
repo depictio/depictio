@@ -1,10 +1,10 @@
 # Stacked taxonomy (QIIME2) — one tab of the nf-core megatests showcase.
 #
-# Regenerate the seed after editing:
-#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+# Uploaded by ../scripts/upload.sh, which builds the dashboard JSON from this
+# file on each run (no seed is committed).
 #
-# The component `index` values are pinned rather than auto-generated: they are
-# what keeps a regenerated seed byte-identical to the shipped one.
+# The component `index` values are pinned rather than auto-generated, so a
+# re-upload upserts the same components instead of minting new ones.
 title: 'Stacked taxonomy (QIIME2)'
 subtitle: 'Per-sample ASV composition'
 icon: 'mdi:chart-bar-stacked'
