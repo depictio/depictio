@@ -12,6 +12,8 @@ from typer import Exit
 # Remove this line as we already import datetime later
 from depictio.cli.cli.utils.common import (
     _apply_env_overrides,
+    cli_config_file,
+    describe_api_target,
     format_timestamp,
     generate_api_headers,
     load_depictio_config,
@@ -335,7 +337,7 @@ class TestCommon:
         def test_explicit_path_beats_config_path_env_var(
             self, monkeypatch, tmp_path, sample_cli_config, config_file
         ):
-            """An explicit --CLI-config-path is never clobbered by the env var."""
+            """An explicit --server is never clobbered by the env var."""
             explicit = self._write_config(
                 tmp_path, sample_cli_config, "explicit.yaml", "https://from-explicit.example.org"
             )
@@ -344,6 +346,57 @@ class TestCommon:
             config = load_depictio_config(str(explicit))
 
             assert config.api_base_url == "https://from-explicit.example.org"
+
+    class TestWhichFileIsRead:
+        """The file a command reads, and how a missing one is reported.
+
+        HOME points at ``tmp_path``, so the developer's ``~/.depictio`` is never read.
+        """
+
+        @pytest.fixture(autouse=True)
+        def isolated_home(self, monkeypatch, tmp_path):
+            monkeypatch.setenv("HOME", str(tmp_path))
+            monkeypatch.delenv("DEPICTIO_CLI_CONFIG_PATH", raising=False)
+            monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL", raising=False)
+
+        @pytest.fixture
+        def env_config(self, monkeypatch, tmp_path, sample_cli_config):
+            config = copy.deepcopy(sample_cli_config)
+            config["api_base_url"] = "https://from-env.example.org"
+            path = tmp_path / "elsewhere" / "CLI.yaml"
+            path.parent.mkdir()
+            path.write_text(yaml.safe_dump(config))
+            monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(path))
+            return path
+
+        def test_the_env_var_stands_in_for_the_default_only(self, env_config):
+            assert cli_config_file() == str(env_config)
+            assert cli_config_file("other.yaml") == "other.yaml"
+
+        def test_the_default_is_expanded(self, tmp_path):
+            assert cli_config_file() == str(tmp_path / ".depictio" / "CLI.yaml")
+
+        def test_a_missing_default_is_not_blamed_on_server(self):
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+                with pytest.raises(Exit):
+                    load_depictio_config()
+
+            message = str(printer.call_args)
+            assert "(the default)" in message
+            assert "pass --server" in message
+
+        def test_a_missing_explicit_file_is_blamed_on_server(self, tmp_path):
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+                with pytest.raises(Exit):
+                    load_depictio_config(str(tmp_path / "typo.yaml"))
+
+            assert "(from --server)" in str(printer.call_args)
+
+        def test_describe_api_target_names_the_file_the_env_var_chose(self, env_config):
+            described = describe_api_target("~/.depictio/CLI.yaml")
+
+            # HOME is tmp_path here, so the file shows under ~ like the commands take it.
+            assert described == "https://from-env.example.org, read from ~/elsewhere/CLI.yaml"
 
     class TestQuietSuppressesTheLoadingLine:
         """``quiet=True`` loads the same config without announcing it.
@@ -369,6 +422,15 @@ class TestCommon:
 
             assert config.api_base_url == "https://quiet.example.org"
             assert printer.call_args_list == []
+
+        def test_a_reload_does_not_announce_the_server_again(self, config_file):
+            """Login and every step reload the configuration; the command says it once."""
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+                load_depictio_config(str(config_file))
+                load_depictio_config(str(config_file))
+
+            announced = [c for c in printer.call_args_list if "Server:" in str(c)]
+            assert len(announced) == 1
 
         def test_default_announces_the_target_server(self, config_file):
             """The flag is opt-in: by default the command says which server it uses."""

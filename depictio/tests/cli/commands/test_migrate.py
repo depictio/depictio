@@ -572,3 +572,80 @@ class TestMigrateCLIErrorHandling:
 
         # Should still exit 0 (files mode, S3 warning not fatal at CLI level)
         assert "S3 error" in result.stdout or "error" in result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# Source and target servers: --server / --to-server, and their old names
+# ---------------------------------------------------------------------------
+
+
+class TestMigrateServers:
+    @pytest.fixture
+    def loaded_paths(self):
+        """The configuration files migrate loads, source first; it stops at the first login."""
+        with (
+            patch("depictio.cli.cli.commands.migrate.load_depictio_config") as load,
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": False},
+            ),
+        ):
+            yield lambda: [call.kwargs["yaml_config_path"] for call in load.call_args_list]
+
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            ["--server", "src.yaml", "--to-server", "dst.yaml"],
+            ["--CLI-config-path", "src.yaml", "--target-config", "dst.yaml"],
+        ],
+    )
+    def test_source_and_target_come_from_the_flags(self, runner, loaded_paths, flags):
+        result = runner.invoke(app, ["--project", "p", *flags])
+
+        assert result.exit_code == 1  # the mocked source login is not an admin
+        assert loaded_paths() == ["src.yaml", "dst.yaml"]
+
+    def test_defaults_are_unchanged(self, runner, loaded_paths):
+        runner.invoke(app, ["--project", "p"])
+
+        assert loaded_paths() == ["~/.depictio/CLI.yaml", "~/.depictio/CLI_remote.yaml"]
+
+    def test_to_server_local_is_the_local_stack_configuration(
+        self, runner, loaded_paths, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+        local = tmp_path / "cli" / "admin_config.yaml"
+        local.parent.mkdir()
+        local.write_text("{}")
+
+        runner.invoke(app, ["--project", "p", "--server", "remote.yaml", "--to-server", "local"])
+
+        assert loaded_paths() == ["remote.yaml", str(local)]
+
+    def test_to_server_local_without_a_local_server_is_a_usage_error(
+        self, runner, loaded_paths, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+
+        result = runner.invoke(app, ["--project", "p", "--to-server", "local"])
+
+        assert result.exit_code == 2
+        assert "depictio local up" in result.output
+        assert loaded_paths() == []
+
+    def test_to_server_and_target_config_together_are_refused(self, runner, loaded_paths):
+        result = runner.invoke(
+            app, ["--project", "p", "--to-server", "a.yaml", "--target-config", "b.yaml"]
+        )
+
+        assert result.exit_code == 2
+        assert "not both" in result.output
+
+    def test_help_hides_the_old_names(self, runner):
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "--server" in result.output
+        assert "--to-server" in result.output
+        assert "--CLI-config-path" not in result.output
+        assert "--target-config" not in result.output

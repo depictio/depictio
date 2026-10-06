@@ -442,3 +442,64 @@ class TestRestoreCLI:
         assert result.exit_code == 1
         assert "failed model validation" in result.stdout
         assert "Document 0 in users" in result.stdout
+
+
+class TestBackupServer:
+    """--server picks the configuration; the hidden --CLI-config-path still does."""
+
+    @pytest.fixture
+    def config_file(self, tmp_path, mock_cli_config):
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.dump(mock_cli_config))
+        return str(path)
+
+    @pytest.mark.parametrize("command", ["create", "list", "validate", "restore"])
+    def test_help_shows_server_not_the_legacy_option(self, runner, command):
+        result = runner.invoke(app, [command, "--help"])
+
+        assert result.exit_code == 0
+        assert "--server" in result.output
+        assert "--CLI-config-path" not in result.output
+
+    def test_check_coverage_help_hides_the_legacy_option(self, runner):
+        result = runner.invoke(dev_app, ["backup", "check-coverage", "--help"])
+
+        assert "--server" in result.output
+        assert "--CLI-config-path" not in result.output
+
+    @pytest.mark.parametrize("flag", ["--server", "--CLI-config-path"])
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_create_logs_in_with_the_named_configuration(
+        self, mock_api_login, runner, config_file, flag
+    ):
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+
+        result = runner.invoke(app, ["create", flag, config_file, "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        mock_api_login.assert_called_once_with(config_file)
+
+    @patch("depictio.cli.cli.utils.api_calls.api_list_backups")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_list_server_local_is_the_local_stack_configuration(
+        self, mock_api_login, mock_list, runner, tmp_path, monkeypatch, mock_cli_config
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+        local = tmp_path / "cli" / "admin_config.yaml"
+        local.parent.mkdir()
+        local.write_text(yaml.dump(mock_cli_config))
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_list.return_value = {"success": True, "backups": []}
+
+        result = runner.invoke(app, ["list", "--server", "local"])
+
+        assert result.exit_code == 0, result.output
+        mock_api_login.assert_called_once_with(str(local))
+
+    def test_restore_server_and_legacy_together_are_refused(self, runner):
+        result = runner.invoke(
+            app, ["restore", "20250627_123456", "--server", "a.yaml", "--CLI-config-path", "b"]
+        )
+
+        assert result.exit_code == 2
+        assert "not both" in result.output

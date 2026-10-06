@@ -7,6 +7,7 @@ Provides three simple commands for dashboard YAML management:
 - export: Export dashboard from server to YAML
 """
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -14,11 +15,21 @@ import httpx
 import typer
 from rich.console import Console
 
+from depictio.cli.cli.utils.server_target import ServerOption, resolve_server
+
 if TYPE_CHECKING:
     from depictio.models.models.dashboards import DashboardDataLite
 
 app = typer.Typer(help="Dashboard management commands")
 console = Console()
+
+# The option these commands took before --server. Still accepted, out of the help.
+LegacyConfigOption = Annotated[str | None, typer.Option("--config", "-c", hidden=True)]
+# Overrides the configuration's api_base_url when given.
+ApiUrlOption = Annotated[str | None, typer.Option("--api", hidden=True)]
+
+# Start of the error validate_schema_online returns when the server does not answer.
+_UNREACHABLE = "Server unreachable"
 
 # Mapping from delta table column types to the canonical COLUMN_TYPES used in constants.py
 _DELTA_TO_COLUMN_TYPE: dict[str, str] = {
@@ -98,7 +109,7 @@ def validate_schema_online(
             ]
         project_data = resp.json()
     except httpx.RequestError as exc:
-        return [{"component_id": "-", "field": "-", "message": f"Server unreachable: {exc}"}]
+        return [{"component_id": "-", "field": "-", "message": f"{_UNREACHABLE}: {exc}"}]
 
     # Cache: (workflow_tag, dc_tag) → {column_name: delta_type} or None (unresolvable)
     schema_cache: dict[tuple[str, str], dict[str, str] | None] = {}
@@ -244,6 +255,14 @@ def _make_error_result(message: str) -> dict[str, Any]:
     }
 
 
+def _connect(config_path: str, api_url: str | None) -> tuple[str, dict[str, str]]:
+    """The API URL and auth headers of the server ``config_path`` names; ``api_url`` wins."""
+    from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+
+    cli_config = load_depictio_config(yaml_config_path=config_path)
+    return api_url or str(cli_config.api_base_url), generate_api_headers(cli_config)
+
+
 def validate_yaml_with_pydantic(yaml_file: Path) -> dict[str, Any]:
     """Validate a YAML file using DashboardDataLite Pydantic model.
 
@@ -285,12 +304,8 @@ def validate_yaml_string_with_pydantic(yaml_content: str) -> dict[str, Any]:
 @app.command()
 def validate(
     yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
-    config_path: Annotated[
-        str | None,
-        typer.Option(
-            "--config", "-c", help="Path to CLI config file (enables server schema validation)"
-        ),
-    ] = None,
+    server: ServerOption = None,
+    config_path: LegacyConfigOption = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
     offline: Annotated[
         bool,
@@ -299,7 +314,7 @@ def validate(
             help="Skip server schema validation (column names, inferred types, aggregation compatibility)",
         ),
     ] = False,
-    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
+    api_url: ApiUrlOption = None,
 ) -> None:
     """Validate a dashboard YAML file.
 
@@ -308,18 +323,24 @@ def validate(
     1. Schema + domain (always): required fields, enum values, cross-field rules
        (visu_type, mode/code_content, aggregation×column_type, etc.)
 
-    2. Server schema (default when --config is provided): resolves each component's
+    2. Server schema (when a server is configured): resolves each component's
        workflow_tag + data_collection_tag against the server delta table schema, checks
        that column_name exists, and validates aggregation/interactive_component_type
-       against the inferred column type. Use --offline to skip this check.
+       against the inferred column type. Without --server it is skipped when neither
+       $DEPICTIO_CLI_CONFIG_PATH nor ~/.depictio/CLI.yaml exists. Use --offline to skip it.
 
     Example:
-        depictio dashboard validate dashboard.yaml --config admin_config.yaml
-        depictio dashboard validate dashboard.yaml --config admin_config.yaml --offline
-        depictio dashboard validate dashboard.yaml  # offline only (no config)
+        depictio dashboard validate dashboard.yaml --server local
+        depictio dashboard validate dashboard.yaml --server admin_config.yaml --offline
+        depictio dashboard validate dashboard.yaml  # offline unless a default server is set up
     """
 
+    from depictio.cli.cli.utils.common import cli_config_file, display_path
     from depictio.models.models.dashboards import DashboardDataLite
+
+    # Only a server the user named must answer: the default one is checked when present.
+    explicit = bool(server or config_path)
+    config_file = resolve_server(server, config_path, legacy_option="--config")
 
     if not yaml_file.exists():
         console.print(f"[red]Error: File not found: {yaml_file}[/red]")
@@ -341,29 +362,36 @@ def validate(
     console.print("  [green]✓ Schema + domain OK[/green]")
 
     # --- Pass 2: server schema validation ---
+    default_file = None if explicit else cli_config_file(config_file)
     if offline:
         console.print("  [dim]Pass 2: skipped (--offline)[/dim]")
-    elif not config_path:
-        console.print("  [dim]Pass 2: skipped (no --config provided)[/dim]")
+    elif default_file and not os.path.isfile(default_file):
+        console.print(
+            "  [dim]Pass 2: skipped (no --server, and no configuration at "
+            f"{display_path(default_file)})[/dim]"
+        )
     else:
         console.print("  [dim]Pass 2: server schema validation[/dim]")
         try:
-            from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
-
-            cli_config = load_depictio_config(yaml_config_path=config_path)
-            headers = generate_api_headers(cli_config)
-            if api_url == "http://localhost:8058":
-                api_url = str(cli_config.api_base_url)
+            server_url, headers = _connect(config_file, api_url)
 
             yaml_content = yaml_file.read_text(encoding="utf-8")
             lite = DashboardDataLite.from_yaml(yaml_content)
-            online_errors = validate_schema_online(lite, api_url, headers)
-            all_errors.extend(online_errors)
+            online_errors = validate_schema_online(lite, server_url, headers)
 
-            if online_errors:
+            if not explicit and _is_unreachable(online_errors):
+                # Nobody asked for this server: being down must not fail an offline-valid file.
+                console.print(
+                    f"  [yellow]⚠ Server schema check skipped: {server_url} is unreachable[/yellow]"
+                )
+            elif online_errors:
+                all_errors.extend(online_errors)
                 console.print(f"  [red]✗ Server schema: {len(online_errors)} error(s)[/red]")
             else:
                 console.print("  [green]✓ Server schema OK[/green]")
+        except typer.Exit:
+            # The configuration --server named is missing: load_depictio_config said so.
+            raise
         except Exception as e:
             console.print(f"  [yellow]⚠ Server schema check skipped: {e}[/yellow]")
 
@@ -374,6 +402,11 @@ def validate(
 
     console.print("\n[green]✓ Validation passed[/green]")
     raise typer.Exit(0)
+
+
+def _is_unreachable(errors: list[dict[str, str]]) -> bool:
+    """Whether validate_schema_online stopped because the server did not answer."""
+    return len(errors) == 1 and errors[0]["message"].startswith(_UNREACHABLE)
 
 
 def _print_error_table(errors: list[dict[str, str]]) -> None:
@@ -396,10 +429,8 @@ def _print_error_table(errors: list[dict[str, str]]) -> None:
 @app.command("import")
 def import_yaml(
     yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
-    config_path: Annotated[
-        str | None,
-        typer.Option("--config", "-c", help="Path to CLI config file (required unless --dry-run)"),
-    ] = None,
+    server: ServerOption = None,
+    config_path: LegacyConfigOption = None,
     project: Annotated[
         str | None,
         typer.Option("--project", "-p", help="Project ID (overrides project_tag in YAML)"),
@@ -408,7 +439,7 @@ def import_yaml(
         bool,
         typer.Option("--overwrite", help="Overwrite existing dashboard with same title in project"),
     ] = False,
-    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
+    api_url: ApiUrlOption = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate only, don't import")] = False,
     offline: Annotated[
         bool,
@@ -424,25 +455,28 @@ def import_yaml(
     1. --project option (if provided)
     2. project_tag field in the YAML file
 
-    Requires --config for server import (not needed for --dry-run validation).
+    Imports into the server --server names, else the one $DEPICTIO_CLI_CONFIG_PATH
+    or ~/.depictio/CLI.yaml describes (none needed for --dry-run validation).
 
     Example:
-        # Validate without server (no config needed)
+        # Validate without a server
         depictio dashboard import dashboard.yaml --dry-run
 
-        # Import with config file
-        depictio dashboard import dashboard.yaml --config admin_config.yaml
+        # Import into the server `depictio local up` runs
+        depictio dashboard import dashboard.yaml --server local
 
         # Overwrite existing dashboard with same title
-        depictio dashboard import dashboard.yaml --config admin_config.yaml --overwrite
+        depictio dashboard import dashboard.yaml --server admin_config.yaml --overwrite
 
         # Override with explicit project ID
-        depictio dashboard import dashboard.yaml --config admin_config.yaml --project 646b0f3c1e4a2d7f8e5b8c9a
+        depictio dashboard import dashboard.yaml --server admin_config.yaml --project 646b0f3c1e4a2d7f8e5b8c9a
 
         # Skip online column validation
-        depictio dashboard import dashboard.yaml --config admin_config.yaml --offline
+        depictio dashboard import dashboard.yaml --server admin_config.yaml --offline
     """
     from depictio.models.models.dashboards import DashboardDataLite
+
+    config_file = resolve_server(server, config_path, legacy_option="--config")
 
     if not yaml_file.exists():
         console.print(f"[red]Error: File not found: {yaml_file}[/red]")
@@ -486,24 +520,16 @@ def import_yaml(
         console.print("\n[yellow]Dry run mode - skipping import[/yellow]")
         raise typer.Exit(0)
 
-    # Config is required for server import
-    if not config_path:
-        console.print("[red]Error: --config is required for server import[/red]")
-        console.print("[yellow]Hint: Use --dry-run for local validation without config[/yellow]")
-        raise typer.Exit(1)
-
     # Step 2: Load CLI config for authentication
     console.print("\n[cyan]Loading CLI configuration...[/cyan]")
     try:
-        from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
-
-        cli_config = load_depictio_config(yaml_config_path=config_path)
-        headers = generate_api_headers(cli_config)
-        # Use API URL from config if not overridden
-        if api_url == "http://localhost:8058":
-            api_url = str(cli_config.api_base_url)
+        api_url, headers = _connect(config_file, api_url)
         console.print("[green]✓ Configuration loaded[/green]")
         console.print(f"  API URL: {api_url}")
+    except typer.Exit:
+        # No configuration file: load_depictio_config named the one it looked for.
+        console.print("[yellow]Hint: Use --dry-run for local validation without a server[/yellow]")
+        raise
     except Exception as e:
         console.print(f"[red]Error loading CLI config: {e}[/red]")
         console.print("[yellow]Hint: Run 'depictio config' to set up authentication[/yellow]")
@@ -576,32 +602,31 @@ def import_yaml(
 @app.command()
 def export(
     dashboard_id: Annotated[str, typer.Argument(help="Dashboard ID to export")],
-    config_path: Annotated[str, typer.Option("--config", "-c", help="Path to CLI config file")],
+    server: ServerOption = None,
+    config_path: LegacyConfigOption = None,
     output: Annotated[Path, typer.Option("--output", "-o", help="Output file path")] = Path(
         "dashboard.yaml"
     ),
-    api_url: Annotated[str, typer.Option("--api", help="API base URL")] = "http://localhost:8058",
+    api_url: ApiUrlOption = None,
 ) -> None:
     """Export a dashboard from the server to a YAML file.
 
     Downloads the dashboard configuration and saves it as a minimal YAML file
     suitable for version control and re-import.
 
-    Requires --config for authentication.
-
     Example:
-        depictio dashboard export 6824cb3b89d2b72169309737 --config admin_config.yaml
-        depictio dashboard export 6824cb3b89d2b72169309737 --config admin_config.yaml -o my-dashboard.yaml
+        depictio dashboard export 6824cb3b89d2b72169309737 --server local
+        depictio dashboard export 6824cb3b89d2b72169309737 --server admin_config.yaml -o my-dashboard.yaml
     """
+    config_file = resolve_server(server, config_path, legacy_option="--config")
+
     # Load CLI config for authentication
     console.print("[cyan]Loading CLI configuration...[/cyan]")
     try:
-        from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
-
-        cli_config = load_depictio_config(yaml_config_path=config_path)
-        headers = generate_api_headers(cli_config)
-        if api_url == "http://localhost:8058":
-            api_url = str(cli_config.api_base_url)
+        api_url, headers = _connect(config_file, api_url)
+    except typer.Exit:
+        # No configuration file: load_depictio_config named the one it looked for.
+        raise
     except Exception as e:
         console.print(f"[red]Error loading CLI config: {e}[/red]")
         console.print("[yellow]Hint: Run 'depictio config' to set up authentication[/yellow]")

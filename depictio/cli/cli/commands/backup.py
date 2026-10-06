@@ -9,6 +9,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_json,
 )
+from depictio.cli.cli.utils.server_target import (
+    LegacyConfigPathOption,
+    ServerOption,
+    resolve_server,
+)
 
 app = typer.Typer()
 
@@ -20,9 +25,8 @@ dev_app = typer.Typer()
 
 @app.command()
 def create(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Perform validation without creating backup")
     ] = False,
@@ -45,20 +49,21 @@ def create(
     Only administrators can perform backup operations.
     \f
     Args:
-        CLI_config_path: Path to the CLI configuration file
+        server: 'local' or a CLI configuration file
         dry_run: If True, validate backup process without creating actual backup
         include_s3_data: If True, also backup S3 deltatable files
         s3_backup_prefix: Prefix for S3 backup folder structure
     """
     rich_print_command_usage("backup create")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
         rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
+        auth_response = api_login(config_path)
 
         if not auth_response.get("is_admin", False):
             rich_print_checked_statement(
@@ -132,22 +137,22 @@ def create(
 
 @app.command()
 def list(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     List available backup files on the server.
     """
     rich_print_command_usage("backup list")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
         rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
+        auth_response = api_login(config_path)
 
         if not auth_response.get("is_admin", False):
             rich_print_checked_statement(
@@ -185,26 +190,26 @@ def validate(
     backup_id: Annotated[
         str, typer.Argument(help="ID of the backup to validate (format: YYYYMMDD_HHMMSS)")
     ],
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     Validate a backup file on the server against Pydantic models.
     \f
     Args:
         backup_id: ID of the backup to validate
-        CLI_config_path: Path to the CLI configuration file
+        server: 'local' or a CLI configuration file
     """
     rich_print_command_usage("backup validate")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
         rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
+        auth_response = api_login(config_path)
 
         if not auth_response.get("is_admin", False):
             rich_print_checked_statement(
@@ -257,9 +262,8 @@ def validate(
 
 @dev_app.command("check-coverage")
 def check_coverage(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     Check validation coverage for all MongoDB collections.
@@ -270,14 +274,15 @@ def check_coverage(
     Only administrators can check backup coverage.
     """
     rich_print_command_usage("backup check-coverage")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        load_depictio_config(yaml_config_path=CLI_config_path)
+        load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
         rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
+        auth_response = api_login(config_path)
 
         if not auth_response.get("is_admin", False):
             rich_print_checked_statement(
@@ -342,9 +347,8 @@ def restore(
     backup_id: Annotated[
         str, typer.Argument(help="ID of the backup to restore (format: YYYYMMDD_HHMMSS)")
     ],
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run/--no-dry-run", help="Simulate restore without making changes")
     ] = False,
@@ -385,7 +389,7 @@ def restore(
     \f
     Args:
         backup_id: ID of the backup to restore from
-        CLI_config_path: Path to the CLI configuration file
+        server: 'local' or a CLI configuration file
         dry_run: If True, only simulate the restore
         collections: Comma-separated list of collections to restore (if not specified, restore all)
         force: Skip confirmation prompt
@@ -393,14 +397,15 @@ def restore(
         skip_validation: Skip the server-side validation gate before restore
     """
     rich_print_command_usage("backup restore")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
         rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
+        auth_response = api_login(config_path)
 
         if not auth_response.get("is_admin", False):
             rich_print_checked_statement(

@@ -72,7 +72,7 @@ class TestConfigCommands:
             args = [command]
 
             if cli_config:
-                args.extend(["--CLI-config-path", cli_config])
+                args.extend(["--server", cli_config])
 
             if project_config:
                 args.extend(["--project-config-path", project_config])
@@ -218,3 +218,77 @@ class TestConfigCommands:
                 result = runner.invoke(app, ["sync", "--CLI-config-path", cli_config_path])
             assert result.exit_code == 0
             assert "already exists" not in result.output
+
+
+class TestServerOption:
+    """--server picks the configuration; the hidden --CLI-config-path still does."""
+
+    runner = CliRunner()
+
+    @pytest.fixture
+    def check_calls(self):
+        """`config check` with every server call mocked; yields the api_login mock."""
+        with (
+            patch(
+                "depictio.cli.cli.commands.config.api_login",
+                return_value={"success": True, "email": "a@b.co"},
+            ) as login,
+            patch("depictio.cli.cli.commands.config.load_depictio_config"),
+            patch("depictio.cli.cli.commands.config.S3_storage_checks"),
+        ):
+            yield login
+
+    @pytest.mark.parametrize("command", ["show", "check", "sync"])
+    def test_help_shows_server_not_the_legacy_option(self, command):
+        result = self.runner.invoke(app, [command, "--help"])
+
+        assert result.exit_code == 0
+        assert "--server" in result.output
+        assert "--CLI-config-path" not in result.output
+
+    @pytest.mark.parametrize("flag", ["--server", "--CLI-config-path"])
+    def test_check_uses_the_named_configuration(self, check_calls, flag):
+        result = self.runner.invoke(app, ["check", flag, "/etc/depictio/CLI.yaml"])
+
+        assert result.exit_code == 0, result.output
+        check_calls.assert_called_once_with("/etc/depictio/CLI.yaml")
+
+    def test_check_without_server_keeps_the_default(self, check_calls):
+        """Left at the default, so load_depictio_config still applies the env var."""
+        result = self.runner.invoke(app, ["check"])
+
+        assert result.exit_code == 0, result.output
+        check_calls.assert_called_once_with("~/.depictio/CLI.yaml")
+
+    def test_check_server_local_is_the_local_stack_configuration(
+        self, check_calls, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+        local = tmp_path / "cli" / "admin_config.yaml"
+        local.parent.mkdir()
+        local.write_text("{}")
+
+        result = self.runner.invoke(app, ["check", "--server", "local"])
+
+        assert result.exit_code == 0, result.output
+        check_calls.assert_called_once_with(str(local))
+
+    def test_sync_passes_the_server_to_validation(self):
+        with patch(
+            "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
+            return_value=(MagicMock(), {"success": False}),
+        ) as validate:
+            result = self.runner.invoke(
+                app, ["sync", "--server", "s.yaml", "--project-config-path", "p.yaml"]
+            )
+
+        assert result.exit_code == 0, result.output
+        validate.assert_called_once_with(CLI_config_path="s.yaml", project_config_path="p.yaml")
+
+    def test_show_server_and_legacy_together_are_refused(self):
+        result = self.runner.invoke(
+            app, ["show", "--server", "a.yaml", "--CLI-config-path", "b.yaml"]
+        )
+
+        assert result.exit_code == 2
+        assert "not both" in result.output

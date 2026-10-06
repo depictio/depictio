@@ -7,18 +7,16 @@ instance.  Never wipes existing data on the target.
 Usage examples:
     # Dry-run first (no changes anywhere)
     depictio migrate --project "my-project" \\
-        --CLI-config-path ~/.depictio/CLI_local.yaml \\
-        --target-config ~/.depictio/CLI_remote.yaml --dry-run
+        --server local --to-server ~/.depictio/CLI_remote.yaml --dry-run
 
     # Full migration (MongoDB docs + S3 files)
     depictio migrate --project "my-project" \\
-        --CLI-config-path ~/.depictio/CLI_local.yaml \\
-        --target-config ~/.depictio/CLI_remote.yaml
+        --server local --to-server ~/.depictio/CLI_remote.yaml
 
-    # Dashboard-only update
+    # Dashboard-only update, between two servers named by their CLI configurations
     depictio migrate --project "my-project" \\
-        --CLI-config-path ~/.depictio/CLI_local.yaml \\
-        --target-config ~/.depictio/CLI_remote.yaml --mode dashboard
+        --server ~/.depictio/CLI_staging.yaml \\
+        --to-server ~/.depictio/CLI_remote.yaml --mode dashboard
 """
 
 from typing import Annotated
@@ -31,6 +29,13 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_json,
 )
+from depictio.cli.cli.utils.server_target import (
+    DEFAULT_CLI_CONFIG,
+    DEFAULT_TARGET_CLI_CONFIG,
+    LegacyConfigPathOption,
+    resolve_server,
+    resolve_target_server,
+)
 
 app = typer.Typer(invoke_without_command=True)
 
@@ -40,12 +45,28 @@ _MODES = ["all", "metadata", "dashboard", "files"]
 @app.callback()
 def migrate(
     project: Annotated[str, typer.Option("--project", help="Project name to migrate")],
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Source CLI config (local instance)")
-    ] = "~/.depictio/CLI.yaml",
-    target_config: Annotated[
-        str, typer.Option("--target-config", help="Target CLI config (remote instance)")
-    ] = "~/.depictio/CLI_remote.yaml",
+    server: Annotated[
+        str | None,
+        typer.Option(
+            "--server",
+            help="Server to migrate from: 'local' for the one `depictio local up` runs, or a "
+            "CLI configuration file. Default: $DEPICTIO_CLI_CONFIG_PATH, else "
+            f"{DEFAULT_CLI_CONFIG}",
+            show_default=False,
+        ),
+    ] = None,
+    CLI_config_path: LegacyConfigPathOption = None,
+    to_server: Annotated[
+        str | None,
+        typer.Option(
+            "--to-server",
+            help="Server to migrate to, given the same way as --server. "
+            f"Default: {DEFAULT_TARGET_CLI_CONFIG}",
+            show_default=False,
+        ),
+    ] = None,
+    # The target's option before --to-server. Still accepted, out of the help.
+    target_config: Annotated[str | None, typer.Option("--target-config", hidden=True)] = None,
     mode: Annotated[
         str,
         typer.Option(
@@ -67,6 +88,8 @@ def migrate(
     """
     Migrate a project from one Depictio instance to another (non-destructive).
 
+    The project is read from --server and written to --to-server.
+
     Mode descriptions:
       all       – MongoDB docs + S3 files  (default, full first-time migration)
       metadata  – MongoDB docs only        (both instances share S3 storage)
@@ -79,13 +102,16 @@ def migrate(
         )
         raise typer.Exit(1)
 
+    source_path = resolve_server(server, CLI_config_path)
+    target_path = resolve_target_server(to_server, target_config)
+
     # Load configs --------------------------------------------------------
-    source_config = load_depictio_config(yaml_config_path=CLI_config_path)
-    remote_config = load_depictio_config(yaml_config_path=target_config)
+    source_config = load_depictio_config(yaml_config_path=source_path)
+    remote_config = load_depictio_config(yaml_config_path=target_path)
 
     # Authenticate source
     rich_print_checked_statement("Authenticating with source instance...", "info")
-    auth_source = api_login(CLI_config_path)
+    auth_source = api_login(source_path)
     if not auth_source.get("is_admin"):
         rich_print_checked_statement("Source: admin access required", "error")
         raise typer.Exit(1)
@@ -93,7 +119,7 @@ def migrate(
 
     # Authenticate target
     rich_print_checked_statement("Authenticating with target instance...", "info")
-    auth_target = api_login(target_config)
+    auth_target = api_login(target_path)
     if not auth_target.get("is_admin"):
         rich_print_checked_statement("Target: admin access required", "error")
         raise typer.Exit(1)

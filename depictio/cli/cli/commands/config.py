@@ -15,6 +15,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_json,
 )
+from depictio.cli.cli.utils.server_target import (
+    LegacyConfigPathOption,
+    ServerOption,
+    resolve_server,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -24,9 +29,8 @@ app = typer.Typer()
 
 @app.command()
 def show(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_name: Annotated[
         str | None,
         typer.Option(
@@ -42,8 +46,9 @@ def show(
     registered on the server.
     """
     rich_print_command_usage("config show")
+    config_path = resolve_server(server, CLI_config_path)
     try:
-        cli_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        cli_config = load_depictio_config(yaml_config_path=config_path)
         rich_print_json("Current Depictio CLI Configuration: ", cli_config.model_dump())
         if project_name:
             metadata = api_get_project_from_name(project_name, cli_config).json()
@@ -262,9 +267,8 @@ def _apply_nextflow_install(snippet, enable: bool, default_enabled: bool = True)
 
 @app.command()
 def check(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -280,11 +284,12 @@ def check(
     exercises the S3 storage check it depends on).
     """
     rich_print_command_usage("config check")
+    config_path = resolve_server(server, CLI_config_path)
 
     # Project-config validation mode (folds the former validate-project-config).
     if project_config_path:
         _, response = validate_project_config_and_check_S3_storage(
-            CLI_config_path=CLI_config_path, project_config_path=project_config_path
+            CLI_config_path=config_path, project_config_path=project_config_path
         )
         if response["success"]:
             rich_print_checked_statement("Depictio Project configuration validated", "success")
@@ -298,7 +303,7 @@ def check(
 
     # Environment doctor: server accessibility + S3 storage.
     try:
-        login_result = api_login(CLI_config_path)
+        login_result = api_login(config_path)
         logger.info(f"Login result: {login_result}")
         if login_result.get("success"):
             user_info = []
@@ -312,14 +317,14 @@ def check(
             rich_print_checked_statement(
                 "Server check failed - Invalid credentials or token expired", "error"
             )
-            rich_print_checked_statement(f"Tried {describe_api_target(CLI_config_path)}", "info")
+            rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
     except Exception as e:
         # This is the command the docs tell you to run before trusting a long
         # pipeline to the trigger, so a bare "Connection refused" is the one
         # answer it must not give: it says nothing about which instance was
         # tried, which is the thing that is usually wrong.
         rich_print_checked_statement(f"Unable to access server - {e}", "error")
-        rich_print_checked_statement(f"Tried {describe_api_target(CLI_config_path)}", "info")
+        rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
 
     try:
         # Announced, and read quietly: probing an unreachable endpoint blocks
@@ -327,7 +332,7 @@ def check(
         # this used to print was the last thing on screen during that wait, so
         # the command looked like it had died mid-load.
         rich_print_checked_statement("Checking S3 storage configuration...", "loading")
-        cli_config = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True)
+        cli_config = load_depictio_config(yaml_config_path=config_path, quiet=True)
         S3_storage_checks(cli_config.s3_storage)
         rich_print_checked_statement("S3 storage configuration is valid", "success")
     except Exception as e:
@@ -336,9 +341,8 @@ def check(
 
 @app.command()
 def sync(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -353,7 +357,8 @@ def sync(
     """
     rich_print_command_usage("config sync")
     CLI_config, validation_response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
     if not validation_response["success"]:
         rich_print_checked_statement(
