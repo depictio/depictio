@@ -1197,7 +1197,10 @@ const EditorApp: React.FC = () => {
               <Text size="sm">
                 {component.section
                   ? `At the bottom of its “${component.section}” section there.`
-                  : 'At the bottom of that tab, outside any section.'}
+                  : next.grid_sections?.length
+                    ? // Unsectioned tiles are drawn above a tab's sections.
+                      'Above that tab’s sections, in none of them: “Move to section” there files it.'
+                    : 'At the bottom of that tab.'}
               </Text>
               <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
                 Open “{targetName}”
@@ -1763,7 +1766,7 @@ const EditorApp: React.FC = () => {
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
-    <BrandScope theme={dashboard?.brand_theme}>
+    <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1850,7 +1853,7 @@ const EditorApp: React.FC = () => {
           onEditTab={openEditTabModal}
           onDeleteTab={handleDeleteTab}
           onMoveTab={handleMoveTab}
-          brandTheme={dashboard?.brand_theme}
+          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
         />
       </AppShell.Navbar>
 
