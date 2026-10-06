@@ -18,7 +18,6 @@ from depictio.cli.cli.local_stack import (
     LocalStackError,
     Paths,
     State,
-    _absolutize_path_var,
     parse_examples,
     pick_ports,
     port_is_free,
@@ -90,7 +89,7 @@ def test_server_env_keeps_the_telemetry_opt_out(paths, monkeypatch):
     assert env["DEPICTIO_TELEMETRY_DEPLOYMENT_KIND"] == "local"
 
 
-def test_the_server_and_ingestion_reach_127_0_0_1_without_the_proxy(paths, monkeypatch):
+def test_the_server_reaches_127_0_0_1_without_the_proxy(paths, monkeypatch):
     monkeypatch.setenv("http_proxy", "http://proxy:3128")
     monkeypatch.setenv("no_proxy", "localhost,.example.org")
     monkeypatch.delenv("NO_PROXY", raising=False)
@@ -98,27 +97,25 @@ def test_the_server_and_ingestion_reach_127_0_0_1_without_the_proxy(paths, monke
     env = server_env(paths, ports, SECRETS, "none", False)
 
     assert env["no_proxy"] == env["NO_PROXY"] == "localhost,.example.org,127.0.0.1,localhost"
-    assert local_stack._ingestion_env()["NO_PROXY"].endswith("127.0.0.1,localhost")
 
 
 @pytest.mark.parametrize(
-    ("value", "template", "expected"),
+    ("value", "expected"),
     [
-        (None, None, "iris,penguins"),
-        (None, "nf-core/rnaseq/latest", "none"),
-        ("penguins", None, "penguins"),
-        ("Iris, penguins,iris", None, "iris,penguins"),
-        ("none", "nf-core/rnaseq/latest", "none"),
+        (None, "iris,penguins"),
+        ("penguins", "penguins"),
+        ("Iris, penguins,iris", "iris,penguins"),
+        ("none", "none"),
     ],
 )
-def test_parse_examples(value, template, expected):
-    assert parse_examples(value, template) == expected
+def test_parse_examples(value, expected):
+    assert parse_examples(value) == expected
 
 
 @pytest.mark.parametrize("value", ["all", "ampliseq", "iris,none", ""])
 def test_parse_examples_rejects_anything_but_the_shipped_examples(value):
     with pytest.raises(LocalStackError, match="iris, penguins, iris,penguins or none"):
-        parse_examples(value, None)
+        parse_examples(value)
 
 
 def test_pick_ports_reuses_the_previous_run_ports():
@@ -191,17 +188,6 @@ def test_pick_ports_rejects_a_busy_explicit_api_port():
             pick_ports(busy.getsockname()[1])
 
 
-def test_absolutize_path_var_resolves_existing_relative_files(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "samplesheet.csv").write_text("sample\n")
-
-    assert _absolutize_path_var("SAMPLESHEET_FILE=samplesheet.csv") == (
-        f"SAMPLESHEET_FILE={tmp_path / 'samplesheet.csv'}"
-    )
-    assert _absolutize_path_var("SKIP_MULTIQC=true") == "SKIP_MULTIQC=true"
-    assert _absolutize_path_var("F=/abs/path.csv") == "F=/abs/path.csv"
-
-
 def test_load_secrets_is_stable_and_private(paths):
     first = local_stack.load_secrets(paths)
     assert local_stack.load_secrets(paths) == first
@@ -264,6 +250,13 @@ def test_state_reads_an_older_file_and_writes_the_same_keys(paths):
 def test_state_is_none_until_up_records_one(paths):
     assert State.load(paths) is None
     assert local_stack.live_pids(None) == {}
+
+
+def test_running_status_does_not_read_a_state_it_is_given(paths, monkeypatch):
+    monkeypatch.setattr(State, "load", MagicMock(side_effect=AssertionError))
+    # This test's own PID, without a start time: alive, so running.
+    status = local_stack.running_status(paths, State(pids={"api": os.getpid()}))
+    assert status == {name: name == "api" for name in local_stack.PROCESS_ORDER}
 
 
 # --- Recorded PIDs ----------------------------------------------------------

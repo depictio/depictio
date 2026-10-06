@@ -1,10 +1,10 @@
-"""`depictio local up/down/status/export-compose`, with every process launch faked."""
+"""`depictio local up/open/down/status/export`, with every process launch faked."""
 
 import logging
-import sys
 from unittest.mock import MagicMock
 
 import pytest
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from depictio.cli.cli import local_stack
@@ -73,13 +73,85 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     state = State.load(stack.paths)
     assert f"Depictio is ready: {state.url}/dashboards" in out
     assert "Examples iris, penguins" in out
-    assert f"export DEPICTIO_CLI_CONFIG_PATH={stack.paths.cli_config}" in out
-    assert "depictio local up --template <template> --data-root <dir>" in out
-    assert "depictio local down" in out
+    assert "Add data depictio ingest --server local --template <template> --data-root <dir>" in out
+    assert "Use the CLI depictio <command> --server local" in out
+    assert "Stop depictio local down" in out
     assert state.start_times == dict.fromkeys(PROCESS_ORDER, 123.0)
     assert state.first_run
     assert local_stack.load_ports(stack.paths) == state.ports
     stack.webbrowser.open.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("args", "seed"),
+    [
+        ([], "iris,penguins"),
+        (["--examples", "penguins"], "penguins"),
+        (["--examples", "none"], "none"),
+    ],
+    ids=["default", "penguins", "none"],
+)
+def test_up_seeds_both_examples_unless_told_otherwise(stack, args, seed):
+    result, out = _invoke("up", *args, "--no-open")
+
+    assert result.exit_code == 0, out
+    assert State.load(stack.paths).examples == seed
+    env = stack.start_services.call_args.args[3]
+    assert env.get("DEPICTIO_SEED_PROJECTS") == (None if seed == "none" else seed)
+    assert ("Examples" in out) == (seed != "none")
+
+
+@pytest.mark.parametrize(
+    ("args", "command"),
+    [
+        (
+            ["--template", "nf-core/rnaseq/latest", "--data-root", "my results"],
+            "depictio ingest --server local --template nf-core/rnaseq/latest "
+            "--data-root 'my results'",
+        ),
+        (
+            # Every flag, with --examples, which `up` still takes, ignored.
+            [
+                "--examples",
+                "iris",
+                "--template",
+                "t",
+                "--data-root",
+                "/data",
+                "--project-name",
+                "My run",
+                "--var",
+                "SAMPLESHEET_FILE=s.csv",
+                "--var",
+                "LABEL=a b",
+            ],
+            "depictio ingest --server local --template t --data-root /data "
+            "--project-name 'My run' --var SAMPLESHEET_FILE=s.csv --var 'LABEL=a b'",
+        ),
+        (
+            ["--var", "X=1"],
+            "depictio ingest --server local --template <template> --data-root <dir> --var X=1",
+        ),
+    ],
+    ids=["template-and-data-root", "every-flag", "incomplete"],
+)
+def test_up_data_flags_exit_2_with_the_ingest_command(stack, args, command):
+    result, out = _invoke("up", *args, "--no-open")
+
+    assert result.exit_code == 2, out
+    assert "depictio local up starts the server only: add data with depictio ingest" in out
+    assert "Start the server depictio local up" in out
+    assert f"Add the data {command}" in out
+    # Before anything starts, or the local home is even created.
+    stack.check_platform_supported.assert_not_called()
+    stack.start_services.assert_not_called()
+    assert not stack.paths.home.exists()
+
+
+def test_up_data_flags_are_hidden_from_the_help():
+    up = get_command(local_cmd.app).commands["up"]
+    hidden = {param.opts[0] for param in up.params if getattr(param, "hidden", False)}
+    assert hidden == {"--template", "--data-root", "--project-name", "--var"}
 
 
 def test_up_rejects_unknown_examples_before_starting_anything(stack):
@@ -144,23 +216,6 @@ def test_examples_missing_from_an_existing_home_are_not_waited_for(stack, monkey
     assert (warning in out) == given
 
 
-def test_ingestion_runs_the_cli_module_without_remote_overrides(stack, tmp_path, monkeypatch):
-    monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "remote-token")
-    monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "https://depictio.example.org")
-    call = MagicMock(return_value=0)
-    monkeypatch.setattr(local_stack.subprocess, "call", call)
-
-    result, out = _invoke(
-        "up", "--template", "nf-core/rnaseq/latest", "--data-root", str(tmp_path), "--no-open"
-    )
-
-    assert result.exit_code == 0, out
-    cmd, env = call.call_args.args[0], call.call_args.kwargs["env"]
-    assert cmd[:4] == [sys.executable, "-m", "depictio.cli", "run"]
-    assert cmd[cmd.index("--CLI-config-path") + 1] == str(stack.paths.cli_config)
-    assert not [k for k in env if k.startswith("DEPICTIO_CLI_")]
-
-
 def test_open_over_ssh_prints_a_tunnel_instead(stack, monkeypatch):
     monkeypatch.setenv("SSH_CONNECTION", "10.0.0.1 50000 10.0.0.2 22")
 
@@ -169,6 +224,49 @@ def test_open_over_ssh_prints_a_tunnel_instead(stack, monkeypatch):
     assert result.exit_code == 0, out
     port = State.load(stack.paths).ports["api"]
     assert f"ssh -L {port}:127.0.0.1:{port} <host>" in out
+    stack.webbrowser.open.assert_not_called()
+
+
+def _save_running_state(stack, running: bool = True) -> State:
+    stack.paths.ensure_dirs()
+    state = State(ports={"api": 18058}, home=str(stack.paths.home))
+    state.save(stack.paths)
+    stack.running_status.return_value = dict.fromkeys(PROCESS_ORDER, running)
+    return state
+
+
+def test_open_opens_the_dashboards_of_the_running_server(stack, monkeypatch):
+    monkeypatch.setattr(local_cmd, "_has_display", lambda: True)
+    _save_running_state(stack)
+
+    result, out = _invoke("open")
+
+    assert result.exit_code == 0, out
+    assert "Opening http://127.0.0.1:18058/dashboards" in out
+    stack.webbrowser.open.assert_called_once_with("http://127.0.0.1:18058/dashboards")
+
+
+def test_open_without_a_display_prints_the_url(stack, monkeypatch):
+    monkeypatch.setattr(local_cmd, "_has_display", lambda: False)
+    _save_running_state(stack)
+
+    result, out = _invoke("open")
+
+    assert result.exit_code == 0, out
+    assert "ssh -L 18058:127.0.0.1:18058 <host>, then open http://127.0.0.1:18058/dashboards" in out
+    stack.webbrowser.open.assert_not_called()
+
+
+@pytest.mark.parametrize("recorded", [False, True], ids=["never-started", "stopped"])
+def test_open_without_a_running_server_says_how_to_start_one(stack, monkeypatch, recorded):
+    monkeypatch.setattr(local_cmd, "_has_display", lambda: True)
+    if recorded:
+        _save_running_state(stack, running=False)
+
+    result, out = _invoke("open")
+
+    assert result.exit_code == 1
+    assert "Depictio local is not running. Start it with: depictio local up" in out
     stack.webbrowser.open.assert_not_called()
 
 
@@ -203,7 +301,7 @@ def test_status_reports_api_health(tmp_path, monkeypatch):
     monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
     ports = {"api": 18058, "mongo": 17018, "redis": 16379, "s3": 19000}
     State(ports=ports, home=str(tmp_path)).save(Paths(tmp_path))
-    monkeypatch.setattr(local_cmd, "running_status", lambda _: dict.fromkeys(PROCESS_ORDER, True))
+    monkeypatch.setattr(local_cmd, "running_status", lambda *_: dict.fromkeys(PROCESS_ORDER, True))
     monkeypatch.setattr(local_cmd, "api_healthy", lambda port: port == 18058)
 
     result, out = _invoke("status")
@@ -227,17 +325,27 @@ def test_a_failure_after_the_checks_stops_what_up_started(stack):
     assert stack.stop_all.call_count == 2
 
 
-def test_export_compose_prints_the_command_to_run_next(tmp_path, monkeypatch):
+# export-compose: the 1.12.0b1 name, still called by CI.
+@pytest.mark.parametrize("command", ["export", "export-compose"])
+def test_export_prints_the_command_to_run_next(tmp_path, monkeypatch, command):
     monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
     export = MagicMock()
     monkeypatch.setattr(local_cmd, "export_compose", export)
     out_dir = tmp_path / "my export"
 
-    result, out = _invoke("export-compose", "--out", str(out_dir))
+    result, out = _invoke(command, "--out", str(out_dir))
 
     assert result.exit_code == 0, out
     assert export.call_args.args[1] == out_dir
     assert f"cd '{out_dir}' && docker compose up -d" in out
+
+
+def test_the_help_lists_open_and_export_but_not_the_old_name():
+    group = get_command(local_cmd.app)
+    listed = [name for name in group.list_commands(None) if not group.commands[name].hidden]
+
+    assert listed == ["up", "open", "down", "status", "wipe", "export"]
+    assert group.commands["export-compose"].hidden
 
 
 @pytest.mark.parametrize(

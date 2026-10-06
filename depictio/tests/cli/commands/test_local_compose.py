@@ -1,4 +1,4 @@
-"""`depictio local export-compose`, with the compose file download faked."""
+"""`depictio local export`, with the compose file download faked."""
 
 import importlib.metadata
 import urllib.error

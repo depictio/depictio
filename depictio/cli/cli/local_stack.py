@@ -14,7 +14,6 @@ import asyncio
 import contextlib
 import importlib.util
 import json
-import logging
 import os
 import secrets
 import shlex
@@ -35,8 +34,8 @@ from depictio.cli.cli_logging import logger
 # chrislusf/seaweedfs): move them together. Redis and SeaweedFS are pinned to the
 # major only: a pin below what an existing local home already runs would
 # downgrade it, and Redis cannot load an RDB written by a newer version.
-# export-compose pins the SeaweedFS image to the local version, so a hand-over
-# never downgrades either.
+# `depictio local export` pins the SeaweedFS image to the local version, so a
+# hand-over never downgrades either.
 CONDA_SPECS = ["mongodb 8.0.*", "redis-server 8.*", "seaweedfs 4.*"]
 ADMIN_EMAIL = "admin@example.com"
 # --force replaces the `depictio` and `depictio-cli` commands that `uv tool install
@@ -367,10 +366,10 @@ def save_ports(paths: Paths, ports: dict[str, int]) -> None:
     logger.debug("Saved %s: %s", paths.ports, ports)
 
 
-def parse_examples(value: str | None, template: str | None) -> str:
-    """--examples as DEPICTIO_SEED_PROJECTS takes it, or 'none'."""
+def parse_examples(value: str | None) -> str:
+    """--examples as DEPICTIO_SEED_PROJECTS takes it, or 'none'; every example by default."""
     if value is None:
-        return "none" if template else ",".join(EXAMPLES)
+        return ",".join(EXAMPLES)
     names = [name.strip().lower() for name in value.split(",") if name.strip()]
     if names == ["none"]:
         return "none"
@@ -1018,8 +1017,10 @@ def stop_all(paths: Paths, log=print) -> list[str]:
     return stopped
 
 
-def running_status(paths: Paths) -> dict[str, bool]:
-    live = live_pids(State.load(paths))
+def running_status(paths: Paths, state: State | None = None) -> dict[str, bool]:
+    """Whether each process `up` started still runs. ``state``: state.json as the
+    caller already loaded it, read here otherwise."""
+    live = live_pids(state if state is not None else State.load(paths))
     return {name: name in live for name in PROCESS_ORDER}
 
 
@@ -1109,7 +1110,7 @@ def reset(paths: Paths) -> None:
 
 
 # ---------------------------------------------------------------------------
-# up: start the stack, ingest a template
+# up: start the stack
 # ---------------------------------------------------------------------------
 
 
@@ -1169,68 +1170,3 @@ def start_stack(
         stop_all(paths, log=log)
         raise
     return state
-
-
-def ingest(
-    paths: Paths,
-    template: str,
-    data_root: Path,
-    variables: list[str] | None = None,
-    project_name: str | None = None,
-) -> int:
-    """Ingest ``data_root`` into the local server with `depictio run`; returns its exit code."""
-    cmd = [
-        sys.executable,
-        "-m",
-        "depictio.cli",
-        # Root options, so they go before the subcommand.
-        *_verbosity_flags(),
-        "run",
-        "--template",
-        template,
-        "--data-root",
-        str(data_root.resolve()),
-        "--CLI-config-path",
-        str(paths.cli_config),
-    ]
-    if project_name:
-        cmd += ["--project-name", project_name]
-    for var in variables or []:
-        cmd += ["--var", _absolutize_path_var(var)]
-    env = _ingestion_env()
-    logger.debug("Ingesting with: %s", shlex.join(cmd))
-    logger.debug("Environment of the ingestion: %s", _describe_env(env))
-    code = subprocess.call(cmd, env=env)
-    logger.debug("depictio run exited with code %d", code)
-    return code
-
-
-def _verbosity_flags() -> list[str]:
-    """The root flag that gives the `depictio run` child this CLI's log level.
-
-    None without -v, so the default command line is unchanged. Levels above INFO
-    are not forwarded: a logger nobody configured reads WARNING too.
-    """
-    if logger.isEnabledFor(logging.DEBUG):
-        return ["-vv"]
-    if logger.isEnabledFor(logging.INFO):
-        return ["-v"]
-    return []
-
-
-def _absolutize_path_var(var: str) -> str:
-    """`run` resolves relative variables against --data-root; users type them from cwd."""
-    key, sep, value = var.partition("=")
-    if sep and value and not Path(value).is_absolute() and Path(value).exists():
-        return f"{key}={Path(value).resolve()}"
-    return var
-
-
-def _ingestion_env() -> dict[str, str]:
-    """The environment of the `depictio run` child, without DEPICTIO_CLI_* overrides.
-
-    DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL, set for another instance,
-    would win over the local server's CLI configuration.
-    """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPICTIO_CLI_")}
-    return bypass_proxy_for_loopback(env)

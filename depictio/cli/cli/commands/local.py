@@ -22,7 +22,6 @@ from depictio.cli.cli.local_stack import (
     check_platform_supported,
     check_server_installed,
     examples_status,
-    ingest,
     local_home,
     parse_examples,
     requested_examples,
@@ -117,14 +116,39 @@ def _has_display() -> bool:
     return True
 
 
-def _check_up_flags(template: str | None, data_root: Path | None, examples: str | None) -> str:
-    """Reject flags that do not go together, before anything starts; returns the seed."""
-    if (template is None) != (data_root is None):
-        _fail("--template and --data-root go together")
-    if data_root is not None and not data_root.is_dir():
-        _fail(f"--data-root {data_root} is not a directory")
+def _moved_to_ingest(
+    template: str | None,
+    data_root: str | None,
+    project_name: str | None,
+    variables: list[str] | None,
+) -> NoReturn:
+    """Exit 2 with the `depictio ingest` command that does what these `up` flags did.
+
+    1.12.0b1 ingested with `up --template --data-root`, so the flags are still
+    parsed, to point there rather than fail as unknown options.
+    """
+    # Placeholders where the old flags were incomplete; given values quoted as typed.
+    args = [
+        ("--template", shlex.quote(template) if template is not None else "<template>"),
+        ("--data-root", shlex.quote(data_root) if data_root is not None else "<dir>"),
+    ]
+    if project_name is not None:
+        args.append(("--project-name", shlex.quote(project_name)))
+    args += [("--var", shlex.quote(var)) for var in variables or []]
+    command = " ".join(["depictio ingest --server local", *(f"{f} {v}" for f, v in args)])
+    rich_print_checked_statement(
+        "depictio local up starts the server only: add data with depictio ingest", "error"
+    )
+    _print_rows(
+        [("Start the server", "depictio local up"), ("Add the data", command)], value_style="cyan"
+    )
+    raise typer.Exit(code=2)
+
+
+def _check_examples(examples: str | None) -> str:
+    """--examples as the server seeds it, rejected before anything starts."""
     try:
-        return parse_examples(examples, template)
+        return parse_examples(examples)
     except LocalStackError as exc:
         _fail(str(exc))
 
@@ -148,9 +172,9 @@ def _start_or_reuse(
                 "dashboards will not render. Build it with: cd depictio/viewer && pnpm run build"
             )
         state = State.load(paths)
-        if state is not None and all(running_status(paths).values()):
+        if state is not None and all(running_status(paths, state).values()):
             _info(f"Depictio is already running at {state.url}")
-            # Applied at startup only; ingestion with --template still goes ahead.
+            # Applied at startup only.
             ignored = [
                 ("--port", port is not None and port != state.ports["api"]),
                 ("--examples", examples_given),
@@ -212,43 +236,15 @@ def _wait_for_examples(paths: Paths, state: State, asked: list[str]) -> list[str
     return [name for name in requested_examples(state) if name not in absent]
 
 
-def _ingest(
-    paths: Paths,
-    template: str,
-    data_root: Path,
-    variables: list[str] | None,
-    project_name: str | None,
-) -> None:
-    """Ingest with `depictio run`; on failure the server keeps running."""
-    _info(f"Ingesting {data_root} with template {template}")
-    try:
-        code = ingest(paths, template, data_root, variables, project_name)
-    except KeyboardInterrupt:
-        _warn("Ingestion interrupted; the server is still running (depictio local down to stop)")
-        raise typer.Exit(code=130)
-    if code != 0:
-        _fail("Ingestion failed; the server is still running (depictio local down to stop)")
-
-
-def _print_summary(
-    paths: Paths,
-    state: State,
-    examples: list[str],
-    template: str | None,
-    data_root: Path | None,
-) -> None:
+def _print_summary(paths: Paths, state: State, examples: list[str]) -> None:
     """Where things are, then what to run next, as two blocks of aligned rows."""
     rich_print_checked_statement(f"Depictio is ready: {state.url}/dashboards", "success")
-    where = []
-    if examples:
-        where.append(("Examples", ", ".join(examples)))
-    if template and data_root is not None:
-        where.append(("Ingested", f"{data_root.resolve()} ({template})"))
+    where = [("Examples", ", ".join(examples))] if examples else []
     where += [("Data", str(paths.home)), ("Logs", str(paths.logs))]
-    # The CLI configuration holds the admin token, so it is what the CLI needs here.
+    # --server local reads the CLI configuration this home holds, admin token included.
     next_steps = [
-        ("Add data", "depictio local up --template <template> --data-root <dir>"),
-        ("Use the CLI", f"export DEPICTIO_CLI_CONFIG_PATH={paths.cli_config}"),
+        ("Add data", "depictio ingest --server local --template <template> --data-root <dir>"),
+        ("Use the CLI", "depictio <command> --server local"),
         ("Stop", "depictio local down"),
     ]
     width = max(len(label) for label, _ in where + next_steps)
@@ -259,44 +255,29 @@ def _print_summary(
     _print_rows(next_steps, width, value_style="cyan")
 
 
-def _open_dashboards(state: State) -> None:
+def _open_dashboards(state: State, announce: bool = False) -> None:
+    """Open the dashboards page in a browser, or say how to reach it without a display."""
+    url = f"{state.url}/dashboards"
     if _has_display():
-        webbrowser.open(f"{state.url}/dashboards")
+        if announce:
+            _info(f"Opening {url}")
+        webbrowser.open(url)
         return
     api_port = state.ports["api"]
     _info(
         f"No browser here: from your machine, run ssh -L {api_port}:127.0.0.1:{api_port} "
-        f"<host>, then open {state.url}/dashboards"
+        f"<host>, then open {url}"
     )
 
 
 @app.command()
 def up(
-    template: Annotated[
-        str | None,
-        typer.Option("--template", help="Template to ingest, e.g. nf-core/rnaseq/latest"),
-    ] = None,
-    data_root: Annotated[
-        Path | None,
-        typer.Option("--data-root", help="Pipeline results directory to ingest with --template"),
-    ] = None,
-    project_name: Annotated[
-        str | None, typer.Option("--project-name", help="Name of the ingested project")
-    ] = None,
-    variables: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--var",
-            help="Template variable KEY=VALUE, passed to `depictio run` (repeatable), "
-            "e.g. --var SAMPLESHEET_FILE=samplesheet.csv",
-        ),
-    ] = None,
     examples: Annotated[
         str | None,
         typer.Option(
             "--examples",
-            help="Example projects to seed: iris, penguins, iris,penguins or none. "
-            "Defaults to iris,penguins without --template and none with it.",
+            help="Example projects to seed on the first run: iris,penguins (the default), "
+            "iris, penguins or none",
         ),
     ] = None,
     port: Annotated[
@@ -318,18 +299,36 @@ def up(
             "needed. Off by default.",
         ),
     ] = None,
+    # Moved to `depictio ingest --server local`: parsed only to say so.
+    template: Annotated[str | None, typer.Option("--template", hidden=True)] = None,
+    data_root: Annotated[str | None, typer.Option("--data-root", hidden=True)] = None,
+    project_name: Annotated[str | None, typer.Option("--project-name", hidden=True)] = None,
+    variables: Annotated[list[str] | None, typer.Option("--var", hidden=True)] = None,
 ):
-    """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest a template."""
-    seed = _check_up_flags(template, data_root, examples)
+    """Start MongoDB, Redis, SeaweedFS, the API and the worker on this machine.
+
+    Then add data with: depictio ingest --server local --template <template> --data-root <dir>
+    """
+    if template is not None or data_root is not None or project_name is not None or variables:
+        _moved_to_ingest(template, data_root, project_name, variables)
+    seed = _check_examples(examples)
     paths = Paths(local_home())
     paths.ensure_dirs()
     state = _start_or_reuse(paths, port, seed, examples is not None, screenshots)
     present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
-    if template and data_root is not None:
-        _ingest(paths, template, data_root, variables, project_name)
-    _print_summary(paths, state, present, template, data_root)
+    _print_summary(paths, state, present)
     if open_browser:
         _open_dashboards(state)
+
+
+@app.command("open")
+def open_cmd():
+    """Open the dashboards page of the running local server in a browser."""
+    paths = Paths(local_home())
+    state = State.load(paths)
+    if state is None or not all(running_status(paths, state).values()):
+        _fail("Depictio local is not running. Start it with: depictio local up")
+    _open_dashboards(state, announce=True)
 
 
 @app.command()
@@ -350,7 +349,7 @@ def status():
     if state is None:
         _info("Depictio local is not running. Start it with: depictio local up")
         return
-    processes = running_status(paths)
+    processes = running_status(paths, state)
     # One line per process, its name, state and port in aligned columns.
     width = max(len(name) for name in processes)
     for name, alive in processes.items():
@@ -382,8 +381,8 @@ def wipe(
     rich_print_checked_statement("Local data deleted", "success")
 
 
-@app.command("export-compose")
-def export_compose_cmd(
+@app.command("export")
+def export_cmd(
     out: Annotated[
         Path,
         typer.Option("--out", help="Directory to create for the Docker Compose stack"),
@@ -407,3 +406,7 @@ def export_compose_cmd(
         ],
         value_style="cyan",
     )
+
+
+# The 1.12.0b1 name, which CI still calls.
+app.command("export-compose", hidden=True)(export_cmd)

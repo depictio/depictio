@@ -8,21 +8,23 @@ becomes a real deployment, the same data moves to Docker Compose.
 
 ```bash
 # the only prerequisite: uv  (curl -LsSf https://astral.sh/uv/install.sh | sh)
-uv tool install "depictio[local]"     # once published on PyPI; puts `depictio` on PATH
+uv tool install "depictio[local]"     # puts `depictio` on PATH
 depictio local up                      # iris and penguins examples
-depictio local up --template nf-core/rnaseq/latest --data-root results/ \
+depictio ingest --server local --template nf-core/rnaseq/latest --data-root results/ \
     --var SAMPLESHEET_FILE=samplesheet.csv
 
-depictio local status | down | wipe
-depictio local export-compose --out depictio-docker   # hand over to Docker Compose
+depictio local open | status | down | wipe
+depictio local export --out depictio-docker   # hand over to Docker Compose
 ```
 
-`up` starts the stack, ingests the directory, then opens
-`http://127.0.0.1:8058/dashboards`. Without `--template` it seeds the iris and
-penguins examples (`--examples iris|penguins|iris,penguins|none`). It ends with a
-short summary: the dashboards URL, where the data and logs are, how to add data,
-how to point the CLI at this server, and how to stop it. Over SSH, or on Linux
-without a display, it prints the `ssh -L` tunnel to open instead of a browser.
+`up` starts the stack, seeds the iris and penguins examples on a first run
+(`--examples iris|penguins|iris,penguins|none`), then opens
+`http://127.0.0.1:8058/dashboards`. It ends with a short summary: the dashboards
+URL, where the data and logs are, how to add data, how to point the CLI at this
+server, and how to stop it. Over SSH, or on Linux without a display, it prints the
+`ssh -L` tunnel to open instead of a browser. `up` only runs the server: data goes
+in with `depictio ingest --server local`, like into any other server. (In the
+first release, 1.12.0b1, `up` took `--template` and `--data-root` itself.)
 
 ## Chosen approach: the same services, as native processes
 
@@ -68,7 +70,7 @@ Excalidraw toolkit (`sketch.py`).
 | Other downloads | images | MongoDB, Redis, SeaweedFS from conda-forge: ~710 MB installed, 10 s, once | none |
 | Viewer | nginx | the wheel's `dist/`, served by FastAPI | none |
 | Auth | multi-user, public or single-user | single-user | token of the target instance |
-| Commands | n/a | the CLI's, plus `local up/down/status/wipe/export-compose` | `run`, `dashboard`, `data`, `config`, `backup`... |
+| Commands | n/a | the CLI's, plus `local up/open/down/status/wipe/export` | `ingest`, `dashboard`, `data`, `config`, `backup`... |
 | `depictio local up` | n/a | works | a clear message pointing to `depictio[local]` |
 | Typical use | team, demo, production | a reviewer trying a template on their results | Nextflow trigger, CI, upload to a shared instance |
 
@@ -112,7 +114,7 @@ the binaries, one directory per service, `logs/`, and three small files. The hom
 
 ## Hand-over to Docker Compose
 
-`depictio local export-compose --out DIR` turns a local server into a Compose stack
+`depictio local export --out DIR` turns a local server into a Compose stack
 on the same data:
 
 1. Stops the local server if it is running, so the copy is consistent, and says so.
@@ -210,7 +212,7 @@ filter carries over to the MultiQC tab.
 | File | Change |
 |---|---|
 | `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe`: MongoDB, Redis and SeaweedFS through py-rattler (pinned to the Compose series), `DEPICTIO_S3_*` settings, sticky ports, generated secrets (`0600`), PIDs with start times and logs in `~/.depictio/local/`, ingestion through `depictio run`, `--var` passed through |
-| `depictio/cli/cli/local_compose.py` | `depictio local export-compose`: the hand-over described above |
+| `depictio/cli/cli/local_compose.py` | `depictio local export`: the hand-over described above |
 | `pyproject.toml` | `local = ["py-rattler==0.26.0"]` extra; `package-data` include globs for the slim wheel; `watchdog` moved to a `worker-reload` group; `plotly-upset` and `plotly-complexheatmap` pinned to 0.1.0. **The root wheel used to hold only the `.py` files**: the same bug as the 1.9.2 CLI wheel |
 | `depictio/version.py` | falls back on `importlib.metadata`: `VERSION` is outside the package, **so the API failed at import from a wheel** |
 | `db_init.py`, `db_init_reference_datasets.py` | the reference `project.yaml` files hard-code `/app/depictio/...`; that prefix is rewritten to the actual package root (no effect in the image). Reference datasets absent from the installed package are skipped |

@@ -1,13 +1,11 @@
-"""What `depictio -vv local ...` logs: probe failures once per reason, the verbosity
-handed to the ingestion, and never a secret value."""
+"""What `depictio -vv local ...` logs: probe failures once per reason, and never a
+secret value."""
 
 import http.server
 import json
 import logging
 import os
-import shlex
 import socket
-import sys
 import threading
 import urllib.error
 from unittest.mock import MagicMock
@@ -88,8 +86,6 @@ def test_no_secret_value_reaches_the_debug_log(paths, debug, monkeypatch, answer
         monkeypatch.setenv(name, value)
     popen = MagicMock(return_value=_running_proc())
     monkeypatch.setattr(local_stack.subprocess, "Popen", popen)
-    call = MagicMock(return_value=0)
-    monkeypatch.setattr(local_stack.subprocess, "call", call)
     monkeypatch.setattr(local_stack, "wait_until", lambda *a, **k: None)
     ports = {"api": answering(404), "mongo": 1, "redis": 2, "s3": 3}
 
@@ -111,7 +107,6 @@ def test_no_secret_value_reaches_the_debug_log(paths, debug, monkeypatch, answer
     # The stand-in API echoes the bearer token back in its 404 body.
     state = local_stack.State(ports=ports, examples="iris", first_run=True)
     assert local_stack.examples_status(paths, state) == {"iris": "loading"}
-    local_stack.ingest(paths, "nf-core/rnaseq/latest", paths.home)
 
     # The secrets were handed to the services, so their absence below means something.
     envs = dict(
@@ -242,29 +237,3 @@ def test_table_status_logs_each_outcome_once_and_not_the_token(debug, monkeypatc
     lines = [r.getMessage() for r in debug.records if "dc1" in r.getMessage()]
     assert lines == ["Delta table of dc1: loading (HTTP 404 Not Found)"]
     assert "bearer-secret" not in debug.text
-
-
-# --- Ingestion ----------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("level", "flags"),
-    [
-        (logging.DEBUG, ["-vv"]),
-        (logging.INFO, ["-v"]),
-        (logging.WARNING, []),
-        (logging.ERROR, []),
-    ],
-    ids=["-vv", "-v", "warning", "default"],
-)
-def test_ingestion_runs_at_the_cli_log_level(paths, caplog, monkeypatch, level, flags):
-    caplog.set_level(level, logger=CLI_LOGGER)
-    call = MagicMock(return_value=0)
-    monkeypatch.setattr(local_stack.subprocess, "call", call)
-
-    assert local_stack.ingest(paths, "nf-core/rnaseq/latest", paths.home) == 0
-
-    cmd = call.call_args.args[0]
-    # Root options, before the subcommand.
-    assert cmd[: cmd.index("run")] == [sys.executable, "-m", "depictio.cli", *flags]
-    assert (f"Ingesting with: {shlex.join(cmd)}" in caplog.text) == (level == logging.DEBUG)
