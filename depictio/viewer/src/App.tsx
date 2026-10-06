@@ -1173,10 +1173,9 @@ const App: React.FC = () => {
               />
             )}
             <Box
-              px={4}
-              py={4}
               data-testid="dashboard-content"
               style={{
+                padding: 4,
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',
