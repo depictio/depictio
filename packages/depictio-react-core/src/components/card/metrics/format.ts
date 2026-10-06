@@ -5,10 +5,12 @@
  */
 
 /** Full-precision-ish rendering for a stat list or an axis anchor. */
-export function formatSecondary(v: unknown): string {
+export function formatSecondary(v: unknown, decimals?: number): string {
   if (v === null || v === undefined) return '—';
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) return '—';
+    // The card's own `decimals`, so the strip agrees with the value above it.
+    if (typeof decimals === 'number' && !Number.isInteger(v)) return v.toFixed(decimals);
     if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
     return String(v);
   }

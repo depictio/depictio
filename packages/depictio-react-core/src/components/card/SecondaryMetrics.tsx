@@ -57,9 +57,11 @@ interface SecondaryMetricsProps {
   coverageValue?: number | null;
   /** Denominator for ``coverage`` / ``gauge`` — e.g. 44 samples / 11 ORFs. */
   coverageMax?: number | null;
-  /** For a headline card: a coverage strip keeps only its bar, a composition
-   *  strip its bar and legend line; the rest stays in the tooltip. */
+  /** For a headline card: a composition strip keeps its bar and legend line;
+   *  the rest stays in the tooltip. */
   minimal?: boolean;
+  /** The card's `decimals`, so numbers in the strip match its value. */
+  decimals?: number;
 }
 
 /** Pull one server-computed payload out of the rows array. The strips dispatch
@@ -88,6 +90,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   coverageValue,
   coverageMax,
   minimal = false,
+  decimals,
 }) => {
   // Categorical layouts — all four read the same ``__breakdown__`` payload and
   // differ only in how they draw it.
@@ -138,7 +141,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
         return <GaugeMetric value={coverageValue} max={coverageMax} color={color} />;
       }
       return (
-        <CoverageMetric value={coverageValue} max={coverageMax} color={color} minimal={minimal} />
+        <CoverageMetric value={coverageValue} max={coverageMax} color={color} />
       );
     }
     // Fall through to the stat list rather than draw an always-zero bar.
@@ -146,7 +149,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
 
   if (layout === 'box_plot') {
     if (!rows.length) return null;
-    return <BoxPlotMetric rows={rows} color={color} />;
+    return <BoxPlotMetric rows={rows} color={color} decimals={decimals} />;
   }
 
   // ``box_plot_stats`` is the one compound aggregation — only BoxPlotMetric

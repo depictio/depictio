@@ -54,7 +54,9 @@ const isBoxPlotStats = (v: unknown): v is BoxPlotStats => {
 const BoxPlotMetric: React.FC<{
   rows: MetricRow[];
   color?: string | null;
-}> = ({ rows, color }) => {
+  /** The card's `decimals`, for the numbers under the box. */
+  decimals?: number;
+}> = ({ rows, color, decimals }) => {
   const statsRow = rows.find(
     (r) => r.name.toLowerCase() === 'box_plot_stats' && isBoxPlotStats(r.value),
   );
@@ -229,9 +231,9 @@ const BoxPlotMetric: React.FC<{
       {/* Axis ends + median, so the plot is readable at a narrow card width
           without opening the tooltip. */}
       <Group justify="space-between" gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
-        <MetricCaption>{formatSecondary(s.min)}</MetricCaption>
-        <MetricCaption strong>{formatSecondary(s.median)}</MetricCaption>
-        <MetricCaption>{formatSecondary(s.max)}</MetricCaption>
+        <MetricCaption>{formatSecondary(s.min, decimals)}</MetricCaption>
+        <MetricCaption strong>{formatSecondary(s.median, decimals)}</MetricCaption>
+        <MetricCaption>{formatSecondary(s.max, decimals)}</MetricCaption>
       </Group>
     </MetricStrip>
   );

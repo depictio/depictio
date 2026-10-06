@@ -30,9 +30,7 @@ const CoverageMetric: React.FC<{
   value: number;
   max: number;
   color?: string | null;
-  /** The bar alone; the share stays in the tooltip. */
-  minimal?: boolean;
-}> = ({ value, max, color, minimal = false }) => {
+}> = ({ value, max, color }) => {
   const share = Math.max(0, Math.min(1, value / max));
   const status = coverageStatus(share);
   const fill = status === 'complete' ? hexWithAlpha(color, 0.8) : INCOMPLETE_FILL;
@@ -52,11 +50,12 @@ const CoverageMetric: React.FC<{
   return (
     <MetricStrip tooltip={tooltip} ariaLabel="Coverage">
       <Meter segments={[{ key: 'covered', share, color: fill }]} />
-      {minimal ? null : (
-        <MetricCaption strong>
-          {percent(share)} of {max.toLocaleString()}
-        </MetricCaption>
-      )}
+      {/* Kept on a headline card too: every strip in a row of key figures
+          is a bar over one line, so the cards' contents stand the same
+          height and their titles line up. */}
+      <MetricCaption strong>
+        {percent(share)} of {max.toLocaleString()}
+      </MetricCaption>
     </MetricStrip>
   );
 };

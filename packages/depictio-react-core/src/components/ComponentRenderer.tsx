@@ -860,6 +860,7 @@ const CardRenderer: React.FC<{
                   coverageValue={typeof value === 'number' ? value : null}
                   coverageMax={coverageMax}
                   minimal={metadata.variant === 'headline'}
+                  decimals={typeof metadata.decimals === 'number' ? metadata.decimals : undefined}
                 />
               )}
               {groupCompare && (
