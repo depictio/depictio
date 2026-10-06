@@ -36,6 +36,8 @@ const CARD_STYLE_OPTIONS: { value: CardVariant | typeof INHERIT; label: string }
   { value: 'headline', label: 'Headline' },
   { value: 'compact', label: 'Compact' },
   { value: 'minimal', label: 'Minimal' },
+  { value: 'accent', label: 'Accent' },
+  { value: 'split', label: 'Split' },
 ];
 
 export interface SectionFormProps {
@@ -257,7 +259,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
       {kind === 'grid' && (
         <Select
           label="Card style"
-          description="How the section's metric cards are drawn. A card that picks its own style in its builder keeps it. Headline: large figures for a landing page. Compact: low cards, title and value on one line. Minimal: no frame, for cards on a tinted section."
+          description="How the section's metric cards are drawn. A card that picks its own style in its builder keeps it. Headline: large figures for a landing page. Compact: low cards, title and value on one line. Minimal: no frame, for cards on a tinted section. Accent: a coloured rail that singles cards out. Split: a stat tile, icon block beside the figure."
           data={CARD_STYLE_OPTIONS}
           value={cardVariant ?? INHERIT}
           onChange={(v) => setCardVariant(normalizeCardVariant(v))}

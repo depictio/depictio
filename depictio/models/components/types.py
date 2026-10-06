@@ -124,4 +124,4 @@ FigureMode = Literal["ui", "code"]
 # section's `card_variant` (the style its cards take unless they set one), so
 # the two can never drift apart. Mirrored by CARD_VARIANTS in
 # packages/depictio-react-core/src/components/cardVariant.ts.
-CardVariant = Literal["default", "headline", "compact", "minimal"]
+CardVariant = Literal["default", "headline", "compact", "minimal", "accent", "split"]

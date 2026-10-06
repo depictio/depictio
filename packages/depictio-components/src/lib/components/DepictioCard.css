@@ -186,3 +186,55 @@
   box-shadow: none !important;
   background-color: var(--mantine-color-default-hover) !important;
 }
+
+/* ``variant: accent`` — a headline card singled out: a rail of the card's
+   colour down its left edge and a faint wash of it fading in from that edge.
+   ``color-mix`` against transparent keeps the wash a tint of whatever the
+   card sits on, so it reads in light and dark alike. The card clips its
+   overflow, so the rail follows the rounded corners. */
+.depictio-card--accent {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--depictio-card-accent) 9%, transparent),
+    transparent 65%
+  );
+}
+
+.depictio-card--accent::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--depictio-card-accent);
+  pointer-events: none;
+}
+
+/* ``variant: split`` — the stat tile's icon block: a rounded square tinted
+   with the icon's own colour (set as ``color`` on the block). */
+.depictio-card-split-icon {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+/* The caption sits under the value column, not under the block: the block's
+   width plus the gap beside it. */
+.depictio-card-split-indent {
+  padding-left: 64px;
+}
+
+/* Too narrow for block and figure side by side (eight to a row): the block
+   goes and the column takes the room, rather than the value wrapping. */
+@container depictio-card (max-width: 200px) {
+  .depictio-card-split-icon {
+    display: none;
+  }
+
+  .depictio-card-split-indent {
+    padding-left: 0;
+  }
+}

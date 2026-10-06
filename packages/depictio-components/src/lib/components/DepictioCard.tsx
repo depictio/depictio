@@ -44,8 +44,12 @@ export interface DepictioCardProps {
    *  `compact`: a low card for a strip of many small numbers — title and value
    *  share one line when the card is wide enough, the icon sits small beside
    *  the title. `minimal`: headline type with no frame, shadow or background,
-   *  for figures sitting on a tinted section or among prose. */
-  variant?: 'default' | 'headline' | 'compact' | 'minimal';
+   *  for figures sitting on a tinted section or among prose. `accent`: a
+   *  headline card with a rail of its colour down the left edge and a faint
+   *  wash of it behind the value, the full strip kept — a few cards singled
+   *  out on an analysis tab. `split`: a stat tile, the icon in a tinted block
+   *  on the left and title, value and caption beside it. */
+  variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split';
   title_color?: string;
   background_color?: string;
   /** Mantine size token: xs / sm / md / lg / xl. Mirrors `dmc.Text size=...`. */
@@ -117,13 +121,22 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   // is what buys the strip its height.
   const minimal = variant === 'minimal' && !inline_header;
   const compact = variant === 'compact' && !inline_header;
-  // A minimal card is a headline card without its frame: same type, same
-  // resting icon, same held heights, so the two line up side by side.
-  const headline = (variant === 'headline' || minimal) && !inline_header;
-  const badge = icon_name && icon_style === 'badge' && !headline && !compact;
+  const accent = variant === 'accent' && !inline_header;
+  const split = variant === 'split' && !inline_header;
+  // Minimal and accent cards are headline cards with a different frame (none,
+  // or a coloured rail): same type, same resting icon, same held heights, so
+  // they line up beside a headline card.
+  const headline = (variant === 'headline' || minimal || accent) && !inline_header;
+  // The heights a row of cards is aligned on (two caption lines, the tallest
+  // strip), held by every style drawn as a large figure.
+  const heldHeights = headline || split;
+  // The colour that marks an accent rail or a split tile's icon block: the
+  // card's own, else the brand's primary.
+  const markColor = icon_color || title_color || 'var(--mantine-primary-color-filled)';
+  const badge = icon_name && icon_style === 'badge' && !headline && !compact && !split;
   const minContentHeight = compact ? COMPACT_MIN_CONTENT_HEIGHT : CARD_MIN_CONTENT_HEIGHT;
   const iconNode =
-    icon_name && !inline_header && !badge && !compact ? (
+    icon_name && !inline_header && !badge && !compact && !split ? (
       <Box className={headline ? 'depictio-card-icon depictio-card-icon--rest' : 'depictio-card-icon'}>
         <Icon icon={icon_name} style={{ color: icon_color || title_color || 'currentColor' }} />
       </Box>
@@ -237,6 +250,43 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         {value !== null && value !== undefined ? value : '—'}
       </Text>
     </div>
+  ) : split ? (
+    // A stat tile: the icon in a block of its colour on the left reads first,
+    // then title and value as one column beside it. On a card too narrow for
+    // both the block goes (DepictioCard.css) and the column takes the width.
+    <Group gap={12} wrap="nowrap" align="center" style={{ minWidth: 0 }}>
+      {icon_name && (
+        <Box className="depictio-card-split-icon" style={{ color: markColor }}>
+          <Icon icon={icon_name} width={28} height={28} />
+        </Box>
+      )}
+      <Stack gap={2} style={{ minWidth: 0 }}>
+        <Text
+          size={title_font_size === 'md' ? 'sm' : title_font_size}
+          fw={600}
+          c={title_color || 'dimmed'}
+          lineClamp={2}
+          style={{ margin: 0, lineHeight: 1.3, overflowWrap: 'break-word' }}
+        >
+          {title}
+        </Text>
+        <Text
+          fw={800}
+          c={title_color || undefined}
+          style={{
+            margin: 0,
+            // Between the compact and the headline value: the tile's block
+            // takes some of the width a headline figure would have.
+            fontSize: 'clamp(22px, 13cqw, 34px)',
+            lineHeight: 1.05,
+            letterSpacing: '-0.02em',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {value !== null && value !== undefined ? value : '—'}
+        </Text>
+      </Stack>
+    </Group>
   ) : headline ? (
     <>
       <Text
@@ -329,9 +379,13 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       className={
         'depictio-card' +
         (minimal ? ' depictio-card--minimal' : '') +
-        (compact ? ' depictio-card--compact' : '')
+        (compact ? ' depictio-card--compact' : '') +
+        (accent ? ' depictio-card--accent' : '') +
+        (split ? ' depictio-card--split' : '')
       }
       style={{
+        // Read by the accent rail and wash in DepictioCard.css.
+        ...(accent ? { ['--depictio-card-accent' as string]: markColor } : {}),
         boxSizing: 'content-box',
         height: '100%',
         minHeight: minContentHeight,
@@ -405,7 +459,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           (e.g. box-plot) sits closer to the value, not separated by a wide
           gap. */}
       <Card.Section
-        p={hasCustomBg || (headline && !minimal) ? '1rem' : 'xs'}
+        p={hasCustomBg || (headline && !minimal) || split ? '1rem' : 'xs'}
         // A minimal card has no frame to keep its text off: a sliver of side
         // padding lines its title up with the section heading above it.
         px={minimal && !hasCustomBg ? 4 : compact ? 'sm' : undefined}
@@ -440,13 +494,15 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
               c="dimmed"
               // One line on a compact card, so a row of them keeps one height.
               lineClamp={compact ? 1 : undefined}
+              // Under the value on a split tile, not under its icon block.
+              className={split && icon_name ? 'depictio-card-split-indent' : undefined}
               style={{
                 marginLeft: -2,
                 // Two lines held on a headline card, whether its caption wraps
                 // or not: a row of cards centres its contents, and a caption a
                 // line shorter than its neighbours' moved the whole card off
                 // their line.
-                ...(headline
+                ...(heldHeights
                   ? { minHeight: 'calc(2 * var(--mantine-line-height-xs) * var(--mantine-font-size-xs))' }
                   : {}),
               }}
@@ -497,7 +553,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
             // A headline card's strip holds the height of the tallest one (a
             // box plot): the cards of a row centre their contents, and equal
             // contents put every title and value on one line across the row.
-            ...(headline ? { minHeight: HEADLINE_STRIP_MIN_PX } : {}),
+            ...(heldHeights ? { minHeight: HEADLINE_STRIP_MIN_PX } : {}),
             // With the compact header the strip is the card's main content:
             // let it take the freed height and distribute it (the strip's own
             // containers justify space-evenly) instead of pooling dead space

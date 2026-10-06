@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { StoredMetadata } from '../api';
 import {
+  CARD_VARIANTS,
   compactKeepsStrip,
   normalizeCardVariant,
   resolveCardVariant,
+  stripIsMinimal,
   variantForPick,
   withSectionCardVariant,
 } from './cardVariant';
@@ -13,8 +15,8 @@ const card = (extra: Partial<StoredMetadata> = {}): StoredMetadata =>
   ({ index: 'c1', component_type: 'card', ...extra }) as StoredMetadata;
 
 describe('normalizeCardVariant', () => {
-  it('keeps the four known styles', () => {
-    for (const v of ['default', 'headline', 'compact', 'minimal']) {
+  it('keeps the six known styles', () => {
+    for (const v of ['default', 'headline', 'compact', 'minimal', 'accent', 'split']) {
       expect(normalizeCardVariant(v)).toBe(v);
     }
   });
@@ -103,5 +105,20 @@ describe('compactKeepsStrip', () => {
     expect(compactKeepsStrip('composition')).toBe(true);
     expect(compactKeepsStrip('box_plot')).toBe(false);
     expect(compactKeepsStrip(undefined)).toBe(false);
+  });
+});
+
+describe('stripIsMinimal', () => {
+  it('keeps the full strip on default and accent cards only', () => {
+    const full = CARD_VARIANTS.filter((v) => !stripIsMinimal(v));
+    expect(full).toEqual(['default', 'accent']);
+  });
+});
+
+describe('the new styles', () => {
+  it('resolve from a section like the others', () => {
+    expect(resolveCardVariant(undefined, 'accent')).toBe('accent');
+    expect(resolveCardVariant('split', 'accent')).toBe('split');
+    expect(withSectionCardVariant(card(), { card_variant: 'split' }).variant).toBe('split');
   });
 });

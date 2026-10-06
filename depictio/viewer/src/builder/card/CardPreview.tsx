@@ -35,6 +35,7 @@ import {
   isBreakdownLayout,
   isNumericLayout,
   resolveCardVariant,
+  stripIsMinimal,
   type BreakdownPayloadDTO,
   type InteractiveFilter,
   type SecondaryLayout,
@@ -491,7 +492,7 @@ const CardPreview: React.FC = () => {
                   layout={layout}
                   coverageValue={coverageValue}
                   coverageMax={coverageMax}
-                  minimal={variant !== 'default'}
+                  minimal={stripIsMinimal(variant)}
                   decimals={decimals}
                 />
               ) : undefined

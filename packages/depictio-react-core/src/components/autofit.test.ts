@@ -49,4 +49,13 @@ describe('fitLayoutHeights with compact cards', () => {
     const fitted = fitLayoutHeights(members, layouts, { a: 60, b: 90 });
     expect(fitted.map((l) => l.h)).toEqual([8, 8]);
   });
+
+  it('keeps an accent or split row at its authored height', () => {
+    const members = [
+      { index: 'a', component_type: 'card', variant: 'accent' },
+      { index: 'b', component_type: 'card', variant: 'split' },
+    ];
+    const fitted = fitLayoutHeights(members, layouts, { a: 60, b: 90 });
+    expect(fitted.map((l) => l.h)).toEqual([8, 8]);
+  });
 });

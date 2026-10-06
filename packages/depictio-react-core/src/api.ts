@@ -296,10 +296,12 @@ export interface StoredMetadata {
   /** How the card is drawn (see `CardVariant` in components/cardVariant.ts).
    *  Unset takes its grid section's `card_variant`. `headline`: large value,
    *  resting icon mark, bar-only strip. `compact`: a low card, title and value
-   *  on one line. `minimal`: headline type with no frame or background. Typed
+   *  on one line. `minimal`: headline type with no frame or background.
+   *  `accent`: headline type on a coloured left rail, full strip. `split`: a
+   *  stat tile, icon block left and the figure beside it. Typed
    *  as a string too: stored metadata is not validated on read, so a value the
    *  viewer does not know has to be expected (and drawn as `default`). */
-  variant?: 'default' | 'headline' | 'compact' | 'minimal' | (string & {});
+  variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | (string & {});
   metric_theme?: string;
   // Text
   /** Frame of a text tile: bare prose, a card, or a tinted panel. */
@@ -376,7 +378,7 @@ export interface FilterSectionSpec {
   appearance?: 'box' | 'plain' | null;
   /** Grid sections: the style every card in the section is drawn in unless
    *  the card sets its own `variant`. Unset leaves each card to its own. */
-  card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | null;
+  card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | null;
 }
 
 export interface DashboardData {

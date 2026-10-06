@@ -4,7 +4,7 @@ import type { GridApi } from 'ag-grid-community';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
-import { compactKeepsStrip, resolveCardVariant } from './cardVariant';
+import { compactKeepsStrip, resolveCardVariant, stripIsMinimal } from './cardVariant';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
 import { useTabLinkResolver } from './tabLinks';
@@ -868,9 +868,7 @@ const CardRenderer: React.FC<{
                   }
                   coverageValue={typeof value === 'number' ? value : null}
                   coverageMax={coverageMax}
-                  // Every style but the default draws its strip cut down to the
-                  // bar: the figure is the point, the breakdown is the tooltip.
-                  minimal={variant !== 'default'}
+                  minimal={stripIsMinimal(variant)}
                   decimals={typeof metadata.decimals === 'number' ? metadata.decimals : undefined}
                 />
               )}

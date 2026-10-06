@@ -274,6 +274,8 @@ const STYLE_OPTIONS: { value: CardVariant; label: string }[] = [
   { value: 'headline', label: 'Headline' },
   { value: 'compact', label: 'Compact' },
   { value: 'minimal', label: 'Minimal' },
+  { value: 'accent', label: 'Accent' },
+  { value: 'split', label: 'Split' },
 ];
 
 const STYLE_LABEL: Record<CardVariant, string> = Object.fromEntries(

@@ -89,6 +89,7 @@ export {
   withSectionCardVariant,
   variantForPick,
   compactKeepsStrip,
+  stripIsMinimal,
 } from './components/cardVariant';
 export type { CardVariant } from './components/cardVariant';
 export type {

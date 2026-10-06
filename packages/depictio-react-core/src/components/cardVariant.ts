@@ -10,7 +10,14 @@
  */
 import type { FilterSectionSpec, StoredMetadata } from '../api';
 
-export const CARD_VARIANTS = ['default', 'headline', 'compact', 'minimal'] as const;
+export const CARD_VARIANTS = [
+  'default',
+  'headline',
+  'compact',
+  'minimal',
+  'accent',
+  'split',
+] as const;
 export type CardVariant = (typeof CARD_VARIANTS)[number];
 
 /** A known style, or null for anything else. Stored metadata is not validated
@@ -65,6 +72,14 @@ export function variantForPick(
 ): CardVariant | null {
   const v = normalizeCardVariant(picked) ?? 'default';
   return v === (normalizeCardVariant(sectionVariant) ?? 'default') ? null : v;
+}
+
+/** Whether a card's strip is cut down to its bar. Every large-figure style
+ *  does it (the figure is the point, the breakdown is the tooltip) except
+ *  `accent`, which singles a card out on an analysis tab and keeps the whole
+ *  strip, and `default`, the analysis card itself. */
+export function stripIsMinimal(variant: CardVariant): boolean {
+  return variant !== 'default' && variant !== 'accent';
 }
 
 /** Which secondary strips a compact card keeps. It is a strip of small numbers,

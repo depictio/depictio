@@ -253,7 +253,10 @@ class CardLiteComponent(BaseLiteComponent):
         "legend line (the rest stays in the tooltip). `compact`: a low card, title and "
         "value on one line when the card is wide enough, no strip beyond a slim bar -- "
         "for a strip of many small numbers. `minimal`: headline type with no frame, "
-        "shadow or background -- for figures sitting on a tinted section or in prose.",
+        "shadow or background -- for figures sitting on a tinted section or in prose. "
+        "`accent`: headline type with a rail of the card's colour down its left edge and "
+        "the full strip kept -- to single out a few cards on an analysis tab. `split`: a "
+        "stat tile, the icon in a tinted block on the left and the figure beside it.",
     )
     decimals: int | None = Field(
         default=None,

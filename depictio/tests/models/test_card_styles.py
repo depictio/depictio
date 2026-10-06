@@ -5,6 +5,8 @@ from pydantic import ValidationError
 
 from depictio.models.models.dashboards import DashboardDataLite, FilterSectionSpec
 
+STYLES = ["default", "headline", "compact", "minimal", "accent", "split"]
+
 KPI = {
     "component_type": "card",
     "tag": "kpi-samples",
@@ -27,7 +29,7 @@ def _dash(*components, grid_sections=None):
     )
 
 
-@pytest.mark.parametrize("variant", ["default", "headline", "compact", "minimal"])
+@pytest.mark.parametrize("variant", STYLES)
 def test_card_variant_round_trips(variant):
     kpi = {**KPI, "display": {"variant": variant}}
     assert _dash(kpi).to_full()["stored_metadata"][0]["variant"] == variant
@@ -52,7 +54,7 @@ def test_section_card_variant_defaults_to_unset():
     assert FilterSectionSpec(name="x").card_variant is None
 
 
-@pytest.mark.parametrize("variant", ["default", "headline", "compact", "minimal"])
+@pytest.mark.parametrize("variant", STYLES)
 def test_section_card_variant_accepts_each_style(variant):
     assert FilterSectionSpec(name="x", card_variant=variant).card_variant == variant
 
@@ -85,3 +87,11 @@ def test_section_card_variant_does_not_write_into_its_cards():
     # cards: a card without its own variant keeps following the section.
     dash = _dash(KPI, grid_sections=[{"name": "Key figures", "card_variant": "compact"}])
     assert not dash.to_full()["stored_metadata"][0].get("variant")
+
+
+def test_card_variant_enum_lists_every_style():
+    from typing import get_args
+
+    from depictio.models.components.types import CardVariant
+
+    assert list(get_args(CardVariant)) == STYLES
