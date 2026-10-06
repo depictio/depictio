@@ -59,9 +59,14 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
-  isStripMember,
-  isStripSection,
-  stripSectionNames,
+  barSectionNames,
+  filtersInScope,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
+  mergeFilterScopes,
+  planScopedRequests,
+  sectionFilterScopes,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -399,18 +404,47 @@ const App: React.FC = () => {
   // fetch via ``DashboardGrid`` → ``ComponentRenderer``.
   const [refreshTick, setRefreshTick] = useState(0);
 
+  // Which filters belong to a section's own bar, and so reach that section's
+  // components only (see `filterScope.ts`): this tab's section bars, plus those
+  // of the persistent sections its siblings fan out here. Every fetch below
+  // goes through it — the grid's cells, the cards, the funnel, the maps.
+  const filterScopes = useMemo(
+    () =>
+      mergeFilterScopes(
+        sectionFilterScopes(dashboard?.stored_metadata, dashboard?.grid_sections),
+        ...crossTab.persistentSections
+          .filter(
+            (s) =>
+              s.kind === 'grid' && s.owner_dashboard_id !== dashboardId && hasSectionBar(s.spec),
+          )
+          .map((s) =>
+            sectionFilterScopes(
+              s.components.map((c) => c.metadata),
+              [s.spec],
+              s.owner_dashboard_id,
+            ),
+          ),
+      ),
+    [dashboard?.stored_metadata, dashboard?.grid_sections, crossTab.persistentSections, dashboardId],
+  );
+
   // Bulk-compute card values whenever the settled filter changes.
   //
   // The debounce used to live here as a local `setTimeout`; it now comes from
   // `deferredFilters`, shared with every other component. Keeping a second one
   // stacked on top would have delayed cards by twice as long as the figures
   // next to them, so they'd visibly lag behind the rest of the dashboard.
+  //
+  // One request per distinct filter set: a card in a section with a bar of its
+  // own is computed under that bar's filters, every other card without them
+  // (`planScopedRequests`). With no section bar filtering, that is the single
+  // request it always was.
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
-    const cardIds = (dashboard.stored_metadata || [])
+    const cards = (dashboard.stored_metadata || [])
       .filter((m) => m.component_type === 'card')
-      .map((m) => m.index);
-    if (cardIds.length === 0) return;
+      .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
+    if (cards.length === 0) return;
 
     setCardsLoading(true);
     // Keep the previous card values mounted while the new bulk-compute
@@ -419,29 +453,43 @@ const App: React.FC = () => {
     // snap every card back to ``…`` on every keystroke / drag step.
     if (bulkCtrl.current) bulkCtrl.current.abort();
     bulkCtrl.current = new AbortController();
-    bulkComputeCards(
-      dashboardId,
-      deferredFilters,
-      cardIds,
-      groupsApi.bulkOptions,
-      // Wired to the abort above: without it a slow superseded response (e.g.
-      // compare-on forces real Delta loads) could land after a fast newer one
-      // and resurrect stale card strips.
-      bulkCtrl.current.signal,
+    const signal = bulkCtrl.current.signal;
+    Promise.all(
+      planScopedRequests(cards, deferredFilters, filterScopes).map((req) =>
+        bulkComputeCards(
+          dashboardId,
+          req.filters,
+          req.ids,
+          groupsApi.bulkOptions,
+          // Wired to the abort above: without it a slow superseded response
+          // (e.g. compare-on forces real Delta loads) could land after a fast
+          // newer one and resurrect stale card strips.
+          signal,
+        ),
+      ),
     )
-      .then((res) => {
-        setCardValues(res.values);
-        setCardSecondaryValues(res.secondary_values || {});
+      .then((responses) => {
+        const values: Record<string, unknown> = {};
+        const secondary: Record<string, Record<string, unknown>> = {};
+        for (const res of responses) {
+          Object.assign(values, res.values);
+          Object.assign(secondary, res.secondary_values || {});
+        }
+        setCardValues(values);
+        setCardSecondaryValues(secondary);
       })
       .catch((err) => {
         if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
       })
-      .finally(() => setCardsLoading(false));
+      .finally(() => {
+        if (!signal.aborted) setCardsLoading(false);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dashboard,
     dashboardId,
     deferredFilterKey,
+    filterScopes,
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
@@ -452,10 +500,10 @@ const App: React.FC = () => {
     () => new Set(crossTab.floating.map((c) => c.metadata.index)),
     [crossTab.floating],
   );
-  // Grid sections drawn as filter bars: their interactive components render
-  // in the grid, not in the filter panel.
-  const stripNames = useMemo(
-    () => stripSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+  // Grid sections with a filter bar (drawn as one, or carrying their own):
+  // their interactive components render in the grid, not in the filter panel.
+  const barNames = useMemo(
+    () => barSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
     [dashboard?.grid_sections],
   );
   const persistentFilterIndices = useMemo(
@@ -469,19 +517,19 @@ const App: React.FC = () => {
         // here as well, so they persist even against a server that predates
         // filter bars and so does not list them.
         ...crossTab.persistentSections
-          .filter((s) => s.kind === 'grid' && isStripSection(s.spec))
+          .filter((s) => s.kind === 'grid' && isBarSection(s.spec))
           .flatMap((s) => s.components.map((c) => c.metadata))
           .filter((m) => m.component_type === 'interactive')
           .map((m) => m.index),
         ...(dashboard?.stored_metadata ?? [])
           .filter((m) => {
-            if (!isStripMember(m, stripNames)) return false;
+            if (!isBarMember(m, barNames)) return false;
             const spec = (dashboard?.grid_sections ?? []).find((g) => g.name === m.section);
             return Boolean(spec?.persistent);
           })
           .map((m) => m.index),
       ]),
-    [crossTab.persistentSections, dashboard, stripNames],
+    [crossTab.persistentSections, dashboard, barNames],
   );
   // Persistent sections owned by *other* tabs. The current tab's own persistent
   // sections render natively (grid ones in DashboardGrid, filter ones in the
@@ -588,6 +636,23 @@ const App: React.FC = () => {
       setFilters((prev) => mergeFiltersBySource(prev, enriched));
     },
     [summaryMetadata],
+  );
+
+  // A bar's "Reset": its own controls' values go, everything else stays.
+  const handleResetFilterIndices = useCallback((indices: string[]) => {
+    const drop = new Set(indices);
+    setFilters((prev) => prev.filter((f) => !(drop.has(f.index) && f.source === undefined)));
+  }, []);
+  // What filters the tab as a whole: everything but the section bars'. For the
+  // components that sit in no section — the floating and docked maps, the
+  // funnel overview.
+  const tabFilters = useMemo(
+    () => filtersInScope(combinedFilters, filterScopes, null),
+    [combinedFilters, filterScopes],
+  );
+  const tabDeferredFilters = useMemo(
+    () => filtersInScope(deferredFilters, filterScopes, null),
+    [deferredFilters, filterScopes],
   );
 
   const handleResetAllFilters = useCallback(() => {
@@ -780,7 +845,7 @@ const App: React.FC = () => {
   );
   const leftComponents = useMemo(() => {
     const own = interactiveComponents.filter(
-      (m) => m.placement !== 'top' && !isStripMember(m, stripNames),
+      (m) => m.placement !== 'top' && !isBarMember(m, barNames),
     );
     const seen = new Set(own.map((m) => m.index));
     // Controls fanned out from sibling tabs' persistent filter sections render
@@ -790,11 +855,11 @@ const App: React.FC = () => {
       .flatMap((s) => s.components.map((c) => c.metadata))
       .filter((m) => !seen.has(m.index) && m.placement !== 'top');
     return foreign.length ? [...own, ...foreign] : own;
-  }, [interactiveComponents, foreignFilterSections, stripNames]);
+  }, [interactiveComponents, foreignFilterSections, barNames]);
   // The filter bars' controls, drawn by the grid in their section.
-  const stripComponents = useMemo(
-    () => interactiveComponents.filter((m) => isStripMember(m, stripNames)),
-    [interactiveComponents, stripNames],
+  const barComponents = useMemo(
+    () => interactiveComponents.filter((m) => isBarMember(m, barNames)),
+    [interactiveComponents, barNames],
   );
   // Section chrome for the panel: the tab's own specs plus the foreign
   // persistent ones its fanned-out controls belong to. Own specs win on a name
@@ -848,11 +913,13 @@ const App: React.FC = () => {
           slot="top"
           filters={deferredFilters}
           controlFilters={filters}
+          filterScopes={filterScopes}
           onFilterChange={handleFilterChange}
           refreshTick={refreshTick}
           groupRender={groupRender}
           bulkOptions={groupsApi.bulkOptions}
           onResetFilters={handleResetAllFilters}
+          onResetBarFilters={handleResetFilterIndices}
         />
       </div>
     ) : null;
@@ -919,10 +986,10 @@ const App: React.FC = () => {
   );
   const rightComponents = useMemo(
     () =>
-      [...cardComponents, ...otherComponents, ...stripComponents].filter(
+      [...cardComponents, ...otherComponents, ...barComponents].filter(
         (m) => !(typeof m.section === 'string' && excludedOwnSections.has(m.section)),
       ),
-    [cardComponents, otherComponents, stripComponents, excludedOwnSections],
+    [cardComponents, otherComponents, barComponents, excludedOwnSections],
   );
 
   // Same count the panel badges, hoisted so the narrow-screen header button can
@@ -1051,7 +1118,7 @@ const App: React.FC = () => {
       projectId={dashboard?.project_id}
       funnel={
         dashboardId
-          ? { enabled: funnelEnabled, dashboardId, filters: deferredFilters }
+          ? { enabled: funnelEnabled, dashboardId, filters: deferredFilters, scopes: filterScopes }
           : undefined
       }
     >
@@ -1344,8 +1411,9 @@ const App: React.FC = () => {
                       panel={mapPanel}
                       // Docked maps render data, so they must see active group
                       // filters too (instant copy: group toggles are single
-                      // clicks, no debounce needed).
-                      filters={combinedFilters}
+                      // clicks, no debounce needed). Tab-wide only: a section
+                      // bar's filters stay with its section.
+                      filters={tabFilters}
                       onFilterChange={handleFilterChange}
                       refreshTick={refreshTick}
                     />
@@ -1441,6 +1509,8 @@ const App: React.FC = () => {
                     beforeSections={topSectionsHost}
                     filters={deferredFilters}
                     controlFilters={filters}
+                    filterScopes={filterScopes}
+                    onResetFilters={handleResetFilterIndices}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
                     cardSecondaryValues={cardSecondaryValues}
@@ -1462,6 +1532,8 @@ const App: React.FC = () => {
                     slot="bottom"
                     filters={deferredFilters}
                     controlFilters={filters}
+                    filterScopes={filterScopes}
+                    onResetBarFilters={handleResetFilterIndices}
                     onFilterChange={handleFilterChange}
                     refreshTick={refreshTick}
                     groupRender={groupRender}
@@ -1536,7 +1608,7 @@ const App: React.FC = () => {
             opened={funnelViewOpen}
             onClose={() => setFunnelViewOpen(false)}
             dashboardId={dashboardId}
-            filters={deferredFilters}
+            filters={tabDeferredFilters}
             groups={groupsApi.groups}
           />
         )}
@@ -1554,8 +1626,8 @@ const App: React.FC = () => {
             <MapPanelSurface
               panel={mapPanel}
               // Floating maps render data: give them group filters too (see the
-              // docked MapPanelDock above).
-              filters={combinedFilters}
+              // docked MapPanelDock above), and the tab's only.
+              filters={tabFilters}
               onFilterChange={handleFilterChange}
               refreshTick={refreshTick}
             />

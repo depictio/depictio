@@ -179,29 +179,52 @@ export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
 
-// Filter bar: a grid section with `display: 'strip'` drawn as one compact row
-// of its interactive components. The placement rules are exported so the apps
-// route those components out of the filter panel by the same predicate the
-// grid uses to draw them.
+// Filter bars: a grid section drawn as one compact row of its interactive
+// components (`display: 'strip'`, filtering the tab), or a section of tiles
+// with a bar of its own (`filter_bar`, filtering that section only). The
+// placement rules are exported so the apps route those components out of the
+// filter panel by the same predicate the grid uses to draw them, and the
+// scoping rules so every fetch applies the same "which filters reach which
+// component".
 export {
+  EmptyBar,
   FilterStrip,
   FilterStripSection,
+  SectionFilterBar,
 } from './components/interactive/strip/FilterStrip';
 export type {
   FilterStripProps,
   FilterStripSectionProps,
+  FilterStripVariant,
+  SectionFilterBarProps,
 } from './components/interactive/strip/FilterStrip';
 export {
-  isStripMember,
+  SECTION_BAR_DEFAULT_VISIBLE,
+  barSectionNames,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
   isStripSection,
-  partitionStripMembers,
+  partitionBarMembers,
+  sectionBarNames,
   sectionRuns,
   stripControlKind,
   stripLabel,
-  stripSectionNames,
   stripShowsIcon,
+  visibleFilterCount,
 } from './components/interactive/strip/stripLayout';
 export type { StripControlKind } from './components/interactive/strip/stripLayout';
+export {
+  NO_FILTER_SCOPES,
+  activeFilterSignature,
+  filtersInScope,
+  mergeFilterScopes,
+  planScopedRequests,
+  scopedFilterIds,
+  sectionFilterScopes,
+  sectionScopeKey,
+} from './filterScope';
+export type { FilterScopes, ScopedRequest } from './filterScope';
 export {
   MAX_STRIP_CHIPS,
   categoricalDisplay,

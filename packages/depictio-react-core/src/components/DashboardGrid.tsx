@@ -22,7 +22,7 @@ import {
   PanelToggleDetail,
   isPanelResizing,
 } from '../utils/panelToggle';
-import { Accordion, Button, Group, Paper, Text } from '@mantine/core';
+import { Accordion, Badge, Button, Group, Paper, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteractive';
 import type { ComponentSection } from '../utils/groupInteractive';
@@ -36,13 +36,16 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
-import { FilterStripSection } from './interactive/strip/FilterStrip';
+import { FilterStripSection, SectionFilterBar } from './interactive/strip/FilterStrip';
 import {
-  isStripMember,
+  barSectionNames,
+  hasSectionBar,
+  isBarMember,
   isStripSection,
   sectionRuns,
-  stripSectionNames,
 } from './interactive/strip/stripLayout';
+import { isFilterActive } from '../activeFilters';
+import { filtersInScope, sectionFilterScopes, type FilterScopes } from '../filterScope';
 import { withSectionStyles } from './figureStyle';
 import {
   fitLayoutHeights,
@@ -134,6 +137,16 @@ interface DashboardGridProps {
    * click at once, as the filter panel's do.
    */
   controlFilters?: InteractiveFilter[];
+  /**
+   * Which filters belong to a section's own bar (`filterScope.ts`). A cell in
+   * section S is handed the tab's filters plus S's bar filters, and no other
+   * section's. The apps pass the family-wide map (a bar fanned out from a
+   * sibling tab scopes its filters away from this grid too); without it the
+   * grid derives the map from its own sections.
+   */
+  filterScopes?: FilterScopes;
+  /** Clears the given filters (by index): a bar's "Reset". */
+  onResetFilters?: (indices: string[]) => void;
 }
 
 /**
@@ -197,14 +210,22 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   renderSectionActions,
   renderStripItemOverlay,
   controlFilters,
+  filterScopes,
+  onResetFilters,
 }) => {
   // Filter-bar members ride along in `metadataList` so they bucket into their
   // section, but they are drawn by the bar and never laid out on the grid:
   // their coordinates (if any) live in the left panel's layout, and an item
   // without one here would be auto-placed — and then persisted by the editor.
-  const stripNames = useMemo(() => stripSectionNames(gridSections), [gridSections]);
-  const onGrid = useCallback((m: StoredMetadata) => !isStripMember(m, stripNames), [stripNames]);
+  const barNames = useMemo(() => barSectionNames(gridSections), [gridSections]);
+  const onGrid = useCallback((m: StoredMetadata) => !isBarMember(m, barNames), [barNames]);
   const gridMetadata = useMemo(() => metadataList.filter(onGrid), [metadataList, onGrid]);
+  const scopes = useMemo(
+    () => filterScopes ?? sectionFilterScopes(metadataList, gridSections),
+    [filterScopes, metadataList, gridSections],
+  );
+  // What a bar's controls show and count as active: the instant copy.
+  const shownFilters = controlFilters ?? filters;
 
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
@@ -555,9 +576,21 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // React re-rendered every Plotly figure and AG Grid on the dashboard to reach
   // the one cell that actually changed. Item geometry is RGL's business and
   // travels through `layouts`, not through these children.
+  // The filters each section's cells see: the tab's, plus the section's own
+  // bar's (see `filterScope.ts`). The same array as `filters` wherever nothing
+  // is scoped away, so a dashboard without section bars renders as before.
+  const filtersBySection = useMemo(() => {
+    const byKey = new Map<string, InteractiveFilter[]>();
+    for (const section of sections) {
+      byKey.set(section.key, filtersInScope(filters, scopes, section.sectionName ?? null));
+    }
+    return byKey;
+  }, [sections, filters, scopes]);
+
   const cellsBySection = useMemo(() => {
     const byKey = new Map<string, React.ReactNode[]>();
     for (const section of sections) {
+      const sectionFilters = filtersBySection.get(section.key) ?? filters;
       byKey.set(
         section.key,
         section.members.filter(onGrid).map((m) => (
@@ -590,7 +623,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 // written onto the card: a card added to the section later, or
                 // a section restyled later, follows without a migration.
                 metadata={withSectionStyles(m, section.spec)}
-                filters={filters}
+                filters={sectionFilters}
                 onFilterChange={onFilterChange}
                 cardValue={cardValues?.[m.index]}
                 cardSecondaryValues={cardSecondaryValues?.[m.index]}
@@ -611,6 +644,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     sections,
     dashboardId,
     filters,
+    filtersBySection,
     onFilterChange,
     cardValues,
     cardSecondaryValues,
@@ -637,16 +671,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       : containerWidth;
 
   const renderGrid = (section: ComponentSection) =>
-    section.members.length === 0 ? (
-      // Only reachable in edit mode (`includeEmpty`). Without a body a freshly
+    !section.members.some(onGrid) ? (
+      // Only shown in edit mode (`includeEmpty`). Without a body a freshly
       // created section is an accordion item that opens onto nothing, which
-      // reads as broken rather than as empty.
-      <Paper withBorder radius="md" p="lg" bg="var(--mantine-color-default-hover)">
-        <Text size="sm" c="dimmed" ta="center">
-          No components yet — move one here from its ⋮ menu, or pick this section
-          while creating one.
-        </Text>
-      </Paper>
+      // reads as broken rather than as empty. A section holding only its bar's
+      // filters has no tiles either, and readers see just the bar.
+      editMode ? (
+        <Paper withBorder radius="md" p="lg" bg="var(--mantine-color-default-hover)">
+          <Text size="sm" c="dimmed" ta="center">
+            No components yet — move one here from its ⋮ menu, or pick this section
+            while creating one.
+          </Text>
+        </Paper>
+      ) : null
     ) : (
     <ResponsiveGridLayout
       className="layout"
@@ -718,20 +755,45 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   const foldable = named.filter((s) => !isPlain(s) && !isStrip(s));
   const anySectionOpen = foldable.some((s) => sectionCollapse.isOpen(s.key));
 
+  // A bar's "Reset": clears its own controls, and only those.
+  const resetFor = (members: StoredMetadata[]) =>
+    onResetFilters ? () => onResetFilters(members.map((m) => m.index)) : undefined;
+
   const renderStripSection = (section: ComponentSection) => {
     const rest = section.members.filter(onGrid);
+    const members = section.members.filter((m) => !onGrid(m));
     return (
       <FilterStripSection
         key={section.key}
         name={section.sectionName ?? ''}
         spec={section.spec}
-        members={section.members.filter((m) => !onGrid(m))}
-        filters={controlFilters ?? filters}
+        members={members}
+        filters={shownFilters}
         onFilterChange={onFilterChange}
+        onReset={resetFor(members)}
         editMode={editMode}
         actions={editMode ? renderSectionActions?.(section.sectionName ?? null) : undefined}
         renderItemActions={editMode ? renderStripItemOverlay : undefined}
         rest={rest.length > 0 ? renderGrid(section) : null}
+      />
+    );
+  };
+
+  // A section's own bar, drawn under its heading; its filters reach this
+  // section's cells only (`filtersBySection`).
+  const renderSectionBar = (section: ComponentSection) => {
+    if (!hasSectionBar(section.spec)) return null;
+    const members = section.members.filter((m) => !onGrid(m));
+    return (
+      <SectionFilterBar
+        name={section.sectionName ?? ''}
+        spec={section.spec}
+        members={members}
+        filters={shownFilters}
+        onFilterChange={onFilterChange}
+        onReset={resetFor(members)}
+        editMode={editMode}
+        renderItemActions={editMode ? renderStripItemOverlay : undefined}
       />
     );
   };
@@ -776,17 +838,22 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               <SectionHeader
                 spec={section.spec}
                 name={section.sectionName}
+                badge={<SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />}
                 // Only while folded: expanded, these numbers are already on
                 // screen as the cards themselves. Folding a section must not
                 // cost you the figures it was showing.
                 trailing={
                   !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
-                    <SectionSummary section={section} cardValues={cardValues} />
+                    <SectionSummary
+                      section={{ ...section, members: section.members.filter(onGrid) }}
+                      cardValues={cardValues}
+                    />
                   ) : undefined
                 }
               />
             </Accordion.Control>
             <Accordion.Panel>
+              {renderSectionBar(section)}
               {/* Plain wrapper so the width available inside the section box
                   can be read off the DOM — see `sectionInset`. Absent until
                   the section has been opened once: see `renderedSections`. */}
@@ -844,6 +911,45 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
 };
 
 export default DashboardGrid;
+
+/**
+ * "Filtered", beside the heading of a section whose own bar is narrowing it:
+ * the cue that these tiles show a subset, and that the rest of the tab does
+ * not. Nothing for a section without a bar, or with its bar at rest.
+ */
+const SectionFilteredBadge: React.FC<{
+  section: ComponentSection;
+  filters: InteractiveFilter[];
+  onGrid: (m: StoredMetadata) => boolean;
+}> = ({ section, filters, onGrid }) => {
+  if (!hasSectionBar(section.spec)) return null;
+  const bar = new Set(section.members.filter((m) => !onGrid(m)).map((m) => m.index));
+  const active = filters.filter(
+    (f) => bar.has(f.index) && f.source === undefined && isFilterActive(f),
+  ).length;
+  if (active === 0) return null;
+  return (
+    <Tooltip
+      label={`${active} filter${active === 1 ? '' : 's'} of this section's bar narrow${
+        active === 1 ? 's' : ''
+      } these tiles. The rest of the tab is not affected.`}
+      withArrow
+      multiline
+      w={260}
+    >
+      <Badge
+        size="sm"
+        variant="light"
+        radius="sm"
+        leftSection={<Icon icon="mdi:filter-variant" width={12} height={12} />}
+        style={{ flexShrink: 0, pointerEvents: 'auto' }}
+        data-testid="section-filtered-badge"
+      >
+        Filtered
+      </Badge>
+    </Tooltip>
+  );
+};
 
 /** How many metric chips a folded section header shows before it gives up and
  *  falls back to a plain count. Four fits a narrow viewport without wrapping. */

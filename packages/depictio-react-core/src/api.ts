@@ -403,6 +403,14 @@ export interface FilterSectionSpec {
    *  interactive components naming it leave the filter panel and render as one
    *  compact row. Unset (or `grid`) is one tile each on the grid. */
   display?: 'grid' | 'strip' | null;
+  /** Grid sections of tiles: a filter bar of the section's own, under its
+   *  heading. The interactive components naming the section render there, and
+   *  their values narrow only this section's tiles (see `filterScope.ts`).
+   *  Ignored on a `display: 'strip'` section. */
+  filter_bar?: boolean | null;
+  /** How many filters a bar shows before its "More filters" toggle. Unset: 2
+   *  on a section's own bar, every filter on a `display: 'strip'` bar. */
+  visible_filters?: number | null;
   /** Grid sections: the style every figure in the section is drawn in unless
    *  the figure sets its own `figure_style`. */
   figure_style?: 'default' | 'minimal' | null;

@@ -46,6 +46,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from './api';
+import { filtersInScope, type FilterScopes } from './filterScope';
 
 /** Funnel result for one interactive component (issue #939). */
 export interface FunnelComponentState {
@@ -189,6 +190,11 @@ export interface AvailableFilterValuesProviderProps {
     enabled: boolean;
     dashboardId: string;
     filters: InteractiveFilter[];
+    /** Section-bar scopes (`filterScope.ts`). A control's remaining values are
+     *  computed against the filters its own scope sees: a section bar's
+     *  controls against the tab's filters plus that bar's, every other control
+     *  against the tab's alone. One request per scope; one in all without. */
+    scopes?: FilterScopes;
   };
   children: React.ReactNode;
 }
@@ -234,18 +240,40 @@ export const AvailableFilterValuesProvider: React.FC<
     if (indexes.length === 0) return;
 
     const controller = new AbortController();
+    // Targets grouped by the scope they filter in: each group is answered
+    // against the filters that scope sees. Without section bars, one group.
+    const scopes = funnel.scopes;
+    const byScope = new Map<string | null, string[]>();
+    for (const index of indexes) {
+      const scope = scopes?.get(index) ?? null;
+      const group = byScope.get(scope) ?? [];
+      group.push(index);
+      byScope.set(scope, group);
+    }
     // Small extra debounce on top of the shell's deferred filters: a burst of
     // component registrations on mount collapses into one request.
     const timer = window.setTimeout(() => {
-      fetchFunnelValues(funnel.dashboardId, funnel.filters, indexes, false, controller.signal)
-        .then((res) => {
+      Promise.all(
+        [...byScope.entries()].map(([scope, group]) =>
+          fetchFunnelValues(
+            funnel.dashboardId,
+            filtersInScope(funnel.filters, scopes, scope),
+            group,
+            false,
+            controller.signal,
+          ),
+        ),
+      )
+        .then((responses) => {
           const targets: Record<string, FunnelComponentState> = {};
-          for (const [index, t] of Object.entries(res.targets || {})) {
-            targets[index] = {
-              status: t.status,
-              set: t.status === 'ok' ? new Set((t.values || []).map(String)) : null,
-              truncated: Boolean(t.truncated),
-            };
+          for (const res of responses) {
+            for (const [index, t] of Object.entries(res.targets || {})) {
+              targets[index] = {
+                status: t.status,
+                set: t.status === 'ok' ? new Set((t.values || []).map(String)) : null,
+                truncated: Boolean(t.truncated),
+              };
+            }
           }
           setFunnelState({ key: funnelKey, targets });
         })
@@ -261,7 +289,7 @@ export const AvailableFilterValuesProvider: React.FC<
     };
     // funnelKey is the stable identity of funnel.filters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [funnelEnabled, funnel?.dashboardId, funnelKey, funnelTargetsVersion]);
+  }, [funnelEnabled, funnel?.dashboardId, funnelKey, funnelTargetsVersion, funnel?.scopes]);
 
   const dcs = useMemo(
     () => collectDataDcs(dashboardMetadata),

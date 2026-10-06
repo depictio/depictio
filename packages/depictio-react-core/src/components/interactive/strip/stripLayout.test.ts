@@ -2,15 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import type { FilterSectionSpec, StoredMetadata } from '../../../api';
 import {
+  barSectionNames,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
   isFullRange,
-  isStripMember,
   isStripSection,
-  partitionStripMembers,
+  partitionBarMembers,
+  sectionBarNames,
   sectionRuns,
   stripControlKind,
   stripLabel,
-  stripSectionNames,
   stripShowsIcon,
+  visibleFilterCount,
 } from './stripLayout';
 
 const meta = (extra: Partial<StoredMetadata>): StoredMetadata =>
@@ -18,47 +22,81 @@ const meta = (extra: Partial<StoredMetadata>): StoredMetadata =>
 
 const SECTIONS: FilterSectionSpec[] = [
   { name: 'Filters', display: 'strip' },
-  { name: 'Key figures' },
+  { name: 'Key figures', filter_bar: true },
   { name: 'Charts', display: 'grid' },
+  // A strip asking for a bar of its own as well is still just a strip.
+  { name: 'Both', display: 'strip', filter_bar: true },
 ];
 
-describe('stripSectionNames / isStripSection', () => {
-  it('names only the sections drawn as a strip', () => {
-    expect([...stripSectionNames(SECTIONS)]).toEqual(['Filters']);
+describe('bar sections', () => {
+  it('tells the two kinds of bar apart', () => {
     expect(isStripSection({ name: 'x', display: 'strip' })).toBe(true);
-    expect(isStripSection({ name: 'x' })).toBe(false);
-    expect(isStripSection(null)).toBe(false);
+    expect(isStripSection({ name: 'x', filter_bar: true })).toBe(false);
+    expect(hasSectionBar({ name: 'x', filter_bar: true })).toBe(true);
+    expect(hasSectionBar({ name: 'x', display: 'strip', filter_bar: true })).toBe(false);
+    expect(hasSectionBar({ name: 'x', filter_bar: false })).toBe(false);
+    expect(isBarSection({ name: 'x' })).toBe(false);
+    expect(isBarSection(null)).toBe(false);
+  });
+
+  it('names the sections whose filters render in a bar, and those with their own', () => {
+    expect([...barSectionNames(SECTIONS)]).toEqual(['Filters', 'Key figures', 'Both']);
+    expect([...sectionBarNames(SECTIONS)]).toEqual(['Key figures']);
   });
 
   it('copes with no sections at all', () => {
-    expect(stripSectionNames(undefined).size).toBe(0);
+    expect(barSectionNames(undefined).size).toBe(0);
+    expect(sectionBarNames(null).size).toBe(0);
   });
 });
 
-describe('isStripMember', () => {
-  const names = stripSectionNames(SECTIONS);
+describe('isBarMember', () => {
+  const names = barSectionNames(SECTIONS);
 
-  it('takes an interactive component naming a strip section', () => {
-    expect(isStripMember(meta({ section: 'Filters' }), names)).toBe(true);
+  it('takes an interactive component naming either kind of bar section', () => {
+    expect(isBarMember(meta({ section: 'Filters' }), names)).toBe(true);
+    expect(isBarMember(meta({ section: 'Key figures' }), names)).toBe(true);
   });
 
   it('leaves everything else where it was', () => {
-    // Unsectioned, or in a section that is not a strip: the filter panel.
-    expect(isStripMember(meta({}), names)).toBe(false);
-    expect(isStripMember(meta({ section: 'Charts' }), names)).toBe(false);
-    // Not interactive: a card in a strip section is still a grid tile.
-    expect(isStripMember(meta({ component_type: 'card', section: 'Filters' }), names)).toBe(false);
+    // Unsectioned, or in a section without a bar: the filter panel.
+    expect(isBarMember(meta({}), names)).toBe(false);
+    expect(isBarMember(meta({ section: 'Charts' }), names)).toBe(false);
+    // Not interactive: a card in a bar section is still a grid tile.
+    expect(isBarMember(meta({ component_type: 'card', section: 'Filters' }), names)).toBe(false);
+    expect(isBarMember(meta({ component_type: 'card', section: 'Key figures' }), names)).toBe(false);
     // The footer wins: a Timeline lifted to the top has no compact form.
-    expect(isStripMember(meta({ section: 'Filters', placement: 'top' }), names)).toBe(false);
+    expect(isBarMember(meta({ section: 'Filters', placement: 'top' }), names)).toBe(false);
   });
 
   it('partitions in order', () => {
     const a = meta({ index: 'a', section: 'Filters' });
     const b = meta({ index: 'b' });
-    const c = meta({ index: 'c', section: 'Filters' });
-    const { strip, rest } = partitionStripMembers([a, b, c], names);
-    expect(strip.map((m) => m.index)).toEqual(['a', 'c']);
+    const c = meta({ index: 'c', section: 'Key figures' });
+    const { bar, rest } = partitionBarMembers([a, b, c], names);
+    expect(bar.map((m) => m.index)).toEqual(['a', 'c']);
     expect(rest.map((m) => m.index)).toEqual(['b']);
+  });
+});
+
+describe('visibleFilterCount', () => {
+  it('shows two filters on a section bar unless told otherwise', () => {
+    expect(visibleFilterCount({ name: 'k', filter_bar: true }, 4)).toBe(2);
+    expect(visibleFilterCount({ name: 'k', filter_bar: true, visible_filters: 3 }, 4)).toBe(3);
+  });
+
+  it('shows every filter on a strip unless told otherwise', () => {
+    expect(visibleFilterCount({ name: 'f', display: 'strip' }, 4)).toBe(4);
+    expect(visibleFilterCount({ name: 'f', display: 'strip', visible_filters: 1 }, 4)).toBe(1);
+  });
+
+  it('never asks for more than there is, and ignores nonsense', () => {
+    expect(visibleFilterCount({ name: 'k', filter_bar: true }, 1)).toBe(1);
+    expect(visibleFilterCount({ name: 'k', filter_bar: true, visible_filters: 9 }, 4)).toBe(4);
+    expect(visibleFilterCount({ name: 'k', filter_bar: true, visible_filters: 0 }, 4)).toBe(2);
+    expect(visibleFilterCount({ name: 'k', filter_bar: true, visible_filters: 2.7 }, 4)).toBe(2);
+    expect(visibleFilterCount(null, 3)).toBe(3);
+    expect(visibleFilterCount({ name: 'k', filter_bar: true }, 0)).toBe(0);
   });
 });
 

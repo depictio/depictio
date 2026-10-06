@@ -11,7 +11,7 @@
  * an intent, `EditorApp` reduces it against `dashboardRef.current` (never
  * against a possibly-stale prop) and hands the result to the existing autosave.
  */
-import { isStripMember, stripSectionNames } from 'depictio-react-core';
+import { barSectionNames, isBarMember } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec, StoredMetadata } from 'depictio-react-core';
 
 /**
@@ -49,24 +49,25 @@ const listKey = (kind: SectionKind) =>
  * render paths. Scoping every mutation by this predicate is what keeps a rename
  * in one tab from touching the identically-named section in the other.
  *
- * The one exception is a filter bar (a grid section with `display: 'strip'`):
- * the interactive components naming it are grid members. Pass the dashboard's
- * bar names (`stripSectionNames`) to apply it; without them every interactive
+ * The one exception is a filter bar — a grid section drawn as one
+ * (`display: 'strip'`) or carrying one of its own (`filter_bar`): the
+ * interactive components naming it are grid members. Pass the dashboard's bar
+ * names (`barSectionNames`) to apply it; without them every interactive
  * component counts as a filter member, which is what the group rule wants.
  */
 export const isFilterMember = (
   m: StoredMetadata,
-  stripNames: ReadonlySet<string> = new Set(),
-): boolean => m.component_type === 'interactive' && !isStripMember(m, stripNames);
+  barNames: ReadonlySet<string> = new Set(),
+): boolean => m.component_type === 'interactive' && !isBarMember(m, barNames);
 
 export const memberOf =
-  (kind: SectionKind, stripNames?: ReadonlySet<string>) =>
+  (kind: SectionKind, barNames?: ReadonlySet<string>) =>
   (m: StoredMetadata): boolean =>
-    kind === 'filter' ? isFilterMember(m, stripNames) : !isFilterMember(m, stripNames);
+    kind === 'filter' ? isFilterMember(m, barNames) : !isFilterMember(m, barNames);
 
 /** `memberOf`, with the dashboard's filter bars taken into account. */
 const memberOfIn = (d: DashboardData, kind: SectionKind) =>
-  memberOf(kind, stripSectionNames(d.grid_sections));
+  memberOf(kind, barSectionNames(d.grid_sections));
 
 export const sectionsFor = (d: DashboardData, kind: SectionKind): FilterSectionSpec[] =>
   d[listKey(kind)] ?? [];
@@ -188,13 +189,13 @@ export function applySectionOp(d: DashboardData, op: SectionOp): DashboardData {
 
     case 'delete': {
       const isMember = memberOfIn(d, op.kind);
-      // A filter bar's controls only follow it into another bar: a tile
-      // section's name means nothing to a filter, and the same name in the
-      // filter panel is a different section. Otherwise they go back to the
-      // panel unsectioned.
-      const strips = stripSectionNames(d.grid_sections);
+      // A filter bar's controls only follow it into another bar (a strip, or
+      // a section with a bar of its own): a tile section's name means nothing
+      // to a filter, and the same name in the filter panel is a different
+      // section. Otherwise they go back to the panel unsectioned.
+      const bars = barSectionNames(d.grid_sections);
       const targetFor = (m: StoredMetadata) =>
-        m.component_type === 'interactive' && op.target && !strips.has(op.target)
+        m.component_type === 'interactive' && op.target && !bars.has(op.target)
           ? undefined
           : (op.target ?? undefined);
       return {

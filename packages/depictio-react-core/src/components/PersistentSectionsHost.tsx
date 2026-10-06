@@ -24,8 +24,14 @@ import ComponentRenderer from './ComponentRenderer';
 import { withSectionStyles } from './figureStyle';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
 import { fitLayoutHeights, GRID_ROW_GAP_PX, SPLIT_ROW_PX, useAutofitHeights } from './autofit';
-import { FilterStripSection } from './interactive/strip/FilterStrip';
-import { isStripSection, sectionRuns } from './interactive/strip/stripLayout';
+import { FilterStripSection, SectionFilterBar } from './interactive/strip/FilterStrip';
+import { hasSectionBar, isStripSection, sectionRuns } from './interactive/strip/stripLayout';
+import {
+  filtersInScope,
+  planScopedRequests,
+  sectionScopeKey,
+  type FilterScopes,
+} from '../filterScope';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -61,7 +67,19 @@ export interface PersistentSectionsHostProps {
   /** What a fanned-out filter bar's controls display — the instant filters,
    *  where `filters` is the debounced copy the data fetches use. */
   controlFilters?: InteractiveFilter[];
+  /** Which filters belong to a section's own bar (`filterScope.ts`), the
+   *  family-wide map the app builds. A fanned-out section with a bar of its
+   *  own is keyed `sectionScopeKey(name, owner)`: its members see its bar's
+   *  filters, and no other section's. */
+  filterScopes?: FilterScopes;
+  /** Clears the given filters (by index): a bar's "Reset". */
+  onResetBarFilters?: (indices: string[]) => void;
 }
+
+/** The scope a fanned-out section's members filter in: its own bar's, if it
+ *  has one, else none (the tab-wide filters only). */
+const hostScopeOf = (s: PersistentSection): string | null =>
+  hasSectionBar(s.spec) ? sectionScopeKey(s.spec.name, s.owner_dashboard_id) : null;
 
 /** A section fanned out from another tab is keyed by owner + name: two tabs
  *  each declaring a persistent section with the same name stay two sections. */
@@ -96,6 +114,8 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   renderSectionActions,
   onResetFilters,
   controlFilters,
+  filterScopes,
+  onResetBarFilters,
 }) => {
   const renderable = useMemo(
     () =>
@@ -142,23 +162,30 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   const [cardsLoading, setCardsLoading] = useState(false);
   const cardFetchId = useRef(0);
 
-  // Card ids per owning tab. Deliberately NOT gated on the lazy-mount set:
-  // a folded section's header shows summary chips built from these values
-  // (see the `trailing` below), so the cards are fetched even while the
-  // section has never been opened. Cards are one cheap bulk call — the
-  // lazy-mount rule still spares the heavy members (tables, figures).
-  const cardIdsByOwner = useMemo(() => {
-    const byOwner = new Map<string, string[]>();
+  // Card ids per owning tab, each with the scope its section filters in.
+  // Deliberately NOT gated on the lazy-mount set: a folded section's header
+  // shows summary chips built from these values (see the `trailing` below), so
+  // the cards are fetched even while the section has never been opened. Cards
+  // are one cheap bulk call — the lazy-mount rule still spares the heavy
+  // members (tables, figures).
+  const cardsByOwner = useMemo(() => {
+    const byOwner = new Map<string, { id: string; scope: string | null }[]>();
     for (const { section, members } of renderable) {
+      const scope = hostScopeOf(section);
       for (const m of members) {
         if (m.metadata.component_type !== 'card') continue;
         const list = byOwner.get(m.dashboard_id) ?? [];
-        list.push(m.metadata.index);
+        list.push({ id: m.metadata.index, scope });
         byOwner.set(m.dashboard_id, list);
       }
     }
     return byOwner;
   }, [renderable]);
+  const cardIdsByOwner = useMemo(
+    () =>
+      new Map([...cardsByOwner.entries()].map(([owner, cards]) => [owner, cards.map((c) => c.id)])),
+    [cardsByOwner],
+  );
   const cardIdsKey = useMemo(
     () =>
       [...cardIdsByOwner.entries()]
@@ -172,12 +199,16 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     if (cardIdsByOwner.size === 0) return;
     const fetchId = ++cardFetchId.current;
     setCardsLoading(true);
+    // One request per owner and per filter set: a section with a bar of its
+    // own computes its cards under that bar's filters (`planScopedRequests`).
     Promise.all(
-      [...cardIdsByOwner.entries()].map(([owner, ids]) =>
-        bulkComputeCards(owner, filters, ids, bulkOptions).catch((err) => {
-          console.warn('[PersistentSectionsHost] bulk-compute failed:', err);
-          return null;
-        }),
+      [...cardsByOwner.entries()].flatMap(([owner, cards]) =>
+        planScopedRequests(cards, filters, filterScopes).map((req) =>
+          bulkComputeCards(owner, req.filters, req.ids, bulkOptions).catch((err) => {
+            console.warn('[PersistentSectionsHost] bulk-compute failed:', err);
+            return null;
+          }),
+        ),
       ),
     )
       .then((results) => {
@@ -196,7 +227,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
         if (fetchId === cardFetchId.current) setCardsLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardIdsKey, JSON.stringify(filters), refreshTick]);
+  }, [cardIdsKey, JSON.stringify(filters), filterScopes, refreshTick]);
 
   // The same cards without filters: the denominator of the folded header's
   // "14 / 85". Fetched only while filters are active, and once per data
@@ -260,6 +291,8 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     gridWidth: number,
   ) => {
     const stored = toSplitRows(normalizeLayout(metas, section.layouts, false));
+    // The tab's filters, plus this section's own bar's if it has one.
+    const sectionFilters = filtersInScope(filters, filterScopes, hostScopeOf(section));
     return (
       <ResponsiveGridLayout
       className="layout"
@@ -312,7 +345,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
               // Same rule as the owner tab's grid: the
               // section's card style unless the card sets one.
               metadata={withSectionStyles(member.metadata, section.spec)}
-              filters={filters}
+              filters={sectionFilters}
               onFilterChange={onFilterChange}
               refreshTick={refreshTick}
               groupRender={groupRender}
@@ -342,6 +375,9 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
         members={bar.map((m) => m.metadata)}
         filters={controlFilters ?? filters}
         onFilterChange={onFilterChange}
+        onReset={
+          onResetBarFilters ? () => onResetBarFilters(bar.map((m) => m.metadata.index)) : undefined
+        }
         rest={others.length > 0 ? renderGrid(metas, others, section, containerWidth) : null}
       />
     );
@@ -363,8 +399,20 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
             value={keys.filter((k) => collapse.isOpen(k))}
             onChange={(open) => applyAccordionValue(open, keys, collapse)}
           >
-            {run.sections.map(({ section, members }) => {
+            {run.sections.map(({ section, members: all }) => {
               const key = hostSectionKey(section);
+              // A section with a bar of its own: its interactive members are the
+              // bar, drawn under the heading, and the rest are its tiles.
+              const withBar = hasSectionBar(section.spec);
+              const bar = withBar
+                ? all.filter((m) => m.metadata.component_type === 'interactive')
+                : [];
+              const members = withBar
+                ? all.filter((m) => m.metadata.component_type !== 'interactive')
+                : all;
+              // "Filtered" when something narrows what this section shows.
+              const sectionFiltered =
+                countActiveFilters(filtersInScope(filters, filterScopes, hostScopeOf(section))) > 0;
               // In the style each card is drawn in, so the fitting below treats a
               // row of compact cards the way the owner tab's grid does.
               // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
@@ -376,7 +424,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                   value={key}
                   color={section.spec.color}
                   actions={
-                    filtered && onResetFilters ? (
+                    sectionFiltered && onResetFilters ? (
                       <Group gap={6} wrap="nowrap">
                         <Button
                           size="compact-xs"
@@ -399,7 +447,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                       spec={section.spec}
                       name={section.spec.name}
                       badge={
-                        filtered ? (
+                        sectionFiltered ? (
                           <Badge size="xs" variant="light" color={section.spec.color || 'blue'}>
                             Filtered
                           </Badge>
@@ -419,13 +467,27 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                               members: metas,
                             }}
                             cardValues={cardValues}
-                            baseValues={filtered && baseValues ? baseValues : undefined}
+                            baseValues={sectionFiltered && baseValues ? baseValues : undefined}
                           />
                         ) : undefined
                       }
                     />
                   </Accordion.Control>
                   <Accordion.Panel>
+                    {withBar && (
+                      <SectionFilterBar
+                        name={section.spec.name}
+                        spec={section.spec}
+                        members={bar.map((m) => m.metadata)}
+                        filters={controlFilters ?? filters}
+                        onFilterChange={onFilterChange}
+                        onReset={
+                          onResetBarFilters
+                            ? () => onResetBarFilters(bar.map((m) => m.metadata.index))
+                            : undefined
+                        }
+                      />
+                    )}
                     {renderedKeys.has(key) && (
                       <div data-persistent-section-grid>
                         {renderGrid(metas, members, section, gridWidth)}

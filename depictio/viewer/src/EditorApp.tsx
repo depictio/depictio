@@ -112,15 +112,22 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
-  isStripMember,
+  barSectionNames,
+  filtersInScope,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
   isStripSection,
-  stripSectionNames,
+  mergeFilterScopes,
+  planScopedRequests,
+  sectionFilterScopes,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
   BrandTheme,
+  FilterScopes,
   FilterSectionSpec,
   PersistentSection,
   InteractiveFilter,
@@ -412,13 +419,36 @@ const EditorApp: React.FC = () => {
       .finally(() => setLoading(false));
   }, [dashboardId]);
 
-  // Bulk-compute card values when filters change (mirrors App.tsx)
+  // Section-bar scopes, as the viewer builds them (App.tsx): which filters
+  // reach only their own section's components.
+  const filterScopes = useMemo(
+    () =>
+      mergeFilterScopes(
+        sectionFilterScopes(dashboard?.stored_metadata, dashboard?.grid_sections),
+        ...crossTab.persistentSections
+          .filter(
+            (s) =>
+              s.kind === 'grid' && s.owner_dashboard_id !== dashboardId && hasSectionBar(s.spec),
+          )
+          .map((s) =>
+            sectionFilterScopes(
+              s.components.map((c) => c.metadata),
+              [s.spec],
+              s.owner_dashboard_id,
+            ),
+          ),
+      ),
+    [dashboard?.stored_metadata, dashboard?.grid_sections, crossTab.persistentSections, dashboardId],
+  );
+
+  // Bulk-compute card values when filters change (mirrors App.tsx, one request
+  // per distinct filter set so a section bar narrows its own cards only).
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
-    const cardIds = (dashboard.stored_metadata || [])
+    const cards = (dashboard.stored_metadata || [])
       .filter((m) => m.component_type === 'card')
-      .map((m) => m.index);
-    if (cardIds.length === 0) return;
+      .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
+    if (cards.length === 0) return;
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
@@ -427,25 +457,38 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(
-        dashboardId,
-        combinedFilters,
-        cardIds,
-        groupsApi.bulkOptions,
-        // See App.tsx: prevents a slow superseded compare-on response from
-        // overwriting a newer one.
-        bulkCtrl.current.signal,
+      const signal = bulkCtrl.current.signal;
+      Promise.all(
+        planScopedRequests(cards, combinedFilters, filterScopes).map((req) =>
+          bulkComputeCards(
+            dashboardId,
+            req.filters,
+            req.ids,
+            groupsApi.bulkOptions,
+            // See App.tsx: prevents a slow superseded compare-on response from
+            // overwriting a newer one.
+            signal,
+          ),
+        ),
       )
-        .then((res) => {
-          setCardValues(res.values);
-          setCardSecondaryValues(res.secondary_values || {});
+        .then((responses) => {
+          const values: Record<string, unknown> = {};
+          const secondary: Record<string, Record<string, unknown>> = {};
+          for (const res of responses) {
+            Object.assign(values, res.values);
+            Object.assign(secondary, res.secondary_values || {});
+          }
+          setCardValues(values);
+          setCardSecondaryValues(secondary);
         })
         .catch((err) => {
           if (err?.name !== 'AbortError') {
             console.warn('[EditorApp] bulk-compute failed:', err);
           }
         })
-        .finally(() => setCardsLoading(false));
+        .finally(() => {
+          if (!signal.aborted) setCardsLoading(false);
+        });
     }, 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -453,6 +496,7 @@ const EditorApp: React.FC = () => {
     dashboard,
     dashboardId,
     stableFilterKey(combinedFilters),
+    filterScopes,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
   ]);
@@ -1010,19 +1054,19 @@ const EditorApp: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement === 'top'),
     [interactiveComponents],
   );
-  // Grid sections drawn as filter bars (App.tsx draws the same split): their
+  // Grid sections with a filter bar (App.tsx draws the same split): their
   // interactive components render in the grid, not in the filter panel.
-  const stripNames = useMemo(
-    () => stripSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+  const barNames = useMemo(
+    () => barSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
     [dashboard?.grid_sections],
   );
-  const stripComponents = useMemo(
-    () => interactiveComponents.filter((m) => isStripMember(m, stripNames)),
-    [interactiveComponents, stripNames],
+  const barComponents = useMemo(
+    () => interactiveComponents.filter((m) => isBarMember(m, barNames)),
+    [interactiveComponents, barNames],
   );
   const leftComponents = useMemo(() => {
     const own = interactiveComponents.filter(
-      (m) => m.placement !== 'top' && !isStripMember(m, stripNames),
+      (m) => m.placement !== 'top' && !isBarMember(m, barNames),
     );
     const seen = new Set(own.map((m) => m.index));
     // Controls fanned out from a sibling tab's persistent filter section, same
@@ -1033,7 +1077,7 @@ const EditorApp: React.FC = () => {
       .flatMap((s) => s.components.map((c) => c.metadata))
       .filter((m) => !seen.has(m.index) && m.placement !== 'top');
     return foreign.length ? [...own, ...foreign] : own;
-  }, [interactiveComponents, foreignFilterSections, stripNames]);
+  }, [interactiveComponents, foreignFilterSections, barNames]);
   // Section chrome for the panel — own specs plus the foreign persistent ones,
   // own winning a name clash. Distinct from the `filterSections` memo below,
   // which feeds the ⋮ "Move to section" menus and must stay own-only: a
@@ -1140,13 +1184,14 @@ const EditorApp: React.FC = () => {
     [dashboard?.filter_sections],
   );
   // A filter can also move into a filter bar — a grid section shown as a
-  // strip — and a tile cannot, so the two menus split the bars between them.
-  // A bar wins a name clash with a filter section: a component naming that
-  // section is drawn in the bar (see `isStripMember`).
+  // strip, or a section of tiles with a bar of its own — and a tile cannot
+  // join a strip, so the two menus split the bars between them. A bar wins a
+  // name clash with a filter section: a component naming that section is
+  // drawn in the bar (see `isBarMember`).
   const stripSpecs = useMemo(
     () =>
       ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? [])
-        .filter(isStripSection)
+        .filter(isBarSection)
         .map((s) => (s.icon ? s : { ...s, icon: 'mdi:tune-variant' })),
     [dashboard?.grid_sections],
   );
@@ -1387,6 +1432,16 @@ const EditorApp: React.FC = () => {
     // Mirrors App.tsx: group filters narrow the dashboard too.
     groupsApi.deactivateAllGroupFilters();
   }, [groupsApi.deactivateAllGroupFilters]);
+  // A bar's "Reset" (App.tsx): its own controls' values go, nothing else.
+  const handleResetFilterIndices = useCallback((indices: string[]) => {
+    const drop = new Set(indices);
+    setFilters((prev) => prev.filter((f) => !(drop.has(f.index) && f.source === undefined)));
+  }, []);
+  // The tab-wide filters, for what sits in no section (the maps).
+  const tabFilters = useMemo(
+    () => filtersInScope(combinedFilters, filterScopes, null),
+    [combinedFilters, filterScopes],
+  );
 
   // Filter-active groups as removable active-filter summary rows.
   const groupSummaryRows = groupsApi.summaryRows;
@@ -1851,6 +1906,8 @@ const EditorApp: React.FC = () => {
           familyId={crossTab.familyId}
           slot="top"
           filters={filters}
+          filterScopes={filterScopes}
+          onResetBarFilters={handleResetFilterIndices}
           onFilterChange={handleFilterChange}
           groupRender={groupRender}
           bulkOptions={groupsApi.bulkOptions}
@@ -2275,8 +2332,9 @@ const EditorApp: React.FC = () => {
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      // Docked maps render data: include group filters.
-                      filters={combinedFilters}
+                      // Docked maps render data: include group filters (the
+                      // tab's; a section bar's stay with its section).
+                      filters={tabFilters}
                       onFilterChange={handleFilterChange}
                       renderEditActions={renderMapPanelEditActions}
                     />
@@ -2323,12 +2381,14 @@ const EditorApp: React.FC = () => {
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
-                stripComponents={stripComponents}
+                barComponents={barComponents}
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
                 tileMoveSections={tileMoveSections}
                 filters={combinedFilters}
                 controlFilters={filters}
+                filterScopes={filterScopes}
+                onResetFilters={handleResetFilterIndices}
                 renderStripItemOverlay={renderFilterItemOverlay}
                 groupRender={groupRender}
                 onFilterChange={handleFilterChange}
@@ -2355,6 +2415,8 @@ const EditorApp: React.FC = () => {
                     familyId={crossTab.familyId}
                     slot="bottom"
                     filters={filters}
+                    filterScopes={filterScopes}
+                    onResetBarFilters={handleResetFilterIndices}
                     onFilterChange={handleFilterChange}
                     groupRender={groupRender}
                     bulkOptions={groupsApi.bulkOptions}
@@ -2428,8 +2490,8 @@ const EditorApp: React.FC = () => {
           {dashboard && dashboardId && (
             <MapPanelSurface
               panel={mapPanel}
-              // Floating maps render data: include group filters.
-              filters={combinedFilters}
+              // Floating maps render data: include group filters (the tab's).
+              filters={tabFilters}
               onFilterChange={handleFilterChange}
               renderEditActions={renderMapPanelEditActions}
             />
@@ -2531,8 +2593,8 @@ interface RightComponentGridProps {
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
   /** Interactive components drawn in a filter bar (a grid section with
-   *  `display: 'strip'`). They take no grid cell. */
-  stripComponents: StoredMetadata[];
+   *  `display: 'strip'` or `filter_bar`). They take no grid cell. */
+  barComponents: StoredMetadata[];
   layoutData: unknown;
   gridSections?: FilterSectionSpec[];
   /** The grid sections a tile can move into: every section but the bars. */
@@ -2540,6 +2602,9 @@ interface RightComponentGridProps {
   filters: InteractiveFilter[];
   /** The filter state the bars' controls show, without the group filters. */
   controlFilters: InteractiveFilter[];
+  /** Section-bar scopes (`filterScope.ts`), and a bar's "Reset". */
+  filterScopes: FilterScopes;
+  onResetFilters: (indices: string[]) => void;
   /** The ⋮ menu of each filter in a bar — the filter panel's own. */
   renderStripItemOverlay: (metadata: StoredMetadata) => React.ReactNode;
   onFilterChange: (filter: InteractiveFilter) => void;
@@ -2582,12 +2647,14 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   dashboardId,
   cardComponents,
   otherComponents,
-  stripComponents,
+  barComponents,
   layoutData,
   gridSections,
   tileMoveSections,
   filters,
   controlFilters,
+  filterScopes,
+  onResetFilters,
   renderStripItemOverlay,
   onFilterChange,
   cardValues,
@@ -2608,8 +2675,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   refreshTick,
 }) => {
   const allComponents = useMemo(
-    () => [...cardComponents, ...otherComponents, ...stripComponents],
-    [cardComponents, otherComponents, stripComponents],
+    () => [...cardComponents, ...otherComponents, ...barComponents],
+    [cardComponents, otherComponents, barComponents],
   );
 
   if (allComponents.length === 0) {
@@ -2661,6 +2728,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       beforeSections={beforeSections}
       filters={filters}
       controlFilters={controlFilters}
+      filterScopes={filterScopes}
+      onResetFilters={onResetFilters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}
       cardSecondaryValues={cardSecondaryValues}
