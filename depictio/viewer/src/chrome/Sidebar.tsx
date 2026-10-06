@@ -17,6 +17,7 @@ import { Icon } from '@iconify/react';
 
 import {
   brandAccent,
+  groupTabs,
   isImagePath,
   isMultiqcIcon,
   themedIconSrc,
@@ -239,12 +240,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Pre-compute first/last child indices so Move up/down can be disabled
-  // appropriately. Main tab (no parent_dashboard_id) is always at the top
-  // and never moves, so it doesn't count toward "first child".
-  const childTabs = tabs.filter((t) => t.parent_dashboard_id);
-  const firstChildId = childTabs[0]?.dashboard_id ?? null;
-  const lastChildId = childTabs[childTabs.length - 1]?.dashboard_id ?? null;
+  // Tabs naming a `tab_group` are drawn together under its name; the main tab
+  // and the ungrouped tabs lead, with no heading.
+  const sections = groupTabs(tabs);
+
+  // Pre-compute the first/last child of each section so Move up/down can be
+  // disabled appropriately. A move stays inside its section (a tab changes
+  // group from the Edit modal), so the bounds are per section. Main tab (no
+  // parent_dashboard_id) is always at the top and never moves, so it doesn't
+  // count toward "first child".
+  const firstChildIds = new Set<string>();
+  const lastChildIds = new Set<string>();
+  for (const section of sections) {
+    const children = section.tabs.filter((t) => t.parent_dashboard_id);
+    if (!children.length) continue;
+    firstChildIds.add(children[0].dashboard_id);
+    lastChildIds.add(children[children.length - 1].dashboard_id);
+  }
 
   // Each tab pill is rendered as an `<a href>` (see `renderRoot` on
   // `Tabs.Tab` below) so middle-click / Cmd+Click / Ctrl+Click open the
@@ -264,6 +276,97 @@ const Sidebar: React.FC<SidebarProps> = ({
     // already-active tab is a no-op because the anchor navigates to the same
     // URL the browser is on.)
     if (value === ADD_TAB_VALUE) onAddTab?.();
+  };
+
+  const renderTab = (d: DashboardSummary) => {
+    const isParent = !d.parent_dashboard_id;
+    const iconColor = resolveTabColor(d, isParent, brand);
+    const isActive = d.dashboard_id === activeId;
+    const label = isParent
+      ? d.main_tab_name || d.title || d.dashboard_id
+      : d.title || d.dashboard_id;
+    // Resolve a YAML-supplied image. For the parent (main) tab, mirror the
+    // Header's `tab_icon || icon` precedence so a dashboard-level favicon
+    // (stored on `icon`, the common single-tab case) shows the SAME image in
+    // the sidebar pill as in the header — otherwise the two disagree (header
+    // shows the favicon, sidebar falls through to a keyword default).
+    // Child tabs deliberately do NOT fall back to `icon`: they inherit the
+    // dashboard's generic favicon, which would override their per-tab Iconify
+    // defaults and strip their distinct color.
+    const yamlImageRaw =
+      d.tab_icon && isImagePath(d.tab_icon)
+        ? d.tab_icon
+        : isParent && d.icon && isImagePath(d.icon)
+          ? d.icon
+          : null;
+    const yamlImage = yamlImageRaw ? themedIconSrc(yamlImageRaw, theme === 'dark', isActive) : null;
+    const iconName = resolveTabIcon(d, isParent);
+    const leftSection = yamlImage ? (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 18,
+          height: 18,
+          flexShrink: 0,
+        }}
+      >
+        <img
+          src={yamlImage.startsWith('/dashboard/') ? yamlImage : resolveAssetUrl(yamlImage)}
+          alt=""
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      </span>
+    ) : (
+      <Icon
+        icon={iconName}
+        width={18}
+        height={18}
+        style={{
+          color: isActive ? 'var(--mantine-color-white)' : `var(--mantine-color-${iconColor}-6)`,
+          flexShrink: 0,
+        }}
+      />
+    );
+
+    // In edit mode, the "..." menu lives in Mantine's `rightSection` slot —
+    // that's the only way to get it truly right-aligned, since the default
+    // `tabLabel` span is auto-width and a flex Group inside it only takes
+    // content width.
+    const rightSection = isEdit ? (
+      <TabMenu
+        tab={d}
+        isParent={isParent}
+        isFirstChild={firstChildIds.has(d.dashboard_id)}
+        isLastChild={lastChildIds.has(d.dashboard_id)}
+        opened={openMenuTabId === d.dashboard_id}
+        onOpen={() => setOpenMenuTabId(d.dashboard_id)}
+        onClose={() => setOpenMenuTabId((cur) => (cur === d.dashboard_id ? null : cur))}
+        onEditTab={onEditTab}
+        onDeleteTab={onDeleteTab}
+        onMoveTab={onMoveTab}
+      />
+    ) : undefined;
+
+    return (
+      <Tabs.Tab
+        key={d.dashboard_id}
+        value={d.dashboard_id}
+        color={iconColor}
+        leftSection={leftSection}
+        rightSection={rightSection}
+        pl="xs"
+        pr={isEdit ? 4 : undefined}
+        // Render the tab as an anchor so browser-level open-in-new-tab
+        // (middle/Cmd+Click) works natively.
+        renderRoot={(props) => (
+          <a {...props} href={dashboardHref(d.dashboard_id, linkMode)} />
+        )}
+      >
+        <TabLabel label={label} />
+      </Tabs.Tab>
+    );
   };
 
   return (
@@ -328,111 +431,28 @@ const Sidebar: React.FC<SidebarProps> = ({
               }}
             >
               <Tabs.List>
-                {tabs.map((d) => {
-                  const isParent = !d.parent_dashboard_id;
-                  const iconColor = resolveTabColor(d, isParent, brand);
-                  const isActive = d.dashboard_id === activeId;
-                  const label = isParent
-                    ? d.main_tab_name || d.title || d.dashboard_id
-                    : d.title || d.dashboard_id;
-                  // Resolve a YAML-supplied image. For the parent (main) tab,
-                  // mirror the Header's `tab_icon || icon` precedence so a
-                  // dashboard-level favicon (stored on `icon`, the common
-                  // single-tab case) shows the SAME image in the sidebar pill
-                  // as in the header — otherwise the two disagree (header shows
-                  // the favicon, sidebar falls through to a keyword default).
-                  // Child tabs deliberately do NOT fall back to `icon`: they
-                  // inherit the dashboard's generic favicon, which would
-                  // override their per-tab Iconify defaults and strip their
-                  // distinct color.
-                  const yamlImageRaw =
-                    d.tab_icon && isImagePath(d.tab_icon)
-                      ? d.tab_icon
-                      : isParent && d.icon && isImagePath(d.icon)
-                        ? d.icon
-                        : null;
-                  const yamlImage = yamlImageRaw
-                    ? themedIconSrc(yamlImageRaw, theme === 'dark', isActive)
-                    : null;
-                  const iconName = resolveTabIcon(d, isParent);
-                  const leftSection = yamlImage ? (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 18,
-                        height: 18,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <img
-                        src={
-                          yamlImage.startsWith('/dashboard/')
-                            ? yamlImage
-                            : resolveAssetUrl(yamlImage)
-                        }
-                        alt=""
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                      />
-                    </span>
-                  ) : (
-                    <Icon
-                      icon={iconName}
-                      width={18}
-                      height={18}
-                      style={{
-                        color: isActive
-                          ? 'var(--mantine-color-white)'
-                          : `var(--mantine-color-${iconColor}-6)`,
-                        flexShrink: 0,
-                      }}
-                    />
-                  );
-
-                  // In edit mode, the "..." menu lives in Mantine's
-                  // `rightSection` slot — that's the only way to get it
-                  // truly right-aligned, since the default `tabLabel` span
-                  // is auto-width and a flex Group inside it only takes
-                  // content width.
-                  const rightSection = isEdit ? (
-                    <TabMenu
-                      tab={d}
-                      isParent={isParent}
-                      isFirstChild={d.dashboard_id === firstChildId}
-                      isLastChild={d.dashboard_id === lastChildId}
-                      opened={openMenuTabId === d.dashboard_id}
-                      onOpen={() => setOpenMenuTabId(d.dashboard_id)}
-                      onClose={() =>
-                        setOpenMenuTabId((cur) =>
-                          cur === d.dashboard_id ? null : cur,
-                        )
-                      }
-                      onEditTab={onEditTab}
-                      onDeleteTab={onDeleteTab}
-                      onMoveTab={onMoveTab}
-                    />
-                  ) : undefined;
-
-                  return (
-                    <Tabs.Tab
-                      key={d.dashboard_id}
-                      value={d.dashboard_id}
-                      color={iconColor}
-                      leftSection={leftSection}
-                      rightSection={rightSection}
-                      pl="xs"
-                      pr={isEdit ? 4 : undefined}
-                      // Render the tab as an anchor so browser-level
-                      // open-in-new-tab (middle/Cmd+Click) works natively.
-                      renderRoot={(props) => (
-                        <a {...props} href={dashboardHref(d.dashboard_id, linkMode)} />
-                      )}
-                    >
-                      <TabLabel label={label} />
-                    </Tabs.Tab>
-                  );
-                })}
+                {sections.map((section) => (
+                  <React.Fragment
+                    key={section.group === null ? 'ungrouped' : `group:${section.group}`}
+                  >
+                    {section.group !== null && (
+                      // Same type as the "Tabs" heading above, set in line with
+                      // the pill icons so it reads as a category within it.
+                      <Text
+                        c="dimmed"
+                        size="xs"
+                        tt="uppercase"
+                        fw={700}
+                        pl="xs"
+                        mt={6}
+                        truncate="end"
+                      >
+                        {section.group}
+                      </Text>
+                    )}
+                    {section.tabs.map(renderTab)}
+                  </React.Fragment>
+                ))}
 
                 {/* Trailing "+ Add tab" pill — visible only in edit mode.
                     Mirrors Dash `_create_add_tab_button` (`tab_callbacks.py:148-161`).

@@ -52,6 +52,8 @@ export { default as TextRenderer } from './components/TextRenderer';
 export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
+export { groupTabs, tabGroupNames, tabGroupOf } from './components/tabGroups';
+export type { GroupableTab, TabGroup } from './components/tabGroups';
 export { parseBlocks } from './components/blockMarkdown';
 export type { Block as MarkdownBlock } from './components/blockMarkdown';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';

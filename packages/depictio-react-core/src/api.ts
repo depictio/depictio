@@ -393,6 +393,8 @@ export interface DashboardData {
   content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
   /** False: no tab name above the canvas (a tab that opens on its own title). */
   show_tab_header?: boolean;
+  /** Sidebar category of a child tab; null when ungrouped. */
+  tab_group?: string | null;
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
    *  defaults. Unset fields inherit the instance branding. */
   brand_theme?: BrandTheme | null;
@@ -537,6 +539,8 @@ export interface DashboardSummary {
   /** Tab-specific fields. Dash precedence: `tab_icon || icon`, `tab_icon_color || icon_color`. */
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Sidebar category of a child tab; absent or null when ungrouped. */
+  tab_group?: string | null;
   icon?: string;
   icon_color?: string;
 }
@@ -1845,6 +1849,8 @@ export interface UpdateTabPayload {
   title?: string;
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Null ungroups the tab; leaving the key out keeps its group. */
+  tab_group?: string | null;
   /** Only allowed on main tabs — backend rejects with 400 for child tabs. */
   main_tab_name?: string;
 }
@@ -1899,7 +1905,7 @@ export async function reorderTabs(
  */
 export async function createTab(
   parentDashboardId: string,
-  fields: { title: string; tab_icon?: string; tab_icon_color?: string },
+  fields: { title: string; tab_icon?: string; tab_icon_color?: string; tab_group?: string | null },
 ): Promise<string> {
   const parent = await fetchDashboard(parentDashboardId);
   const siblings = await fetchAllDashboards();
@@ -1929,6 +1935,7 @@ export async function createTab(
     tab_order: nextOrder,
     tab_icon: fields.tab_icon ?? null,
     tab_icon_color: fields.tab_icon_color ?? null,
+    tab_group: fields.tab_group ?? null,
   };
 
   const res = await authFetch(`${API_BASE}/dashboards/save/${newId}`, {

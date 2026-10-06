@@ -1,5 +1,11 @@
 import React, { useMemo } from 'react';
-import { isImagePath, TabLinkContext, tabLinkKey, useBranding } from 'depictio-react-core';
+import {
+  groupTabs,
+  isImagePath,
+  TabLinkContext,
+  tabLinkKey,
+  useBranding,
+} from 'depictio-react-core';
 import type { DashboardSummary, TabLinkResolver, TabLinkTarget } from 'depictio-react-core';
 
 import { dashboardHref } from '../dashboards/lib/dashboardLinks';
@@ -19,6 +25,12 @@ const TabLinkProvider: React.FC<{ tabs: DashboardSummary[]; children: React.Reac
   const brand = useBranding();
   const resolve = useMemo<TabLinkResolver>(() => {
     const byKey = new Map<string, TabLinkTarget>();
+    // The group as the sidebar heads it, so a tab spelling it differently
+    // still lands under the same name.
+    const groupOf = new Map<string, string | null>();
+    for (const section of groupTabs(tabs)) {
+      for (const d of section.tabs) groupOf.set(d.dashboard_id, section.group);
+    }
     for (const d of tabs) {
       const isParent = !d.parent_dashboard_id;
       const label = (isParent ? d.main_tab_name || d.title : d.title) || '';
@@ -29,6 +41,7 @@ const TabLinkProvider: React.FC<{ tabs: DashboardSummary[]; children: React.Reac
         icon: image ?? resolveTabIcon(d, isParent),
         color: resolveTabColor(d, isParent, brand),
         description: d.subtitle?.trim() || null,
+        group: groupOf.get(d.dashboard_id) ?? null,
       };
       for (const name of [label, d.title]) {
         const key = name ? tabLinkKey(name) : '';

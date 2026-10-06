@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Anchor,
+  Autocomplete,
   Button,
   Group,
   Modal,
@@ -52,6 +53,9 @@ export interface TabModalSubmitPayload {
   title: string;
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Sidebar group; null when the field was left empty. Absent for the main
+   *  tab, which is never grouped. */
+  tab_group?: string | null;
   /** Only present when editing a main tab. */
   main_tab_name?: string;
 }
@@ -61,6 +65,8 @@ interface TabModalProps {
   mode: TabModalMode;
   /** Required in edit mode — pre-populates the form. Ignored in create mode. */
   tab?: DashboardSummary | null;
+  /** Groups the dashboard's tabs already use, offered as suggestions. */
+  groupOptions?: string[];
   onClose: () => void;
   onSubmit: (payload: TabModalSubmitPayload) => Promise<void> | void;
   /** True while the parent's submit handler is in flight. Disables actions. */
@@ -73,6 +79,8 @@ interface TabModalProps {
  * Field set mirrors `depictio/dash/layouts/tab_modal.py` (lines 206-362):
  *   - Tab name (required)
  *   - Main tab name (only when editing a main tab)
+ *   - Group — sidebar category, picked from the family's or typed fresh
+ *     (not for the main tab, which is never grouped)
  *   - Icon — Iconify name (e.g. `mdi:chart-bar`); live preview to the right
  *   - Color — Mantine palette + "Auto"
  *
@@ -84,6 +92,7 @@ const TabModal: React.FC<TabModalProps> = ({
   opened,
   mode,
   tab,
+  groupOptions = [],
   onClose,
   onSubmit,
   submitting = false,
@@ -94,6 +103,7 @@ const TabModal: React.FC<TabModalProps> = ({
   const [mainTabName, setMainTabName] = useState('');
   const [tabIcon, setTabIcon] = useState('');
   const [tabIconColor, setTabIconColor] = useState('');
+  const [tabGroup, setTabGroup] = useState('');
 
   // Reset / pre-populate fields whenever the modal opens (or the target tab
   // changes). We watch `opened` specifically so closing-then-reopening with
@@ -105,11 +115,13 @@ const TabModal: React.FC<TabModalProps> = ({
       setMainTabName(tab.main_tab_name || '');
       setTabIcon(tab.tab_icon || tab.icon || '');
       setTabIconColor(tab.tab_icon_color || tab.icon_color || '');
+      setTabGroup(tab.tab_group || '');
     } else {
       setTitle('');
       setMainTabName('');
       setTabIcon('');
       setTabIconColor('');
+      setTabGroup('');
     }
   }, [opened, mode, tab]);
 
@@ -124,6 +136,10 @@ const TabModal: React.FC<TabModalProps> = ({
     };
     if (isMainTab) {
       payload.main_tab_name = mainTabName.trim() || undefined;
+    } else {
+      // Null rather than undefined: emptying the field has to reach the
+      // server to take the tab out of its group.
+      payload.tab_group = tabGroup.trim() || null;
     }
     await onSubmit(payload);
   };
@@ -187,6 +203,17 @@ const TabModal: React.FC<TabModalProps> = ({
             placeholder="MultiQC"
             value={mainTabName}
             onChange={(e) => setMainTabName(e.currentTarget.value)}
+          />
+        )}
+
+        {!isMainTab && (
+          <Autocomplete
+            label="Group"
+            description="Tabs in the same group are listed together under its name in the sidebar."
+            placeholder="None"
+            data={groupOptions}
+            value={tabGroup}
+            onChange={setTabGroup}
           />
         )}
 

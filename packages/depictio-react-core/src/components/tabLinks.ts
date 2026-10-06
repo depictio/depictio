@@ -20,6 +20,8 @@ export interface TabLinkTarget {
   color?: string | null;
   /** The tab's own one-line description (its subtitle), if it has one. */
   description?: string | null;
+  /** The sidebar group the tab is listed under, or null when it has none. */
+  group?: string | null;
 }
 
 /** Resolves a tab name (case-insensitive) to its link, or null if unknown. */

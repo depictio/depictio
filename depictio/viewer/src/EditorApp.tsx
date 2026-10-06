@@ -65,7 +65,9 @@ import {
   bulkComputeCards,
   createTab,
   deleteTab,
+  groupTabs,
   reorderTabs,
+  tabGroupNames,
   updateTab,
   DashboardGrid,
   FilterPanel,
@@ -1117,6 +1119,8 @@ const EditorApp: React.FC = () => {
     () => tabSiblings.find((d) => d.dashboard_id === dashboardId) || null,
     [tabSiblings, dashboardId],
   );
+  // The family's existing groups, offered when a tab is created or edited.
+  const tabGroupOptions = useMemo(() => tabGroupNames(tabSiblings), [tabSiblings]);
   const parentTab = useMemo(
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
@@ -1340,6 +1344,7 @@ const EditorApp: React.FC = () => {
             title: payload.title,
             tab_icon: payload.tab_icon,
             tab_icon_color: payload.tab_icon_color,
+            tab_group: payload.tab_group,
           });
           notifications.show({
             color: 'teal',
@@ -1446,23 +1451,27 @@ const EditorApp: React.FC = () => {
   const handleMoveTab = useCallback(
     async (tab: DashboardSummary, direction: 'up' | 'down') => {
       // Build the new ordering by swapping `tab` with its neighbor in the
-      // child-only list. The main tab keeps tab_order=0 and isn't part of
-      // the reorder payload.
-      const children = (
-        tabSiblings.length
-          ? tabSiblings
-          : allDashboards.filter(
-              (d) => d.parent_dashboard_id === tab.parent_dashboard_id,
-            )
-      ).filter((t) => t.parent_dashboard_id);
-      const idx = children.findIndex((c) => c.dashboard_id === tab.dashboard_id);
-      if (idx === -1) return;
+      // child-only list, as the sidebar shows it: grouped, so the neighbor is
+      // the one above or below in the same group, and a move renumbers the
+      // whole list in that order (which also gathers a group an author had
+      // interleaved). The main tab keeps tab_order=0 and isn't part of the
+      // reorder payload.
+      const family = tabSiblings.length
+        ? tabSiblings
+        : allDashboards.filter((d) => d.parent_dashboard_id === tab.parent_dashboard_id);
+      const sections = groupTabs(family).map((section) =>
+        section.tabs.filter((t) => t.parent_dashboard_id),
+      );
+      const section = sections.find((ts) =>
+        ts.some((c) => c.dashboard_id === tab.dashboard_id),
+      );
+      if (!section) return;
+      const idx = section.findIndex((c) => c.dashboard_id === tab.dashboard_id);
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= children.length) return;
+      if (swapIdx < 0 || swapIdx >= section.length) return;
 
-      const reordered = [...children];
-      [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-      const tabOrders = reordered.map((c, i) => ({
+      [section[idx], section[swapIdx]] = [section[swapIdx], section[idx]];
+      const tabOrders = sections.flat().map((c, i) => ({
         dashboard_id: c.dashboard_id,
         tab_order: i + 1,
       }));
@@ -2012,6 +2021,7 @@ const EditorApp: React.FC = () => {
         opened={tabModalState.open}
         mode={tabModalState.mode}
         tab={tabModalState.target}
+        groupOptions={tabGroupOptions}
         onClose={closeTabModal}
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}
