@@ -57,8 +57,8 @@ interface SecondaryMetricsProps {
   coverageValue?: number | null;
   /** Denominator for ``coverage`` / ``gauge`` — e.g. 44 samples / 11 ORFs. */
   coverageMax?: number | null;
-  /** Bar only: a headline card keeps a composition or coverage strip to its
-   *  meter, the numbers it would print staying in the tooltip. */
+  /** For a headline card: a coverage strip keeps only its bar, a composition
+   *  strip its bar and legend line; the rest stays in the tooltip. */
   minimal?: boolean;
 }
 

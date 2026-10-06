@@ -245,8 +245,9 @@ class CardLiteComponent(BaseLiteComponent):
     variant: Literal["default", "headline"] | None = Field(
         default=None,
         description="`headline`: a key-figure card for a landing page. The value is drawn "
-        "large, the icon sits faint on the right at all times, and a composition or "
-        "coverage strip shrinks to its bar (its numbers stay in the tooltip).",
+        "large, the icon sits faint on the right at all times, a coverage strip shrinks "
+        "to its bar and a composition strip to its bar and legend line (the rest stays "
+        "in the tooltip).",
     )
     link: str | None = Field(
         default=None,

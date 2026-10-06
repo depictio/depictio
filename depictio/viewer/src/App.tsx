@@ -87,7 +87,7 @@ import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
 import TabLinkProvider from './chrome/TabLinkProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
-import { useContentMaxWidth } from './hooks/useContentWidthPref';
+import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -446,6 +446,11 @@ const App: React.FC = () => {
   // Persistent sections owned by *other* tabs. The current tab's own persistent
   // sections render natively (grid ones in DashboardGrid, filter ones in the
   // panel) — fanning them out too would draw them twice.
+  // The width preference is per tab, opening at the author's
+  // `content_width_default` until the viewer picks one.
+  useEffect(() => {
+    setContentWidthScope(dashboardId ?? null, dashboard?.content_width_default);
+  }, [dashboardId, dashboard?.content_width_default]);
   // The tab's displayed name, which `exclude_tabs` lists: the parent answers to
   // its main-tab label, a child to its title.
   const currentTabKey = useMemo(() => {

@@ -279,6 +279,14 @@ class DashboardDataLite(BaseModel):
         description="Initial state of the left filter panel before the viewer "
         "has toggled it ('open' or 'collapsed').",
     )
+    # The page width a tab opens at before the viewer has picked one. A landing
+    # page of cards and prose reads better at a reading width than stretched
+    # across a wide screen; the viewer's own choice, once made, wins.
+    content_width_default: Literal["full", "wide", "comfortable"] = Field(
+        default="full",
+        description="Initial page width before the viewer has picked one: 'full', "
+        "'wide' (1600px) or 'comfortable' (1240px).",
+    )
 
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
@@ -417,6 +425,7 @@ class DashboardDataLite(BaseModel):
         "workflow_system",
         "funnel_filtering",
         "filter_panel_default",
+        "content_width_default",
         "filter_sections",
         "grid_sections",
         "brand_theme",
@@ -459,6 +468,7 @@ class DashboardDataLite(BaseModel):
             "icon_color": "orange",
             "icon_variant": "filled",
             "filter_panel_default": "open",
+            "content_width_default": "full",
         }
         for field, default in default_value_fields.items():
             if not data.get(field) or data.get(field) == default:
@@ -1189,6 +1199,7 @@ class DashboardDataLite(BaseModel):
             grid_sections=dashboard_data.get("grid_sections") or [],
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
             filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
+            content_width_default=dashboard_data.get("content_width_default") or "full",
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
@@ -1284,6 +1295,7 @@ class DashboardDataLite(BaseModel):
             "grid_sections": [s.model_dump() for s in self.grid_sections],
             "funnel_filtering": self.funnel_filtering,
             "filter_panel_default": self.filter_panel_default,
+            "content_width_default": self.content_width_default,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
             if self.brand_theme
             else None,
@@ -1625,6 +1637,8 @@ class DashboardData(MongoModel):
     funnel_filtering: bool = True
     # Initial left-panel state before the viewer has toggled it.
     filter_panel_default: Literal["open", "collapsed"] = "open"
+    # Initial page width before the viewer has picked one.
+    content_width_default: Literal["full", "wide", "comfortable"] = "full"
     # Dashboard-level brand override (logo, palette, surfaces, figure
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.

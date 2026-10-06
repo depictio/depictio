@@ -385,6 +385,8 @@ export interface DashboardData {
   funnel_filtering?: boolean;
   /** Initial left filter panel state before the viewer has toggled it. */
   filter_panel_default?: 'open' | 'collapsed';
+  /** Page width the tab opens at before the viewer picks one. */
+  content_width_default?: 'full' | 'wide' | 'comfortable';
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
    *  defaults. Unset fields inherit the instance branding. */
   brand_theme?: BrandTheme | null;

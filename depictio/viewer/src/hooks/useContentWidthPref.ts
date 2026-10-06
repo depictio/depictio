@@ -27,25 +27,54 @@ function isWidth(value: unknown): value is ContentWidth {
   return CONTENT_WIDTHS.some((w) => w.value === value);
 }
 
+/**
+ * The tab the preference applies to, and the width its author asked for
+ * (`content_width_default`). Set by the app when a tab mounts; the header
+ * toggle and the settings drawer read and write through it without needing
+ * the dashboard themselves.
+ *
+ * The viewer's choice is remembered per tab, like the filter panel's: an
+ * author who opens a landing page at a reading width should not have that
+ * undone by a width the viewer picked for a wide heatmap tab.
+ */
+let scope: { id: string | null; fallback: ContentWidth } = { id: null, fallback: 'full' };
+
+function storageKey(): string {
+  return scope.id ? `${STORAGE_KEY}:${scope.id}` : STORAGE_KEY;
+}
+
 export function readStoredContentWidth(): ContentWidth {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return isWidth(raw) ? raw : 'full';
+    const raw = localStorage.getItem(storageKey());
+    return isWidth(raw) ? raw : scope.fallback;
   } catch {
-    return 'full';
+    return scope.fallback;
   }
 }
 
-function broadcast(width: ContentWidth): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, width);
-  } catch {
-    // storage unavailable: the choice lasts for this page only
-  }
+function notify(): void {
+  const width = readStoredContentWidth();
   listeners.forEach((fn) => fn(width));
   // The grid, Plotly and AG Grid size to their container; a width change
   // moves it without a window resize, so fire the established reflow signal.
   window.dispatchEvent(new Event('resize'));
+}
+
+/** Points the preference at a tab and its author's default. */
+export function setContentWidthScope(id: string | null, fallback: unknown): void {
+  const next = { id, fallback: isWidth(fallback) ? fallback : 'full' };
+  if (next.id === scope.id && next.fallback === scope.fallback) return;
+  scope = next;
+  notify();
+}
+
+function broadcast(width: ContentWidth): void {
+  try {
+    localStorage.setItem(storageKey(), width);
+  } catch {
+    // storage unavailable: the choice lasts for this page only
+  }
+  notify();
 }
 
 export function useContentWidthPref() {

@@ -24,7 +24,8 @@ import type { BreakdownPayload } from './types';
 const CompositionMetric: React.FC<{
   payload: BreakdownPayload;
   color?: string | null;
-  /** The bar alone; the legend stays in the tooltip. */
+  /** The bar and its one-line legend; the evenness line goes to the
+   *  tooltip. A bare bar left readers asking what its segments were. */
   minimal?: boolean;
 }> = ({ payload, color, minimal = false }) => {
   if (!payload.top.length) return null;
@@ -55,12 +56,10 @@ const CompositionMetric: React.FC<{
           { key: '__other__', share: otherShare, color: METRIC.remainder },
         ]}
       />
-      {minimal ? null : (
-        <MetricCaption>
-          {legend}
-          {otherShare > 0 ? ` · other ${percent(otherShare)}` : ''}
-        </MetricCaption>
-      )}
+      <MetricCaption>
+        {legend}
+        {otherShare > 0 ? ` · other ${percent(otherShare)}` : ''}
+      </MetricCaption>
       {evenness !== null && !minimal ? (
         <MetricCaption>
           {evennessLabel(evenness)} ({evenness.toFixed(2)}) ·{' '}
