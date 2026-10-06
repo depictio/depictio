@@ -531,6 +531,12 @@ def build_figure_preview(payload: dict) -> dict:
             )
         if detected:
             visu_type = detected
+        if ok:
+            from depictio.api.v1.services.figure.figure_builder import recolor_code_figure
+
+            # Code that names no colours still draws each category the way
+            # every other tile does.
+            recolor_code_figure(fig, payload.get("category_colors"), code_content)
     else:
         # Render path uses `selection_*`; preview path doesn't pass them. The
         # underlying helper takes both as kwargs with safe defaults, so always

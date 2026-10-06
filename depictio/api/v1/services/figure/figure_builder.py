@@ -285,6 +285,58 @@ def _decimate_ordered(plot_df, x_col: str | None, cap: int):
     )
 
 
+# Code that picks its own trace colours; the dashboard's are then left alone.
+_CODE_SETS_COLORS_RE = re.compile(
+    r"color_discrete_(?:map|sequence)|marker_color|\bcolorway\b|update_traces\([^)]*color"
+)
+
+
+def recolor_code_figure(fig: Any, category_colors: Any, code: str | None) -> bool:
+    """Draw a code-mode figure's categories in the dashboard's colours.
+
+    UI-mode figures get the dashboard's ``category_colors`` as their
+    ``color_discrete_map`` (``merge_category_colors``). Code builds its own
+    kwargs, so a ``px.histogram(..., color="locality")`` that names no colours
+    came out in Plotly's default cycle while every other tile drew Athens in
+    the dashboard's blue. After the code has run, its traces are recoloured
+    when their names are the values of one column the dashboard colours, every
+    name but "Other" known. Code that sets colours itself (a discrete map or
+    sequence, a marker colour, a colorway) is left as written.
+
+    Returns whether the figure was recoloured.
+    """
+    if not isinstance(category_colors, dict) or not category_colors or fig is None:
+        return False
+    if code and _CODE_SETS_COLORS_RE.search(code):
+        return False
+    traces = [t for t in getattr(fig, "data", ()) if getattr(t, "name", None)]
+    names = {str(t.name) for t in traces} - {"Other"}
+    if not names:
+        return False
+    palette = next(
+        (
+            {str(k): v for k, v in values.items() if isinstance(v, str) and v}
+            for values in category_colors.values()
+            if isinstance(values, dict) and names <= {str(k) for k in values}
+        ),
+        None,
+    )
+    if not palette:
+        return False
+    for trace in traces:
+        colour = palette.get(str(trace.name))
+        if not colour:
+            continue
+        if hasattr(trace, "marker"):
+            trace.marker.color = colour
+        line = getattr(trace, "line", None)
+        if line is not None and getattr(line, "color", None) is not None:
+            line.color = colour
+        if getattr(trace, "fillcolor", None) is not None:
+            trace.fillcolor = colour
+    return True
+
+
 # A `template=` keyword argument, not the tail of `hovertemplate=` or
 # `texttemplate=`: the word boundary rules out an identifier character before
 # it, the lookahead an `==` comparison.
