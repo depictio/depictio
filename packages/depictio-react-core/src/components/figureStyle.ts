@@ -31,6 +31,11 @@ export function resolveFigureStyle(own: unknown, sectionStyle?: unknown): Figure
   return normalizeFigureStyle(own) ?? normalizeFigureStyle(sectionStyle) ?? 'default';
 }
 
+/** Component types a section's `figure_style` reaches. An advanced
+ *  visualisation takes the style's frame and card header, not the server's
+ *  plot overlay (see advanced_viz/advancedVizShowcase.ts). */
+const STYLED_TYPES: ReadonlySet<string> = new Set(['figure', 'advanced_viz']);
+
 /**
  * The metadata a grid cell hands a figure: its own, with the section's style
  * filled in when it sets none. The same object when nothing changes, so React
@@ -40,7 +45,7 @@ export function withSectionFigureStyle(
   metadata: StoredMetadata,
   section: Pick<FilterSectionSpec, 'figure_style'> | null | undefined,
 ): StoredMetadata {
-  if (metadata.component_type !== 'figure') return metadata;
+  if (!STYLED_TYPES.has(String(metadata.component_type))) return metadata;
   if (normalizeFigureStyle(metadata.figure_style)) return metadata;
   const fromSection = normalizeFigureStyle(section?.figure_style);
   if (!fromSection) return metadata;

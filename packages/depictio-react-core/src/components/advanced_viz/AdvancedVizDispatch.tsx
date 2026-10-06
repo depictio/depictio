@@ -58,6 +58,12 @@ import {
 } from '../../groupReach';
 import GroupStatusBadge, { GroupStatusBadgeContext } from '../GroupStatusBadge';
 import { advancedVizChromeReset, isSourceFilterActive } from '../../selection';
+import { useTabLinkResolver } from '../tabLinks';
+import {
+  AdvancedVizShowcaseContext,
+  advancedVizShowcase,
+  tabLinkName,
+} from './advancedVizShowcase';
 
 /** The hover line behind each way an advanced viz ends up "not grouped". */
 const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
@@ -341,6 +347,25 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       ? () => onFilterChange({ index: metadata.index, value: [], source: 'scatter_selection' })
       : undefined;
   const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
+  // The `minimal` style's card header, resolved once for the frame (see
+  // advancedVizShowcase.ts). Null in the default style, which leaves every
+  // renderer's frame exactly as it was.
+  const resolveTab = useTabLinkResolver();
+  const linkedTab = tabLinkName(metadata.link);
+  const sourceTab = linkedTab ? (resolveTab?.(linkedTab) ?? null) : null;
+  const showcase = React.useMemo(
+    () => advancedVizShowcase(metadata, sourceTab),
+    [
+      metadata.figure_style,
+      metadata.subtitle,
+      metadata.icon_name,
+      metadata.icon_color,
+      sourceTab?.href,
+      sourceTab?.label,
+      sourceTab?.icon,
+      sourceTab?.color,
+    ],
+  );
 
   return wrapWithChrome(
     'advanced_viz',
@@ -350,7 +375,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       <ComponentIndexContext.Provider value={metadata.index}>
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>
-            {inner}
+            <AdvancedVizShowcaseContext.Provider value={showcase}>
+              {inner}
+            </AdvancedVizShowcaseContext.Provider>
           </GroupColouringReportContext.Provider>
         </GroupStatusBadgeContext.Provider>
       </ComponentIndexContext.Provider>

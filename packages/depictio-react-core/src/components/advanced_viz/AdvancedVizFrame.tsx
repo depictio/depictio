@@ -10,6 +10,9 @@ import {
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
+import { useAdvancedVizShowcase } from './advancedVizShowcase';
+import { CARD_FRAME } from '../cardFrame';
+import FigureHeader from '../FigureHeader';
 
 /**
  * Server-side downsampling state, mirroring the scatter-figure reduction badge
@@ -111,6 +114,22 @@ export const TIER_COLORS: Record<string, string> = {
   MISS: 'gray',
 };
 
+/** "10,000 / 5,000,000 pts" on a chart that sums its rows reads as a display
+ *  cap. It isn't: the values themselves are off by the sampling stride, and
+ *  that has to be said outright. */
+const EstimatedBadge: React.FC = () => (
+  <Tooltip
+    label="This chart derives its values from the rows it receives, and the collection was too large to send whole — what is shown is an estimate."
+    multiline
+    w={260}
+    withArrow
+  >
+    <Badge variant="light" color="orange" size="xs" radius="sm">
+      estimated
+    </Badge>
+  </Tooltip>
+);
+
 /**
  * Shared wrapper for advanced-viz renderers.
  *
@@ -208,11 +227,111 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     return () => publish(null);
   }, [publish, extras]);
 
+  // Tier counts (volcano UP/DN/NS, …). When ``tierAnnotation.selectedOrder``
+  // is provided, that's the source of truth for which tier is "highlighted" —
+  // chips for selected tiers get the canonical hit colour, the rest dim to
+  // gray. This keeps the chips, plot markers, and data table consistent when
+  // the user flips highlight above/below. Without selectedOrder (no threshold
+  // set), fall back to the per-tier palette.
+  const countBadges =
+    counts && Object.keys(counts).length > 0 ? (
+      <Group gap={4} wrap="nowrap" mt={2}>
+        {Object.entries(counts).map(([label, n]) => {
+          const selected = tierAnnotation?.selectedOrder;
+          const respectSelection = Array.isArray(selected) && selected.length > 0;
+          const isSelected = respectSelection ? selected.includes(label) : true;
+          const color = respectSelection
+            ? isSelected
+              ? TIER_COLORS[label] ?? 'teal'
+              : 'gray'
+            : TIER_COLORS[label] ?? 'gray';
+          return (
+            <Badge
+              key={label}
+              size="xs"
+              radius="sm"
+              variant={isSelected ? 'light' : 'outline'}
+              color={color}
+            >
+              {label}: {n.toLocaleString()}
+            </Badge>
+          );
+        })}
+      </Group>
+    ) : null;
+  const reductionBadge =
+    reduction && showReduction ? (
+      <Badge variant="light" color="gray" size="xs" radius="sm">
+        {reduction.full
+          ? `${reduction.displayed.toLocaleString()} pts (all)`
+          : `${reduction.displayed.toLocaleString()} / ${reduction.total.toLocaleString()} pts`}
+      </Badge>
+    ) : null;
+
+  // `minimal`: the landing-page tile. The header is the figures' own (badge,
+  // title, subtitle inline, the tab it summarises), the frame the metric
+  // cards'. The status chips sit at the end of the header line, as on a figure;
+  // tier counts keep their own line under it.
+  const showcase = useAdvancedVizShowcase();
+  const statusBadges =
+    reductionBadge || estimated || groupBadge ? (
+      <>
+        {reductionBadge}
+        {estimated ? <EstimatedBadge /> : null}
+        {groupBadge}
+      </>
+    ) : null;
+
+  const header = showcase ? (
+    showcase.icon || title || showcase.subtitle || showcase.source || statusBadges || countBadges ? (
+      <>
+        <FigureHeader
+          title={title}
+          subtitle={showcase.subtitle}
+          icon={showcase.icon || undefined}
+          iconColor={showcase.iconColor || undefined}
+          source={showcase.source}
+          badges={statusBadges ?? undefined}
+        />
+        {countBadges ? <div style={{ marginBottom: 6 }}>{countBadges}</div> : null}
+      </>
+    ) : null
+  ) : title || subtitle || countBadges || reductionBadge || estimated || groupBadge ? (
+    <Stack gap={2} mb="xs">
+      {title ? (
+        <Text fw={600} size="sm" lineClamp={1}>
+          {title}
+        </Text>
+      ) : null}
+      {subtitle ? (
+        <Text size="xs" c="dimmed" lineClamp={2}>
+          {subtitle}
+        </Text>
+      ) : null}
+      {countBadges}
+      {reductionBadge ? (
+        <Group gap={4} wrap="nowrap" mt={2}>
+          {reductionBadge}
+        </Group>
+      ) : null}
+      {estimated ? (
+        <Group gap={4} wrap="nowrap" mt={2}>
+          <EstimatedBadge />
+        </Group>
+      ) : null}
+      {groupBadge ? (
+        <Group gap={4} wrap="nowrap" mt={2}>
+          {groupBadge}
+        </Group>
+      ) : null}
+    </Stack>
+  ) : null;
+
   return (
     <ErrorBoundary>
       <Paper
-        p="sm"
-        withBorder
+        p={showcase ? 'md' : 'sm'}
+        withBorder={!showcase}
         radius="md"
         style={{
           flex: 1,
@@ -220,93 +339,10 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          borderWidth: 1.5,
+          ...(showcase ? CARD_FRAME : { borderWidth: 1.5 }),
         }}
       >
-        {title ||
-        subtitle ||
-        (counts && Object.keys(counts).length > 0) ||
-        showReduction ||
-        estimated ||
-        groupBadge ? (
-          <Stack gap={2} mb="xs">
-            {title ? (
-              <Text fw={600} size="sm" lineClamp={1}>
-                {title}
-              </Text>
-            ) : null}
-            {subtitle ? (
-              <Text size="xs" c="dimmed" lineClamp={2}>
-                {subtitle}
-              </Text>
-            ) : null}
-            {counts && Object.keys(counts).length > 0 ? (
-              <Group gap={4} wrap="nowrap" mt={2}>
-                {Object.entries(counts).map(([label, n]) => {
-                  // When ``tierAnnotation.selectedOrder`` is provided, that's
-                  // the source of truth for which tier is "highlighted" — chips
-                  // for selected tiers get the canonical hit colour, the rest
-                  // dim to gray. This keeps the chips, plot markers, and data
-                  // table consistent when the user flips highlight above/below.
-                  // Without selectedOrder (no threshold set), fall back to the
-                  // per-tier palette.
-                  const selected = tierAnnotation?.selectedOrder;
-                  const respectSelection = Array.isArray(selected) && selected.length > 0;
-                  const isSelected = respectSelection
-                    ? selected.includes(label)
-                    : true;
-                  const color = respectSelection
-                    ? isSelected
-                      ? TIER_COLORS[label] ?? 'teal'
-                      : 'gray'
-                    : TIER_COLORS[label] ?? 'gray';
-                  return (
-                    <Badge
-                      key={label}
-                      size="xs"
-                      radius="sm"
-                      variant={isSelected ? 'light' : 'outline'}
-                      color={color}
-                    >
-                      {label}: {n.toLocaleString()}
-                    </Badge>
-                  );
-                })}
-              </Group>
-            ) : null}
-            {reduction && showReduction ? (
-              <Group gap={4} wrap="nowrap" mt={2}>
-                <Badge variant="light" color="gray" size="xs" radius="sm">
-                  {reduction.full
-                    ? `${reduction.displayed.toLocaleString()} pts (all)`
-                    : `${reduction.displayed.toLocaleString()} / ${reduction.total.toLocaleString()} pts`}
-                </Badge>
-              </Group>
-            ) : null}
-            {estimated ? (
-              // "10,000 / 5,000,000 pts" on a chart that sums its rows reads as
-              // a display cap. It isn't: the values themselves are off by the
-              // sampling stride, and that has to be said outright.
-              <Group gap={4} wrap="nowrap" mt={2}>
-                <Tooltip
-                  label="This chart derives its values from the rows it receives, and the collection was too large to send whole — what is shown is an estimate."
-                  multiline
-                  w={260}
-                  withArrow
-                >
-                  <Badge variant="light" color="orange" size="xs" radius="sm">
-                    estimated
-                  </Badge>
-                </Tooltip>
-              </Group>
-            ) : null}
-            {groupBadge ? (
-              <Group gap={4} wrap="nowrap" mt={2}>
-                {groupBadge}
-              </Group>
-            ) : null}
-          </Stack>
-        ) : null}
+        {header}
         <div style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
           {loading ? (
             <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>

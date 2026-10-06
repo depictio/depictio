@@ -15,6 +15,7 @@ import { supportsSelectionGrouping } from '../../selection';
 import { useGroupingColorVar } from '../../selectionGroups';
 import { actionsFor, type ChromeAction } from './chromeActions';
 import { TILE_ACTION_STYLE } from './actionStyles';
+import { resolveFigureStyle } from '../figureStyle';
 import './chrome.css';
 
 export { actionsFor };
@@ -133,10 +134,14 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
    * for a label and its control, and neither can grow a paragraph.
    *
    * advanced_viz is excluded because its renderers already print the same text
-   * as a subtitle under the title, so the icon would only offer a second copy.
+   * as a subtitle under the title, so the icon would only offer a second copy —
+   * except in the `minimal` style, whose header shows the short `subtitle`
+   * instead and would otherwise lose the prose.
    */
   const description = typeof metadata.description === 'string' ? metadata.description.trim() : '';
-  const hasDescription = Boolean(description) && componentType !== 'advanced_viz';
+  const hasDescription =
+    Boolean(description) &&
+    (componentType !== 'advanced_viz' || resolveFigureStyle(metadata.figure_style) === 'minimal');
   // Sits directly before `metadata` (always first in `actionsFor`): both answer
   // "what is this component", the prose one before the structured one.
   if (hasDescription) actions.push('description');

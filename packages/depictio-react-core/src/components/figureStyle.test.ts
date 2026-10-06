@@ -51,6 +51,11 @@ describe('withSectionFigureStyle', () => {
     expect(withSectionFigureStyle(plain, null)).toBe(plain);
   });
 
+  it('styles an advanced visualisation too', () => {
+    const viz = { index: 'v', component_type: 'advanced_viz' } as StoredMetadata;
+    expect(withSectionFigureStyle(viz, { figure_style: 'minimal' }).figure_style).toBe('minimal');
+  });
+
   it('leaves other component types alone', () => {
     const card = { index: 'c', component_type: 'card' } as StoredMetadata;
     expect(withSectionFigureStyle(card, { figure_style: 'minimal' })).toBe(card);
