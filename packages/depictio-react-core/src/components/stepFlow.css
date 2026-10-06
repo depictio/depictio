@@ -98,9 +98,10 @@
   display: inline-flex;
 }
 
-.depictio-step-link > a,
-.depictio-step-link > button {
-  display: inline-grid;
+/* Whatever the link renders as: an anchor, a button, or (a tab link in the
+   editor) a plain span. */
+.depictio-step-link > * {
+  display: inline-grid !important;
   place-items: center;
   width: 20px;
   height: 20px;
@@ -115,16 +116,15 @@
   transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
 }
 
-.depictio-step-link > a:hover,
-.depictio-step-link > button:hover,
-.depictio-step-link > a:focus-visible,
-.depictio-step-link > button:focus-visible {
+.depictio-step-link > *:hover,
+.depictio-step-link > *:focus-visible {
   opacity: 1;
   color: var(--step-accent) !important;
   background: color-mix(in srgb, var(--step-accent) 12%, transparent);
 }
 
-.depictio-step-link svg {
+.depictio-step-link svg,
+.depictio-step-link img {
   width: 14px;
   height: 14px;
   margin: 0 !important;
