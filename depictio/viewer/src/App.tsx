@@ -58,6 +58,10 @@ import {
   tabLinkKey,
   buildGuideModel,
   resolveGuideSettings,
+  CategoryColorsContext,
+  isStripMember,
+  isStripSection,
+  stripSectionNames,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -448,14 +452,36 @@ const App: React.FC = () => {
     () => new Set(crossTab.floating.map((c) => c.metadata.index)),
     [crossTab.floating],
   );
+  // Grid sections drawn as filter bars: their interactive components render
+  // in the grid, not in the filter panel.
+  const stripNames = useMemo(
+    () => stripSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+    [dashboard?.grid_sections],
+  );
   const persistentFilterIndices = useMemo(
     () =>
-      new Set(
-        crossTab.persistentSections
+      new Set([
+        ...crossTab.persistentSections
           .filter((s) => s.kind === 'filter')
           .flatMap((s) => s.components.map((c) => c.metadata.index)),
-      ),
-    [crossTab.persistentSections],
+        // A persistent filter bar's controls are filters on every tab too. The
+        // fan-out lists them under their grid section; this tab's own are added
+        // here as well, so they persist even against a server that predates
+        // filter bars and so does not list them.
+        ...crossTab.persistentSections
+          .filter((s) => s.kind === 'grid' && isStripSection(s.spec))
+          .flatMap((s) => s.components.map((c) => c.metadata))
+          .filter((m) => m.component_type === 'interactive')
+          .map((m) => m.index),
+        ...(dashboard?.stored_metadata ?? [])
+          .filter((m) => {
+            if (!isStripMember(m, stripNames)) return false;
+            const spec = (dashboard?.grid_sections ?? []).find((g) => g.name === m.section);
+            return Boolean(spec?.persistent);
+          })
+          .map((m) => m.index),
+      ]),
+    [crossTab.persistentSections, dashboard, stripNames],
   );
   // Persistent sections owned by *other* tabs. The current tab's own persistent
   // sections render natively (grid ones in DashboardGrid, filter ones in the
@@ -753,7 +779,9 @@ const App: React.FC = () => {
     [interactiveComponents],
   );
   const leftComponents = useMemo(() => {
-    const own = interactiveComponents.filter((m) => m.placement !== 'top');
+    const own = interactiveComponents.filter(
+      (m) => m.placement !== 'top' && !isStripMember(m, stripNames),
+    );
     const seen = new Set(own.map((m) => m.index));
     // Controls fanned out from sibling tabs' persistent filter sections render
     // as ordinary panel rows: their renderers fetch options by dc_id/column,
@@ -762,7 +790,12 @@ const App: React.FC = () => {
       .flatMap((s) => s.components.map((c) => c.metadata))
       .filter((m) => !seen.has(m.index) && m.placement !== 'top');
     return foreign.length ? [...own, ...foreign] : own;
-  }, [interactiveComponents, foreignFilterSections]);
+  }, [interactiveComponents, foreignFilterSections, stripNames]);
+  // The filter bars' controls, drawn by the grid in their section.
+  const stripComponents = useMemo(
+    () => interactiveComponents.filter((m) => isStripMember(m, stripNames)),
+    [interactiveComponents, stripNames],
+  );
   // Section chrome for the panel: the tab's own specs plus the foreign
   // persistent ones its fanned-out controls belong to. Own specs win on a name
   // clash — the members bucket by name either way.
@@ -814,6 +847,7 @@ const App: React.FC = () => {
           familyId={crossTab.familyId}
           slot="top"
           filters={deferredFilters}
+          controlFilters={filters}
           onFilterChange={handleFilterChange}
           refreshTick={refreshTick}
           groupRender={groupRender}
@@ -885,10 +919,10 @@ const App: React.FC = () => {
   );
   const rightComponents = useMemo(
     () =>
-      [...cardComponents, ...otherComponents].filter(
+      [...cardComponents, ...otherComponents, ...stripComponents].filter(
         (m) => !(typeof m.section === 'string' && excludedOwnSections.has(m.section)),
       ),
-    [cardComponents, otherComponents, excludedOwnSections],
+    [cardComponents, otherComponents, stripComponents, excludedOwnSections],
   );
 
   // Same count the panel badges, hoisted so the narrow-screen header button can
@@ -1027,6 +1061,9 @@ const App: React.FC = () => {
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
       <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+      {/* `category_colors` for the filter bar's chips and anything else that
+          colours a category: one value, one colour, on every surface. */}
+      <CategoryColorsContext.Provider value={dashboard}>
       <TabLinkProvider tabs={tabSiblings}>
       <AppShell
       header={{ height: 50 }}
@@ -1403,6 +1440,7 @@ const App: React.FC = () => {
                     gridSections={dashboard.grid_sections}
                     beforeSections={topSectionsHost}
                     filters={deferredFilters}
+                    controlFilters={filters}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
                     cardSecondaryValues={cardSecondaryValues}
@@ -1423,6 +1461,7 @@ const App: React.FC = () => {
                     familyId={crossTab.familyId}
                     slot="bottom"
                     filters={deferredFilters}
+                    controlFilters={filters}
                     onFilterChange={handleFilterChange}
                     refreshTick={refreshTick}
                     groupRender={groupRender}
@@ -1553,6 +1592,7 @@ const App: React.FC = () => {
       <RunParametersHost dashboard={dashboard} />
     </AppShell>
       </TabLinkProvider>
+      </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
       </InspectorProviders>

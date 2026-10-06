@@ -82,6 +82,9 @@ const SectionForm: React.FC<SectionFormProps> = ({
   const [cardVariant, setCardVariant] = useState<CardVariant | null>(
     normalizeCardVariant(initial?.card_variant),
   );
+  // Grid sections only: tiles on the grid, or one compact filter bar.
+  const [strip, setStrip] = useState(initial?.display === 'strip');
+  const isStrip = kind === 'grid' && strip;
 
   // Names already excluded stay on offer even when no tab carries them any
   // more (renamed, or written in YAML for another run), so editing an
@@ -116,12 +119,18 @@ const SectionForm: React.FC<SectionFormProps> = ({
             // it does not round-trip into the YAML as a setting that does
             // nothing.
             pin: persistent ? pin : undefined,
-            // Grid sections only; `box` is the default and goes unwritten.
-            appearance: kind === 'grid' && plain ? 'plain' : undefined,
+            // Grid sections only; `box` is the default and goes unwritten. A
+            // filter bar has no heading to make plain.
+            appearance: kind === 'grid' && plain && !isStrip ? 'plain' : undefined,
             // Same rule as `pin`: only a persistent section shows on other tabs.
             exclude_tabs: persistent && excludeTabs.length ? excludeTabs : undefined,
             // Grid sections only, and unwritten when each card keeps its own.
-            card_variant: kind === 'grid' && cardVariant ? cardVariant : undefined,
+            card_variant: kind === 'grid' && cardVariant && !isStrip ? cardVariant : undefined,
+            // Unwritten for the default grid, so a section saved from this
+            // form stays readable by a server that predates filter bars.
+            display: isStrip ? 'strip' : undefined,
+            // A bar never folds.
+            ...(isStrip ? { collapsed: false } : {}),
           }
         : null,
     );
@@ -139,6 +148,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
     plain,
     excludeTabs,
     cardVariant,
+    isStrip,
   ]);
 
   return (
@@ -248,6 +258,45 @@ const SectionForm: React.FC<SectionFormProps> = ({
       />
 
       {kind === 'grid' && (
+        <Stack gap={4}>
+          <Text size="sm" fw={500}>
+            Display
+          </Text>
+          <SegmentedControl
+            fullWidth
+            color="grape"
+            value={strip ? 'strip' : 'grid'}
+            onChange={(v) => setStrip(v === 'strip')}
+            data={[
+              {
+                value: 'grid',
+                label: (
+                  <Group gap={6} justify="center" wrap="nowrap">
+                    <Icon icon="mdi:view-grid-outline" width={14} />
+                    <span>Grid</span>
+                  </Group>
+                ),
+              },
+              {
+                value: 'strip',
+                label: (
+                  <Group gap={6} justify="center" wrap="nowrap">
+                    <Icon icon="mdi:tune-variant" width={14} />
+                    <span>Filter bar</span>
+                  </Group>
+                ),
+              },
+            ]}
+          />
+          <Text size="xs" c="dimmed">
+            {strip
+              ? 'Filters placed in this section leave the filter panel and sit here in one compact row.'
+              : 'Each component is a tile on the dashboard grid.'}
+          </Text>
+        </Stack>
+      )}
+
+      {kind === 'grid' && !isStrip && (
         <Switch
           label="Plain heading"
           description="A light heading over the tiles: no frame, no fold, always open. For a section whose tiles are already cards, like a landing page's key figures."
@@ -256,7 +305,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
         />
       )}
 
-      {kind === 'grid' && (
+      {kind === 'grid' && !isStrip && (
         <Select
           label="Card style"
           description="How the section's metric cards are drawn. A card that picks its own style in its builder keeps it. Headline: large figures for a landing page. Compact: low cards, title and value on one line. Minimal: no frame, for cards on a tinted section. Accent: a coloured rail that singles cards out. Split: a stat tile, icon block beside the figure."
@@ -269,8 +318,9 @@ const SectionForm: React.FC<SectionFormProps> = ({
         />
       )}
 
-      {/* A plain section never folds, so there is nothing to start collapsed. */}
-      {!(kind === 'grid' && plain) && (
+      {/* A plain section never folds, nor does a filter bar, so there is
+          nothing to start collapsed. */}
+      {!(kind === 'grid' && (plain || isStrip)) && (
         <Switch
           label="Start collapsed"
           description="Applies to first-time visitors. Anyone who has already opened this dashboard keeps the state they left it in."

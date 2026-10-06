@@ -117,6 +117,10 @@ interface InteractiveConfig {
   group?: string;
   placement?: string;
   show_marks?: boolean;
+  // Only read when the control sits in a filter bar (a grid section shown as
+  // a strip): a shorter name than the title, and whether the icon badge shows.
+  strip_label?: string;
+  strip_icon?: boolean;
 }
 
 /** Variants whose renderers read `show_marks`. */
@@ -404,6 +408,31 @@ const InteractiveBuilder: React.FC = () => {
                 width={14}
               />
             }
+          />
+
+          <Stack gap={2} mt="xs">
+            <Text size="sm" fw={600}>
+              In a filter bar
+            </Text>
+            <Text size="xs" c="dimmed">
+              Used only when the control sits in a section shown as a filter bar.
+            </Text>
+          </Stack>
+
+          <TextInput
+            label="Short label"
+            description="Shown instead of the title, which stays in a tooltip"
+            placeholder={config.title?.trim() || 'Same as the title'}
+            value={config.strip_label ?? ''}
+            onChange={(e) => patchConfig({ strip_label: e.currentTarget.value })}
+            maxLength={40}
+          />
+
+          <SwitchField
+            label="Icon badge"
+            description="The icon in a small coloured square before the label"
+            checked={config.strip_icon !== false}
+            onChange={(checked) => patchConfig({ strip_icon: checked })}
           />
         </Stack>
       </BuilderSection>

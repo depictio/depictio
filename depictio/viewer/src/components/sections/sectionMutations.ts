@@ -11,6 +11,7 @@
  * an intent, `EditorApp` reduces it against `dashboardRef.current` (never
  * against a possibly-stale prop) and hands the result to the existing autosave.
  */
+import { isStripMember, stripSectionNames } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec, StoredMetadata } from 'depictio-react-core';
 
 /**
@@ -47,14 +48,25 @@ const listKey = (kind: SectionKind) =>
  * or in the grid is decided by its type, exactly as `EditorApp` splits the two
  * render paths. Scoping every mutation by this predicate is what keeps a rename
  * in one tab from touching the identically-named section in the other.
+ *
+ * The one exception is a filter bar (a grid section with `display: 'strip'`):
+ * the interactive components naming it are grid members. Pass the dashboard's
+ * bar names (`stripSectionNames`) to apply it; without them every interactive
+ * component counts as a filter member, which is what the group rule wants.
  */
-export const isFilterMember = (m: StoredMetadata): boolean =>
-  m.component_type === 'interactive';
+export const isFilterMember = (
+  m: StoredMetadata,
+  stripNames: ReadonlySet<string> = new Set(),
+): boolean => m.component_type === 'interactive' && !isStripMember(m, stripNames);
 
 export const memberOf =
-  (kind: SectionKind) =>
+  (kind: SectionKind, stripNames?: ReadonlySet<string>) =>
   (m: StoredMetadata): boolean =>
-    kind === 'filter' ? isFilterMember(m) : !isFilterMember(m);
+    kind === 'filter' ? isFilterMember(m, stripNames) : !isFilterMember(m, stripNames);
+
+/** `memberOf`, with the dashboard's filter bars taken into account. */
+const memberOfIn = (d: DashboardData, kind: SectionKind) =>
+  memberOf(kind, stripSectionNames(d.grid_sections));
 
 export const sectionsFor = (d: DashboardData, kind: SectionKind): FilterSectionSpec[] =>
   d[listKey(kind)] ?? [];
@@ -62,7 +74,7 @@ export const sectionsFor = (d: DashboardData, kind: SectionKind): FilterSectionS
 /** Section name → number of components in it, for one namespace. */
 export function memberCounts(d: DashboardData, kind: SectionKind): Map<string, number> {
   const counts = new Map<string, number>();
-  const isMember = memberOf(kind);
+  const isMember = memberOfIn(d, kind);
   for (const m of d.stored_metadata ?? []) {
     if (!isMember(m)) continue;
     const name = typeof m.section === 'string' ? m.section.trim() : '';
@@ -76,7 +88,7 @@ export function memberCounts(d: DashboardData, kind: SectionKind): Map<string, n
 export function implicitNames(d: DashboardData, kind: SectionKind): string[] {
   const declared = new Set(sectionsFor(d, kind).map((s) => s.name));
   const seen: string[] = [];
-  const isMember = memberOf(kind);
+  const isMember = memberOfIn(d, kind);
   for (const m of d.stored_metadata ?? []) {
     if (!isMember(m)) continue;
     const name = typeof m.section === 'string' ? m.section.trim() : '';
@@ -168,25 +180,34 @@ export function applySectionOp(d: DashboardData, op: SectionOp): DashboardData {
         ...next,
         stored_metadata: retarget(
           d,
-          (m) => memberOf(op.kind)(m) && m.section === op.name,
+          (m) => memberOfIn(d, op.kind)(m) && m.section === op.name,
           renamed,
         ),
       };
     }
 
-    case 'delete':
+    case 'delete': {
+      const isMember = memberOfIn(d, op.kind);
+      // A filter bar's controls only follow it into another bar: a tile
+      // section's name means nothing to a filter, and the same name in the
+      // filter panel is a different section. Otherwise they go back to the
+      // panel unsectioned.
+      const strips = stripSectionNames(d.grid_sections);
+      const targetFor = (m: StoredMetadata) =>
+        m.component_type === 'interactive' && op.target && !strips.has(op.target)
+          ? undefined
+          : (op.target ?? undefined);
       return {
         ...d,
         [listKey(op.kind)]: sectionsFor(d, op.kind).filter((s) => s.name !== op.name),
         // `undefined`, never '': the bucketing treats a blank name as
         // unsectioned but JSON.stringify keeps an empty string, which would
         // persist a section nobody can see.
-        stored_metadata: retarget(
-          d,
-          (m) => memberOf(op.kind)(m) && m.section === op.name,
-          op.target ?? undefined,
+        stored_metadata: (d.stored_metadata ?? []).map((m) =>
+          isMember(m) && m.section === op.name ? { ...m, section: targetFor(m) } : m,
         ),
       };
+    }
 
     case 'move': {
       const list = [...sectionsFor(d, op.kind)];

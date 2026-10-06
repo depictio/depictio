@@ -109,6 +109,10 @@ import {
   BrandScope,
   buildGuideModel,
   resolveGuideSettings,
+  CategoryColorsContext,
+  isStripMember,
+  isStripSection,
+  stripSectionNames,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -1004,8 +1008,20 @@ const EditorApp: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement === 'top'),
     [interactiveComponents],
   );
+  // Grid sections drawn as filter bars (App.tsx draws the same split): their
+  // interactive components render in the grid, not in the filter panel.
+  const stripNames = useMemo(
+    () => stripSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+    [dashboard?.grid_sections],
+  );
+  const stripComponents = useMemo(
+    () => interactiveComponents.filter((m) => isStripMember(m, stripNames)),
+    [interactiveComponents, stripNames],
+  );
   const leftComponents = useMemo(() => {
-    const own = interactiveComponents.filter((m) => m.placement !== 'top');
+    const own = interactiveComponents.filter(
+      (m) => m.placement !== 'top' && !isStripMember(m, stripNames),
+    );
     const seen = new Set(own.map((m) => m.index));
     // Controls fanned out from a sibling tab's persistent filter section, same
     // as the viewer does: their renderers fetch options by dc_id/column, not by
@@ -1015,7 +1031,7 @@ const EditorApp: React.FC = () => {
       .flatMap((s) => s.components.map((c) => c.metadata))
       .filter((m) => !seen.has(m.index) && m.placement !== 'top');
     return foreign.length ? [...own, ...foreign] : own;
-  }, [interactiveComponents, foreignFilterSections]);
+  }, [interactiveComponents, foreignFilterSections, stripNames]);
   // Section chrome for the panel — own specs plus the foreign persistent ones,
   // own winning a name clash. Distinct from the `filterSections` memo below,
   // which feeds the ⋮ "Move to section" menus and must stay own-only: a
@@ -1121,6 +1137,29 @@ const EditorApp: React.FC = () => {
     () => dashboard?.filter_sections ?? [],
     [dashboard?.filter_sections],
   );
+  // A filter can also move into a filter bar — a grid section shown as a
+  // strip — and a tile cannot, so the two menus split the bars between them.
+  // A bar wins a name clash with a filter section: a component naming that
+  // section is drawn in the bar (see `isStripMember`).
+  const stripSpecs = useMemo(
+    () =>
+      ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? [])
+        .filter(isStripSection)
+        .map((s) => (s.icon ? s : { ...s, icon: 'mdi:tune-variant' })),
+    [dashboard?.grid_sections],
+  );
+  const filterMoveSections = useMemo(() => {
+    if (stripSpecs.length === 0) return filterSections;
+    const bars = new Set(stripSpecs.map((s) => s.name));
+    return [...filterSections.filter((s) => !bars.has(s.name)), ...stripSpecs];
+  }, [filterSections, stripSpecs]);
+  const tileMoveSections = useMemo(
+    () =>
+      ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? []).filter(
+        (s) => !isStripSection(s),
+      ),
+    [dashboard?.grid_sections],
+  );
   // How many controls move together, per component. Precomputed once instead of
   // per overlay so the callback below can depend on this rather than on the
   // whole `dashboard`.
@@ -1148,7 +1187,7 @@ const EditorApp: React.FC = () => {
         onDelete={handleDeleteComponent}
         onDuplicate={handleDuplicateComponent}
         componentType={component.component_type}
-        sections={filterSections}
+        sections={filterMoveSections}
         currentSection={component.section ?? null}
         onMoveToSection={handleMoveToSection}
         groupSize={filterGroupSizes.get(component.index) ?? 1}
@@ -1158,7 +1197,7 @@ const EditorApp: React.FC = () => {
       dashboardId,
       handleDeleteComponent,
       handleDuplicateComponent,
-      filterSections,
+      filterMoveSections,
       handleMoveToSection,
       filterGroupSizes,
       ownComponentIndices,
@@ -1953,6 +1992,9 @@ const EditorApp: React.FC = () => {
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
     <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+    {/* The viewer's `category_colors` scope, so a filter bar's chips take the
+        colours readers will see. */}
+    <CategoryColorsContext.Provider value={dashboard}>
     {/* Tab links in text resolve here too, so the canvas shows them as the
         viewer does rather than as plain text. */}
     <TabLinkProvider tabs={tabSiblings} mode="edit">
@@ -2220,9 +2262,13 @@ const EditorApp: React.FC = () => {
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
+                stripComponents={stripComponents}
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
+                tileMoveSections={tileMoveSections}
                 filters={combinedFilters}
+                controlFilters={filters}
+                renderStripItemOverlay={renderFilterItemOverlay}
                 groupRender={groupRender}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
@@ -2401,6 +2447,7 @@ const EditorApp: React.FC = () => {
       />
     </AppShell>
     </TabLinkProvider>
+    </CategoryColorsContext.Provider>
     </BrandScope>
     </SaveGroupContext.Provider>
     </InspectorProviders>
@@ -2421,9 +2468,18 @@ interface RightComponentGridProps {
   dashboardId: string;
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
+  /** Interactive components drawn in a filter bar (a grid section with
+   *  `display: 'strip'`). They take no grid cell. */
+  stripComponents: StoredMetadata[];
   layoutData: unknown;
   gridSections?: FilterSectionSpec[];
+  /** The grid sections a tile can move into: every section but the bars. */
+  tileMoveSections: FilterSectionSpec[];
   filters: InteractiveFilter[];
+  /** The filter state the bars' controls show, without the group filters. */
+  controlFilters: InteractiveFilter[];
+  /** The ⋮ menu of each filter in a bar — the filter panel's own. */
+  renderStripItemOverlay: (metadata: StoredMetadata) => React.ReactNode;
   onFilterChange: (filter: InteractiveFilter) => void;
   cardValues: Record<string, unknown>;
   cardSecondaryValues: Record<string, Record<string, unknown>>;
@@ -2462,9 +2518,13 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   dashboardId,
   cardComponents,
   otherComponents,
+  stripComponents,
   layoutData,
   gridSections,
+  tileMoveSections,
   filters,
+  controlFilters,
+  renderStripItemOverlay,
   onFilterChange,
   cardValues,
   cardSecondaryValues,
@@ -2483,8 +2543,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   refreshTick,
 }) => {
   const allComponents = useMemo(
-    () => [...cardComponents, ...otherComponents],
-    [cardComponents, otherComponents],
+    () => [...cardComponents, ...otherComponents, ...stripComponents],
+    [cardComponents, otherComponents, stripComponents],
   );
 
   if (allComponents.length === 0) {
@@ -2535,6 +2595,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       gridSections={gridSections}
       beforeSections={beforeSections}
       filters={filters}
+      controlFilters={controlFilters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}
       cardSecondaryValues={cardSecondaryValues}
@@ -2547,6 +2608,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       editMode={true}
       renderSectionActions={renderSectionActions}
       onLayoutChange={onLayoutChange}
+      renderStripItemOverlay={renderStripItemOverlay}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
           dashboardId={dashboardId}
@@ -2555,7 +2617,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
           componentType={metadata.component_type}
-          sections={gridSections}
+          sections={tileMoveSections}
           currentSection={metadata.section ?? null}
           onMoveToSection={onMoveToSection}
           fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
