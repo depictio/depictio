@@ -4,7 +4,6 @@ import {
   Badge,
   Card,
   Group,
-  NumberInput,
   ScrollArea,
   Select,
   Stack,
@@ -20,6 +19,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizNumberInput } from './controls/VizControls';
 import { formatFieldValue, NULL_DISPLAY, recordLinks } from './record_card/recordFields';
 import { buildRecordSections, fieldLabel } from './record_card/recordSections';
 import {
@@ -380,9 +380,7 @@ const RecordCardRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
   // selected. One compact control, so it reads the same in the popover and in
   // the header strip the frame promotes it into.
   const controls = (
-    <NumberInput
-      size="xs"
-      w={150}
+    <VizNumberInput
       label="Fields per card"
       value={maxFields}
       onChange={(v) => setMaxFields(Math.max(1, Number(v) || 40))}

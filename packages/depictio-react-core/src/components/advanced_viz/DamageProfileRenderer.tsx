@@ -74,7 +74,6 @@ function lengthBinSortKey(label: string): number {
 // this list (an unusual `base_change` string) still renders muted, unlabelled
 // in the picker.
 const SUBSTITUTION_OPTIONS = ['C>T', 'G>A', 'T>C', 'A>G', 'other'];
-const MUTED_COLOUR = '#9aa0a6';
 const HIGHLIGHT_PALETTE = TAB10_PALETTE;
 
 const num = (v: unknown): number | null => {
@@ -276,6 +275,7 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     const highlightNames = Array.from(highlightSet).sort();
     const highlightColours = stableColorMap(highlightNames, palette, null);
     const { textColor } = plotlyThemeColors(isDark, theme);
+    const mutedColour = isDark ? theme.colors.gray[6] : theme.colors.gray[5];
 
     const colWidth = 1 / panels.length;
     const gap = panels.length > 1 ? 0.06 : 0;
@@ -307,7 +307,7 @@ const DamageProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         for (const [key, pts] of bucket) {
           const [sample, change] = key.split('|');
           const isHighlighted = highlightSet.has(change);
-          const colour = isHighlighted ? highlightColours.get(change) : MUTED_COLOUR;
+          const colour = isHighlighted ? highlightColours.get(change) : mutedColour;
           traces.push({
             type: 'scatter' as const,
             mode: 'lines' as const,

@@ -341,7 +341,7 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
   const lineColour = plotlyThemeColors(isDark, theme).zeroLineColor;
   // Stronger than the intron line: a chevron may land on a coloured block (a
   // single-exon transcript has no intron), and a 35% mark would vanish there.
-  const chevronColour = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.55)';
+  const chevronColour = plotlyThemeColors(isDark, theme).textColor;
 
   const figure = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
     if (!lanes.length) return null;

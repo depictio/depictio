@@ -10,7 +10,7 @@
 
 /** What a null or an empty value shows as. The caller dims it; the glyph is
  *  there so an empty field still reads as a field rather than as a gap. */
-export const NULL_DISPLAY = '–';
+export const NULL_DISPLAY = '-';
 
 const VALUE_PLACEHOLDER = '{value}';
 

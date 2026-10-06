@@ -935,7 +935,7 @@ const AdvancedVizBuilder: React.FC = () => {
                     label={roleBindingLabel(
                       'ranks',
                       [],
-                      'Hierarchy columns from root to leaf — pick at least 2, in order.',
+                      'Hierarchy columns from root to leaf, pick at least 2, in order.',
                       true,
                     )}
                     placeholder="Pick rank columns in order"
@@ -950,7 +950,7 @@ const AdvancedVizBuilder: React.FC = () => {
                     clearable
                   />
                 ) : null}
-                {/* Sankey has no single <role>_col schema — it binds an ordered
+                {/* Sankey has no single <role>_col schema: it binds an ordered
                     list of categorical columns (step_cols). Without this block
                     the kind was selectable but unbindable, so the renderer
                     failed with "≥2 step columns required". */}
@@ -1048,7 +1048,7 @@ const AdvancedVizBuilder: React.FC = () => {
                 ) : null}
                 {requiredRoles
                   .filter(
-                    // Skip dim_1/dim_2 when running embedding live — the
+                    // Skip dim_1/dim_2 when running embedding live, the
                     // Celery task derives them.
                     ([role]) =>
                       !liveEmbedding || (role !== 'dim_1' && role !== 'dim_2'),
@@ -1099,7 +1099,7 @@ const AdvancedVizBuilder: React.FC = () => {
                   </Alert>
                 ) : null}
                 {validation.warnings.length > 0 ? (
-                  <Alert color="yellow" variant="light" title="Heads up — dtype coercion">
+                  <Alert color="yellow" variant="light" title="Heads up: dtype coercion">
                     <ul style={{ margin: 0, paddingLeft: 16 }}>
                       {validation.warnings.map((w) => (
                         <li key={w}>
