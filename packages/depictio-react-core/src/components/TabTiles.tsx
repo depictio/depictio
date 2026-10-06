@@ -54,45 +54,61 @@ const TabTiles: React.FC<{
       {present.map(({ item, target }, i) => {
         const color = glyphColorVar(target.color ?? 'gray');
         const line = item.text ?? target.description ?? null;
-        const inner = (
-          <>
-            <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-              {ordered ? (
-                // In the tab's colour: the step ties the tile to its mark.
-                <Text
-                  size="xs"
-                  fw={800}
-                  style={{ color, letterSpacing: '0.06em', fontVariantNumeric: 'tabular-nums' }}
-                  aria-label={`Step ${i + 1}`}
-                >
-                  {String(i + 1).padStart(2, '0')}
-                </Text>
-              ) : null}
-              <Text fw={700} size="md" lh={1.3}>
-                {item.label}
+        const icon = target.icon ? (
+          // The tab's mark at rest, as on a headline metric card.
+          <span className="depictio-tab-tile-icon" aria-hidden>
+            <Glyph icon={target.icon} color={target.color} size={ordered ? 30 : 36} />
+          </span>
+        ) : null;
+        const words = (
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+            <Text fw={700} size="md" lh={1.3}>
+              {item.label}
+            </Text>
+            {line ? (
+              <Text size="sm" c="dimmed" lh={1.4}>
+                {line}
               </Text>
-              {line ? (
-                <Text size="sm" c="dimmed" lh={1.4}>
-                  {line}
-                </Text>
-              ) : null}
-            </span>
-            {target.icon ? (
-              // The tab's mark at rest, as on a headline metric card.
-              <span className="depictio-tab-tile-icon" aria-hidden>
-                <Glyph icon={target.icon} color={target.color} size={36} />
-              </span>
             ) : null}
+          </span>
+        );
+        // A numbered tile is a step: its number leads, large and in the tab's
+        // colour, so the row reads as a path before a word of it is read. The
+        // tab's mark sits opposite it, the name and question underneath.
+        const inner = ordered ? (
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, flex: 1 }}>
+            <span style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <span
+                aria-label={`Step ${i + 1}`}
+                style={{
+                  color,
+                  fontSize: 30,
+                  fontWeight: 800,
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              {icon}
+            </span>
+            {words}
+          </span>
+        ) : (
+          <>
+            <span style={{ flex: 1, minWidth: 0 }}>{words}</span>
+            {icon}
           </>
         );
         const style: React.CSSProperties = {
           ...CARD_FRAME,
           display: 'flex',
-          alignItems: 'center',
+          alignItems: ordered ? 'stretch' : 'center',
           gap: 14,
-          padding: '20px 22px',
+          padding: ordered ? '18px 20px 20px' : '20px 22px',
           textAlign: 'left',
-          minHeight: 96,
+          minHeight: ordered ? 0 : 96,
           ['--tile-tint' as string]: `color-mix(in srgb, ${color} 6%, var(--mantine-color-body))`,
           ['--tile-edge' as string]: color,
         };
