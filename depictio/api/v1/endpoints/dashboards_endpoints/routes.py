@@ -3925,13 +3925,14 @@ def get_cross_tab_components(
     persistent_sections: list[dict[str, Any]] = []
     for tab in tabs:
         metas = tab.get("stored_metadata") or []
-        # Grid sections drawn as a filter bar (`display: strip`) hold the
-        # interactive components that name them, which therefore leave the
-        # filter panel's namespace on this tab.
-        strip_names = {
+        # Grid sections with a filter bar -- drawn as one (`display: strip`) or
+        # carrying their own (`filter_bar: true`) -- hold the interactive
+        # components that name them, which therefore leave the filter panel's
+        # namespace on this tab.
+        bar_names = {
             spec.get("name")
             for spec in tab.get("grid_sections") or []
-            if spec.get("display") == "strip"
+            if spec.get("display") == "strip" or spec.get("filter_bar")
         }
         for kind, spec_field in (("grid", "grid_sections"), ("filter", "filter_sections")):
             for spec in tab.get(spec_field) or []:
@@ -3948,7 +3949,7 @@ def get_cross_tab_components(
                     # excluded — they already fan out through `floating`.
                     is_filter = (
                         meta.get("component_type") == "interactive"
-                        and meta.get("section") not in strip_names
+                        and meta.get("section") not in bar_names
                     )
                     if is_filter != (kind == "filter"):
                         continue

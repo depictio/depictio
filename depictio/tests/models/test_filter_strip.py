@@ -163,3 +163,80 @@ class TestCategoryColors:
         )
         assert doc.category_colors == COLORS
         assert doc.inherited_category_colors is None
+
+
+# ---------------------------------------------------------------------------
+# A section's own filter bar: filter_bar / visible_filters
+# ---------------------------------------------------------------------------
+
+
+class TestSectionFilterBar:
+    """`filter_bar: true` gives a grid section of tiles a bar of its own, whose
+    filters narrow that section only; `visible_filters` caps how many a bar
+    shows before "More filters". The model carries both through every format;
+    the scoping itself is the viewer's (see `filterScope.ts`)."""
+
+    def _bound(self, **spec) -> DashboardDataLite:
+        return _dashboard(
+            [
+                _interactive("city", section="Key figures"),
+                _interactive("season", section="Key figures", column_name="season"),
+            ],
+            grid_sections=[{"name": "Key figures", **spec}],
+        )
+
+    def test_defaults_to_unset(self):
+        spec = FilterSectionSpec(name="Key figures")
+        assert spec.filter_bar is None
+        assert spec.visible_filters is None
+
+    def test_round_trips_through_full_and_yaml(self):
+        dash = self._bound(filter_bar=True, visible_filters=2)
+        full = dash.to_full()
+        assert full["grid_sections"][0]["filter_bar"] is True
+        assert full["grid_sections"][0]["visible_filters"] == 2
+        for back in (
+            DashboardDataLite.from_yaml(dash.to_yaml()),
+            DashboardDataLite.from_full(full),
+        ):
+            assert back.grid_sections[0].filter_bar is True
+            assert back.grid_sections[0].visible_filters == 2
+
+    def test_unset_is_not_exported(self):
+        yaml_str = self._bound().to_yaml()
+        assert "filter_bar" not in yaml_str
+        assert "visible_filters" not in yaml_str
+
+    def test_members_keep_their_section(self):
+        """Bar members stay `section: Key figures` -- that name is what binds
+        them to the section's bar and scopes their filters to its tiles."""
+        meta = self._bound(filter_bar=True).to_full()["stored_metadata"]
+        assert [m["section"] for m in meta] == ["Key figures", "Key figures"]
+
+    @pytest.mark.parametrize("bad", [0, -1])
+    def test_rejects_a_visible_count_below_one(self, bad):
+        with pytest.raises(ValidationError):
+            FilterSectionSpec(name="Key figures", visible_filters=bad)
+
+    def test_visible_filters_applies_to_a_strip_too(self):
+        dash = _dashboard(
+            [_interactive("habitat", section="Filters")],
+            grid_sections=[{"name": "Filters", "display": "strip", "visible_filters": 1}],
+        )
+        assert DashboardDataLite.from_yaml(dash.to_yaml()).grid_sections[0].visible_filters == 1
+
+    def test_the_full_model_accepts_it(self):
+        """The editor saves through `DashboardData`, which forbids unknown keys."""
+        from depictio.models.models.dashboards import DashboardData
+
+        full = self._bound(filter_bar=True, visible_filters=3).to_full()
+        doc = DashboardData(
+            **{
+                **full,
+                "dashboard_id": "507f1f77bcf86cd799439011",
+                "project_id": "507f1f77bcf86cd799439012",
+                "permissions": {"owners": [], "editors": [], "viewers": []},
+            }
+        )
+        assert doc.grid_sections[0].filter_bar is True
+        assert doc.grid_sections[0].visible_filters == 3

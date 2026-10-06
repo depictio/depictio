@@ -146,7 +146,7 @@ UNBOUND_COMPONENT_TYPES: frozenset[str] = frozenset({"text", "highlight"})
 
 
 class FilterSectionSpec(BaseModel):
-    """Presentation of one left-panel filter section.
+    """Presentation of one left-panel filter section, or one grid section.
 
     Only needed to override a section's defaults. A section named by a
     component's ``section`` field but absent from ``filter_sections`` still
@@ -160,6 +160,29 @@ class FilterSectionSpec(BaseModel):
           - name: Quality
             icon: mdi:check-decagram
             collapsed: true
+
+    Filters can also sit on the dashboard itself, as a compact bar, in two
+    ways. Both take the interactive components whose ``section`` names the grid
+    section, and those leave the left filter panel:
+
+    - ``display: strip`` draws the grid section as a filter bar. Its filters
+      join the tab's filters, like the panel's: they narrow every component on
+      the tab whose data has the column (directly or through a link).
+    - ``filter_bar: true`` gives a grid section of tiles a bar of its own, under
+      its heading. Its filters narrow that section's tiles only; the rest of the
+      tab, the filter panel and the other tabs ignore them.
+
+    ``visible_filters`` caps how many filters a bar shows before a "More
+    filters" toggle (unset: 2 on a section's own bar, all on a filter bar)::
+
+        grid_sections:
+          - name: Key figures
+            filter_bar: true
+            visible_filters: 2
+        components:
+          - tag: city
+            component_type: interactive
+            section: Key figures   # drawn in that section's bar, filters it only
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -223,8 +246,24 @@ class FilterSectionSpec(BaseModel):
         "each on the dashboard grid. `strip`: a filter bar -- the interactive "
         "components naming this section leave the left filter panel and render as one "
         "compact row of controls (label, chips or a thin slider, dividers between), "
-        "ignoring their grid coordinates. Any non-interactive members still render as "
-        "tiles below the bar. Grid sections only.",
+        "ignoring their grid coordinates. Their values filter the whole tab, as the "
+        "panel's do. Any non-interactive members still render as tiles below the bar. "
+        "Grid sections only.",
+    )
+    filter_bar: bool | None = Field(
+        default=None,
+        description="Give this grid section a filter bar of its own: the interactive "
+        "components naming it leave the left filter panel and render as one compact row "
+        "under the section's heading, and their values narrow only this section's tiles "
+        "(cards, figures, tables, maps). The rest of the tab and the other tabs ignore "
+        "them. Ignored on a `display: strip` section and in `filter_sections`.",
+    )
+    visible_filters: int | None = Field(
+        default=None,
+        ge=1,
+        description="How many filters a bar shows before a 'More filters' toggle, which "
+        "unfolds the rest in place. Unset: 2 on a section's own bar (`filter_bar`), "
+        "every filter on a `display: strip` bar. Bars only.",
     )
     figure_style: FigureStyle | None = Field(
         default=None,
@@ -385,7 +424,8 @@ class DashboardDataLite(BaseModel):
         default_factory=list,
         description="Optional presentation for the main grid's sections. Same shape "
         "as `filter_sections`, applied to non-interactive components -- and to the "
-        "interactive components of a section with `display: strip` (a filter bar).",
+        "interactive components of a section with `display: strip` (a filter bar) or "
+        "`filter_bar: true` (the section's own filters).",
     )
     # Category colours (column -> value -> colour), so one category is drawn in
     # one colour everywhere: a filter bar's chip dots, a figure's points, a
