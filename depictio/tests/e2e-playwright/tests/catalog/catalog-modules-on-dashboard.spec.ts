@@ -186,11 +186,16 @@ const CONTENT_SELECTOR: Record<string, string> = {
  * cards, and group_compare shows what it compares until two groups are
  * picked. A miss costs a full wait per page, so an unlisted kind here can
  * push a job past its timeout.
+ *
+ * A record card shows the record a linked tile selected, or its
+ * `default_record`. The walk adds it alone and selects nothing, and catalog
+ * offers carry no default record (a record id is run-specific), so its
+ * instruction to pick a row is the expected render here, not a broken one.
  */
 const KIND_CONTENT_SELECTOR: Record<string, string> = {
   genome_view: ".depictio-genome-view canvas",
   genome_chord: 'svg[role="img"]',
-  record_card: ".mantine-Card-root",
+  record_card: '.mantine-Card-root, [data-testid="advanced-viz-empty"]',
   group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
 };
 
