@@ -31,6 +31,9 @@ interface TabIntroProps {
 const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  // A tab that opens on its own title (a landing page's study name) opts out:
+  // "Overview" above it would be the largest and least informative line.
+  if (dashboard?.show_tab_header === false) return null;
   const isChildTab = Boolean(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   // The parent pill carries its own label ("MultiQC"), distinct from the
   // dashboard title the breadcrumb already shows.

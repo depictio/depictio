@@ -288,6 +288,13 @@ class DashboardDataLite(BaseModel):
     # The page width a tab opens at before the viewer has picked one. A landing
     # page of cards and prose reads better at a reading width than stretched
     # across a wide screen; the viewer's own choice, once made, wins.
+    # A landing tab whose first text tile is titled (the study's own name) does
+    # not need "Overview" set above it as well.
+    show_tab_header: bool = Field(
+        default=True,
+        description="Show the tab's name (and subtitle) above its canvas. Off for a "
+        "tab whose content opens on its own title.",
+    )
     content_width_default: Literal["full", "wide", "comfortable"] = Field(
         default="full",
         description="Initial page width before the viewer has picked one: 'full', "
@@ -432,6 +439,7 @@ class DashboardDataLite(BaseModel):
         "funnel_filtering",
         "filter_panel_default",
         "content_width_default",
+        "show_tab_header",
         "filter_sections",
         "grid_sections",
         "brand_theme",
@@ -481,6 +489,8 @@ class DashboardDataLite(BaseModel):
                 data.pop(field, None)
         if data.get("is_main_tab", True) is True:
             data.pop("is_main_tab", None)
+        if data.get("show_tab_header", True) is True:
+            data.pop("show_tab_header", None)
         if data.get("tab_order", 0) == 0:
             data.pop("tab_order", None)
         if not data.get("workflow_system") or data.get("workflow_system") == "none":
@@ -1071,6 +1081,7 @@ class DashboardDataLite(BaseModel):
                         "caption",
                         "variant",
                         "link",
+                        "decimals",
                     ],
                 )
                 if display:
@@ -1206,6 +1217,7 @@ class DashboardDataLite(BaseModel):
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
             filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
             content_width_default=dashboard_data.get("content_width_default") or "full",
+            show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
@@ -1302,6 +1314,7 @@ class DashboardDataLite(BaseModel):
             "funnel_filtering": self.funnel_filtering,
             "filter_panel_default": self.filter_panel_default,
             "content_width_default": self.content_width_default,
+            "show_tab_header": self.show_tab_header,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
             if self.brand_theme
             else None,
@@ -1390,8 +1403,10 @@ class DashboardDataLite(BaseModel):
                     "caption",
                     "variant",
                     "link",
+                    "decimals",
                 ]:
-                    if comp_dict.get(f):
+                    # `decimals: 0` is a real setting, not an empty one.
+                    if comp_dict.get(f) or (f == "decimals" and comp_dict.get(f) == 0):
                         full_comp[f] = comp_dict[f]
 
             elif comp_type == "interactive":
@@ -1645,6 +1660,8 @@ class DashboardData(MongoModel):
     filter_panel_default: Literal["open", "collapsed"] = "open"
     # Initial page width before the viewer has picked one.
     content_width_default: Literal["full", "wide", "comfortable"] = "full"
+    # Whether the tab's name is drawn above its canvas.
+    show_tab_header: bool = True
     # Dashboard-level brand override (logo, palette, surfaces, figure
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.

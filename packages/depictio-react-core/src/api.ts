@@ -291,6 +291,8 @@ export interface StoredMetadata {
   caption?: string;
   /** Click target: `tab:<name>` for a sibling tab, or a URL. */
   link?: string;
+  /** Decimal places for a fractional card value. */
+  decimals?: number;
   /** `headline`: large value, resting icon mark, bar-only strip. */
   variant?: 'default' | 'headline';
   metric_theme?: string;
@@ -389,6 +391,8 @@ export interface DashboardData {
   filter_panel_default?: 'open' | 'collapsed';
   /** Page width the tab opens at before the viewer picks one. */
   content_width_default?: 'full' | 'wide' | 'comfortable';
+  /** False: no tab name above the canvas (a tab that opens on its own title). */
+  show_tab_header?: boolean;
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
    *  defaults. Unset fields inherit the instance branding. */
   brand_theme?: BrandTheme | null;

@@ -140,3 +140,35 @@ const LINKS_ONLY = /^(?:\s*\[[^\]\n]+\]\([^)\n]+(?:\([^)\n]*\))?[^)\n]*\)\s*[·|
 export function isLinksOnly(text: string): boolean {
   return LINKS_ONLY.test(text);
 }
+
+/** One row of a result list: `**41%** Claim — context [Tab](tab:Name)`. */
+export interface StatRow {
+  stat: string;
+  claim: string;
+  context: string | null;
+  /** The trailing link, as written (`[label](target)`), or null. */
+  link: string | null;
+}
+
+const STAT_HEAD = /^\*\*([^*\n]{1,16})\*\*\s+(\S.*)$/;
+const TRAILING_LINK = /\s*(\[[^\]\n]+\]\((?:[^()\n]|\([^()\n]*\))+\))\s*$/;
+const CONTEXT_SPLIT = /\s+[—–]\s+/;
+
+/**
+ * Reads a list item as a result row, or null: a bold figure (it must hold a
+ * digit), the claim, then a context after an em or en dash and/or a closing
+ * link. The figure alone is not enough: `**16S** amplicons` is a fact, not a
+ * result, so a row also needs its context or its link.
+ */
+export function parseStatRow(item: string): StatRow | null {
+  const m = STAT_HEAD.exec(item.trim());
+  if (!m || !/\d/.test(m[1])) return null;
+  let rest = m[2];
+  const linkMatch = TRAILING_LINK.exec(rest);
+  const link = linkMatch ? linkMatch[1] : null;
+  if (linkMatch) rest = rest.slice(0, linkMatch.index);
+  const [claim, ...ctx] = rest.split(CONTEXT_SPLIT);
+  const context = ctx.length ? ctx.join(' — ').trim() : null;
+  if (!claim.trim() || (!link && !context)) return null;
+  return { stat: m[1].trim(), claim: claim.trim(), context, link };
+}

@@ -3,7 +3,15 @@ import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core'
 
 import { StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
-import { Block, Fact, isLinksOnly, parseBlocks, parseFact } from './blockMarkdown';
+import {
+  Block,
+  Fact,
+  isLinksOnly,
+  parseBlocks,
+  parseFact,
+  parseStatRow,
+  StatRow,
+} from './blockMarkdown';
 import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
 import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
@@ -157,79 +165,118 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
   lineHeight: 1.35,
 };
 
-/** Icon tints for a fact strip without an accent: each fact its own hue. */
-const FACT_HUES = ['blue', 'teal', 'grape', 'orange', 'cyan', 'pink'];
+/**
+ * Prose stops at a reading measure. A full-width tile on a wide screen ran
+ * paragraphs to ~180 characters a line, where the eye loses the next line's
+ * start. Tables, tiles and strips keep the tile's width.
+ */
+const PROSE_MEASURE = '80ch';
+function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties {
+  return {
+    maxWidth: PROSE_MEASURE,
+    marginInline: alignment === 'center' ? 'auto' : alignment === 'right' ? 'auto 0' : undefined,
+  };
+}
 
 /**
- * A list of `![](icon:…) **Label** value` items, drawn as one strip: a card
- * split into cells, each an icon on a tint, a small label over its value. A
- * study's method box (pipeline, markers, reference databases) read at a
- * glance. Cells take equal shares of the row and wrap below ~200px; the
- * hairlines between them sit on each cell's left edge and the first column's
- * is clipped, so the strip stays clean however many rows it wraps to.
+ * A list of `![](icon:…) **Label** value` items, drawn as one line of
+ * metadata under a title: a quiet icon, a dimmed label, the value. Unframed
+ * and in grey on purpose: a study's method (pipeline, markers, databases,
+ * sites, period) is context for the page, not one more box competing with
+ * the cards below it. Wraps to as many lines as the width needs.
  */
-const FactStrip: React.FC<{
+const FactLine: React.FC<{
   facts: Fact[];
-  accentColor: string | null;
   inline: (text: string) => React.ReactNode[];
-}> = ({ facts, accentColor, inline }) => (
-  // Margins hold the prose around it off the frame: a paragraph set flush
-  // under a bordered strip reads as its caption.
-  <div style={{ ...CARD_FRAME, overflow: 'hidden', width: '100%', margin: '6px 0 10px' }}>
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
-        marginLeft: -1,
-      }}
-    >
-      {facts.map((fact, i) => {
-        const tint = accentColor ?? glyphColorVar(FACT_HUES[i % FACT_HUES.length]);
-        return (
-          <div
-            key={i}
+}> = ({ facts, inline }) => (
+  <div
+    style={{
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '6px 22px',
+      width: '100%',
+      margin: '2px 0 6px',
+      fontSize: 'var(--mantine-font-size-sm)',
+      lineHeight: 1.4,
+    }}
+  >
+    {facts.map((fact, i) => (
+      <span
+        key={i}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}
+      >
+        {fact.icon ? (
+          <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
+        ) : null}
+        <span style={{ color: 'var(--mantine-color-dimmed)' }}>{fact.label}</span>
+        <span style={{ fontWeight: 600 }}>{inline(fact.value)}</span>
+      </span>
+    ))}
+  </div>
+);
+
+/**
+ * A list of `**41%** Claim — context [Tab](tab:Name)` items, drawn as result
+ * rows: the figure in its tab's colour, the claim over its context, the way
+ * in on the right. Reads like an abstract's key results, set apart from the
+ * metric cards a landing page also carries (which state what was measured,
+ * not what was found), and as one panel it takes the height its rows need
+ * instead of a card's worth of grid rows each.
+ */
+const StatList: React.FC<{
+  rows: StatRow[];
+  inline: (text: string) => React.ReactNode[];
+  resolveTab: TabLinkResolver | null;
+}> = ({ rows, inline, resolveTab }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+    {rows.map((row, i) => {
+      const tabName = row.link ? /\]\(tab:(.+)\)$/.exec(row.link)?.[1] ?? null : null;
+      const color = tabName ? resolveTab?.(tabName)?.color ?? null : null;
+      return (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 20,
+            rowGap: 4,
+            padding: '12px 0',
+            borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
+          }}
+        >
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              minWidth: 0,
-              padding: '12px 16px',
-              borderLeft: `1px solid ${CARD_RULE}`,
+              flex: '0 0 auto',
+              minWidth: 92,
+              fontSize: 28,
+              fontWeight: 800,
+              lineHeight: 1.05,
+              letterSpacing: '-0.02em',
+              fontVariantNumeric: 'tabular-nums',
+              color: color ? glyphColorVar(color) : undefined,
             }}
           >
-            {fact.icon ? (
-              <span
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 9,
-                  flex: 'none',
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: `color-mix(in srgb, ${tint} 13%, var(--mantine-color-body))`,
-                }}
-              >
-                <Glyph icon={fact.icon} color={tint} size={19} />
-              </span>
+            {row.stat}
+          </span>
+          <span style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <Text size="sm" fw={700} lh={1.35}>
+              {inline(row.claim)}
+            </Text>
+            {row.context ? (
+              <Text size="sm" c="dimmed" lh={1.35}>
+                {inline(row.context)}
+              </Text>
             ) : null}
-            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <Text
-                size="xs"
-                c="dimmed"
-                fw={600}
-                tt="uppercase"
-                style={{ letterSpacing: '0.05em', lineHeight: 1.3 }}
-              >
-                {fact.label}
-              </Text>
-              <Text size="sm" fw={600} style={{ lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                {inline(fact.value)}
-              </Text>
-            </span>
-          </div>
-        );
-      })}
-    </div>
+          </span>
+          {row.link ? (
+            <Text size="sm" style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
+              {inline(row.link)}
+            </Text>
+          ) : null}
+        </div>
+      );
+    })}
   </div>
 );
 
@@ -288,16 +335,20 @@ const MarkdownBody: React.FC<{
               </Title>
             );
           case 'list': {
-            const facts = block.ordered ? [] : block.items.map(parseFact);
-            if (facts.length && facts.every(Boolean)) {
+            const stats = block.items.map(parseStatRow);
+            if (stats.length && stats.every(Boolean)) {
               return (
-                <FactStrip
+                <StatList
                   key={idx}
-                  facts={facts as Fact[]}
-                  accentColor={accentColor}
+                  rows={stats as StatRow[]}
                   inline={inline}
+                  resolveTab={resolveTab}
                 />
               );
+            }
+            const facts = block.ordered ? [] : block.items.map(parseFact);
+            if (facts.length && facts.every(Boolean)) {
+              return <FactLine key={idx} facts={facts as Fact[]} inline={inline} />;
             }
             const tiles = resolveTab ? block.items.map(parseTabTile) : [];
             if (tiles.length && tiles.every(Boolean)) {
@@ -319,7 +370,12 @@ const MarkdownBody: React.FC<{
                 // sizes to its text instead of the tile: long items ran past
                 // the edge and were clipped. Inline flow wraps them.
                 styles={{ itemWrapper: { display: 'inline' }, itemLabel: { display: 'inline' } }}
-                style={{ lineHeight: 1.45, textAlign: 'left', paddingRight: 4 }}
+                style={{
+                  lineHeight: 1.45,
+                  textAlign: 'left',
+                  paddingRight: 4,
+                  ...proseWidth(alignment),
+                }}
               >
                 {block.items.map((item, i) => (
                   <List.Item key={i}>{inline(item)}</List.Item>
@@ -372,7 +428,7 @@ const MarkdownBody: React.FC<{
               );
             }
             return (
-              <Text key={idx} ta={alignment} style={BODY_TEXT_STYLE}>
+              <Text key={idx} ta={alignment} style={{ ...BODY_TEXT_STYLE, ...proseWidth(alignment) }}>
                 {inline(block.text)}
               </Text>
             );

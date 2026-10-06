@@ -650,7 +650,7 @@ const CardRenderer: React.FC<{
     loading && value == null
       ? '…'
       : value != null
-      ? formatValue(value)
+      ? formatValue(value, typeof metadata.decimals === 'number' ? metadata.decimals : undefined)
       : '—';
 
   // Preserve the YAML-declared order; fall back to the keys returned by the
@@ -879,8 +879,11 @@ function capitalize(s: string): string {
 }
 
 /** Exported alongside `inferCardTitle`, and for the same reason. */
-export function formatValue(v: unknown): string | number {
+export function formatValue(v: unknown, decimals?: number): string | number {
   if (typeof v === 'number') {
+    // An author's `decimals` is a display choice: kept as written (7.10, not
+    // 7.1), so a row of figures lines up.
+    if (decimals !== undefined && !Number.isInteger(v)) return v.toFixed(decimals);
     if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
     return v;
   }

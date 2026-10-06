@@ -89,3 +89,20 @@ def test_section_appearance_defaults_to_box():
 
     assert FilterSectionSpec(name="x").appearance == "box"
     assert FilterSectionSpec(name="x", appearance="plain").appearance == "plain"
+
+
+def test_card_decimals_round_trip():
+    kpi = {**KPI, "display": {**KPI["display"], "decimals": 2}}
+    assert _dash(kpi).to_full()["stored_metadata"][0]["decimals"] == 2
+    card = DashboardDataLite.from_full(_dash(kpi).to_full()).components[0]
+    assert card.display["decimals"] == 2
+
+
+def test_show_tab_header_defaults_on_and_survives_round_trip():
+    dash = DashboardDataLite(title="T", components=[])
+    assert dash.show_tab_header is True
+    assert "show_tab_header" not in dash.to_yaml()
+    off = DashboardDataLite(title="T", components=[], show_tab_header=False)
+    assert "show_tab_header: false" in off.to_yaml()
+    assert DashboardDataLite.from_yaml(off.to_yaml()).show_tab_header is False
+    assert DashboardDataLite.from_full(off.to_full()).show_tab_header is False

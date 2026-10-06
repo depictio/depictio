@@ -269,7 +269,9 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         // disappeared.
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
+        // A headline card sits in a row of them: top-aligned, so titles and
+        // values line up across the row whatever each card carries below.
+        justifyContent: headline ? 'flex-start' : 'center',
         // Border is set in DepictioCard.css with !important to win over
         // Mantine's ``withBorder`` shorthand. See the .depictio-card rule.
         //
@@ -318,7 +320,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           flex: '0 0 auto',
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'center',
+          justifyContent: headline ? 'flex-start' : 'center',
           minHeight: CARD_MIN_CONTENT_HEIGHT,
           width: '100%',
           minWidth: 0,

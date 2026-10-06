@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isLinksOnly, parseBlocks, parseFact } from './blockMarkdown';
+import { isLinksOnly, parseBlocks, parseFact, parseStatRow } from './blockMarkdown';
 
 describe('parseBlocks', () => {
   it('keeps a body without block syntax as one paragraph, line breaks included', () => {
@@ -104,5 +104,40 @@ describe('isLinksOnly', () => {
 
   it('refuses prose around a link', () => {
     expect(isLinksOnly('see [Ordination](tab:Ordination & Clustering)')).toBe(false);
+  });
+});
+
+describe('parseStatRow', () => {
+  it('reads figure, claim, context and a tab link', () => {
+    expect(
+      parseStatRow(
+        '**41%** Locality drives the community — of the variation between samples [Ordination](tab:Ordination & Clustering)',
+      ),
+    ).toEqual({
+      stat: '41%',
+      claim: 'Locality drives the community',
+      context: 'of the variation between samples',
+      link: '[Ordination](tab:Ordination & Clustering)',
+    });
+  });
+
+  it('keeps parentheses in a tab name', () => {
+    expect(parseStatRow('**46** casts matched [CTD](tab:Environment (CTD))')?.link).toBe(
+      '[CTD](tab:Environment (CTD))',
+    );
+  });
+
+  it('accepts a context without a link', () => {
+    expect(parseStatRow('**3.2×** more reads – than the 2023 run')).toEqual({
+      stat: '3.2×',
+      claim: 'more reads',
+      context: 'than the 2023 run',
+      link: null,
+    });
+  });
+
+  it('rejects a fact: no digit, or no context nor link', () => {
+    expect(parseStatRow('**Pipeline** nf-core/ampliseq 2.18.0')).toBeNull();
+    expect(parseStatRow('**16S** amplicons only')).toBeNull();
   });
 });

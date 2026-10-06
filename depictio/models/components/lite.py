@@ -249,6 +249,13 @@ class CardLiteComponent(BaseLiteComponent):
         "to its bar and a composition strip to its bar and legend line (the rest stays "
         "in the tooltip).",
     )
+    decimals: int | None = Field(
+        default=None,
+        ge=0,
+        le=6,
+        description="Decimal places for a fractional value (default: up to 4, trailing "
+        "zeros dropped). `2` shows a median Shannon of 7.0831 as 7.08.",
+    )
     link: str | None = Field(
         default=None,
         description="Where clicking the card goes: `tab:<name>` for a sibling tab (by its "
