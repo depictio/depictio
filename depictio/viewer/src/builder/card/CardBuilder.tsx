@@ -30,7 +30,7 @@ import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
 import { BuilderSection, BuilderSections, Field } from '../shared/BuilderSections';
 import PlacementSection from '../shared/PlacementSection';
-import { useTabFamily } from '../shared/useTabFamily';
+import { tabLinkOptions, useTabFamily } from '../shared/useTabFamily';
 import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import CardPreview from './CardPreview';
 import { cardMethodsForType } from '../aggFunctions';
@@ -283,23 +283,6 @@ const STYLE_LABEL: Record<CardVariant, string> = Object.fromEntries(
   STYLE_OPTIONS.map((o) => [o.value, o.label]),
 ) as Record<CardVariant, string>;
 
-/**
- * Link targets: each tab as `tab:<name>`, the form the card's `link` takes. A
- * link the list does not hold (a URL, a tab since renamed) is kept as its own
- * entry so opening the form does not drop it.
- */
-function linkOptions(tabs: DashboardSummary[], current: string | undefined) {
-  // Two tabs may share a name, and Mantine rejects duplicate options.
-  const items = [...new Set(tabs.map(tabDisplayName))].map((name) => ({
-    value: `tab:${name}`,
-    label: name,
-  }));
-  if (current && !items.some((o) => o.value === current)) {
-    items.unshift({ value: current, label: `${current} (custom)` });
-  }
-  return items;
-}
-
 const CardBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
@@ -335,7 +318,7 @@ const CardBuilder: React.FC = () => {
   const link = config.link?.trim() || undefined;
   // A card linking to the tab it sits on would go nowhere.
   const linkData = useMemo(
-    () => linkOptions(tabs.filter((t) => t.dashboard_id !== dashboardId), link),
+    () => tabLinkOptions(tabs.filter((t) => t.dashboard_id !== dashboardId), link),
     [tabs, dashboardId, link],
   );
 

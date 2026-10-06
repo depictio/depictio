@@ -175,6 +175,12 @@ class FigureLiteComponent(BaseLiteComponent):
         description="Draw the figure without its legend, for a tile too small for one. "
         "Unset keeps the legend the figure has.",
     )
+    link: str | None = Field(
+        default=None,
+        description="The tab this figure summarises, as `tab:<name>`: a landing page's "
+        "figure drawn from an analysis tab's data links back to it, as an icon at the end "
+        "of the card header (`minimal` style) or in the tile's actions.",
+    )
 
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":

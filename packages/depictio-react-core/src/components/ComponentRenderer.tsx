@@ -27,6 +27,7 @@ import SecondaryMetrics, {
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
 import { wrapWithChrome } from './chrome';
+import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import SaveGroupAction, {
   SaveGroupContext,
@@ -621,6 +622,17 @@ const FigureBlock: React.FC<{
   sourceLink,
 }) => {
   const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
+  // A figure that summarises another tab (`link: tab:<name>`) links to it the
+  // way a highlight links to the tab its figure comes from.
+  const resolveTab = useTabLinkResolver();
+  const ownLink =
+    typeof metadata.link === 'string' && metadata.link.startsWith('tab:')
+      ? (resolveTab?.(metadata.link.slice(4)) ?? null)
+      : null;
+  const headerLink = sourceLink ?? ownLink;
+  // Without the minimal header, the link sits in the tile's actions.
+  const actionLink =
+    !sourceLink && ownLink && resolveFigureStyle(metadata.figure_style) !== 'minimal' ? ownLink : null;
   // Only scatter / scatter_3d traces carry the per-row customdata we need for
   // meaningful cross-filter selection. Aggregated visus (histogram, box, bar,
   // pie, …) would emit per-bin envelopes — hide the reset affordance there so
@@ -640,9 +652,10 @@ const FigureBlock: React.FC<{
       : undefined;
   const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
   const combinedExtras =
-    loadAllState || extraActions ? (
+    loadAllState || actionLink || extraActions ? (
       <>
         {loadAllState && <LoadAllButton state={loadAllState} />}
+        {actionLink && <SourceTabAction link={actionLink} />}
         {extraActions}
       </>
     ) : undefined;
@@ -662,7 +675,7 @@ const FigureBlock: React.FC<{
         onLoadAllState={setLoadAllState}
         renderSource={renderSource}
         styleRequest={styleRequest}
-        sourceLink={sourceLink}
+        sourceLink={headerLink}
       />
     </Suspense>,
     { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },

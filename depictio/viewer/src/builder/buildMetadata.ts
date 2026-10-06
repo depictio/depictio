@@ -184,6 +184,7 @@ function figureDisplay(config: unknown): Partial<StoredMetadata> {
     icon_name?: string | null;
     icon_color?: string | null;
     hide_legend?: boolean | null;
+    link?: string | null;
   }>(config);
   return {
     title: c.title?.trim() || undefined,
@@ -192,6 +193,7 @@ function figureDisplay(config: unknown): Partial<StoredMetadata> {
     icon_name: c.icon_name || undefined,
     icon_color: c.icon_color || undefined,
     hide_legend: c.hide_legend ? true : undefined,
+    link: c.link?.trim() || undefined,
   };
 }
 

@@ -9,7 +9,7 @@
  * suggestions.
  */
 import { useEffect, useState } from 'react';
-import { fetchAllDashboards, tabFamilyOf } from 'depictio-react-core';
+import { fetchAllDashboards, tabDisplayName, tabFamilyOf } from 'depictio-react-core';
 import type { DashboardSummary } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 
@@ -31,4 +31,21 @@ export function useTabFamily(): DashboardSummary[] {
   }, [dashboardId]);
 
   return family;
+}
+
+/**
+ * Link targets: each tab as `tab:<name>`, the form a card's or a figure's `link` takes. A
+ * link the list does not hold (a URL, a tab since renamed) is kept as its own
+ * entry so opening the form does not drop it.
+ */
+export function tabLinkOptions(tabs: DashboardSummary[], current: string | undefined) {
+  // Two tabs may share a name, and Mantine rejects duplicate options.
+  const items = [...new Set(tabs.map(tabDisplayName))].map((name) => ({
+    value: `tab:${name}`,
+    label: name,
+  }));
+  if (current && !items.some((o) => o.value === current)) {
+    items.unshift({ value: current, label: `${current} (custom)` });
+  }
+  return items;
 }

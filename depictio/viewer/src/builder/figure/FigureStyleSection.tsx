@@ -13,7 +13,7 @@
  * minimal rather than the section's, and an unset field takes the figure's
  * own, which `inherited` shows as the placeholder.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ColorSwatch,
   Group,
@@ -30,6 +30,7 @@ import type { FigureStyle } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import { BuilderSection, Field, SwitchField } from '../shared/BuilderSections';
 import { useSectionFigureStyle } from '../shared/useSectionCardVariant';
+import { tabLinkOptions, useTabFamily } from '../shared/useTabFamily';
 import {
   SECTION_COLOR_OPTIONS,
   iconOptionsWith,
@@ -52,6 +53,7 @@ interface FigureStyleConfig {
   icon_name?: string | null;
   icon_color?: string | null;
   hide_legend?: boolean | null;
+  link?: string | null;
 }
 
 const FigureStyleSection: React.FC<{
@@ -67,6 +69,13 @@ const FigureStyleSection: React.FC<{
   const implicit: FigureStyle = highlight ? 'minimal' : (sectionStyle ?? 'default');
   const ownStyle = normalizeFigureStyle(config.figure_style);
   const shown = ownStyle ?? implicit;
+  const tabs = useTabFamily();
+  const dashboardId = useBuilderStore((s) => s.dashboardId);
+  const link = config.link?.trim() || undefined;
+  const linkData = useMemo(
+    () => tabLinkOptions(tabs.filter((t) => t.dashboard_id !== dashboardId), link),
+    [tabs, dashboardId, link],
+  );
 
   return (
     <BuilderSection
@@ -160,6 +169,22 @@ const FigureStyleSection: React.FC<{
           onChange={(checked) => patchConfig({ hide_legend: checked || null })}
           testId="figure-hide-legend"
         />
+
+        {!highlight && (
+          <Select
+            label="Links to a tab"
+            description="The tab this figure summarises, e.g. a landing page's figure drawn from an analysis tab's data. Its icon, at the end of the card header, opens that tab."
+            placeholder={linkData.length ? 'No link' : 'This dashboard has no other tabs'}
+            data={linkData}
+            value={link ?? null}
+            onChange={(val) => patchConfig({ link: val })}
+            clearable
+            searchable
+            comboboxProps={{ withinPortal: false }}
+            leftSection={<Icon icon="mdi:link-variant" width={14} />}
+            data-testid="figure-link"
+          />
+        )}
       </Stack>
     </BuilderSection>
   );

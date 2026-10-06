@@ -130,6 +130,7 @@ FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
     "icon_name",
     "icon_color",
     "hide_legend",
+    "link",
 )
 
 # Where a highlight's figure lives (see HighlightLiteComponent).
