@@ -16,7 +16,6 @@ import {
   Text,
   Textarea,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
@@ -29,6 +28,8 @@ import type { CardVariant, DashboardSummary } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
+import { BuilderSection, BuilderSections, Field } from '../shared/BuilderSections';
+import PlacementSection from '../shared/PlacementSection';
 import { useTabFamily } from '../shared/useTabFamily';
 import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import CardPreview from './CardPreview';
@@ -497,305 +498,339 @@ const CardBuilder: React.FC = () => {
   }, [config.column_type, aggOptions]);
 
   const form = (
-    <Stack gap="md">
-      <TextInput
-        label="Card title"
-        placeholder={
-          autoCardTitle(
-            config.aggregation,
-            config.column_name,
-            config.column_type,
-          ) || 'Total samples'
-        }
-        description="Leave empty to auto-fill with “<Aggregation> on <column>”."
-        value={config.title ?? ''}
-        onChange={(e) => patchConfig({ title: e.currentTarget.value })}
-        leftSection={<Icon icon="mdi:format-title" width={14} />}
-      />
+    <BuilderSections builder="card" required={['value']}>
+      <BuilderSection
+        value="value"
+        icon="mdi:numeric"
+        title="Value"
+        subtitle="The column the card reads, how it is aggregated, and its title"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="Card title"
+            placeholder={
+              autoCardTitle(
+                config.aggregation,
+                config.column_name,
+                config.column_type,
+              ) || 'Total samples'
+            }
+            description="Leave empty to auto-fill with “<Aggregation> on <column>”."
+            value={config.title ?? ''}
+            onChange={(e) => patchConfig({ title: e.currentTarget.value })}
+            leftSection={<Icon icon="mdi:format-title" width={14} />}
+          />
 
-      <ColumnSelect
-        label="Select your column"
-        value={config.column_name}
-        onChange={(name, type) =>
-          patchConfig({ column_name: name, column_type: type })
-        }
-        required
-      />
-
-      <Select
-        label="Select your aggregation method"
-        placeholder={
-          !config.column_type
-            ? 'Pick a column first'
-            : aggOptions.length === 0
-              ? 'No aggregations for this column type'
-              : 'Pick aggregation'
-        }
-        data={aggOptions}
-        value={config.aggregation ?? null}
-        onChange={(val) => patchConfig({ aggregation: val })}
-        disabled={!config.column_type || aggOptions.length === 0}
-        required
-      />
-
-      <Select
-        label="Multi-metric style"
-        description="Pick a secondary strip layout. Stats lists and distributions target numeric columns, cardinality targets count / distinct-count cards, quality control answers “how many rows pass”, and trend answers “is this moving”. The field each layout needs is pre-filled from your data."
-        data={MULTI_METRIC_OPTIONS}
-        value={multiMetricStyle}
-        onChange={(val) => {
-          if (!val) return;
-          patchConfig(multiMetricStyleToConfig(val as MultiMetricStyle));
-        }}
-        allowDeselect={false}
-        leftSection={<Icon icon="mdi:chart-box-outline" width={14} />}
-      />
-
-      {/* Conditional fields for the cardinality-style layouts. The breakdown
-          layouts need a categorical column + a row count; ``coverage`` needs
-          the theoretical max (denominator). Both are pre-filled above, so this
-          block shows a working configuration rather than empty required
-          fields. Hidden for the distribution-style layouts. */}
-      {isBreakdownLayout(config.secondary_layout) && (
-        <>
           <ColumnSelect
-            label="Breakdown column"
-            description="Categorical column to group by. The strip shows the top-N most-frequent values."
-            value={config.breakdown_col ?? null}
-            onChange={(name) => patchConfig({ breakdown_col: name })}
-            categoricalOnly
-            required
-            clearable={false}
-          />
-          <NumberInput
-            label="Top N"
-            description="How many values to surface (1–5; past 5 the strip becomes illegibly cramped at typical card widths)."
-            value={config.top_n_count ?? 3}
-            onChange={(val) =>
-              patchConfig({ top_n_count: Math.max(1, Math.min(5, Number(val) || 3)) })
+            label="Select your column"
+            value={config.column_name}
+            onChange={(name, type) =>
+              patchConfig({ column_name: name, column_type: type })
             }
-            min={1}
-            max={5}
-            step={1}
-            leftSection={<Icon icon="mdi:format-list-numbered" width={14} />}
-          />
-        </>
-      )}
-      {(multiMetricStyle === 'coverage' || multiMetricStyle === 'gauge') && (
-        <NumberInput
-          label="Maximum"
-          description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders “value / max” as a fill bar or a dial."
-          value={config.coverage_max ?? undefined}
-          onChange={(val) =>
-            patchConfig({
-              coverage_max: val === '' || val === undefined ? null : Number(val),
-            })
-          }
-          min={1}
-          step={1}
-          leftSection={<Icon icon="mdi:gauge" width={14} />}
-          required
-        />
-      )}
-
-      {multiMetricStyle === 'trend' && (
-        <Select
-          label="Trend axis"
-          description="Ordered column the sparkline is bucketed along — a date, or an index like run or year. The card's own column is what gets aggregated inside each bucket."
-          placeholder={
-            trendAxisOptions.length === 0
-              ? 'No date or integer column in this data collection'
-              : 'Pick an ordered column'
-          }
-          data={trendAxisOptions}
-          value={config.trend_col ?? null}
-          onChange={(val) => patchConfig({ trend_col: val })}
-          disabled={trendAxisOptions.length === 0}
-          allowDeselect={false}
-          searchable
-          leftSection={<Icon icon="mdi:chart-timeline-variant" width={14} />}
-          required
-        />
-      )}
-
-      {/* Quality-control layouts. ``threshold`` needs the cut-off (pre-filled
-          with the column's median so the strip renders something meaningful
-          immediately) and which side passes; ``attrition`` needs the ordered
-          stage columns. ``completeness`` needs no config at all. */}
-      {multiMetricStyle === 'threshold' && (
-        <>
-          <NumberInput
-            label="Threshold value"
-            description="QC cut-off the column is judged against. Pre-filled with the column's median — replace it with your actual criterion (e.g. 30 for ≥30× coverage, 80 for %Q30)."
-            value={config.threshold_value ?? undefined}
-            onChange={(val) =>
-              patchConfig({
-                threshold_value: val === '' || val === undefined ? null : Number(val),
-              })
-            }
-            step={1}
-            leftSection={<Icon icon="mdi:ruler" width={14} />}
             required
           />
+
           <Select
-            label="Passing side"
-            description="Which side of the cut-off counts as a pass. Getting this backwards inverts the QC verdict, so it is explicit rather than guessed."
-            data={[
-              { value: 'min', label: 'At least (≥) — higher is better, e.g. coverage, %Q30' },
-              { value: 'max', label: 'At most (≤) — lower is better, e.g. duplication, error rate' },
-            ]}
-            value={config.threshold_direction ?? 'min'}
-            onChange={(val) => patchConfig({ threshold_direction: val || 'min' })}
-            allowDeselect={false}
-            leftSection={<Icon icon="mdi:compare-horizontal" width={14} />}
-          />
-          <NumberInput
-            label="Warning threshold (optional)"
-            description="Softer cut-off between pass and fail. Must sit on the failing side of the main threshold, otherwise it is ignored."
-            value={config.threshold_warn ?? undefined}
-            onChange={(val) =>
-              patchConfig({
-                threshold_warn: val === '' || val === undefined ? null : Number(val),
-              })
+            label="Select your aggregation method"
+            placeholder={
+              !config.column_type
+                ? 'Pick a column first'
+                : aggOptions.length === 0
+                  ? 'No aggregations for this column type'
+                  : 'Pick aggregation'
             }
-            step={1}
-            leftSection={<Icon icon="mdi:alert-outline" width={14} />}
+            data={aggOptions}
+            value={config.aggregation ?? null}
+            onChange={(val) => patchConfig({ aggregation: val })}
+            disabled={!config.column_type || aggOptions.length === 0}
+            required
           />
-        </>
-      )}
-      {multiMetricStyle === 'attrition' && (
-        <MultiSelect
-          label="Later stage columns"
-          description="Numeric columns for the stages after this card's own, in pipeline order (e.g. trimmed → mapped → deduplicated). Bars show each stage's share of the first."
-          data={numericColumnNames}
-          value={config.attrition_cols ?? []}
-          onChange={(vals) => patchConfig({ attrition_cols: vals })}
-          searchable
-          clearable
-          leftSection={<Icon icon="mdi:filter-variant" width={14} />}
-        />
-      )}
+        </Stack>
+      </BuilderSection>
 
-      <Title order={6} fw={700} mt="sm">
-        Display
-      </Title>
+      <BuilderSection
+        value="breakdown"
+        icon="mdi:chart-box-outline"
+        title="Breakdown"
+        subtitle="An optional strip under the value: stats, distribution, QC, trend"
+      >
+        <Stack gap="md">
+          <Select
+            label="Multi-metric style"
+            description="Pick a secondary strip layout. Stats lists and distributions target numeric columns, cardinality targets count / distinct-count cards, quality control answers “how many rows pass”, and trend answers “is this moving”. The field each layout needs is pre-filled from your data."
+            data={MULTI_METRIC_OPTIONS}
+            value={multiMetricStyle}
+            onChange={(val) => {
+              if (!val) return;
+              patchConfig(multiMetricStyleToConfig(val as MultiMetricStyle));
+            }}
+            allowDeselect={false}
+            leftSection={<Icon icon="mdi:chart-box-outline" width={14} />}
+          />
 
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Style
-        </Text>
-        <Text size="xs" c="dimmed">
-          Headline: a key figure for a landing page, the value large and the icon resting
-          beside it. Compact: a low card, title and value on one line, for a strip of many
-          numbers. Minimal: headline type with no frame, for a card on a tinted section.
-        </Text>
-        {sectionVariant && (
-          <Text size="xs" c="grape" data-testid="card-style-section-hint">
-            {ownVariant && ownVariant !== sectionVariant
-              ? `This section draws its cards as ${STYLE_LABEL[sectionVariant]}; this card overrides it. Pick ${STYLE_LABEL[sectionVariant]} to follow the section again.`
-              : `This section draws its cards as ${STYLE_LABEL[sectionVariant]}; pick a style here to override.`}
-          </Text>
-        )}
-        <SegmentedControl
-          // What the card will look like on the grid: its own style, else its
-          // section's, else the default.
-          value={ownVariant ?? sectionVariant ?? 'default'}
-          onChange={(val) => patchConfig({ variant: variantForPick(val, sectionVariant) })}
-          data={STYLE_OPTIONS}
-          fullWidth
-        />
-      </Stack>
+          {/* Conditional fields for the cardinality-style layouts. The breakdown
+              layouts need a categorical column + a row count; ``coverage`` needs
+              the theoretical max (denominator). Both are pre-filled above, so this
+              block shows a working configuration rather than empty required
+              fields. Hidden for the distribution-style layouts. */}
+          {isBreakdownLayout(config.secondary_layout) && (
+            <>
+              <ColumnSelect
+                label="Breakdown column"
+                description="Categorical column to group by. The strip shows the top-N most-frequent values."
+                value={config.breakdown_col ?? null}
+                onChange={(name) => patchConfig({ breakdown_col: name })}
+                categoricalOnly
+                required
+                clearable={false}
+              />
+              <NumberInput
+                label="Top N"
+                description="How many values to surface (1–5; past 5 the strip becomes illegibly cramped at typical card widths)."
+                value={config.top_n_count ?? 3}
+                onChange={(val) =>
+                  patchConfig({ top_n_count: Math.max(1, Math.min(5, Number(val) || 3)) })
+                }
+                min={1}
+                max={5}
+                step={1}
+                leftSection={<Icon icon="mdi:format-list-numbered" width={14} />}
+              />
+            </>
+          )}
+          {(multiMetricStyle === 'coverage' || multiMetricStyle === 'gauge') && (
+            <NumberInput
+              label="Maximum"
+              description="Theoretical maximum the hero value can reach (e.g. 44 samples / 11 ORFs / 99 amplicons). The strip renders “value / max” as a fill bar or a dial."
+              value={config.coverage_max ?? undefined}
+              onChange={(val) =>
+                patchConfig({
+                  coverage_max: val === '' || val === undefined ? null : Number(val),
+                })
+              }
+              min={1}
+              step={1}
+              leftSection={<Icon icon="mdi:gauge" width={14} />}
+              required
+            />
+          )}
 
-      <TextInput
-        label="Caption"
-        description="One line under the value, in place of the aggregation label, which moves to the header's tooltip."
-        placeholder="e.g. samples across 3 cities"
-        value={config.caption ?? ''}
-        onChange={(e) => patchConfig({ caption: e.currentTarget.value })}
-        leftSection={<Icon icon="mdi:text-short" width={14} />}
-      />
+          {multiMetricStyle === 'trend' && (
+            <Select
+              label="Trend axis"
+              description="Ordered column the sparkline is bucketed along — a date, or an index like run or year. The card's own column is what gets aggregated inside each bucket."
+              placeholder={
+                trendAxisOptions.length === 0
+                  ? 'No date or integer column in this data collection'
+                  : 'Pick an ordered column'
+              }
+              data={trendAxisOptions}
+              value={config.trend_col ?? null}
+              onChange={(val) => patchConfig({ trend_col: val })}
+              disabled={trendAxisOptions.length === 0}
+              allowDeselect={false}
+              searchable
+              leftSection={<Icon icon="mdi:chart-timeline-variant" width={14} />}
+              required
+            />
+          )}
 
-      <NumberInput
-        label="Decimals"
-        description="Decimal places for a fractional value. Empty shows up to 4, trailing zeros dropped."
-        placeholder="Auto"
-        value={config.decimals ?? ''}
-        onChange={(val) => patchConfig({ decimals: typeof val === 'number' ? val : null })}
-        min={0}
-        max={6}
-        step={1}
-        allowDecimal={false}
-        clampBehavior="strict"
-        leftSection={<Icon icon="mdi:decimal" width={14} />}
-      />
+          {/* Quality-control layouts. ``threshold`` needs the cut-off (pre-filled
+              with the column's median so the strip renders something meaningful
+              immediately) and which side passes; ``attrition`` needs the ordered
+              stage columns. ``completeness`` needs no config at all. */}
+          {multiMetricStyle === 'threshold' && (
+            <>
+              <NumberInput
+                label="Threshold value"
+                description="QC cut-off the column is judged against. Pre-filled with the column's median — replace it with your actual criterion (e.g. 30 for ≥30× coverage, 80 for %Q30)."
+                value={config.threshold_value ?? undefined}
+                onChange={(val) =>
+                  patchConfig({
+                    threshold_value: val === '' || val === undefined ? null : Number(val),
+                  })
+                }
+                step={1}
+                leftSection={<Icon icon="mdi:ruler" width={14} />}
+                required
+              />
+              <Select
+                label="Passing side"
+                description="Which side of the cut-off counts as a pass. Getting this backwards inverts the QC verdict, so it is explicit rather than guessed."
+                data={[
+                  { value: 'min', label: 'At least (≥) — higher is better, e.g. coverage, %Q30' },
+                  { value: 'max', label: 'At most (≤) — lower is better, e.g. duplication, error rate' },
+                ]}
+                value={config.threshold_direction ?? 'min'}
+                onChange={(val) => patchConfig({ threshold_direction: val || 'min' })}
+                allowDeselect={false}
+                leftSection={<Icon icon="mdi:compare-horizontal" width={14} />}
+              />
+              <NumberInput
+                label="Warning threshold (optional)"
+                description="Softer cut-off between pass and fail. Must sit on the failing side of the main threshold, otherwise it is ignored."
+                value={config.threshold_warn ?? undefined}
+                onChange={(val) =>
+                  patchConfig({
+                    threshold_warn: val === '' || val === undefined ? null : Number(val),
+                  })
+                }
+                step={1}
+                leftSection={<Icon icon="mdi:alert-outline" width={14} />}
+              />
+            </>
+          )}
+          {multiMetricStyle === 'attrition' && (
+            <MultiSelect
+              label="Later stage columns"
+              description="Numeric columns for the stages after this card's own, in pipeline order (e.g. trimmed → mapped → deduplicated). Bars show each stage's share of the first."
+              data={numericColumnNames}
+              value={config.attrition_cols ?? []}
+              onChange={(vals) => patchConfig({ attrition_cols: vals })}
+              searchable
+              clearable
+              leftSection={<Icon icon="mdi:filter-variant" width={14} />}
+            />
+          )}
+        </Stack>
+      </BuilderSection>
 
-      <Select
-        label="Link to a tab"
-        description="Clicking the card opens that tab, the one that explains the figure."
-        placeholder={linkData.length ? 'No link' : 'This dashboard has no other tabs'}
-        data={linkData}
-        value={link ?? null}
-        onChange={(val) => patchConfig({ link: val })}
-        clearable
-        searchable
-        leftSection={<Icon icon="mdi:link-variant" width={14} />}
-      />
+      <BuilderSection
+        value="display"
+        icon="mdi:card-text-outline"
+        title="Display"
+        subtitle="Card style, caption and decimal places"
+      >
+        <Stack gap="md">
+          <Field
+            label="Style"
+            description="Headline: a key figure for a landing page, the value large and the icon resting beside it. Compact: a low card, title and value on one line, for a strip of many numbers. Minimal: headline type with no frame, for a card on a tinted section."
+          >
+            {sectionVariant && (
+              <Text size="xs" c="grape" data-testid="card-style-section-hint">
+                {ownVariant && ownVariant !== sectionVariant
+                  ? `This section draws its cards as ${STYLE_LABEL[sectionVariant]}; this card overrides it. Pick ${STYLE_LABEL[sectionVariant]} to follow the section again.`
+                  : `This section draws its cards as ${STYLE_LABEL[sectionVariant]}; pick a style here to override.`}
+              </Text>
+            )}
+            <SegmentedControl
+              // What the card will look like on the grid: its own style, else its
+              // section's, else the default.
+              value={ownVariant ?? sectionVariant ?? 'default'}
+              onChange={(val) => patchConfig({ variant: variantForPick(val, sectionVariant) })}
+              data={STYLE_OPTIONS}
+              fullWidth
+            />
+          </Field>
 
-      <Textarea
-        label="Description"
-        description="What the figure is, shown in the tooltip on the card's header."
-        autosize
-        minRows={2}
-        value={config.description ?? ''}
-        onChange={(e) => patchConfig({ description: e.currentTarget.value })}
-      />
+          <TextInput
+            label="Caption"
+            description="One line under the value, in place of the aggregation label, which moves to the header's tooltip."
+            placeholder="e.g. samples across 3 cities"
+            value={config.caption ?? ''}
+            onChange={(e) => patchConfig({ caption: e.currentTarget.value })}
+            leftSection={<Icon icon="mdi:text-short" width={14} />}
+          />
 
-      <Title order={6} fw={700} mt="sm">
-        Card Styling
-      </Title>
+          <NumberInput
+            label="Decimals"
+            description="Decimal places for a fractional value. Empty shows up to 4, trailing zeros dropped."
+            placeholder="Auto"
+            value={config.decimals ?? ''}
+            onChange={(val) => patchConfig({ decimals: typeof val === 'number' ? val : null })}
+            min={0}
+            max={6}
+            step={1}
+            allowDecimal={false}
+            clampBehavior="strict"
+            leftSection={<Icon icon="mdi:decimal" width={14} />}
+          />
+        </Stack>
+      </BuilderSection>
 
-      <ColorInput
-        label="Background Color"
-        value={config.background_color ?? ''}
-        onChange={(val) => patchConfig({ background_color: val })}
-        format="hex"
-        swatchesPerRow={7}
-        swatches={BACKGROUND_SWATCHES}
-        placeholder="(default)"
-      />
+      <BuilderSection
+        value="link"
+        icon="mdi:link-variant"
+        title="Link & help"
+        subtitle="The tab a click opens, and the header tooltip"
+      >
+        <Stack gap="md">
+          <Select
+            label="Link to a tab"
+            description="Clicking the card opens that tab, the one that explains the figure."
+            placeholder={linkData.length ? 'No link' : 'This dashboard has no other tabs'}
+            data={linkData}
+            value={link ?? null}
+            onChange={(val) => patchConfig({ link: val })}
+            clearable
+            searchable
+            leftSection={<Icon icon="mdi:link-variant" width={14} />}
+          />
 
-      <ColorInput
-        label="Title Color"
-        value={config.title_color ?? ''}
-        onChange={(val) => patchConfig({ title_color: val })}
-        format="hex"
-        swatchesPerRow={7}
-        swatches={TITLE_COLOR_SWATCHES}
-        placeholder="(default)"
-      />
+          <Textarea
+            label="Description"
+            description="What the figure is, shown in the tooltip on the card's header."
+            autosize
+            minRows={2}
+            value={config.description ?? ''}
+            onChange={(e) => patchConfig({ description: e.currentTarget.value })}
+          />
+        </Stack>
+      </BuilderSection>
 
-      <Select
-        label="Icon"
-        placeholder="Pick an icon"
-        data={ICON_OPTIONS}
-        value={config.icon_name ?? null}
-        onChange={(val) => patchConfig({ icon_name: val })}
-        searchable
-        leftSection={
-          <Icon icon={config.icon_name || 'mdi:help-circle'} width={14} />
-        }
-      />
+      <BuilderSection
+        value="colours"
+        icon="mdi:palette-outline"
+        title="Colours & icon"
+        subtitle="Background, title colour, icon and title size"
+      >
+        <Stack gap="md">
+          <ColorInput
+            label="Background Color"
+            value={config.background_color ?? ''}
+            onChange={(val) => patchConfig({ background_color: val })}
+            format="hex"
+            swatchesPerRow={7}
+            swatches={BACKGROUND_SWATCHES}
+            placeholder="(default)"
+          />
 
-      <Select
-        label="Title Font Size"
-        data={FONT_SIZES}
-        value={config.title_font_size ?? 'md'}
-        onChange={(val) => patchConfig({ title_font_size: val })}
-      />
-    </Stack>
+          <ColorInput
+            label="Title Color"
+            value={config.title_color ?? ''}
+            onChange={(val) => patchConfig({ title_color: val })}
+            format="hex"
+            swatchesPerRow={7}
+            swatches={TITLE_COLOR_SWATCHES}
+            placeholder="(default)"
+          />
+
+          <Select
+            label="Icon"
+            placeholder="Pick an icon"
+            data={ICON_OPTIONS}
+            value={config.icon_name ?? null}
+            onChange={(val) => patchConfig({ icon_name: val })}
+            searchable
+            leftSection={
+              <Icon icon={config.icon_name || 'mdi:help-circle'} width={14} />
+            }
+          />
+
+          <Select
+            label="Title Font Size"
+            data={FONT_SIZES}
+            value={config.title_font_size ?? 'md'}
+            onChange={(val) => patchConfig({ title_font_size: val })}
+          />
+        </Stack>
+      </BuilderSection>
+
+      <PlacementSection />
+    </BuilderSections>
   );
 
-  return <DesignShell formSlot={form} previewSlot={<CardPreview />} />;
+  return <DesignShell formSlot={form} previewSlot={<CardPreview />} ownsPlacement />;
 };
 
 export default CardBuilder;
