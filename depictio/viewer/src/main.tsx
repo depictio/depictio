@@ -22,6 +22,10 @@ import '@mantine/dates/styles.css';
 // as un-styled invisible boxes and the editor surface has no border or
 // padding, producing a large empty gap inside the NotesFooter drawer.
 import '@mantine/tiptap/styles.css';
+// Inter, self-hosted: the minimal figure style sets it as the plot's font
+// (style_presets.MINIMAL_FONT_FAMILY). A subset downloads only when a figure
+// draws a glyph from it.
+import '@fontsource-variable/inter';
 import './styles/app.css';
 
 // Each route tree is its own async chunk. Only one tree renders per page load

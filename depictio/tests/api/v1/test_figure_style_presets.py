@@ -377,3 +377,56 @@ def test_heatmap_axes_have_no_grid():
     layout = apply_figure_style(fig, "minimal")["layout"]
     assert layout["xaxis"]["showgrid"] is False
     assert layout["yaxis"]["showgrid"] is False
+
+
+def _bars(**layout):
+    return {
+        "data": [
+            {
+                "type": "bar",
+                "orientation": "h",
+                "x": [3, 5],
+                "y": ["Athens", "Naples"],
+                "text": ["3", "5"],
+            }
+        ],
+        "layout": layout,
+    }
+
+
+def test_minimal_sets_inter_over_the_stock_font():
+    from depictio.cli.cli.utils.mantine_templates import FONT_FAMILY
+
+    plain = apply_figure_style(_bars(), "minimal")["layout"]
+    assert plain["font"]["family"].startswith('"Inter Variable", Inter,')
+    stock = _bars(template={"layout": {"font": {"family": FONT_FAMILY}}})
+    assert apply_figure_style(stock, "minimal")["layout"]["font"]["family"].startswith(
+        '"Inter Variable"'
+    )
+
+
+def test_minimal_keeps_a_brand_or_author_font():
+    brand = _bars(template={"layout": {"font": {"family": "Lato, sans-serif"}}})
+    assert "family" not in (apply_figure_style(brand, "minimal")["layout"].get("font") or {})
+    own = _bars(font={"family": "Georgia, serif", "size": 13})
+    assert apply_figure_style(own, "minimal")["layout"]["font"] == {
+        "family": "Georgia, serif",
+        "size": 13,
+    }
+
+
+def test_minimal_weights_category_names_and_bar_values():
+    out = apply_figure_style(_bars(), "minimal")
+    layout = out["layout"]
+    # Horizontal bars: the cities are on y, the values on x.
+    assert layout["yaxis"]["tickfont"]["weight"] == 500
+    assert layout["yaxis"]["tickfont"]["color"] == "#495057"
+    assert "weight" not in layout["xaxis"]["tickfont"]
+    assert out["data"][0]["textfont"]["weight"] == 500
+    go.Figure(out)
+
+
+def test_minimal_leaves_an_authors_bar_text_weight():
+    fig = _bars()
+    fig["data"][0]["textfont"] = {"weight": 700}
+    assert apply_figure_style(fig, "minimal")["data"][0]["textfont"]["weight"] == 700

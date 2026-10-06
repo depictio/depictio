@@ -6,9 +6,9 @@ the same way: UI mode, code mode and the scan-level aggregation path all end in
 the same figure dict.
 
 ``minimal`` is the "showcase" look of a landing page: a transparent plot, faint
-dashed grid lines and no axis lines, small grey ticks, the legend in one line
-under the plot, tight margins, large markers without outlines, bars without
-edges. The card header carries the title, so the plot drops its own. Grouped
+dashed grid lines and no axis lines, small grey ticks, set in Inter with the
+category names in medium weight, the legend in one line under the plot, tight
+margins, large markers without outlines, bars without edges. The card header carries the title, so the plot drops its own. Grouped
 bars (one facet per group, each with its own categories) get a coloured
 underline per group with the group's name under it, in place of the facet
 titles over the panels.
@@ -25,6 +25,8 @@ from __future__ import annotations
 import copy
 import re
 from typing import Any
+
+from depictio.cli.cli.utils.mantine_templates import FONT_FAMILY as STOCK_FONT_FAMILY
 
 FIGURE_STYLES: tuple[str, ...] = ("default", "minimal")
 DEFAULT_FIGURE_STYLE = "default"
@@ -57,6 +59,16 @@ _PALETTE: dict[str, dict[str, str]] = {
 }
 
 _AXIS_KEY = re.compile(r"^([xy])axis(\d*)$")
+
+# Inter, which the viewer bundles (@fontsource-variable/inter), then the system
+# stack for anywhere it isn't loaded (an exported image, another client).
+MINIMAL_FONT_FAMILY = (
+    '"Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, '
+    "Helvetica, Arial, sans-serif"
+)
+# Medium weight for what a reader reads first: the category names and the
+# values printed on bars. Ticks and the legend stay regular.
+_EMPHASIS_WEIGHT = 500
 
 # Marker size by how many points share the plot: large markers are the look,
 # but a few thousand of them at 12px is a blot, not a scatter.
@@ -176,6 +188,7 @@ def _apply_minimal(
     # which can be most of the payload, are shared rather than duplicated.
     traces = [dict(t) for t in (figure.get("data") or []) if isinstance(t, dict)]
 
+    _style_font(layout)
     _style_traces(traces, layout, palette)
     has_title = _style_title(layout, header_title, palette)
     _style_axes(layout, traces, palette)
@@ -263,6 +276,21 @@ def _is_strip(trace: dict) -> bool:
     return trace.get("boxpoints") == "all" and trace.get("hoveron") == "points"
 
 
+def _style_font(layout: dict) -> None:
+    """Inter for the plot's text, unless the figure or the brand names a font.
+
+    A brand font lives in the template (``mantine_templates``), so a template
+    font other than the stock one is the brand's and is kept.
+    """
+    font = dict(layout.get("font") or {})
+    template = layout.get("template")
+    template_layout = template.get("layout") if isinstance(template, dict) else None
+    template_font = (template_layout or {}).get("font") or {}
+    if not font.get("family") and template_font.get("family") in (None, STOCK_FONT_FAMILY):
+        font["family"] = MINIMAL_FONT_FAMILY
+        layout["font"] = font
+
+
 def _style_traces(traces: list[dict], layout: dict, palette: dict[str, str]) -> None:
     scatter_points = sum(
         _point_count(t)
@@ -298,6 +326,8 @@ def _style_traces(traces: list[dict], layout: dict, palette: dict[str, str]) -> 
             has_bars = has_bars or kind == "bar"
             marker = _sub(trace, "marker")
             line = _sub(marker, "line")
+            if trace.get("text") is not None or trace.get("texttemplate"):
+                _sub(trace, "textfont").setdefault("weight", _EMPHASIS_WEIGHT)
             if kind == "bar" and stacked:
                 # Segments read apart by a gap of the card's colour, not a
                 # border: an outline in the surface colour is that gap.
@@ -368,9 +398,10 @@ def _style_axes(layout: dict, traces: list[dict], palette: dict[str, str]) -> No
         letter, suffix = match.groups()
         axis = dict(layout[key])
         on_axis = _axis_traces(traces, letter, suffix)
-        no_grid = any(t.get("type") == "heatmap" for t in on_axis) or any(
-            _is_category_side(t, letter) for t in on_axis
-        )
+        categories = any(_is_category_side(t, letter) for t in on_axis)
+        no_grid = categories or any(t.get("type") == "heatmap" for t in on_axis)
+        # Category names are what the reader reads: label ink, medium weight.
+        names = {"color": palette["label"], "weight": _EMPHASIS_WEIGHT} if categories else {}
         axis.update(
             showline=False,
             zeroline=False,
@@ -379,7 +410,7 @@ def _style_axes(layout: dict, traces: list[dict], palette: dict[str, str]) -> No
             gridcolor=palette["grid"],
             gridwidth=1,
             griddash=_GRID_DASH,
-            tickfont={**(axis.get("tickfont") or {}), **tick_font},
+            tickfont={**(axis.get("tickfont") or {}), **tick_font, **names},
             automargin=True,
         )
         title = axis.get("title")
@@ -389,17 +420,17 @@ def _style_axes(layout: dict, traces: list[dict], palette: dict[str, str]) -> No
     # A figure with no explicit axis blocks still gets the look on its first pair.
     for letter in ("x", "y"):
         if f"{letter}axis" not in layout and _axis_traces(traces, letter, ""):
+            categories = any(_is_category_side(t, letter) for t in _axis_traces(traces, letter, ""))
+            names = {"color": palette["label"], "weight": _EMPHASIS_WEIGHT} if categories else {}
             layout[f"{letter}axis"] = {
                 "showline": False,
                 "zeroline": False,
                 "ticks": "",
                 "gridcolor": palette["grid"],
                 "griddash": _GRID_DASH,
-                "tickfont": tick_font,
+                "tickfont": {**tick_font, **names},
                 "automargin": True,
-                "showgrid": not any(
-                    _is_category_side(t, letter) for t in _axis_traces(traces, letter, "")
-                ),
+                "showgrid": not categories,
             }
 
 

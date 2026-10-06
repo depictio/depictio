@@ -28,8 +28,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import plotly.io as pio
 
-# Mantine default fontFamily.
-_FONT_FAMILY = (
+# Mantine default fontFamily. The minimal figure style reads it to tell a brand
+# font (kept) from this default (replaced by Inter).
+FONT_FAMILY = (
     "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "
     'sans-serif, "Apple Color Emoji", "Segoe UI Emoji"'
 )
@@ -103,7 +104,7 @@ def _build(colorway: list[str], text: str, grid: str, zeroline: str) -> go.layou
             colorway=colorway,
             paper_bgcolor=_TRANSPARENT,
             plot_bgcolor=_TRANSPARENT,
-            font=dict(family=_FONT_FAMILY, color=text),
+            font=dict(family=FONT_FAMILY, color=text),
             xaxis=axis,
             yaxis=axis,
             geo=dict(bgcolor=_TRANSPARENT),
