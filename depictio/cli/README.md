@@ -6,6 +6,11 @@
 
 A command-line interface for interacting with the Depictio API.
 
+> **`depictio-cli` is now an alias of the [`depictio`](https://pypi.org/project/depictio/)
+> package.** Both install the same CLI, as the `depictio` command and, for existing
+> scripts and the Nextflow hook, the `depictio-cli` command. New installs can use
+> `pip install depictio` (add `[multiqc]` to read MultiQC reports).
+
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio)
 
 ## Installation
@@ -19,9 +24,8 @@ To install the CLI directly from the repository:
 git clone https://github.com/depictio/depictio.git
 cd depictio
 
-# Install the CLI package
-cd depictio/cli
-pip install -e .
+# Install the CLI (the depictio package, without its server extra)
+pip install -e ".[multiqc]"
 ```
 
 ## Usage

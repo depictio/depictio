@@ -177,7 +177,9 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
         return metadata
 
     except ImportError:
-        logger.error("MultiQC module not available. Please install MultiQC: pip install multiqc")
+        logger.error(
+            "MultiQC module not available. Please install MultiQC: pip install 'depictio[multiqc]'"
+        )
         raise
     except Exception as e:
         logger.error(f"Failed to extract MultiQC metadata from {parquet_path}: {e}")

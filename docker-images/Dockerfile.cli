@@ -41,29 +41,26 @@ RUN groupadd -g ${GID} depictio && \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash depictio
 
 # ---- Dependency layer (cached across code + version changes) ----
-# The CLI has its own pyproject/lockfile under depictio/cli/, so the dependency
-# install is keyed on those two files alone. --no-install-project keeps the
-# expensive resolve off the source tree, which is copied in the layer below.
-COPY --chown=depictio:depictio depictio/cli/pyproject.toml depictio/cli/uv.lock* /app/depictio/cli/
-WORKDIR /app/depictio/cli
+# The CLI is the root depictio project without its server extra, so this keys
+# on the root pyproject/lockfile. --no-install-project keeps the expensive
+# resolve off the source tree, which is copied in the layer below. packages/
+# holds path sources the lockfile names (only the server extra installs them).
+COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
+COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev --extra multiqc \
     || uv sync --no-install-project --no-dev --extra multiqc
 
 # ---- Project layer (source last) ----
-# depictio/cli/pyproject.toml maps package-dir to the repo root, so the whole
-# depictio tree has to be present before the project itself installs.
-WORKDIR /app
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
-WORKDIR /app/depictio/cli
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra multiqc || uv sync --no-dev --extra multiqc
 
 # PYTHONPATH puts /app ahead of site-packages, so `depictio.cli` resolves from
 # the source tree. That is what makes _projects_roots() find /app/depictio/
 # projects: from an installed-only layout the bundled templates are invisible.
-ENV PATH="/app/depictio/cli/.venv/bin:${PATH}"
+ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 

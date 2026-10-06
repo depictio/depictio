@@ -150,7 +150,7 @@ def compose_file(version: str | None, log=print) -> bytes:
         raise LocalStackError(
             "This depictio build is not a release or a beta, so no published "
             "docker-compose.yaml matches it. The hand-over needs a released version (e.g. "
-            'uv tool install "depictio[local]==X.Y.Z") or a source checkout of depictio.'
+            'uv tool install --force "depictio[local]==X.Y.Z") or a source checkout of depictio.'
         )
     url = COMPOSE_URL.format(version=version)
     log(f"Downloading {url}")

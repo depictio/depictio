@@ -280,12 +280,12 @@ jobs:
             cd depictio/cli
             uv venv venv --python 3.11
             source venv/bin/activate
-            uv pip install -e .
+            uv pip install -e ../..
           else
             cd depictio/cli
             python3 -m venv venv
             source venv/bin/activate
-            pip install -e .
+            pip install -e ../..
           fi
 
       - name: Get admin token from backend pod

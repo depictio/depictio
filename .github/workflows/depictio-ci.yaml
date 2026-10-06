@@ -1019,7 +1019,8 @@ jobs:
           cd depictio/cli
           uv venv --python 3.12.9 venv
           source venv/bin/activate
-          uv pip install -e ".[multiqc]"
+          # The CLI is the root depictio package, without its server extra.
+          uv pip install -e "../..[multiqc]"
 
       # ============================================
       # PHASE 1: Offline Tests (No Server Required)
@@ -1228,7 +1229,7 @@ jobs:
           # `python3`: this job's `python3` is the actions/setup-python
           # toolcache build, which has no PyYAML, so a bare `import yaml`
           # aborts with ModuleNotFoundError before the first echo. The CLI
-          # venv (created above via `uv pip install -e .[multiqc]`) ships
+          # venv (created above via `uv pip install -e ../..[multiqc]`) ships
           # PyYAML. (docker-system-init's identical line works because that
           # job uses the system python3, which has python3-yaml.)
           ADMIN_TOKEN=$(depictio/cli/venv/bin/python -c "import yaml; print(yaml.safe_load(open('/tmp/admin_config.yaml'))['user']['token']['access_token'])")
@@ -2063,7 +2064,7 @@ jobs:
 
           echo "📦 Installing CLI dependencies..."
           uv pip install --upgrade pip
-          uv pip install -e .
+          uv pip install -e ../..
           echo "✅ CLI dependencies installed"
 
           echo "🔑 Copying admin configuration from backend container..."

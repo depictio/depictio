@@ -35,6 +35,9 @@ from pathlib import Path
 # never downgrades either.
 CONDA_SPECS = ["mongodb 8.0.*", "redis-server 8.*", "seaweedfs 4.*"]
 ADMIN_EMAIL = "admin@example.com"
+# --force replaces the `depictio` and `depictio-cli` commands that `uv tool install
+# depictio-cli` (the alias package) installed, which uv would otherwise refuse to do.
+INSTALL_LOCAL = 'uv tool install --force "depictio[local]"'
 S3_USER = "depictio"
 S3_BUCKET = "depictio-bucket"
 
@@ -153,7 +156,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     except ImportError as exc:
         raise LocalStackError(
             "py-rattler is required to fetch MongoDB, Redis and SeaweedFS. "
-            'Install the local extra: uv tool install "depictio[local]"'
+            f"Install the local extra: {INSTALL_LOCAL}"
         ) from exc
 
     # The platform is part of the marker: a $HOME shared between linux-64 and
@@ -867,7 +870,7 @@ def check_server_installed() -> None:
     if missing:
         raise LocalStackError(
             "The Depictio server is not installed in this environment "
-            f'(missing: {", ".join(missing)}). Install it with: uv tool install "depictio[local]"'
+            f"(missing: {', '.join(missing)}). Install it with: {INSTALL_LOCAL}"
         )
 
 

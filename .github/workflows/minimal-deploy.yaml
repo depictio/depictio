@@ -306,7 +306,7 @@ jobs:
           cd depictio/cli
           uv venv venv
           source venv/bin/activate
-          uv pip install -e .
+          uv pip install -e ../..
 
       - name: Run CLI tests
         run: |

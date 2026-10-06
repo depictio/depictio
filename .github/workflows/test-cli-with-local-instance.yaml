@@ -27,7 +27,7 @@ jobs:
           cd depictio/cli
           uv venv --python 3.11 venv
           source venv/bin/activate
-          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+          if uv pip install -e ../.. && python -c "import polars" 2>/dev/null; then
             echo "✅ Standard polars successful"
           else
             echo "⚠️ Fallback to LTS polars"

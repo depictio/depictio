@@ -45,7 +45,9 @@ def _warn(msg: str) -> None:
 
 
 def _fail(msg: str) -> NoReturn:
-    rich_print_checked_statement(msg, "error")
+    # Escaped: the messages quote install commands such as `depictio[local]`, which
+    # Rich would otherwise read as a style tag and drop.
+    rich_print_checked_statement(escape(msg), "error")
     raise typer.Exit(code=1)
 
 

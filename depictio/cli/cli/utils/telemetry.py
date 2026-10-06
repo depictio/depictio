@@ -67,8 +67,8 @@ _DEFAULT_API_KEY: Final[str] = DEFAULT_API_KEY
 def cli_version() -> str:
     """Installed version of the CLI, or ``"dev"`` from a source checkout.
 
-    The CLI ships in two distributions with the same version number: ``depictio``
-    (the full server) and ``depictio-cli`` (the client only).
+    The CLI ships in ``depictio``. ``depictio-cli`` is an alias of it with the same
+    version number; releases before the alias installed the CLI on their own.
     """
     for dist in ("depictio", "depictio-cli"):
         try:
