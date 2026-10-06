@@ -3,17 +3,23 @@ import {
   Accordion,
   ActionIcon,
   Anchor,
+  Box,
   Button,
   Divider,
   Drawer,
   FileButton,
   Group,
+  Modal,
+  NavLink,
+  ScrollArea,
   SegmentedControl,
+  Select,
   Stack,
   Switch,
   Text,
   Tooltip,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import {
@@ -534,49 +540,289 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 );
 
 // ---------------------------------------------------------------------------
-// Drawer
+// Sections
 // ---------------------------------------------------------------------------
 
 type SectionKey = 'about' | 'view' | 'tab-defaults' | 'filtering' | 'branding' | 'feedback';
+type Surface = 'viewer' | 'editor';
 
-/** Which sections start open, per surface. The viewer is mostly about reading
- *  and adjusting one's own view; the editor opens on the metadata only, so the
- *  authoring sections don't all unfold at once. */
-const DEFAULT_OPEN: Record<'viewer' | 'editor', SectionKey[]> = {
+/** One settings section: what both layouts draw, so neither carries its own
+ *  copy of the contents. */
+interface SettingsSection {
+  key: SectionKey;
+  icon: string;
+  title: string;
+  /** Shorter name for the nav rail, when the title would wrap there. */
+  navLabel?: string;
+  /** What the section is for and who it affects. */
+  subtitle: string;
+  body: React.ReactNode;
+}
+
+/**
+ * Which layout the settings use.
+ *
+ * - `nav`: a wide modal laid out like GitHub's or VS Code's settings, a rail
+ *   of sections on the left and the active one as a page on the right.
+ * - `accordion`: the earlier right-hand drawer of collapsible sections, kept
+ *   for comparison.
+ */
+export type SettingsLayout = 'nav' | 'accordion';
+const DEFAULT_LAYOUT: SettingsLayout = 'nav';
+
+// ---------------------------------------------------------------------------
+// Per-browser memory (both layouts)
+// ---------------------------------------------------------------------------
+
+function readStored<T>(key: string, valid: (v: unknown) => v is T): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (valid(parsed)) return parsed;
+    }
+  } catch {
+    // Storage blocked or corrupt: the caller falls back to its default.
+  }
+  return null;
+}
+
+function writeStored(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Remembering a layout detail is a convenience; ignore failures.
+  }
+}
+
+const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string');
+const isString = (v: unknown): v is string => typeof v === 'string';
+
+// ---------------------------------------------------------------------------
+// Accordion layout
+// ---------------------------------------------------------------------------
+
+/** Which sections start open in the accordion, per surface. The viewer is
+ *  mostly about reading and adjusting one's own view; the editor opens on the
+ *  metadata only, so the authoring sections don't all unfold at once. */
+const DEFAULT_OPEN: Record<Surface, SectionKey[]> = {
   viewer: ['about', 'view'],
   editor: ['about'],
 };
 
-const openSectionsKey = (surface: 'viewer' | 'editor') =>
-  `depictio-settings-drawer-open:${surface}`;
+const AccordionLayout: React.FC<{
+  sections: SettingsSection[];
+  surface: Surface;
+}> = ({ sections, surface }) => {
+  const storageKey = `depictio-settings-drawer-open:${surface}`;
+  const [open, setOpen] = React.useState<string[]>(
+    () => readStored(storageKey, isStringArray) ?? DEFAULT_OPEN[surface],
+  );
+  return (
+    <Accordion
+      multiple
+      variant="separated"
+      radius="md"
+      chevronPosition="right"
+      value={open}
+      onChange={(value) => {
+        setOpen(value);
+        writeStored(storageKey, value);
+      }}
+      // A flex gap rather than the separated variant's md margin between
+      // items, so the drawer stays compact.
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--mantine-spacing-xs)' }}
+      styles={{
+        item: { marginTop: 0 },
+        control: { paddingInline: 'var(--mantine-spacing-sm)' },
+        label: { paddingBlock: 'var(--mantine-spacing-xs)' },
+        content: {
+          paddingInline: 'var(--mantine-spacing-sm)',
+          paddingTop: 'var(--mantine-spacing-xs)',
+          paddingBottom: 'var(--mantine-spacing-sm)',
+        },
+      }}
+    >
+      {sections.map((s) => (
+        <Accordion.Item key={s.key} value={s.key} data-testid={`settings-section-${s.key}`}>
+          <Accordion.Control>
+            <SectionHeader icon={s.icon} title={s.title} subtitle={s.subtitle} />
+          </Accordion.Control>
+          <Accordion.Panel>{s.body}</Accordion.Panel>
+        </Accordion.Item>
+      ))}
+    </Accordion>
+  );
+};
 
-function readOpenSections(surface: 'viewer' | 'editor'): SectionKey[] {
-  try {
-    const raw = localStorage.getItem(openSectionsKey(surface));
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string')) {
-        return parsed as SectionKey[];
-      }
-    }
-  } catch {
-    // Storage blocked or corrupt: fall back to the defaults.
-  }
-  return DEFAULT_OPEN[surface];
-}
+// ---------------------------------------------------------------------------
+// Nav layout
+// ---------------------------------------------------------------------------
 
-function writeOpenSections(surface: 'viewer' | 'editor', value: string[]) {
-  try {
-    localStorage.setItem(openSectionsKey(surface), JSON.stringify(value));
-  } catch {
-    // Remembering the open sections is a convenience; ignore failures.
+/** The section a surface opens on before the reader has picked one: a
+ *  viewer's own display options, or the editor's tab defaults (what an author
+ *  most often comes here to change; About is one click up the rail). */
+const DEFAULT_ACTIVE: Record<Surface, SectionKey> = {
+  viewer: 'view',
+  editor: 'tab-defaults',
+};
+
+/** Below this the rail no longer fits beside the page and becomes a select. */
+const NARROW_QUERY = '(max-width: 640px)';
+
+const RAIL_WIDTH = 220;
+
+const NavLayout: React.FC<{
+  sections: SettingsSection[];
+  surface: Surface;
+}> = ({ sections, surface }) => {
+  const storageKey = `depictio-settings-active:${surface}`;
+  const [stored, setStored] = React.useState<string | null>(() =>
+    readStored(storageKey, isString),
+  );
+  const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
+
+  // A remembered section can be missing today (no feedback link configured,
+  // or an editor-only one in the viewer): fall back rather than draw nothing.
+  const active =
+    sections.find((s) => s.key === stored) ??
+    sections.find((s) => s.key === DEFAULT_ACTIVE[surface]) ??
+    sections[0];
+  const select = (key: string) => {
+    setStored(key);
+    writeStored(storageKey, key);
+  };
+
+  const page = active && (
+    <Stack gap="lg" data-testid={`settings-section-${active.key}`}>
+      {narrow ? (
+        // The select above already names the section; repeating it as a
+        // heading on a phone only pushes the fields down.
+        <Text size="sm" c="dimmed">
+          {active.subtitle}
+        </Text>
+      ) : (
+        <Stack gap={2}>
+          <Group gap="sm" wrap="nowrap">
+            <Icon icon={active.icon} width={22} height={22} style={SECTION_ICON_STYLE} />
+            <Text fw={600} size="lg" lh={1.25}>
+              {active.title}
+            </Text>
+          </Group>
+          <Text size="sm" c="dimmed">
+            {active.subtitle}
+          </Text>
+        </Stack>
+      )}
+      <Divider />
+      {active.body}
+    </Stack>
+  );
+
+  if (narrow) {
+    return (
+      <Stack gap="md">
+        <Select
+          aria-label="Settings section"
+          value={active?.key ?? null}
+          onChange={(value) => value && select(value)}
+          data={sections.map((s) => ({ value: s.key, label: s.title }))}
+          allowDeselect={false}
+          comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
+          leftSection={
+            active ? <Icon icon={active.icon} width={16} style={SECTION_ICON_STYLE} /> : null
+          }
+          data-testid="settings-nav-select"
+        />
+        {page}
+      </Stack>
+    );
   }
-}
+
+  return (
+    <Group
+      align="stretch"
+      gap={0}
+      wrap="nowrap"
+      // A fixed height, so moving between a short and a long section doesn't
+      // make the dialog jump.
+      h="min(640px, calc(100dvh - 140px))"
+    >
+      <Stack
+        w={RAIL_WIDTH}
+        gap={0}
+        justify="space-between"
+        p="sm"
+        style={{
+          flexShrink: 0,
+          borderRight: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-default-hover)',
+        }}
+      >
+        <Stack gap={2} component="nav" aria-label="Settings sections">
+          {sections.map((s) => {
+            const isActive = s.key === active?.key;
+            return (
+              <NavLink
+                key={s.key}
+                label={s.navLabel ?? s.title}
+                active={isActive}
+                variant="light"
+                onClick={() => select(s.key)}
+                leftSection={
+                  <Icon
+                    icon={s.icon}
+                    width={18}
+                    height={18}
+                    style={{
+                      flexShrink: 0,
+                      color: isActive
+                        ? 'var(--mantine-primary-color-filled)'
+                        : 'var(--mantine-color-dimmed)',
+                    }}
+                  />
+                }
+                styles={{
+                  root: { borderRadius: 'var(--mantine-radius-sm)' },
+                  label: { fontWeight: isActive ? 600 : 500 },
+                }}
+                data-testid={`settings-nav-${s.key}`}
+              />
+            );
+          })}
+        </Stack>
+        <Group gap={6} wrap="nowrap" px={6} pt="sm">
+          <Icon
+            icon="mdi:check-circle-outline"
+            width={14}
+            style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0 }}
+          />
+          <Text size="xs" c="dimmed" lh={1.3}>
+            Changes save as you make them.
+          </Text>
+        </Group>
+      </Stack>
+      <ScrollArea style={{ flex: 1 }} type="auto">
+        <Box px="xl" py="lg" maw={620}>
+          {page}
+        </Box>
+      </ScrollArea>
+    </Group>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 
 interface SettingsDrawerProps {
   opened: boolean;
   onClose: () => void;
   dashboard: DashboardData | null;
+  /** Which layout to draw. Defaults to `nav`; `accordion` keeps the earlier
+   *  drawer available for comparison. */
+  layout?: SettingsLayout;
   /** Editor only: shows the Branding section. The viewer leaves this unset
    *  and the section is not rendered. */
   onChangeBrandTheme?: (theme: BrandTheme | null) => void;
@@ -593,11 +839,11 @@ interface SettingsDrawerProps {
 }
 
 /**
- * Right-side drawer for the current dashboard, as collapsible sections. Each
- * section header says what it holds and who it affects:
+ * The current dashboard's settings, in sections that each say what they hold
+ * and who they affect:
  *
  * 1. About this dashboard: metadata (`DashboardInfoBody`, shared with the
- *    inspector's Info tab, which replaces this drawer when enabled).
+ *    inspector's Info tab, which replaces these settings when enabled).
  * 2. Your view: the reader's own font size (#854) and page width, kept in
  *    this browser.
  * 3. Tab defaults (editor): page width, filter panel and tab name the tab
@@ -607,32 +853,27 @@ interface SettingsDrawerProps {
  *    surfaces and figure palette, inheriting the main tab or instance).
  * 6. Feedback: the deployment's feedback link, when one is configured.
  *
- * Editor sections render only when their callback is given. Which sections
- * are open is remembered per browser, separately for viewer and editor.
+ * Editor sections render only when their callback is given. Two layouts draw
+ * the same sections (see `SettingsLayout`): by default a wide modal with a
+ * section rail, remembering the last section per browser (viewer and editor
+ * apart); or the earlier drawer of collapsible sections, remembering which
+ * are open.
+ *
+ * Both are portaled to <body>, outside the dashboard's BrandScope wrapper, so
+ * the root carries the scope's attributes to stay in the dashboard's brand.
  */
 const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   opened,
   onClose,
   dashboard,
+  layout = DEFAULT_LAYOUT,
   onChangeBrandTheme,
   onToggleFunnelFiltering,
   onUploadLogo,
   onChangeTabDefaults,
 }) => {
-  const surface: 'viewer' | 'editor' =
+  const surface: Surface =
     onChangeBrandTheme || onToggleFunnelFiltering || onChangeTabDefaults ? 'editor' : 'viewer';
-  const [openSections, setOpenSections] = React.useState<string[]>(() =>
-    readOpenSections(surface),
-  );
-  const handleSectionsChange = (value: string[]) => {
-    setOpenSections(value);
-    writeOpenSections(surface, value);
-  };
-
-  // The drawer is portaled to <body>, outside the dashboard's BrandScope
-  // wrapper, so its CSS variables would fall back to the instance theme; these
-  // put the drawer back in the dashboard's brand (primary colour, switches,
-  // segmented controls, icons).
   const brandScope = useBrandScopeAttributes();
 
   const feedback = useFeedbackLink({
@@ -641,122 +882,144 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     tab: null,
   });
 
-  const section = (
-    key: SectionKey,
-    icon: string,
-    title: string,
-    subtitle: string,
-    body: React.ReactNode,
-  ) => (
-    <Accordion.Item value={key} data-testid={`settings-section-${key}`}>
-      <Accordion.Control>
-        <SectionHeader icon={icon} title={title} subtitle={subtitle} />
-      </Accordion.Control>
-      <Accordion.Panel>{body}</Accordion.Panel>
-    </Accordion.Item>
+  const sections: SettingsSection[] = [
+    {
+      key: 'about',
+      icon: 'mdi:information-outline',
+      title: 'About this dashboard',
+      navLabel: 'About',
+      subtitle: 'Project, template, run and owner',
+      body: <DashboardInfoBody dashboard={dashboard} active={opened} />,
+    },
+    {
+      key: 'view',
+      icon: 'mdi:monitor-eye',
+      title: 'Your view',
+      subtitle: 'Only for you, saved in this browser',
+      body: (
+        <Stack gap="lg">
+          <FontSizeBlock />
+          <PageWidthBlock />
+        </Stack>
+      ),
+    },
+  ];
+  if (onChangeTabDefaults) {
+    sections.push({
+      key: 'tab-defaults',
+      icon: 'mdi:tab',
+      title: 'Tab defaults',
+      subtitle: 'What this tab opens with, for everyone',
+      body: <TabDefaultsBlock dashboard={dashboard} onChange={onChangeTabDefaults} />,
+    });
+  }
+  if (onToggleFunnelFiltering) {
+    sections.push({
+      key: 'filtering',
+      icon: 'mdi:filter-variant',
+      title: 'Filtering',
+      subtitle: 'How the filters behave on this dashboard, for everyone',
+      body: (
+        <SwitchField
+          label="Funnel filtering by default"
+          description="Highlight, in every other filter, the values that still lead to a non-empty result set. Viewers can still turn it off from the filter panel."
+          checked={dashboard?.funnel_filtering !== false}
+          onChange={onToggleFunnelFiltering}
+          testId="funnel-filtering-default-switch"
+        />
+      ),
+    });
+  }
+  if (onChangeBrandTheme) {
+    sections.push({
+      key: 'branding',
+      icon: 'mdi:palette-outline',
+      title: 'Branding',
+      subtitle: 'Logo, colours and figure palette, for everyone',
+      body: (
+        <BrandingBlock
+          dashboard={dashboard}
+          onChange={onChangeBrandTheme}
+          onUploadLogo={onUploadLogo}
+          opened={opened}
+        />
+      ),
+    });
+  }
+  if (feedback) {
+    sections.push({
+      key: 'feedback',
+      icon: 'mdi:comment-quote-outline',
+      title: 'Feedback',
+      subtitle: 'Report a problem or suggest an improvement',
+      body: <FeedbackBlock href={feedback.href} label={feedback.label} />,
+    });
+  }
+
+  const title = (
+    <Group gap="xs">
+      <Icon icon="ic:baseline-settings" width={20} height={20} style={SECTION_ICON_STYLE} />
+      <Text fw={600}>Dashboard settings</Text>
+    </Group>
   );
+  const rootProps = {
+    className: brandScope?.className,
+    'data-mantine-color-scheme': brandScope?.['data-mantine-color-scheme'],
+    // Above the floating map card, so the overlay dims it like the rest of
+    // the dashboard instead of leaving it lit on top.
+    zIndex: Z_LAYERS.overlay,
+  };
+
+  if (layout === 'accordion') {
+    return (
+      <Drawer
+        opened={opened}
+        onClose={onClose}
+        position="right"
+        size="md"
+        title={title}
+        {...rootProps}
+      >
+        <AccordionLayout sections={sections} surface={surface} />
+      </Drawer>
+    );
+  }
 
   return (
-    <Drawer
+    <SettingsModal opened={opened} onClose={onClose} title={title} rootProps={rootProps}>
+      <NavLayout sections={sections} surface={surface} />
+    </SettingsModal>
+  );
+};
+
+/** The nav layout's frame: a wide modal, full screen on a phone, with no
+ *  body padding so the rail runs edge to edge. */
+const SettingsModal: React.FC<{
+  opened: boolean;
+  onClose: () => void;
+  title: React.ReactNode;
+  rootProps: Record<string, unknown>;
+  children: React.ReactNode;
+}> = ({ opened, onClose, title, rootProps, children }) => {
+  const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
+  return (
+    <Modal
       opened={opened}
       onClose={onClose}
-      position="right"
-      size="md"
-      // Above the floating map card, so the drawer's overlay dims it like the
-      // rest of the dashboard instead of leaving it lit on top.
-      zIndex={Z_LAYERS.overlay}
-      className={brandScope?.className}
-      data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
-      title={
-        <Group gap="xs">
-          <Icon icon="ic:baseline-settings" width={20} height={20} style={SECTION_ICON_STYLE} />
-          <Text fw={600}>Dashboard settings</Text>
-        </Group>
-      }
+      title={title}
+      size={860}
+      fullScreen={narrow}
+      radius="md"
+      centered
+      data-testid="settings-modal"
+      styles={{
+        header: { borderBottom: '1px solid var(--mantine-color-default-border)' },
+        body: narrow ? { paddingTop: 'var(--mantine-spacing-md)' } : { padding: 0 },
+      }}
+      {...rootProps}
     >
-      <Accordion
-        multiple
-        variant="separated"
-        radius="md"
-        chevronPosition="right"
-        value={openSections}
-        onChange={handleSectionsChange}
-        // A flex gap rather than the separated variant's md margin between
-        // items, so the drawer stays compact.
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--mantine-spacing-xs)' }}
-        styles={{
-          item: { marginTop: 0 },
-          control: { paddingInline: 'var(--mantine-spacing-sm)' },
-          label: { paddingBlock: 'var(--mantine-spacing-xs)' },
-          content: {
-            paddingInline: 'var(--mantine-spacing-sm)',
-            paddingTop: 'var(--mantine-spacing-xs)',
-            paddingBottom: 'var(--mantine-spacing-sm)',
-          },
-        }}
-      >
-        {section(
-          'about',
-          'mdi:information-outline',
-          'About this dashboard',
-          'Project, template, run and owner',
-          <DashboardInfoBody dashboard={dashboard} active={opened} />,
-        )}
-        {section(
-          'view',
-          'mdi:monitor-eye',
-          'Your view',
-          'Only for you, saved in this browser',
-          <Stack gap="md">
-            <FontSizeBlock />
-            <PageWidthBlock />
-          </Stack>,
-        )}
-        {onChangeTabDefaults &&
-          section(
-            'tab-defaults',
-            'mdi:tab',
-            'Tab defaults',
-            'What this tab opens with, for everyone',
-            <TabDefaultsBlock dashboard={dashboard} onChange={onChangeTabDefaults} />,
-          )}
-        {onToggleFunnelFiltering &&
-          section(
-            'filtering',
-            'mdi:filter-variant',
-            'Filtering',
-            'How the filters behave on this dashboard, for everyone',
-            <SwitchField
-              label="Funnel filtering by default"
-              description="Highlight, in every other filter, the values that still lead to a non-empty result set. Viewers can still turn it off from the filter panel."
-              checked={dashboard?.funnel_filtering !== false}
-              onChange={onToggleFunnelFiltering}
-              testId="funnel-filtering-default-switch"
-            />,
-          )}
-        {onChangeBrandTheme &&
-          section(
-            'branding',
-            'mdi:palette-outline',
-            'Branding',
-            'Logo, colours and figure palette, for everyone',
-            <BrandingBlock
-              dashboard={dashboard}
-              onChange={onChangeBrandTheme}
-              onUploadLogo={onUploadLogo}
-              opened={opened}
-            />,
-          )}
-        {feedback &&
-          section(
-            'feedback',
-            'mdi:comment-quote-outline',
-            'Feedback',
-            'Report a problem or suggest an improvement',
-            <FeedbackBlock href={feedback.href} label={feedback.label} />,
-          )}
-      </Accordion>
-    </Drawer>
+      {children}
+    </Modal>
   );
 };
 
