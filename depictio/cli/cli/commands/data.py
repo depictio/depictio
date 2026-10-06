@@ -44,15 +44,10 @@ def scan(
     ),
 ):
     """
-    Scan files.
+    Scan the project's data folders for the files its data collections match.
 
-    Args:
-        CLI_config_path (Annotated[str, typer.Option, optional): _description_. Defaults to "Path to the CLI configuration file")]="~/.depictio/CLI.yaml".
-        project_config_path (Annotated[str, typer.Option, optional): _description_. Defaults to "Path to the pipeline configuration file")]="".
-        workflow_name (Annotated[str, typer.Option, optional): _description_. Defaults to "Name of the workflow to be scanned")]="",
-        data_collection_tag (Optional[str], optional): _description_. Defaults to typer.Option(None, "--data-collection-tag", help="Data collection tag to be scanned").
-        rescan_folders (Annotated[bool, typer.Option, optional): _description_. Defaults to "Reprocess all runs for the data collection")]=False.
-        update_files (Annotated[bool, typer.Option, optional): _description_. Defaults to "Update files for the data collection. rescan-folders will be enabled if used.")]=False.
+    Registers what it finds on the server; `depictio data process` then turns those
+    files into tables. The project configuration must already be synced.
     """
     rich_print_command_usage("scan")
 
@@ -160,7 +155,7 @@ def process(
     ),
 ):
     """
-    Process data collections for a specific tag.
+    Build each data collection's Delta table from the files `depictio data scan` found.
     """
     rich_print_command_usage("process")
 

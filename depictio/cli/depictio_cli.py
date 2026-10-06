@@ -1,8 +1,15 @@
+import logging
 import os
+from itertools import groupby
 
 os.environ["DEPICTIO_CONTEXT"] = "CLI"
 
 import typer
+from rich.console import Console, Group
+from rich.style import Style
+from rich.table import Table
+from rich.text import Text
+from typer.core import TyperGroup
 from typer.main import get_command
 
 from depictio.cli.cli.commands.backup import app as backup
@@ -16,16 +23,52 @@ from depictio.cli.cli.commands.local import app as local
 from depictio.cli.cli.commands.migrate import app as migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
+from depictio.cli.cli.utils import logo_art
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
+from depictio.cli.cli.utils.rich_utils import console as default_console
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
 from depictio.models.logging import setup_logging as setup_models_logging
 
-app = typer.Typer()
+DOCS_URL = "https://depictio.github.io/depictio-docs/latest/"
+TAGLINE = "Interactive dashboards for bioinformatics data"
 
-# Register standalone commands (version, status, etc.)
+# The panels of `depictio --help`, in display order, with their commands.
+HELP_PANELS = {
+    "Get started": ("local", "run"),
+    "Projects and data": ("config", "data", "dashboard", "images"),
+    "Administration": ("migrate", "backup"),
+    "Reference": ("catalog", "commands", "version"),
+}
+# Each command's panel, and its rank in the order HELP_PANELS lists them.
+_PANEL_OF = {name: panel for panel, names in HELP_PANELS.items() for name in names}
+_COMMAND_ORDER = {name: rank for rank, name in enumerate(_PANEL_OF)}
+
+
+class _PanelOrderGroup(TyperGroup):
+    """The root group, listing its commands in HELP_PANELS order.
+
+    Rich help draws the panels in the order their first command is listed, and Typer
+    lists plain commands (run, version, commands) before groups, which would put
+    Reference second.
+    """
+
+    def list_commands(self, ctx) -> list[str]:
+        return sorted(
+            super().list_commands(ctx),
+            key=lambda name: _COMMAND_ORDER.get(name, len(_COMMAND_ORDER)),
+        )
+
+
+app = typer.Typer(
+    cls=_PanelOrderGroup,
+    help=f"Depictio: {TAGLINE.lower()}.",
+    epilog=f"Run depictio with no command for a quick start.\n\nDocumentation: {DOCS_URL}",
+    # Rich markup, not Markdown: Markdown would reflow the indented examples in the
+    # commands' help and drop <placeholders> such as '<name>/<version>'.
+    rich_markup_mode="rich",
+)
+
 register_standalone_commands(app)
-
-# Register the run command
 register_run_command(app)
 
 
@@ -43,17 +86,40 @@ def _version_callback(value: bool) -> None:
     raise typer.Exit()
 
 
-@app.callback()
+def _log_level(verbose: int, explicit: str | None) -> str | None:
+    """The logging level -v/-vv/--log-level ask for, or None to stay quiet."""
+    if explicit:
+        level = explicit.upper()
+        if level not in logging.getLevelNamesMapping():
+            raise typer.BadParameter(f"unknown level {explicit!r}", param_hint="--log-level")
+        return level
+    return {0: None, 1: "INFO"}.get(verbose, "DEBUG")
+
+
+# invoke_without_command: `depictio` alone runs this callback and shows the landing,
+# where Click would otherwise fail with "Missing command".
+@app.callback(invoke_without_command=True)
 def verbose_callback(
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose logging", is_eager=True
-    ),
-    verbose_level=typer.Option(
-        "INFO",
-        "--verbose-level",
-        "-vl",
-        help="Set verbose logging level",
+    ctx: typer.Context,
+    verbose: int = typer.Option(
+        0,
+        "--verbose",
+        "-v",
+        count=True,
+        help="Show logs: -v for INFO, -vv for DEBUG",
+        metavar="",
+        show_default=False,
         is_eager=True,
+    ),
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        help="Show logs from this level up (DEBUG, INFO, WARNING, ERROR); no -v needed",
+        is_eager=True,
+    ),
+    # The former spelling, which only took effect together with -v. Kept for scripts.
+    verbose_level: str | None = typer.Option(
+        None, "--verbose-level", "-vl", hidden=True, is_eager=True
     ),
     version: bool = typer.Option(
         False,
@@ -64,134 +130,258 @@ def verbose_callback(
         callback=_version_callback,
     ),
 ):
-    # """Set up logging for all commands"""
-    # Set up both CLI and models logging with the same verbose settings
-    setup_cli_logging(verbose, verbose_level)
-    setup_models_logging(verbose, verbose_level)
+    # The CLI and the models log at the same level.
+    level = _log_level(verbose, log_level or verbose_level)
+    setup_cli_logging(level is not None, level or "INFO")
+    setup_models_logging(level is not None, level or "INFO")
+    if ctx.invoked_subcommand is None:
+        print_landing()
 
 
-app.add_typer(backup, name="backup", help="Backup commands")
-app.add_typer(catalog, name="catalog", help="Bioinformatics tool→viz catalog commands")
-app.add_typer(config, name="config", help="Configuration commands")
-app.add_typer(dashboard, name="dashboard", help="Dashboard validation commands")
-app.add_typer(data, name="data", help="Data management commands")
-app.add_typer(images, name="images", help="Image management commands")
-app.add_typer(migrate, name="migrate", help="Cross-instance project migration")
-app.add_typer(local, name="local", help="Run Depictio locally without Docker")
+app.add_typer(
+    local, name="local", help="Run a complete Depictio server on this machine, without Docker."
+)
+app.add_typer(
+    config,
+    name="config",
+    help="Check the CLI setup, sync project configurations, hook Depictio into Nextflow.",
+)
+app.add_typer(
+    data,
+    name="data",
+    help="Run one ingestion step at a time: scan files, process data collections, join tables.",
+)
+app.add_typer(dashboard, name="dashboard", help="Validate, import and export dashboard YAML files.")
+app.add_typer(images, name="images", help="Upload images to S3 storage and list a bucket's images.")
+# No help here: migrate's own docstring, which also describes its modes, is shown.
+app.add_typer(migrate, name="migrate")
+app.add_typer(
+    backup,
+    name="backup",
+    help="Create, list, validate and restore server database backups (admins only).",
+)
+app.add_typer(
+    catalog,
+    name="catalog",
+    help="Browse the supported tools and the dashboard components their outputs become.",
+)
 # Maintainer / CI tooling (catalog authoring, recipe test harness, backup
 # coverage). Hidden from the user-facing help; still callable as `depictio dev …`.
 app.add_typer(dev, name="dev", hidden=True)
+
+# Set here rather than where each command is registered, so HELP_PANELS is the one
+# place that says which panel a command is in.
+for _entry in (*app.registered_commands, *app.registered_groups):
+    if _entry.name in _PANEL_OF:
+        _entry.rich_help_panel = _PANEL_OF[_entry.name]
+
 depictiocli = get_command(app)
 
 
-def display_depictio_cli_logo() -> None:
-    """Render the compact startup banner.
+# Depictio brand colours, as in the web app (depictio-react-core's brandColors).
+DEPICTIO_COLORS = {
+    "purple": "#9966CC",
+    "violet": "#7A5DC7",
+    "blue": "#6495ED",
+    "orange": "#F68B33",
+    "yellow": "#F9CB40",
+    "green": "#8BC34A",
+    "teal": "#45B8AC",
+    "pink": "#E6779F",
+}
+# The landing's text colours, chosen to read on light and dark terminals alike. A
+# colour can only reach a contrast of about 4.1:1 against both white and near black
+# (#1E1E1E); these two come close.
+# - Brand purple, for the name and headings: 4.1 on white, 4.1 on #1E1E1E.
+ACCENT_COLOR = DEPICTIO_COLORS["purple"]
+# - Mantine's blue 7, the web app's primary colour, for what to type: 4.2 and 4.0.
+#   The brand blue would fall to 3.0 on white, the lighter wedge colours lower still.
+COMMAND_COLOR = "#1C7ED6"
 
-    A small colour rendition of the depictio favicon (the 8-wedge pinwheel)
-    beside the brand name + version, a tagline, and the current directory —
-    no panel. Shown once at startup on an interactive terminal.
+# Narrower than this, the text beside the logo would be squeezed into a sliver.
+MIN_ART_WIDTH = 60
+# The large logo needs this much room; smaller terminals get the compact one, which
+# keeps the whole landing on a 24-line screen.
+LARGE_ART_WIDTH = 100
+LARGE_ART_HEIGHT = 30
+
+# Block characters by the quarters of a cell they fill: top-left, top-right,
+# bottom-left, bottom-right. A half-block pixel fills both quarters of its half.
+_BLOCKS = {
+    (0, 0, 0, 0): " ",
+    (1, 0, 0, 0): "▘",
+    (0, 1, 0, 0): "▝",
+    (0, 0, 1, 0): "▖",
+    (0, 0, 0, 1): "▗",
+    (1, 1, 0, 0): "▀",
+    (0, 0, 1, 1): "▄",
+    (1, 0, 1, 0): "▌",
+    (0, 1, 0, 1): "▐",
+    (1, 0, 0, 1): "▚",
+    (0, 1, 1, 0): "▞",
+    (1, 1, 1, 0): "▛",
+    (1, 1, 0, 1): "▜",
+    (1, 0, 1, 1): "▙",
+    (0, 1, 1, 1): "▟",
+    (1, 1, 1, 1): "█",
+}
+
+# What the landing suggests trying first: (what it does, the command).
+GET_STARTED = (
+    ("Start a server on this machine, with example dashboards", "depictio local up"),
+    (
+        "Build dashboards from a pipeline's results",
+        "depictio run --template nf-core/rnaseq/latest --data-root <dir>",
+    ),
+    ("Check the server and storage the CLI is set up for", "depictio config check"),
+)
+
+
+def _logo_cell(*quarters: str) -> tuple[str, Style | None]:
+    """A cell's character and colours, from its quarters' palette letters ('.' where
+    the logo is transparent): the first colour in front, the second behind it, and the
+    terminal's own background wherever the logo is transparent."""
+    colours = [c for c in dict.fromkeys(quarters) if c != "."]
+    if not colours:
+        return " ", None
+    front, *behind = (logo_art.PALETTE[c] for c in colours)
+    lit = tuple(int(q == colours[0]) for q in quarters)
+    if all(lit):
+        # A coloured space, not a full block: some fonts draw that short of the cell,
+        # leaving seams between rows.
+        return " ", Style(bgcolor=front)
+    return _BLOCKS[lit], Style(color=front, bgcolor=behind[0] if behind else None)
+
+
+def _logo(name: str) -> Text:
+    """A logo_art rendition in block characters, two pixel rows per text row."""
+    logo = logo_art.LOGOS[name]
+    across = 2 if logo["glyphs"] == "quadrant" else 1
+    pixels = logo["pixels"]
+    art = Text(no_wrap=True)
+    for row, (upper, lower) in enumerate(zip(pixels[::2], pixels[1::2])):
+        if row:
+            art.append("\n")
+        cells = (
+            _logo_cell(upper[x], upper[x + across - 1], lower[x], lower[x + across - 1])
+            for x in range(0, len(upper), across)
+        )
+        # One span per run of like cells, so runs share one escape sequence.
+        for (char, style), run in groupby(cells):
+            art.append(char * len(list(run)), style)
+    return art
+
+
+def _in_colour(console: Console) -> bool:
+    """Whether the console shows colours: a terminal, not a dumb one, NO_COLOR unset."""
+    return (
+        console.is_terminal
+        and not console.is_dumb_terminal
+        and not console.no_color
+        and console.color_system is not None
+    )
+
+
+def art_supported(console: Console) -> bool:
+    """Whether the logo renders as intended: a UTF-8 terminal, wide enough, with 256
+    colours or more.
+
+    Without colour (NO_COLOR, TERM=dumb, piped) it would be a grey blob, and on a
+    narrow terminal it would leave the text beside it a few columns. With 16 colours
+    the wedges would merge (violet and blue both become bright blue) into whatever the
+    terminal's theme makes of them; with 256 they stay apart.
     """
-    from rich.console import Console
-    from rich.style import Style
-    from rich.text import Text
+    return (
+        _in_colour(console)
+        and console.color_system in ("256", "truecolor")
+        and console.encoding.lower().startswith("utf")
+        and console.width >= MIN_ART_WIDTH
+    )
 
-    # Depictio brand colours used by the mini favicon.
-    DEPICTIO_COLORS = {
-        "purple": "#9966CC",
-        "violet": "#7A5DC7",
-        "blue": "#6495ED",
-        "orange": "#F68B33",
-        "yellow": "#F9CB40",
-        "green": "#8BC34A",
-        "teal": "#45B8AC",
-        "pink": "#E6779F",
-    }
 
-    from depictio.cli.cli.utils.telemetry import cli_version as _cli_version
+def _logo_size(console: Console) -> str:
+    large = console.width >= LARGE_ART_WIDTH and console.height >= LARGE_ART_HEIGHT
+    return "large" if large else "compact"
 
-    cli_version = _cli_version()
 
-    # Pre-rendered favicon (20x8 chars), generated offline from the logo PNG by
-    # snapping each pixel to the nearest brand colour - sharp wedge edges without
-    # a Pillow/raster dependency at runtime. Each row is (top_pixels,
-    # bottom_pixels); every char is a palette index or "."=empty.
-    mini_palette = [
-        DEPICTIO_COLORS["violet"],  # 0
-        DEPICTIO_COLORS["blue"],  # 1
-        DEPICTIO_COLORS["orange"],  # 2
-        DEPICTIO_COLORS["yellow"],  # 3
-        DEPICTIO_COLORS["green"],  # 4
-        DEPICTIO_COLORS["teal"],  # 5
-        DEPICTIO_COLORS["pink"],  # 6
-        DEPICTIO_COLORS["purple"],  # 7
-    ]
-    favicon_art = [
-        (".............0000000", ".............0000000"),
-        (".......7777..0000000", "......77777..00000.."),
-        (".......7777..0000...", "........777..000..11"),
-        (".........77..0...111", "......66........1111"),
-        ("......666......11111", "...................."),
-        ("555555555......22222", "55555555........2222"),
-        ("5555555...4..3...222", "555555..444..33...22"),
-        ("5555...4444.........", "555...44444........."),
-    ]
+def print_banner(console: Console | None = None) -> None:
+    """The name, version and tagline, beside the logo where the terminal allows."""
+    from depictio.cli.cli.utils.telemetry import cli_version
 
-    def mini_color(index: str):
-        return None if index == "." else mini_palette[int(index)]
+    console = console or default_console
+    title = Text.assemble(
+        ("depictio", Style(color=ACCENT_COLOR, bold=True)), (f" {cli_version()}", "dim")
+    )
+    tagline = Text(TAGLINE)
+    if not art_supported(console):
+        console.print(title)
+        console.print(tagline)
+        return
+    banner = Table.grid(padding=(0, 3))
+    banner.add_column(no_wrap=True)
+    # A cell of its own, so a tagline that wraps stays beside the logo.
+    banner.add_column(vertical="middle")
+    banner.add_row(_logo(_logo_size(console)), Group(title, tagline))
+    console.print()
+    console.print(banner)
 
-    console = Console()
-    favicon_rows = []
-    for top_pixels, bottom_pixels in favicon_art:
-        row_text = Text()
-        for top_idx, bottom_idx in zip(top_pixels, bottom_pixels):
-            top = mini_color(top_idx)
-            bottom = mini_color(bottom_idx)
-            if top and bottom:
-                row_text.append("▀", style=Style(color=top, bgcolor=bottom))
-            elif top:
-                row_text.append("▀", style=Style(color=top))
-            elif bottom:
-                row_text.append("▄", style=Style(color=bottom))
-            else:
-                row_text.append(" ")
-        favicon_rows.append(row_text)
 
-    cwd = os.getcwd().replace(os.path.expanduser("~"), "~")
-
-    info_lines = [
+def print_landing(console: Console | None = None) -> None:
+    """What `depictio` alone prints: the banner, commands to start with, and where to
+    read more."""
+    console = console or default_console
+    command_style = Style(color=COMMAND_COLOR)
+    # A prompt sign marks what to type, in colour only: elsewhere the text stays as is.
+    prompt = "$ " if _in_colour(console) else ""
+    print_banner(console)
+    console.print()
+    console.print("Get started", style=Style(color=ACCENT_COLOR, bold=True))
+    for purpose, command in GET_STARTED:
+        console.print(f"  {purpose}", highlight=False)
+        # soft_wrap: a long command stays on one line, so it copy-pastes intact.
+        console.print(
+            Text.assemble("    ", (prompt, "dim"), (command, command_style)), soft_wrap=True
+        )
+    console.print()
+    console.print(Text.assemble(("All commands   ", "dim"), ("depictio --help", command_style)))
+    console.print(
         Text.assemble(
-            ("depictio-cli", f"bold {DEPICTIO_COLORS['purple']}"),
-            (f"  v{cli_version}", "dim"),
+            ("Documentation  ", "dim"),
+            # A link where the terminal supports them (OSC 8), plain text elsewhere.
+            (DOCS_URL, Style(color=COMMAND_COLOR, underline=True, link=DOCS_URL)),
         ),
-        Text("Interactive dashboards for bioinformatics data", style="dim"),
-        Text(cwd, style="dim"),
-    ]
+        soft_wrap=True,
+    )
 
-    # Concatenate each row by hand (fixed-width favicon gutter + text) rather than
-    # using a Table, so a long path is shown in full instead of being cropped to
-    # the column width.
-    gutter = len(favicon_art[0][0])
-    console.print()
-    for i in range(max(len(favicon_rows), len(info_lines))):
-        line = Text()
-        line.append_text(favicon_rows[i] if i < len(favicon_rows) else Text(" " * gutter))
-        line.append("   ")
-        if i < len(info_lines):
-            line.append_text(info_lines[i])
-        console.print(line)
-    console.print()
+
+def brand_help() -> None:
+    """Give `--help` the landing's colours: what to type in blue, headings and short
+    flags in purple, and no yellow, which light backgrounds make unreadable. Typer
+    reads these styles each time it draws help."""
+    from typer import rich_utils
+
+    rich_utils.STYLE_USAGE = f"bold {ACCENT_COLOR}"
+    rich_utils.STYLE_OPTION = f"bold {COMMAND_COLOR}"
+    rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN = f"bold {COMMAND_COLOR}"
+    rich_utils.STYLE_SWITCH = f"bold {ACCENT_COLOR}"
+    rich_utils.STYLE_TYPES = ACCENT_COLOR
+    rich_utils.STYLE_OPTION_ENVVAR = "dim"
+    rich_utils.STYLE_OPTIONS_PANEL_BORDER = ACCENT_COLOR
+    rich_utils.STYLE_COMMANDS_PANEL_BORDER = ACCENT_COLOR
 
 
 def main():
     # Add rich display support for Polars DataFrames
     add_rich_display_to_polars()
 
-    # Branded startup banner — only on an interactive terminal, so piped /
-    # redirected output (scripts, CI greps, ``| jq``) stays clean.
+    # No banner here: `depictio` alone shows one on its landing, and every other
+    # command's output starts straight away.
     import sys
 
-    if sys.stdout.isatty():
-        display_depictio_cli_logo()
+    # Only when help is asked for: Typer's help module takes some 25 ms to import,
+    # which every other command would pay too.
+    if "--help" in sys.argv[1:]:
+        brand_help()
 
     from depictio.cli.cli.utils.telemetry import (
         CommandTimer,

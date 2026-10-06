@@ -10,6 +10,7 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from depictio.models.models.workflows import Workflow, WorkflowRun
 
@@ -23,10 +24,32 @@ console = Console()
 _DEFAULT_CONSOLE = console
 
 
+# Symbol, symbol style and message style of each status line. One-cell glyphs rather
+# than emoji: emoji widths vary between terminals, which misaligned consecutive lines.
+_STATUS_STYLES = {
+    "success": ("✓", "bold green", ""),
+    "error": ("✗", "bold red", "red"),
+    "warning": ("!", "bold yellow", "yellow"),
+    "info": ("•", "bold blue", ""),
+    "loading": ("…", "bold yellow", ""),
+}
+
+
+def _print_status(statement: str, mode: str) -> None:
+    symbol, symbol_style, text_style = _STATUS_STYLES[mode]
+    text = console.render_str(statement, style=text_style)
+    # Wrapped here with a hanging indent, so a long message continues under its text
+    # rather than under the symbol (a Table would also pad lines with spaces).
+    for i, line in enumerate(text.wrap(console, max(console.width - 2, 20))):
+        line.rstrip()
+        prefix = Text(symbol, style=symbol_style) if i == 0 else Text(" ")
+        console.print(Text.assemble(prefix, " ", line), soft_wrap=True)
+
+
 @validate_call
 def handle_error(message: str, exit: bool = False):
     """Print an error message and raise a ValueError."""
-    console.print(f"• [bold red]:x: {message}[/bold red]")
+    _print_status(message, "error")
     if exit:
         sys.exit()
 
@@ -75,20 +98,13 @@ def rich_print_json(statement: str, json_obj: dict | list[dict]):
 @validate_call
 def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
     """
-    Print a statement with a check mark or cross.
+    Print a status line: a symbol for ``mode`` (loading, success, error, info,
+    warning), then ``statement``, which may hold Rich markup.
     """
-    if mode not in ["loading", "success", "error", "info", "warning"]:
+    if mode not in _STATUS_STYLES:
         handle_error(f"Invalid mode: {mode}", exit=exit)
-    if mode == "loading":
-        console.print(f"• [bold yellow]:hourglass: {statement}[/bold yellow]")
-    elif mode == "success":
-        console.print(f"• [bold green]:white_check_mark: {statement}[/bold green]")
-    elif mode == "error":
-        console.print(f"• [bold red]:x: {statement}[/bold red]")
-    elif mode == "info":
-        console.print(f"• [bold blue]:blue_book: {statement}[/bold blue]")
-    elif mode == "warning":
-        console.print(f"• [bold orange1]:warning: {statement}[/bold orange1]")
+        return
+    _print_status(statement, mode)
 
 
 def render_records_table(

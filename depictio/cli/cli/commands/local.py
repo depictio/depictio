@@ -1,12 +1,17 @@
+import contextlib
+import logging
 import os
 import shlex
 import sys
+import time
 import webbrowser
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
 from rich.markup import escape
+from rich.text import Text
 
 from depictio.cli.cli.local_compose import export_compose
 from depictio.cli.cli.local_stack import (
@@ -36,25 +41,67 @@ app = typer.Typer(
 )
 
 
+# Messages are escaped: they quote install commands such as `depictio[local]` and
+# paths, which Rich would otherwise read as style tags and drop.
 def _info(msg: str) -> None:
-    rich_print_checked_statement(msg, "info")
+    rich_print_checked_statement(escape(msg), "info")
 
 
 def _warn(msg: str) -> None:
-    rich_print_checked_statement(msg, "warning")
+    rich_print_checked_statement(escape(msg), "warning")
 
 
 def _fail(msg: str) -> NoReturn:
-    # Escaped: the messages quote install commands such as `depictio[local]`, which
-    # Rich would otherwise read as a style tag and drop.
     rich_print_checked_statement(escape(msg), "error")
     raise typer.Exit(code=1)
 
 
-def _print_rows(rows: list[tuple[str, str]]) -> None:
+def _print_rows(rows: list[tuple[str, str]], width: int = 0, value_style: str = "") -> None:
+    """Label/value rows with the values aligned, past ``width`` or the longest label."""
+    width = max(width, *(len(label) for label, _ in rows))
     for label, value in rows:
-        # soft_wrap: long paths stay on one line, so commands copy-paste intact.
-        console.print(f"  [bold]{label}:[/bold] {escape(value)}", soft_wrap=True, highlight=False)
+        # Text with soft_wrap rather than a Table: long paths and commands stay on one
+        # line, so they copy-paste intact.
+        row = Text.assemble("  ", (label.ljust(width), "dim"), "  ", (value, value_style))
+        console.print(row, soft_wrap=True)
+
+
+def _can_animate() -> bool:
+    """Whether a spinner may draw: stdout is an interactive terminal, and no -v/-vv
+    logs are on, which go to stderr through a plain logging handler and would tear
+    through the live display."""
+    return (
+        sys.stdout.isatty()
+        and not console.is_dumb_terminal
+        and logging.getLogger("depictio-cli").getEffectiveLevel() >= logging.ERROR
+    )
+
+
+class _Elapsed:
+    """``message`` and the seconds since it started, redrawn with each spinner frame."""
+
+    def __init__(self, message: str):
+        self.message = message
+        self.start = time.monotonic()
+
+    def __rich__(self) -> Text:
+        return Text.assemble(self.message, (f"  {time.monotonic() - self.start:.0f}s", "dim"))
+
+
+@contextlib.contextmanager
+def _spinner(message: str, *, announce: bool = False) -> Iterator[None]:
+    """A spinner with the elapsed time while `up` waits, where _can_animate allows.
+
+    Lines printed meanwhile appear above it. Where it cannot draw, ``announce``
+    prints ``message`` as an info line instead.
+    """
+    if not _can_animate():
+        if announce:
+            _info(message)
+        yield
+        return
+    with console.status(_Elapsed(message)):
+        yield
 
 
 def _has_display() -> bool:
@@ -117,7 +164,10 @@ def _start_or_reuse(
                     )
             return state
         starting = True
-        return start_stack(paths, port, seed, bool(screenshots), log=_info, warn=_warn)
+        # No spinner with --screenshots: the Chromium installer draws its own progress.
+        spinner = contextlib.nullcontext() if screenshots else _spinner("Starting the local server")
+        with spinner:
+            return start_stack(paths, port, seed, bool(screenshots), log=_info, warn=_warn)
     except LocalStackError as exc:
         _fail(str(exc))
     except KeyboardInterrupt:
@@ -137,8 +187,8 @@ def _wait_for_examples(paths: Paths, state: State, asked: list[str]) -> list[str
     try:
         status = examples_status(paths, state)
         if "loading" in status.values():
-            _info("Loading the examples")
-            status = wait_for_examples(paths, state)
+            with _spinner("Loading the examples", announce=True):
+                status = wait_for_examples(paths, state)
     except KeyboardInterrupt:
         _warn(
             "Interrupted: the server keeps running and finishes loading the examples "
@@ -187,19 +237,26 @@ def _print_summary(
     template: str | None,
     data_root: Path | None,
 ) -> None:
+    """Where things are, then what to run next, as two blocks of aligned rows."""
     rich_print_checked_statement(f"Depictio is ready: {state.url}/dashboards", "success")
-    rows = []
+    where = []
     if examples:
-        rows.append(("Examples", ", ".join(examples)))
+        where.append(("Examples", ", ".join(examples)))
     if template and data_root is not None:
-        rows.append(("Ingested", f"{data_root.resolve()} ({template})"))
-    rows += [
-        ("Data", f"{paths.home} (logs in {paths.logs})"),
+        where.append(("Ingested", f"{data_root.resolve()} ({template})"))
+    where += [("Data", str(paths.home)), ("Logs", str(paths.logs))]
+    # The CLI configuration holds the admin token, so it is what the CLI needs here.
+    next_steps = [
         ("Add data", "depictio local up --template <template> --data-root <dir>"),
-        ("CLI on this server", f"export DEPICTIO_CLI_CONFIG_PATH={paths.cli_config}"),
+        ("Use the CLI", f"export DEPICTIO_CLI_CONFIG_PATH={paths.cli_config}"),
         ("Stop", "depictio local down"),
     ]
-    _print_rows(rows)
+    width = max(len(label) for label, _ in where + next_steps)
+    console.print()
+    _print_rows(where, width)
+    console.print()
+    console.print("  Next steps", style="bold")
+    _print_rows(next_steps, width, value_style="cyan")
 
 
 def _open_dashboards(state: State) -> None:
@@ -291,19 +348,25 @@ def status():
     paths = Paths(local_home())
     state = State.load(paths)
     if state is None:
-        _info("Depictio local is not running.")
+        _info("Depictio local is not running. Start it with: depictio local up")
         return
-    for name, alive in running_status(paths).items():
-        where = f" (port {state.ports[name]})" if name in state.ports else ""
+    processes = running_status(paths)
+    # One line per process, its name, state and port in aligned columns.
+    width = max(len(name) for name in processes)
+    for name, alive in processes.items():
+        port = f"port {state.ports[name]}" if name in state.ports else ""
         rich_print_checked_statement(
-            f"{name}{where}: {'running' if alive else 'stopped'}", "success" if alive else "error"
+            f"{name.ljust(width)}  {'running' if alive else 'stopped'}  {port}".rstrip(),
+            "success" if alive else "error",
         )
     healthy = api_healthy(state.ports["api"])
     rich_print_checked_statement(
         f"API at {state.url}: {'reachable' if healthy else 'not reachable'}",
         "success" if healthy else "error",
     )
-    _info(f"Logs: {Path(state.home) / 'logs'}")
+    _print_rows(
+        [("Dashboards", f"{state.url}/dashboards"), ("Logs", str(Path(state.home) / "logs"))]
+    )
 
 
 @app.command()
@@ -341,5 +404,6 @@ def export_compose_cmd(
         [
             ("Start it", f"cd {shlex.quote(str(out))} && docker compose up -d"),
             ("Then open", "http://localhost:5080"),
-        ]
+        ],
+        value_style="cyan",
     )

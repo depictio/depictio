@@ -1,5 +1,6 @@
 """`depictio local up/down/status/export-compose`, with every process launch faked."""
 
+import logging
 import sys
 from unittest.mock import MagicMock
 
@@ -71,7 +72,7 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     assert result.exit_code == 0, out
     state = State.load(stack.paths)
     assert f"Depictio is ready: {state.url}/dashboards" in out
-    assert "Examples: iris, penguins" in out
+    assert "Examples iris, penguins" in out
     assert f"export DEPICTIO_CLI_CONFIG_PATH={stack.paths.cli_config}" in out
     assert "depictio local up --template <template> --data-root <dir>" in out
     assert "depictio local down" in out
@@ -138,7 +139,7 @@ def test_examples_missing_from_an_existing_home_are_not_waited_for(stack, monkey
 
     assert result.exit_code == 0, out
     wait.assert_not_called()
-    assert "Examples: iris" not in out
+    assert "Examples iris" not in out
     warning = "This local home has no iris example: examples are added on its first run only"
     assert (warning in out) == given
 
@@ -209,8 +210,10 @@ def test_status_reports_api_health(tmp_path, monkeypatch):
 
     assert result.exit_code == 0, out
     assert "API at http://127.0.0.1:18058: reachable" in out
-    assert "worker: running" in out
-    assert "worker (port" not in out
+    assert "mongo running port 17018" in out
+    # The worker listens on no port.
+    assert "worker running" in out
+    assert "worker running port" not in out
 
 
 def test_a_failure_after_the_checks_stops_what_up_started(stack):
@@ -235,3 +238,33 @@ def test_export_compose_prints_the_command_to_run_next(tmp_path, monkeypatch):
     assert result.exit_code == 0, out
     assert export.call_args.args[1] == out_dir
     assert f"cd '{out_dir}' && docker compose up -d" in out
+
+
+@pytest.mark.parametrize(
+    ("tty", "level", "expected"),
+    [
+        (True, logging.ERROR, True),
+        (False, logging.ERROR, False),
+        (True, logging.INFO, False),
+        (True, logging.DEBUG, False),
+    ],
+    ids=["terminal", "piped", "-v", "-vv"],
+)
+def test_spinners_draw_only_on_a_terminal_without_logs(monkeypatch, tty, level, expected):
+    """-v/-vv logs go to stderr through a plain handler and would tear a spinner."""
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(local_cmd.sys.stdout, "isatty", lambda: tty)
+    monkeypatch.setattr(logging.getLogger("depictio-cli"), "level", level)
+
+    assert local_cmd._can_animate() is expected
+
+
+def test_a_wait_that_cannot_spin_says_what_it_waits_for(capsys):
+    with local_cmd._spinner("Loading the examples", announce=True):
+        pass
+    with local_cmd._spinner("Starting the local server"):
+        pass
+
+    out = capsys.readouterr().out
+    assert "Loading the examples" in out
+    assert "Starting the local server" not in out

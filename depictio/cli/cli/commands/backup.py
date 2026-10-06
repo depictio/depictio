@@ -43,7 +43,7 @@ def create(
     Optionally includes S3 deltatable data for complete backups.
 
     Only administrators can perform backup operations.
-
+    \f
     Args:
         CLI_config_path: Path to the CLI configuration file
         dry_run: If True, validate backup process without creating actual backup
@@ -191,7 +191,7 @@ def validate(
 ):
     """
     Validate a backup file on the server against Pydantic models.
-
+    \f
     Args:
         backup_id: ID of the backup to validate
         CLI_config_path: Path to the CLI configuration file
@@ -382,7 +382,7 @@ def restore(
     Before restoring, the server validates the backup against the current
     Pydantic models and refuses to restore invalid backups unless
     --skip-validation is passed.
-
+    \f
     Args:
         backup_id: ID of the backup to restore from
         CLI_config_path: Path to the CLI configuration file

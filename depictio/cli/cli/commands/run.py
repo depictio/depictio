@@ -580,26 +580,20 @@ def register_run_command(app: typer.Typer):
         ),
     ):
         """
-        Run the complete Depictio workflow: validate, sync, scan, process, and join.
+        Ingest pipeline results into a Depictio server, from validation to dashboards.
 
-        This command executes the full depictio-cli pipeline:
+        Runs these steps in order:
+          1. Check that the server answers
+          2. Check the S3 storage configuration
+          3. Validate the project configuration (or resolve the template)
+          4. Sync the project configuration to the server
+          5. Scan the data files
+          6. Process the data collections
+          7. Run the table joins the project configuration defines
+          8. Import the dashboards (from the template, or from --dashboard)
 
-        1. Check server accessibility
-
-        2. Check S3 storage configuration
-
-        3. Validate project configuration (or resolve template)
-
-        4. Sync project configuration to server
-
-        5. Scan data files
-
-        6. Process data collections
-
-        7. Execute table joins (if defined in project config)
-
-        Template mode:
-            depictio-cli run --template nf-core/ampliseq/latest --data-root /path/to/data
+        Example, from a template:
+          depictio run --template nf-core/ampliseq/latest --data-root /path/to/data
         """
         rich_print_command_usage("run")
 

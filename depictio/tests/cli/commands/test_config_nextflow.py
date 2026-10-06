@@ -43,8 +43,8 @@ class TestPathOutput:
         out = _stdout()
         assert out.endswith("\n")
         assert len(out.strip().splitlines()) == 1
-        # Rich's checkmarks, banners and box drawing all fail this.
-        assert not any(ch in out for ch in "•✅❌╭╮╰╯│")
+        # Rich's status symbols, banners and box drawing all fail this.
+        assert not any(ch in out for ch in "•✓✗✅❌╭╮╰╯│▀▄")
 
 
 class TestPrintOutput:

@@ -167,14 +167,15 @@ def catalog_preview(
     ] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
-    """Preview an output's components on its fixture, served on an ephemeral
-    localhost server (Ctrl-C to stop); pass ``--out FILE`` to export a portable,
-    self-contained HTML instead.
+    """Preview an output's components in the browser, on its bundled fixture.
 
-    Renders every ``renders_as`` target through the depictio **React viewer's**
-    real ``ComponentRenderer`` (figure/card/table today). The data is computed
-    Dash-free from the output's bundled ``fixture``. Needs the prebuilt bundle
-    (``cd depictio/viewer && pnpm run build:catalog-preview``).
+    Served on an ephemeral localhost server (Ctrl-C to stop); --out FILE exports a
+    portable, self-contained HTML instead.
+
+    Renders every renders_as target through the depictio React viewer's real
+    ComponentRenderer (figure/card/table today). The data is computed Dash-free from
+    the output's bundled fixture. Needs the prebuilt bundle
+    (cd depictio/viewer && pnpm run build:catalog-preview).
     """
     from depictio.catalog.payload import CatalogPayloadError, render_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
@@ -214,14 +215,16 @@ def catalog_gallery(
     ] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
-    """Browse the whole catalog on one page (every tool's outputs, grouped, with
-    component-type badges, fixture chips, search/filter, copyable ``renders_as``),
-    served on an ephemeral localhost server (Ctrl-C to stop).
+    """Browse the whole catalog on one page in the browser.
+
+    Every tool's outputs, grouped, with component-type badges, fixture chips,
+    search/filter and copyable renders_as, served on an ephemeral localhost server
+    (Ctrl-C to stop).
 
     Clicking an output opens its full live preview (same renderer as
-    ``catalog preview``). Pass ``--out FILE`` to export a portable, self-contained
-    HTML instead; needs the prebuilt bundle
-    (``cd depictio/viewer && pnpm run build:catalog-preview``).
+    catalog preview). Pass --out FILE to export a portable, self-contained HTML
+    instead; needs the prebuilt bundle
+    (cd depictio/viewer && pnpm run build:catalog-preview).
     """
     from depictio.catalog.payload import CatalogPayloadError, render_gallery_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
