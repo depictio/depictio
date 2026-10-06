@@ -4,3 +4,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cool
 homepage: https://cooler.readthedocs.io/
 description: Sparse binary format for genomic interaction matrices.
 biotools_url: null  # no bio.tools entry for this tool
+stage: quantification

@@ -6,3 +6,4 @@ description: >-
   and chimeras in RNA-seq data.
 homepage: https://github.com/ndaniel/fusioncatcher
 biotools_url: https://bio.tools/fusioncatcher
+stage: fusions

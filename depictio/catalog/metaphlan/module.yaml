@@ -6,3 +6,4 @@ description: >-
   Identify clades (phyla to species) present in the metagenome obtained from a
   microbiome sample and their relative abundance.
 homepage: https://huttenhower.sph.harvard.edu/metaphlan/
+stage: taxonomy

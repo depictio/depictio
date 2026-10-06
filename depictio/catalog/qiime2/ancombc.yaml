@@ -1,4 +1,5 @@
 id: qiime2_ancombc
+stage: differential
 name: Differential abundance
 mode: composition/ancombc
 description: >-

@@ -10,3 +10,4 @@ biotools_url: https://bio.tools/multiqc # from nf-core meta.yml identifier
 description: >-
   Aggregates the logs and reports of many bioinformatics tools into one
   report.
+stage: qc

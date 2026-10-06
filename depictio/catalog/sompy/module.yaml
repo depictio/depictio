@@ -5,3 +5,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/happ
 biotools_url: https://bio.tools/hap.py
 description: Somatic variant comparison against a truth set, from the hap.py suite.
 homepage: https://github.com/Illumina/hap.py
+stage: benchmarking

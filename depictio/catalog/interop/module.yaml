@@ -12,3 +12,4 @@ description: >-
   Illumina library that parses the InterOp binary metrics a sequencer writes
   during a run.
 biotools_url: null  # no bio.tools entry for this tool
+stage: qc

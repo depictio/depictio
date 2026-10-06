@@ -10,3 +10,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mird
 homepage: https://github.com/rajewsky-lab/mirdeep2
 description: Discovers known and novel microRNA genes from small RNA sequencing reads.
 biotools_url: https://bio.tools/mirdeep2
+stage: quantification

@@ -14,3 +14,4 @@ description: >-
   Generally applicable transcriptome-wide analysis of translational efficiency
   using anota2seq.
 biotools_url: https://bio.tools/anota2seq
+stage: differential

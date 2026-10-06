@@ -3,6 +3,7 @@ name: Germline benchmark (hap.py)
 origin_tool: hap.py
 mode: happy
 description: Germline small-variant accuracy per callset (SNP / INDEL precision, recall, F1) as hap.py reports it through MultiQC.
+stage: benchmarking
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

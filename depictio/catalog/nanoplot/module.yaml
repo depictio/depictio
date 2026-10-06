@@ -13,3 +13,4 @@ description: >-
 homepage: https://github.com/wdecoster/NanoPlot
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nanoplot
 biotools_url: https://bio.tools/nanoplot
+stage: qc

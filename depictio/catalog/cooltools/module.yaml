@@ -4,3 +4,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cool
 homepage: https://cooltools.readthedocs.io/
 description: Analysis tools for genomic interaction data stored in .cool format.
 biotools_url: https://bio.tools/cooltools
+stage: quantification

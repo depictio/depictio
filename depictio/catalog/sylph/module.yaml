@@ -6,3 +6,4 @@ description: >-
   metagenomes to find nearest neighbour ANI.
 homepage: https://github.com/bluenote-1577/sylph
 biotools_url: https://bio.tools/sylph
+stage: taxonomy

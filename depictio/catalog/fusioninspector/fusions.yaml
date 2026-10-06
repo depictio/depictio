@@ -40,7 +40,7 @@ renders_as:
           margin={"t": 24, "l": 56, "r": 16, "b": 48},
       )
   - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: prot_fusion_type, top_n_count: 3 }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: prot_fusion_type, top_n_count: 3, headline: true }
   - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: splice_type }
   - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }
   - { component: table, row_selection_enabled: true, row_selection_column: fusion }

@@ -23,6 +23,7 @@ renders_as:
         },
     }
   - {
+      headline: true,
       component: card,
       column: species,
       aggregation: nunique,

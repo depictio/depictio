@@ -20,3 +20,4 @@ source_url: https://github.com/nf-core/mhcquant/tree/3.2.0/modules/local
 edam_topics:
   - http://edamontology.org/topic_0121 # Proteomics
   - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
+stage: immune

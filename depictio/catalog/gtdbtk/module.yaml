@@ -17,3 +17,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gtdb
 homepage: https://ecogenomics.github.io/GTDBTk/
 description: Taxonomic classification of metagenome-assembled genomes against the Genome Taxonomy Database.
 biotools_url: https://bio.tools/GTDB-Tk
+stage: taxonomy

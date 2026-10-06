@@ -11,3 +11,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qual
 homepage: http://qualimap.conesalab.org
 description: Quality control of alignment sequencing data and of feature counts.
 biotools_url: https://bio.tools/qualimap
+stage: alignment

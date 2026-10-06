@@ -3,6 +3,7 @@ name: Protein-level classification
 origin_tool: Kaiju
 mode: kaiju
 description: Protein-level taxonomic classification of reads (top taxa), from Kaiju via MultiQC.
+stage: taxonomy
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

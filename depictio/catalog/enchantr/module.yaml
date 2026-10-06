@@ -19,3 +19,4 @@ biotools_url: null  # no bio.tools entry for this tool
 edam_topics:
   - http://edamontology.org/topic_0804 # Immunology
   - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
+stage: immune

@@ -11,3 +11,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/jell
 homepage: https://github.com/gmarcais/Jellyfish
 description: K-mer counting and the read k-mer spectrum.
 biotools_url: https://bio.tools/jellyfish
+stage: qc

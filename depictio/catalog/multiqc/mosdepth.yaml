@@ -3,6 +3,7 @@ name: Coverage distribution
 origin_tool: mosdepth
 mode: mosdepth
 description: Coverage-depth distribution and per-contig coverage — mosdepth, surfaced via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

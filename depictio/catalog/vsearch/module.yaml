@@ -11,3 +11,4 @@ description: >-
   Open-source tool for amplicon and metagenomic sequence analysis: chimera
   detection, clustering, dereplication and searching.
 homepage: https://github.com/torognes/vsearch
+stage: taxonomy

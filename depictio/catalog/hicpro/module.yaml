@@ -13,3 +13,4 @@ biotools_url: https://bio.tools/hic-pro
 source_url: https://github.com/nf-core/hic/tree/master/modules/local/hicpro
 edam_topics:
   - http://edamontology.org/topic_3940 # Chromosome conformation capture
+stage: alignment
