@@ -22,6 +22,7 @@ import {
   Stack,
   Text,
   TextInput,
+  Textarea,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { figureStyleForPick, normalizeFigureStyle } from 'depictio-react-core';
@@ -54,6 +55,7 @@ interface FigureStyleConfig {
   icon_color?: string | null;
   hide_legend?: boolean | null;
   link?: string | null;
+  caption?: string | null;
 }
 
 const FigureStyleSection: React.FC<{
@@ -121,6 +123,18 @@ const FigureStyleSection: React.FC<{
           value={config.subtitle ?? ''}
           onChange={(e) => patchConfig({ subtitle: e.currentTarget.value })}
           leftSection={<Icon icon="mdi:text-short" width={14} />}
+        />
+
+        <Textarea
+          label="Caption"
+          description="A line or two under the plot on how to read it: what a mark is, what the filters do to it."
+          placeholder="e.g. One dot per sample; the grey tick is the city's median."
+          value={config.caption ?? ''}
+          onChange={(e) => patchConfig({ caption: e.currentTarget.value })}
+          autosize
+          minRows={1}
+          maxRows={4}
+          data-testid="figure-caption-input"
         />
 
         <Group grow align="flex-start">

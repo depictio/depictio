@@ -233,7 +233,7 @@ def _stacked_bars(**layout):
 def test_stacked_segments_are_parted_by_a_gap_of_the_cards_colour(theme, surface):
     out = apply_figure_style(_stacked_bars(), "minimal", theme=theme)
     for trace in out["data"]:
-        assert trace["marker"]["line"] == {"width": 2, "color": surface}
+        assert trace["marker"]["line"] == {"width": 1, "color": surface}
 
 
 def test_bars_get_rounded_ends_unless_the_author_set_a_radius():

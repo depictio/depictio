@@ -74,8 +74,8 @@ _CATEGORICAL_TYPES = frozenset({"bar", "box", "violin", "histogram", "funnel"})
 # Bars end in a slight round, square at the baseline (Plotly rounds the outer
 # end only, and in a stack only the stack's end).
 _BAR_CORNER_RADIUS_PX = 4
-# The gap, in the card's colour, between the segments of a stacked bar.
-_STACK_GAP_PX = 2
+# The hairline gap, in the card's colour, between the segments of a stacked bar.
+_STACK_GAP_PX = 1
 # Top margin for a kept plot title, and for facet titles over the top panels.
 _TITLE_MARGIN_PX = 32
 _FACET_TITLE_MARGIN_PX = 26

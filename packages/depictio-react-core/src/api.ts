@@ -287,7 +287,8 @@ export interface StoredMetadata {
   icon_color?: string;
   /** `badge`: icon on a tint, beside the title. Default: hover watermark. */
   icon_style?: 'watermark' | 'badge';
-  /** One line under the value, replacing the aggregation label. */
+  /** Cards: one line under the value, replacing the aggregation label.
+   *  Figures: a line or two under the plot saying how to read it. */
   caption?: string;
   /** Click target: `tab:<name>` for a sibling tab, or a URL. */
   link?: string;

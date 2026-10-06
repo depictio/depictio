@@ -573,6 +573,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const subtitle = typeof metadata.subtitle === 'string' ? metadata.subtitle.trim() : '';
   const iconName = typeof metadata.icon_name === 'string' ? metadata.icon_name : '';
   const iconColor = typeof metadata.icon_color === 'string' ? metadata.icon_color : '';
+  const caption = typeof metadata.caption === 'string' ? metadata.caption.trim() : '';
   const showcaseHeader =
     showcase && Boolean(metadata.title || subtitle || iconName || reductionBadge || groupedBadge || sourceLink);
 
@@ -650,6 +651,18 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           />
           <RefetchOverlay visible={showRefetchOverlay} />
         </div>
+      )}
+      {caption && (
+        // How to read the plot, under it: what a mark is, what a filter does.
+        <Text
+          size="xs"
+          c="dimmed"
+          mt={6}
+          style={{ lineHeight: 1.45, flex: 'none', whiteSpace: 'pre-line' }}
+          data-testid="figure-caption"
+        >
+          {caption}
+        </Text>
       )}
     </Paper>
   );

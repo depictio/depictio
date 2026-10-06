@@ -175,6 +175,11 @@ class FigureLiteComponent(BaseLiteComponent):
         description="Draw the figure without its legend, for a tile too small for one. "
         "Unset keeps the legend the figure has.",
     )
+    caption: str | None = Field(
+        default=None,
+        description="A line or two under the plot saying how to read it (what a mark is, "
+        "what a filter does to it), in any style.",
+    )
     link: str | None = Field(
         default=None,
         description="The tab this figure summarises, as `tab:<name>`: a landing page's "
@@ -807,6 +812,9 @@ class HighlightLiteComponent(BaseLiteComponent):
     )
     hide_legend: bool | None = Field(
         default=None, description="Draw the figure without its legend here."
+    )
+    caption: str | None = Field(
+        default=None, description="Lines under the plot; unset takes the source's."
     )
 
     # The figure is bound to its data on its own tab; the highlight is not.

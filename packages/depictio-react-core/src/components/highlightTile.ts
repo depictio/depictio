@@ -123,6 +123,7 @@ export function highlightMetadata(highlight: StoredMetadata, source: StoredMetad
     icon_color: text(highlight.icon_color) || source.icon_color,
     hide_legend:
       typeof highlight.hide_legend === 'boolean' ? highlight.hide_legend : source.hide_legend,
+    caption: text(highlight.caption) || source.caption,
     font_scale: highlight.font_scale ?? source.font_scale,
   };
   if (source.component_type === 'figure') {
