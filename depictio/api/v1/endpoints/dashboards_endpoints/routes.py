@@ -22,6 +22,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     family_brand_theme,
+    family_category_colors,
     get_child_tabs,
     get_parent_dashboard_title,
     load_dashboards_from_db,
@@ -324,6 +325,9 @@ async def get_dashboard(
     # into this tab, which would then miss later changes to the main tab's.
     if not dashboard_dict.get("brand_theme"):
         dashboard_dict["inherited_brand_theme"] = family_brand_theme(dashboard_dict)
+    # Same rule for category colours: the main tab's, sent apart from the tab's
+    # own so a save never freezes a copy of them here.
+    dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
 
     # Surface the project's realtime config so the React viewer can decide
     # whether to mount the RealtimeIndicator. A project without
@@ -452,6 +456,9 @@ async def init_dashboard(
     # into this tab, which would then miss later changes to the main tab's.
     if not dashboard_dict.get("brand_theme"):
         dashboard_dict["inherited_brand_theme"] = family_brand_theme(dashboard_dict)
+    # Same rule for category colours: the main tab's, sent apart from the tab's
+    # own so a save never freezes a copy of them here.
+    dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
 
     response = {
         "dashboard": dashboard_dict,
@@ -621,6 +628,7 @@ async def save_dashboard(
     # Read-time only: a child tab's main-tab brand, resolved on every GET.
     # Stored, it would freeze a copy that later changes to the main tab miss.
     save_payload.pop("inherited_brand_theme", None)
+    save_payload.pop("inherited_category_colors", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
@@ -3896,6 +3904,14 @@ def get_cross_tab_components(
     persistent_sections: list[dict[str, Any]] = []
     for tab in tabs:
         metas = tab.get("stored_metadata") or []
+        # Grid sections drawn as a filter bar (`display: strip`) hold the
+        # interactive components that name them, which therefore leave the
+        # filter panel's namespace on this tab.
+        strip_names = {
+            spec.get("name")
+            for spec in tab.get("grid_sections") or []
+            if spec.get("display") == "strip"
+        }
         for kind, spec_field in (("grid", "grid_sections"), ("filter", "filter_sections")):
             for spec in tab.get(spec_field) or []:
                 if not spec.get("persistent"):
@@ -3906,9 +3922,13 @@ def get_cross_tab_components(
                         continue
                     # Same membership rule as the viewer's `isFilterMember`:
                     # interactive components live in filter sections, everything
-                    # else in grid sections. Floating maps are excluded — they
-                    # already fan out through `floating`.
-                    is_filter = meta.get("component_type") == "interactive"
+                    # else in grid sections -- except interactive components of
+                    # a filter bar, which are grid members. Floating maps are
+                    # excluded — they already fan out through `floating`.
+                    is_filter = (
+                        meta.get("component_type") == "interactive"
+                        and meta.get("section") not in strip_names
+                    )
                     if is_filter != (kind == "filter"):
                         continue
                     if meta.get("component_type") == "map" and meta.get("placement") == "floating":

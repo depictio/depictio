@@ -228,3 +228,23 @@ def test_pin_reaches_the_client_verbatim() -> None:
         result = _call()
     grid = next(s for s in result["persistent_sections"] if s["kind"] == "grid")
     assert grid["spec"]["pin"] == "bottom"
+
+
+def test_filter_bar_members_fan_out_with_their_grid_section() -> None:
+    """A grid section drawn as a filter bar (`display: strip`) holds the
+    interactive components naming it, so a persistent one fans those out as
+    grid members — and they must not also appear under a same-named filter
+    section, which would render them twice on the sibling tab."""
+    main = _main_tab(
+        filter_sections=[{"name": "Filters", "persistent": True}],
+        grid_sections=[{"name": "Filters", "persistent": True, "display": "strip"}],
+    )
+    main["stored_metadata"][0]["section"] = "Filters"
+    with _Ctx([main, _child_tab()]):
+        result = _call()
+    by_kind = {
+        s["kind"]: s for s in result["persistent_sections"] if s["owner_dashboard_id"] == MAIN_ID
+    }
+    assert [c["metadata"]["index"] for c in by_kind["grid"]["components"]] == ["sample-filter"]
+    assert by_kind["filter"]["components"] == []
+    assert by_kind["grid"]["spec"]["display"] == "strip"

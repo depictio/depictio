@@ -571,6 +571,18 @@ class InteractiveLiteComponent(BaseLiteComponent):
     custom_color: str | None = Field(default=None, description="Custom accent color")
     icon_name: str | None = Field(default=None, description="Iconify icon name")
 
+    # Filter bar (a grid section with `display: strip`). Ignored elsewhere.
+    strip_label: str | None = Field(
+        default=None,
+        description="Short label shown in a filter bar instead of the title "
+        "(e.g. 'Habitat' for 'Sampling habitat'). Unset uses the title.",
+    )
+    strip_icon: bool | None = Field(
+        default=None,
+        description="Whether a filter bar draws the icon badge before the label. "
+        "Unset means shown.",
+    )
+
     @field_validator("column_type")
     @classmethod
     def validate_column_type(cls, v: str | None) -> str | None:

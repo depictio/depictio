@@ -214,6 +214,25 @@ def family_brand_theme(dashboard_dict: dict) -> dict | None:
     return (parent or {}).get("brand_theme") or None
 
 
+def family_category_colors(dashboard_dict: dict) -> dict | None:
+    """A child tab's main-tab ``category_colors``, for read-time inheritance.
+
+    Category colours are declared once, on the main tab, and have to hold on
+    every tab: a filter bar fanned out to a sibling tab, or a figure there,
+    must draw "Athens" in the colour the main tab gave it. Returned apart from
+    the tab's own map (the client lays its own over it, per column and value)
+    so a save never writes a copy into the child that would miss later edits.
+    """
+    parent_id = dashboard_dict.get("parent_dashboard_id")
+    if not parent_id:
+        return None
+    parent = dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(str(parent_id))},
+        {"category_colors": 1},
+    )
+    return (parent or {}).get("category_colors") or None
+
+
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
     """Load dashboards from MongoDB with project-based permissions."""
     projection = {

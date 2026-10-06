@@ -193,6 +193,15 @@ class FilterSectionSpec(BaseModel):
         "matches them without being told. Unset leaves each card to its own `variant`. "
         "Grid sections only.",
     )
+    display: Literal["grid", "strip"] | None = Field(
+        default=None,
+        description="How a grid section lays out its members. Unset or `grid`: one tile "
+        "each on the dashboard grid. `strip`: a filter bar -- the interactive "
+        "components naming this section leave the left filter panel and render as one "
+        "compact row of controls (label, chips or a thin slider, dividers between), "
+        "ignoring their grid coordinates. Any non-interactive members still render as "
+        "tiles below the bar. Grid sections only.",
+    )
 
 
 class DashboardDataLite(BaseModel):
@@ -344,7 +353,18 @@ class DashboardDataLite(BaseModel):
     grid_sections: list[FilterSectionSpec] = Field(
         default_factory=list,
         description="Optional presentation for the main grid's sections. Same shape "
-        "as `filter_sections`, applied to non-interactive components.",
+        "as `filter_sections`, applied to non-interactive components -- and to the "
+        "interactive components of a section with `display: strip` (a filter bar).",
+    )
+    # Category colours (column -> value -> colour), so one category is drawn in
+    # one colour everywhere: a filter bar's chip dots, a figure's points, a
+    # bar's underline. Shared contract between the filter bar and the figures.
+    category_colors: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description="Optional fixed colours per categorical value, keyed by column name "
+        "then value (e.g. `locality: {Athens: '#1c7ed6'}`). Values not listed fall back "
+        "to the dashboard brand's colorway in the order of the column's values, then to "
+        "a neutral grey.",
     )
 
     # Dashboard-level brand override (#397). Same shape as the instance
@@ -475,6 +495,7 @@ class DashboardDataLite(BaseModel):
         "guide_intro",
         "filter_sections",
         "grid_sections",
+        "category_colors",
         "brand_theme",
     ]
 
@@ -1133,7 +1154,13 @@ class DashboardDataLite(BaseModel):
                 # Conditional data scoping
                 if comp.get("filter_expr"):
                     lite_comp["filter_expr"] = comp["filter_expr"]
-                display = collect_display_fields(comp, ["title_size", "custom_color", "icon_name"])
+                display = collect_display_fields(
+                    comp, ["title_size", "custom_color", "icon_name", "strip_label"]
+                )
+                # `strip_icon` defaults to on, so only its `False` is a setting —
+                # and the truthiness filter above would drop exactly that.
+                if comp.get("strip_icon") is False:
+                    display["strip_icon"] = False
                 if display:
                     lite_comp["display"] = display
 
@@ -1251,6 +1278,7 @@ class DashboardDataLite(BaseModel):
             # "declared nowhere, sorted by first appearance".
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
+            category_colors=dashboard_data.get("category_colors") or None,
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
             filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
             content_width_default=dashboard_data.get("content_width_default") or "full",
@@ -1352,6 +1380,7 @@ class DashboardDataLite(BaseModel):
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
+            "category_colors": self.category_colors,
             "funnel_filtering": self.funnel_filtering,
             "filter_panel_default": self.filter_panel_default,
             "content_width_default": self.content_width_default,
@@ -1472,9 +1501,11 @@ class DashboardDataLite(BaseModel):
                         "show_marks": comp_dict.get("show_marks"),
                     }
                 )
-                for f in ["title_size", "custom_color", "icon_name"]:
+                for f in ["title_size", "custom_color", "icon_name", "strip_label"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
+                if comp_dict.get("strip_icon") is not None:
+                    full_comp["strip_icon"] = bool(comp_dict["strip_icon"])
 
             elif comp_type == "table":
                 full_comp.update(
@@ -1696,6 +1727,9 @@ class DashboardData(MongoModel):
     # sections existed, which renders exactly as it did then.
     filter_sections: list[FilterSectionSpec] = []
     grid_sections: list[FilterSectionSpec] = []
+    # Column -> value -> colour. None for dashboards that pin no colours, which
+    # then draw categories from the brand colorway exactly as before.
+    category_colors: dict[str, dict[str, str]] | None = None
     # Funnel filtering (issue #939). On by default; authors opt out per
     # dashboard from the settings drawer.
     funnel_filtering: bool = True
@@ -1784,6 +1818,9 @@ class DashboardData(MongoModel):
     )
     inherited_brand_theme: Optional[dict] = (
         None  # Populated at runtime for a child tab: its main tab's brand_theme
+    )
+    inherited_category_colors: Optional[dict] = (
+        None  # Populated at runtime for a child tab: its main tab's category_colors
     )
 
     model_config = ConfigDict(
