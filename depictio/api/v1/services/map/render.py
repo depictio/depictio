@@ -379,6 +379,10 @@ def render_map(
         # across re-renders.  This is map-viewport-specific and does NOT
         # preserve trace selection state (we clear that with selectedpoints=None).
         layout_kwargs: dict[str, Any] = {
+            # The theme's template, as every other figure gets: without it the
+            # map kept Plotly's default one, whose dark-navy text (legend,
+            # hover) was unreadable on a dark page.
+            "template": get_theme_template(theme),
             "margin": {"l": 0, "r": 0, "t": 30 if title else 0, "b": 0},
             "paper_bgcolor": "rgba(0,0,0,0)",
             "map": {"uirevision": "preserve"},

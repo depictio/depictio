@@ -24,3 +24,42 @@ export const GRID_MAX_COLS = GRID_COL_COUNTS.lg;
 
 /** The only breakpoint whose layout is ever persisted. */
 export const GRID_WIDEST_BREAKPOINT = 'lg';
+
+/** The geometry a layout item carries (react-grid-layout's `Layout`). */
+export interface GridTile {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * A phone's layout: the tiles in reading order, a quarter-width tile half a
+ * row (so a row of four cards becomes two rows of two) and anything wider the
+ * full row.
+ *
+ * Scaling the edges, as the wider breakpoints do, has nothing to round to at
+ * two columns: four quarter-width cards put three of their edges on the same
+ * column, compaction then stacks those three down the right-hand side, and two
+ * half-width figures stay side by side at a phone's half width.
+ */
+export function phoneLayout<T extends GridTile>(lg: T[], cols: number): T[] {
+  const half = Math.max(1, Math.floor(cols / 2));
+  const ordered = [...lg].sort((a, b) => a.y - b.y || a.x - b.x);
+  const out: T[] = [];
+  let x = 0;
+  let y = 0;
+  let rowH = 0;
+  for (const item of ordered) {
+    const w = item.w * 4 <= GRID_MAX_COLS ? half : cols;
+    if (x + w > cols) {
+      y += rowH;
+      x = 0;
+      rowH = 0;
+    }
+    out.push({ ...item, x, y, w });
+    x += w;
+    rowH = Math.max(rowH, item.h);
+  }
+  return out;
+}

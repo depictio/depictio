@@ -5,6 +5,7 @@ import {
   GRID_COL_COUNTS,
   GRID_MAX_COLS,
   GRID_WIDEST_BREAKPOINT,
+  phoneLayout,
 } from '../gridConfig';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -152,7 +153,7 @@ export function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
     lg,
     md: scale(GRID_COL_COUNTS.md),
     sm: scale(GRID_COL_COUNTS.sm),
-    xs: scale(GRID_COL_COUNTS.xs),
+    xs: phoneLayout(lg, GRID_COL_COUNTS.xs),
   };
 }
 
