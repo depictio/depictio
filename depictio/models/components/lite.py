@@ -35,7 +35,7 @@ from depictio.models.components.constants import (
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
 )
-from depictio.models.components.types import CardVariant
+from depictio.models.components.types import CardVariant, FigureStyle
 
 
 class BaseLiteComponent(BaseModel):
@@ -142,6 +142,38 @@ class FigureLiteComponent(BaseLiteComponent):
         gt=0,
         description="Font-size multiplier applied to the whole figure layout font "
         "(axis labels, ticks, legend). Unset/1 = default size.",
+    )
+
+    # Showcase look (see FigureStyle) and the card header that goes with it.
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="How the figure is drawn. Unset takes the style of the grid section "
+        "the figure sits in (`figure_style`), else `default`. `minimal`: the landing-page "
+        "look -- the title in the card header beside an icon badge with the subtitle "
+        "inline, a transparent plot with faint dashed grid lines and no axis lines, small "
+        "grey ticks, the legend in one line under the plot, large markers without "
+        "outlines, tight margins, and the toolbar only on hover. Grouped bars get a "
+        "coloured underline per group.",
+    )
+    subtitle: str | None = Field(
+        default=None,
+        description="A few words after the title in the card header, dimmed "
+        '("relative abundance per sample", "Bray-Curtis"). Drawn by the `minimal` style.',
+    )
+    icon_name: str | None = Field(
+        default=None,
+        description="Iconify id of the badge before the title in the card header "
+        "(`minimal` style), e.g. `mdi:chart-scatter-plot`.",
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Colour of the header badge: a Mantine palette name or a CSS colour. "
+        "Unset uses the brand's primary colour.",
+    )
+    hide_legend: bool | None = Field(
+        default=None,
+        description="Draw the figure without its legend, for a tile too small for one. "
+        "Unset keeps the legend the figure has.",
     )
 
     @model_validator(mode="after")

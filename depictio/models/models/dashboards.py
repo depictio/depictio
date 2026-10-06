@@ -41,7 +41,7 @@ from depictio.models.components.lite import (
     MultiQCLiteComponent,
     TableLiteComponent,
 )
-from depictio.models.components.types import CardVariant
+from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
@@ -119,6 +119,17 @@ def _parse_component_lines(raw_msg: str) -> list[dict[str, Any]]:
 # ============================================================================
 # DashboardDataLite - User-friendly YAML format
 # ============================================================================
+
+
+# A figure's look and card header (see FigureLiteComponent), carried through
+# import and export as they are.
+FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
+    "figure_style",
+    "subtitle",
+    "icon_name",
+    "icon_color",
+    "hide_legend",
+)
 
 
 class FilterSectionSpec(BaseModel):
@@ -201,6 +212,13 @@ class FilterSectionSpec(BaseModel):
         "compact row of controls (label, chips or a thin slider, dividers between), "
         "ignoring their grid coordinates. Any non-interactive members still render as "
         "tiles below the bar. Grid sections only.",
+    )
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="The style every figure in this section is drawn in, unless the "
+        "figure sets its own `figure_style`: `minimal` gives a row of figures the "
+        "landing-page look (title and icon in the card header, faint grid, legend under "
+        "the plot). Unset leaves each figure to its own style. Grid sections only.",
     )
 
 
@@ -1115,6 +1133,11 @@ class DashboardDataLite(BaseModel):
                     lite_comp["max_points"] = comp["max_points"]
                 if comp.get("font_scale") and comp["font_scale"] != 1:
                     lite_comp["font_scale"] = comp["font_scale"]
+                # The figure's look and card header. Left out when unset, so a
+                # figure that follows its section exports no key.
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -1439,6 +1462,9 @@ class DashboardDataLite(BaseModel):
                         "font_scale": comp_dict.get("font_scale"),
                     }
                 )
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp_dict.get(field) is not None:
+                        full_comp[field] = comp_dict[field]
 
             elif comp_type == "card":
                 full_comp.update(

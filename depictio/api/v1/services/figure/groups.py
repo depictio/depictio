@@ -41,6 +41,13 @@ CODE_GROUP_KWARGS = "depictio_group_kwargs"
 # below is then handed a column its frame no longer has. Empty list whenever
 # grouping is off, so the same line works ungrouped.
 CODE_GROUP_BY = "depictio_group_by"
+# The dashboard's colour per category, ``{column: {value: colour}}``, handed to
+# code mode the same way (see ``merge_category_colors`` for UI mode):
+#   px.box(..., color="locality",
+#          color_discrete_map=depictio_category_colors.get("locality"))
+# Always bound (an empty dict when the dashboard declares none), so code that
+# reads it never fails on a dashboard without colours.
+CODE_CATEGORY_COLORS = "depictio_category_colors"
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
 OTHER_COLOR = "#adb5bd"

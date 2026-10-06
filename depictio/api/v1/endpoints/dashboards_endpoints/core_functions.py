@@ -233,6 +233,27 @@ def family_category_colors(dashboard_dict: dict) -> dict | None:
     return (parent or {}).get("category_colors") or None
 
 
+def effective_category_colors(dashboard_dict: dict) -> dict[str, dict[str, str]] | None:
+    """The colour per category a tab draws in: the main tab's, with the tab's own
+    laid over it per column and value.
+
+    ``category_colors`` maps a column to its values' colours
+    (``{"locality": {"Athens": "#1a4f8f", …}}``), so a category keeps one
+    colour on every tile of every tab. Figures are rendered server side, so
+    they need the merged map the client builds from ``category_colors`` and
+    ``inherited_category_colors``. Read with ``.get``: the field is optional
+    on the stored document.
+    """
+    merged: dict[str, dict[str, str]] = {}
+    for layer in (family_category_colors(dashboard_dict), dashboard_dict.get("category_colors")):
+        if not isinstance(layer, dict):
+            continue
+        for column, values in layer.items():
+            if isinstance(values, dict) and values:
+                merged.setdefault(column, {}).update(values)
+    return merged or None
+
+
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
     """Load dashboards from MongoDB with project-based permissions."""
     projection = {

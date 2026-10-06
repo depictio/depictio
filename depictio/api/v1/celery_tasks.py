@@ -106,7 +106,13 @@ def build_figure_preview(payload: dict) -> dict:
             "selection_column"  (optional, render only),
           },
           "filter_metadata": [...],     # cleaned filters list
-          "theme": "light" | "dark"
+          "theme": "light" | "dark",
+          "style": {                    # optional, see `figure_style_payload`
+            "figure_style": "default" | "minimal",
+            "header_title": bool,       # the card header shows the title
+            "hide_legend": bool,
+          },
+          "category_colors": {column: {value: colour}},  # optional
         }
 
     Returns:
@@ -154,6 +160,7 @@ def build_figure_preview(payload: dict) -> dict:
 
     from depictio.api.v1.services.figure.figure_builder import _WHOLE_FRAME_VISU
     from depictio.api.v1.services.figure.groups import (
+        CODE_CATEGORY_COLORS,
         CODE_GROUP_BY,
         CODE_GROUP_KWARGS,
         GROUP_COLUMN,
@@ -490,6 +497,10 @@ def build_figure_preview(payload: dict) -> dict:
             extra_globals={
                 CODE_GROUP_KWARGS: code_group_kwargs,
                 CODE_GROUP_BY: code_group_by,
+                # The dashboard's colour per category, for code that wants the
+                # colours every other tile uses: `color_discrete_map=
+                # depictio_category_colors.get("locality")`.
+                CODE_CATEGORY_COLORS: dict(payload.get("category_colors") or {}),
             },
         )
         if not ok:
@@ -550,6 +561,25 @@ def build_figure_preview(payload: dict) -> dict:
         fig_dict = json.loads(fig.to_json())
     else:
         fig_dict = fig
+
+    # The figure's style preset, last: it restyles whatever the build produced
+    # (UI, code or aggregation path) on top of the theme and brand templates.
+    style = payload.get("style") or {}
+    if isinstance(style, dict) and isinstance(fig_dict, dict) and not code_error:
+        from depictio.api.v1.services.figure.style_presets import apply_figure_style
+
+        try:
+            fig_dict = apply_figure_style(
+                fig_dict,
+                style.get("figure_style"),
+                theme=theme,
+                header_title=bool(style.get("header_title")),
+                hide_legend=bool(style.get("hide_legend")),
+                category_colors=payload.get("category_colors") or None,
+            )
+        except Exception as exc:  # a style never costs the figure
+            logger.warning(f"celery_tasks.build_figure_preview: figure style skipped: {exc}")
+
     if isinstance(fig_dict, dict) and "layout" in fig_dict:
         fig_dict["layout"].setdefault("uirevision", "persistent")
 

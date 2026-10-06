@@ -21,6 +21,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+    effective_category_colors,
     family_brand_theme,
     family_category_colors,
     get_child_tabs,
@@ -58,7 +59,11 @@ from depictio.api.v1.services.card_metrics import (
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
 )
-from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
+from depictio.api.v1.services.figure.figure_builder import (
+    merge_category_colors,
+    merge_dashboard_brand_theme,
+)
+from depictio.api.v1.services.figure.style_presets import figure_style_payload
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
@@ -2911,10 +2916,17 @@ async def render_figure_endpoint(
          "groups": [{name, column_name, values, color}], "color_by_group": bool,
          "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
          "grouping_display": "color" | "facet",
-         "include_other": bool}
+         "include_other": bool,
+         "style": {"figure_style": "default" | "minimal",
+                   "header_title": bool, "hide_legend": bool}}
 
     ``full_load`` (default False) bypasses the point-plot row cap so the client
     can explicitly render every point on demand (slow on large datasets).
+
+    ``style`` (optional) overrides the figure's own look: a highlight drawing
+    this figure on another tab sends its own style and header. Without it the
+    figure's ``figure_style`` applies, else its grid section's (see
+    ``figure_style_payload``).
 
     ``groups`` + ``color_by_group`` (optional) ask for the figure to be colored
     by the caller's selection groups (issue #89); ``color_by_column`` asks for
@@ -2992,13 +3004,17 @@ async def render_figure_endpoint(
     # body re-coerces wf_id back to ObjectId for `load_deltatable_lite`.
     dc_config = component.get("dc_config") or {}
     mode = component.get("mode", "ui")
+    category_colors = effective_category_colors(dashboard_data)
     metadata = {
         "wf_id": str(wf_id),
         "dc_id": str(dc_id),
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": merge_dashboard_brand_theme(
-            family_brand_theme(dashboard_data), component.get("dict_kwargs") or {}
+        "dict_kwargs": merge_category_colors(
+            category_colors,
+            merge_dashboard_brand_theme(
+                family_brand_theme(dashboard_data), component.get("dict_kwargs") or {}
+            ),
         ),
         "mode": mode,
         "code_content": component.get("code_content", ""),
@@ -3042,7 +3058,12 @@ async def render_figure_endpoint(
         "filter_metadata": filter_metadata,
         "theme": theme,
         "full_load": full_load,
+        # The figure's own style, else its section's; a highlight drawing this
+        # figure on another tab asks for its own through `style`.
+        "style": figure_style_payload(component, dashboard_data, request.get("style")),
     }
+    if category_colors:
+        payload["category_colors"] = category_colors
     if color_by_group:
         payload["groups"] = group_defs
         payload["color_by_group"] = True

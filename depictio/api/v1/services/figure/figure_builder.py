@@ -75,6 +75,47 @@ def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict) -> dict:
     return merged
 
 
+def merge_category_colors(category_colors: Any, dict_kwargs: dict) -> dict:
+    """Colour a figure's categories the way the dashboard colours them.
+
+    ``category_colors`` is the dashboard family's ``{column: {value: colour}}``
+    (see ``effective_category_colors``). When the figure colours by a column that
+    has an entry, that entry becomes its ``color_discrete_map``, so a category
+    is drawn in one colour on every tile.
+
+    The component's own ``color_discrete_map`` still wins value by value: it is
+    laid over the dashboard's rather than replaced by it. Apply after
+    ``merge_dashboard_brand_theme``, so values the map does not name keep the
+    brand's colorway. Code-mode figures build their own kwargs; they receive
+    the same map as ``depictio_category_colors`` instead.
+    """
+    if not isinstance(category_colors, dict) or not isinstance(dict_kwargs, dict):
+        return dict_kwargs
+    column = dict_kwargs.get("color")
+    if not isinstance(column, str) or not column:
+        return dict_kwargs
+    palette = category_colors.get(column)
+    if not isinstance(palette, dict):
+        return dict_kwargs
+    palette = {str(k): v for k, v in palette.items() if isinstance(v, str) and v}
+    if not palette:
+        return dict_kwargs
+
+    explicit = dict_kwargs.get("color_discrete_map")
+    if isinstance(explicit, str) and explicit.strip():
+        # Stored from the builder or YAML as a JSON string; parsed the same way
+        # `create_figure_from_data` would.
+        import json
+
+        try:
+            explicit = json.loads(explicit)
+        except (json.JSONDecodeError, ValueError):
+            explicit = None
+    merged = dict(dict_kwargs)
+    merged["color_discrete_map"] = {**palette, **(explicit if isinstance(explicit, dict) else {})}
+    return merged
+
+
 # Scatter-family plots — one marker per row, and the only types we force to WebGL.
 _POINT_PLOT_TYPES = frozenset(
     {"scatter", "scatter_3d", "scatter_ternary", "scatter_polar", "strip"}
