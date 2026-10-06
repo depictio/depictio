@@ -164,16 +164,14 @@ def load_depictio_config(
     """
     Load the Depictio configuration file.
 
-    ``quiet`` suppresses the "Loading..." line, for callers that re-read an
-    already-loaded config only to name a field (the API URL in an error
-    message, the viewer URL in the summary). Without it those reads announce a
-    second load that never happened, in the middle of reporting a failure.
+    Unless ``quiet``, it announces the server the command will talk to, and from
+    which file: the wrong server is the usual reason a command fails. ``quiet`` is
+    for callers that re-read an already-loaded config only to name a field (the API
+    URL in an error message, the viewer URL in the summary).
     """
     try:
-        if not quiet:
-            rich_print_checked_statement("Loading Depictio configuration...", "loading")
         # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
-        # at a default - an explicit --CLI-config-path always wins.
+        # at a default - an explicit --server always wins.
         env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
         from_env = bool(env_path) and yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS
         if from_env:
@@ -184,7 +182,7 @@ def load_depictio_config(
         # message instead of a traceback. That matters most for an automated
         # trigger, where the path usually arrives from DEPICTIO_CLI_CONFIG_PATH.
         if not os.path.isfile(expanded):
-            source = "DEPICTIO_CLI_CONFIG_PATH" if from_env else "--CLI-config-path"
+            source = "DEPICTIO_CLI_CONFIG_PATH" if from_env else "--server"
             logger.error(f"Depictio CLI configuration file not found: {expanded} (from {source})")
             rich_print_checked_statement(
                 f"Depictio CLI configuration file not found: {expanded} (from {source}). "
@@ -195,6 +193,11 @@ def load_depictio_config(
         config = get_config(expanded)
         config = _apply_env_overrides(config)
         config = validate_depictio_cli_config(config)
+        if not quiet:
+            shown = expanded.replace(os.path.expanduser("~"), "~", 1)
+            rich_print_checked_statement(
+                f"Server: {config.api_base_url} (configuration {shown})", "info"
+            )
         return config
     except FileNotFoundError:
         logger.error(

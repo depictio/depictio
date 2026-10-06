@@ -370,11 +370,12 @@ class TestCommon:
             assert config.api_base_url == "https://quiet.example.org"
             assert printer.call_args_list == []
 
-        def test_default_still_announces_the_load(self, config_file):
-            """The flag is opt-in: every existing call site is unchanged."""
+        def test_default_announces_the_target_server(self, config_file):
+            """The flag is opt-in: by default the command says which server it uses."""
             with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
                 load_depictio_config(str(config_file))
 
             assert any(
-                "Loading Depictio configuration" in str(call) for call in printer.call_args_list
+                "Server: https://quiet.example.org" in str(call) and str(config_file) in str(call)
+                for call in printer.call_args_list
             )
