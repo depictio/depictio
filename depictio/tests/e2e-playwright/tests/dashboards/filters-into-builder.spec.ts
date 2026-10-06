@@ -61,11 +61,13 @@ function selectInput(page: Page, label: string) {
 /** Mantine's Switch forwards data-testid to its real <input>, which it keeps
  *  visually hidden (1×1 and clipped). Clicking that input fails with "Element
  *  is outside of the viewport" — `force` skips the actionability checks but
- *  still clicks at the element's coordinates. Click the <label> bound to it
- *  instead: that is the visible track, and what a user actually hits. */
+ *  still clicks at the element's coordinates. Click a <label> bound to it
+ *  instead: what a user actually hits. A SwitchField carries two (its text
+ *  label, then the switch's own track), both toggling the input, so take the
+ *  first rather than trip strict mode. */
 async function flipSwitch(page: Page, testId: string): Promise<void> {
   const id = await page.locator(`[data-testid='${testId}']`).getAttribute("id");
-  await page.locator(`label[for='${id}']`).click();
+  await page.locator(`label[for='${id}']`).first().click();
 }
 
 /** StepData: choose the Iris data collection. Basic projects render a single
