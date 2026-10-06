@@ -35,6 +35,7 @@ from depictio.models.models.transforms import RecipeSource
 _SOURCE_PATH = "_source_path"
 _SAMPLE_SUFFIX = ".fusions.csv"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     # No input_schema: every column is matched case-insensitively, with fallbacks.
     RecipeSource(
@@ -46,6 +47,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "fusion": pl.Utf8,
