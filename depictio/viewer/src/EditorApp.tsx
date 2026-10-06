@@ -2032,13 +2032,14 @@ const EditorApp: React.FC = () => {
               />
             )}
             <Box
-              px={4}
-              py={4}
               data-tour-id="editor-grid"
               data-testid="dashboard-content"
               style={{
                 // The same page width as the viewer, so the author lays the
-                // tab out at the width its readers get.
+                // tab out at the width its readers get. Padding goes here
+                // rather than as `px`/`py` props: Mantine writes those as
+                // paddingLeft/Right, which beat this paddingInline.
+                padding: 4,
                 ...(contentMaxWidth !== null
                   ? {
                       paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
