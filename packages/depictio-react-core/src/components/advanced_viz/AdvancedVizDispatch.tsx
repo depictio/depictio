@@ -57,6 +57,7 @@ import {
   useReportGroupReach,
 } from '../../groupReach';
 import GroupStatusBadge, { GroupStatusBadgeContext } from '../GroupStatusBadge';
+import { advancedVizChromeReset, isSourceFilterActive } from '../../selection';
 
 /** The hover line behind each way an advanced viz ends up "not grouped". */
 const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
@@ -332,6 +333,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     </>
   ) : undefined;
 
+  // "Reset selection", for a kind that draws its selection from the filter
+  // list (see `advancedVizChromeReset`); the same action and the same
+  // persistent orange state a scatter figure's lasso gets.
+  const onResetSelection =
+    onFilterChange && advancedVizChromeReset(metadata)
+      ? () => onFilterChange({ index: metadata.index, value: [], source: 'scatter_selection' })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
+
   return wrapWithChrome(
     'advanced_viz',
     metadata,
@@ -345,7 +355,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         </GroupStatusBadgeContext.Provider>
       </ComponentIndexContext.Provider>
     </AdvancedVizExtrasProvider>,
-    { extraActions: combinedExtras, showDragHandle },
+    { extraActions: combinedExtras, showDragHandle, onResetFilter: onResetSelection, sourceFilterActive },
   );
 };
 

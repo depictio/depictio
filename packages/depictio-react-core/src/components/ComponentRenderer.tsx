@@ -36,7 +36,7 @@ import SaveGroupAction, {
   selectionCandidateFor,
 } from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
-import { isMapSelectionEnabled, supportsSelectionGrouping } from '../selection';
+import { isMapSelectionEnabled, isSourceFilterActive, supportsSelectionGrouping } from '../selection';
 import { ActiveHighlight } from '../highlight';
 import type { GroupRenderState } from '../selectionGroups';
 
@@ -699,26 +699,6 @@ const SourceTabAction: React.FC<{ link: TabLinkTarget }> = ({ link }) => (
     </ActionIcon>
   </Tooltip>
 );
-
-/** A filter is "source-active" for this component when an entry exists with
- *  matching `index`, the expected `source` discriminator, and a non-empty
- *  value (avoid false-positives for filters that were emitted then cleared
- *  but kept in the array with `value: []`). */
-function isSourceFilterActive(
-  filters: InteractiveFilter[],
-  componentIndex: string,
-  expectedSource: InteractiveFilter['source'],
-): boolean {
-  for (const f of filters) {
-    if (f.index !== componentIndex) continue;
-    if (f.source !== expectedSource) continue;
-    const v = f.value;
-    if (v == null) continue;
-    if (Array.isArray(v) && v.length === 0) continue;
-    return true;
-  }
-  return false;
-}
 
 /**
  * The card's frame, which the tile has to pay for on top of the content: 1.5px
