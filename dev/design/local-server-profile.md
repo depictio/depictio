@@ -21,8 +21,10 @@ depictio local export-compose --out depictio-docker   # hand over to Docker Comp
 
 `up` starts the stack (or reuses the running one), ingests the directory, then
 opens the dashboard it made. `--template` is optional: without it `depictio run`
-picks the bundled template from the run's `pipeline_info/`, and it also takes the
-path to a `template.yaml`. Ingesting the same directory again changes nothing and
+picks the bundled template from the run's `pipeline_info/`, or composes one from
+the catalog when none fits (`--compose` forces that, `--include-unknown` /
+`--include <glob>` add the files the catalog does not recognise; see
+`run-directory-to-dashboard.md`), and it also takes the path to a `template.yaml`. Ingesting the same directory again changes nothing and
 opens the existing project's dashboard; `--refresh` ingests it again and resets
 its dashboards to the template's. Another directory that gets the same project
 name (a template names its project) stops there and asks for `--project-name`. `up` reads what happened from the file `run
