@@ -36,9 +36,10 @@ import {
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
 import {
   fitLayoutHeights,
+  fitPhoneRows,
+  gridRowPx,
   useAutofitHeights,
   GRID_ROW_GAP_PX,
-  GRID_ROW_PX,
 } from './autofit';
 
 /** Bucket key for what is left of the unsectioned components once the tab's
@@ -138,7 +139,11 @@ interface DashboardGridProps {
  *  itself, and its `correctBounds` clamps a right-hand tile onto its
  *  neighbour, which vertical compaction then pushes onto its own row — two
  *  half-width tables stack instead of sitting side by side. */
-export function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
+export function responsiveLayouts(
+  lg: Layout[],
+  /** Phone rows per fitted tile (`fitPhoneRows`); the rest keep their height. */
+  phoneRows?: Readonly<Record<string, number>>,
+): Record<string, Layout[]> {
   const scale = (cols: number) =>
     lg.map((item) => {
       const edge = (v: number) => Math.round((v * cols) / GRID_MAX_COLS);
@@ -153,7 +158,7 @@ export function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
     lg,
     md: scale(GRID_COL_COUNTS.md),
     sm: scale(GRID_COL_COUNTS.sm),
-    xs: phoneLayout(lg, GRID_COL_COUNTS.xs),
+    xs: phoneLayout(lg, GRID_COL_COUNTS.xs, phoneRows),
   };
 }
 
@@ -472,6 +477,16 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     [layouts, isDraggable, isResizable, autoHeights],
   );
 
+  // The same fit in phone rows, for the `xs` layout `responsiveLayouts` derives.
+  const phoneRowsForSection = useCallback(
+    (members: StoredMetadata[]): Record<string, number> => {
+      const ids = new Set(members.map((m) => m.index));
+      const mine = layouts.filter((l) => ids.has(l.i));
+      return fitPhoneRows(members, mine, autoHeights, !(isDraggable || isResizable));
+    },
+    [layouts, isDraggable, isResizable, autoHeights],
+  );
+
   const handleSectionLayoutChange = useCallback(
     (sectionKey: string, current: Layout[]) => {
       // `onLayoutChange` also fires on a breakpoint switch, carrying the
@@ -584,6 +599,14 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     isDraggable,
   ]);
 
+  // Explicit width rather than `WidthProvider`: that HOC installs its own
+  // window listener, which would fight `lockedWidthRef` and undo the
+  // panel-transition sync above. Sectioned grids sit inside the section box
+  // and get the room left inside it; the unsectioned bucket has no box and
+  // spans the wrapper.
+  const gridWidth = (section: ComponentSection) =>
+    section.sectionName ? Math.max(100, containerWidth - sectionInset) : containerWidth;
+
   const renderGrid = (section: ComponentSection) =>
     section.members.length === 0 ? (
       // Only reachable in edit mode (`includeEmpty`). Without a body a freshly
@@ -598,7 +621,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     ) : (
     <ResponsiveGridLayout
       className="layout"
-      layouts={responsiveLayouts(layoutsForSection(section.members))}
+      layouts={responsiveLayouts(
+        layoutsForSection(section.members),
+        phoneRowsForSection(section.members),
+      )}
       // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
       // grid down to narrow content widths so opening the panels shrinks
       // components instead of wrapping them; fewer columns are a phone-only
@@ -608,13 +634,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       onBreakpointChange={(bp) => {
         breakpointRef.current = bp;
       }}
-      rowHeight={GRID_ROW_PX}
-      // Explicit width rather than `WidthProvider`: that HOC installs its own
-      // window listener, which would fight `lockedWidthRef` and undo the
-      // panel-transition sync above. Sectioned grids sit inside the section box
-      // and get the room left inside it; the unsectioned bucket has no box and
-      // spans the wrapper.
-      width={section.sectionName ? Math.max(100, containerWidth - sectionInset) : containerWidth}
+      // Phone rows below `sm`, which the `xs` layout's heights are counted in.
+      rowHeight={gridRowPx(gridWidth(section))}
+      width={gridWidth(section)}
       // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
       // between side-by-side cards / plots) but vertical drops to 4 px so
       // stacked rows feel tightly packed — short text intros, Manhattan→

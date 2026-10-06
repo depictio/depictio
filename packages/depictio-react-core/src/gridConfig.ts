@@ -25,8 +25,27 @@ export const GRID_MAX_COLS = GRID_COL_COUNTS.lg;
 /** The only breakpoint whose layout is ever persisted. */
 export const GRID_WIDEST_BREAKPOINT = 'lg';
 
+/**
+ * Phone rows per desktop row.
+ *
+ * A text tile reflows to about twice its lines on a phone, and a whole desktop
+ * row (100px) of rounding then leaves up to that much blank under it. Phone
+ * rows are half as tall with the same gap, so two of them span exactly one
+ * desktop row: figures and cards keep their height to the pixel, and text
+ * stops within half a row of its last line.
+ */
+export const PHONE_ROW_SPLIT = 2;
+
+/** Whether a grid this wide lays out for a phone (the `xs` breakpoint).
+ *  Mirrors react-grid-layout's `getBreakpointFromWidth`, which takes the
+ *  widest breakpoint the width strictly exceeds. */
+export function isPhoneWidth(width: number): boolean {
+  return width <= GRID_BREAKPOINTS.sm;
+}
+
 /** The geometry a layout item carries (react-grid-layout's `Layout`). */
 export interface GridTile {
+  i: string;
   x: number;
   y: number;
   w: number;
@@ -42,8 +61,16 @@ export interface GridTile {
  * two columns: four quarter-width cards put three of their edges on the same
  * column, compaction then stacks those three down the right-hand side, and two
  * half-width figures stay side by side at a phone's half width.
+ *
+ * Heights are in phone rows (see `PHONE_ROW_SPLIT`): a tile keeps its desktop
+ * height exactly, unless `phoneRows` gives the rows its content needs at this
+ * width — a text tile's prose, which reflows to twice its desktop lines.
  */
-export function phoneLayout<T extends GridTile>(lg: T[], cols: number): T[] {
+export function phoneLayout<T extends GridTile>(
+  lg: T[],
+  cols: number,
+  phoneRows: Readonly<Record<string, number>> = {},
+): T[] {
   const half = Math.max(1, Math.floor(cols / 2));
   const ordered = [...lg].sort((a, b) => a.y - b.y || a.x - b.x);
   const out: T[] = [];
@@ -57,9 +84,10 @@ export function phoneLayout<T extends GridTile>(lg: T[], cols: number): T[] {
       x = 0;
       rowH = 0;
     }
-    out.push({ ...item, x, y, w });
+    const h = phoneRows[item.i] ?? item.h * PHONE_ROW_SPLIT;
+    out.push({ ...item, x, y, w, h });
     x += w;
-    rowH = Math.max(rowH, item.h);
+    rowH = Math.max(rowH, h);
   }
   return out;
 }

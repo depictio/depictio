@@ -124,7 +124,10 @@
 }
 
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-plain + .depictio-section-item,
-.depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item.is-plain {
+.depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item.is-plain,
+/* The first heading after the tab's opening tiles: the accordion's first item,
+   so the rules above never reach it, and it sat on the tile above it. */
+.react-grid-layout + .depictio-section-accordion:not(.is-compact) > .depictio-section-item.is-plain:first-child {
   margin-top: calc(var(--mantine-spacing-xl) * 1.5);
 }
 

@@ -17,7 +17,13 @@ import {
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
-import { fitLayoutHeights, GRID_ROW_GAP_PX, GRID_ROW_PX, useAutofitHeights } from './autofit';
+import {
+  fitLayoutHeights,
+  fitPhoneRows,
+  gridRowPx,
+  GRID_ROW_GAP_PX,
+  useAutofitHeights,
+} from './autofit';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -252,6 +258,9 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
       >
         {renderable.map(({ section, members }) => {
           const key = hostSectionKey(section);
+          const metas = members.map((m) => m.metadata);
+          const stored = normalizeLayout(metas, section.layouts, false);
+          const gridWidth = Math.max(100, containerWidth - sectionInset);
           return (
             <SectionAccordionItem
               key={key}
@@ -298,7 +307,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                           key,
                           sectionName: section.spec.name,
                           spec: section.spec,
-                          members: members.map((m) => m.metadata),
+                          members: metas,
                         }}
                         cardValues={cardValues}
                         baseValues={filtered && baseValues ? baseValues : undefined}
@@ -323,20 +332,14 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                       // half-width tile with the first, stacking a two-table row
                       // below 1440px.
                       layouts={responsiveLayouts(
-                        fitLayoutHeights(
-                          members.map((m) => m.metadata),
-                          normalizeLayout(
-                            members.map((m) => m.metadata),
-                            section.layouts,
-                            false,
-                          ),
-                          autoHeights,
-                        ),
+                        fitLayoutHeights(metas, stored, autoHeights),
+                        fitPhoneRows(metas, stored, autoHeights),
                       )}
                       breakpoints={GRID_BREAKPOINTS}
                       cols={GRID_COL_COUNTS}
-                      rowHeight={GRID_ROW_PX}
-                      width={Math.max(100, containerWidth - sectionInset)}
+                      // Phone rows below `sm`, as in DashboardGrid.
+                      rowHeight={gridRowPx(gridWidth)}
+                      width={gridWidth}
                       // Same asymmetric gap as the main grid, from the same
                       // constants: gridConfig.ts's header warns these two
                       // surfaces must not drift.
