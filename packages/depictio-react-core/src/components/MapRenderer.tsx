@@ -76,6 +76,9 @@ interface MapRendererProps {
   };
 }
 
+/** Below this tile width a map floats its legend over the basemap. */
+const NARROW_MAP_PX = 560;
+
 /**
  * Renders a Plotly map component (px.scatter_map / density_map / choropleth_map).
  * Mirrors FigureRenderer: server returns a Plotly figure dict via
@@ -87,6 +90,7 @@ interface MapRendererProps {
  * choropleth shapes are non-point geometries that Plotly's selection events
  * don't cover, mirroring Dash's behavior.
  */
+
 const MapRenderer: React.FC<MapRendererProps> = ({
   dashboardId,
   metadata,
@@ -474,6 +478,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   }, [onSettingsNode, settingsNode]);
   useEffect(() => () => onSettingsNode?.(null), [onSettingsNode]);
 
+  // A legend beside the map takes a column of its own, which a narrow tile (a
+  // phone, a half-width tile on a small screen) cannot spare: the fit, which
+  // only knows the container, then crops the outermost points. Narrow tiles
+  // float it over the map the way a bare host always does.
+  const floatLegend = bare || (boxSize !== null && boxSize.width < NARROW_MAP_PX);
+
   const layout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {
       ...((figure?.layout as Record<string, unknown>) || {}),
@@ -510,7 +520,8 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // rather than something to reconcile against a stashed GUI edit.
     base.selectionrevision = selectedKey || 'none';
 
-    // Float the legend over the map instead of beside it — bare hosts only.
+    // Float the legend over the map instead of beside it — bare hosts and
+    // narrow tiles only.
     //
     // Plotly's default vertical legend sits at x=1.02 — outside the plot area —
     // and `expandMargin` (components/legend/draw.js) turns that into a right
@@ -523,10 +534,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // of the plot area, and with a zero top margin the two land on top of each
     // other. Bottom-right belongs to the basemap credit.
     //
-    // A grid tile is not short of width, so it keeps Plotly's own placement at
-    // full size: the 10px plate is a trade the panel makes and a full-width map
-    // has no reason to.
-    if (bare) {
+    // A wide grid tile is not short of width, so it keeps Plotly's own
+    // placement at full size: the 10px plate is a trade a narrow tile makes and
+    // a full-width map has no reason to.
+    if (floatLegend) {
       const srcLegend = (figure?.layout?.legend as Record<string, unknown>) || {};
       base.legend = {
         ...srcLegend,
@@ -553,12 +564,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // Plotly Express always routes map colour through `layout.coloraxis`, so
     // there is no per-trace colour bar to chase here.
     const coloraxis = figure?.layout?.coloraxis as Record<string, unknown> | undefined;
-    if (coloraxis && (bare || !showLegend)) {
+    if (coloraxis && (floatLegend || !showLegend)) {
       const cb = (coloraxis.colorbar as Record<string, unknown>) || {};
       base.coloraxis = {
         ...coloraxis,
         ...(showLegend ? {} : { showscale: false }),
-        ...(bare
+        ...(floatLegend
           ? {
               colorbar: {
                 ...cb,
@@ -606,7 +617,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     selectionEnabled,
     metadata.selection_mode,
     refreshTick,
-    bare,
+    floatLegend,
     selectedKey,
     showLegend,
     overlayPlate,
