@@ -1,9 +1,9 @@
 import React from 'react';
-import { Anchor, Group, Text } from '@mantine/core';
+import { Anchor, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { IconBadge } from 'depictio-components';
 
-import { glyphColorVar } from './Glyph';
+import Glyph, { glyphColorVar } from './Glyph';
 import type { TabLinkTarget } from './tabLinks';
 
 /**
@@ -64,18 +64,32 @@ const FigureHeader: React.FC<FigureHeaderProps> = ({
       </Group>
       {badges}
       {source && (
-        <Anchor
-          href={source.href}
-          size="xs"
-          c="dimmed"
-          underline="hover"
-          ml="auto"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', flex: 'none' }}
-          data-testid="figure-header-source"
-        >
-          Open in {source.label}
-          <Icon icon="mdi:arrow-right" width={13} />
-        </Anchor>
+        // The tab it comes from as its icon and an arrow, the name on hover:
+        // spelled out, "Open in Community & Diversity" took the room the
+        // subtitle needed on a narrow tile.
+        <Tooltip label={`Open in ${source.label}`} withArrow openDelay={200}>
+          <Anchor
+            href={source.href}
+            c="dimmed"
+            ml="auto"
+            aria-label={`Open in ${source.label}`}
+            className="depictio-figure-header-source"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 2,
+              flex: 'none',
+              padding: '2px 4px',
+              borderRadius: 6,
+            }}
+            data-testid="figure-header-source"
+          >
+            {source.icon ? (
+              <Glyph icon={source.icon} color={source.color} size={15} />
+            ) : null}
+            <Icon icon="mdi:arrow-top-right" width={13} />
+          </Anchor>
+        </Tooltip>
       )}
     </Group>
   );
