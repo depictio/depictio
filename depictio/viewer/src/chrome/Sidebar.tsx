@@ -19,6 +19,8 @@ import {
   brandAccent,
   groupTabs,
   isImagePath,
+  sameTabGroup,
+  tabGroupOf,
   isMultiqcIcon,
   themedIconSrc,
   useBranding,
@@ -170,6 +172,8 @@ export function resolveTabColor(
 /** Reserved sentinel value — clicking the trailing pill triggers `onAddTab`
  *  rather than navigating. Mirrors Dash's `__add_tab__` (`tab_callbacks.py:148-161`). */
 const ADD_TAB_VALUE = '__add_tab__';
+/** Same trick for the "+ New group" pill. */
+const NEW_GROUP_VALUE = '__new_group__';
 
 export type TabMoveDirection = 'up' | 'down';
 
@@ -184,6 +188,16 @@ interface SidebarProps {
   onDeleteTab?: (tab: DashboardSummary) => void;
   onMoveTab?: (tab: DashboardSummary, direction: TabMoveDirection) => void;
   onAddTab?: () => void;
+  /** Edit-mode group handlers. A group is the `tab_group` its tabs share; each
+   *  handler is optional, and the matching menu entry is hidden without it. */
+  onRenameGroup?: (group: string) => void;
+  onMoveGroup?: (group: string, direction: TabMoveDirection) => void;
+  onAddTabToGroup?: (group: string) => void;
+  onUngroup?: (group: string) => void;
+  /** Opens the New group dialog, optionally with tabs already picked. */
+  onNewGroup?: (tabIds?: string[]) => void;
+  /** Moves one tab into `group` (null: out of any group). */
+  onMoveTabToGroup?: (tab: DashboardSummary, group: string | null) => void;
   /** The dashboard's own brand theme. Its logo renders centered at the
    *  bottom of the sidebar, just above the footer divider; when the dashboard
    *  doesn't set one it inherits the instance logo. */
@@ -206,6 +220,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeleteTab,
   onMoveTab,
   onAddTab,
+  onRenameGroup,
+  onMoveGroup,
+  onAddTabToGroup,
+  onUngroup,
+  onNewGroup,
+  onMoveTabToGroup,
   brandTheme,
 }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -270,10 +290,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Tabs naming a `tab_group` are drawn together under its name; the main tab
   // and the ungrouped tabs lead, with no heading.
   const sections = groupTabs(tabs);
+  const groupNames = sections.flatMap((s) => (s.group ? [s.group] : []));
 
   // Pre-compute the first/last child of each section so Move up/down can be
   // disabled appropriately. A move stays inside its section (a tab changes
-  // group from the Edit modal), so the bounds are per section. Main tab (no
+  // group from "Move to group" or the Edit modal), so the bounds are per section. Main tab (no
   // parent_dashboard_id) is always at the top and never moves, so it doesn't
   // count toward "first child".
   const firstChildIds = new Set<string>();
@@ -303,6 +324,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     // already-active tab is a no-op because the anchor navigates to the same
     // URL the browser is on.)
     if (value === ADD_TAB_VALUE) onAddTab?.();
+    else if (value === NEW_GROUP_VALUE) onNewGroup?.();
   };
 
   const renderTab = (d: DashboardSummary) => {
@@ -359,6 +381,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         onEditTab={onEditTab}
         onDeleteTab={onDeleteTab}
         onMoveTab={onMoveTab}
+        groupNames={groupNames}
+        onMoveTabToGroup={onMoveTabToGroup}
+        onNewGroup={onNewGroup}
       />
     ) : undefined;
 
@@ -449,19 +474,46 @@ const Sidebar: React.FC<SidebarProps> = ({
                     key={section.group === null ? 'ungrouped' : `group:${section.group}`}
                   >
                     {section.group !== null && (
-                      // Same type as the "Tabs" heading above, set in line with
-                      // the pill icons so it reads as a category within it.
-                      <Text
-                        c="dimmed"
-                        size="xs"
-                        tt="uppercase"
-                        fw={700}
-                        pl="xs"
+                      <Group
+                        gap={4}
+                        wrap="nowrap"
+                        justify="space-between"
                         mt={6}
-                        truncate="end"
+                        pr={isEdit ? 4 : undefined}
+                        data-testid="sidebar-tab-group"
                       >
-                        {section.group}
-                      </Text>
+                        {/* Same type as the "Tabs" heading above, set in line
+                            with the pill icons so it reads as a category. */}
+                        <Text
+                          c="dimmed"
+                          size="xs"
+                          tt="uppercase"
+                          fw={700}
+                          pl="xs"
+                          truncate="end"
+                          style={{ minWidth: 0 }}
+                        >
+                          {section.group}
+                        </Text>
+                        {isEdit && (
+                          <GroupMenu
+                            group={section.group}
+                            isFirst={section.group === groupNames[0]}
+                            isLast={section.group === groupNames[groupNames.length - 1]}
+                            opened={openMenuTabId === `group:${section.group}`}
+                            onOpen={() => setOpenMenuTabId(`group:${section.group}`)}
+                            onClose={() =>
+                              setOpenMenuTabId((cur) =>
+                                cur === `group:${section.group}` ? null : cur,
+                              )
+                            }
+                            onRenameGroup={onRenameGroup}
+                            onMoveGroup={onMoveGroup}
+                            onAddTabToGroup={onAddTabToGroup}
+                            onUngroup={onUngroup}
+                          />
+                        )}
+                      </Group>
                     )}
                     {section.tabs.map(renderTab)}
                   </React.Fragment>
@@ -485,6 +537,27 @@ const Sidebar: React.FC<SidebarProps> = ({
                     pl="xs"
                   >
                     <span className="depictio-chrome-tab-label">Add tab</span>
+                  </Tabs.Tab>
+                )}
+                {/* "+ New group" — a group is only a name its tabs share, so
+                    without this an author had to find the Group field in a
+                    tab's Edit dialog to start one. */}
+                {isEdit && onNewGroup && (
+                  <Tabs.Tab
+                    key={NEW_GROUP_VALUE}
+                    value={NEW_GROUP_VALUE}
+                    leftSection={
+                      <Icon
+                        icon="mdi:folder-plus-outline"
+                        width={18}
+                        height={18}
+                        style={{ flexShrink: 0 }}
+                      />
+                    }
+                    pl="xs"
+                    data-testid="sidebar-new-group"
+                  >
+                    <span className="depictio-chrome-tab-label">New group</span>
                   </Tabs.Tab>
                 )}
               </Tabs.List>
@@ -535,6 +608,10 @@ interface TabMenuProps {
   onEditTab?: (tab: DashboardSummary) => void;
   onDeleteTab?: (tab: DashboardSummary) => void;
   onMoveTab?: (tab: DashboardSummary, direction: TabMoveDirection) => void;
+  /** The family's groups, for the "Move to group" page. */
+  groupNames: string[];
+  onMoveTabToGroup?: (tab: DashboardSummary, group: string | null) => void;
+  onNewGroup?: (tabIds?: string[]) => void;
 }
 
 /**
@@ -551,6 +628,11 @@ interface TabMenuProps {
  *
  * Click handlers stop propagation to prevent the surrounding Tabs.Tab from
  * navigating when the user opens the menu.
+ *
+ * "Move to group" is a second page of the same dropdown, as "Move to section"
+ * is on a component's menu (`GridItemEditOverlay`): the family's groups, "No
+ * group", and "New group…", which opens the New group dialog with this tab
+ * already picked.
  */
 const TabMenu: React.FC<TabMenuProps> = ({
   tab,
@@ -563,7 +645,12 @@ const TabMenu: React.FC<TabMenuProps> = ({
   onEditTab,
   onDeleteTab,
   onMoveTab,
+  groupNames,
+  onMoveTabToGroup,
+  onNewGroup,
 }) => {
+  const [page, setPage] = useState<'actions' | 'groups'>('actions');
+  const currentGroup = tabGroupOf(tab);
   const stop = (e: React.SyntheticEvent) => {
     // Stop the click bubbling to the Tabs.Tab (which would switch tab) AND
     // cancel the default action: `renderRoot` renders the tab as an
@@ -588,9 +675,15 @@ const TabMenu: React.FC<TabMenuProps> = ({
         withinPortal
         zIndex={Z_LAYERS.tooltip}
         shadow="md"
-        width={170}
+        width={210}
         opened={opened}
-        onChange={(o) => (o ? onOpen() : onClose())}
+        onChange={(o) => {
+          if (o) onOpen();
+          else {
+            onClose();
+            setPage('actions');
+          }
+        }}
         closeOnItemClick
       >
         <Menu.Target>
@@ -604,36 +697,106 @@ const TabMenu: React.FC<TabMenuProps> = ({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item
-            leftSection={<Icon icon="tabler:edit" width={14} />}
-            onClick={() => onEditTab?.(tab)}
-          >
-            Edit
-          </Menu.Item>
-          {!isParent && (
+          {page === 'groups' ? (
             <>
               <Menu.Item
-                leftSection={<Icon icon="tabler:arrow-up" width={14} />}
-                disabled={isFirstChild}
-                onClick={() => onMoveTab?.(tab, 'up')}
+                closeMenuOnClick={false}
+                leftSection={<Icon icon="mdi:chevron-left" width={14} />}
+                onClick={() => setPage('actions')}
               >
-                Move up
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<Icon icon="tabler:arrow-down" width={14} />}
-                disabled={isLastChild}
-                onClick={() => onMoveTab?.(tab, 'down')}
-              >
-                Move down
+                Back
               </Menu.Item>
               <Menu.Divider />
+              <Menu.Label>Move to group</Menu.Label>
+              <ScrollArea.Autosize mah={240} type="auto">
+                {groupNames.map((g) => {
+                  const current = sameTabGroup(g, currentGroup);
+                  return (
+                    <Menu.Item
+                      key={g}
+                      disabled={current}
+                      leftSection={
+                        <Icon
+                          icon={current ? 'mdi:check' : 'mdi:folder-outline'}
+                          width={14}
+                        />
+                      }
+                      onClick={() => onMoveTabToGroup?.(tab, g)}
+                    >
+                      {g}
+                    </Menu.Item>
+                  );
+                })}
+              </ScrollArea.Autosize>
               <Menu.Item
-                color="red"
-                leftSection={<Icon icon="tabler:trash" width={14} />}
-                onClick={() => onDeleteTab?.(tab)}
+                disabled={currentGroup === null}
+                leftSection={
+                  <Icon
+                    icon={currentGroup === null ? 'mdi:check' : 'mdi:folder-off-outline'}
+                    width={14}
+                  />
+                }
+                onClick={() => onMoveTabToGroup?.(tab, null)}
               >
-                Delete
+                No group
               </Menu.Item>
+              {onNewGroup && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Item
+                    leftSection={<Icon icon="mdi:folder-plus-outline" width={14} />}
+                    onClick={() => onNewGroup([tab.dashboard_id])}
+                  >
+                    New group…
+                  </Menu.Item>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <Menu.Item
+                leftSection={<Icon icon="tabler:edit" width={14} />}
+                onClick={() => onEditTab?.(tab)}
+              >
+                Edit
+              </Menu.Item>
+              {!isParent && (
+                <>
+                  <Menu.Item
+                    leftSection={<Icon icon="tabler:arrow-up" width={14} />}
+                    disabled={isFirstChild}
+                    onClick={() => onMoveTab?.(tab, 'up')}
+                  >
+                    Move up
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<Icon icon="tabler:arrow-down" width={14} />}
+                    disabled={isLastChild}
+                    onClick={() => onMoveTab?.(tab, 'down')}
+                  >
+                    Move down
+                  </Menu.Item>
+                  {onMoveTabToGroup && (
+                    <Menu.Item
+                      // Opens the second page, so the menu has to stay open.
+                      closeMenuOnClick={false}
+                      leftSection={<Icon icon="mdi:folder-move-outline" width={14} />}
+                      rightSection={<Icon icon="mdi:chevron-right" width={14} />}
+                      onClick={() => setPage('groups')}
+                    >
+                      Move to group
+                    </Menu.Item>
+                  )}
+                  <Menu.Divider />
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Icon icon="tabler:trash" width={14} />}
+                    onClick={() => onDeleteTab?.(tab)}
+                  >
+                    Delete
+                  </Menu.Item>
+                </>
+              )}
             </>
           )}
         </Menu.Dropdown>
@@ -641,5 +804,107 @@ const TabMenu: React.FC<TabMenuProps> = ({
     </Box>
   );
 };
+
+interface GroupMenuProps {
+  group: string;
+  isFirst: boolean;
+  isLast: boolean;
+  opened: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onRenameGroup?: (group: string) => void;
+  onMoveGroup?: (group: string, direction: TabMoveDirection) => void;
+  onAddTabToGroup?: (group: string) => void;
+  onUngroup?: (group: string) => void;
+}
+
+/**
+ * The "..." menu on a group heading (edit mode), styled like the per-tab one.
+ * Moving a group moves its whole block of tabs among the other groups; the
+ * ungrouped tabs, main tab included, always stay above the groups.
+ */
+const GroupMenu: React.FC<GroupMenuProps> = ({
+  group,
+  isFirst,
+  isLast,
+  opened,
+  onOpen,
+  onClose,
+  onRenameGroup,
+  onMoveGroup,
+  onAddTabToGroup,
+  onUngroup,
+}) => (
+  <Menu
+    position="bottom-end"
+    withinPortal
+    zIndex={Z_LAYERS.tooltip}
+    shadow="md"
+    width={210}
+    opened={opened}
+    onChange={(o) => (o ? onOpen() : onClose())}
+    closeOnItemClick
+  >
+    <Menu.Target>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size="sm"
+        aria-label={`Group actions: ${group}`}
+        data-testid="sidebar-tab-group-menu"
+      >
+        <Icon icon="tabler:dots-vertical" width={16} />
+      </ActionIcon>
+    </Menu.Target>
+    <Menu.Dropdown>
+      <Menu.Label>{group}</Menu.Label>
+      {onRenameGroup && (
+        <Menu.Item
+          leftSection={<Icon icon="tabler:edit" width={14} />}
+          onClick={() => onRenameGroup(group)}
+        >
+          Rename group…
+        </Menu.Item>
+      )}
+      {onAddTabToGroup && (
+        <Menu.Item
+          leftSection={<Icon icon="mdi:plus" width={14} />}
+          onClick={() => onAddTabToGroup(group)}
+        >
+          Add tab to this group
+        </Menu.Item>
+      )}
+      {onMoveGroup && (
+        <>
+          <Menu.Item
+            leftSection={<Icon icon="tabler:arrow-up" width={14} />}
+            disabled={isFirst}
+            onClick={() => onMoveGroup(group, 'up')}
+          >
+            Move group up
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<Icon icon="tabler:arrow-down" width={14} />}
+            disabled={isLast}
+            onClick={() => onMoveGroup(group, 'down')}
+          >
+            Move group down
+          </Menu.Item>
+        </>
+      )}
+      {onUngroup && (
+        <>
+          <Menu.Divider />
+          <Menu.Item
+            leftSection={<Icon icon="mdi:folder-off-outline" width={14} />}
+            onClick={() => onUngroup(group)}
+          >
+            Ungroup
+          </Menu.Item>
+        </>
+      )}
+    </Menu.Dropdown>
+  </Menu>
+);
 
 export default Sidebar;

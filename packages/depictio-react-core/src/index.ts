@@ -52,8 +52,17 @@ export { default as TextRenderer } from './components/TextRenderer';
 export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
-export { groupTabs, tabGroupNames, tabGroupOf } from './components/tabGroups';
-export type { GroupableTab, TabGroup } from './components/tabGroups';
+export {
+  groupTabs,
+  sameTabGroup,
+  tabGroupNames,
+  tabGroupOf,
+  tabIdsInGroup,
+  tabOrderAfterGroupMove,
+  tabOrderAfterRegroup,
+  tabOrderEntries,
+} from './components/tabGroups';
+export type { EditableTab, GroupableTab, TabGroup } from './components/tabGroups';
 export { tabDisplayName, tabFamilyOf } from './components/tabFamily';
 export type { FamilyTab } from './components/tabFamily';
 export { canCopyToTab, copyComponentToTab } from './components/copyToTab';

@@ -129,6 +129,7 @@ import { applySectionOp, groupWith, sectionsFor } from './components/sections/se
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
+import { useTabGroupActions } from './chrome/useTabGroupActions';
 import NotesFooter from './components/NotesFooter';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
@@ -268,6 +269,8 @@ const EditorApp: React.FC = () => {
     mode: 'create' | 'edit';
     target: DashboardSummary | null;
     submitting: boolean;
+    /** Create mode: the Group the new tab is prefilled with. */
+    group?: string | null;
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
@@ -1403,14 +1406,23 @@ const EditorApp: React.FC = () => {
     }
   }, []);
 
-  const openCreateTabModal = useCallback(() => {
+  const openCreateTabModal = useCallback((group?: string | null) => {
     setTabModalState({
       open: true,
       mode: 'create',
       target: null,
       submitting: false,
+      group: group ?? null,
     });
   }, []);
+
+  // Tab groups: the sidebar's group menus, "+ New group" and a tab's "Move to
+  // group". Persisted as tab patches + a reorder, then the list refreshes.
+  const tabGroupActions = useTabGroupActions({
+    tabs: tabSiblings,
+    refresh: refreshTabList,
+    openCreateTab: openCreateTabModal,
+  });
 
   const openEditTabModal = useCallback((tab: DashboardSummary) => {
     setTabModalState({
@@ -1849,10 +1861,16 @@ const EditorApp: React.FC = () => {
           tabs={tabSiblings}
           activeId={dashboardId}
           mode="edit"
-          onAddTab={openCreateTabModal}
+          onAddTab={() => openCreateTabModal()}
           onEditTab={openEditTabModal}
           onDeleteTab={handleDeleteTab}
           onMoveTab={handleMoveTab}
+          onRenameGroup={tabGroupActions.onRenameGroup}
+          onMoveGroup={tabGroupActions.onMoveGroup}
+          onAddTabToGroup={tabGroupActions.onAddTabToGroup}
+          onUngroup={tabGroupActions.onUngroup}
+          onNewGroup={tabGroupActions.onNewGroup}
+          onMoveTabToGroup={tabGroupActions.onMoveTabToGroup}
           brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
         />
       </AppShell.Navbar>
@@ -2120,11 +2138,13 @@ const EditorApp: React.FC = () => {
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
 
+      {tabGroupActions.modals}
       <TabModal
         opened={tabModalState.open}
         mode={tabModalState.mode}
         tab={tabModalState.target}
         groupOptions={tabGroupOptions}
+        initialGroup={tabModalState.group}
         onClose={closeTabModal}
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}

@@ -67,6 +67,9 @@ interface TabModalProps {
   tab?: DashboardSummary | null;
   /** Groups the dashboard's tabs already use, offered as suggestions. */
   groupOptions?: string[];
+  /** Create mode: the Group the new tab starts in (a group's "Add tab to this
+   *  group", or the New group dialog). */
+  initialGroup?: string | null;
   onClose: () => void;
   onSubmit: (payload: TabModalSubmitPayload) => Promise<void> | void;
   /** True while the parent's submit handler is in flight. Disables actions. */
@@ -93,6 +96,7 @@ const TabModal: React.FC<TabModalProps> = ({
   mode,
   tab,
   groupOptions = [],
+  initialGroup = null,
   onClose,
   onSubmit,
   submitting = false,
@@ -121,9 +125,9 @@ const TabModal: React.FC<TabModalProps> = ({
       setMainTabName('');
       setTabIcon('');
       setTabIconColor('');
-      setTabGroup('');
+      setTabGroup(initialGroup ?? '');
     }
-  }, [opened, mode, tab]);
+  }, [opened, mode, tab, initialGroup]);
 
   const handleSubmit = async () => {
     const trimmedTitle = title.trim();
