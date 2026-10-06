@@ -17,6 +17,8 @@ import {
 import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
 import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
+import { openRunParameters } from '../utils/runParameters';
+import StepFlow from './StepFlow';
 import TabTiles from './TabTiles';
 import { parseTabTile, TabLinkResolver, TabTileItem, useTabLinkResolver } from './tabLinks';
 
@@ -83,6 +85,25 @@ const renderInlineMarkdown = (
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
             >
               {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
+              {token.value}
+            </Anchor>
+          );
+        }
+        if (token.href.startsWith('params:')) {
+          // The run's parameters, opened in the viewer's dialog rather than
+          // navigated to: there is no page of them to go to.
+          const query = token.href.slice('params:'.length);
+          return (
+            <Anchor
+              key={idx}
+              component="button"
+              type="button"
+              inherit
+              fw={600}
+              onClick={() => openRunParameters(query)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+            >
+              <Glyph icon="mdi:tune-variant" color="currentColor" size={16} />
               {token.value}
             </Anchor>
           );
@@ -447,8 +468,19 @@ const MarkdownBody: React.FC<{
                 />
               );
             }
-            const facts = block.ordered ? [] : block.items.map(parseFact);
+            const facts = block.items.map(parseFact);
             if (facts.length && facts.every(Boolean)) {
+              // Numbered facts are steps: their order is what they say.
+              if (block.ordered) {
+                return (
+                  <StepFlow
+                    key={idx}
+                    steps={facts as Fact[]}
+                    inline={inline}
+                    accentColor={accentColor}
+                  />
+                );
+              }
               return framed ? (
                 <FactTable key={idx} facts={facts as Fact[]} inline={inline} />
               ) : (

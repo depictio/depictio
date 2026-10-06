@@ -1,0 +1,109 @@
+/* StepFlow: a numbered list of facts drawn as a process. */
+
+.depictio-step-flow-box {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.depictio-step-flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  width: 100%;
+}
+
+.depictio-step {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.depictio-step-rail {
+  display: flex;
+  align-items: center;
+}
+
+.depictio-step-mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--step-accent);
+  background: color-mix(in srgb, var(--step-accent) 12%, var(--mantine-color-body));
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rail runs from each mark to the next one's. */
+.depictio-step-line {
+  flex: 1;
+  height: 2px;
+  margin: 0 10px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--step-accent) 28%, transparent);
+}
+
+.depictio-step:last-child .depictio-step-line {
+  visibility: hidden;
+}
+
+.depictio-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 16px;
+  min-width: 0;
+}
+
+.depictio-step-label {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.depictio-step-value {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* Too narrow to go across: down the tile, the rail between the marks. */
+@container (max-width: 600px) {
+  .depictio-step-flow {
+    flex-direction: column;
+  }
+
+  .depictio-step {
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .depictio-step-rail {
+    flex-direction: column;
+    align-self: stretch;
+  }
+
+  .depictio-step-line {
+    flex: 1;
+    width: 2px;
+    height: auto;
+    min-height: 8px;
+    margin: 4px 0;
+  }
+
+  .depictio-step-body {
+    padding: 7px 0 14px;
+  }
+
+  .depictio-step:last-child .depictio-step-body {
+    padding-bottom: 0;
+  }
+}

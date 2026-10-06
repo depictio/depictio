@@ -108,3 +108,16 @@ describe('inline icons', () => {
     }
   });
 });
+
+describe('run parameter links', () => {
+  it('reads params: with and without a search', () => {
+    expect(parseInlineMarkdown('[All parameters](params:)')).toEqual([
+      { type: 'link', value: 'All parameters', href: 'params:', external: false },
+    ]);
+    expect(parseInlineMarkdown('[DADA2](params:dada2)')[0]).toMatchObject({ href: 'params:dada2' });
+  });
+
+  it('keeps a params: link with anything but a plain search as text', () => {
+    expect(parseInlineMarkdown('[x](params:a b)').some((t) => t.type === 'link')).toBe(false);
+  });
+});

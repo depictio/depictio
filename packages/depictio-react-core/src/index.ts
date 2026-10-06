@@ -129,6 +129,8 @@ export {
   isPanelResizing,
 } from './utils/panelToggle';
 export type { PanelToggleDetail } from './utils/panelToggle';
+export { OPEN_RUN_PARAMETERS_EVENT, openRunParameters } from './utils/runParameters';
+export type { OpenRunParametersDetail } from './utils/runParameters';
 // Advanced-viz ↔ inspector bridge. Deliberately a separate module from the
 // renderers so importing it doesn't pull in the plotly-heavy lazy chunk.
 export { AdvancedVizInspectorProvider } from './components/advanced_viz/AdvancedVizInspectorBridge';

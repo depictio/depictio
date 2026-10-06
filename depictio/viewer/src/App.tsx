@@ -83,7 +83,7 @@ const ingestionBannerKey = (projectId: string) =>
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
-import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
+import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
 import TabLinkProvider from './chrome/TabLinkProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
@@ -1423,6 +1423,8 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
       />
+      {/* Opens on a dashboard's `params:` links. */}
+      <RunParametersHost dashboard={dashboard} />
     </AppShell>
       </TabLinkProvider>
       </BrandScope>

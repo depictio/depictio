@@ -121,7 +121,7 @@ import GroupingHeaderControl, {
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Header, Sidebar, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
@@ -2005,6 +2005,8 @@ const EditorApp: React.FC = () => {
         onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
       />
+      {/* Opens on a dashboard's `params:` links. */}
+      <RunParametersHost dashboard={dashboard} />
 
       <TabModal
         opened={tabModalState.open}
