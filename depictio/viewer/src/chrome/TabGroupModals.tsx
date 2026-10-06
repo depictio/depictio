@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Group, Modal, MultiSelect, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Group, Modal, MultiSelect, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import { Z_LAYERS, sameTabGroup, tabDisplayName, tabGroupOf } from 'depictio-react-core';
 import type { DashboardSummary } from 'depictio-react-core';
@@ -11,6 +12,53 @@ import type { DashboardSummary } from 'depictio-react-core';
  * so both dialogs only collect a name (and, for a new group, which tabs go in
  * it); `useTabGroupActions` turns that into tab patches and a reorder.
  */
+
+/**
+ * The look the tab and group dialogs share, so adding a tab and adding a
+ * group read as the same kind of step: a centred orange icon and title (as
+ * the dashboard create/edit dialogs), then the form, then Cancel and an
+ * orange primary action.
+ */
+export const SidebarModalHeader: React.FC<{ icon: string; title: string }> = ({
+  icon,
+  title,
+}) => (
+  <Group justify="center" gap="sm" mb="xs">
+    <Icon icon={icon} width={28} height={28} color="var(--mantine-color-orange-6)" />
+    <Title order={3} c="orange" m={0}>
+      {title}
+    </Title>
+  </Group>
+);
+
+export const SidebarModalActions: React.FC<{
+  submitIcon: string;
+  submitLabel: string;
+  submitting: boolean;
+  disabled: boolean;
+  onCancel: () => void;
+  /** Without it the primary button submits its form. */
+  onSubmit?: () => void;
+  testId?: string;
+}> = ({ submitIcon, submitLabel, submitting, disabled, onCancel, onSubmit, testId }) => (
+  <Group justify="flex-end" gap="md" mt="sm">
+    <Button variant="outline" color="gray" radius="md" onClick={onCancel} disabled={submitting}>
+      Cancel
+    </Button>
+    <Button
+      type={onSubmit ? 'button' : 'submit'}
+      color="orange"
+      radius="md"
+      leftSection={<Icon icon={submitIcon} width={16} />}
+      onClick={onSubmit}
+      loading={submitting}
+      disabled={disabled}
+      data-testid={testId}
+    >
+      {submitLabel}
+    </Button>
+  </Group>
+);
 
 /** Rename a group. Typing another group's name merges the two. */
 export const RenameGroupModal: React.FC<{
@@ -38,8 +86,9 @@ export const RenameGroupModal: React.FC<{
     <Modal
       opened={group !== null}
       onClose={onClose}
-      title={<Text fw={600}>Rename group</Text>}
-      size="sm"
+      withCloseButton
+      size="md"
+      centered
       zIndex={Z_LAYERS.overlay}
       data-testid="rename-group-modal"
     >
@@ -50,8 +99,10 @@ export const RenameGroupModal: React.FC<{
         }}
       >
         <Stack gap="sm">
+          <SidebarModalHeader icon="mdi:folder-edit-outline" title="Edit Group" />
           <TextInput
             label="Group name"
+            required
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
             data-autofocus
@@ -62,19 +113,14 @@ export const RenameGroupModal: React.FC<{
               &ldquo;{mergeInto}&rdquo; already exists: its tabs and these will form one group.
             </Text>
           )}
-          <Group justify="flex-end" gap="xs">
-            <Button variant="default" onClick={onClose} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              loading={submitting}
-              disabled={!trimmed || unchanged}
-              data-testid="rename-group-submit"
-            >
-              {mergeInto ? 'Merge' : 'Rename'}
-            </Button>
-          </Group>
+          <SidebarModalActions
+            submitIcon={mergeInto ? 'mdi:call-merge' : 'mdi:content-save'}
+            submitLabel={mergeInto ? 'Merge Groups' : 'Save Changes'}
+            submitting={submitting}
+            disabled={!trimmed || unchanged}
+            onCancel={onClose}
+            testId="rename-group-submit"
+          />
         </Stack>
       </form>
     </Modal>
@@ -139,8 +185,9 @@ export const NewGroupModal: React.FC<{
     <Modal
       opened={opened}
       onClose={onClose}
-      title={<Text fw={600}>New group</Text>}
+      withCloseButton
       size="md"
+      centered
       zIndex={Z_LAYERS.overlay}
       data-testid="new-group-modal"
     >
@@ -151,13 +198,12 @@ export const NewGroupModal: React.FC<{
         }}
       >
         <Stack gap="sm">
-          <Text size="xs" c="dimmed">
-            Groups gather tabs under a heading in the sidebar. A group exists as long as at
-            least one tab is in it.
-          </Text>
+          <SidebarModalHeader icon="mdi:folder-plus-outline" title="Add Group" />
           <TextInput
             label="Group name"
-            placeholder="e.g. Quality control"
+            description="A heading in the sidebar that gathers tabs. It stays as long as one tab is in it."
+            required
+            placeholder="Quality control"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
             data-autofocus
@@ -170,7 +216,7 @@ export const NewGroupModal: React.FC<{
           )}
           <MultiSelect
             label="Move existing tabs into it"
-            description="Optional. Leave empty to start the group with a new tab."
+            description="Optional. Leave empty and the group starts with a new tab, added next."
             placeholder={tabIds.length ? undefined : 'Pick tabs…'}
             data={options}
             value={tabIds}
@@ -180,21 +226,18 @@ export const NewGroupModal: React.FC<{
             comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
             data-testid="new-group-tabs"
           />
-          <Group justify="flex-end" gap="xs">
-            <Button variant="default" onClick={onClose} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              loading={submitting}
-              disabled={!trimmed}
-              data-testid="new-group-submit"
-            >
-              {tabIds.length
-                ? `Move ${tabIds.length} tab${tabIds.length === 1 ? '' : 's'}`
-                : 'Create first tab…'}
-            </Button>
-          </Group>
+          <SidebarModalActions
+            submitIcon={tabIds.length ? 'mdi:folder-move-outline' : 'mdi:plus'}
+            submitLabel={
+              tabIds.length
+                ? `Move ${tabIds.length} Tab${tabIds.length === 1 ? '' : 's'}`
+                : 'Add Group'
+            }
+            submitting={submitting}
+            disabled={!trimmed}
+            onCancel={onClose}
+            testId="new-group-submit"
+          />
         </Stack>
       </form>
     </Modal>

@@ -563,7 +563,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => onAddTab?.()}
                         data-testid="sidebar-add-tab"
                       >
-                        <Text size="sm">New tab</Text>
+                        <Text size="sm">Add tab</Text>
                         <Text size="xs" c="dimmed">
                           A page of components
                         </Text>
@@ -575,7 +575,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => onNewGroup?.()}
                         data-testid="sidebar-new-group"
                       >
-                        <Text size="sm">New group</Text>
+                        <Text size="sm">Add group</Text>
                         <Text size="xs" c="dimmed">
                           A heading that gathers tabs
                         </Text>

@@ -2,17 +2,17 @@ import React, { useEffect, useState } from 'react';
 import {
   Anchor,
   Autocomplete,
-  Button,
   Group,
   Modal,
   Select,
   Stack,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
+
+import { SidebarModalActions, SidebarModalHeader } from './TabGroupModals';
 
 /** True for path-like icon values (asset URLs such as
  *  `/assets/images/icons/favicon.png`) rather than Iconify names. Mirrors the
@@ -179,17 +179,10 @@ const TabModal: React.FC<TabModalProps> = ({
       <Stack gap="sm">
         {/* Header — consistent with the dashboard create/edit modals:
             centered orange icon + title. */}
-        <Group justify="center" gap="sm" mb="xs">
-          <Icon
-            icon={mode === 'create' ? 'mdi:tab-plus' : 'mdi:square-edit-outline'}
-            width={28}
-            height={28}
-            color="var(--mantine-color-orange-6)"
-          />
-          <Title order={3} c="orange" m={0}>
-            {mode === 'create' ? 'Add Tab' : 'Edit Tab'}
-          </Title>
-        </Group>
+        <SidebarModalHeader
+          icon={mode === 'create' ? 'mdi:tab-plus' : 'mdi:square-edit-outline'}
+          title={mode === 'create' ? 'Add Tab' : 'Edit Tab'}
+        />
 
         <TextInput
           label="Tab name"
@@ -268,32 +261,14 @@ const TabModal: React.FC<TabModalProps> = ({
           allowDeselect={false}
         />
 
-        <Group justify="flex-end" gap="md" mt="sm">
-          <Button
-            variant="outline"
-            color="gray"
-            radius="md"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            color="orange"
-            radius="md"
-            leftSection={
-              <Icon
-                icon={mode === 'create' ? 'mdi:plus' : 'mdi:content-save'}
-                width={16}
-              />
-            }
-            onClick={handleSubmit}
-            loading={submitting}
-            disabled={!title.trim()}
-          >
-            {mode === 'create' ? 'Add Tab' : 'Save Changes'}
-          </Button>
-        </Group>
+        <SidebarModalActions
+          submitIcon={mode === 'create' ? 'mdi:plus' : 'mdi:content-save'}
+          submitLabel={mode === 'create' ? 'Add Tab' : 'Save Changes'}
+          submitting={submitting}
+          disabled={!title.trim()}
+          onCancel={onClose}
+          onSubmit={handleSubmit}
+        />
       </Stack>
     </Modal>
   );
