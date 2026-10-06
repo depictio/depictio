@@ -12,6 +12,9 @@ export type ServerStatusValue = 'online' | 'offline' | 'unknown';
 export interface ServerFeatures {
   ai: boolean;
   ai_user_keys: boolean;
+  /** Whole-dashboard generation (POST /ai/generate-dashboard). The server
+   *  already folds `ai` into this flag, so it is never true while `ai` is off. */
+  ai_generate_dashboard: boolean;
 }
 
 export interface ServerStatus {
@@ -20,7 +23,11 @@ export interface ServerStatus {
   features: ServerFeatures;
 }
 
-const NO_FEATURES: ServerFeatures = { ai: false, ai_user_keys: false };
+const NO_FEATURES: ServerFeatures = {
+  ai: false,
+  ai_user_keys: false,
+  ai_generate_dashboard: false,
+};
 
 const STATUS_URL = '/depictio/api/v1/utils/status';
 const POLL_INTERVAL_MS = 30_000;
@@ -61,6 +68,7 @@ export function useServerStatus(): ServerStatus {
           features: {
             ai: data.features?.ai === true,
             ai_user_keys: data.features?.ai_user_keys === true,
+            ai_generate_dashboard: data.features?.ai_generate_dashboard === true,
           },
         });
       } catch {

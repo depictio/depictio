@@ -112,6 +112,15 @@ class DataContext:
     # The DC's `config.type` ("table", "phylogeny", ...). The advanced_viz
     # ranker gates some kinds on it; None means unknown and gates nothing.
     dc_type: str | None = None
+    # Whole-dashboard generation only, empty everywhere else. Plain dicts so
+    # this module keeps its import surface: the ranker and the catalog are
+    # pulled in lazily by the builders that fill them.
+    # viz_suggestions: {viz_kind, score, role_candidates: {role: [columns]}}
+    # (see `viz_suggestions_for`). catalog_offers: {tool, render_id, title,
+    # component_type, dc_tag, description}; the planner refers to an offer as
+    # `use: "<tool>/<render_id>"` (see `offer_use_id`).
+    viz_suggestions: list[dict[str, Any]] = field(default_factory=list)
+    catalog_offers: list[dict[str, Any]] = field(default_factory=list)
 
     def schema_block(self) -> str:
         return "\n".join(c.to_prompt_line() for c in self.columns)
@@ -720,6 +729,268 @@ async def build_dashboard_context(
             dc_ids=dc_ids,
         ),
         dc_ids[0] if dc_ids else None,
+    )
+
+
+# ---------- Project data context (whole-dashboard generation) ----------
+#
+# The generation flow starts from a project, not a dashboard: there is no
+# dashboard yet. `ProjectDataContext` is the multi-DC context of
+# `build_dashboard_data_context` seeded from the project document instead
+# of a dashboard's components, with the project identity the planner
+# prompt opens with.
+
+# Ranked advanced_viz kinds described per collection, and how many candidate
+# columns a role lists. Three kinds keep the planner from treating the
+# candidate list as a menu of equals; the generator binds role_candidates[0].
+MAX_VIZ_SUGGESTIONS_PER_DC = 3
+MAX_VIZ_ROLE_CANDIDATES = 4
+MAX_OFFER_DESCRIPTION_CHARS = 100
+
+
+def offer_use_id(offer: dict[str, Any]) -> str:
+    """The `use` handle of a catalog offer: `<tool>/<render_id>`."""
+    return f"{offer.get('tool') or '?'}/{offer.get('render_id') or '?'}"
+
+
+def role_candidates_line(suggestion: dict[str, Any], limit: int = MAX_VIZ_ROLE_CANDIDATES) -> str:
+    """`feature_id -> gene_id, symbol; effect_size -> log2FoldChange`, `limit` columns a role.
+
+    The planner prompt renders the same suggestions with a shorter `limit`
+    (`prompts._plan_viz_lines`), so the two stay in step.
+    """
+    roles = "; ".join(
+        f"{role} -> {', '.join(cols[:limit])}"
+        for role, cols in (suggestion.get("role_candidates") or {}).items()
+        if cols
+    )
+    return roles or "(no role bindings)"
+
+
+def viz_suggestion_line(suggestion: dict[str, Any]) -> str:
+    """`volcano (fit 0.92): feature_id -> gene_id, symbol; effect_size -> log2FoldChange`."""
+    score = suggestion.get("score")
+    fit = f" (fit {float(score):.2f})" if isinstance(score, (int, float)) else ""
+    return f"{suggestion.get('viz_kind')}{fit}: {role_candidates_line(suggestion)}"
+
+
+def offer_line(offer: dict[str, Any]) -> str:
+    """`use "nf-core-rnaseq/deseq2-0" (advanced_viz: Volcano plot). <description>`."""
+    kind = offer.get("component_type") or "component"
+    title = offer.get("title") or offer.get("render_id") or ""
+    line = f'use "{offer_use_id(offer)}" ({kind}: {title})'
+    description = " ".join(str(offer.get("description") or "").split())
+    if description:
+        if len(description) > MAX_OFFER_DESCRIPTION_CHARS:
+            description = description[: MAX_OFFER_DESCRIPTION_CHARS - 3].rstrip() + "..."
+        line += f". {description}"
+    return line
+
+
+def viz_suggestions_for(
+    columns: list[ColumnSummary],
+    *,
+    dc_type: str | None = "table",
+    limit: int = MAX_VIZ_SUGGESTIONS_PER_DC,
+) -> list[dict[str, Any]]:
+    """Top advanced_viz kinds for a schema, as the plain dicts `DataContext` carries.
+
+    Same ranker and bar as the builder's "Recommended" picker and the typed
+    suggestions (`suggest.advanced_viz_components`): score at or above
+    RECOMMENDED_SCORE, and every required role satisfiable, because the
+    generator binds each role to `role_candidates[0]` and a kind with an
+    unmet role could never be filled. Imported lazily to keep the ranker
+    out of this module's import graph.
+    """
+    from depictio.models.components.advanced_viz.schemas import (
+        RECOMMENDED_SCORE,
+        suggest_viz_kinds,
+    )
+
+    schema = {c.name: c.dtype for c in columns}
+    if not schema:
+        return []
+    ranked = suggest_viz_kinds(schema, dc_type=dc_type)
+    picks = [s for s in ranked if s.score >= RECOMMENDED_SCORE and not s.unmet_roles]
+    return [
+        {
+            "viz_kind": str(s.viz_kind),
+            "score": round(float(s.score), 2),
+            "role_candidates": {
+                role: list(cols) for role, cols in s.role_candidates.items() if cols
+            },
+        }
+        for s in picks[:limit]
+    ]
+
+
+@dataclass(kw_only=True)
+class ProjectDataContext(DashboardDataContext):
+    """Every table collection of a project the planner may build on.
+
+    `dashboard_id` is empty: the dashboard does not exist yet. Collections
+    carry their `viz_suggestions` (filled here) and `catalog_offers` (filled
+    by the generator from the catalog matcher, which lives in the catalog
+    endpoints and is not imported here).
+    """
+
+    dashboard_id: str = ""
+    project_id: str
+    project_name: str
+    project_description: str = ""
+
+    def _collection_chunk(self, c: DataContext, *, with_samples: bool) -> str:
+        tag = c.data_collection_tag or c.data_collection_id
+        head = f'dc["{tag}"]: {c.row_count:,} rows'
+        if c.dc_description:
+            head += f". {c.dc_description}"
+        lines = [head, c.schema_block()]
+        if with_samples:
+            lines.append(f"  sample: {c.sample_block()}")
+        for suggestion in c.viz_suggestions:
+            lines.append(f"  advanced_viz candidate: {viz_suggestion_line(suggestion)}")
+        for offer in c.catalog_offers:
+            lines.append(f"  catalog offer: {offer_line(offer)}")
+        return "\n".join(lines)
+
+    def project_block(self, warnings: list[str] | None = None) -> str:
+        """The data section of the planner prompt, under `max_context_chars`.
+
+        Same degradation as `prompts._data_block`: sample rows go first
+        (they illustrate shape, they are not evidence), then whole
+        collections from the tail, and every cut is reported through
+        `warnings` because a silently shortened context reads to the model
+        as the complete picture.
+        """
+        budget = settings.ai.max_context_chars
+        notes: list[str] = []
+
+        def render(kept: list[DataContext], with_samples: bool) -> str:
+            parts = [f"PROJECT: {self.project_name or '(unnamed)'}"]
+            description = " ".join(self.project_description.split())
+            if description:
+                parts.append(f"PROJECT DESCRIPTION: {description}")
+            body = "\n\n".join(self._collection_chunk(c, with_samples=with_samples) for c in kept)
+            parts.append(f"\nDATA COLLECTIONS:\n{body or '(no data collections)'}")
+            parts.append(f"\nDECLARED JOINS:\n{self.joins_block()}")
+            return "\n".join(parts)
+
+        kept = list(self.collections)
+        block = render(kept, True)
+        if len(block) > budget:
+            block = render(kept, False)
+            notes.append(
+                "Sample rows were omitted from the context to stay within the size budget."
+            )
+        while len(block) > budget and len(kept) > 1:
+            dropped = kept.pop()
+            notes.append(
+                f"Data collection '{dropped.data_collection_tag or dropped.data_collection_id}' "
+                "was left out of the context to stay within the size budget."
+            )
+            block = render(kept, False)
+
+        if warnings is not None:
+            warnings.extend(notes)
+        return block
+
+
+async def build_project_data_context(
+    project_id: str,
+    current_user: Any,
+    dc_ids: list[str] | None = None,
+    *,
+    max_collections: int = 6,
+) -> tuple[ProjectDataContext, list[str]]:
+    """Summarise the table collections of a project. Returns (context, warnings).
+
+    Twin of `build_dashboard_data_context` seeded from the project document:
+    every `config.type == "table"` collection, in project order, narrowed to
+    `dc_ids` (in the requested order) when given, capped at
+    `max_collections` with a warning. Each collection goes through
+    `build_data_context` (one bad read is a warning, not a failure) and gets
+    its ranked advanced_viz kinds; catalog offers are left for the caller.
+
+    Editor permission on the project is the route's job and is checked
+    before this runs; `build_data_context` re-checks viewer access per
+    collection through the same helper, so nothing is read that the user
+    could not open in the builder. Raises 400 on a malformed id and 404 on
+    an unknown project.
+    """
+    try:
+        p_oid = ObjectId(project_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"invalid project_id: {e}")
+
+    project = projects_collection.find_one(
+        {"_id": p_oid},
+        {
+            "name": 1,
+            "description": 1,
+            "joins": 1,
+            "workflows._id": 1,
+            "workflows.data_collections._id": 1,
+            "workflows.data_collections.config.type": 1,
+        },
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    warnings: list[str] = []
+    table_ids: list[str] = []
+    for wf in project.get("workflows") or []:
+        if not isinstance(wf, dict):
+            continue
+        for dc in wf.get("data_collections") or []:
+            if not isinstance(dc, dict):
+                continue
+            dc_id = _coerce_id(dc.get("_id"))
+            if not dc_id or dc_id in table_ids:
+                continue
+            if str((dc.get("config") or {}).get("type") or "").lower() != "table":
+                continue
+            table_ids.append(dc_id)
+
+    if dc_ids:
+        requested = list(dict.fromkeys(dc_ids))
+        known = set(table_ids)
+        ignored = [d for d in requested if d not in known]
+        if ignored:
+            warnings.append(
+                f"{len(ignored)} requested data collection(s) are not table collections of "
+                "this project and were ignored."
+            )
+        table_ids = [d for d in requested if d in known]
+
+    if len(table_ids) > max_collections:
+        dropped = table_ids[max_collections:]
+        warnings.append(
+            f"{len(dropped)} of {len(table_ids)} data collections were left out of the "
+            f"generation context (limit {max_collections})."
+        )
+        table_ids = table_ids[:max_collections]
+
+    collections: list[DataContext] = []
+    for dc_id in table_ids:
+        try:
+            ctx = await build_data_context(dc_id, current_user)
+        except Exception as e:  # noqa: BLE001, one bad DC must not void the rest
+            logger.warning("generation context: skipping dc %s: %s", dc_id, e)
+            warnings.append(f"Data collection {dc_id} could not be read and was skipped.")
+            continue
+        ctx.viz_suggestions = viz_suggestions_for(ctx.columns, dc_type="table")
+        collections.append(ctx)
+
+    tags = {c.data_collection_tag or c.data_collection_id for c in collections}
+    return (
+        ProjectDataContext(
+            project_id=str(project_id),
+            project_name=str(project.get("name") or ""),
+            project_description=str(project.get("description") or ""),
+            collections=collections,
+            joins=_joins_for_tags(project, tags),
+        ),
+        warnings,
     )
 
 

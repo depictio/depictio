@@ -14,6 +14,7 @@ import {
   getAnalyses as apiGetAnalyses,
   resolveFilters as apiResolveFilters,
   streamAnalyze as apiStreamAnalyze,
+  streamGenerateDashboard as apiStreamGenerateDashboard,
   suggestComponents as apiSuggestComponents,
   summarizeSection as apiSummarizeSection,
   type AIHealth,
@@ -29,7 +30,11 @@ import type {
   ComponentFromPromptResponse,
   ComponentSuggestion,
   DashboardActions,
+  DashboardPlan,
   ExecutionStep,
+  GenerateDashboardRequest,
+  GeneratedComponentEvent,
+  GeneratedDashboardEvent,
   ResolveFiltersResponse,
   SuggestComponentsRequest,
   SummarizeSectionRequest,
@@ -477,6 +482,133 @@ export function useAnalysisReport(dashboardId: string) {
     () => ({ run, cancel, reset, pending, state, history, loadHistory }),
     [run, cancel, reset, pending, state, history, loadHistory],
   );
+}
+
+/** Session id the whole-dashboard generator keys its LLM credentials on.
+ *  There is no dashboard yet when it runs, so the key cannot live under a
+ *  dashboard id; one shared entry means the user enters it once for every
+ *  project. `AIKeySection` and `useGenerateDashboard` must agree on it. */
+export const GENERATE_DASHBOARD_SESSION_ID = 'generate-dashboard';
+
+export interface GenerateDashboardRunState {
+  status: string;
+  plan: DashboardPlan | null;
+  budget: BudgetTick | null;
+  /** One entry per reported component tag, the latest event winning. */
+  components: GeneratedComponentEvent[];
+  dashboard: GeneratedDashboardEvent | null;
+  error: string | null;
+}
+
+const EMPTY_GENERATION: GenerateDashboardRunState = {
+  status: '',
+  plan: null,
+  budget: null,
+  components: [],
+  dashboard: null,
+  error: null,
+};
+
+/** The plan arrives from a model-facing schema; default the lists so the
+ *  panel never has to guard against a missing array. */
+function normalizePlan(raw: unknown): DashboardPlan | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Partial<DashboardPlan>;
+  return {
+    title: String(p.title ?? ''),
+    subtitle: p.subtitle ?? null,
+    filter_sections: Array.isArray(p.filter_sections) ? p.filter_sections : [],
+    grid_sections: Array.isArray(p.grid_sections) ? p.grid_sections : [],
+    components: Array.isArray(p.components) ? p.components : [],
+  };
+}
+
+function normalizeDashboardEvent(raw: Record<string, unknown>): GeneratedDashboardEvent {
+  const d = raw as unknown as Partial<GeneratedDashboardEvent>;
+  return {
+    dashboard_id: String(d.dashboard_id ?? ''),
+    title: String(d.title ?? ''),
+    project_id: String(d.project_id ?? ''),
+    yaml: String(d.yaml ?? ''),
+    warnings: Array.isArray(d.warnings) ? d.warnings.map(String) : [],
+    dropped: Array.isArray(d.dropped) ? d.dropped.map(String) : [],
+  };
+}
+
+/** Drive one whole-dashboard generation run and expose its live state: the
+ *  status line, the plan, the budget countdown, per-component outcomes and
+ *  finally the persisted draft (`dashboard`). Modelled on useAnalysisReport
+ *  and, like it, not backed by the chat store. */
+export function useGenerateDashboard() {
+  const session = useAISession(GENERATE_DASHBOARD_SESSION_ID);
+  const [state, setState] = useState<GenerateDashboardRunState>(EMPTY_GENERATION);
+  const [pending, setPending] = useState(false);
+  const [controller, setController] = useState<AbortController | null>(null);
+
+  const run = useCallback(
+    async (body: GenerateDashboardRequest) => {
+      const abort = new AbortController();
+      setController(abort);
+      setPending(true);
+      setState({ ...EMPTY_GENERATION, status: 'starting' });
+
+      const components: GeneratedComponentEvent[] = [];
+      try {
+        await apiStreamGenerateDashboard(body, session.llmKey || null, {
+          signal: abort.signal,
+          onEvent: (event: AIStreamEvent) => {
+            switch (event.type) {
+              case 'status':
+                setState((s) => ({ ...s, status: String(event.data.message ?? '') }));
+                break;
+              case 'plan':
+                setState((s) => ({ ...s, plan: normalizePlan(event.data.plan) }));
+                break;
+              case 'budget':
+                setState((s) => ({ ...s, budget: event.data as unknown as BudgetTick }));
+                break;
+              case 'component': {
+                const c = event.data as unknown as GeneratedComponentEvent;
+                // A tag reports more than once (filled, then repaired or
+                // dropped): the latest outcome replaces the earlier row.
+                const at = components.findIndex((x) => x.tag === c.tag);
+                if (at === -1) components.push(c);
+                else components[at] = c;
+                setState((s) => ({ ...s, components: [...components] }));
+                break;
+              }
+              case 'dashboard':
+                setState((s) => ({ ...s, dashboard: normalizeDashboardEvent(event.data) }));
+                break;
+              case 'error':
+                setState((s) => ({
+                  ...s,
+                  error: String(event.data.detail ?? 'unknown error'),
+                }));
+                break;
+              default:
+                break;
+            }
+          },
+        });
+      } catch (e) {
+        if (!abort.signal.aborted) {
+          setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e) }));
+        }
+      } finally {
+        setPending(false);
+        setController(null);
+      }
+    },
+    [session.llmKey],
+  );
+
+  const cancel = useCallback(() => {
+    controller?.abort();
+    setPending(false);
+  }, [controller]);
+
+  return useMemo(() => ({ run, cancel, pending, state }), [run, cancel, pending, state]);
 }
 
 export type { DashboardActions };

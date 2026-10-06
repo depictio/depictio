@@ -21,6 +21,7 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     ColumnSummary,
     DataContext,
     InventoryEntry,
+    ProjectDataContext,
     ProjectInventory,
 )
 from depictio.api.v1.endpoints.ai_endpoints.prompts import (
@@ -28,8 +29,13 @@ from depictio.api.v1.endpoints.ai_endpoints.prompts import (
     _YAML_EXAMPLES,
     FALLBACK_ADVANCED_VIZ_KINDS,
     MAX_ADVANCED_VIZ_KINDS,
+    MAX_MULTISELECT_DISTINCT,
+    MAX_PLAN_OFFERS,
+    PLAN_COMPONENT_TYPES,
     _constraint_sheet,
+    component_fill_prompt,
     component_from_prompt_messages,
+    dashboard_plan_messages,
     route_component_messages,
     suggest_figures_messages,
 )
@@ -224,3 +230,220 @@ class TestRouteComponentMessages:
         assert len(text) < ROUTE_PROMPT_MAX_CHARS
         for tag in inv.tags():
             assert tag in text
+
+
+# ---------------------------------------------------------------------------
+# Whole-dashboard generation: plan prompt + fill tail
+# ---------------------------------------------------------------------------
+
+
+def _project_dc(
+    tag: str,
+    columns: dict[str, str],
+    *,
+    viz: list[dict] | None = None,
+    offers: list[dict] | None = None,
+) -> DataContext:
+    ctx = _ctx(columns)
+    ctx.dc_name = tag
+    ctx.data_collection_tag = tag
+    ctx.data_collection_id = tag.ljust(24, "0")
+    ctx.dc_type = "table"
+    ctx.viz_suggestions = viz or []
+    ctx.catalog_offers = offers or []
+    return ctx
+
+
+def _offer(i: int) -> dict:
+    return {
+        "tool": "nf-core-rnaseq",
+        "render_id": f"deseq2-{i}",
+        "title": f"Render {i}",
+        "component_type": "advanced_viz",
+        "dc_tag": "deseq2",
+        "description": "",
+    }
+
+
+VOLCANO = {
+    "viz_kind": "volcano",
+    "score": 1.0,
+    "role_candidates": {
+        "feature_id": ["gene_id", "symbol"],
+        "effect_size": ["log2FoldChange"],
+        "significance": ["padj"],
+    },
+}
+
+
+def _project_ctx(*, n_offers: int = 1, with_viz: bool = True) -> ProjectDataContext:
+    return ProjectDataContext(
+        project_id="p" * 24,
+        project_name="RNA project",
+        project_description="Bulk RNA-seq differential expression",
+        collections=[
+            _project_dc(
+                "deseq2",
+                DE_COLUMNS,
+                viz=[VOLCANO] if with_viz else None,
+                offers=[_offer(i) for i in range(n_offers)],
+            ),
+            _project_dc("samples", IRIS_COLUMNS),
+        ],
+    )
+
+
+class TestPlanComponentTypes:
+    def test_derived_from_the_component_literal_for_table_collections(self) -> None:
+        # Every type a table collection backs, plus text; image and multiqc
+        # need collections the generator never reads.
+        assert set(PLAN_COMPONENT_TYPES) == {
+            "figure",
+            "card",
+            "interactive",
+            "table",
+            "text",
+            "map",
+            "advanced_viz",
+        }
+        assert set(PLAN_COMPONENT_TYPES) <= set(get_args(ComponentType))
+
+
+class TestDashboardPlanMessages:
+    def _messages(self, **kwargs) -> tuple[str, str]:
+        ctx = kwargs.pop("ctx", None) or _project_ctx()
+        system, user = dashboard_plan_messages(
+            ctx,
+            kwargs.pop("prompt", "focus on contrasts"),
+            kwargs.pop("title", None),
+            max_components=kwargs.pop("max_components", 16),
+            max_sections=kwargs.pop("max_sections", 4),
+            **kwargs,
+        )
+        assert system["role"] == "system" and user["role"] == "user"
+        return system["content"], user["content"]
+
+    def test_states_the_funnel_and_the_answer_shape(self) -> None:
+        system, _ = self._messages()
+        for stage in ("Cohort filters", "KPI cards", "Figures", "Reference table"):
+            assert stage in system
+        for key in ('"title"', '"filter_sections"', '"grid_sections"', '"components"'):
+            assert key in system
+        for key in ('"tag"', '"section"', '"component_type"', '"data_collection_tag"', '"intent"'):
+            assert key in system
+        assert '"use"' in system and '"viz_kind"' in system
+        assert "Do not wrap the JSON in markdown fences" in system
+
+    def test_states_the_limits(self) -> None:
+        system, _ = self._messages(max_components=12, max_sections=3)
+        assert "At most 12 components and at most 3 grid sections" in system
+        assert "At least one interactive filter" in system
+        assert "multiples of 4" in system
+        assert "At most one table" in system
+        assert f"at most {MAX_MULTISELECT_DISTINCT} distinct" in system
+
+    def test_lists_every_plan_type_and_no_other(self) -> None:
+        system, _ = self._messages()
+        for t in PLAN_COMPONENT_TYPES:
+            assert f"- {t}:" in system
+        assert "- image:" not in system
+        assert "- multiqc:" not in system
+
+    def test_user_message_names_every_collection_tag(self) -> None:
+        ctx = _project_ctx()
+        _, user = self._messages(ctx=ctx)
+        for tag in ctx.tags():
+            assert f'dc["{tag}"]' in user
+        assert "PROJECT: RNA project" in user
+        assert "gene_id" in user and "sepal_length" in user
+
+    def test_offer_lines_are_capped(self) -> None:
+        system, _ = self._messages(ctx=_project_ctx(n_offers=MAX_PLAN_OFFERS + 5))
+        assert system.count("- use: ") == MAX_PLAN_OFFERS
+        assert '- use: "nf-core-rnaseq/deseq2-0" on deseq2: advanced_viz, Render 0' in system
+
+    def test_viz_candidates_carry_role_bindings(self) -> None:
+        system, _ = self._messages()
+        assert (
+            "- volcano on deseq2: feature_id -> gene_id, symbol; effect_size -> log2FoldChange"
+            in (system)
+        )
+
+    def test_fallbacks_when_nothing_is_recognised(self) -> None:
+        system, _ = self._messages(ctx=_project_ctx(n_offers=0, with_viz=False))
+        assert "(none recognised)" in system
+        assert "do not plan advanced_viz" in system
+        assert "- use: " not in system
+
+    def test_user_message_carries_intent_and_optional_title(self) -> None:
+        _, user = self._messages(prompt="  focus on contrasts  ", title="DE overview")
+        assert user.endswith(
+            "USER INTENT:\nfocus on contrasts\n\nREQUESTED TITLE: DE overview\n"
+            "Use it as the dashboard title verbatim."
+        )
+        _, user = self._messages(prompt="", title=None)
+        assert "REQUESTED TITLE" not in user
+        assert "(none given" in user
+
+    def test_context_cuts_are_reported_through_warnings(self, monkeypatch) -> None:
+        from depictio.api.v1.endpoints.ai_endpoints import context as context_module
+
+        monkeypatch.setattr(context_module.settings.ai, "max_context_chars", 300)
+        warnings: list[str] = []
+        self._messages(warnings=warnings)
+        assert warnings and warnings[0].startswith("Sample rows were omitted")
+
+
+class TestComponentFillPrompt:
+    def test_starts_with_the_intent_and_names_tag_section_siblings(self) -> None:
+        text = component_fill_prompt(
+            "  Average sepal length  ",
+            dashboard_title="Iris overview",
+            section="Overview",
+            tag="mean_sepal",
+            siblings=["variety_filter", "n_rows"],
+        )
+        assert text.startswith("Average sepal length\n\nDASHBOARD CONTEXT:\n")
+        assert '- dashboard: "Iris overview"' in text
+        assert '- section: "Overview"' in text
+        assert "- this component's tag: mean_sepal" in text
+        assert "- already filled in this dashboard: variety_filter, n_rows" in text
+        assert "viz_kind" not in text
+        assert "catalog render" not in text
+
+    def test_no_siblings_reads_as_none_yet(self) -> None:
+        text = component_fill_prompt(
+            "x", dashboard_title="d", section="s", tag="first", siblings=[]
+        )
+        assert "already filled in this dashboard: (none yet)" in text
+
+    def test_pins_a_catalog_render(self) -> None:
+        text = component_fill_prompt(
+            "x",
+            dashboard_title="d",
+            section="s",
+            tag="t",
+            siblings=[],
+            use="nf-core-rnaseq/deseq2-0",
+        )
+        assert 'reproduce the catalog render "nf-core-rnaseq/deseq2-0"' in text
+
+    def test_pins_viz_kind_and_role_bindings(self) -> None:
+        text = component_fill_prompt(
+            "x",
+            dashboard_title="d",
+            section="s",
+            tag="t",
+            siblings=[],
+            viz_kind="volcano",
+            role_bindings={"feature_id": "gene_id", "effect_size": "log2FoldChange"},
+        )
+        assert (
+            "- viz_kind: volcano; keep these role bindings: "
+            "feature_id=gene_id, effect_size=log2FoldChange"
+        ) in text
+        without = component_fill_prompt(
+            "x", dashboard_title="d", section="s", tag="t", siblings=[], viz_kind="volcano"
+        )
+        assert "- viz_kind: volcano\n" in without
+        assert "role bindings" not in without
