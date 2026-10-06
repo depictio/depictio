@@ -29,7 +29,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,
     "fragment_ions": pl.Int64,
@@ -39,7 +39,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "fragment_error_ppm": pl.Float64,
     "matched_intensity": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -70,6 +70,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("_err").median().alias("fragment_error_ppm"),
             pl.col("_int").sum().alias("matched_intensity"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "peptide"])
     )

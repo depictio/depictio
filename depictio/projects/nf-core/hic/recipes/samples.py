@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "n_libraries": pl.Int64,
     "single_end": pl.Boolean,
@@ -64,4 +64,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.len().cast(pl.Int64).alias("n_libraries"),
         pl.col("single_end").all().alias("single_end"),
     )
-    return samples.select(list(EXPECTED_SCHEMA)).sort("sample_id")
+    return samples.select(list(OUTPUT_SCHEMA)).sort("sample_id")

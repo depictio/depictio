@@ -69,7 +69,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "lane_id": pl.Utf8,
     "sample_id": pl.Utf8,
     "sample_name": pl.Utf8,
@@ -171,12 +171,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         joined.with_columns(
-            *[pl.col(c).cast(EXPECTED_SCHEMA[c], strict=False) for c in _NUMERIC],
+            *[pl.col(c).cast(OUTPUT_SCHEMA[c], strict=False) for c in _NUMERIC],
             pl.coalesce(
                 pl.col("lane").cast(pl.Utf8),
                 pl.col("lane_id").str.extract(_LANE_SUFFIX_RE, 1),
             ).alias("lane"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample_id", "lane"])
     )

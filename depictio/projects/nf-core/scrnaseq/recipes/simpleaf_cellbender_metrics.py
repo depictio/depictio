@@ -11,11 +11,11 @@ Output schema: identical to `cellbender/metrics.py`.
 
 from __future__ import annotations
 
-from depictio.catalog.cellbender.metrics import EXPECTED_SCHEMA, transform
+from depictio.catalog.cellbender.metrics import OUTPUT_SCHEMA, transform
 from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metrics", dc_ref="simpleaf_cellbender_metrics_raw"),
 ]
 
-__all__ = ["EXPECTED_SCHEMA", "SOURCES", "transform"]
+__all__ = ["OUTPUT_SCHEMA", "SOURCES", "transform"]

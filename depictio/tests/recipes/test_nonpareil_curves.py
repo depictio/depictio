@@ -149,7 +149,7 @@ def test_curves_recipe_expands_the_summary() -> None:
         orient="row",
     )
     result = module.transform({"summaries": summaries, "samples": None})
-    validate_schema(result, module.EXPECTED_SCHEMA, "nonpareil/curves.py")
+    validate_schema(result, module.OUTPUT_SCHEMA, "nonpareil/curves.py")
     assert result.height == len(MEGATEST_ROWS) * module.POINTS
     assert result["coverage"].min() >= 0.0
     assert result["coverage"].max() <= 1.0

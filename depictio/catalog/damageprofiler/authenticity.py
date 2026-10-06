@@ -51,7 +51,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lengths", dc_ref=LGDISTRIBUTION_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "ct_5p_first": pl.Float64,
     "ga_3p_first": pl.Float64,
@@ -181,4 +181,4 @@ def transform(
             pl.col("terminal_damage").cast(pl.Float64),
         )
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return out.select(list(OUTPUT_SCHEMA)).sort("sample")

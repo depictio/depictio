@@ -49,7 +49,7 @@ COUNTED_RANKS: tuple[tuple[str, str], ...] = (
     ("g", "genus"),
 )
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "sample": pl.Utf8,
     "assembler": pl.Utf8,
@@ -132,6 +132,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         stacked.group_by(["sample_id", "sample", "assembler", "binner", "rank", "taxon"])
         .agg(pl.len().cast(pl.Int64).alias("abundance"))
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["rank", "sample_id", "abundance", "taxon"], descending=[False, False, True, False])
     )

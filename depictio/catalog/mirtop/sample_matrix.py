@@ -28,11 +28,11 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="counts", dc_ref="mirtop_mirna_counts"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
 # miRNA and design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 MAX_MIRNAS = 1000
 

@@ -39,7 +39,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 # Every remaining column is a library of the run; see `window_correlation.py`.
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "window_id": pl.Utf8,
     "chromosome": pl.Utf8,
     "window_variance": pl.Float64,

@@ -74,7 +74,7 @@ SOURCES: list[RecipeSource] = [
 
 _RANK_COLUMNS = ("domain", "phylum", "class_name", "order", "family", "genus", "species")
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,
     "assembler": pl.Utf8,
@@ -211,7 +211,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     # A source that did not run at all still has to leave its columns behind,
     # so every missing one is materialised as a typed null column.
-    for name, dtype in EXPECTED_SCHEMA.items():
+    for name, dtype in OUTPUT_SCHEMA.items():
         if name not in counted.columns:
             counted = counted.with_columns(pl.lit(None, dtype=dtype).alias(name))
 
@@ -233,4 +233,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .alias("mimag_tier"),
     )
-    return scored.select(list(EXPECTED_SCHEMA)).sort(["assembler", "binner", "sample", "bin_id"])
+    return scored.select(list(OUTPUT_SCHEMA)).sort(["assembler", "binner", "sample", "bin_id"])

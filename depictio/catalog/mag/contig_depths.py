@@ -61,7 +61,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="depths", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "assembler": pl.Utf8,
     "sample": pl.Utf8,
@@ -201,6 +201,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         pl.concat(blocks, how="vertical")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["assembly_id", "contig_id", "read_sample"])
     )

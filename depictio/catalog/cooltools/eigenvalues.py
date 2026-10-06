@@ -43,7 +43,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lam", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "chrom": pl.Utf8,
@@ -67,4 +67,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("eigval2").cast(pl.Float64, strict=False),
         pl.col("eigval3").cast(pl.Float64, strict=False),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "resolution", "chrom"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "resolution", "chrom"])

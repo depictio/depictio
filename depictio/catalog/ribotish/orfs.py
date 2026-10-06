@@ -22,7 +22,7 @@ per library (the library id is the file name without ``_pred.txt``). The
 pooled run nf-core/riboseq writes under ``ribotish_all/`` is not a library and
 is not matched.
 
-Output: see ``EXPECTED_SCHEMA``.
+Output: see ``OUTPUT_SCHEMA``.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "orf_id": pl.Utf8,
     "transcript_id": pl.Utf8,
@@ -132,5 +132,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("frame_qvalue"),
         )
         .sort("sample", "orf_id")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

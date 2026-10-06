@@ -70,7 +70,7 @@ RANKS: tuple[tuple[str, str], ...] = (
     ("s", "species"),
 )
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,
     "assembler": pl.Utf8,
@@ -234,6 +234,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         frame.unique(subset=["bin_id", "marker_set"], keep="first", maintain_order=True)
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["assembler", "binner", "sample", "bin_id"])
     )

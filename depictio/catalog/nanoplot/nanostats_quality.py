@@ -30,7 +30,7 @@ from depictio.recipes.lib.nanoplot import RAW_LINE_COL, SOURCE_PATH_COL, sample_
 RAW_DC_TAG = "nanoplot_nanostats_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "q_cutoff": pl.Int64,
     "n_reads": pl.Float64,
@@ -67,7 +67,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
 
     if not rows:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     return (
         pl.DataFrame(rows)
         .with_columns(
@@ -77,6 +77,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("pct_reads").cast(pl.Float64),
             pl.col("megabases").cast(pl.Float64),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "q_cutoff"])
     )

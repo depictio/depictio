@@ -56,7 +56,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="predictions", dc_ref="mirdeep2_predictions"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "precursor_id": pl.Utf8,
     "chromosome": pl.Utf8,
     "start": pl.Int64,
@@ -106,7 +106,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         & pl.col("end").is_not_null()
     ).sort(["chromosome", "strand", "start", "end"])
     if novel.is_empty():
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
     # Interval merge: a call opens a new locus when it starts past the running
     # end of the current one (per chromosome and strand).
@@ -175,7 +175,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("no"))
         .alias("star_support"),
     )
-    out = out.with_columns([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()])
-    return out.select(list(EXPECTED_SCHEMA)).sort(
+    out = out.with_columns([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
+    return out.select(list(OUTPUT_SCHEMA)).sort(
         ["samples_detected", "max_score"], descending=[True, True]
     )

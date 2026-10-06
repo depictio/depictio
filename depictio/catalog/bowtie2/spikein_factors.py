@@ -70,7 +70,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="logs", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_pairs": pl.Int64,
     "target_aligned": pl.Int64,
@@ -214,4 +214,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .cast(pl.Float64)
         .alias("scale_factor"),
     )
-    return merged.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return merged.select(list(OUTPUT_SCHEMA)).sort("sample")

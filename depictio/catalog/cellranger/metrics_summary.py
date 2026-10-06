@@ -58,7 +58,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metrics", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "estimated_cells": pl.Int64,
     "mean_reads_per_cell": pl.Int64,
@@ -143,4 +143,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "cellranger_metrics: a row's source_path does not look like "
             "'cellranger/count/<sample>/outs/metrics_summary.csv'"
         )
-    return result.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return result.select(list(OUTPUT_SCHEMA)).sort("sample")

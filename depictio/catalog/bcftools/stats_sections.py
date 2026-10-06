@@ -49,7 +49,7 @@ from depictio.recipes.lib.bcftools_stats import sample_and_caller
 RAW_DC_TAG = "bcftools_stats_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "section": pl.Utf8,
@@ -159,6 +159,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         long.join(sample_and_caller(sources["raw"]), on="source_path", how="left")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "caller", "section", "bin", "label"], nulls_last=True)
     )

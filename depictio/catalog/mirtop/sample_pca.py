@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="counts", dc_ref="mirtop_mirna_counts"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -42,7 +42,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "mirna_reads": pl.Int64,
     "mirnas_detected": pl.Int64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 TOP_VARIABLE = 500
 MIN_MEAN_CPM = 10.0
@@ -81,7 +81,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("reads").sum().cast(pl.Int64).alias("mirna_reads"),
         (pl.col("reads") > 0).sum().cast(pl.Int64).alias("mirnas_detected"),
     )
-    out = coords.join(per_sample, on="sample", how="left").select(list(EXPECTED_SCHEMA))
+    out = coords.join(per_sample, on="sample", how="left").select(list(OUTPUT_SCHEMA))
     if design:
         out = out.join(counts.select("sample", *design).unique(subset="sample"), on="sample")
     return out.sort("sample")

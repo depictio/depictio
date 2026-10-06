@@ -54,7 +54,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="peaks", dc_ref=SOURCE_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "offset_bp": pl.Int64,
     "n_summits": pl.Int64,
@@ -154,7 +154,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                     "peak_footprint": footprint.astype(np.float64),
                     "neighbour_summit_density": neighbours / n / per_kb,
                 },
-                schema=EXPECTED_SCHEMA,
+                schema=OUTPUT_SCHEMA,
             )
         )
-    return pl.concat(rows).select(list(EXPECTED_SCHEMA)).sort(["sample", "offset_bp"])
+    return pl.concat(rows).select(list(OUTPUT_SCHEMA)).sort(["sample", "offset_bp"])

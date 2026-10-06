@@ -44,7 +44,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="ions", dc_ref=IONS_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,
     "sequence": pl.Utf8,
@@ -79,7 +79,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "fragment_ions": pl.Int64,
     "fragment_error_ppm": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 PROTON = 1.007276
 # Kyte & Doolittle (1982) hydropathy index.
@@ -215,4 +215,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.lit(None, dtype=pl.Int64).alias("fragment_ions"),
             pl.lit(None, dtype=pl.Float64).alias("fragment_error_ppm"),
         )
-    return out.select(list(EXPECTED_SCHEMA)).sort(["sample", "score"], descending=[False, True])
+    return out.select(list(OUTPUT_SCHEMA)).sort(["sample", "score"], descending=[False, True])

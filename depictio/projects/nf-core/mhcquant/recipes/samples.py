@@ -38,7 +38,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "run_id": pl.Utf8,
     "replicate": pl.Int64,
@@ -46,7 +46,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "Sample": pl.Utf8,
     "Condition": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Extensions the mhcquant input schema accepts, longest first so `.d.tar.gz`
 # is stripped whole rather than leaving `.d.tar`.

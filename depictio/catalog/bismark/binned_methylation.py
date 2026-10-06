@@ -90,7 +90,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="index", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,
     "start": pl.Int64,
@@ -154,5 +154,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("cpg_density_class"),
         )
         .sort(["sample", "_contig_number", "chromosome", "start"], nulls_last=True)
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

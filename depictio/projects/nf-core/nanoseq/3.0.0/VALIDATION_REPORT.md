@@ -319,7 +319,7 @@ Two cross-checks were scripted against the shipped YAML rather than run by hand,
 every `data_collection_tag` in `dashboards/base.yaml` exists in `template.yaml` (the only
 collections not bound to a tile are the four raw two-step scans plus `samplesheet`), and every
 column named by a card, figure, table, filter or advanced-viz config exists in the recipe's
-`EXPECTED_SCHEMA` with the declared `column_type`.
+`OUTPUT_SCHEMA` with the declared `column_type`.
 
 ### Live ingest: partial, blocked on the instance
 

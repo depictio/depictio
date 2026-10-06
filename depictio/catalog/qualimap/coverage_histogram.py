@@ -41,7 +41,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="histograms", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "coverage": pl.Int64,
     "n_genomic_locations": pl.Float64,
@@ -70,6 +70,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 pl.col("n_genomic_locations") / pl.col("n_genomic_locations").sum().over("sample")
             ).alias("fraction")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "coverage"])
     )

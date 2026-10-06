@@ -51,7 +51,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="diffexp", dc_ref=DIFFEXP_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,
     "cluster_label": pl.Utf8,
@@ -97,7 +97,7 @@ def transform(
     if not genes:
         # Only reachable when the wide table carries no gene column at all,
         # which `cellranger/cell_expression.py` never produces.
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
     wide = (
         wide.sort(["sample", "cluster_label", "barcode"])
@@ -117,4 +117,4 @@ def transform(
         pl.col("gene").cast(pl.Utf8),
         pl.col("expression").cast(pl.Float64),
     )
-    return long.select(list(EXPECTED_SCHEMA)).sort(["sample", "gene", "barcode"])
+    return long.select(list(OUTPUT_SCHEMA)).sort(["sample", "gene", "barcode"])

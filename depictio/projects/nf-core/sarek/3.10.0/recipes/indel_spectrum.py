@@ -25,7 +25,7 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="sections", dc_ref="bcftools_sta
 
 MAX_LENGTH = 20
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "callset": pl.Utf8,
@@ -62,6 +62,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .otherwise(pl.lit("deletion"))
             .alias("indel_class"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort([*by_callset, "length"])
     )

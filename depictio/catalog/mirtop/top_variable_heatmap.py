@@ -30,10 +30,10 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="counts", dc_ref="mirtop_mirna_counts"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mirna": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 TOP_N = 100
 MIN_MEAN_CPM = 10.0

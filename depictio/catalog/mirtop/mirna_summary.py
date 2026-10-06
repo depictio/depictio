@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="counts", dc_ref="mirtop_mirna_counts"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mirna": pl.Utf8,
     "arm": pl.Utf8,
     "expression_rank": pl.Int64,
@@ -77,6 +77,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("reference_pct"),
     ).sort(["mean_cpm", "mirna"], descending=[True, False])
     out = out.with_columns(pl.int_range(1, pl.len() + 1, dtype=pl.Int64).alias("expression_rank"))
-    return out.with_columns([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()]).select(
-        list(EXPECTED_SCHEMA)
+    return out.with_columns([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()]).select(
+        list(OUTPUT_SCHEMA)
     )

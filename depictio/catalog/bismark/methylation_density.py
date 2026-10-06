@@ -52,7 +52,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="index", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "series": pl.Utf8,
     "methylation_bin": pl.Float64,
@@ -123,4 +123,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
         )
 
-    return pl.concat(frames).sort(["sample", "methylation_bin"]).select(list(EXPECTED_SCHEMA))
+    return pl.concat(frames).sort(["sample", "methylation_bin"]).select(list(OUTPUT_SCHEMA))

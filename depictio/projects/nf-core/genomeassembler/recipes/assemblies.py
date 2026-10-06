@@ -79,7 +79,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="quast_ref", dc_ref="quast_reference_report", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "sample": pl.Utf8,
     "stage": pl.Utf8,
@@ -214,7 +214,7 @@ def contiguity(lengths: list[int]) -> dict:
 
 def _idxstats_contiguity(raw: pl.DataFrame | None) -> pl.DataFrame:
     schema = {"assembly_id": pl.Utf8} | {
-        k: EXPECTED_SCHEMA[k]
+        k: OUTPUT_SCHEMA[k]
         for k in [
             "n_sequences",
             "total_length",
@@ -269,7 +269,7 @@ def _busco(frame: pl.DataFrame | None) -> pl.DataFrame:
         "fragmented_pct": "busco_fragmented",
         "missing_pct": "busco_missing",
     }
-    schema = {"assembly_id": pl.Utf8} | {v: EXPECTED_SCHEMA[v] for v in renames.values()}
+    schema = {"assembly_id": pl.Utf8} | {v: OUTPUT_SCHEMA[v] for v in renames.values()}
     if frame is None or frame.is_empty():
         return pl.DataFrame(schema=schema)
     # Several lineages per assembly: keep the most specific, the one with the most markers.
@@ -283,7 +283,7 @@ def _busco(frame: pl.DataFrame | None) -> pl.DataFrame:
 
 def _quast_ref(frame: pl.DataFrame | None) -> pl.DataFrame:
     keep = ["genome_fraction", "misassemblies", "mismatches_per_100kbp", "nga50"]
-    schema = {"assembly_id": pl.Utf8} | {k: EXPECTED_SCHEMA[k] for k in keep}
+    schema = {"assembly_id": pl.Utf8} | {k: OUTPUT_SCHEMA[k] for k in keep}
     if frame is None or frame.is_empty():
         return pl.DataFrame(schema=schema)
     return frame.select(pl.col("report_id").alias("assembly_id"), *keep).unique(
@@ -342,7 +342,7 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     sheet = sources.get("samplesheet")
     if sheet is not None and not sheet.is_empty():
         design = design_columns(sheet)
-        passthrough = [c for c in design.columns if c == SAMPLE_COL or c not in EXPECTED_SCHEMA]
+        passthrough = [c for c in design.columns if c == SAMPLE_COL or c not in OUTPUT_SCHEMA]
         passthrough += ["assembler_used", "scaffolders"]
         frame = frame.join(design.select(passthrough), on=SAMPLE_COL, how="left")
     else:
@@ -351,5 +351,5 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             pl.lit(None, dtype=pl.Utf8).alias("scaffolders"),
         )
 
-    extra = [c for c in frame.columns if c not in EXPECTED_SCHEMA]
-    return frame.select([*EXPECTED_SCHEMA, *extra]).sort(["sample", "stage_rank", "stage"])
+    extra = [c for c in frame.columns if c not in OUTPUT_SCHEMA]
+    return frame.select([*OUTPUT_SCHEMA, *extra]).sort(["sample", "stage_rank", "stage"])

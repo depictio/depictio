@@ -35,7 +35,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cells", dc_ref=CELL_QC_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "graphclust": pl.Utf8,
     "cluster_label": pl.Utf8,
@@ -86,4 +86,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .with_columns((pl.col("n_cells") / pl.col("_sample_total") * 100).alias("pct_cells"))
         .drop("_sample_total")
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "graphclust"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "graphclust"])

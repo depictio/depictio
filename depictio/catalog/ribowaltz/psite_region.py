@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "region": pl.Utf8,
     "scope": pl.Utf8,
@@ -83,4 +83,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("enrichment"),
         )
     )
-    return out.sort("sample", "region").select(list(EXPECTED_SCHEMA))
+    return out.sort("sample", "region").select(list(OUTPUT_SCHEMA))

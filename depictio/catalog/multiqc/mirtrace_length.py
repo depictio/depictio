@@ -36,7 +36,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "length": pl.Int64,
     "reads": pl.Float64,
@@ -82,4 +82,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("40 nt and over"))
         .alias("length_class"),
     )
-    return frame.select(list(EXPECTED_SCHEMA)).sort(["sample", "length"])
+    return frame.select(list(OUTPUT_SCHEMA)).sort(["sample", "length"])

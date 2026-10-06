@@ -41,7 +41,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="depths", dc_ref=DEPTHS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "assembler": pl.Utf8,
     "sample": pl.Utf8,

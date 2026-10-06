@@ -21,7 +21,7 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="variants", dc_ref="snpeff_ann_v
 #: Genes kept, ranked by how many coding variants they carry across the run.
 TOP_GENES = 40
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "gene": pl.Utf8,
@@ -53,7 +53,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         coding.join(top, on="gene", how="inner")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .with_columns(pl.col("vaf").cast(pl.Float64))
         .sort(["gene", "aa_pos", "sample", "caller"])
     )

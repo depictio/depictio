@@ -35,7 +35,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="calls", dc_ref="vcf_variants"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "callset": pl.Utf8,
     "sample": pl.Utf8,
     "caller": pl.Utf8,
@@ -91,6 +91,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .cast(pl.Float64)
             .alias("het_hom_ratio"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(keys)
     )

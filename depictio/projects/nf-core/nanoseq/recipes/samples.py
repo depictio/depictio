@@ -53,7 +53,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "condition": pl.Utf8,
     "replicate": pl.Int64,
@@ -65,7 +65,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "has_fast5": pl.Boolean,
 }
 # Extra design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _REQUIRED = ["sample", "fasta"]
 
@@ -101,7 +101,7 @@ def _design_table(
     if not factors:
         return None
     condition_col = group_col if group_col in factors else factors[0]
-    extras = [c for c in factors if c != condition_col and c not in EXPECTED_SCHEMA]
+    extras = [c for c in factors if c != condition_col and c not in OUTPUT_SCHEMA]
     bound = [c for c in DESIGN_COLUMNS if c in factors]
     table = metadata.select(
         pl.col(id_col).cast(pl.Utf8).str.strip_chars().alias("key"),
@@ -166,4 +166,4 @@ def transform(
             for c in DESIGN_COLUMNS
         ],
     )
-    return hub.select([*EXPECTED_SCHEMA, *extras]).sort("sample_id")
+    return hub.select([*OUTPUT_SCHEMA, *extras]).sort("sample_id")

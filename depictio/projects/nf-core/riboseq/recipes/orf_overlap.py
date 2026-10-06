@@ -16,7 +16,7 @@ Membership columns (0/1, the UpSet sets):
 Sources: the ``ribotish_orfs`` and ``ribocode_orfs`` data collections; either
 may be absent.
 
-Output: see ``EXPECTED_SCHEMA``. ``orf_class`` is RiboCode's class when
+Output: see ``OUTPUT_SCHEMA``. ``orf_class`` is RiboCode's class when
 RiboCode called the ORF, else Ribo-TISH's.
 """
 
@@ -31,7 +31,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="ribocode", dc_ref="ribocode_orfs", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "orf_id": pl.Utf8,
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -89,4 +89,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("ribotish_libraries").fill_null(0).cast(pl.Int64),
         pl.col("ribocode_libraries").fill_null(0).cast(pl.Int64),
     )
-    return out.sort("orf_id").select(list(EXPECTED_SCHEMA))
+    return out.sort("orf_id").select(list(OUTPUT_SCHEMA))

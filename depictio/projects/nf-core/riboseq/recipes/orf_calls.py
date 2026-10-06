@@ -24,7 +24,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="ribocode", dc_ref="ribocode_orfs", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "orf_class": pl.Utf8,
@@ -48,7 +48,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .with_columns(pl.lit(label).alias("caller"))
         )
     if not frames:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     out = pl.concat(frames, how="diagonal_relaxed")
     return (
         out.with_columns(
@@ -58,5 +58,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .with_columns(pl.col("sample").cast(pl.Utf8))
         .sort("sample", "caller", "orf_class")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -87,7 +87,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="stats", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_pairs": pl.Int64,
     "unmapped_pairs": pl.Int64,
@@ -170,7 +170,7 @@ def _ratio(numerator: str, denominator: str, name: str) -> pl.Expr:
 
 
 def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -220,4 +220,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("duplicate_rate")
     )
 
-    return wide.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return wide.select(list(OUTPUT_SCHEMA)).sort("sample")

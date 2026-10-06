@@ -62,7 +62,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="factors", dc_ref=FACTORS_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "signal_class": pl.Utf8,
@@ -176,4 +176,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (1.0 - pl.col("frip")).round(4).alias("fraction"),
     )
     long = pl.concat([inside, outside], how="vertical").with_columns(pl.col("fragment_bp").round(1))
-    return long.select(list(EXPECTED_SCHEMA)).sort(["sample", "signal_class"])
+    return long.select(list(OUTPUT_SCHEMA)).sort(["sample", "signal_class"])

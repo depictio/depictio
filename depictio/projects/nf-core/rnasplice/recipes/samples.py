@@ -45,7 +45,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,
     "read_type": pl.Utf8,
@@ -53,7 +53,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "runs": pl.Int64,
 }
 # Design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _RUN_SUFFIX = r"_T\d+$"
 _TRUE = ("true", "1", "yes", "t")
@@ -101,5 +101,5 @@ def transform(
         hub = hub.with_columns(
             [pl.coalesce(pl.col(f"{c}_design"), pl.col(c)).alias(c) for c in shared]
         ).drop([f"{c}_design" for c in shared])
-    head = list(EXPECTED_SCHEMA)
+    head = list(OUTPUT_SCHEMA)
     return hub.select(head + [c for c in hub.columns if c not in head]).sort("sample")

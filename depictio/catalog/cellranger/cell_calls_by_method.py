@@ -68,7 +68,7 @@ _CALLER_COLUMNS = [
     "kallisto_cellbender",
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "barcode_core": pl.Utf8,
     "cellranger": pl.Boolean,
     "cellranger_cellbender": pl.Boolean,
@@ -114,4 +114,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = df.with_columns(
         pl.sum_horizontal([pl.col(c).cast(pl.Int64) for c in _CALLER_COLUMNS]).alias("n_callers")
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort("barcode_core")
+    return df.select(list(OUTPUT_SCHEMA)).sort("barcode_core")

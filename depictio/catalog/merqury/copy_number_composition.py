@@ -39,7 +39,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="spectra", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "copy_class": pl.Utf8,
     "rank": pl.Utf8,
@@ -105,7 +105,7 @@ def _one_file(path: str, frame: pl.DataFrame) -> pl.DataFrame:
                 "error_cutoff": cutoff,
             }
         )
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

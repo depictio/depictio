@@ -43,7 +43,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mirna": pl.Utf8,
     "variant_class": pl.Utf8,
     "mean_share_pct": pl.Float64,
@@ -145,4 +145,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     out = out.with_columns(
         pl.col("variant_class").replace_strict(order, return_dtype=pl.Int64).alias("_order")
     )
-    return out.sort(["mirna_rank", "_order"]).select(list(EXPECTED_SCHEMA))
+    return out.sort(["mirna_rank", "_order"]).select(list(OUTPUT_SCHEMA))

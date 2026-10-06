@@ -48,7 +48,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "f1": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "caller": pl.Utf8,  # the tool that made the calls (pipeline `Caller` column)
     "truth_set": pl.Utf8,  # read off the `<id>.<truth set>.<caller>.<ext>` File name
     "event_type": pl.Utf8,

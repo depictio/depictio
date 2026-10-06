@@ -50,7 +50,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="raw_barcodes", dc_ref=RAW_BARCODES_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcodes_observed": pl.Int64,
     "cells_called": pl.Int64,
@@ -94,4 +94,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("cells_called") / pl.col("barcodes_observed") * 100).alias("pct_called"),
         (pl.col("cells_qc_pass") / pl.col("cells_called") * 100).alias("pct_qc_pass"),
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return result.select(list(OUTPUT_SCHEMA)).sort("sample")

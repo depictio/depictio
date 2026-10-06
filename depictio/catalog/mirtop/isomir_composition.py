@@ -51,7 +51,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "rank": pl.Utf8,
     "taxon": pl.Utf8,
@@ -147,6 +147,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .fill_nan(None)
         .alias("percent")
     )
-    return long.select(list(EXPECTED_SCHEMA)).sort(
+    return long.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "rank", "abundance"], descending=[False, False, True]
     )

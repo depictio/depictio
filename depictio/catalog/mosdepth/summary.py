@@ -71,7 +71,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,  # md / recal on sarek; "all" when the file name has no stage
     "scope": pl.Utf8,  # genome (whole contig) or region (--by targets only)
@@ -111,5 +111,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .filter(pl.col("contig").str.contains(PRIMARY_CONTIG_RE))
         .drop("chrom")
         .rename({"contig": "chrom"})
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     ).sort(["sample", "stage", "scope", "chrom"])

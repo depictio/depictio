@@ -57,7 +57,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "consensus_set": pl.Utf8,
     "dim_1": pl.Float64,
@@ -135,4 +135,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         for block in df.partition_by("_matrix", maintain_order=True)
     ]
     out = pl.concat(blocks, how="vertical")
-    return out.select(list(EXPECTED_SCHEMA)).sort(["consensus_set", "sample_id"])
+    return out.select(list(OUTPUT_SCHEMA)).sort(["consensus_set", "sample_id"])

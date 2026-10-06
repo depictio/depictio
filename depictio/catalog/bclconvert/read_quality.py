@@ -17,7 +17,7 @@ from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="quality", dc_ref="bclconvert_quality_raw")]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "flowcell": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -104,6 +104,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.when(pl.col("_y") > 0).then(100.0 * pl.col("_q30") / pl.col("_y")).alias("pct_q30"),
         pl.when(pl.col("_y") > 0).then(pl.col("_qs") / pl.col("_y")).alias("mean_quality"),
     ).with_columns((pl.col("pct_q30") / 100.0).alias("frac_q30"))
-    return out.select([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()]).sort(
+    return out.select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()]).sort(
         ["flowcell", "lane", "read"]
     )

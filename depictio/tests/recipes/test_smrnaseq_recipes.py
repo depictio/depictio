@@ -38,7 +38,7 @@ def _joined() -> pl.DataFrame:
 def _counts(metadata: pl.DataFrame | None = None) -> pl.DataFrame:
     module = load_recipe("mirtop/mirna_counts.py")
     out = module.transform({"joined": _joined(), "metadata": metadata})
-    validate_schema(out, module.EXPECTED_SCHEMA, "mirtop_mirna_counts", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "mirtop_mirna_counts", None)
     return out
 
 
@@ -71,7 +71,7 @@ def test_mirna_counts_carry_the_design_when_given():
 def test_sample_hub_without_optional_sources_or_design():
     module = load_recipe("nf-core/smrnaseq/samples.py")
     hub = module.transform({"counts": _counts(), "composition": None, "predictions": None})
-    validate_schema(hub, module.EXPECTED_SCHEMA, "samples", None)
+    validate_schema(hub, module.OUTPUT_SCHEMA, "samples", None)
     assert hub["sample"].to_list() == ["s1", "s2"]
     s1 = hub.row(0, named=True)
     assert s1["mirna_reads"] == 100
@@ -161,7 +161,7 @@ def _raw(tmp_path: Path) -> pl.DataFrame:
 def test_mirdeep2_predictions_parse_both_blocks(tmp_path: Path):
     module = load_recipe("mirdeep2/predictions.py")
     out = module.transform({"results": _raw(tmp_path)})
-    validate_schema(out, module.EXPECTED_SCHEMA, "mirdeep2_predictions", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "mirdeep2_predictions", None)
     assert out.height == 4
     assert sorted(out["sample"].unique().to_list()) == ["s1", "s2"]
     assert out.filter(pl.col("category") == "novel").height == 2
@@ -181,7 +181,7 @@ def test_mirdeep2_predictions_parse_both_blocks(tmp_path: Path):
 def test_mirdeep2_score_summary_reads_the_cutoff_table(tmp_path: Path):
     module = load_recipe("mirdeep2/score_summary.py")
     out = module.transform({"results": _raw(tmp_path)})
-    validate_schema(out, module.EXPECTED_SCHEMA, "mirdeep2_score_summary", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "mirdeep2_score_summary", None)
     s1 = out.filter(pl.col("sample") == "s1").sort("score_cutoff")
     assert s1["score_cutoff"].to_list() == [0.0, 10.0]
     top = s1.row(1, named=True)
@@ -197,7 +197,7 @@ def test_mirdeep2_novel_precursors_merge_overlapping_calls(tmp_path: Path):
     predictions = load_recipe("mirdeep2/predictions.py").transform({"results": _raw(tmp_path)})
     module = load_recipe("mirdeep2/novel_precursors.py")
     out = module.transform({"predictions": predictions})
-    validate_schema(out, module.EXPECTED_SCHEMA, "mirdeep2_novel_precursors", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "mirdeep2_novel_precursors", None)
     # The two samples' novel calls overlap on one strand: one precursor.
     assert out.height == 1
     row = out.row(0, named=True)

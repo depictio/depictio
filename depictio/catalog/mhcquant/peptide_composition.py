@@ -17,13 +17,13 @@ PEPTIDES_DC_TAG = "mhcquant_peptides"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="peptides", dc_ref=PEPTIDES_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "rank": pl.Utf8,
     "category": pl.Utf8,
     "peptides": pl.Int64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 RANKS = {
     "Peptide length": "length_class",
@@ -42,6 +42,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     ]
     return (
         pl.concat(frames, how="vertical_relaxed")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "rank", "peptides"], descending=[False, False, True])
     )

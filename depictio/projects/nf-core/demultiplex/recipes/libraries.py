@@ -56,7 +56,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "flowcell": pl.Utf8,
     "lanes": pl.Utf8,
@@ -178,8 +178,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     else:
         hub = hub.with_columns(pl.lit(None, dtype=pl.Utf8).alias("fastq_id"))
         hub = hub.with_columns(pl.lit(None, dtype=t).alias(c) for c, t in _QC_COLS.items())
-    hub = hub.select([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()])
-    meta = _metadata(sources.get("metadata"), set(EXPECTED_SCHEMA))
+    hub = hub.select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
+    meta = _metadata(sources.get("metadata"), set(OUTPUT_SCHEMA))
     if meta is not None:
         hub = hub.join(meta, on="sample", how="left")
     else:

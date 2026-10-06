@@ -39,7 +39,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "sample_name": pl.Utf8,
     "organism": pl.Utf8,
@@ -68,7 +68,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("Lane").sort().str.join(",").alias("lane_ids"),
     )
     return (
-        libraries.rename({"Library_ID": "sample_id"})
-        .select(list(EXPECTED_SCHEMA))
-        .sort("sample_id")
+        libraries.rename({"Library_ID": "sample_id"}).select(list(OUTPUT_SCHEMA)).sort("sample_id")
     )

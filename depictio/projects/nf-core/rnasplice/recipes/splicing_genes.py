@@ -21,7 +21,7 @@ column false and its evidence null. Overlapping loci that a tool could not
 separate (DEXSeq ``ENSG1+ENSG2``, SUPPA ``ENSG1_and_ENSG2``) count for each
 gene they name. Gene symbols come from rMATS, the only tool that reports them.
 
-Output schema: see ``EXPECTED_SCHEMA``.
+Output schema: see ``OUTPUT_SCHEMA``.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ TOOLS: dict[str, str] = {
     "suppa": "SUPPA2",
 }
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -191,8 +191,8 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     out = out.with_columns(pl.col("gene_name").fill_null(pl.col("gene_id")))
 
     out = out.with_columns(
-        [pl.lit(None, dtype=t).alias(c) for c, t in EXPECTED_SCHEMA.items() if c not in out.columns]
-    ).with_columns([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()])
-    return out.select(list(EXPECTED_SCHEMA)).sort(
+        [pl.lit(None, dtype=t).alias(c) for c, t in OUTPUT_SCHEMA.items() if c not in out.columns]
+    ).with_columns([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
+    return out.select(list(OUTPUT_SCHEMA)).sort(
         ["contrast", "tools_significant", "gene_id"], descending=[False, True, False]
     )

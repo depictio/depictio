@@ -36,7 +36,7 @@ SOURCES: list[RecipeSource] = [
 # Every column but the row label is a library of the run, so only the index is
 # declarable here; the rest is checked against the fixture, as in
 # `deeptools/correlation_matrix.py`.
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
 

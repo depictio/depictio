@@ -46,7 +46,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metrics", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "retained_cells": pl.Int64,
     "processed_cells": pl.Int64,
@@ -102,4 +102,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "qcatch_metrics_summary: a row's source_path does not look like "
             "'qcatch/<sample>_metrics_summary.csv'"
         )
-    return result.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return result.select(list(OUTPUT_SCHEMA)).sort("sample")

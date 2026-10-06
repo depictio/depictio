@@ -52,7 +52,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="summaries", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "input_file": pl.Utf8,
     "lineage": pl.Utf8,
@@ -156,4 +156,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     out = raw.select(selected).unique(subset=["assembly_id", "lineage"], keep="first")
     if out.is_empty():
         raise ValueError("busco_batch_summary: no batch summary carried a data row")
-    return out.select(list(EXPECTED_SCHEMA)).sort(["assembly_id", "lineage"])
+    return out.select(list(OUTPUT_SCHEMA)).sort(["assembly_id", "lineage"])

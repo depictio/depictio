@@ -57,7 +57,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cellbender_barcodes", dc_ref=CELLBENDER_BARCODES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "aligner": pl.Utf8,
     "rank": pl.Int64,
@@ -141,4 +141,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("is_cell").cast(pl.Boolean),
         pl.lit("simpleaf").alias("aligner"),
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "rank"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "rank"])

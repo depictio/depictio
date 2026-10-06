@@ -33,14 +33,14 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "row_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "locus": pl.Utf8,
     "v_gene": pl.Utf8,
 }
 # Plus one Float64 column per J gene; the gene set is discovered from the data.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _TRUE = ("T", "TRUE", "True", "true", "1")
 

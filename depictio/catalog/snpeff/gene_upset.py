@@ -23,9 +23,9 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="genes", dc_ref="snpeff_genes")]
 #: the intersections.
 MAX_GENES = 3_000
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {"gene_name": pl.Utf8}
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"gene_name": pl.Utf8}
 # Caller columns are one per caller in the run, known only at ingest.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

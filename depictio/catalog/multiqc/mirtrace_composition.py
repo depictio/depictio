@@ -49,7 +49,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "rank": pl.Utf8,
     "taxon": pl.Utf8,
@@ -126,13 +126,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if not rows:
         raise ValueError("mirtrace_composition: the MultiQC report carries no miRTrace plot data")
     frame = pl.DataFrame(
-        rows, schema={k: EXPECTED_SCHEMA[k] for k in ("sample", "rank", "taxon", "abundance")}
+        rows, schema={k: OUTPUT_SCHEMA[k] for k in ("sample", "rank", "taxon", "abundance")}
     )
     frame = frame.with_columns(
         (pl.col("abundance") * 100.0 / pl.col("abundance").sum().over(["sample", "rank"]))
         .fill_nan(None)
         .alias("percent")
     )
-    return frame.select(list(EXPECTED_SCHEMA)).sort(
+    return frame.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "rank", "abundance"], descending=[False, False, True]
     )

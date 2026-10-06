@@ -21,7 +21,7 @@ Sources:
              merged Salmon count matrix by default) to put symbols on the
              Ensembl ids; repoint it with ``source_overrides``.
 
-Output: see ``EXPECTED_SCHEMA``. ``significant`` uses anota2seq's default
+Output: see ``OUTPUT_SCHEMA``. ``significant`` uses anota2seq's default
 selection: adjusted p below ``MAX_PADJ`` and an absolute effect of at least
 ``MIN_EFFECT`` (log2 of a 1.2-fold change).
 """
@@ -51,7 +51,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "analysis": pl.Utf8,
     "gene_id": pl.Utf8,
@@ -132,4 +132,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("down"))
         .alias("direction")
     )
-    return out.sort("contrast", "analysis", "gene_id").select(list(EXPECTED_SCHEMA))
+    return out.sort("contrast", "analysis", "gene_id").select(list(OUTPUT_SCHEMA))

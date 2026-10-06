@@ -17,9 +17,9 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="genes", dc_ref="snpeff_genes")]
 #: A clustered heatmap stops being readable well before a hundred rows.
 TOP_GENES = 40
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {"gene_name": pl.Utf8}
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"gene_name": pl.Utf8}
 # One numeric column per callset, known only at ingest.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

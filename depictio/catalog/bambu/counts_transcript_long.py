@@ -36,7 +36,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,
     "transcript_id": pl.Utf8,
@@ -83,6 +83,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .replace_strict(conditions, default=None, return_dtype=pl.Utf8)
             .alias("condition")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "transcript_id"])
     )

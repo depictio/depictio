@@ -75,7 +75,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="results", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "prediction_id": pl.Utf8,
     "sample": pl.Utf8,
     "category": pl.Utf8,
@@ -235,5 +235,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         rows.extend(_parse(str(path), group[RAW_LINE_COL].to_list()))
     if not rows:
         raise ValueError("mirdeep2_predictions: no table carried a candidate block")
-    frame = pl.DataFrame(rows, schema=EXPECTED_SCHEMA)
+    frame = pl.DataFrame(rows, schema=OUTPUT_SCHEMA)
     return frame.sort(["sample", "category", "score"], descending=[False, True, True])

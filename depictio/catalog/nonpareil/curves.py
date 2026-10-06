@@ -64,7 +64,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref="samplesheet", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "library": pl.Utf8,
     "platform": pl.Utf8,
@@ -75,7 +75,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "diversity": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # The `profile` kind asks recipes to decimate to at most 200 points per series.
 POINTS = 200
@@ -101,7 +101,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         raise ValueError("nonpareil curves: no library carried a usable model fit")
 
     lookup = samplesheet_lookup(sources.get("samples"))
-    rows: dict[str, list] = {key: [] for key in EXPECTED_SCHEMA}
+    rows: dict[str, list] = {key: [] for key in OUTPUT_SCHEMA}
     for row in frame.iter_rows(named=True):
         library = row["library"]
         sample, platform = attribute_library(library, lookup)
@@ -119,4 +119,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             rows["projected_effort"].append(lr_star)
             rows["diversity"].append(diversity)
 
-    return pl.DataFrame(rows, schema=dict(EXPECTED_SCHEMA)).sort(["library", "sequencing_effort"])
+    return pl.DataFrame(rows, schema=dict(OUTPUT_SCHEMA)).sort(["library", "sequencing_effort"])

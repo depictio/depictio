@@ -60,7 +60,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "patient": pl.Utf8,
     "sex": pl.Utf8,
@@ -139,6 +139,6 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             .otherwise(pl.lit("Unknown"))
             .alias("status_label"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample_id")
     )

@@ -59,7 +59,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "role": pl.Utf8,
     "is_control": pl.Boolean,
@@ -69,7 +69,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "control_id": pl.Utf8,
 }
 # Extra design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _REQUIRED = ["sample_id", "control_id", "antibody"]
 
@@ -97,7 +97,7 @@ def _design_table(
     if not factors:
         return None
     condition_col = group_col if group_col in factors else factors[0]
-    extras = [c for c in factors if c != condition_col and c not in EXPECTED_SCHEMA]
+    extras = [c for c in factors if c != condition_col and c not in OUTPUT_SCHEMA]
     table = metadata.select(
         pl.col(id_col).cast(pl.Utf8).str.strip_chars().alias("key"),
         pl.col(condition_col).cast(pl.Utf8).alias("_condition"),
@@ -187,6 +187,6 @@ def transform(
         condition = pl.coalesce("_condition", "_inherited")
     libraries = libraries.with_columns(condition.alias("condition"))
 
-    return libraries.select([*EXPECTED_SCHEMA, *extras]).sort(
+    return libraries.select([*OUTPUT_SCHEMA, *extras]).sort(
         ["is_control", "antibody", "condition", "replicate"], nulls_last=True
     )

@@ -32,7 +32,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "contig": pl.Utf8,
     "region_id": pl.Utf8,
@@ -95,5 +95,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .drop_nulls(["contig", "start", "end"])
         .sort("sample", "contig", "start")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

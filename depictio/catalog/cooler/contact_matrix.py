@@ -85,7 +85,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="bins", dc_ref=BINS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "chrom1": pl.Utf8,
@@ -114,7 +114,7 @@ _SORT_KEYS = ["resolution", "chrom1", "start1", "start2"]
 
 def _empty() -> pl.DataFrame:
     """The output schema with no rows, for a run that dumped nothing."""
-    return pl.DataFrame(schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
 
 def coarsen(df: pl.DataFrame, base_resolution: int, factor: int) -> pl.DataFrame:
@@ -140,7 +140,7 @@ def coarsen(df: pl.DataFrame, base_resolution: int, factor: int) -> pl.DataFrame
             pl.col("end2").max(),
             pl.col("count").sum(),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(_SORT_KEYS)
     )
 
@@ -194,7 +194,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             how="inner",
         )
         .filter(pl.col("chrom1") == pl.col("chrom2"))
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(_SORT_KEYS)
     )
     if df.is_empty():

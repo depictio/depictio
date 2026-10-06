@@ -44,7 +44,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="stats", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "mapping": pl.Utf8,
     "filtering": pl.Utf8,
@@ -88,7 +88,7 @@ _METRICS = (
 
 
 def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -144,6 +144,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         pl.concat(paths)
         .filter(pl.col("pairs") > 0)
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "mapping", "filtering", "contacts"])
     )

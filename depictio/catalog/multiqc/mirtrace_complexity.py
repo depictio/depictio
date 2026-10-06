@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "reads": pl.Float64,
     "distinct_mirnas": pl.Float64,
@@ -71,4 +71,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
     if not records:
         raise ValueError("mirtrace_complexity: the complexity plot has no points")
-    return pl.DataFrame(records, schema=EXPECTED_SCHEMA).sort(["sample", "reads"])
+    return pl.DataFrame(records, schema=OUTPUT_SCHEMA).sort(["sample", "reads"])

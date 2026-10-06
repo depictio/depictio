@@ -39,13 +39,13 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="design", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "fastq_1": pl.Utf8,
     "fastq_2": pl.Utf8,
 }
 # Design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: Design-table column names that are never a factor: the sample id spellings
 #: and bookkeeping columns a samplesheet-derived table may carry along.

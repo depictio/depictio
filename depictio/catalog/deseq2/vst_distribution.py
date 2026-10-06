@@ -58,7 +58,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "bin_centre": pl.Float64,
     "density": pl.Float64,
@@ -70,7 +70,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "p95": pl.Float64,
     "floor_share": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 N_BINS = 60
 MAX_LEVELS = 12
@@ -114,7 +114,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     sheet = sources.get("samplesheet")
     samples = _numeric_columns(matrix)
     if not samples:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
     groups = _group_map(sheet, samples)
 
@@ -139,7 +139,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         "value"
     )
     if values.is_empty():
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     per_sample = values.group_by("sample_id").agg(
         pl.len().alias("total"),
         pl.col("value").quantile(0.25).alias("q1"),
@@ -179,6 +179,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .join(per_sample, on="sample_id", how="left")
         .join(labels, on="sample_id", how="left")
         .with_columns((pl.col("count").fill_null(0) / pl.col("total")).alias("density"))
-        .select([pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()])
+        .select([pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()])
         .sort(["sample_id", "bin_centre"])
     )

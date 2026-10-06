@@ -83,7 +83,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "chromosome": pl.Utf8,
     "position": pl.Int64,  # window start
     "end": pl.Int64,  # window start + BIN_SIZE
@@ -141,6 +141,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("value"),
             (pl.col("sample") + pl.lit(" (") + pl.col("stage") + pl.lit(")")).alias("sample_stage"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "stage", "chromosome", "position"])
     )

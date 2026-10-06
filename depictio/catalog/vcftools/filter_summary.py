@@ -19,7 +19,7 @@ from depictio.recipes.lib.vcf import finite_float, sample_and_caller
 RAW_DC_TAG = "vcftools_filter_summary_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "filter_label": pl.Utf8,
@@ -52,6 +52,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ).alias("pct_of_calls"),
     )
 
-    return df.select(list(EXPECTED_SCHEMA)).sort(
+    return df.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "caller", "n_variants"], descending=[False, False, True]
     )

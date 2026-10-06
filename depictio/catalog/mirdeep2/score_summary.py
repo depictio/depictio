@@ -40,7 +40,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="results", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "score_cutoff": pl.Int64,
     "novel_reported": pl.Int64,
@@ -119,7 +119,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if not rows:
         raise ValueError("mirdeep2_score_summary: no table carried a score summary block")
     frame = pl.DataFrame(rows, infer_schema_length=None)
-    frame = frame.with_columns(
-        [pl.col(c).cast(t, strict=False) for c, t in EXPECTED_SCHEMA.items()]
-    )
-    return frame.select(list(EXPECTED_SCHEMA)).sort(["sample", "score_cutoff"])
+    frame = frame.with_columns([pl.col(c).cast(t, strict=False) for c, t in OUTPUT_SCHEMA.items()])
+    return frame.select(list(OUTPUT_SCHEMA)).sort(["sample", "score_cutoff"])

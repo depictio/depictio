@@ -41,7 +41,7 @@ CNV_PROFILE_COLUMNS: list[str] = [
     "depth",
 ]
 
-#: The canonical output schema, shared by all three recipes' EXPECTED_SCHEMA.
+#: The canonical output schema, shared by all three recipes' OUTPUT_SCHEMA.
 CNV_PROFILE_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chrom": pl.Utf8,

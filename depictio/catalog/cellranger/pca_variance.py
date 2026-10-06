@@ -27,7 +27,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="variance", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "pc": pl.Int64,
     "variance_explained": pl.Float64,
@@ -60,4 +60,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "cellranger_pca_variance: a row's source_path did not match the expected layout"
         )
 
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "pc"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "pc"])

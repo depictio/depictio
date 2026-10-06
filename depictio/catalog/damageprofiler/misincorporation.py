@@ -61,7 +61,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="misinc", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "end": pl.Utf8,
     "position": pl.Int64,
@@ -137,4 +137,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     ).with_columns(pl.lit("other").alias("base_change"))
 
     out = pl.concat([kept, other.select(kept.columns)], how="vertical")
-    return out.select(list(EXPECTED_SCHEMA)).sort(["sample", "end", "position", "base_change"])
+    return out.select(list(OUTPUT_SCHEMA)).sort(["sample", "end", "position", "base_change"])

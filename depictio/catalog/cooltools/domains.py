@@ -58,7 +58,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="insulation", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "window": pl.Int64,
@@ -84,7 +84,7 @@ _WINDOW_COL_RE = r"^is_boundary_(\d+)$"
 
 
 def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
 
 def _domains_for_window(bins: pl.DataFrame, window: int) -> pl.DataFrame | None:
@@ -202,6 +202,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("valid_fraction").is_null() | (pl.col("valid_fraction") >= MIN_VALID_FRACTION)
     )
 
-    return domains.select(list(EXPECTED_SCHEMA)).sort(
+    return domains.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "resolution", "window", "chrom", "start"]
     )

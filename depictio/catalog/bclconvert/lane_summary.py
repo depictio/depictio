@@ -23,7 +23,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="quality", dc_ref="bclconvert_quality_raw", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "flowcell": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -145,6 +145,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .then(100.0 * pl.col("undetermined_reads") / pl.col("clusters_pf"))
         .alias("pct_undetermined"),
     )
-    return out.select([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()]).sort(
+    return out.select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()]).sort(
         ["flowcell", "lane"]
     )

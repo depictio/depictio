@@ -18,14 +18,14 @@ REPLICATES_DC_TAG = "mhcquant_replicate_intensity"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="replicates", dc_ref=REPLICATES_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,
     "pair": pl.Utf8,
     "intensity_a": pl.Float64,
     "intensity_b": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -46,4 +46,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
     if not frames:
         raise ValueError("mhcquant replicate pairs: no sample has two quantified replicates")
-    return pl.concat(frames).select(list(EXPECTED_SCHEMA)).sort(["sample", "pair", "peptide"])
+    return pl.concat(frames).select(list(OUTPUT_SCHEMA)).sort(["sample", "pair", "peptide"])

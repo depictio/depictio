@@ -70,7 +70,7 @@ _QUALIMAP_REGIONS = (
     "qualimap_rnaseq-reads_aligned_intergenic",
 )
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,
     **{name: pl.Float64 for name in METRICS},
@@ -162,4 +162,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     out = out.with_columns(
         pl.Series("condition", [_condition(s) for s in out["sample"].to_list()], dtype=pl.Utf8)
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return out.select(list(OUTPUT_SCHEMA)).sort("sample")

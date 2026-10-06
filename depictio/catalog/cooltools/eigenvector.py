@@ -72,7 +72,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="vecs", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "chrom": pl.Utf8,
@@ -141,4 +141,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(None)
         .alias("compartment")
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "resolution", "chrom", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "resolution", "chrom", "start"])

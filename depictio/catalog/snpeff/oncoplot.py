@@ -17,12 +17,12 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="genes", dc_ref="snpeff_genes")]
 #: An oncoplot is read row by row; thirty genes is the usual ceiling.
 TOP_GENES = 30
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "gene": pl.Utf8,
     "mutation_type": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {"n_variants": pl.Int64}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"n_variants": pl.Int64}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

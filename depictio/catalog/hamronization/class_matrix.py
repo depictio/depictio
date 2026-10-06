@@ -26,7 +26,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="report", dc_ref="hamronization_report"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "drug_class": pl.Utf8,
     "top_tool": pl.Utf8,
     "n_genes_band": pl.Utf8,

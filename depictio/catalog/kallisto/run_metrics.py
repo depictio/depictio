@@ -61,7 +61,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="barcodes", dc_ref=BARCODES_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "n_processed": pl.Int64,
     "n_pseudoaligned": pl.Int64,
@@ -138,9 +138,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
 
     df = pl.DataFrame(rows, infer_schema_length=None)
-    for column, dtype in EXPECTED_SCHEMA.items():
+    for column, dtype in OUTPUT_SCHEMA.items():
         if column not in df.columns:
             df = df.with_columns(pl.lit(None, dtype=dtype).alias(column))
     return df.select(
-        [pl.col(column).cast(dtype, strict=False) for column, dtype in EXPECTED_SCHEMA.items()]
+        [pl.col(column).cast(dtype, strict=False) for column, dtype in OUTPUT_SCHEMA.items()]
     ).sort("sample")

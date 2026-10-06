@@ -60,7 +60,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="features", dc_ref=FEATURES_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene": pl.Utf8,
     "normalized_dispersion": pl.Float64,
@@ -177,6 +177,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     else:
         table = table.with_columns(pl.lit(UNKNOWN).alias("selection"))
 
-    return table.select(list(EXPECTED_SCHEMA)).sort(
+    return table.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "normalized_dispersion"], descending=[False, True]
     )

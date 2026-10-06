@@ -50,7 +50,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,
     "gene_id": pl.Utf8,
@@ -134,7 +134,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
     )
     if usage.is_empty():
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
-    return usage.select(list(EXPECTED_SCHEMA)).sort(
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
+    return usage.select(list(OUTPUT_SCHEMA)).sort(
         ["gene_padj", "gene_id", "sample", "transcript_id"]
     )

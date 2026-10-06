@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="decay", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "chromosome": pl.Utf8,
@@ -74,4 +74,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("Number_bins").cast(pl.Int64, strict=False).alias("number_bins"),
         pl.col("Scale_factor").cast(pl.Float64, strict=False).alias("scale_factor"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "resolution", "chromosome", "distance"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "resolution", "chromosome", "distance"])

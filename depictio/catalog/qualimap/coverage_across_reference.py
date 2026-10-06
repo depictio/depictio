@@ -71,7 +71,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=CONTIG_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,
     "position": pl.Int64,
@@ -152,4 +152,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
         )
 
-    return placed.select(list(EXPECTED_SCHEMA)).sort(["sample", "global_position"])
+    return placed.select(list(OUTPUT_SCHEMA)).sort(["sample", "global_position"])

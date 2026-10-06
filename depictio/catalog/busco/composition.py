@@ -31,7 +31,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="summary", dc_ref=SUMMARY_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "lineage": pl.Utf8,
     "busco_class": pl.Utf8,
@@ -72,6 +72,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         pl.concat(parts, how="vertical")
         .drop_nulls(["percent"])
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["assembly_id", "lineage", "class_order"])
     )

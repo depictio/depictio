@@ -354,7 +354,7 @@ uv run pre-commit run --files <every file this pass touched>           # all hoo
 
 Every recipe was additionally run against the real megatest files, building the raw frame
 the way each DC's `polars_kwargs` will, and asserting both the dtype of every column in
-`EXPECTED_SCHEMA` and the column order. Every `use:` in the dashboard was resolved through
+`OUTPUT_SCHEMA` and the column order. Every `use:` in the dashboard was resolved through
 `catalog_source_for_use` (88 refs, 0 unresolved) and every column the dashboard names
 (`column_name`, `breakdown_col`, `attrition_cols`, `step_cols`, `dict_kwargs`, and every
 advanced-viz role) was checked to exist in the frame its data collection will hold, with

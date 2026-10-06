@@ -26,7 +26,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="replicates", dc_ref=REPLICATES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "psms": pl.Int64,
     "peptides": pl.Int64,
@@ -44,7 +44,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "replicate_median_r": pl.Float64,
     "replicate_min_r": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Fewer shared quantified peptides than this and a correlation is noise.
 MIN_PAIR_PEPTIDES = 20
@@ -105,4 +105,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     out = base.join(lengths, on="sample", how="left").join(
         _replicate_stats(sources.get("replicates")), on="sample", how="left"
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return out.select(list(OUTPUT_SCHEMA)).sort("sample")

@@ -33,7 +33,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "locus": pl.Utf8,
@@ -63,4 +63,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .cast(pl.Float64)
         .alias("fraction")
     )
-    return counts.select(list(EXPECTED_SCHEMA)).sort([*keys, "cdr3_aa_length"])
+    return counts.select(list(OUTPUT_SCHEMA)).sort([*keys, "cdr3_aa_length"])

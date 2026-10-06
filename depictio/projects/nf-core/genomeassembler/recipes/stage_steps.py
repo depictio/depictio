@@ -46,7 +46,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="assemblies", dc_ref=ASSEMBLIES_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "route": pl.Utf8,
     "assembly_id": pl.Utf8,
     "sample": pl.Utf8,
@@ -115,5 +115,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("qv") - pl.col("_qv0")).alias("qv_gain"),
         (pl.col("n50").cast(pl.Float64) / pl.col("_n500")).alias("n50_fold"),
     ).drop(["_qv0", "_n500"])
-    extra = [c for c in steps.columns if c not in EXPECTED_SCHEMA]
-    return steps.select([*EXPECTED_SCHEMA, *extra]).sort(["route", "stage_rank"])
+    extra = [c for c in steps.columns if c not in OUTPUT_SCHEMA]
+    return steps.select([*OUTPUT_SCHEMA, *extra]).sort(["route", "stage_rank"])

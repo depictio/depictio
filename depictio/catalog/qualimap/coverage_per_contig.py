@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "chromosome": pl.Utf8,
     "length": pl.Int64,
@@ -82,6 +82,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .cast(pl.Float64)
             .alias("relative_coverage")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "chromosome"])
     )

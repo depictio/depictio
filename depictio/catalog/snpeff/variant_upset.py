@@ -27,9 +27,9 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="variants", dc_ref="snpeff_ann_v
 #: singletons.
 MAX_VARIANTS = 60_000
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {"variant_key": pl.Utf8}
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"variant_key": pl.Utf8}
 # Set columns are one per caller-and-sample pair, known only at ingest.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

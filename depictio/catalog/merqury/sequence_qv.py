@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="sequences", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "sequence": pl.Utf8,
     "asm_only_kmers": pl.Int64,
@@ -84,6 +84,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("error_free"),
         )
         .drop_nulls(["sequence"])
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["assembly_id", "total_kmers"], descending=[False, True])
     )

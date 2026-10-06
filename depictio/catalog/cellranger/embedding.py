@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="pca", dc_ref=PCA_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,
     "cluster": pl.Utf8,
@@ -109,4 +109,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .join(tsne, on=["sample", "barcode"], how="left")
         .join(pca, on=["sample", "barcode"], how="left")
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "barcode"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "barcode"])

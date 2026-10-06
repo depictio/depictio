@@ -10,7 +10,7 @@ marker_expression DC::
 
 Output schema: `gene` (Utf8, row id) plus one Float64 column per cluster
 label seen in the source table (column names are data-dependent, hence no
-static EXPECTED_SCHEMA beyond `gene`; `catalog validate` checks the frame
+static OUTPUT_SCHEMA beyond `gene`; `catalog validate` checks the frame
 shape, not a fixed column list, for pivoted outputs).
 """
 
@@ -27,7 +27,7 @@ SOURCES: list[RecipeSource] = [
 ]
 
 #: only `gene` is guaranteed; the per-cluster value columns are data-dependent.
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene": pl.Utf8,
 }
 

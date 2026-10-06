@@ -62,9 +62,9 @@ parsing logic:
 
 | Collection | Rows | Columns | Schema |
 |---|---|---|---|
-| `bcftools_stats_summary` | 10 (2 samples x 5 callers) | 12 | all match `EXPECTED_SCHEMA` |
-| `bcftools_stats_tstv` | 10 | 8 | all match `EXPECTED_SCHEMA` |
-| `samples` | 2 | 6 | all match `EXPECTED_SCHEMA` |
+| `bcftools_stats_summary` | 10 (2 samples x 5 callers) | 12 | all match `OUTPUT_SCHEMA` |
+| `bcftools_stats_tstv` | 10 | 8 | all match `OUTPUT_SCHEMA` |
+| `samples` | 2 | 6 | all match `OUTPUT_SCHEMA` |
 
 ## New MultiQC panels: `gatk`, `vcftools`, `vep`
 

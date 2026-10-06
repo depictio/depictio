@@ -39,7 +39,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "assembler": pl.Utf8,
     "sample": pl.Utf8,
@@ -98,6 +98,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 / pl.col("total_length").max().over("assembly_id").cast(pl.Float64)
             ).alias("length_fraction"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["assembly_id", "min_contig_length"])
     )

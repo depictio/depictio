@@ -61,7 +61,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="diffexp", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Utf8,
     "cluster": pl.Utf8,
@@ -218,6 +218,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     result = result.filter(pl.col("rank_in_cluster") <= MAX_GENES_PER_CLUSTER)
     result = result.join(cluster_labels, on=keys, how="left")
 
-    return result.select(list(EXPECTED_SCHEMA)).sort(
+    return result.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "resolution", "cluster", "adjusted_pvalue"]
     )

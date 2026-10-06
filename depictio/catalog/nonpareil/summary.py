@@ -45,7 +45,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref="samplesheet", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "library": pl.Utf8,
     "platform": pl.Utf8,
@@ -58,7 +58,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "effort_multiple": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -94,6 +94,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .cast(pl.Float64)
             .alias("effort_multiple"),
         )
-        .select(*EXPECTED_SCHEMA)
+        .select(*OUTPUT_SCHEMA)
         .sort("library")
     )

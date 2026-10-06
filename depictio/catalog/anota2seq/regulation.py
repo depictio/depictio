@@ -22,7 +22,7 @@ Sources: the same files as ``results.py`` (every
 ``<contrast>.<analysis>.anota2seq.results.tsv``) and the same optional gene
 symbol table.
 
-Output: see ``EXPECTED_SCHEMA``.
+Output: see ``OUTPUT_SCHEMA``.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -181,5 +181,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("direction"),
         )
         .sort("contrast", "gene_id")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -56,7 +56,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="bins", dc_ref=BINS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "chrom": pl.Utf8,
@@ -79,7 +79,7 @@ _BINS_RE = r"cooler_bins_(\d+)\.bed$"
 
 
 def _empty() -> pl.DataFrame:
-    return pl.DataFrame(schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -207,4 +207,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.lit(finest, dtype=pl.Int64).alias("resolution"),
     )
 
-    return binned.select(list(EXPECTED_SCHEMA)).sort(["sample", "chrom", "distance"])
+    return binned.select(list(OUTPUT_SCHEMA)).sort(["sample", "chrom", "distance"])

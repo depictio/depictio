@@ -31,7 +31,7 @@ def test_general_stats_folds_read_rows_onto_their_library():
         }
     ).with_columns(pl.all().replace("", None))
     out = module.transform({"stats": raw})
-    validate_schema(out, module.EXPECTED_SCHEMA, "general_stats", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "general_stats", None)
 
     assert out["sample"].to_list() == ["ctrl_REP1", "ko_1"]
     assert out["condition"].to_list() == ["ctrl", "ko"]
@@ -57,7 +57,7 @@ def test_gene_summary_ranks_genes_on_the_mean_variance_plane():
         }
     )
     out = module.transform({"matrix": matrix})
-    validate_schema(out, module.EXPECTED_SCHEMA, "gene_summary", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "gene_summary", None)
 
     assert out["gene_name"].to_list() == ["PEAK", "FLAT"]  # OFF never reaches 1 TPM
     peak = out.row(0, named=True)

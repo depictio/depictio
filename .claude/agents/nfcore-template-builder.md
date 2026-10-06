@@ -76,10 +76,10 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.sample_ids import strip_stage_suffixes
 RAW_DC_TAG = "preseq_ccurve_raw"
 SOURCES = [RecipeSource(ref="curves", dc_ref=RAW_DC_TAG)]
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {"sample": pl.Utf8, "total_reads": pl.Float64, ...}
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"sample": pl.Utf8, "total_reads": pl.Float64, ...}
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame: ...
 ```
-Rules: dtypes must match EXPECTED_SCHEMA exactly (`pl.len()` is UInt64, cast it: the TSV
+Rules: dtypes must match OUTPUT_SCHEMA exactly (`pl.len()` is UInt64, cast it: the TSV
 round-trip hides this and ingestion does not); recover the sample id from the file name via
 `include_file_paths: source_path` + `depictio/recipes/lib/sample_ids.py`; decimate inside
 the recipe for `profile` (never sampled, keep <= 200 points per series); every render a

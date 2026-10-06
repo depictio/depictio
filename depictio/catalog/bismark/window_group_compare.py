@@ -90,7 +90,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "window_id": pl.Utf8,
     "chromosome": pl.Utf8,
     "position": pl.Int64,
@@ -354,7 +354,7 @@ def compare_windows(
             .cast(pl.Utf8)
             .alias("direction"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         # Ties on padj are common (BH assigns one value to a run of p-values),
         # so the genomic position keeps the order stable between runs.
         .sort(["padj", "chromosome", "start"])

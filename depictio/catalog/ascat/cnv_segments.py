@@ -57,8 +57,8 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="segments", dc_ref=SEGMENTS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: nf-core/sarek writes `variant_calling/ascat/<sample>/<sample>.cnvs.txt`.
 _SAMPLE_RE = r"ascat/([^/]+)/[^/]*$"

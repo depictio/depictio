@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "run_id": pl.Utf8,
     "spectra_searched": pl.Int64,
     "target_psms": pl.Int64,
@@ -50,7 +50,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "median_mass_error_ppm": pl.Float64,
     "median_peptide_length": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def _tda(frame: pl.DataFrame) -> pl.DataFrame:
@@ -109,4 +109,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 "median_peptide_length": target["_len"].median(),
             }
         )
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort("run_id")
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort("run_id")

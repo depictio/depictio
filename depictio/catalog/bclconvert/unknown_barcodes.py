@@ -25,7 +25,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="demux", dc_ref="bclconvert_demux_raw"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "flowcell": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -197,4 +197,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                     "swap_class": swap,
                 }
             )
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["flowcell", "lane", "rank"])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["flowcell", "lane", "rank"])

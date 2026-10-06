@@ -27,7 +27,7 @@ def test_nx_rungs_follow_the_bases_not_the_reads() -> None:
     raw = pl.DataFrame({"raw_line": lines, "source_path": ["x/S1.sorted.bam.stats"] * len(lines)})
     out = recipe.transform({"raw": raw})
 
-    assert dict(out.schema) == {k: v() for k, v in recipe.EXPECTED_SCHEMA.items()}
+    assert dict(out.schema) == {k: v() for k, v in recipe.OUTPUT_SCHEMA.items()}
     assert out["sample"].unique().to_list() == ["S1"]
     assert out.height == 99
     by_rung = dict(zip(out["nx"].to_list(), out["read_length"].to_list(), strict=True))
@@ -42,4 +42,4 @@ def test_no_rl_rows_gives_an_empty_frame_with_the_schema() -> None:
     raw = pl.DataFrame({"raw_line": ["SN\tx:\t1"], "source_path": ["S2.bam.stats"]})
     out = recipe.transform({"raw": raw})
     assert out.is_empty()
-    assert list(out.columns) == list(recipe.EXPECTED_SCHEMA)
+    assert list(out.columns) == list(recipe.OUTPUT_SCHEMA)

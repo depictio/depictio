@@ -42,7 +42,7 @@ from depictio.recipes.lib.nanoplot import RAW_LINE_COL, SOURCE_PATH_COL, sample_
 RAW_DC_TAG = "nanoplot_nanostats_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "n_reads": pl.Float64,
     "total_bases": pl.Float64,
@@ -114,11 +114,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # `infer_schema_length=None`: a key first seen after the 100th report is
     # still a column, not silently dropped.
     frame = pl.DataFrame(rows, infer_schema_length=None) if rows else pl.DataFrame({"sample": []})
-    for column, dtype in EXPECTED_SCHEMA.items():
+    for column, dtype in OUTPUT_SCHEMA.items():
         if column not in frame.columns:
             frame = frame.with_columns(pl.lit(None, dtype=dtype).alias(column))
     frame = frame.with_columns(
         pl.col("sample").cast(pl.Utf8),
-        *[pl.col(c).cast(pl.Float64, strict=False) for c in EXPECTED_SCHEMA if c != "sample"],
+        *[pl.col(c).cast(pl.Float64, strict=False) for c in OUTPUT_SCHEMA if c != "sample"],
     ).with_columns((pl.col("total_bases") / 1e9).alias("total_gigabases"))
-    return frame.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return frame.select(list(OUTPUT_SCHEMA)).sort("sample")

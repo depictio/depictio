@@ -61,7 +61,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "endogenous_dna": pl.Float64,
     "endogenous_dna_post": pl.Float64,
@@ -129,6 +129,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             (pl.col("endogenous_dna") - pl.col("endogenous_dna_post")).alias("endogenous_dna_loss"),
             (100.0 - pl.col("endogenous_dna")).alias("off_target_pct"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample")
     )

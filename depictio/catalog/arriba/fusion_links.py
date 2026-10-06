@@ -65,7 +65,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "label": pl.Utf8,
     "chrom_a": pl.Utf8,
@@ -126,4 +126,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ),
         _text("type").alias("category"),
         _text("confidence").alias("confidence"),
-    ).select(list(EXPECTED_SCHEMA))
+    ).select(list(OUTPUT_SCHEMA))

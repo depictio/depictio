@@ -43,7 +43,7 @@ _SECTIONS: dict[str, str] = {
 #: Percent`, and only these four of its keys are counts.
 _ZYGOSITY_KEYS = ["Reference", "Het", "Hom", "Missing"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "section": pl.Utf8,
@@ -95,4 +95,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
     )
 
-    return rows.select(list(EXPECTED_SCHEMA)).sort(["sample", "caller", "section", "category"])
+    return rows.select(list(OUTPUT_SCHEMA)).sort(["sample", "caller", "section", "category"])

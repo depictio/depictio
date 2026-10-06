@@ -73,7 +73,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -81,7 +81,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "dim_2_percent": pl.Float64,
     "pca_set": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "dim_3": pl.Float64,
     "dim_3_percent": pl.Float64,
 }
@@ -240,7 +240,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     out = pl.concat(blocks, how="diagonal_relaxed")
     # A third component is published only when every set has one.
     optional = [
-        c for c in OPTIONAL_SCHEMA if c in out.columns and out.get_column(c).null_count() == 0
+        c
+        for c in OPTIONAL_OUTPUT_SCHEMA
+        if c in out.columns and out.get_column(c).null_count() == 0
     ]
-    dropped = [c for c in OPTIONAL_SCHEMA if c in out.columns and c not in optional]
-    return out.drop(dropped).select([*EXPECTED_SCHEMA, *optional])
+    dropped = [c for c in OPTIONAL_OUTPUT_SCHEMA if c in out.columns and c not in optional]
+    return out.drop(dropped).select([*OUTPUT_SCHEMA, *optional])

@@ -64,7 +64,7 @@ RAW_DC_TAG = "interop_summary_raw"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="summary", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "run_id": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -181,4 +181,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         rows.extend(_parse([line or "" for line in group[RAW_LINE_COL].to_list()]))
     if not rows:
         raise ValueError("interop_summary: no Read block with lane rows was found")
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["run_id", "lane", "read"])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["run_id", "lane", "read"])

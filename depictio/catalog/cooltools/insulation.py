@@ -73,7 +73,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="insulation", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "resolution": pl.Int64,
     "chrom": pl.Utf8,
@@ -153,10 +153,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     if not per_window:
         return df.select(
-            [
-                pl.lit(None, dtype=t).alias(c).filter(pl.lit(False))
-                for c, t in EXPECTED_SCHEMA.items()
-            ]
+            [pl.lit(None, dtype=t).alias(c).filter(pl.lit(False)) for c, t in OUTPUT_SCHEMA.items()]
         )
 
-    return pl.concat(per_window).select(list(EXPECTED_SCHEMA)).sort(["chrom", "start", "window"])
+    return pl.concat(per_window).select(list(OUTPUT_SCHEMA)).sort(["chrom", "start", "window"])

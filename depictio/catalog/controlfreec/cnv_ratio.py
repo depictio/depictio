@@ -63,8 +63,8 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="ratio", dc_ref=RATIO_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = CNV_PROFILE_SCHEMA
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: nf-core/sarek writes `variant_calling/controlfreec/<sample>/<sample>_ratio.txt`.
 _SAMPLE_RE = r"controlfreec/([^/]+)/[^/]*$"

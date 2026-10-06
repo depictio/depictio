@@ -26,7 +26,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "expected_cells": pl.Int64,
     "n_lanes": pl.Int64,
@@ -53,4 +53,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.len().cast(pl.Int64).alias("n_lanes"),
     )
     result = result.rename({"sample": "sample_id"})
-    return result.select(list(EXPECTED_SCHEMA)).sort("sample_id")
+    return result.select(list(OUTPUT_SCHEMA)).sort("sample_id")

@@ -61,7 +61,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 # The callers nf-core/rnafusion runs by default, type-checked when present. Any
 # other caller column the file carries is published the same way.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "arriba": pl.Int64,
     "fusioncatcher": pl.Int64,
     "starfusion": pl.Int64,

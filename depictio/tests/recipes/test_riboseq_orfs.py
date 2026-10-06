@@ -41,7 +41,7 @@ def test_ribotish_collapses_start_sites_onto_the_stop_key():
     )
     module = load_recipe("ribotish/orfs.py")
     out = module.transform({"pred": raw})
-    validate_schema(out, module.EXPECTED_SCHEMA, "ribotish_orfs", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "ribotish_orfs", None)
 
     rows = {r["orf_id"]: r for r in out.to_dicts()}
     assert set(rows) == {"chr1:+:1000", "chr2:-:501"}
@@ -71,7 +71,7 @@ def test_orf_overlap_flags_each_caller():
     code = orfs(["b:-:5", "c:+:9"], "Upstream ORF", ["l1", "l1"])
     module = load_recipe("nf-core/riboseq/orf_overlap.py")
     out = module.transform({"ribotish": tish, "ribocode": code})
-    validate_schema(out, module.EXPECTED_SCHEMA, "orf_overlap", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "orf_overlap", None)
 
     rows = {r["orf_id"]: r for r in out.to_dicts()}
     assert (rows["a:+:1"]["ribotish"], rows["a:+:1"]["ribocode"]) == (1, 0)

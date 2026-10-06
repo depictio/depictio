@@ -38,7 +38,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "clone_id": pl.Utf8,
@@ -48,7 +48,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "lower": pl.Float64,
     "upper": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # A `profile` series is never sampled downstream, so the recipe owns the budget.
 MAX_POINTS = 200

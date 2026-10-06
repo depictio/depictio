@@ -55,7 +55,7 @@ RAW_LINE_COL = "raw_line"
 #: Column carrying the report's path (``include_file_paths`` on the raw DC).
 SOURCE_PATH_COL = "source_path"
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "section": pl.Utf8,
     "series": pl.Utf8,
@@ -230,10 +230,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         rows += _rows_for(sample, "IS", "insert_size", sample, "n_pairs", inserts)
 
     if not rows:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
     frame = pl.DataFrame(rows, infer_schema_length=None)
-    for column, dtype in EXPECTED_SCHEMA.items():
+    for column, dtype in OUTPUT_SCHEMA.items():
         if column not in frame.columns:
             frame = frame.with_columns(pl.lit(None, dtype=dtype).alias(column))
     return (
@@ -247,6 +247,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 for c in ("bin", *_VALUE_COLUMNS, *_SN_COLUMNS)
             ],
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "section", "series", "bin"], nulls_last=False)
     )

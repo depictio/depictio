@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="completeness", dc_ref=COMPLETENESS_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "merqury_name": pl.Utf8,
     "asm_only_kmers": pl.Int64,
@@ -144,6 +144,6 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     completeness = _tidy_completeness(sources.get("completeness"))
     return (
         qv.join(completeness, on="assembly_id", how="left")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("assembly_id")
     )

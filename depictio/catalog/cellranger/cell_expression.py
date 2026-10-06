@@ -44,7 +44,7 @@ A template reusing this recipe declares six sources, all already shared by
     ]
 
 Output schema: the six fixed columns below, then one Float64 column per panel
-gene (names are data-dependent, so they are not in `EXPECTED_SCHEMA`; the
+gene (names are data-dependent, so they are not in `OUTPUT_SCHEMA`; the
 `group_compare` kind infers its feature columns the same way `complex_heatmap`
 infers its matrix, and `umap_1` / `umap_2` are numeric columns of the same
 frame, see the note in VALIDATION_REPORT.md).
@@ -84,7 +84,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cell_qc", dc_ref=CELL_QC_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,
     "cluster_label": pl.Utf8,
@@ -179,7 +179,7 @@ def transform(
 
     feature_names = set(features["feature_name"].cast(pl.Utf8).drop_nulls().to_list())
     # A gene symbol that collides with one of the fixed columns would shadow it.
-    feature_names -= set(EXPECTED_SCHEMA)
+    feature_names -= set(OUTPUT_SCHEMA)
     genes = panel_genes(diffexp, dispersion, feature_names, marker_panel_from_params(params))
     if not genes:
         raise ValueError("cellranger_cell_expression: the gene panel is empty")
@@ -234,4 +234,4 @@ def transform(
         if gene not in result.columns:
             result = result.with_columns(pl.lit(0.0, dtype=pl.Float64).alias(gene))
 
-    return result.select([*EXPECTED_SCHEMA, *genes]).sort(["sample", "barcode"])
+    return result.select([*OUTPUT_SCHEMA, *genes]).sort(["sample", "barcode"])

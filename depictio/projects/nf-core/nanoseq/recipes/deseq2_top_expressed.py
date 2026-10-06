@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = dict(DESEQ2_COLUMNS)
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = dict(DESEQ2_COLUMNS)
 
 #: Rows kept, ranked by mean normalised count.
 TOP_N = 200

@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "position": pl.Int64,
     "signal": pl.Float64,
@@ -53,5 +53,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.when(total > 0).then(pl.col("signal") * 100.0 / total).otherwise(0.0).alias("signal")
         )
         .sort("sample", "position")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -52,7 +52,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "report_id": pl.Utf8,
     "reference_length": pl.Int64,
@@ -130,7 +130,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     selected = [label.alias("assembly_id"), report_id.alias("report_id")]
     for alias, folded in REFERENCE_COLUMNS.items():
-        dtype = EXPECTED_SCHEMA[alias]
+        dtype = OUTPUT_SCHEMA[alias]
         original = mapping.get(folded)
         if original is None:
             selected.append(pl.lit(None, dtype=dtype).alias(alias))
@@ -153,4 +153,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     if out.is_empty():
         raise ValueError("quast_reference_report: no row carried an assembly name")
-    return out.select(list(EXPECTED_SCHEMA)).sort("report_id")
+    return out.select(list(OUTPUT_SCHEMA)).sort("report_id")

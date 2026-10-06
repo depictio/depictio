@@ -60,7 +60,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="fragments", dc_ref=FRAGMENTS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "fragment_class": pl.Utf8,
@@ -180,4 +180,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         _median_length(pl.col("count"), pl.col("fragment_length")).alias("sample_median_length")
     )
     grouped = grouped.join(ratios, on="sample", how="left").join(medians, on="sample", how="left")
-    return grouped.select(list(EXPECTED_SCHEMA)).sort(["sample", "class_order"])
+    return grouped.select(list(OUTPUT_SCHEMA)).sort(["sample", "class_order"])

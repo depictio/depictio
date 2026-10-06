@@ -137,7 +137,7 @@ def _bclconvert_sources() -> dict[str, pl.DataFrame]:
 def _run(recipe: str, sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     module = load_recipe(recipe)
     out = module.transform(sources)
-    assert dict(out.schema) == dict(module.EXPECTED_SCHEMA), recipe
+    assert dict(out.schema) == dict(module.OUTPUT_SCHEMA), recipe
     return out
 
 
@@ -145,8 +145,8 @@ def _run(recipe: str, sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     "output", ["demux_stats", "lane_summary", "read_quality", "unknown_barcodes"]
 )
 def test_bcl2fastq_and_bclconvert_write_the_same_schema(output: str) -> None:
-    bcl2 = load_recipe(f"bcl2fastq/{output}.py").EXPECTED_SCHEMA
-    bclc = load_recipe(f"bclconvert/{output}.py").EXPECTED_SCHEMA
+    bcl2 = load_recipe(f"bcl2fastq/{output}.py").OUTPUT_SCHEMA
+    bclc = load_recipe(f"bclconvert/{output}.py").OUTPUT_SCHEMA
     assert dict(bcl2) == dict(bclc)
 
 

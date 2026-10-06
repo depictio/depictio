@@ -95,7 +95,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="peaks", dc_ref=PEAKS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "target": pl.Utf8,
     "peak_id": pl.Utf8,
@@ -145,7 +145,7 @@ def _sample_profile(sample: str, frags: pl.DataFrame, peaks: pl.DataFrame) -> pl
     total = frags.height
     regions = _kept_regions(peaks.select("peak_id", "chr", "summit", "total_signal"))
     if total == 0 or regions.is_empty():
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
     n_side = HALF_WINDOW // BIN_BP
     windows = (
@@ -189,7 +189,7 @@ def _sample_profile(sample: str, frags: pl.DataFrame, peaks: pl.DataFrame) -> pl
             (pl.col("fragments").cast(pl.Float64) * 1e6 / total).alias("cpm"),
             pl.col("sample").str.replace(_REPLICATE_SUFFIX, "").alias("target"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )
 
 

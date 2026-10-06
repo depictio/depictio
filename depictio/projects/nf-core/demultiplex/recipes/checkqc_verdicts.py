@@ -50,7 +50,7 @@ RAW_DC_TAG = "checkqc_raw"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="reports", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "report": pl.Utf8,
     "handler": pl.Utf8,
     "severity": pl.Utf8,
@@ -154,6 +154,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 )
     if not rows:
         raise ValueError("checkqc_verdicts: no handler in the scanned reports")
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(
-        ["report", "severity", "handler", "lane"]
-    )
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["report", "severity", "handler", "lane"])

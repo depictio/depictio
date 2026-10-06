@@ -14,7 +14,7 @@ ORF, Downstream ORF, Internal ORF, Novel ORF).
 Sources: every ``*_collapsed.txt`` under the run root; the library id is the
 file name without ``_collapsed.txt``.
 
-Output: see ``EXPECTED_SCHEMA``. ``aa_length`` is ``ORF_length / 3`` (RiboCode
+Output: see ``OUTPUT_SCHEMA``. ``aa_length`` is ``ORF_length / 3`` (RiboCode
 reports the ORF length in nucleotides without the stop codon).
 """
 
@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "orf_id": pl.Utf8,
     "transcript_id": pl.Utf8,
@@ -92,5 +92,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         out.unique(subset=["sample", "orf_id"], keep="first", maintain_order=True)
         .sort("sample", "orf_id")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

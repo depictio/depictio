@@ -32,7 +32,7 @@ from depictio.recipes.lib.bcftools_stats import sample_and_caller
 RAW_DC_TAG = "bcftools_stats_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "n_records": pl.Int64,
@@ -85,7 +85,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     # A caller/sample pair missing one SN line entirely (should not happen,
     # but bcftools stats has no schema contract) still gets every column.
-    for col in EXPECTED_SCHEMA:
+    for col in OUTPUT_SCHEMA:
         if col in ("sample", "caller", "snp_fraction", "log10_n_records"):
             continue
         if col not in wide.columns:
@@ -99,4 +99,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("n_records") + 1).log(base=10).alias("log10_n_records"),
     )
 
-    return wide.select(list(EXPECTED_SCHEMA)).sort(["sample", "caller"])
+    return wide.select(list(OUTPUT_SCHEMA)).sort(["sample", "caller"])

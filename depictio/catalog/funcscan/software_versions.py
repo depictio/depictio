@@ -35,7 +35,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "process": pl.Utf8,
     "tool": pl.Utf8,
     "version": pl.Utf8,
@@ -114,7 +114,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         raise ValueError("software_versions: the MultiQC report listed no software versions")
 
     return (
-        pl.DataFrame(rows, schema=EXPECTED_SCHEMA)
+        pl.DataFrame(rows, schema=OUTPUT_SCHEMA)
         .sort("screen", "process", "tool")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -551,7 +551,7 @@ uv run ruff format / check on the two new recipes
 
 Every recipe was also run directly against the real files before the ingest, through the same
 glob and read options the collection declares, and its output frame compared to
-`EXPECTED_SCHEMA`.
+`OUTPUT_SCHEMA`.
 
 ---
 

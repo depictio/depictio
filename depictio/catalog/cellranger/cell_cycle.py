@@ -66,7 +66,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cell_qc", dc_ref=CELL_QC_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,
     "cluster_label": pl.Utf8,
@@ -190,4 +190,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.lit(n_g2m, dtype=pl.Int64).alias("n_g2m_genes"),
     )
 
-    return scored.select(list(EXPECTED_SCHEMA)).sort(["sample", "barcode"])
+    return scored.select(list(OUTPUT_SCHEMA)).sort(["sample", "barcode"])

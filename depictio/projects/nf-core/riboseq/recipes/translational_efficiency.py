@@ -45,7 +45,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
     "rna_cpm": pl.Float64,
@@ -122,7 +122,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             (pl.col("ribo_cpm") + 1).log(2).alias("log2_ribo_cpm"),
             ((pl.col("ribo_cpm") + 1) / (pl.col("rna_cpm") + 1)).log(2).alias("log2_te"),
         )
-        .with_columns([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()])
+        .with_columns([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
         .sort("gene_id")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

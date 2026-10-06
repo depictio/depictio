@@ -32,7 +32,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,
     "sequence": pl.Utf8,
@@ -41,7 +41,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "detected": pl.Int64,
     "log10_intensity": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _OUTPUT_SUFFIXES = ("_pin", "_speclib", "_matching_ions", "_all_peaks")
 
@@ -84,6 +84,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             (pl.col("_i") > 0).fill_null(False).cast(pl.Int64).alias("detected"),
             pl.when(pl.col("_i") > 0).then(pl.col("_i").log10()).alias("log10_intensity"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "peptide", "replicate"])
     )

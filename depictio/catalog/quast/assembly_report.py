@@ -55,7 +55,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "assembler": pl.Utf8,
     "sample": pl.Utf8,
@@ -111,6 +111,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         frame.with_columns(assembler.alias("assembler"), sample.alias("sample"))
         .unique(subset=["assembly_id"], keep="first", maintain_order=True)
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["assembler", "sample"])
     )

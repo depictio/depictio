@@ -36,7 +36,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metrics", dc_ref=METRICS_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "metric": pl.Utf8,
     "value": pl.Float64,
@@ -81,4 +81,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
         )
     result = pl.concat(frames, how="vertical_relaxed")
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "metric"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "metric"])

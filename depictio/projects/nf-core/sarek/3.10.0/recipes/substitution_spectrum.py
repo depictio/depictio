@@ -39,7 +39,7 @@ FOLD: dict[str, str] = {
 }
 TRANSITIONS = ["C>T", "T>C"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "callset": pl.Utf8,
@@ -75,6 +75,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .otherwise(pl.lit("transversion"))
             .alias("mutation_class"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort([*by_callset, "substitution_class"])
     )

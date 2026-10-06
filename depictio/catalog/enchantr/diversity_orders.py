@@ -28,7 +28,7 @@ ORDER_LABELS: dict[int, str] = {
     2: "q = 2, Simpson",
 }
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "order": pl.Utf8,
@@ -37,7 +37,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "d_lower": pl.Float64,
     "d_upper": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -64,4 +64,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .replace_strict(ORDER_LABELS, return_dtype=pl.Utf8)
         .alias("order")
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort(["q", "sample_id"])
+    return out.select(list(OUTPUT_SCHEMA)).sort(["q", "sample_id"])

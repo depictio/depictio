@@ -91,7 +91,7 @@ def test_every_dumped_resolution_survives_as_its_own_partition(recipe) -> None:
 
     out = recipe.transform({"contacts": contacts, "bins": bins})
 
-    validate_schema(out, recipe.EXPECTED_SCHEMA, RECIPE)
+    validate_schema(out, recipe.OUTPUT_SCHEMA, RECIPE)
     assert sorted(set(out["resolution"].to_list())) == [500_000, 1_000_000]
 
 
@@ -140,7 +140,7 @@ def test_an_empty_dump_returns_the_output_schema_not_a_crash(recipe) -> None:
     out = recipe.transform({"contacts": empty, "bins": _bins({500_000: _grid("chr1", 2, 500_000)})})
 
     assert out.height == 0
-    assert list(out.columns) == list(recipe.EXPECTED_SCHEMA)
+    assert list(out.columns) == list(recipe.OUTPUT_SCHEMA)
 
 
 # ---------------------------------------------------------------------------

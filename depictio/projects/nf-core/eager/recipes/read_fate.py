@@ -64,7 +64,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="dedup", dc_ref=DEDUP_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "step_sequencing": pl.Utf8,
     "step_trimming": pl.Utf8,
@@ -191,4 +191,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if not rows:
         raise ValueError("eager_read_fate: no library produced a single non-empty fate")
 
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["sample", *STEP_COLUMNS])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["sample", *STEP_COLUMNS])

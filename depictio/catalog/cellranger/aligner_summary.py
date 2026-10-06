@@ -62,7 +62,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="kallisto_cellbender", dc_ref=KALLISTO_CELLBENDER_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "aligner": pl.Utf8,
     "cells_called": pl.Int64,
     "cellbender_cells": pl.Int64,
@@ -154,9 +154,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
 
     df = pl.DataFrame(rows, infer_schema_length=None)
-    for column, dtype in EXPECTED_SCHEMA.items():
+    for column, dtype in OUTPUT_SCHEMA.items():
         if column not in df.columns:
             df = df.with_columns(pl.lit(None, dtype=dtype).alias(column))
     return df.select(
-        [pl.col(column).cast(dtype, strict=False) for column, dtype in EXPECTED_SCHEMA.items()]
+        [pl.col(column).cast(dtype, strict=False) for column, dtype in OUTPUT_SCHEMA.items()]
     ).sort("aligner")

@@ -34,7 +34,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cazyme", dc_ref="dbcan_overview", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "contig": pl.Utf8,
     "contig_length": pl.Int64,
@@ -145,5 +145,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             top_screen.alias("top_screen"),
         )
         .sort("sample", "features", "contig", descending=[False, True, False])
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -50,7 +50,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cell_qc", dc_ref=CELL_QC_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cluster_label": pl.Utf8,
     "gene": pl.Utf8,
     "mean_expression": pl.Float64,
@@ -147,4 +147,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("_n_detected") / pl.col("_n_cells_in_cluster")).alias("frac_expressing"),
     )
 
-    return result.select(list(EXPECTED_SCHEMA)).sort(["cluster_label", "gene"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["cluster_label", "gene"])

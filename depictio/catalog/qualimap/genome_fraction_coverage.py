@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="curves", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "min_coverage": pl.Int64,
     "genome_fraction_pct": pl.Float64,
@@ -59,4 +59,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if frame.is_empty():
         raise ValueError(f"{_RECIPE}: no row carried a threshold and a fraction")
 
-    return frame.select(list(EXPECTED_SCHEMA)).sort(["sample", "min_coverage"])
+    return frame.select(list(OUTPUT_SCHEMA)).sort(["sample", "min_coverage"])

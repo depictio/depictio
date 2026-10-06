@@ -18,7 +18,7 @@ compares across libraries:
 Sources: the ``*.ribowaltz.frames.tsv``, ``*.ribowaltz.psite_region.tsv`` and
 ``*.ribowaltz.length_distribution.tsv`` files of every library.
 
-Output schema: see ``EXPECTED_SCHEMA``; ``sample`` is the key.
+Output schema: see ``OUTPUT_SCHEMA``; ``sample`` is the key.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "psites": pl.Int64,
     "frame0_cds_pct": pl.Float64,
@@ -149,9 +149,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .join(_frames(sources["frames"]), on="sample", how="full", coalesce=True)
         .join(_lengths(sources["lengths"]), on="sample", how="full", coalesce=True)
     )
-    casts = {name: dtype for name, dtype in EXPECTED_SCHEMA.items()}
+    casts = {name: dtype for name, dtype in OUTPUT_SCHEMA.items()}
     return (
         out.with_columns([pl.col(c).cast(t) for c, t in casts.items()])
         .sort("sample")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

@@ -77,7 +77,7 @@ RANKS: tuple[str, ...] = (
     "species",
 )
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "profiler": pl.Utf8,
     "database": pl.Utf8,
     "profiler_db": pl.Utf8,
@@ -92,7 +92,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "rel_abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # kraken2 rank codes. A trailing digit marks an intermediate level (`D1` = a clade
 # between domain and phylum); it collapses onto its parent rank, and levels outside
@@ -215,6 +215,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.lit(ROOT, dtype=pl.Utf8).alias("root"),
             *[pl.Series(rank, values, dtype=pl.Utf8) for rank, values in widened.items()],
         )
-        .select(*EXPECTED_SCHEMA)
+        .select(*OUTPUT_SCHEMA)
         .sort(["profiler", "database", "sample", "rel_abundance"], descending=[False] * 3 + [True])
     )

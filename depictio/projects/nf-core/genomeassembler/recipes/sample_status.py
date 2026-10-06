@@ -35,7 +35,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="assemblies", dc_ref="assemblies", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "assembler_used": pl.Utf8,
     "scaffolders": pl.Utf8,
@@ -139,5 +139,5 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         .otherwise(pl.lit("No assembly QC"))
         .alias("qc_status"),
     )
-    extra = [c for c in out.columns if c not in EXPECTED_SCHEMA]
-    return out.select([*EXPECTED_SCHEMA, *extra])
+    extra = [c for c in out.columns if c not in OUTPUT_SCHEMA]
+    return out.select([*OUTPUT_SCHEMA, *extra])

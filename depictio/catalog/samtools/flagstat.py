@@ -55,7 +55,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,
     "total_reads": pl.Int64,
@@ -144,4 +144,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if not records:
         raise ValueError("samtools_flagstat: no report parsed")
 
-    return pl.DataFrame(records, schema=EXPECTED_SCHEMA).sort(["sample", "stage"])
+    return pl.DataFrame(records, schema=OUTPUT_SCHEMA).sort(["sample", "stage"])

@@ -32,13 +32,13 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "run_id": pl.Utf8,
     "q_value": pl.Float64,
     "accepted_psms": pl.Int64,
     "xcorr_threshold": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 MAX_Q = 0.10
 MAX_POINTS = 200
@@ -79,5 +79,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("xcorr").alias("xcorr_threshold"),
             pl.lit(run_id).alias("run_id"),
         )
-        frames.append(curve.select(list(EXPECTED_SCHEMA)))
+        frames.append(curve.select(list(OUTPUT_SCHEMA)))
     return pl.concat(frames).sort(["run_id", "q_value"])

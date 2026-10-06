@@ -73,7 +73,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="filtered_barcodes", dc_ref=FILTERED_BARCODES_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "rank": pl.Int64,
     "umi_count": pl.Int64,
@@ -160,4 +160,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     result = result.with_columns(
         pl.col("umi_count").cast(pl.Int64), pl.col("is_cell").cast(pl.Boolean)
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "rank"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "rank"])

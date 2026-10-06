@@ -27,7 +27,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref="samples"),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sequence": pl.Utf8,
     "length": pl.Int64,
     "length_class": pl.Utf8,
@@ -36,9 +36,9 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sharing": pl.Utf8,
     "conditions": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
-_RESERVED = set(EXPECTED_SCHEMA)
+_RESERVED = set(OUTPUT_SCHEMA)
 
 
 def _set_name(value: str) -> str:
@@ -82,6 +82,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(pl.lit("Several conditions"))
         .alias("sharing")
     )
-    return out.select([*EXPECTED_SCHEMA, *sets]).sort(
+    return out.select([*OUTPUT_SCHEMA, *sets]).sort(
         ["conditions_detected", "samples_detected", "sequence"], descending=[True, True, False]
     )

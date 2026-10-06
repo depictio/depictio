@@ -48,7 +48,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="damage", dc_ref=DAMAGE_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "endogenous_dna": pl.Float64,
     "endogenous_dna_post": pl.Float64,
@@ -116,6 +116,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for ref, columns in _PICKS:
         out = out.join(_per_sample(sources.get(ref), columns), on="sample", how="left")
 
-    return out.select([pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()]).sort(
+    return out.select([pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()]).sort(
         "sample"
     )

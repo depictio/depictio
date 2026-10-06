@@ -42,12 +42,12 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="purityploidy", dc_ref=PURITY_PLOIDY_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "purity": pl.Float64,
     "ploidy": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: nf-core/sarek writes `variant_calling/ascat/<sample>/<sample>.purityploidy.txt`.
 _SAMPLE_RE = r"ascat/([^/]+)/[^/]*$"

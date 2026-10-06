@@ -45,7 +45,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
     "mean_log2_tpm": pl.Float64,
@@ -130,7 +130,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("log2fc_top_vs_rest"),
     )
     return (
-        out.select(list(EXPECTED_SCHEMA))
+        out.select(list(OUTPUT_SCHEMA))
         .with_columns(pl.col("sd_log2_tpm").fill_null(0.0))
         .sort("sd_log2_tpm", descending=True)
     )

@@ -57,7 +57,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="report", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "phenotype": pl.Utf8,
     "term": pl.Utf8,
@@ -73,7 +73,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "leading_edge_percent": pl.Float64,
     "leading_edge": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # `<contrast>.gsea_report_for_<phenotype>[_<timestamp>].tsv`
 _NAME = re.compile(r"^(?P<contrast>.+?)\.gsea_report_for_(?P<phenotype>.+?)(?:_\d{10,})?\.tsv$")
@@ -109,7 +109,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Stack every report, label it with its contrast and pole, and rename."""
     df = sources["report"]
     if df.is_empty():
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
 
     labels = [_from_path(p) for p in df.get_column("source_path").to_list()]
     df = df.with_columns(
@@ -153,6 +153,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .cast(pl.Float64)
         .alias("neg_log10_fdr")
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort(
+    return out.select(list(OUTPUT_SCHEMA)).sort(
         ["contrast", "phenotype", "nes"], descending=[False, False, True]
     )

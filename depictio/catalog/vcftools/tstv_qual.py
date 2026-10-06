@@ -26,7 +26,7 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 #: Points kept per series. The curve is smooth; 200 steps redraw it exactly.
 MAX_POINTS = 200
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "series": pl.Utf8,
@@ -60,4 +60,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     rank = pl.int_range(pl.len()).over("series")
     df = df.filter((rank % stride == 0) | (rank == 0) | (rank == pl.len().over("series") - 1))
 
-    return df.select(list(EXPECTED_SCHEMA)).sort(["series", "qual_threshold"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["series", "qual_threshold"])

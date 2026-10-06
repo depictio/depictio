@@ -78,7 +78,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,
     "assembler": pl.Utf8,
@@ -193,4 +193,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         (pl.col("completeness") - 5.0 * pl.col("contamination")).alias("quality_score"),
         quality_tier(pl.col("completeness"), pl.col("contamination")).alias("quality_tier"),
     )
-    return scored.select(list(EXPECTED_SCHEMA)).sort(["assembler", "binner", "sample", "bin_id"])
+    return scored.select(list(OUTPUT_SCHEMA)).sort(["assembler", "binner", "sample", "bin_id"])

@@ -63,7 +63,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="features", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_id": pl.Utf8,
     "sample": pl.Utf8,
     "assembler": pl.Utf8,
@@ -157,6 +157,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         frame.drop_nulls(["bin_id", "contig", "start", "end"])
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["bin_id", "contig", "start"])
     )

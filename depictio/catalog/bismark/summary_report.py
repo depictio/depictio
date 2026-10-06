@@ -78,7 +78,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_reads": pl.Int64,
     "aligned_reads": pl.Int64,
@@ -102,7 +102,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "conversion_efficiency_pct": pl.Float64,
 }
 # Design columns are run-dependent (the sample hub's factors); validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # The BAM name in the `File` column records the trimming and alignment stages;
 # the sample is what is left of it. `bismark_[a-z0-9]+` rather than
@@ -185,6 +185,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("conversion_efficiency_pct")
         )
         .pipe(annotate_from_hub, samples, factors, left_on="sample")
-        .select(*EXPECTED_SCHEMA, *factors)
+        .select(*OUTPUT_SCHEMA, *factors)
         .sort("sample")
     )

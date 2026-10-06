@@ -58,7 +58,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "condition": pl.Utf8,
     "dim_1": pl.Float64,
@@ -148,12 +148,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .with_columns(
             pl.col("n_genes_detected").cast(pl.Int64),
-            *[
-                pl.col(c).cast(pl.Float64)
-                for c in EXPECTED_SCHEMA
-                if EXPECTED_SCHEMA[c] is pl.Float64
-            ],
+            *[pl.col(c).cast(pl.Float64) for c in OUTPUT_SCHEMA if OUTPUT_SCHEMA[c] is pl.Float64],
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample_id")
     )

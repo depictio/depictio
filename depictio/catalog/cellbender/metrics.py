@@ -41,7 +41,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metrics", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_raw_counts": pl.Float64,
     "total_output_counts": pl.Float64,
@@ -77,7 +77,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "cellbender_metrics: a row's source_path did not match '<sample>_metrics.csv'"
         )
 
-    wanted = [c for c in EXPECTED_SCHEMA if c != "sample"]
+    wanted = [c for c in OUTPUT_SCHEMA if c != "sample"]
     pivoted = df.pivot(on="metric", index="sample", values="value")
     missing_metrics = [c for c in wanted if c not in pivoted.columns]
     if missing_metrics:
@@ -86,4 +86,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     result = pivoted.select(["sample", *wanted])
     for col in wanted:
         result = result.with_columns(pl.col(col).cast(pl.Float64, strict=False))
-    return result.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return result.select(list(OUTPUT_SCHEMA)).sort("sample")

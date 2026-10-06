@@ -37,7 +37,7 @@ RAW_DC_TAG = "bcl2fastq_stats_raw"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="stats", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "flowcell": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -126,4 +126,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             )
     if not rows:
         raise ValueError("bcl2fastq_read_quality: no read metrics in the scanned reports")
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["flowcell", "lane", "read"])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["flowcell", "lane", "read"])

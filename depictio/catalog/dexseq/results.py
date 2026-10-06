@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "feature_id": pl.Utf8,
     "gene_id": pl.Utf8,
     "log2fc": pl.Float64,

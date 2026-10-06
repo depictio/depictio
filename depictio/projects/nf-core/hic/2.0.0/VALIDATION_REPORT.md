@@ -53,7 +53,7 @@ grepping the installed `multiqc` package source for `add_section(name=...)`.
 All five recipes were run against the real megatest files (raw scan simulated
 with `include_file_paths`, `pl.concat(..., how="diagonal_relaxed")` to mirror
 `align_lazy_schemas()`'s per-file null-fill union), and every output frame's
-schema matches its `EXPECTED_SCHEMA` exactly:
+schema matches its `OUTPUT_SCHEMA` exactly:
 
 | Recipe | Rows | Cols | Notes |
 |---|---|---|---|

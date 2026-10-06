@@ -53,7 +53,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="report", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "rank": pl.Utf8,
     "taxon": pl.Utf8,
@@ -61,7 +61,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "tag_count": pl.Int64,
     "abundance": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _TOTAL = re.compile(r"^Total\s+(Reads|Tags|Assigned Tags)\s+(\d+)\s*$")
 _ROW = re.compile(r"^(\S+)\s+(\d+)\s+(\d+)\s+([\d.]+)\s*$")
@@ -171,5 +171,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         path = source_path[0] if isinstance(source_path, tuple) else source_path
         rows += _parse_one(group.get_column("line").to_list(), str(path))
     if not rows:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["sample_id", "rank", "taxon"])
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["sample_id", "rank", "taxon"])

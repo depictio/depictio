@@ -1,6 +1,6 @@
 """Calibration of the advanced-viz kind suggester on real template schemas.
 
-The schemas are the `EXPECTED_SCHEMA` of the catalog recipes the nf-core
+The schemas are the `OUTPUT_SCHEMA` of the catalog recipes the nf-core
 templates bind (the exact columns and dtypes their Delta tables carry), so a
 recipe change that reshapes a table shows up here as a ranking change.
 
@@ -30,8 +30,8 @@ from depictio.models.components.advanced_viz.schemas import (
 
 
 def _recipe_schema(module: str) -> dict[str, str]:
-    """A catalog recipe's EXPECTED_SCHEMA as ``{column: polars dtype name}``."""
-    expected = importlib.import_module(module).EXPECTED_SCHEMA
+    """A catalog recipe's OUTPUT_SCHEMA as ``{column: polars dtype name}``."""
+    expected = importlib.import_module(module).OUTPUT_SCHEMA
     return {
         col: str(dtype() if isinstance(dtype, type) else dtype) for col, dtype in expected.items()
     }

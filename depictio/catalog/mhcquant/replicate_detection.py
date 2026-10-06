@@ -17,12 +17,12 @@ REPLICATES_DC_TAG = "mhcquant_replicate_intensity"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="replicates", dc_ref=REPLICATES_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peptide": pl.Utf8,
     "replicates_detected": pl.Int64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

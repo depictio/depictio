@@ -54,7 +54,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "mirna": pl.Utf8,
     "reads": pl.Int64,
@@ -64,7 +64,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "reference_pct": pl.Float64,
 }
 # Design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: The annotation columns mirtop writes before the per-sample counts.
 ANNOTATION_COLUMNS = (
@@ -168,9 +168,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
         .with_columns((pl.col("cpm") + 1.0).log(2).alias("log2_cpm"))
     )
-    out = out.select(list(EXPECTED_SCHEMA))
+    out = out.select(list(OUTPUT_SCHEMA))
 
-    design = design_columns(sources.get("metadata"), set(EXPECTED_SCHEMA))
+    design = design_columns(sources.get("metadata"), set(OUTPUT_SCHEMA))
     if design is not None:
         out = out.join(design, on="sample", how="left")
     return out.sort(["sample", "mirna"])

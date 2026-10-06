@@ -38,7 +38,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="histograms", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "read_set": pl.Utf8,
     "multiplicity": pl.Int64,
     "kmers": pl.Int64,
@@ -115,6 +115,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         raise ValueError("jellyfish_histogram: no histogram carried a data row")
     return (
         pl.concat(parts, how="vertical")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["read_set", "multiplicity"])
     )

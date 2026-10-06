@@ -65,7 +65,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lengths", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "strand": pl.Utf8,
     "series": pl.Utf8,
@@ -133,6 +133,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .cast(pl.Float64)
             .alias("fraction"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "strand", "length"])
     )

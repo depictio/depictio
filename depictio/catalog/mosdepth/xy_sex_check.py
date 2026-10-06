@@ -67,7 +67,7 @@ def keep_one_stage(df: pl.DataFrame) -> pl.DataFrame:
     return df.join(kept, on=["sample", "stage"], how="semi")
 
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "stage": pl.Utf8,  # md (duplicate-marked) or recal (BQSR-recalibrated)
     "x_coverage": pl.Float64,
@@ -113,5 +113,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .otherwise(pl.lit("XY"))
             .alias("inferred_sex")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     ).sort(["sample", "stage"])

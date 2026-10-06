@@ -20,7 +20,7 @@ from depictio.recipes.lib.vcf import vcf_to_long
 RAW_DC_TAG = "vcf_calls_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "caller": pl.Utf8,
     "chrom": pl.Utf8,

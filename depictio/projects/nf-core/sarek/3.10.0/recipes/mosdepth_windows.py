@@ -17,7 +17,7 @@ from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="regions", dc_ref="mosdepth_regions")]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "chrom": pl.Utf8,
     "pos": pl.Int64,  # window start
     "end": pl.Int64,  # window end
@@ -40,5 +40,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("depth").cast(pl.Float64),
             pl.col("n_targets").cast(pl.Int64),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

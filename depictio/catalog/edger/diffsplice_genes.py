@@ -58,7 +58,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "contrast": pl.Utf8,
     "gene_id": pl.Utf8,
     "chrom": pl.Utf8,
@@ -161,4 +161,4 @@ def transform(
         .otherwise(pl.lit("down"))
         .alias("direction")
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort(["contrast", "fdr"], nulls_last=True)
+    return out.select(list(OUTPUT_SCHEMA)).sort(["contrast", "fdr"], nulls_last=True)

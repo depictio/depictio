@@ -50,7 +50,7 @@ def test_regulation_mode_follows_anota2seq_priority():
     genes = pl.DataFrame({"gene_id": ["G1", "G2"], "gene_name": ["ONE", "TWO"]})
     module = load_recipe("anota2seq/regulation.py")
     out = module.transform({"results": raw, "genes": genes})
-    validate_schema(out, module.EXPECTED_SCHEMA, "regulation", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "regulation", None)
 
     rows = {r["gene_id"]: r for r in out.to_dicts()}
     assert rows["G1"]["regulation_mode"] == "translation"
@@ -77,7 +77,7 @@ def test_results_long_form_labels_analyses_and_caps_zero_padj():
     )
     module = load_recipe("anota2seq/results.py")
     out = module.transform({"results": raw})
-    validate_schema(out, module.EXPECTED_SCHEMA, "results", None)
+    validate_schema(out, module.OUTPUT_SCHEMA, "results", None)
 
     assert set(out["analysis"]) == {"Translation", "Total mRNA"}
     g1 = out.filter((pl.col("gene_id") == "G1") & (pl.col("analysis") == "Translation")).row(

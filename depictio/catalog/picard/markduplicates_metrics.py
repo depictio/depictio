@@ -56,7 +56,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "library": pl.Utf8,
     "unpaired_reads_examined": pl.Int64,
@@ -187,6 +187,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             duplicates.cast(pl.Int64).alias("duplicate_reads"),
             (examined - duplicates).cast(pl.Int64).alias("reads_after_dedup"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample")
     )

@@ -20,7 +20,7 @@ PEPTIDES_DC_TAG = "mhcquant_peptides"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="peptides", dc_ref=PEPTIDES_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "length": pl.Int64,
     "length_class": pl.Utf8,
@@ -28,7 +28,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "peptides": pl.Int64,
     "fraction": pl.Float64,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -40,6 +40,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         counts.with_columns(
             (pl.col("peptides") / pl.col("peptides").sum().over("sample")).alias("fraction")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "length"])
     )

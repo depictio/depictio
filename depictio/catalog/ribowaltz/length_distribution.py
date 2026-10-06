@@ -28,7 +28,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "length": pl.Int64,
     "count": pl.Int64,
@@ -47,5 +47,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     return (
         df.with_columns((pl.col("count") * 100.0 / total).cast(pl.Float64).alias("pct"))
         .sort("sample", "length")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

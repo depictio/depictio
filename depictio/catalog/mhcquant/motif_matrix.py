@@ -26,7 +26,7 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="peptides", dc_ref=PEPTIDES_DC_T
 AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
 MIN_PEPTIDES = 20
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "row_id": pl.Utf8,
     "sample": pl.Utf8,
     "length_class": pl.Utf8,
@@ -34,7 +34,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "peptides": pl.Int64,
     **{aa: pl.Float64 for aa in AMINO_ACIDS},
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -74,5 +74,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 "row_id"
             )
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

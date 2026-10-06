@@ -2,7 +2,7 @@
 
 Each test builds the recipe's real input shape in a temp dir (or injects the
 ``dc_ref`` frames), runs it through ``execute_recipe`` so the engine enforces
-``EXPECTED_SCHEMA``, and checks the binding the dashboard relies on with
+``OUTPUT_SCHEMA``, and checks the binding the dashboard relies on with
 ``validate_binding``.
 
 The interesting cases are the ones the megatest run exposed and a fixture

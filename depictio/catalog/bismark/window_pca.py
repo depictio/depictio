@@ -45,14 +45,14 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
     "dim_3": pl.Float64,
 }
 # Design columns are run-dependent (the sample hub's factors); validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: Sample-hub columns carried onto the embedding when the hub declares them.
 
@@ -74,6 +74,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     factors = hub_factor_columns(samples)
     return (
         annotate_from_hub(coords, samples, factors)
-        .select(*EXPECTED_SCHEMA, *factors)
+        .select(*OUTPUT_SCHEMA, *factors)
         .sort("sample_id")
     )

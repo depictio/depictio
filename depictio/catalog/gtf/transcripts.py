@@ -71,7 +71,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="gtf", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "transcript_id": pl.Utf8,
     "gene_id": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -288,5 +288,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     ).filter(pl.col("start").is_not_null() & pl.col("end").is_not_null())
 
     return out.sort(["sample", "chrom", "gene_id", "transcript_id", "start"]).select(
-        list(EXPECTED_SCHEMA)
+        list(OUTPUT_SCHEMA)
     )

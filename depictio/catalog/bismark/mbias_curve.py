@@ -55,7 +55,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "read": pl.Utf8,
     "series": pl.Utf8,

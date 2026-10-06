@@ -62,7 +62,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="reports", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_read_pairs": pl.Int64,
     "total_reads": pl.Int64,
@@ -195,4 +195,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(None)
         .alias("discard_rate"),
     )
-    return out.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return out.select(list(OUTPUT_SCHEMA)).sort("sample")

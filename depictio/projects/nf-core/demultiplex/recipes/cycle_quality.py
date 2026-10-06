@@ -42,7 +42,7 @@ RAW_DC_TAG = "fastp_json_raw"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="reports", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "series": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -139,5 +139,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .with_columns(
             pl.format("{}, read {}", pl.col("lane_label"), pl.col("read")).alias("series")
         )
-        .select([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()])
+        .select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
     )

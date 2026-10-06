@@ -37,7 +37,7 @@ SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
 RAW_LINE_COL = "raw_line"
 SOURCE_PATH_COL = "source_path"
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "nx": pl.Float64,
     "read_length": pl.Float64,
@@ -87,7 +87,7 @@ def _ladder(sample: str, histogram: pl.DataFrame) -> pl.DataFrame:
     )
     total = float(ranked["cum_bases"][-1]) if ranked.height else 0.0
     if total <= 0:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     ranked = ranked.with_columns((pl.col("cum_bases") * 100.0 / total).alias("share"))
     lengths = ranked["length"].to_list()
     shares = ranked["share"].to_list()
@@ -104,7 +104,7 @@ def _ladder(sample: str, histogram: pl.DataFrame) -> pl.DataFrame:
                 "bases_share": float(shares[cursor]),
             }
         )
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -115,5 +115,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         for (path,), block in raw.group_by(SOURCE_PATH_COL, maintain_order=True)
     ]
     if not ladders:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
-    return pl.concat(ladders).select(list(EXPECTED_SCHEMA)).sort(["sample", "nx"])
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
+    return pl.concat(ladders).select(list(OUTPUT_SCHEMA)).sort(["sample", "nx"])

@@ -44,7 +44,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="idxstats", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "sample": pl.Utf8,
     "stage": pl.Utf8,
@@ -129,4 +129,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         raise ValueError(
             "genomeassembler nx_curve: no idxstats file is named `<sample>_<stage>.idxstats`"
         )
-    return pl.DataFrame(records, schema=EXPECTED_SCHEMA).sort(["assembly_id", "nx"])
+    return pl.DataFrame(records, schema=OUTPUT_SCHEMA).sort(["assembly_id", "nx"])

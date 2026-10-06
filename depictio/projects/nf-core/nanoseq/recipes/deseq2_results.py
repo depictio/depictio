@@ -43,7 +43,7 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = dict(DESEQ2_COLUMNS)
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = dict(DESEQ2_COLUMNS)
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

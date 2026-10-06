@@ -138,7 +138,7 @@ SOURCES: list[RecipeSource] = [
 
 _KMEANS_KS = list(range(2, 11))
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,
     "barcode_core": pl.Utf8,
@@ -477,4 +477,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("cluster_label").fill_null("Unassigned"),
     )
 
-    return per_cell.select(list(EXPECTED_SCHEMA)).sort(["sample", "barcode"])
+    return per_cell.select(list(OUTPUT_SCHEMA)).sort(["sample", "barcode"])

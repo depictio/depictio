@@ -17,7 +17,7 @@ PEPTIDES_DC_TAG = "mhcquant_peptides"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="peptides", dc_ref=PEPTIDES_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "protein": pl.Utf8,
     "protein_entry": pl.Utf8,
@@ -28,7 +28,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "log10_intensity": pl.Float64,
     "peptide_list": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 MAX_LISTED = 25
 
@@ -75,6 +75,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .then(pl.col("log10_intensity"))
             .alias("log10_intensity")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "peptides"], descending=[False, True])
     )

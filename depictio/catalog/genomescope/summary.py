@@ -54,7 +54,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="lines", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "read_set": pl.Utf8,
     "genomescope_version": pl.Utf8,
     "k": pl.Int64,
@@ -107,7 +107,7 @@ def _number(token: str) -> float | None:
 
 def parse_summary(read_set: str, lines: list[str]) -> dict:
     """Parse one GenomeScope summary into an output row."""
-    row: dict = {name: None for name in EXPECTED_SCHEMA}
+    row: dict = {name: None for name in OUTPUT_SCHEMA}
     row["read_set"] = read_set
     for line in lines:
         text = line.rstrip()
@@ -144,7 +144,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         parse_summary(read_set_name(str(path)), [ln or "" for ln in group[text_col].to_list()])
         for (path,), group in raw.group_by([SOURCE_PATH_COL], maintain_order=True)
     ]
-    out = pl.DataFrame(rows, schema=EXPECTED_SCHEMA)
+    out = pl.DataFrame(rows, schema=OUTPUT_SCHEMA)
     out = out.filter(pl.col("haploid_length_max").is_not_null() | pl.col("k").is_not_null())
     if out.is_empty():
         raise ValueError("genomescope_summary: no file parsed as a GenomeScope summary")

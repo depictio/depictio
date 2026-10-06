@@ -1,7 +1,7 @@
 """sarek 3.10.0 pipeline-local recipes added for the wave 2 locus section.
 
 Each is exercised on a few hand-built rows shaped like its source collection,
-and checked against its own EXPECTED_SCHEMA through `validate_schema`, which is
+and checked against its own OUTPUT_SCHEMA through `validate_schema`, which is
 what ingest enforces.
 """
 
@@ -18,7 +18,9 @@ VERSION = "3.10.0"
 def _run(name: str, sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     module = load_recipe(f"nf-core/sarek/{name}", VERSION)
     out = module.transform(sources)
-    validate_schema(out, module.EXPECTED_SCHEMA, name, getattr(module, "OPTIONAL_SCHEMA", None))
+    validate_schema(
+        out, module.OUTPUT_SCHEMA, name, getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None)
+    )
     return out
 
 

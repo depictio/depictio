@@ -50,7 +50,7 @@ RAW_DC_TAG = "fastp_json_raw"
 
 SOURCES: list[RecipeSource] = [RecipeSource(ref="reports", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "lane": pl.Int64,
     "lane_label": pl.Utf8,
@@ -154,4 +154,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         )
     if not rows:
         raise ValueError("fastp_library_qc: no fastp report was read")
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["sample", "lane"])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["sample", "lane"])

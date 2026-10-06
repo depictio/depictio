@@ -46,7 +46,7 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="predictions", dc_ref="mirdeep2_predictions", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "mirna_reads": pl.Int64,
     "mirnas_detected": pl.Int64,
@@ -63,7 +63,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "known_recovered": pl.Int64,
 }
 # Design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _MEASURES = ("mirna", "reads", "cpm", "log2_cpm", "isomirs", "reference_pct")
 _RNA_TYPES = {
@@ -125,9 +125,9 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         hub = hub.join(calls, on="sample", how="left")
 
     hub = hub.with_columns(
-        [pl.lit(None, dtype=t).alias(c) for c, t in EXPECTED_SCHEMA.items() if c not in hub.columns]
-    ).with_columns([pl.col(c).cast(t) for c, t in EXPECTED_SCHEMA.items()])
-    out = hub.select(list(EXPECTED_SCHEMA))
+        [pl.lit(None, dtype=t).alias(c) for c, t in OUTPUT_SCHEMA.items() if c not in hub.columns]
+    ).with_columns([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
+    out = hub.select(list(OUTPUT_SCHEMA))
     if design:
         out = out.join(
             counts.select("sample", *design).unique(subset="sample"), on="sample", how="left"
