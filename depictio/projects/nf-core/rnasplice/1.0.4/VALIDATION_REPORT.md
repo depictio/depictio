@@ -6,10 +6,8 @@
 
 ## Data used
 
-`-profile test_full` run on the EMBL cluster (`/scratch/tweber/NF_CORE/rnasplice/1.0.4/run_full`,
-Nextflow 24.04.2, MultiQC 1.18), tables-only copy in
-`~/Data/depictio-nfcore/rnasplice/1.0.4/test_full` (about 3.6 GB with the Salmon and featureCounts
-per-sample tables). Six samples, two conditions, two mirrored contrasts, GRCh37 annotation
+`-profile test_full` run on an HPC cluster (Nextflow 24.04.2, MultiQC 1.18), ingested from a
+tables-only local copy (about 3.6 GB with the Salmon and featureCounts per-sample tables). Six samples, two conditions, two mirrored contrasts, GRCh37 annotation
 (`GENOME=hg19` for the UCSC link), both `star_salmon` and `salmon` routes, all five splicing
 tools enabled. No AWS megatest results exist for 1.0.4, so `megatest.yaml` has `results_sha: null`.
 

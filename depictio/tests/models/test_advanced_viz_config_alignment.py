@@ -40,8 +40,8 @@ DISPATCH = ADVANCED_VIZ / "AdvancedVizDispatch.tsx"
 # client unvalidated, still finds a renderer.
 #
 # `ancombc_differentials` was collapsed into `da_barplot` and reuses its
-# renderer; the four view merges each still have their own renderer until the
-# survivor learns to draw the view (see the TODO(P4) comments in the dispatch).
+# renderer; the four view merges keep a thin wrapper that hands their survivor
+# the matching `view` (see the retired-kinds comment in the dispatch).
 LEGACY_KIND_ALIASES = {"ancombc_differentials"} | set(_KIND_ALIASES)
 
 

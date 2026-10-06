@@ -1124,7 +1124,7 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         ``--ancombc``), so qiime2/ancombc/ is absent
       - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
       - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
-      - ``IS_BCLCONVERT``  — demultiplex runs using BCL Convert instead of bcl2fastq
+      - ``IS_BCLCONVERT``: demultiplex runs using BCL Convert instead of bcl2fastq
       - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
         reconstructed into one cross-region feature table under ``sidle/``)
       - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``

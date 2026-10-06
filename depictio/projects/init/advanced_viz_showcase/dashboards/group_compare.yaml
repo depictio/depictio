@@ -1,4 +1,4 @@
-# Group comparison — one tab of the advanced-visualisation showcase.
+# Group comparison: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase

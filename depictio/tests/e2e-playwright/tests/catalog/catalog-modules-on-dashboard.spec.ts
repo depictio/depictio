@@ -511,7 +511,7 @@ test.describe("catalog modules are usable on a dashboard", () => {
                 entry.fullWidthInEditor = checked.fullWidth;
                 if (checked.problem) report(checked.problem);
               })
-              .catch((e: unknown) => report(`${offer.label}: add failed — ${e}`));
+              .catch((e: unknown) => report(`${offer.label}: add failed: ${e}`));
           }
           if (placed.length === 0) continue;
 

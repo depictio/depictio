@@ -198,6 +198,7 @@ dump.rdb
 !depictio/projects/nf-core/hic/*/input/*.tsv
 !depictio/projects/nf-core/sarek/*/input/*.tsv
 !depictio/projects/nf-core/chipseq/*/input/*.csv
+!depictio/projects/nf-core/chipseq/*/input/*.tsv
 !depictio/projects/nf-core/atacseq/*/input/*.csv
 !depictio/projects/nf-core/cutandrun/*/input/*.csv
 # Lot 2 templates (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic).
@@ -205,6 +206,7 @@ dump.rdb
 !depictio/projects/nf-core/scrnaseq/*/input/*.csv
 !depictio/projects/nf-core/mag/*/input/*.csv
 !depictio/projects/nf-core/nanoseq/*/input/*.csv
+!depictio/projects/nf-core/nanoseq/*/input/*.tsv
 !depictio/projects/nf-core/eager/*/input/*.csv
 !depictio/projects/nf-core/eager/*/input/*.tsv
 !depictio/projects/nf-core/methylseq/*/input/*.csv

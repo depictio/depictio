@@ -1,4 +1,4 @@
-# GenomeSpy for genome-scale tracks — evaluation and spike (#1083)
+# GenomeSpy for genome-scale tracks: evaluation and spike (#1083)
 
 **Status:** Evaluation, then a landed kind (`viz_kind: genome_view`, renamed from the spike's
 `genomespy_track`). Replacement of existing renderers is proposed, not done.
@@ -109,8 +109,8 @@ Plotly figures. A colour-scheme switch rebuilds the spec and re-embeds.
 | Size | plotly already split into `vendor-plotly` | 8.5 MB unpacked incl. BAM/VCF/BigWig/Parquet parsers | `./minimal` + one renderer registration, `import()`ed by the hook → async `vendor-genomespy` chunk |
 | Transitive deps | `d3-array/color/format` already locked | `d3-*`, `vega-util/scale/expression`, `twgl.js`, `lit`, `@gmod/*` | No singletons in conflict; 409 lockfile lines added |
 | Rendering | 16 live GL contexts per process, budgeted | 1 context per embed; `canvas` fallback | See §2.3 |
-| Licence | MIT | MIT | — |
-| API stability | — | 0.85 → 0.88.1 in 13 days, one breaking `fix(core)!` in 0.86, `addEventListener` deprecated for `events.subscribe` | Pinned to `0.88.1` exactly; all calls in one adapter module |
+| Licence | MIT | MIT | n/a |
+| API stability | n/a | 0.85 → 0.88.1 in 13 days, one breaking `fix(core)!` in 0.86, `addEventListener` deprecated for `events.subscribe` | Pinned to `0.88.1` exactly; all calls in one adapter module |
 | Tests | vitest (node, no jsdom) + Playwright | same | Spec builder is unit-tested; the mount is an e2e matter |
 
 ## 4. Overlap with existing renderers, and what to replace

@@ -29,7 +29,7 @@ Output schema:
     Kingdom … Species : Utf8
     confidence : Float64
     label : Utf8 — short display label (Phylum if known, else taxon[:8])
-    dominant_habitat : Utf8 — level of the design factor carrying most of the
+    dominant_habitat : Utf8, level of the design factor carrying most of the
         ASV's abundance. The factor is the template's ``GROUP_COL`` (the
         ``group_col`` param); the column keeps its historical name for schema
         stability, whatever factor fills it.

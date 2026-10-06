@@ -5,7 +5,7 @@
  * component config into a GenomeSpy root spec. No DOM, no React, no colour
  * literals: the palette and the axis colours come in from the renderer, which
  * resolves them from the Mantine theme. Kept separate from the renderer so
- * vitest (node environment) can cover it — see genomeSpySpec.test.ts.
+ * vitest (node environment) can cover it (see genomeSpySpec.test.ts).
  *
  * Grammar references (GenomeSpy 0.88): `encoding.x = {chrom, pos, type:
  * "locus"}` for chromosome-aware positions, root `genomes.<name>.contigs` for a
