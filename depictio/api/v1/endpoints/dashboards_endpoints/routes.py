@@ -924,6 +924,8 @@ async def update_tab(
             - tab_icon_color: Color for the icon
             - tab_group: Sidebar category name; null or blank ungroups the tab
             - main_tab_name: Custom name for the main tab (main tabs only)
+            - show_guide: Offer the Guide page for the whole dashboard (main tabs only)
+            - guide_intro: Author note (markdown) atop the Guide (main tabs only)
 
     Returns:
         Updated dashboard information
@@ -971,6 +973,22 @@ async def update_tab(
                 detail="main_tab_name can only be set on main tabs, not child tabs.",
             )
         update_fields["main_tab_name"] = data["main_tab_name"]
+
+    # The Guide is a property of the whole dashboard, and the viewer reads it
+    # from the main tab — so that is the only document it is written to. A
+    # targeted patch rather than the full-document save, because the editor can
+    # change it from any tab, not only from the main one.
+    guide_fields = {"show_guide", "guide_intro"} & data.keys()
+    if guide_fields:
+        if not dashboard.get("is_main_tab", True):
+            raise HTTPException(
+                status_code=400,
+                detail="show_guide and guide_intro can only be set on main tabs.",
+            )
+        if "show_guide" in data:
+            update_fields["show_guide"] = data["show_guide"] is not False
+        if "guide_intro" in data:
+            update_fields["guide_intro"] = str(data["guide_intro"] or "")
 
     if not update_fields:
         raise HTTPException(status_code=400, detail="No valid fields provided for update.")

@@ -317,6 +317,19 @@ class DashboardDataLite(BaseModel):
         description="Initial page width before the viewer has picked one: 'full', "
         "'wide' (1600px), 'comfortable' (1240px) or 'compact' (1080px).",
     )
+    # The built-in Guide page (how to move around, filter and read the
+    # dashboard), opened from the sidebar and the header. On by default; read
+    # from the main tab, so it holds for the whole tab family.
+    show_guide: bool = Field(
+        default=True,
+        description="Offer the Guide page in the sidebar and the header. Read from the "
+        "main tab for the whole dashboard.",
+    )
+    guide_intro: str = Field(
+        default="",
+        description="Optional author note (markdown) shown at the top of the Guide. Read "
+        "from the main tab.",
+    )
 
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
@@ -458,6 +471,8 @@ class DashboardDataLite(BaseModel):
         "filter_panel_default",
         "content_width_default",
         "show_tab_header",
+        "show_guide",
+        "guide_intro",
         "filter_sections",
         "grid_sections",
         "brand_theme",
@@ -502,6 +517,7 @@ class DashboardDataLite(BaseModel):
             "icon_variant": "filled",
             "filter_panel_default": "open",
             "content_width_default": "full",
+            "guide_intro": "",
         }
         for field, default in default_value_fields.items():
             if not data.get(field) or data.get(field) == default:
@@ -510,6 +526,8 @@ class DashboardDataLite(BaseModel):
             data.pop("is_main_tab", None)
         if data.get("show_tab_header", True) is True:
             data.pop("show_tab_header", None)
+        if data.get("show_guide", True) is True:
+            data.pop("show_guide", None)
         if data.get("tab_order", 0) == 0:
             data.pop("tab_order", None)
         if not data.get("workflow_system") or data.get("workflow_system") == "none":
@@ -1237,6 +1255,8 @@ class DashboardDataLite(BaseModel):
             filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
             content_width_default=dashboard_data.get("content_width_default") or "full",
             show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
+            show_guide=dashboard_data.get("show_guide", True) is not False,
+            guide_intro=dashboard_data.get("guide_intro") or "",
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
@@ -1336,6 +1356,8 @@ class DashboardDataLite(BaseModel):
             "filter_panel_default": self.filter_panel_default,
             "content_width_default": self.content_width_default,
             "show_tab_header": self.show_tab_header,
+            "show_guide": self.show_guide,
+            "guide_intro": self.guide_intro,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
             if self.brand_theme
             else None,
@@ -1683,6 +1705,10 @@ class DashboardData(MongoModel):
     content_width_default: Literal["full", "wide", "comfortable", "compact"] = "full"
     # Whether the tab's name is drawn above its canvas.
     show_tab_header: bool = True
+    # The Guide page and its author note. Read from the main tab for the
+    # whole family; a child tab's own copy is ignored.
+    show_guide: bool = True
+    guide_intro: str = ""
     # Dashboard-level brand override (logo, palette, surfaces, figure
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.

@@ -241,6 +241,10 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         "tab_icon": 1,
         "tab_icon_color": 1,
         "tab_group": 1,
+        # The Guide's settings live on the main tab; a child tab reads them
+        # from the main tab's entry in this list.
+        "show_guide": 1,
+        "guide_intro": 1,
     }
     if admin_mode:
         projection["stored_metadata"] = 1
