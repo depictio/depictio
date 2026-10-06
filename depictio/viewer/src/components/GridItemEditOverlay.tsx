@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { ActionIcon, Group, Menu, ScrollArea, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { SectionIcon } from 'depictio-react-core';
-import type { FilterSectionSpec } from 'depictio-react-core';
+import { Glyph, SectionIcon, tabDisplayName, useBranding } from 'depictio-react-core';
+import type { DashboardSummary, FilterSectionSpec } from 'depictio-react-core';
+import { resolveTabColor, resolveTabIcon } from '../chrome/Sidebar';
 
 /**
  * Edit menu rendered as a chrome action icon (passed via the
@@ -14,11 +15,14 @@ import type { FilterSectionSpec } from 'depictio-react-core';
  *   - Edit:      navigates to the React edit page at
  *                /dashboard-edit/{id}/component/edit/{componentId}
  *   - Duplicate: fires `onDuplicate` — parent clones metadata + layout, POSTs /save
+ *   - Copy to tab…: fires `onCopyToTab` — parent adds a copy to the picked
+ *                sibling tab's document and saves that tab
  *   - Delete:    fires `onDelete` — parent is responsible for the actual API call
  *
  * "Move to section" is a second page inside the same dropdown rather than a
  * fourth action: the list is as long as the dashboard has sections, and it
  * would otherwise be the thing that pushes Delete off the bottom of a viewport.
+ * "Copy to tab…" opens a page of sibling tabs the same way.
  *
  * Hidden via the `editMode` prop so the same renderer tree can be reused for
  * read-only mode.
@@ -80,6 +84,11 @@ interface GridItemEditOverlayProps {
   /** Fires with the new multiplier when the user steps the font-size control.
    *  Only rendered for figure components; omit to hide the control. */
   onFontScale?: (componentId: string, scale: number) => void;
+  /** Sibling tabs this component can be copied to, the current one left out.
+   *  The caller omits it for a type that cannot be copied (see
+   *  `canCopyToTab`); omitted or empty hides "Copy to tab…". */
+  copyTargets?: DashboardSummary[];
+  onCopyToTab?: (componentId: string, targetDashboardId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -95,12 +104,17 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   groupSize = 1,
   fontScale,
   onFontScale,
+  copyTargets,
+  onCopyToTab,
 }) => {
-  // The dropdown shows one page at a time: the actions, or the section list.
-  // A dashboard can declare any number of sections, and a flat list would grow
-  // the menu until it ran off the viewport — the actions the user reaches for
-  // most (Edit, Delete) would be the ones that moved.
-  const [page, setPage] = useState<'actions' | 'sections'>('actions');
+  // The dropdown shows one page at a time: the actions, the section list or
+  // the tab list. A dashboard can declare any number of sections and tabs, and
+  // a flat list would grow the menu until it ran off the viewport — the
+  // actions the user reaches for most (Edit, Delete) would be the ones that
+  // moved.
+  const [page, setPage] = useState<'actions' | 'sections' | 'tabs'>('actions');
+  // Tabs are listed with the icon and colour their sidebar pill wears.
+  const brand = useBranding();
 
   if (!editMode) return null;
 
@@ -127,6 +141,8 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   // is where that starts, so offering only "No section" here would be a dead
   // end.
   const showMoveToSection = !!onMoveToSection && !!sections?.length;
+
+  const showCopyToTab = !!onCopyToTab && !!copyTargets?.length;
 
   // Per-figure font-size multiplier (#854 follow-up). Figures only: their
   // whole Plotly layout font (axis labels, ticks, legend) follows it.
@@ -188,6 +204,16 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                 Move to section
               </Menu.Item>
             )}
+            {showCopyToTab && (
+              <Menu.Item
+                closeMenuOnClick={false}
+                leftSection={<Icon icon="mdi:content-duplicate" width={14} />}
+                rightSection={<Icon icon="mdi:chevron-right" width={14} />}
+                onClick={() => setPage('tabs')}
+              >
+                Copy to tab…
+              </Menu.Item>
+            )}
             {showFontScale && (
               <>
                 <Menu.Divider />
@@ -242,6 +268,38 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
             >
               Delete
             </Menu.Item>
+          </>
+        ) : page === 'tabs' ? (
+          <>
+            <Menu.Item
+              closeMenuOnClick={false}
+              leftSection={<Icon icon="mdi:chevron-left" width={14} />}
+              onClick={() => setPage('actions')}
+            >
+              Back
+            </Menu.Item>
+            <Menu.Divider />
+            <Menu.Label>Copy to tab</Menu.Label>
+            <ScrollArea.Autosize mah={240} type="auto">
+              {copyTargets?.map((tab) => {
+                const isParent = !tab.parent_dashboard_id;
+                return (
+                  <Menu.Item
+                    key={tab.dashboard_id}
+                    leftSection={
+                      <Glyph
+                        icon={resolveTabIcon(tab, isParent)}
+                        color={resolveTabColor(tab, isParent, brand)}
+                        size={14}
+                      />
+                    }
+                    onClick={() => onCopyToTab?.(componentId, tab.dashboard_id)}
+                  >
+                    {tabDisplayName(tab)}
+                  </Menu.Item>
+                );
+              })}
+            </ScrollArea.Autosize>
           </>
         ) : (
           // Second page: the section list, replacing the actions rather than

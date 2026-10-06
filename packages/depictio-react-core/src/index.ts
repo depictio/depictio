@@ -56,6 +56,8 @@ export { groupTabs, tabGroupNames, tabGroupOf } from './components/tabGroups';
 export type { GroupableTab, TabGroup } from './components/tabGroups';
 export { tabDisplayName, tabFamilyOf } from './components/tabFamily';
 export type { FamilyTab } from './components/tabFamily';
+export { canCopyToTab, copyComponentToTab } from './components/copyToTab';
+export type { CopyToTabInput } from './components/copyToTab';
 export { parseBlocks } from './components/blockMarkdown';
 export type { Block as MarkdownBlock } from './components/blockMarkdown';
 export { MARKDOWN_CHEATSHEET } from './components/markdownCheatsheet';

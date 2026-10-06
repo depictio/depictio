@@ -29,6 +29,7 @@ import React, {
 } from 'react';
 import {
   ActionIcon,
+  Anchor,
   AppShell,
   Button,
   Center,
@@ -63,6 +64,8 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  canCopyToTab,
+  copyComponentToTab,
   createTab,
   deleteTab,
   groupTabs,
@@ -127,6 +130,7 @@ import type { SectionKind, SectionOp } from './components/sections/sectionMutati
 import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
+import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
 
@@ -1153,6 +1157,67 @@ const EditorApp: React.FC = () => {
   const tabGroupOptions = useMemo(() => tabGroupNames(tabSiblings), [tabSiblings]);
   // The names `exclude_tabs` matches against, offered by the section form.
   const tabNames = useMemo(() => tabSiblings.map(tabDisplayName), [tabSiblings]);
+  // Where a component's "Copy to tab…" can send it: every other tab.
+  const copyTargets = useMemo(
+    () => tabSiblings.filter((d) => d.dashboard_id !== dashboardId),
+    [tabSiblings, dashboardId],
+  );
+
+  /**
+   * Copy to tab: add a copy of the component to a sibling tab's document and
+   * save that tab. The target is fetched fresh rather than taken from any
+   * cache, and saved through the same `/save` this tab uses; this tab's own
+   * document is not touched, so a pending layout save here is unaffected.
+   */
+  const handleCopyToTab = useCallback(
+    async (componentId: string, targetId: string) => {
+      const cur = dashboardRef.current;
+      const source = cur?.stored_metadata?.find((m) => m.index === componentId);
+      const targetTab = tabSiblings.find((d) => d.dashboard_id === targetId);
+      if (!cur || !source || !targetTab) return;
+      const targetName = tabDisplayName(targetTab);
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        const target = await fetchDashboard(targetId);
+        const { dashboard: next, component } = copyComponentToTab({
+          source,
+          sourceLayoutData: cur.right_panel_layout_data,
+          target,
+          newId,
+        });
+        await saveDashboard(targetId, next);
+        notifications.show({
+          color: 'teal',
+          title: `Copied to “${targetName}”`,
+          message: (
+            <Stack gap={2}>
+              <Text size="sm">
+                {component.section
+                  ? `At the bottom of its “${component.section}” section there.`
+                  : 'At the bottom of that tab, outside any section.'}
+              </Text>
+              <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
+                Open “{targetName}”
+              </Anchor>
+            </Stack>
+          ),
+          autoClose: 6000,
+        });
+      } catch (err) {
+        console.error('[EditorApp] copy to tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: `Copy to “${targetName}” failed`,
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [tabSiblings],
+  );
   const parentTab = useMemo(
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
@@ -1941,6 +2006,8 @@ const EditorApp: React.FC = () => {
                 onLayoutChange={handleRightLayoutChange}
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
+                copyTargets={copyTargets}
+                onCopyToTab={handleCopyToTab}
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
@@ -2111,6 +2178,9 @@ interface RightComponentGridProps {
   onLayoutChange: (newLayout: Layout[]) => void;
   onDeleteComponent: (componentId: string) => void;
   onDuplicateComponent: (componentId: string) => void;
+  /** Sibling tabs a component can be copied to, and the copy itself. */
+  copyTargets: DashboardSummary[];
+  onCopyToTab: (componentId: string, targetDashboardId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
   groupRender?: GroupRenderState;
@@ -2149,6 +2219,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onLayoutChange,
   onDeleteComponent,
   onDuplicateComponent,
+  copyTargets,
+  onCopyToTab,
   onAddComponent,
   activeHighlight,
   groupRender,
@@ -2235,6 +2307,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onMoveToSection={onMoveToSection}
           fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
           onFontScale={onComponentFontScale}
+          copyTargets={canCopyToTab(metadata) ? copyTargets : undefined}
+          onCopyToTab={onCopyToTab}
         />
       )}
     />
