@@ -109,6 +109,11 @@ function buildCard(
     title_color?: string;
     icon_name?: string;
     title_font_size?: string;
+    variant?: string | null;
+    caption?: string | null;
+    decimals?: number | null;
+    link?: string | null;
+    description?: string | null;
   }>(state.config);
   const title =
     (c.title && c.title.trim()) ||
@@ -141,6 +146,14 @@ function buildCard(
     title_color: c.title_color || '',
     icon_name: c.icon_name || 'mdi:chart-line',
     title_font_size: (c.title_font_size as 'xs' | 'sm' | 'md' | 'lg' | 'xl') || 'md',
+    // Display block. Set after `...existing` even when empty: undefined drops
+    // the key, so clearing a field in the form clears it on the saved card
+    // rather than letting the previous value ride through.
+    variant: c.variant === 'headline' ? 'headline' : undefined,
+    caption: c.caption?.trim() || undefined,
+    decimals: typeof c.decimals === 'number' ? c.decimals : undefined,
+    link: c.link?.trim() || undefined,
+    description: c.description?.trim() || undefined,
   };
 }
 

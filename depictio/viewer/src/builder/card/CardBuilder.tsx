@@ -2,22 +2,29 @@
  * Card builder form. Mirrors design_card() in
  * depictio/dash/modules/card_component/design_ui.py — title, column,
  * aggregation, colors, icon, font size, with a live preview on the right.
+ * The display block (headline style, caption, decimals, link, description)
+ * is what a key figure on a landing page needs.
  */
 import React, { useEffect, useMemo } from 'react';
 import {
   ColorInput,
   MultiSelect,
   NumberInput,
+  SegmentedControl,
   Select,
   Stack,
+  Text,
+  Textarea,
   TextInput,
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { isBreakdownLayout } from 'depictio-react-core';
+import { isBreakdownLayout, tabDisplayName } from 'depictio-react-core';
+import type { DashboardSummary } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
+import { useTabFamily } from '../shared/useTabFamily';
 import CardPreview from './CardPreview';
 import { cardMethodsForType } from '../aggFunctions';
 import { autoCardTitle } from './cardTitle';
@@ -254,6 +261,28 @@ function multiMetricStyleToConfig(style: MultiMetricStyle): Record<string, unkno
   }
 }
 
+/** `variant` in the model: unset (default) or `headline`. */
+const STYLE_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'headline', label: 'Headline' },
+];
+
+/**
+ * Link targets: each tab as `tab:<name>`, the form the card's `link` takes. A
+ * link the list does not hold (a URL, a tab since renamed) is kept as its own
+ * entry so opening the form does not drop it.
+ */
+function linkOptions(tabs: DashboardSummary[], current: string | undefined) {
+  const items = tabs.map((t) => {
+    const name = tabDisplayName(t);
+    return { value: `tab:${name}`, label: name };
+  });
+  if (current && !items.some((o) => o.value === current)) {
+    items.unshift({ value: current, label: `${current} (custom)` });
+  }
+  return items;
+}
+
 const CardBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
@@ -274,9 +303,22 @@ const CardBuilder: React.FC = () => {
     title_color?: string;
     icon_name?: string;
     title_font_size?: string;
+    variant?: string | null;
+    caption?: string | null;
+    decimals?: number | null;
+    link?: string | null;
+    description?: string;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const cols = useBuilderStore((s) => s.cols);
+  const tabs = useTabFamily();
+  const dashboardId = useBuilderStore((s) => s.dashboardId);
+  const link = config.link?.trim() || undefined;
+  // A card linking to the tab it sits on would go nowhere.
+  const linkData = useMemo(
+    () => linkOptions(tabs.filter((t) => t.dashboard_id !== dashboardId), link),
+    [tabs, dashboardId, link],
+  );
 
   // Apply sane defaults once after mount when creating fresh.
   useEffect(() => {
@@ -615,6 +657,70 @@ const CardBuilder: React.FC = () => {
           leftSection={<Icon icon="mdi:filter-variant" width={14} />}
         />
       )}
+
+      <Title order={6} fw={700} mt="sm">
+        Display
+      </Title>
+
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>
+          Style
+        </Text>
+        <Text size="xs" c="dimmed">
+          Headline is a key figure for a landing page: the value drawn large, the icon resting
+          faint beside it, a strip cut down to its bar.
+        </Text>
+        <SegmentedControl
+          value={config.variant === 'headline' ? 'headline' : 'default'}
+          onChange={(val) => patchConfig({ variant: val === 'headline' ? 'headline' : null })}
+          data={STYLE_OPTIONS}
+          fullWidth
+        />
+      </Stack>
+
+      <TextInput
+        label="Caption"
+        description="One line under the value, in place of the aggregation label, which moves to the header's tooltip."
+        placeholder="e.g. samples across 3 cities"
+        value={config.caption ?? ''}
+        onChange={(e) => patchConfig({ caption: e.currentTarget.value })}
+        leftSection={<Icon icon="mdi:text-short" width={14} />}
+      />
+
+      <NumberInput
+        label="Decimals"
+        description="Decimal places for a fractional value. Empty shows up to 4, trailing zeros dropped."
+        placeholder="Auto"
+        value={config.decimals ?? ''}
+        onChange={(val) => patchConfig({ decimals: typeof val === 'number' ? val : null })}
+        min={0}
+        max={6}
+        step={1}
+        allowDecimal={false}
+        clampBehavior="strict"
+        leftSection={<Icon icon="mdi:decimal" width={14} />}
+      />
+
+      <Select
+        label="Link to a tab"
+        description="Clicking the card opens that tab, the one that explains the figure."
+        placeholder={linkData.length ? 'No link' : 'This dashboard has no other tabs'}
+        data={linkData}
+        value={link ?? null}
+        onChange={(val) => patchConfig({ link: val })}
+        clearable
+        searchable
+        leftSection={<Icon icon="mdi:link-variant" width={14} />}
+      />
+
+      <Textarea
+        label="Description"
+        description="What the figure is, shown in the tooltip on the card's header."
+        autosize
+        minRows={2}
+        value={config.description ?? ''}
+        onChange={(e) => patchConfig({ description: e.currentTarget.value })}
+      />
 
       <Title order={6} fw={700} mt="sm">
         Card Styling
