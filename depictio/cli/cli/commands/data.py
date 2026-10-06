@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -10,6 +11,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_section_separator,
 )
+from depictio.cli.cli.utils.server_target import (
+    LegacyConfigPathOption,
+    ServerOption,
+    resolve_server,
+)
 from depictio.cli.cli_logging import logger
 
 app = typer.Typer()
@@ -17,10 +23,8 @@ app = typer.Typer()
 
 @app.command()
 def scan(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -59,7 +63,8 @@ def scan(
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if response["success"]:
@@ -132,10 +137,8 @@ def scan(
 
 @app.command()
 def process(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -161,7 +164,8 @@ def process(
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if response["success"]:
@@ -215,10 +219,8 @@ def process(
 
 @app.command()
 def join(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -265,7 +267,8 @@ def join(
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if not response["success"]:
@@ -360,8 +363,151 @@ def join(
     rich_print_checked_statement("Join processing complete", "success")
 
 
+@app.command("push-images")
+def push_images(
+    source_directory: Annotated[
+        str,
+        typer.Argument(help="Source directory containing images"),
+    ],
+    s3_destination: Annotated[
+        str,
+        typer.Argument(help="S3 destination path (e.g., s3://bucket/path/to/images/)"),
+    ],
+    recursive: bool = typer.Option(
+        True, "--recursive/--no-recursive", "-r/-R", help="Include subdirectories"
+    ),
+    extensions: Annotated[
+        str | None,
+        typer.Option(
+            "--extensions",
+            "-e",
+            help="Comma-separated list of extensions to upload (e.g., '.png,.jpg')",
+        ),
+    ] = None,
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-n", help="Show what would be uploaded without actually uploading"
+    ),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing files in S3"),
+    concurrency: int = typer.Option(
+        8, "--concurrency", "-c", min=1, help="Number of parallel uploads"
+    ),
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
+):
+    """
+    Upload a directory of images to S3 storage, for an image data collection.
+
+    The directory structure is kept, relative to the source directory, and images
+    already in storage are skipped unless --overwrite. Upload to the collection's
+    s3_base_folder: its image_column paths are relative to it. `depictio ingest`
+    does this itself for a collection that sets local_images_path.
+
+    Examples:
+        # Push all images to S3
+        depictio data push-images ./data/images s3://my-bucket/project/images/
+
+        # Dry run to see what would be uploaded
+        depictio data push-images ./data/images s3://my-bucket/images/ --dry-run
+
+        # Push only specific extensions
+        depictio data push-images ./data/images s3://my-bucket/images/ --extensions ".png,.jpg"
+    """
+    from rich.table import Table
+
+    from depictio.cli.cli.utils.image_upload import (
+        parse_s3_folder,
+        s3_client,
+        scan_directory_for_images,
+        upload_images,
+    )
+    from depictio.cli.cli.utils.rich_utils import console
+
+    rich_print_command_usage("data push-images")
+
+    source_path = Path(source_directory).expanduser().resolve()
+    if not source_path.exists():
+        rich_print_checked_statement(f"Source directory does not exist: {source_path}", "error")
+        raise typer.Exit(code=1)
+    if not source_path.is_dir():
+        rich_print_checked_statement(f"Source path is not a directory: {source_path}", "error")
+        raise typer.Exit(code=1)
+
+    try:
+        bucket, prefix = parse_s3_folder(s3_destination)
+    except ValueError as e:
+        rich_print_checked_statement(str(e), "error")
+        raise typer.Exit(code=1)
+
+    ext_set: set[str] | None = None
+    if extensions:
+        ext_set = {ext.strip().lower() for ext in extensions.split(",")}
+        ext_set = {ext if ext.startswith(".") else f".{ext}" for ext in ext_set}
+
+    rich_print_section_separator("Uploading images to S3")
+
+    images = scan_directory_for_images(source_path, recursive=recursive, extensions=ext_set)
+    if not images:
+        rich_print_checked_statement("No images found to upload", "warning")
+        raise typer.Exit(code=0)
+
+    console.print(f"[bold]Source:[/bold] {source_path}")
+    console.print(f"[bold]Destination:[/bold] s3://{bucket}/{prefix}")
+    console.print(f"[bold]Images found:[/bold] {len(images)}")
+
+    if dry_run:
+        console.print("\n[yellow][DRY RUN] Would upload:[/yellow]")
+        for img in images[:20]:
+            rel_path = img.relative_to(source_path)
+            s3_key = f"{prefix}{rel_path}".replace("\\", "/")
+            console.print(f"  {rel_path} → s3://{bucket}/{s3_key}")
+        if len(images) > 20:
+            console.print(f"  ... and {len(images) - 20} more")
+        rich_print_checked_statement(
+            f"Dry run complete: {len(images)} images would be uploaded", "success"
+        )
+        raise typer.Exit(code=0)
+
+    from depictio.cli.cli.utils.common import load_depictio_config
+
+    CLI_config = load_depictio_config(resolve_server(server, CLI_config_path))
+    try:
+        client = s3_client(CLI_config)
+    except Exception as e:
+        rich_print_checked_statement(f"Failed to initialize S3 client: {e}", "error")
+        raise typer.Exit(code=1)
+
+    counts = upload_images(
+        images,
+        source_path,
+        client,
+        bucket,
+        prefix,
+        overwrite=overwrite,
+        concurrency=concurrency,
+        label=s3_destination,
+    )
+
+    console.print()
+    rich_print_section_separator("Upload Summary")
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Status", style="dim")
+    table.add_column("Count", justify="right")
+    table.add_row("[green]Uploaded[/green]", str(counts["uploaded"]))
+    table.add_row("[yellow]Skipped (existing)[/yellow]", str(counts["skipped"]))
+    table.add_row("[red]Errors[/red]", str(counts["error"]))
+    table.add_row("[bold]Total[/bold]", str(len(images)))
+    console.print(table)
+
+    if counts["error"] > 0:
+        rich_print_checked_statement(f"Upload completed with {counts['error']} errors", "warning")
+    else:
+        rich_print_checked_statement(
+            f"Successfully uploaded {counts['uploaded']} images", "success"
+        )
+
+
 # DC link subcommands. Links are authored declaratively in the project YAML
-# (`links:`) and pushed via `config sync` / `run`; these commands only inspect
+# (`links:`) and pushed via `config sync` / `ingest`; these commands only inspect
 # the live server state (`list`), test resolution (`resolve`), or imperatively
 # tweak it (`create`/`delete`). They are mounted under the hidden top-level `dev`
 # group (see commands/dev.py) — callable as `depictio dev link <cmd>` — rather
@@ -371,10 +517,8 @@ link_app = typer.Typer(help="Inspect & test DC links (authored in the project YA
 
 @link_app.command("list")
 def link_list(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -410,7 +554,8 @@ def link_list(
 
     # Validate configurations
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if not response["success"]:
@@ -460,10 +605,8 @@ def link_list(
 
 @link_app.command("create")
 def link_create(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -548,7 +691,8 @@ def link_create(
 
     # Validate configurations
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if not response["success"]:
@@ -595,10 +739,8 @@ def link_create(
 
 @link_app.command("resolve")
 def link_resolve(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -657,7 +799,8 @@ def link_resolve(
 
     # Validate configurations
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if not response["success"]:
@@ -716,10 +859,8 @@ def link_resolve(
 
 @link_app.command("delete")
 def link_delete(
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
         typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -755,7 +896,8 @@ def link_delete(
 
     # Validate configurations
     CLI_config, response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+        CLI_config_path=resolve_server(server, CLI_config_path),
+        project_config_path=project_config_path,
     )
 
     if not response["success"]:

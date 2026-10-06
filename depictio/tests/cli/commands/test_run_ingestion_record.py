@@ -1,4 +1,4 @@
-"""`depictio-cli run` closes its monitoring record on every way out.
+"""`depictio-cli ingest` closes its monitoring record on every way out.
 
 The record used to be closed only at the very end of the command, so every
 error exit (sync, scan, process, joins, dashboard import), a Ctrl-C or a SIGTERM
@@ -47,6 +47,7 @@ def _invoke(harness, data_root, finish, start=None):
         return CliRunner().invoke(
             app,
             [
+                "ingest",
                 "--template",
                 "nf-core/ampliseq/2.16.0",
                 "--data-root",

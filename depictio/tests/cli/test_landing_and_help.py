@@ -178,8 +178,20 @@ class TestHelp:
         listed = {name for names in cli.HELP_PANELS.values() for name in names}
         assert visible == listed
 
-    def test_run_lists_its_steps_without_blank_lines(self, cli):
-        result = runner.invoke(cli.app, ["run", "--help"], terminal_width=100)
+    def test_former_names_work_out_of_the_help(self, cli):
+        """`run` became `ingest`, `images push` became `data push-images`: the old
+        names stay callable for hooks and scripts, without a place in the help."""
+        out = runner.invoke(cli.app, ["--help"], terminal_width=100).output
+
+        assert re.search(r"│ ingest ", out)
+        assert not re.search(r"│ (run|images) ", out)
+        for command in (["run"], ["images", "push"], ["images", "list-bucket"]):
+            result = runner.invoke(cli.app, [*command, "--help"])
+            assert result.exit_code == 0, (command, result.output)
+        assert "Ingest pipeline results" in runner.invoke(cli.app, ["run", "--help"]).output
+
+    def test_ingest_lists_its_steps_without_blank_lines(self, cli):
+        result = runner.invoke(cli.app, ["ingest", "--help"], terminal_width=100)
 
         lines = [line.strip() for line in result.output.splitlines()]
         first = lines.index("1. Check that the server answers")

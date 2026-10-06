@@ -1,4 +1,4 @@
-"""End-to-end flag contract for `depictio-cli run --attach-run`.
+"""End-to-end flag contract for `depictio-cli ingest --attach-run`.
 
 Attaching a run to an existing project is a specific combination of the flags the
 pipeline already had, and getting any one of them wrong is silently destructive:
@@ -66,6 +66,7 @@ def _invoke(app, runner, harness, extra_args):
         return runner.invoke(
             app,
             [
+                "ingest",
                 "--template",
                 "nf-core/ampliseq/2.16.0",
                 "--data-root",
@@ -153,6 +154,7 @@ class TestProvenanceStamping:
             result = runner.invoke(
                 app,
                 [
+                    "ingest",
                     "--data-root",
                     str(root),
                     "--skip-server-check",
@@ -266,6 +268,7 @@ class TestServerCheckHonoursTheVerdict:
             result = runner.invoke(
                 app,
                 [
+                    "ingest",
                     "--template",
                     "nf-core/ampliseq/2.16.0",
                     "--data-root",
@@ -299,6 +302,7 @@ class TestServerCheckHonoursTheVerdict:
             result = runner.invoke(
                 app,
                 [
+                    "ingest",
                     "--template",
                     "nf-core/ampliseq/2.16.0",
                     "--data-root",

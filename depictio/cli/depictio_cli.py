@@ -34,8 +34,8 @@ TAGLINE = "Interactive dashboards for bioinformatics data"
 
 # The panels of `depictio --help`, in display order, with their commands.
 HELP_PANELS = {
-    "Get started": ("local", "run"),
-    "Projects and data": ("config", "data", "dashboard", "images"),
+    "Get started": ("local", "ingest"),
+    "Projects and data": ("config", "data", "dashboard"),
     "Administration": ("migrate", "backup"),
     "Reference": ("catalog", "commands", "version"),
 }
@@ -48,7 +48,7 @@ class _PanelOrderGroup(TyperGroup):
     """The root group, listing its commands in HELP_PANELS order.
 
     Rich help draws the panels in the order their first command is listed, and Typer
-    lists plain commands (run, version, commands) before groups, which would put
+    lists plain commands (ingest, version, commands) before groups, which would put
     Reference second.
     """
 
@@ -149,10 +149,13 @@ app.add_typer(
 app.add_typer(
     data,
     name="data",
-    help="Run one ingestion step at a time: scan files, process data collections, join tables.",
+    help="Run one ingestion step at a time: scan files, process data collections, join "
+    "tables, upload images.",
 )
 app.add_typer(dashboard, name="dashboard", help="Validate, import and export dashboard YAML files.")
-app.add_typer(images, name="images", help="Upload images to S3 storage and list a bucket's images.")
+# Out of the help: `images push` is `data push-images` now, kept for the scripts that
+# call it, and `images list-bucket` with it.
+app.add_typer(images, name="images", hidden=True)
 # No help here: migrate's own docstring, which also describes its modes, is shown.
 app.add_typer(migrate, name="migrate")
 app.add_typer(
@@ -231,7 +234,7 @@ GET_STARTED = (
     ("Start a server on this machine, with example dashboards", "depictio local up"),
     (
         "Build dashboards from a pipeline's results",
-        "depictio run --template nf-core/rnaseq/latest --data-root <dir>",
+        "depictio ingest --template nf-core/rnaseq/latest --data-root <dir>",
     ),
     ("Check the server and storage the CLI is set up for", "depictio config check"),
 )

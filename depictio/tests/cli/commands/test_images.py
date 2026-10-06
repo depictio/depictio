@@ -6,12 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from depictio.cli.cli.commands.images import (
+from depictio.cli.cli.commands.images import app
+from depictio.cli.cli.utils.image_upload import (
     SUPPORTED_IMAGE_EXTENSIONS,
-    _get_content_type,
-    _is_image_file,
-    _scan_directory_for_images,
-    app,
+    get_content_type,
+    is_image_file,
+    scan_directory_for_images,
 )
 
 
@@ -19,25 +19,25 @@ class TestImageUtilityFunctions:
     """Test suite for image utility functions."""
 
     def test_is_image_file_supported_extensions(self):
-        """Test _is_image_file recognizes supported extensions."""
+        """Test is_image_file recognizes supported extensions."""
         for ext in SUPPORTED_IMAGE_EXTENSIONS:
             path = Path(f"test{ext}")
-            assert _is_image_file(path) is True
+            assert is_image_file(path) is True
 
     def test_is_image_file_uppercase_extensions(self):
-        """Test _is_image_file handles uppercase extensions."""
+        """Test is_image_file handles uppercase extensions."""
         for ext in [".PNG", ".JPG", ".JPEG", ".GIF"]:
             path = Path(f"test{ext}")
-            assert _is_image_file(path) is True
+            assert is_image_file(path) is True
 
     def test_is_image_file_unsupported_extensions(self):
-        """Test _is_image_file rejects unsupported extensions."""
+        """Test is_image_file rejects unsupported extensions."""
         for ext in [".txt", ".pdf", ".doc", ".mp4"]:
             path = Path(f"test{ext}")
-            assert _is_image_file(path) is False
+            assert is_image_file(path) is False
 
     def test_get_content_type_known_types(self):
-        """Test _get_content_type returns correct MIME types."""
+        """Test get_content_type returns correct MIME types."""
         test_cases = {
             "image.png": "image/png",
             "photo.jpg": "image/jpeg",
@@ -46,13 +46,13 @@ class TestImageUtilityFunctions:
         }
         for filename, expected_type in test_cases.items():
             path = Path(filename)
-            content_type = _get_content_type(path)
+            content_type = get_content_type(path)
             assert content_type == expected_type
 
     def test_get_content_type_unknown_fallback(self):
-        """Test _get_content_type returns fallback for unknown types."""
+        """Test get_content_type returns fallback for unknown types."""
         path = Path("file.unknown")
-        content_type = _get_content_type(path)
+        content_type = get_content_type(path)
         assert content_type == "application/octet-stream"
 
 
@@ -81,7 +81,7 @@ class TestScanDirectoryForImages:
 
     def test_scan_directory_recursive(self, temp_image_dir):
         """Test recursive directory scanning finds all images."""
-        images = _scan_directory_for_images(temp_image_dir, recursive=True)
+        images = scan_directory_for_images(temp_image_dir, recursive=True)
 
         # Should find 5 image files (3 in root, 2 in subdir)
         assert len(images) == 5
@@ -92,7 +92,7 @@ class TestScanDirectoryForImages:
 
     def test_scan_directory_non_recursive(self, temp_image_dir):
         """Test non-recursive scanning only finds root images."""
-        images = _scan_directory_for_images(temp_image_dir, recursive=False)
+        images = scan_directory_for_images(temp_image_dir, recursive=False)
 
         # Should find only 3 images in root directory
         assert len(images) == 3
@@ -104,7 +104,7 @@ class TestScanDirectoryForImages:
     def test_scan_directory_specific_extensions(self, temp_image_dir):
         """Test scanning with specific extension filter."""
         extensions = {".png", ".gif"}
-        images = _scan_directory_for_images(temp_image_dir, recursive=True, extensions=extensions)
+        images = scan_directory_for_images(temp_image_dir, recursive=True, extensions=extensions)
 
         # Should find only .png and .gif files (3 total)
         assert len(images) == 3
@@ -117,7 +117,7 @@ class TestScanDirectoryForImages:
         (temp_image_dir / "CAPS.PNG").touch()
         (temp_image_dir / "UPPER.JPG").touch()
 
-        images = _scan_directory_for_images(temp_image_dir, recursive=False)
+        images = scan_directory_for_images(temp_image_dir, recursive=False)
 
         # Should find both lowercase and uppercase files
         caps_files = [img for img in images if img.name in ["CAPS.PNG", "UPPER.JPG"]]
@@ -128,7 +128,7 @@ class TestScanDirectoryForImages:
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
 
-        images = _scan_directory_for_images(empty_dir, recursive=True)
+        images = scan_directory_for_images(empty_dir, recursive=True)
         assert len(images) == 0
 
     def test_scan_directory_no_images(self, tmp_path):
@@ -138,13 +138,13 @@ class TestScanDirectoryForImages:
         (text_dir / "file1.txt").touch()
         (text_dir / "file2.pdf").touch()
 
-        images = _scan_directory_for_images(text_dir, recursive=True)
+        images = scan_directory_for_images(text_dir, recursive=True)
         assert len(images) == 0
 
     def test_scan_directory_removes_duplicates(self, temp_image_dir):
         """Test that duplicate paths are removed."""
         # Scanning twice shouldn't create duplicates
-        images = _scan_directory_for_images(temp_image_dir, recursive=True)
+        images = scan_directory_for_images(temp_image_dir, recursive=True)
         unique_images = list(set(images))
         assert len(images) == len(unique_images)
 
@@ -223,3 +223,119 @@ class TestListBucketCommand:
                 result = runner.invoke(app, ["list-bucket", "s3://bucket/prefix/"])
                 # Should attempt to connect (may fail in test env but path should parse)
                 assert "bucket" in str(result.output) or result.exit_code in [0, 1]
+
+
+class TestPushImages:
+    """`depictio data push-images` is the command; `images push`, which the benchmark
+    runner calls, is the same one under its former name."""
+
+    @pytest.fixture
+    def runner(self):
+        return CliRunner()
+
+    @pytest.fixture
+    def data_app(self):
+        from depictio.cli.cli.commands.data import app as data_app
+
+        return data_app
+
+    @pytest.fixture
+    def img_dir(self, tmp_path):
+        folder = tmp_path / "images"
+        (folder / "sub").mkdir(parents=True)
+        (folder / "a.png").write_bytes(b"x")
+        (folder / "sub" / "b.png").write_bytes(b"x")
+        return folder
+
+    def _push(self, runner, cli_app, args, keys=()):
+        """Invoke with S3 and the configuration mocked; returns the result, the
+        mocked client and the configuration loader."""
+        client = MagicMock()
+        client.get_paginator.return_value.paginate.return_value = [
+            {"Contents": [{"Key": k} for k in keys]}
+        ]
+        load = MagicMock()
+        with (
+            patch("depictio.cli.cli.utils.common.load_depictio_config", load),
+            patch("depictio.cli.cli.utils.image_upload.s3_client", return_value=client),
+        ):
+            result = runner.invoke(cli_app, args)
+        return result, client, load
+
+    def test_both_names_take_the_same_arguments_and_options(self, data_app):
+        from typer.main import get_command
+
+        push_images = get_command(data_app).commands["push-images"]
+        push = get_command(app).commands["push"]
+
+        assert [p.name for p in push.params] == [p.name for p in push_images.params]
+        assert {"server", "CLI_config_path"} <= {p.name for p in push_images.params}
+
+    def test_a_dry_run_lists_the_keys(self, runner, data_app, img_dir):
+        result = runner.invoke(
+            data_app, ["push-images", str(img_dir), "s3://bucket/imgs", "--dry-run"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "s3://bucket/imgs/sub/b.png" in result.output
+
+    def test_the_bucket_root_gets_keys_without_a_leading_slash(self, runner, data_app, img_dir):
+        result = runner.invoke(data_app, ["push-images", str(img_dir), "s3://bucket/", "--dry-run"])
+
+        assert "s3://bucket/a.png" in result.output
+        assert "s3://bucket//" not in result.output
+
+    def test_images_already_stored_are_skipped(self, runner, data_app, img_dir):
+        result, client, _ = self._push(
+            runner, data_app, ["push-images", str(img_dir), "s3://bucket/imgs/"], ["imgs/a.png"]
+        )
+
+        assert result.exit_code == 0, result.output
+        client.upload_file.assert_called_once()
+        assert client.upload_file.call_args.args[1:] == ("bucket", "imgs/sub/b.png")
+
+    def test_images_push_still_uploads_as_before(self, runner, img_dir):
+        result, client, load = self._push(
+            runner,
+            app,
+            [
+                "push",
+                str(img_dir),
+                "s3://bucket/imgs/",
+                "--CLI-config-path",
+                "/srv/CLI.yaml",
+                "--overwrite",
+            ],
+            ["imgs/a.png"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert client.upload_file.call_count == 2
+        load.assert_called_once_with("/srv/CLI.yaml")
+
+    def test_server_names_the_configuration(self, runner, data_app, img_dir):
+        _, _, load = self._push(
+            runner,
+            data_app,
+            ["push-images", str(img_dir), "s3://bucket/imgs/", "--server", "/srv/other.yaml"],
+        )
+
+        load.assert_called_once_with("/srv/other.yaml")
+
+    def test_server_and_the_former_option_together_are_refused(self, runner, data_app, img_dir):
+        result, client, _ = self._push(
+            runner,
+            data_app,
+            [
+                "push-images",
+                str(img_dir),
+                "s3://bucket/imgs/",
+                "--server",
+                "a.yaml",
+                "--CLI-config-path",
+                "b.yaml",
+            ],
+        )
+
+        assert result.exit_code == 2
+        client.upload_file.assert_not_called()

@@ -24,12 +24,21 @@ from depictio.cli.cli.utils.common import (
 )
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
+from depictio.cli.cli.utils.image_upload import (
+    image_collections_to_upload,
+    upload_collection_images,
+)
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.scan import scan_project_files
+from depictio.cli.cli.utils.server_target import (
+    LegacyConfigPathOption,
+    ServerOption,
+    resolve_server,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -131,9 +140,9 @@ class _TerminatedBySignal(SystemExit):
 
 
 class _IngestionRecord:
-    """The server-side monitoring record of one ``run`` invocation.
+    """The server-side monitoring record of one ``ingest`` invocation.
 
-    ``run`` fills it in as it goes (run id once opened, steps, project id) and
+    ``ingest`` fills it in as it goes (run id once opened, steps, project id) and
     closes it with the final tally at the summary. ``_closes_ingestion_record``
     closes it on every other way out, so an error exit, a Ctrl-C or a SIGTERM no
     longer leaves the run "running" forever.
@@ -376,12 +385,13 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
 
 
 def register_run_command(app: typer.Typer):
-    @app.command("run")
+    """Register ``ingest`` and, out of the help, ``run``: its former name, which
+    Nextflow hooks installed from older releases, CI and scripts still call."""
+
     @_closes_ingestion_record
-    def run(
-        CLI_config_path: Annotated[
-            str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-        ] = "~/.depictio/CLI.yaml",
+    def ingest(
+        server: ServerOption = None,
+        CLI_config_path: LegacyConfigPathOption = None,
         project_config_path: Annotated[
             str,
             typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
@@ -534,7 +544,9 @@ def register_run_command(app: typer.Typer):
         ),
         skip_scan: bool = typer.Option(False, "--skip-scan", help="Skip data scanning step"),
         skip_process: bool = typer.Option(
-            False, "--skip-process", help="Skip data processing step"
+            False,
+            "--skip-process",
+            help="Skip data processing step, and with it the image upload",
         ),
         skip_join: bool = typer.Option(False, "--skip-join", help="Skip join execution step"),
         # Sync options
@@ -588,14 +600,15 @@ def register_run_command(app: typer.Typer):
           3. Validate the project configuration (or resolve the template)
           4. Sync the project configuration to the server
           5. Scan the data files
-          6. Process the data collections
+          6. Process the data collections, uploading images where local_images_path is set
           7. Run the table joins the project configuration defines
           8. Import the dashboards (from the template, or from --dashboard)
 
         Example, from a template:
-          depictio run --template nf-core/ampliseq/latest --data-root /path/to/data
+          depictio ingest --template nf-core/ampliseq/latest --data-root /path/to/data
         """
-        rich_print_command_usage("run")
+        rich_print_command_usage("ingest")
+        CLI_config_path = resolve_server(server, CLI_config_path)
 
         # A data root that is not there is an argument mistake, and it is worth
         # saying so before anything else happens. This used to live inside the
@@ -993,7 +1006,7 @@ def register_run_command(app: typer.Typer):
                 if remote.status_code != 200:
                     rich_print_checked_statement(
                         f"--attach-run: no project named '{project_config.name}' on this "
-                        f"server (HTTP {remote.status_code}). Run once without --attach-run "
+                        f"server (HTTP {remote.status_code}). Ingest once without --attach-run "
                         f"to create it, or pass --project-name to target another project.",
                         "error",
                     )
@@ -1040,7 +1053,7 @@ def register_run_command(app: typer.Typer):
                 ingestion.project_config = _proj
                 ingestion.run_id = api_monitoring_ingestion_start(
                     CLI_config=CLI_config,
-                    command="run",
+                    command="ingest",
                     project_name=getattr(_proj, "name", None),
                     cli_version=_cli_version(),
                     command_line=_redacted_command_line(),
@@ -1083,7 +1096,7 @@ def register_run_command(app: typer.Typer):
                     if sync_verdict.get("action") == "exists":
                         rich_print_checked_statement(
                             f"Project '{project_config.name}' already exists on this server. "
-                            f"Re-run with --update-config to refresh its configuration, or "
+                            f"Ingest again with --update-config to refresh its configuration, or "
                             f"with --attach-run to add {data_root or project_config_path} as "
                             f"an additional run of that project.",
                             "error",
@@ -1229,6 +1242,7 @@ def register_run_command(app: typer.Typer):
         if not skip_process:
             rich_print_section_separator(f"Step 6/{total_steps}: Processing data collections")
             ingestion.current_step = "process"
+            image_uploads: list[dict] = []
             try:
                 if not dry_run:
                     # Get remote project configuration again for processing
@@ -1264,6 +1278,9 @@ def register_run_command(app: typer.Typer):
                                     f"failed to process: "
                                     f"{', '.join(process_result.get('failed_tags', []))}"
                                 )
+                            # After the tables, which say which images they reference.
+                            for dc in image_collections_to_upload(project_config):
+                                image_uploads.append(upload_collection_images(dc, CLI_config))
                         else:
                             raise Exception("Local and remote project configurations do not match")
                     else:
@@ -1280,6 +1297,13 @@ def register_run_command(app: typer.Typer):
                     if _n_ok is not None
                     else "data collections processed",
                 )
+                if image_uploads:
+                    _rec(
+                        "images",
+                        "success",
+                        f"{sum(u['uploaded'] for u in image_uploads)} uploaded / "
+                        f"{sum(u['skipped'] for u in image_uploads)} already stored",
+                    )
             except Exception as e:
                 rich_print_checked_statement(f"Data processing failed: {e}", "error")
                 _rec("process", "failed", str(e))
@@ -1448,7 +1472,7 @@ def register_run_command(app: typer.Typer):
                 rich_print_checked_statement(f"Could not create login link: {e}", "warning")
 
         # Final summary
-        rich_print_section_separator("Depictio-CLI Run Summary")
+        rich_print_section_separator("Ingestion summary")
 
         # Where to go and look at what just happened. The ingestion is otherwise
         # a wall of green ticks that never says where the result landed, which
@@ -1486,12 +1510,12 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(f"Template used: {template_metadata.template_id}", "info")
         if success_count == total_steps:
             rich_print_checked_statement(
-                f"Depictio-CLI run completed successfully! ({success_count}/{total_steps} steps)",
+                f"Ingestion completed successfully! ({success_count}/{total_steps} steps)",
                 "success",
             )
         else:
             rich_print_checked_statement(
-                f"Depictio-CLI run completed with some issues ({success_count}/{total_steps} steps)",
+                f"Ingestion completed with some issues ({success_count}/{total_steps} steps)",
                 "warning",
             )
 
@@ -1506,3 +1530,7 @@ def register_run_command(app: typer.Typer):
         # --continue-on-error, which only suppresses the early aborts above).
         if success_count != total_steps:
             raise typer.Exit(code=1)
+
+    app.command("ingest")(ingest)
+    # Same command, same options: only its place in the help is gone.
+    app.command("run", hidden=True)(ingest)

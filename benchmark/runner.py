@@ -1450,7 +1450,6 @@ def run_ingest_matrix(
                 cfg_dir,
                 s3_bucket=s3_bucket,
                 metadata_csv=metadata_csv,
-                images_dir=images_dir,
                 run_tag=run_tag,
             )
 

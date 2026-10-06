@@ -226,3 +226,40 @@ class TestTheHandlerForwardsDashboards:
         example = Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "example"
         assert (example / "depictio_dashboard.yaml").is_file()
         assert "depictio_dashboard" in (example / "nextflow.config").read_text()
+
+
+class TestTheHandlerCallsIngest:
+    """The handler runs `depictio-cli ingest --server ...`. A handler copied from an
+    older release still calls `run`, which the CLI keeps as an alias."""
+
+    def _nextflow_dir(self) -> Path:
+        import depictio.cli
+
+        return Path(depictio.cli.__file__).parent / "configs" / "nextflow"
+
+    def _snippet(self) -> str:
+        return (self._nextflow_dir() / "depictio.config").read_text()
+
+    def test_it_runs_ingest(self):
+        snippet = self._snippet()
+        assert "argv.add('ingest')" in snippet
+        assert "argv.add('run')" not in snippet
+
+    def test_the_server_reaches_the_cli_as_server(self):
+        snippet = self._snippet()
+        assert "argv += ['--server', cliConfig]" in snippet
+        assert "--CLI-config-path" not in snippet
+
+    def test_local_is_documented(self):
+        """`depictio_cli_config = 'local'` targets the server `depictio local up` runs."""
+        assert "--depictio_cli_config local" in self._snippet()
+        options = (self._nextflow_dir() / "example" / "depictio_all_options.config").read_text()
+        assert "params.depictio_cli_config = 'local'" in options
+
+    def test_no_text_still_names_the_former_command(self):
+        files = [self._nextflow_dir() / "depictio.config"]
+        files += sorted((self._nextflow_dir() / "example").iterdir())
+        for path in files:
+            text = path.read_text()
+            for former in ("depictio-cli run", "depictio run", "--CLI-config-path"):
+                assert former not in text, f"{former!r} in {path.name}"
