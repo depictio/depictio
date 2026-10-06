@@ -14,13 +14,14 @@ import {
   Text,
   Textarea,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { glyphColorVar, tabDisplayName } from 'depictio-react-core';
 import type { DashboardSummary } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import DesignShell from '../shared/DesignShell';
+import { BuilderSection, BuilderSections, Field } from '../shared/BuilderSections';
+import PlacementSection from '../shared/PlacementSection';
 import { useTabFamily } from '../shared/useTabFamily';
 import { SECTION_COLOR_OPTIONS } from '../../components/sections/sectionIcons';
 import MarkdownHelp from './MarkdownHelp';
@@ -98,113 +99,137 @@ const TextBuilder: React.FC = () => {
   const accentData = useMemo(() => accentOptions(tabs, accent), [tabs, accent]);
 
   const form = (
-    <Stack gap="md">
-      <Title order={6} fw={700}>
-        Text component configuration
-      </Title>
+    <BuilderSections builder="text" required={['content']}>
+      <BuilderSection
+        value="content"
+        icon="mdi:text-box-outline"
+        title="Content"
+        subtitle="The heading and the markdown body the tile shows"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="Title"
+            description="Heading text shown at the top of the block."
+            placeholder="Section title"
+            value={config.title ?? ''}
+            onChange={(e) => patchConfig({ title: e.currentTarget.value })}
+          />
 
-      <TextInput
-        label="Title"
-        description="Heading text shown at the top of the block."
-        placeholder="Section title"
-        value={config.title ?? ''}
-        onChange={(e) => patchConfig({ title: e.currentTarget.value })}
-      />
+          <Stack gap={4}>
+            <Textarea
+              label="Body"
+              description="Optional markdown rendered below the title: headings, lists, links to tabs, icons, tables."
+              autosize
+              minRows={3}
+              value={config.body ?? ''}
+              onChange={(e) => patchConfig({ body: e.currentTarget.value })}
+            />
+            <MarkdownHelp />
+          </Stack>
+        </Stack>
+      </BuilderSection>
 
-      <Select
-        label="Heading level"
-        description="H1 is the largest; H6 the smallest."
-        data={ORDER_OPTIONS}
-        value={orderStr}
-        onChange={(val) => patchConfig({ order: val ? Number(val) : 1 })}
-        allowDeselect={false}
-      />
+      <BuilderSection
+        value="layout"
+        icon="mdi:format-align-left"
+        title="Layout"
+        subtitle="Heading size and where the text sits in the tile"
+      >
+        <Stack gap="md">
+          <Select
+            label="Heading level"
+            description="H1 is the largest; H6 the smallest."
+            data={ORDER_OPTIONS}
+            value={orderStr}
+            onChange={(val) => patchConfig({ order: val ? Number(val) : 1 })}
+            allowDeselect={false}
+          />
 
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Horizontal alignment
-        </Text>
-        <SegmentedControl
-          value={alignment}
-          onChange={(val) => patchConfig({ alignment: val })}
-          data={ALIGNMENT_OPTIONS}
-          fullWidth
-        />
-      </Stack>
+          <Field label="Horizontal alignment" description="How the title and body line up across the tile.">
+            <SegmentedControl
+              value={alignment}
+              onChange={(val) => patchConfig({ alignment: val })}
+              data={ALIGNMENT_OPTIONS}
+              fullWidth
+            />
+          </Field>
 
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Vertical alignment
-        </Text>
-        <Text size="xs" c="dimmed">
-          Where the text sits when the tile is taller than the text.
-        </Text>
-        <SegmentedControl
-          value={verticalAlignment}
-          onChange={(val) => patchConfig({ vertical_alignment: val })}
-          data={VERTICAL_ALIGNMENT_OPTIONS}
-          fullWidth
-        />
-      </Stack>
+          <Field
+            label="Vertical alignment"
+            description="Where the text sits when the tile is taller than the text."
+          >
+            <SegmentedControl
+              value={verticalAlignment}
+              onChange={(val) => patchConfig({ vertical_alignment: val })}
+              data={VERTICAL_ALIGNMENT_OPTIONS}
+              fullWidth
+            />
+          </Field>
+        </Stack>
+      </BuilderSection>
 
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Frame
-        </Text>
-        <Text size="xs" c="dimmed">
-          None for prose between figures. Card frames the tile like a metric card, for a
-          finding or a fact box on a landing page; Tinted lays it on a wash of its accent.
-        </Text>
-        <SegmentedControl
-          value={surface}
-          onChange={(val) => patchConfig({ surface: val })}
-          data={FRAME_OPTIONS}
-          fullWidth
-        />
-      </Stack>
+      <BuilderSection
+        value="frame"
+        icon="mdi:card-outline"
+        title="Frame & accent"
+        subtitle="Whether the tile is framed, and in which colour"
+      >
+        <Stack gap="md">
+          <Field
+            label="Frame"
+            description="None for prose between figures. Card frames the tile like a metric card, for a finding or a fact box on a landing page; Tinted lays it on a wash of its accent."
+          >
+            <SegmentedControl
+              value={surface}
+              onChange={(val) => patchConfig({ surface: val })}
+              data={FRAME_OPTIONS}
+              fullWidth
+            />
+          </Field>
 
-      {/* Without a frame the renderer draws no accent at all, so the field
-          would set nothing visible. */}
-      {surface !== 'none' && (
-        <Select
-          label="Accent"
-          description="Tints the tile's ground (Tinted) and the marks of a numbered fact list. A tab's colour also rests that tab's icon in a Card's corner."
-          placeholder={surface === 'tinted' ? 'Grey' : 'No accent'}
-          data={accentData}
-          value={accent ?? null}
-          onChange={(val) => patchConfig({ accent: val ?? undefined })}
-          clearable
-          searchable
-          leftSection={<Icon icon="mdi:palette" width={16} />}
-          renderOption={({ option }) => (
-            <Group gap="xs" wrap="nowrap">
-              <ColorSwatch
-                size={14}
-                withShadow={false}
-                color={option.value.startsWith('tab:') ? 'transparent' : glyphColorVar(option.value)}
-              />
-              <Text size="sm">{option.label}</Text>
-            </Group>
+          {/* Without a frame the renderer draws no accent at all, so the field
+              would set nothing visible. */}
+          {surface !== 'none' ? (
+            <Select
+              label="Accent"
+              description="Tints the tile's ground (Tinted) and the marks of a numbered fact list. A tab's colour also rests that tab's icon in a Card's corner."
+              placeholder={surface === 'tinted' ? 'Grey' : 'No accent'}
+              data={accentData}
+              value={accent ?? null}
+              onChange={(val) => patchConfig({ accent: val ?? undefined })}
+              clearable
+              searchable
+              leftSection={<Icon icon="mdi:palette" width={16} />}
+              renderOption={({ option }) => (
+                <Group gap="xs" wrap="nowrap">
+                  <ColorSwatch
+                    size={14}
+                    withShadow={false}
+                    color={option.value.startsWith('tab:') ? 'transparent' : glyphColorVar(option.value)}
+                  />
+                  <Text size="sm">{option.label}</Text>
+                </Group>
+              )}
+            />
+          ) : (
+            <Text size="xs" c="dimmed">
+              Pick a Card or Tinted frame to give the tile an accent colour.
+            </Text>
           )}
-        />
-      )}
+        </Stack>
+      </BuilderSection>
 
-      <Stack gap={4}>
-        <Textarea
-          label="Body"
-          description="Optional markdown rendered below the title: headings, lists, links to tabs, icons, tables."
-          autosize
-          minRows={3}
-          value={config.body ?? ''}
-          onChange={(e) => patchConfig({ body: e.currentTarget.value })}
-        />
-        <MarkdownHelp />
-      </Stack>
-    </Stack>
+      <PlacementSection />
+    </BuilderSections>
   );
 
   return (
-    <DesignShell formSlot={form} previewSlot={<TextPreview tabs={tabs} />} hideColumns />
+    <DesignShell
+      formSlot={form}
+      previewSlot={<TextPreview tabs={tabs} />}
+      hideColumns
+      ownsPlacement
+    />
   );
 };
 
