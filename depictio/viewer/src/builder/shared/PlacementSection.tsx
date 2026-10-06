@@ -25,7 +25,7 @@ import { fetchDashboard, SectionIcon } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import { useBuilderStore } from '../store/useBuilderStore';
-import { BuilderSection, BuilderSections } from './BuilderSections';
+import { BuilderSection } from './BuilderSections';
 import { implicitNames, sectionsFor } from '../../components/sections/sectionMutations';
 import type { SectionKind } from '../../components/sections/sectionMutations';
 
@@ -33,14 +33,9 @@ export interface PlacementSectionProps {
   /** Section value — keep it out of the builder's `required` list so the
    *  section starts collapsed. */
   itemValue?: string;
-  /** Wrap the item in its own `BuilderSections`. */
-  standalone?: boolean;
 }
 
-const PlacementSection: React.FC<PlacementSectionProps> = ({
-  itemValue = 'placement',
-  standalone = false,
-}) => {
+const PlacementSection: React.FC<PlacementSectionProps> = ({ itemValue = 'placement' }) => {
   const componentType = useBuilderStore((s) => s.componentType);
   const dashboardId = useBuilderStore((s) => s.dashboardId);
   const config = useBuilderStore((s) => s.config) as {
@@ -150,7 +145,7 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({
     />
   );
 
-  const item = (
+  return (
     <BuilderSection
       value={itemValue}
       icon="mdi:format-list-group"
@@ -169,14 +164,6 @@ const PlacementSection: React.FC<PlacementSectionProps> = ({
         </Text>
       </Stack>
     </BuilderSection>
-  );
-
-  return standalone ? (
-    <BuilderSections builder="placement" required={[]}>
-      {item}
-    </BuilderSections>
-  ) : (
-    item
   );
 };
 

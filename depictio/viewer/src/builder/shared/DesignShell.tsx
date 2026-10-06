@@ -10,7 +10,6 @@ import React from 'react';
 import { Box, Center, Grid, Stack } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import ColumnsDescription from './ColumnsDescription';
-import PlacementSection from './PlacementSection';
 import StickyPreview, { STICKY_TOP } from './StickyPreview';
 
 interface Props {
@@ -18,27 +17,20 @@ interface Props {
   previewSlot: React.ReactNode;
   /** Hide the columns-description (e.g. multiqc has no tabular schema). */
   hideColumns?: boolean;
-  /** The form already carries Placement as one of its sections. */
-  ownsPlacement?: boolean;
 }
 
 const DesignShell: React.FC<Props> = ({
   formSlot,
   previewSlot,
   hideColumns,
-  ownsPlacement,
 }) => {
   return (
     <Stack gap="lg" pt="md">
       <Grid columns={24} gutter="md" align="stretch">
         <Grid.Col span={{ base: 24, md: 10 }}>
-          {/* Placement rides at the bottom of the control column, with the rest
-              of this builder's settings, rather than full-width under both
-              columns. It hides itself when the dashboard has no sections. */}
-          <Stack gap="md" style={{ height: '100%' }}>
-            <Box>{formSlot}</Box>
-            {!ownsPlacement && <PlacementSection standalone />}
-          </Stack>
+          {/* The form is the builder's BuilderSections; Placement is one of
+              its sections (see PlacementSection), not a block of its own. */}
+          <Box style={{ height: '100%' }}>{formSlot}</Box>
         </Grid.Col>
         <Grid.Col span={{ base: 24, md: 1 }} visibleFrom="md">
           {/* Level with the upper part of the preview, which no longer

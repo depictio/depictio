@@ -11,23 +11,16 @@
  * (lines 126-327) — module/plot/dataset cascade with a side-by-side preview.
  */
 import React, { useEffect, useState } from 'react';
-import {
-  Alert,
-  Group,
-  Loader,
-  Select,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Alert, Group, Loader, Select, Stack, Text } from '@mantine/core';
 import {
   fetchMultiQCBuilderOptions,
   readMultiqcSelection,
 } from 'depictio-react-core';
 import type { MultiQCBuilderOptions } from 'depictio-react-core';
-import { DcTypeIcon } from '../../projects/dcTypeIcon';
 import { useBuilderStore } from '../store/useBuilderStore';
 import DesignShell from '../shared/DesignShell';
+import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
+import PlacementSection from '../shared/PlacementSection';
 import MultiQCPreview from './MultiQCPreview';
 
 const MultiQCBuilder: React.FC = () => {
@@ -100,77 +93,83 @@ const MultiQCBuilder: React.FC = () => {
   }, [isGeneralStats, config.is_general_stats, patchConfig]);
 
   const form = (
-    <Stack gap="md">
-      <Group gap="xs" align="center">
-        <DcTypeIcon type="multiqc" size={20} withTooltip={false} />
-        <Title order={6}>MultiQC Report</Title>
-      </Group>
+    <BuilderSections builder="multiqc" required={['report']}>
+      <BuilderSection
+        value="report"
+        icon="mdi:file-chart-outline"
+        title="MultiQC report"
+        subtitle="The module, plot and dataset this tile shows"
+      >
+        <Stack gap="md">
+          {error && (
+            <Alert color="red" title="Failed to load MultiQC options">
+              <Text size="xs">{error}</Text>
+            </Alert>
+          )}
+          {loading && (
+            <Group>
+              <Loader size="xs" />
+              <Text size="sm">Loading modules…</Text>
+            </Group>
+          )}
 
-      {error && (
-        <Alert color="red" title="Failed to load MultiQC options">
-          <Text size="xs">{error}</Text>
-        </Alert>
-      )}
-      {loading && (
-        <Group>
-          <Loader size="xs" />
-          <Text size="sm">Loading modules…</Text>
-        </Group>
-      )}
+          <Select
+            label="Module"
+            placeholder="Pick a MultiQC module"
+            data={moduleOptions}
+            value={config.selected_module ?? null}
+            onChange={(val) => {
+              // "General Stats Table" is one click — module and plot are both
+              // ``general_stats``, no further drill-down needed.
+              if (val === 'general_stats') {
+                patchConfig({
+                  selected_module: 'general_stats',
+                  selected_plot: 'general_stats',
+                  selected_dataset: undefined,
+                });
+                return;
+              }
+              patchConfig({
+                selected_module: val,
+                selected_plot: undefined,
+                selected_dataset: undefined,
+              });
+            }}
+            searchable
+            disabled={!opts || !moduleOptions.length}
+          />
 
-      <Select
-        label="Module"
-        placeholder="Pick a MultiQC module"
-        data={moduleOptions}
-        value={config.selected_module ?? null}
-        onChange={(val) => {
-          // "General Stats Table" is one click — module and plot are both
-          // ``general_stats``, no further drill-down needed.
-          if (val === 'general_stats') {
-            patchConfig({
-              selected_module: 'general_stats',
-              selected_plot: 'general_stats',
-              selected_dataset: undefined,
-            });
-            return;
-          }
-          patchConfig({
-            selected_module: val,
-            selected_plot: undefined,
-            selected_dataset: undefined,
-          });
-        }}
-        searchable
-        disabled={!opts || !moduleOptions.length}
-      />
+          {config.selected_module !== 'general_stats' && (
+            <Select
+              label="Plot"
+              placeholder={
+                !config.selected_module ? 'Pick a module first' : 'Pick a plot'
+              }
+              data={plotOptions}
+              value={config.selected_plot ?? null}
+              onChange={(val) =>
+                patchConfig({ selected_plot: val, selected_dataset: undefined })
+              }
+              searchable
+              disabled={!plotOptions.length}
+            />
+          )}
 
-      {config.selected_module !== 'general_stats' && (
-        <Select
-          label="Plot"
-          placeholder={
-            !config.selected_module ? 'Pick a module first' : 'Pick a plot'
-          }
-          data={plotOptions}
-          value={config.selected_plot ?? null}
-          onChange={(val) =>
-            patchConfig({ selected_plot: val, selected_dataset: undefined })
-          }
-          searchable
-          disabled={!plotOptions.length}
-        />
-      )}
+          {datasetOptions.length > 0 && config.selected_module !== 'general_stats' && (
+            <Select
+              label="Dataset"
+              placeholder="Pick a dataset"
+              data={datasetOptions}
+              value={config.selected_dataset ?? null}
+              onChange={(val) => patchConfig({ selected_dataset: val })}
+              searchable
+            />
+          )}
+        </Stack>
+      </BuilderSection>
 
-      {datasetOptions.length > 0 && config.selected_module !== 'general_stats' && (
-        <Select
-          label="Dataset"
-          placeholder="Pick a dataset"
-          data={datasetOptions}
-          value={config.selected_dataset ?? null}
-          onChange={(val) => patchConfig({ selected_dataset: val })}
-          searchable
-        />
-      )}
-    </Stack>
+      <PlacementSection />
+    </BuilderSections>
   );
 
   return (

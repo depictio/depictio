@@ -830,7 +830,7 @@ const CardBuilder: React.FC = () => {
     </BuilderSections>
   );
 
-  return <DesignShell formSlot={form} previewSlot={<CardPreview />} ownsPlacement />;
+  return <DesignShell formSlot={form} previewSlot={<CardPreview />} />;
 };
 
 export default CardBuilder;

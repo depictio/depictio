@@ -228,7 +228,6 @@ const TextBuilder: React.FC = () => {
       formSlot={form}
       previewSlot={<TextPreview tabs={tabs} />}
       hideColumns
-      ownsPlacement
     />
   );
 };
