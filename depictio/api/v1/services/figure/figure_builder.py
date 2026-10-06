@@ -6,6 +6,8 @@ parameters (either UI dict_kwargs or executed user code). They are Dash-free so
 the API/Celery preview path can use them without importing the Dash app.
 """
 
+import ast
+import re
 from typing import Any
 
 import plotly.express as px
@@ -242,6 +244,57 @@ def _decimate_ordered(plot_df, x_col: str | None, cap: int):
     )
 
 
+# A `template=` keyword argument, not the tail of `hovertemplate=` or
+# `texttemplate=`: the word boundary rules out an identifier character before
+# it, the lookahead an `==` comparison.
+_TEMPLATE_KWARG_RE = re.compile(r"\btemplate\s*=(?!=)")
+
+
+def code_sets_template(code: str) -> bool:
+    """Whether user figure code picks its own Plotly template.
+
+    Code mode keeps the author's template and applies the theme's only when the
+    code chose none. The check used to be the substring ``"template="``, which
+    every ``hovertemplate=`` and ``texttemplate=`` also contains, so a figure
+    that merely formatted its hover text lost the theme template and drew in
+    Plotly's default look.
+
+    Read from the syntax tree: a ``template=`` keyword in any call, an
+    assignment to a ``.template`` attribute (``fig.layout.template = …``) or to
+    ``templates.default``, or a ``"template"`` key in a dict literal
+    (``fig.update_layout({"template": …})``). Code that does not parse falls
+    back to a word-bounded match on the keyword.
+    """
+    if not code:
+        return False
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return bool(_TEMPLATE_KWARG_RE.search(code))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if any(kw.arg == "template" for kw in node.keywords):
+                return True
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if not isinstance(target, ast.Attribute):
+                    continue
+                if target.attr == "template":
+                    return True
+                if (
+                    target.attr == "default"
+                    and isinstance(target.value, ast.Attribute)
+                    and target.value.attr == "templates"
+                ):
+                    return True
+        elif isinstance(node, ast.Dict):
+            if any(isinstance(k, ast.Constant) and k.value == "template" for k in node.keys):
+                return True
+    return False
+
+
 def process_code_mode_figure(
     code_content: str,
     df: Any,
@@ -284,7 +337,7 @@ def process_code_mode_figure(
 
     detected_visu_type = extract_visualization_type_from_code(code_content)
 
-    if "template=" not in code_content:
+    if not code_sets_template(code_content):
         theme_template = f"mantine_{current_theme}"
         fig.update_layout(template=theme_template)
 
