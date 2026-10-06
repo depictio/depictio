@@ -662,9 +662,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // Drives one button rather than a pair: "collapse all" until nothing is open,
   // then "expand all". A single control can't be in the dead state where the
   // one you want is the one already applied.
-  const anySectionOpen = named.some((s) => sectionCollapse.isOpen(s.key));
-
+  // Plain sections have no fold, so they neither count nor get the button.
   const isPlain = (s: ComponentSection) => s.spec?.appearance === 'plain';
+  const foldable = named.filter((s) => !isPlain(s));
+  const anySectionOpen = foldable.some((s) => sectionCollapse.isOpen(s.key));
+
   const renderSections = (list: ComponentSection[]) =>
     list.length === 0 ? null : (
       <SectionAccordion
@@ -723,7 +725,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       style={{ width: '100%', overflowX: 'hidden' }}
     >
       {leadBucket && renderGrid(leadBucket)}
-      {named.length > 0 && (
+      {foldable.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button
             variant="subtle"
@@ -734,7 +736,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             }
             onClick={() =>
               sectionCollapse.setAll(
-                named.map((s) => s.key),
+                foldable.map((s) => s.key),
                 anySectionOpen,
               )
             }
