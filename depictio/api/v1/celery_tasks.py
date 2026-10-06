@@ -536,7 +536,12 @@ def build_figure_preview(payload: dict) -> dict:
 
             # Code that names no colours still draws each category the way
             # every other tile does.
-            recolor_code_figure(fig, payload.get("category_colors"), code_content)
+            recolor_code_figure(
+                fig,
+                payload.get("category_colors"),
+                code_content,
+                grouped=bool(code_group_kwargs.get("color_discrete_map")),
+            )
     else:
         # Render path uses `selection_*`; preview path doesn't pass them. The
         # underlying helper takes both as kwargs with safe defaults, so always

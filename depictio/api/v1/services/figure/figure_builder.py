@@ -289,9 +289,18 @@ def _decimate_ordered(plot_df, x_col: str | None, cap: int):
 _CODE_SETS_COLORS_RE = re.compile(
     r"color_discrete_(?:map|sequence)|marker_color|\bcolorway\b|update_traces\([^)]*color"
 )
+# A colour map taken from the analysis groups (`color_discrete_map=
+# depictio_group_kwargs.get("color_discrete_map", {})`, as the ampliseq
+# templates write it): no colours of the code's own while no group is set.
+_GROUP_COLOR_REF_RE = re.compile(
+    r"color_discrete_map\s*=\s*depictio_group_kwargs\.get\([^()]*(?:\([^()]*\)[^()]*)*\)"
+    r"(?:\s*or\s*\{\s*\})?"
+)
 
 
-def recolor_code_figure(fig: Any, category_colors: Any, code: str | None) -> bool:
+def recolor_code_figure(
+    fig: Any, category_colors: Any, code: str | None, *, grouped: bool = False
+) -> bool:
     """Draw a code-mode figure's categories in the dashboard's colours.
 
     UI-mode figures get the dashboard's ``category_colors`` as their
@@ -301,12 +310,16 @@ def recolor_code_figure(fig: Any, category_colors: Any, code: str | None) -> boo
     the dashboard's blue. After the code has run, its traces are recoloured
     when their names are the values of one column the dashboard colours, every
     name but "Other" known. Code that sets colours itself (a discrete map or
-    sequence, a marker colour, a colorway) is left as written.
+    sequence, a marker colour, a colorway) is left as written; a map read from
+    the analysis groups counts as the code's own only while ``grouped`` (the
+    request carries groups, so that map holds their colours).
 
     Returns whether the figure was recoloured.
     """
     if not isinstance(category_colors, dict) or not category_colors or fig is None:
         return False
+    if code and not grouped:
+        code = _GROUP_COLOR_REF_RE.sub("", code)
     if code and _CODE_SETS_COLORS_RE.search(code):
         return False
     traces = [t for t in getattr(fig, "data", ()) if getattr(t, "name", None)]
