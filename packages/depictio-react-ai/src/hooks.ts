@@ -15,11 +15,21 @@ import {
   resolveFilters as apiResolveFilters,
   streamAnalyze as apiStreamAnalyze,
   streamGenerateDashboard as apiStreamGenerateDashboard,
+  streamRegenerateComponent as apiStreamRegenerateComponent,
+  streamRegenerateSection as apiStreamRegenerateSection,
   suggestComponents as apiSuggestComponents,
   summarizeSection as apiSummarizeSection,
   type AIHealth,
+  type AIStreamHandlers,
 } from './api';
-import { useAISession, useAIStore } from './store';
+import {
+  awaitingVerdict,
+  EMPTY_GENERATION,
+  EMPTY_SPEND,
+  useAISession,
+  useAIStore,
+} from './store';
+import type { RunSpend } from './store';
 import type {
   AIStreamEvent,
   AnalysisReport,
@@ -490,24 +500,10 @@ export function useAnalysisReport(dashboardId: string) {
  *  project. `AIKeySection` and `useGenerateDashboard` must agree on it. */
 export const GENERATE_DASHBOARD_SESSION_ID = 'generate-dashboard';
 
-export interface GenerateDashboardRunState {
-  status: string;
-  plan: DashboardPlan | null;
-  budget: BudgetTick | null;
-  /** One entry per reported component tag, the latest event winning. */
-  components: GeneratedComponentEvent[];
-  dashboard: GeneratedDashboardEvent | null;
-  error: string | null;
-}
-
-const EMPTY_GENERATION: GenerateDashboardRunState = {
-  status: '',
-  plan: null,
-  budget: null,
-  components: [],
-  dashboard: null,
-  error: null,
-};
+// The run state itself lives in the AI store, so that a run survives the
+// dialog being closed; it stays part of this module's surface because
+// GenerationProgress and the hosts read it from here.
+export type { GenerateDashboardRunState, GenerationRun, RunSpend } from './store';
 
 /** The plan arrives from a model-facing schema; default the lists so the
  *  panel never has to guard against a missing array. */
@@ -535,22 +531,102 @@ function normalizeDashboardEvent(raw: Record<string, unknown>): GeneratedDashboa
   };
 }
 
+/** What a run needs told about itself that the request body does not say. */
+export interface GenerateDashboardRunOptions {
+  /** Label of the project being generated into, so an affordance outside
+   *  the panel can name the run without a project list of its own. */
+  projectName?: string;
+  /** This call plans and stops (`body.plan_only`), so the plan it returns
+   *  waits for a verdict instead of being filled. */
+  planPhase?: boolean;
+}
+
+/** One generation run as a host reads it from outside the dialog: enough to
+ *  say that something is happening, name it, and react when it ends. Kept
+ *  deliberately free of the plan, the budget and the component rows, so a
+ *  host does not re-render on every token tick. */
+export interface GenerationRunSummary {
+  /** Null until a run is started; new for each call of a run. */
+  id: string | null;
+  pending: boolean;
+  awaitingPlan: boolean;
+  /** The run has neither finished nor failed: it is streaming, or its plan
+   *  is waiting for a verdict. */
+  active: boolean;
+  /** The stage the stream last named ('planning', 'filling', ...). */
+  status: string;
+  projectName: string;
+  /** The saved draft, once a run produced one. */
+  dashboard: GeneratedDashboardEvent | null;
+  error: string | null;
+}
+
+/**
+ * The generation run from outside the panel — for a host that shows a run is
+ * in flight while the dialog that started it is closed, and that announces
+ * the outcome when nobody is looking at the panel.
+ *
+ * Reads the same store slot the panel does, so the two can never disagree
+ * about whether a run is going.
+ */
+export function useGenerationRun(): GenerationRunSummary {
+  const id = useAIStore((s) => s.generation?.id ?? null);
+  const pending = useAIStore((s) => s.generation?.pending ?? false);
+  const awaitingPlan = useAIStore((s) => awaitingVerdict(s.generation));
+  const status = useAIStore((s) => s.generation?.state.status ?? '');
+  const projectName = useAIStore((s) => s.generation?.projectName ?? '');
+  const dashboard = useAIStore((s) => s.generation?.state.dashboard ?? null);
+  const error = useAIStore((s) => s.generation?.state.error ?? null);
+
+  return useMemo(
+    () => ({
+      id,
+      pending,
+      awaitingPlan,
+      active: pending || awaitingPlan,
+      status,
+      projectName,
+      dashboard,
+      error,
+    }),
+    [id, pending, awaitingPlan, status, projectName, dashboard, error],
+  );
+}
+
 /** Drive one whole-dashboard generation run and expose its live state: the
  *  status line, the plan, the budget countdown, per-component outcomes and
- *  finally the persisted draft (`dashboard`). Modelled on useAnalysisReport
- *  and, like it, not backed by the chat store. */
+ *  finally the persisted draft (`dashboard`).
+ *
+ *  The run lives in the AI store rather than in this hook, because it takes
+ *  minutes and the dialog it runs in is closed and reopened while it streams:
+ *  unmounting the panel leaves the stream alone, and a remount picks the run
+ *  up where it is. `cancel()` is the only thing that aborts it.
+ *
+ *  `run` serves both phases of the reviewed flow, one call each: pass
+ *  `plan_only: true` (with `planPhase`) for the planning call, which ends on
+ *  the `plan` event with `dashboard` still null, and then the same body plus
+ *  `plan: <the plan the server sent>` to fill it. Each call resets the run
+ *  state; the ending call's spend is banked into `sessionSpend` so reviewing
+ *  a plan does not lose what planning it cost. */
 export function useGenerateDashboard() {
   const session = useAISession(GENERATE_DASHBOARD_SESSION_ID);
-  const [state, setState] = useState<GenerateDashboardRunState>(EMPTY_GENERATION);
-  const [pending, setPending] = useState(false);
-  const [controller, setController] = useState<AbortController | null>(null);
+  const state = useAIStore((s) => s.generation?.state ?? EMPTY_GENERATION);
+  const pending = useAIStore((s) => s.generation?.pending ?? false);
+  const awaitingPlan = useAIStore((s) => awaitingVerdict(s.generation));
+  const spent = useAIStore((s) => s.generation?.spent ?? EMPTY_SPEND);
 
   const run = useCallback(
-    async (body: GenerateDashboardRequest) => {
+    async (body: GenerateDashboardRequest, opts: GenerateDashboardRunOptions = {}) => {
       const abort = new AbortController();
-      setController(abort);
-      setPending(true);
-      setState({ ...EMPTY_GENERATION, status: 'starting' });
+      const runId = useAIStore.getState().startGeneration({
+        request: body,
+        projectName: opts.projectName ?? '',
+        planPhase: Boolean(opts.planPhase),
+        abort,
+      });
+      // The slot is held by a stream that is still open; see startGeneration.
+      if (!runId) return;
+      const { patchGeneration, endGeneration } = useAIStore.getState();
 
       const components: GeneratedComponentEvent[] = [];
       try {
@@ -559,13 +635,13 @@ export function useGenerateDashboard() {
           onEvent: (event: AIStreamEvent) => {
             switch (event.type) {
               case 'status':
-                setState((s) => ({ ...s, status: String(event.data.message ?? '') }));
+                patchGeneration(runId, { status: String(event.data.message ?? '') });
                 break;
               case 'plan':
-                setState((s) => ({ ...s, plan: normalizePlan(event.data.plan) }));
+                patchGeneration(runId, { plan: normalizePlan(event.data.plan) });
                 break;
               case 'budget':
-                setState((s) => ({ ...s, budget: event.data as unknown as BudgetTick }));
+                patchGeneration(runId, { budget: event.data as unknown as BudgetTick });
                 break;
               case 'component': {
                 const c = event.data as unknown as GeneratedComponentEvent;
@@ -574,20 +650,173 @@ export function useGenerateDashboard() {
                 const at = components.findIndex((x) => x.tag === c.tag);
                 if (at === -1) components.push(c);
                 else components[at] = c;
-                setState((s) => ({ ...s, components: [...components] }));
+                patchGeneration(runId, { components: [...components] });
                 break;
               }
               case 'dashboard':
-                setState((s) => ({ ...s, dashboard: normalizeDashboardEvent(event.data) }));
+                patchGeneration(runId, { dashboard: normalizeDashboardEvent(event.data) });
                 break;
+              case 'error':
+                patchGeneration(runId, {
+                  error: String(event.data.detail ?? 'unknown error'),
+                });
+                break;
+              default:
+                break;
+            }
+          },
+        });
+      } catch (e) {
+        if (!abort.signal.aborted) {
+          patchGeneration(runId, { error: e instanceof Error ? e.message : String(e) });
+        }
+      } finally {
+        endGeneration(runId);
+      }
+    },
+    [session.llmKey],
+  );
+
+  const cancel = useCallback(() => {
+    useAIStore.getState().stopGeneration();
+  }, []);
+
+  /** Totals across every call of the session, the one in flight included.
+   *  Null while the session is still on its first call, which the budget
+   *  bar already reports on its own. */
+  const sessionSpend = useMemo<RunSpend | null>(() => {
+    if (spent.runs === 0) return null;
+    const liveCost = typeof state.budget?.cost_usd === 'number' ? state.budget.cost_usd : null;
+    return {
+      runs: spent.runs + 1,
+      tokens: spent.tokens + (state.budget?.tokens_used ?? 0),
+      seconds: spent.seconds + (state.budget?.seconds ?? 0),
+      cost:
+        spent.cost === null && liveCost === null ? null : (spent.cost ?? 0) + (liveCost ?? 0),
+    };
+  }, [spent, state.budget]);
+
+  return useMemo(
+    () => ({ run, cancel, pending, state, awaitingPlan, sessionSpend }),
+    [run, cancel, pending, state, awaitingPlan, sessionSpend],
+  );
+}
+
+/** Live state of one regeneration run: the status line, the budget
+ *  countdown, the per-tile outcomes and the component dicts that came back
+ *  to replace the tiles on the dashboard. Same shape as
+ *  `GenerateDashboardRunState`, minus the plan a regeneration has no need
+ *  for (the plan is the draft it is editing). */
+export interface RegenerateRunState {
+  status: string;
+  budget: BudgetTick | null;
+  /** One row per reported tag, the latest outcome winning. */
+  rows: GeneratedComponentEvent[];
+  /** Replacing components in `stored_metadata` shape, keyed by their own
+   *  `index`: the host swaps them into its local dashboard. */
+  replaced: Record<string, unknown>[];
+  error: string | null;
+}
+
+const EMPTY_REGENERATION: RegenerateRunState = {
+  status: '',
+  budget: null,
+  rows: [],
+  replaced: [],
+  error: null,
+};
+
+/** Pull the replacing component dict(s) out of a regenerate stream's
+ *  terminal `regenerated` event (RegeneratedEvent server-side).
+ *
+ *  `components` is the complete list of tiles written back and is what the
+ *  section route answers with; the single-tile route repeats its one tile
+ *  in `component`, so that is the fallback rather than the first read. The
+ *  event is matched by its payload rather than by its name so a rename on
+ *  the server surfaces as a no-op, not as a silently stale tile. */
+function normalizeReplacement(data: Record<string, unknown>): Record<string, unknown>[] {
+  const many = data.components ?? data.stored_metadata;
+  if (Array.isArray(many) && many.length) {
+    return many.filter(
+      (c): c is Record<string, unknown> => Boolean(c) && typeof c === 'object',
+    );
+  }
+  const single = data.component;
+  if (single && typeof single === 'object' && !Array.isArray(single)) {
+    return [single as Record<string, unknown>];
+  }
+  return [];
+}
+
+/**
+ * Regenerate one tile of an AI-generated draft, or every tile of one of its
+ * sections.
+ *
+ * Modelled on `useGenerateDashboard`: one run at a time, an imperative
+ * `run` / `runSection`, live state for the status line and the budget, and
+ * `cancel()` for the abort. Both entry points resolve with the components
+ * that came back, so a host can swap them into its own dashboard state
+ * without a refetch; the run itself is persisted server-side, so nothing
+ * here saves the dashboard.
+ */
+export function useRegenerateComponent(dashboardId: string) {
+  const session = useAISession(dashboardId);
+  const [state, setState] = useState<RegenerateRunState>(EMPTY_REGENERATION);
+  const [pending, setPending] = useState(false);
+  const [controller, setController] = useState<AbortController | null>(null);
+
+  /** Both routes stream the same events; only the URL differs, so the whole
+   *  state machine lives here and the two entry points just pick a caller. */
+  const stream = useCallback(
+    async (
+      call: (handlers: AIStreamHandlers) => Promise<void>,
+    ): Promise<Record<string, unknown>[]> => {
+      const abort = new AbortController();
+      setController(abort);
+      setPending(true);
+      setState({ ...EMPTY_REGENERATION, status: 'starting' });
+
+      const rows: GeneratedComponentEvent[] = [];
+      let replaced: Record<string, unknown>[] = [];
+      try {
+        await call({
+          signal: abort.signal,
+          onEvent: (event: AIStreamEvent) => {
+            switch (event.type) {
+              case 'status':
+                setState((s) => ({ ...s, status: String(event.data.message ?? '') }));
+                break;
+              case 'budget':
+                setState((s) => ({ ...s, budget: event.data as unknown as BudgetTick }));
+                break;
+              case 'component': {
+                const c = event.data as unknown as GeneratedComponentEvent;
+                // As in generation, a tag reports again after a repair: the
+                // latest outcome replaces the earlier row.
+                const at = rows.findIndex((x) => x.tag === c.tag);
+                if (at === -1) rows.push(c);
+                else rows[at] = c;
+                setState((s) => ({ ...s, rows: [...rows] }));
+                break;
+              }
               case 'error':
                 setState((s) => ({
                   ...s,
                   error: String(event.data.detail ?? 'unknown error'),
                 }));
                 break;
-              default:
+              case 'done':
                 break;
+              default: {
+                // Every other event is a candidate terminal one — see
+                // `normalizeReplacement` on why the name is not assumed.
+                const found = normalizeReplacement(event.data);
+                if (found.length) {
+                  replaced = found;
+                  setState((s) => ({ ...s, replaced: found }));
+                }
+                break;
+              }
             }
           },
         });
@@ -599,8 +828,39 @@ export function useGenerateDashboard() {
         setPending(false);
         setController(null);
       }
+      return replaced;
     },
-    [session.llmKey],
+    [],
+  );
+
+  /** One tile, addressed by its `stored_metadata.index`. */
+  const run = useCallback(
+    ({ index, instruction }: { index: string; instruction?: string }) =>
+      stream((handlers) =>
+        apiStreamRegenerateComponent(
+          dashboardId,
+          index,
+          { instruction: instruction?.trim() || undefined },
+          session.llmKey || null,
+          handlers,
+        ),
+      ),
+    [dashboardId, session.llmKey, stream],
+  );
+
+  /** Every tile of one grid section, addressed by the section's name. */
+  const runSection = useCallback(
+    ({ section, instruction }: { section: string; instruction?: string }) =>
+      stream((handlers) =>
+        apiStreamRegenerateSection(
+          dashboardId,
+          section,
+          { instruction: instruction?.trim() || undefined },
+          session.llmKey || null,
+          handlers,
+        ),
+      ),
+    [dashboardId, session.llmKey, stream],
   );
 
   const cancel = useCallback(() => {
@@ -608,7 +868,12 @@ export function useGenerateDashboard() {
     setPending(false);
   }, [controller]);
 
-  return useMemo(() => ({ run, cancel, pending, state }), [run, cancel, pending, state]);
+  const reset = useCallback(() => setState(EMPTY_REGENERATION), []);
+
+  return useMemo(
+    () => ({ run, runSection, cancel, reset, pending, state }),
+    [run, runSection, cancel, reset, pending, state],
+  );
 }
 
 export type { DashboardActions };

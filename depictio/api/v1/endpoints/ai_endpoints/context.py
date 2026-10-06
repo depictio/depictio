@@ -795,12 +795,40 @@ def viz_suggestions_for(
 ) -> list[dict[str, Any]]:
     """Top advanced_viz kinds for a schema, as the plain dicts `DataContext` carries.
 
-    Same ranker and bar as the builder's "Recommended" picker and the typed
-    suggestions (`suggest.advanced_viz_components`): score at or above
-    RECOMMENDED_SCORE, and every required role satisfiable, because the
-    generator binds each role to `role_candidates[0]` and a kind with an
-    unmet role could never be filled. Imported lazily to keep the ranker
-    out of this module's import graph.
+    Same ranker as the builder's "Recommended" picker and the typed
+    suggestions (`suggest.advanced_viz_components`), behind a stricter bar,
+    because this list is not a menu a human picks from: the generator binds
+    every required role to `role_candidates[0]` and saves the result
+    unattended. A kind reaches the plan prompt only when
+
+    * its score is at or above RECOMMENDED_SCORE,
+    * no required role is unmet, i.e. has no dtype-compatible column at all
+      (such a kind could never be filled), and
+    * no required role is *weak*, i.e. every one of them matched the column's
+      NAME and not merely its dtype (`VizSuggestion.weak_roles`, the roles
+      scoring under the ranker's `_STRONG_ROLE_SCORE`).
+
+    That last clause is the AI-only one, and it is what keeps rarefaction off
+    the penguins project. On `physical_features` the ranker scores rarefaction
+    0.8042 and ranks it first: `sample_id` matches `individual_id` (0.8375)
+    and `depth` matches `bill_depth_mm` on the substring "depth" (0.925), but
+    `metric` carries no name signal whatsoever and scores 0.5, a pure dtype
+    match against the same float columns. The average over the required roles
+    is 0.7542, below the 0.8 bar; what lifts it over is the optional-role
+    nudge in `_score_kind`, which adds up to 0.1 for optional roles that are
+    themselves dtype-only matches. The ranker already knows the match is thin
+    (it reports `weak_roles == ["metric"]`) and this function used to throw
+    that away, so the planner was offered a rarefaction curve over penguin
+    bill measurements, with `depth` and `metric` both binding `bill_depth_mm`.
+    Every emitted suggestion therefore has an empty `weak_roles`, which is why
+    the field is not carried into the prompt dict.
+
+    Do not relax this back to a score-only test, and do not move it into
+    `suggest_viz_kinds`. The builder's "Recommended" cards and the DC
+    suggestion chips read that ranking too, and there a thin match is a
+    starting point the user re-binds by hand, which is precisely what an
+    unattended generator cannot do. Imported lazily to keep the ranker out of
+    this module's import graph.
     """
     from depictio.models.components.advanced_viz.schemas import (
         RECOMMENDED_SCORE,
@@ -811,7 +839,9 @@ def viz_suggestions_for(
     if not schema:
         return []
     ranked = suggest_viz_kinds(schema, dc_type=dc_type)
-    picks = [s for s in ranked if s.score >= RECOMMENDED_SCORE and not s.unmet_roles]
+    picks = [
+        s for s in ranked if s.score >= RECOMMENDED_SCORE and not s.unmet_roles and not s.weak_roles
+    ]
     return [
         {
             "viz_kind": str(s.viz_kind),

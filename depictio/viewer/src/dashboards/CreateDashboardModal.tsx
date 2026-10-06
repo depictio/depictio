@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -26,7 +26,7 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
-import { AI_ICON, GenerateDashboardPanel } from 'depictio-react-ai';
+import { AI_COLOR, AI_ICON, GenerateDashboardPanel, GenerationHistory } from 'depictio-react-ai';
 import type { GenerateDataCollection } from 'depictio-react-ai';
 
 import { UnstyledDropZone } from '../components/UnstyledDropZone';
@@ -58,7 +58,7 @@ const COLOR_OPTIONS: { value: string; label: string }[] = [
 const DEFAULT_ICON = 'mdi:view-dashboard';
 const DEFAULT_COLOR = 'orange';
 
-type CreateTab = 'create' | 'import' | 'generate';
+export type CreateTab = 'create' | 'import' | 'generate';
 
 /** Wiring for the "Generate with AI" tab; the host owns the project fetch
  *  and the navigation into the editor. */
@@ -87,6 +87,9 @@ interface CreateDashboardModalProps {
   /** The "Generate with AI" tab. Undefined hides it, which is the case
    *  whenever the server's `ai_generate_dashboard` feature is off. */
   generate?: GenerateTabProps;
+  /** Tab the dialog opens on. Defaults to Create; a host re-entering a
+   *  generation run it left in flight opens on Generate. */
+  initialTab?: CreateTab;
 }
 
 const projectOptions = (projects: ProjectListEntry[]) =>
@@ -106,9 +109,31 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onImport,
   disableImport = false,
   generate,
+  initialTab = 'create',
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<CreateTab>('create');
+  const canGenerate = Boolean(generate);
+
+  // Which project the Generate tab is pointed at, so "Previous generations"
+  // beside it lists that project's runs. The panel owns the picker, and the
+  // one thing it tells the host about a selection is the collection fetch —
+  // so that is where the id is read off.
+  const [generateProjectId, setGenerateProjectId] = useState<string | null>(null);
+  const [historyTick, setHistoryTick] = useState(0);
+  const loadProjectForGenerate = useCallback(
+    (projectId: string) => {
+      setGenerateProjectId(projectId);
+      if (!generate) return Promise.resolve({ dataCollections: [] });
+      return generate.loadProject(projectId);
+    },
+    [generate],
+  );
+  // Re-read the runs each time the tab is opened: one may have finished (or
+  // been started from another window) since it was last on screen.
+  useEffect(() => {
+    if (tab === 'generate') setHistoryTick((t) => t + 1);
+  }, [tab]);
 
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -128,7 +153,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
 
   useEffect(() => {
     if (!opened) return;
-    setTab('create');
+    // Asking for a tab that is not on offer lands on Create rather than on a
+    // panel with no tab above it.
+    setTab(initialTab === 'generate' && !canGenerate ? 'create' : initialTab);
     setTitle('');
     setSubtitle('');
     setProjectId('');
@@ -143,7 +170,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
     setValidateIntegrity(true);
     setImportSubmitting(false);
     setImportError(null);
-  }, [opened]);
+    // `initialTab` is only ever changed by the host in the same commit that
+    // opens the dialog, so this cannot reset a form under the user.
+  }, [opened, initialTab, canGenerate]);
 
   const trimmedTitle = title.trim();
   const titleConflict =
@@ -278,6 +307,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
             {generate && (
               <Tabs.Tab
                 value="generate"
+                // Overrides the list's brand colour: every AI affordance in
+                // the app wears AI_COLOR, and this pill is one of them.
+                color={AI_COLOR}
                 leftSection={<Icon icon={AI_ICON} width={18} />}
                 disabled={generate.disabled}
                 title={
@@ -453,7 +485,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
               </Grid.Col>
             </Grid>
 
-            <Group justify="flex-end" gap="md" mt="md">
+            <Group justify="center" gap="md" mt="md">
               <Button
                 variant="outline"
                 color="gray"
@@ -558,7 +590,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
               </Grid.Col>
             </Grid>
 
-            <Group justify="flex-end" gap="md" mt="md">
+            <Group justify="center" gap="md" mt="md">
               <Button
                 variant="outline"
                 color="gray"
@@ -585,12 +617,26 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
         {generate && (
           // keepMounted: a run in flight survives a look at the other tabs.
           <Tabs.Panel value="generate" pt="lg" keepMounted>
-            <GenerateDashboardPanel
-              projects={projectOptions(projects).map((o) => ({ id: o.value, name: o.label }))}
-              loadProject={generate.loadProject}
-              onOpen={generate.onOpen}
-              serverKeyAvailable={generate.serverKeyAvailable}
-            />
+            <Grid gutter="lg">
+              <Grid.Col span={{ base: 12, md: 8 }}>
+                <GenerateDashboardPanel
+                  projects={projectOptions(projects).map((o) => ({ id: o.value, name: o.label }))}
+                  loadProject={loadProjectForGenerate}
+                  onOpen={generate.onOpen}
+                  serverKeyAvailable={generate.serverKeyAvailable}
+                  // The panel draws this tab's footer, so its Cancel closes
+                  // the modal like the one under Create and Import.
+                  onClose={onClose}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 4 }}>
+                <GenerationHistory
+                  projectId={generateProjectId}
+                  onOpen={generate.onOpen}
+                  refreshKey={historyTick}
+                />
+              </Grid.Col>
+            </Grid>
           </Tabs.Panel>
         )}
       </Tabs>

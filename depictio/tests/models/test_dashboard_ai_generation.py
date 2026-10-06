@@ -26,6 +26,11 @@ STAMP = {
     "warnings": ["Dropped 1 component: budget"],
 }
 
+# The same stamp once the model has loaded it: a draft written before the
+# review pass existed gains its two empty bookkeeping lists, and one written
+# before the planner explained itself an empty `sections` list.
+STAMP_STORED = {**STAMP, "reviewed": [], "dropped": [], "sections": []}
+
 
 def _dashboard(**extra) -> DashboardData:
     owner = UserBase(id=ObjectId(), email="owner@example.com")
@@ -59,6 +64,23 @@ class TestAIGenerationInfo:
         with pytest.raises(ValidationError):
             AIGenerationInfo(**{**STAMP, "cost_usd": 0.1})
 
+    def test_keeps_the_planner_section_rationales(self):
+        info = AIGenerationInfo(
+            **{
+                **STAMP,
+                "sections": [
+                    {"name": "Cohort", "kind": "filter", "rationale": "narrows every tile"},
+                    {"name": "Overview", "rationale": "the headline numbers"},
+                ],
+            }
+        )
+        assert [s.kind for s in info.sections] == ["filter", "grid"]
+        assert info.sections[1].rationale == "the headline numbers"
+
+    def test_rejects_an_unknown_section_kind(self):
+        with pytest.raises(ValidationError):
+            AIGenerationInfo(**{**STAMP, "sections": [{"name": "Cohort", "kind": "panel"}]})
+
     def test_model_generated_at_and_run_id_are_required(self):
         with pytest.raises(ValidationError):
             AIGenerationInfo()
@@ -73,7 +95,7 @@ class TestDashboardDataField:
         assert isinstance(dashboard.ai_generation, AIGenerationInfo)
 
         doc = dashboard.mongo()
-        assert doc["ai_generation"] == STAMP
+        assert doc["ai_generation"] == STAMP_STORED
 
         reloaded = DashboardData.from_mongo(doc)
         assert reloaded.ai_generation == dashboard.ai_generation

@@ -187,31 +187,19 @@ class TestCleanDashboard:
     def test_text_is_never_checked(self, contexts):
         assert _findings(contexts, _comp("text", title="Hello")) == []
 
-    def test_multiqc_and_advanced_viz_are_skipped(self, contexts):
-        comps = [
-            _comp(
-                "multiqc",
-                tag="mq",
-                data_collection_tag="multiqc_reports",
-                selected_module="fastqc",
-                selected_plot="x",
-            ),
-            # Columns and collection deliberately unknown: the catalog schema
-            # owns advanced_viz bindings, so the column checks must not run.
-            _comp(
-                "advanced_viz",
-                tag="volcano",
-                data_collection_tag="other",
-                viz_kind="volcano",
-                config={
-                    "viz_kind": "volcano",
-                    "feature_id_col": "gene",
-                    "effect_size_col": "lfc",
-                    "significance_col": "padj",
-                },
-            ),
-        ]
-        assert _findings(contexts, *comps) == []
+    def test_multiqc_is_skipped(self, contexts):
+        # Collection and fields deliberately unknown: a MultiQC tile names a
+        # module and a plot of its report, not columns of a table, so none of
+        # the column checks apply to it. advanced_viz is *not* skipped with it
+        # any more, and has its own bindings suite below.
+        comp = _comp(
+            "multiqc",
+            tag="mq",
+            data_collection_tag="multiqc_reports",
+            selected_module="fastqc",
+            selected_plot="x",
+        )
+        assert _findings(contexts, comp) == []
 
 
 class TestUnknownColumns:
@@ -498,3 +486,140 @@ class TestCollections:
         comp.pop("tag")
         findings = _findings(contexts, _comp("text", tag="hdr"), comp)
         assert _fields(findings) == [("component[1]", "aggregation")]
+
+
+class TestAdvancedVizBindings:
+    """`_check_advanced_viz`: role bindings against the collection's real dtypes.
+
+    These use polars dtype names (`Float64`, `String`) because that is what a
+    real `DataContext` carries: `context._summarize_columns` fills every
+    `ColumnSummary.dtype` with `str(series.dtype)`, and the canonical role
+    schemas in `depictio/models/components/advanced_viz/schemas.py` are keyed
+    on exactly those strings.
+    """
+
+    PENGUINS = {
+        "individual_id": ("String", 344),
+        "bill_length_mm": ("Float64", 164),
+        "bill_depth_mm": ("Float64", 80),
+        "body_mass_g": ("Float64", 94),
+    }
+
+    def _contexts(self) -> dict[str, DataContext]:
+        return {DC: _ctx(self.PENGUINS)}
+
+    def _viz(self, viz_kind: str, config: dict, **fields) -> dict:
+        return _comp(
+            "advanced_viz",
+            viz_kind=viz_kind,
+            config={"viz_kind": viz_kind, **config},
+            **fields,
+        )
+
+    def test_a_fully_bound_viz_passes(self):
+        findings = _findings(
+            self._contexts(),
+            self._viz(
+                "rarefaction",
+                {
+                    "sample_id_col": "individual_id",
+                    "depth_col": "bill_depth_mm",
+                    "metric_col": "bill_length_mm",
+                },
+            ),
+        )
+        assert findings == []
+
+    def test_a_collection_the_dashboard_does_not_have(self):
+        # advanced_viz used to skip the binding checks entirely, so a viz on a
+        # collection nobody had passed and failed at render time instead.
+        findings = _findings(
+            self._contexts(),
+            self._viz(
+                "rarefaction",
+                {
+                    "sample_id_col": "individual_id",
+                    "depth_col": "bill_depth_mm",
+                    "metric_col": "bill_length_mm",
+                },
+                data_collection_tag="other",
+            ),
+        )
+        assert _fields(findings) == [("c", "data_collection_tag")]
+
+    def test_a_role_bound_to_a_column_that_is_not_there(self):
+        findings = _findings(
+            self._contexts(),
+            self._viz(
+                "rarefaction",
+                {
+                    "sample_id_col": "individual_id",
+                    "depth_col": "sequencing_depth",
+                    "metric_col": "bill_length_mm",
+                },
+            ),
+        )
+        assert _fields(findings) == [("c", "config.depth_col")]
+        assert "sequencing_depth" in findings[0]["message"]
+        assert "bill_depth_mm" in findings[0]["message"]  # the available columns
+
+    def test_a_role_bound_to_the_wrong_dtype(self):
+        findings = _findings(
+            self._contexts(),
+            self._viz(
+                "volcano",
+                {
+                    "feature_id_col": "individual_id",
+                    "effect_size_col": "individual_id",
+                    "significance_col": "bill_depth_mm",
+                },
+            ),
+        )
+        assert _fields(findings) == [("c", "config.effect_size_col")]
+        assert "effect_size" in findings[0]["message"]
+        assert "Float64" in findings[0]["message"]
+
+    def test_a_castable_dtype_is_not_reported(self):
+        # `validate_binding` grades an Int column bound to a Float role as a
+        # warning because the renderer coerces it; a finding carries no
+        # severity, so passing it on would send the repair prompt hunting.
+        contexts = {DC: _ctx({**self.PENGUINS, "year": ("Int64", 3)})}
+        findings = _findings(
+            contexts,
+            self._viz(
+                "volcano",
+                {
+                    "feature_id_col": "individual_id",
+                    "effect_size_col": "year",
+                    "significance_col": "bill_depth_mm",
+                },
+            ),
+        )
+        assert findings == []
+
+    def test_a_role_whose_config_field_is_not_role_col(self):
+        # ComplexHeatmap's `index` role lives on `index_column`, which is how
+        # the catalog `use:` expansion and the builder both spell it. Reading
+        # it as `index_col` would report a phantom "role not bound".
+        contexts = self._contexts()
+        assert (
+            _findings(contexts, self._viz("complex_heatmap", {"index_column": "individual_id"}))
+            == []
+        )
+        findings = _findings(contexts, self._viz("complex_heatmap", {"index_column": "nope"}))
+        assert _fields(findings) == [("c", "config.index_column")]
+
+    def test_the_collection_tag_is_checked_like_every_other_type(self):
+        findings = _findings(
+            self._contexts(),
+            self._viz(
+                "rarefaction",
+                {
+                    "sample_id_col": "individual_id",
+                    "depth_col": "bill_depth_mm",
+                    "metric_col": "bill_length_mm",
+                },
+                data_collection_tag="other",
+            ),
+        )
+        assert _fields(findings) == [("c", "data_collection_tag")]

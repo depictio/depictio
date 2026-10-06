@@ -25,8 +25,16 @@ The router is only registered when ``settings.ai.enabled`` is true (see
   optional dashboard mutations (filter proposals + existing-figure
   patches).
 * ``POST /ai/generate-dashboard``: a whole dashboard draft from a prompt
-  (plan, per-component fill, layout, persist; see ``dashboard_gen``), and
+  (plan, per-component fill, render check, layout, persist; see
+  ``dashboard_gen``), in one shot or in two phases (``plan_only`` returns
+  the plan and stops, ``plan`` fills the plan that came back approved), and
   ``POST /ai/generated-dashboards/{id}/promote`` to clear its draft flag.
+* Reviewing that draft:
+  ``POST /ai/generated-dashboards/{id}/components/{index}/regenerate`` and
+  ``.../sections/{section}/regenerate`` re-fill one tile or one section
+  (streaming, same events as the generation),
+  ``POST /ai/generated-dashboards/{id}/review`` keeps or unkeeps a tile,
+  and ``GET /ai/generations/{project_id}`` lists the project's runs.
 
 The analyze and generate endpoints stream; the others are single-shot JSON
 responses.
@@ -40,7 +48,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -50,6 +58,7 @@ from pydantic import ValidationError
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints import (
     analyses,
+    component_style,
     component_yaml,
     dashboard_gen,
     llm_client,
@@ -76,11 +85,15 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     DashboardActions,
     ExecutionStep,
     GenerateDashboardRequest,
+    GenerationsResponse,
     PlotSuggestion,
     PromoteResponse,
+    RegenerateRequest,
     ResolvedFilter,
     ResolveFiltersRequest,
     ResolveFiltersResponse,
+    ReviewRequest,
+    ReviewResponse,
     RoutingInfo,
     StreamEvent,
     SuggestComponentsRequest,
@@ -323,6 +336,10 @@ async def component_from_prompt(
             ]
             continue
 
+        # Same gate the generator applies: an icon outside the builder's own
+        # picker renders as a blank box under the CSP and blanks itself on the
+        # first save, so it never reaches the builder.
+        component_style.sanitize_style(parsed)
         title = parsed.get("title")
         return ComponentFromPromptResponse(
             component_type=parsed.get("component_type", component_type),
@@ -1043,13 +1060,22 @@ async def generate_dashboard(
     """A whole dashboard draft from a prompt. Streams `StreamEvent` chunks as SSE.
 
     The gates run before the stream opens so they answer with real HTTP
-    codes (`dashboard_gen.gate_generate_request`): 404 when
+    codes: 422 from the request model when `plan_only` and `plan` are sent
+    together (they are the two phases of one flow, never one request), then
+    `dashboard_gen.gate_generate_request`: 404 when
     `settings.ai.generate_dashboard_enabled` is off, 403 in public mode or
     for an anonymous user outside single-user mode (the YAML import rule),
     403 without editor permission on the project, 400 for a
     `data_collection_id` outside the project. Everything after that is
     reported inside the stream (`error` + `done`), the draft included
     (`dashboard` + `done`).
+
+    Two-phase runs use the same route: `plan_only` stops on the plan event
+    and saves nothing, and sending that plan back as `plan` skips the
+    planning call and fills it. A `plan` that does not parse, or that names
+    a data collection outside this request's subset, is an `error` event
+    inside the stream, not an HTTP status: the body was well-formed, the
+    plan was not usable.
     """
     project_doc = await asyncio.to_thread(dashboard_gen.gate_generate_request, body, current_user)
     return StreamingResponse(
@@ -1078,3 +1104,152 @@ async def promote_generated_dashboard(
     mutation). Discarding a draft is the ordinary dashboard delete.
     """
     return await asyncio.to_thread(dashboard_gen.promote_dashboard, dashboard_id, current_user)
+
+
+# ---------------------------------------------------------------------------
+# Reviewing a draft: regenerate a tile or a section, keep a tile, read history
+# ---------------------------------------------------------------------------
+
+
+def _gate_regeneration(
+    dashboard_id: str,
+    current_user: User,
+    locate: Callable[[dict[str, Any]], list[int]],
+) -> tuple[dict[str, Any], list[int]]:
+    """The gates of both regenerate routes; returns the draft and what to re-fill.
+
+    Run before the stream opens so they answer with real HTTP codes: the
+    generation feature's own (404 flag off, 403 public mode, 403 anonymous),
+    then 404 for a dashboard that does not exist or was not generated, 403
+    without editor permission, and 404 from `locate` for a component index
+    or a section this draft does not have. Everything after that is reported
+    inside the stream. Synchronous (pymongo); the routes run it in a thread.
+    """
+    dashboard_gen.gate_generation_feature(current_user)
+    _, doc = dashboard_gen.require_draft_dashboard(dashboard_id, current_user)
+    return doc, locate(doc)
+
+
+def _regeneration_response(
+    doc: dict[str, Any],
+    current_user: User,
+    *,
+    positions: list[int],
+    section: str | None,
+    instruction: str | None,
+    user_api_key: str | None,
+) -> StreamingResponse:
+    """The SSE response of both regenerate routes."""
+    return StreamingResponse(
+        dashboard_gen.run_regeneration(
+            doc,
+            current_user,
+            positions=positions,
+            section=section,
+            instruction=instruction,
+            user_api_key=user_api_key,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@ai_endpoint_router.post("/generated-dashboards/{dashboard_id}/components/{index}/regenerate")
+async def regenerate_generated_component(
+    dashboard_id: str,
+    index: str,
+    body: RegenerateRequest,
+    current_user: User = Depends(get_current_user),
+    user_api_key: str | None = Depends(_llm_key),
+) -> StreamingResponse:
+    """Re-fill one tile of a draft. Streams `StreamEvent` chunks as SSE.
+
+    `index` addresses the tile either by its position in `stored_metadata`
+    or by its own `index` uuid. The stream is `status`* -> `budget` ->
+    `component` -> `regenerated` -> `done`; a tile that cannot be re-filled
+    is left exactly as it was and reported as `component` (status
+    `dropped`) + `error` + `done`.
+    """
+    doc, positions = await asyncio.to_thread(
+        _gate_regeneration,
+        dashboard_id,
+        current_user,
+        lambda d: [dashboard_gen.locate_component(d, index)],
+    )
+    return _regeneration_response(
+        doc,
+        current_user,
+        positions=positions,
+        section=None,
+        instruction=body.instruction,
+        user_api_key=user_api_key,
+    )
+
+
+@ai_endpoint_router.post("/generated-dashboards/{dashboard_id}/sections/{section}/regenerate")
+async def regenerate_generated_section(
+    dashboard_id: str,
+    section: str,
+    body: RegenerateRequest,
+    current_user: User = Depends(get_current_user),
+    user_api_key: str | None = Depends(_llm_key),
+) -> StreamingResponse:
+    """Re-fill every tile of one section of a draft. Streams `StreamEvent` chunks as SSE.
+
+    One `component` event per tile, then the section's layout pass runs
+    again (boxes are section-relative, so nothing else moves) and the new
+    components arrive in the terminal `regenerated` event. Tiles that could
+    not be re-filled keep what they had.
+    """
+    doc, positions = await asyncio.to_thread(
+        _gate_regeneration,
+        dashboard_id,
+        current_user,
+        lambda d: dashboard_gen.locate_section(d, section),
+    )
+    return _regeneration_response(
+        doc,
+        current_user,
+        positions=positions,
+        section=section,
+        instruction=body.instruction,
+        user_api_key=user_api_key,
+    )
+
+
+@ai_endpoint_router.post(
+    "/generated-dashboards/{dashboard_id}/review", response_model=ReviewResponse
+)
+async def review_generated_dashboard(
+    dashboard_id: str,
+    body: ReviewRequest,
+    current_user: User = Depends(get_current_user),
+) -> ReviewResponse:
+    """Mark one tile of a draft reviewed (`keep`) or take the mark back (`unkeep`).
+
+    404 when the dashboard does not exist or was not generated, 403 without
+    editor permission. Returns the counts the review panel shows; a tag
+    whose tile has since been deleted is dropped from the count rather than
+    inflating it.
+    """
+    return await asyncio.to_thread(dashboard_gen.review_dashboard, dashboard_id, body, current_user)
+
+
+@ai_endpoint_router.get("/generations/{project_id}", response_model=GenerationsResponse)
+async def list_generations(
+    project_id: str,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+) -> GenerationsResponse:
+    """The project's dashboard generation runs, newest first.
+
+    Viewer permission on the project; `limit` defaults to 20 and is capped
+    at 50. The rows carry the per-component counts and the warnings, never
+    the YAML or the plan: this is the history list, not the draft. An
+    authenticated user, like the rest of the generation surface: the rows
+    quote the prompts their author wrote.
+    """
+    return await asyncio.to_thread(dashboard_gen.list_generations, project_id, current_user, limit)
