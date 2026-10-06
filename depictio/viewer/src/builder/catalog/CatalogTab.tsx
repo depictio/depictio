@@ -192,6 +192,21 @@ async function multiqcConfigForSection(
   const opts = await fetchMultiQCBuilderOptions(dcId);
   const modulePrefix = (anchor: string) => anchor.split(/[-_]/)[0];
   const norm = (s: string) => s.toLowerCase();
+
+  // General Statistics is not a module: the catalog names it `general` (the first
+  // token of its anchor) and the options list it apart, under `general_stats`.
+  // Matched against `modules` it found nothing and fell back to another module's
+  // first plot.
+  const general = opts.general_stats?.[0];
+  if (section && general && ['general', 'general_stats'].includes(norm(section))) {
+    return {
+      selected_module: general.module,
+      selected_plot: general.plot,
+      selected_dataset: null,
+      s3_locations: opts.s3_locations ?? [],
+      is_general_stats: true,
+    };
+  }
   const hasPlot = (m: string) => m === 'general_stats' || (opts.plots[m]?.length ?? 0) > 0;
 
   const candidates = section
