@@ -5,6 +5,7 @@ import { brandColorway } from '../colors';
 import {
   categoryColorMap,
   dashboardColorway,
+  pinnedCategoryDots,
   type CategoryColorSource,
 } from '../categoryColors';
 
@@ -42,4 +43,17 @@ export function useCategoryColorMap(
     () => categoryColorMap(source, column, universe, palette),
     [source, column, universe, palette],
   );
+}
+
+/**
+ * `pinnedCategoryDots` for one column, bound to the provider: the colour dots
+ * a filter's chips draw, or `null` when the dashboard gives the column none.
+ * No palette fallback, on purpose (see `categoryColors.ts`).
+ */
+export function useCategoryDotColors(
+  column: string | null | undefined,
+  universe: readonly unknown[],
+): Map<string, string> | null {
+  const source = useCategoryColorSource();
+  return useMemo(() => pinnedCategoryDots(source, column, universe), [source, column, universe]);
 }

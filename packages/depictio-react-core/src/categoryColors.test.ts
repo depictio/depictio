@@ -5,7 +5,9 @@ import {
   categoryColor,
   categoryColorMap,
   dashboardColorway,
+  hasPinnedColors,
   pinnedCategoryColor,
+  pinnedCategoryDots,
   sortCategoryValues,
   type CategoryColorSource,
 } from './categoryColors';
@@ -113,5 +115,47 @@ describe('categoryColorMap', () => {
     expect(map.get('Groundwater')).toBe('#111111');
     expect(map.get('Sediment')).toBe('#d6336c');
     expect(map.get('Soil')).toBe('#f0a04b');
+  });
+});
+
+describe('pinnedCategoryDots (filter chips)', () => {
+  // The TREC shape: colours for the city, none for the size class or season.
+  const trec: CategoryColorSource = {
+    category_colors: {
+      locality: { Athens: '#1a4f8f', Barcelona: '#f5a11b', Naples: '#00a550' },
+    },
+    brand_theme: { plots: { colorway: ['#aa0000', '#00aa00'] } },
+  };
+
+  it('dots a column the dashboard gives colours to, in those colours', () => {
+    const dots = pinnedCategoryDots(trec, 'locality', ['Naples', 'Athens', 'Barcelona']);
+    expect(dots && [...dots.entries()]).toEqual([
+      ['Athens', '#1a4f8f'],
+      ['Barcelona', '#f5a11b'],
+      ['Naples', '#00a550'],
+    ]);
+  });
+
+  it('gives no dot at all to any other column, whatever the brand palette', () => {
+    expect(pinnedCategoryDots(trec, 'size_class', ['Large', 'Medium', 'Small'])).toBeNull();
+    expect(pinnedCategoryDots(trec, 'season', ['Spring', 'Summer'])).toBeNull();
+    expect(pinnedCategoryDots(null, 'locality', ['Athens'])).toBeNull();
+    expect(pinnedCategoryDots(trec, undefined, ['Athens'])).toBeNull();
+  });
+
+  it('greys a value the author did not list, so the row keeps its dots', () => {
+    const dots = pinnedCategoryDots(trec, 'locality', ['Athens', 'Marseille']);
+    expect(dots?.get('Athens')).toBe('#1a4f8f');
+    expect(dots?.get('Marseille')).toBe(NEUTRAL_CATEGORY_COLOR);
+  });
+
+  it('reads the main tab’s colours on a child tab', () => {
+    const child: CategoryColorSource = { inherited_category_colors: trec.category_colors };
+    expect(hasPinnedColors(child, 'locality')).toBe(true);
+    expect(pinnedCategoryDots(child, 'locality', ['Naples'])?.get('Naples')).toBe('#00a550');
+  });
+
+  it('treats an empty entry as no colours', () => {
+    expect(hasPinnedColors({ category_colors: { season: {} } }, 'season')).toBe(false);
   });
 });

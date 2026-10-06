@@ -13,9 +13,15 @@
  *      filter left over, so a value keeps its colour while others come and go;
  *   4. a neutral grey.
  *
+ * Steps 3 and 4 are for surfaces that must colour every value, a figure's
+ * traces. A filter's chips are not one of them: a dot there says "this is the
+ * colour Athens has on this dashboard", which is only true of a column the
+ * author gave colours to. So the chips take `pinnedCategoryDots` — steps 1 and
+ * 2, and no dot at all for a column with no entry.
+ *
  * Pure on purpose: the figure code calls the same functions with the same
- * inputs and gets the same answer. `useCategoryColorMap` is the React binding
- * that supplies the resolved brand colorway from the Mantine theme.
+ * inputs and gets the same answer. `useCategoryColorMap` and
+ * `useCategoryDotColors` are the React bindings.
  */
 import type { CategoryColors } from './api';
 import type { BrandTheme } from './brandTheme';
@@ -112,5 +118,41 @@ export function categoryColorMap(
   sortCategoryValues(universe).forEach((value, i) => {
     map.set(value, categoryColor(source, column, value, i, palette));
   });
+  return map;
+}
+
+/** Whether the dashboard (or its main tab) gives `column` colours of its own. */
+export function hasPinnedColors(
+  source: CategoryColorSource | null | undefined,
+  column: string | null | undefined,
+): boolean {
+  if (!source || !column) return false;
+  const own = source.category_colors?.[column];
+  const inherited = source.inherited_category_colors?.[column];
+  return Boolean(
+    (own && Object.keys(own).length) || (inherited && Object.keys(inherited).length),
+  );
+}
+
+/**
+ * The dots a filter's chips draw, or `null` for none.
+ *
+ * Only a column listed in `category_colors` (own or inherited) gets dots: there
+ * the colour is the one the figures draw the value in, so the dot means
+ * something. Its values each take their pinned colour, and one the author did
+ * not list takes the neutral grey, so a row of chips never has a gap where a
+ * dot should be. Any other column — a size class, a season — gets no dot: a
+ * colour handed out by position would read as a meaning it does not have.
+ */
+export function pinnedCategoryDots(
+  source: CategoryColorSource | null | undefined,
+  column: string | null | undefined,
+  universe: readonly unknown[],
+): Map<string, string> | null {
+  if (!hasPinnedColors(source, column)) return null;
+  const map = new Map<string, string>();
+  for (const value of sortCategoryValues(universe)) {
+    map.set(value, pinnedCategoryColor(source, column, value) ?? NEUTRAL_CATEGORY_COLOR);
+  }
   return map;
 }

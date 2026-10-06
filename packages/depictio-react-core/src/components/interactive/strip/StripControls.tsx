@@ -22,7 +22,7 @@ import {
 import type { InteractiveFilter, StoredMetadata } from '../../../api';
 import { useAvailableSet } from '../../../availableValues';
 import { useBrandScopeAttributes } from '../../branding/BrandScope';
-import { useCategoryColorMap } from '../../../hooks/useCategoryColors';
+import { useCategoryDotColors } from '../../../hooks/useCategoryColors';
 import {
   categoricalDisplay,
   chipFilterValue,
@@ -70,9 +70,11 @@ const ControlMessage: React.FC<{ error?: boolean; children: React.ReactNode }> =
 // ------------------------------------------------------------- categorical
 
 /**
- * MultiSelect, Select and SegmentedControl as a grey track of toggle chips,
- * each with its category's colour dot. Past `MAX_STRIP_CHIPS` values the chips
- * no longer fit, and a compact select drawn as the same track takes over.
+ * MultiSelect, Select and SegmentedControl as a grey track of toggle chips.
+ * A chip carries a colour dot only when the dashboard gives its column colours
+ * (`category_colors`): there the dot is the colour the figures draw the value
+ * in. Past `MAX_STRIP_CHIPS` values the chips no longer fit, and a compact
+ * select drawn as the same track takes over.
  */
 export const StripCategorical: React.FC<StripControlProps> = ({
   metadata,
@@ -92,8 +94,8 @@ export const StripCategorical: React.FC<StripControlProps> = ({
     [options, availableSet],
   );
   // Keyed on the full universe, not on `ordered`: a value keeps its colour
-  // while the funnel greys other values out.
-  const colors = useCategoryColorMap(metadata.column_name, options);
+  // while the funnel greys other values out. Null: the column has no colours.
+  const dots = useCategoryDotColors(metadata.column_name, options);
   const selected = selectedValues(filterValueOf(filters, metadata.index));
   const mode = chipSelectionMode(type);
   const emit = (next: string[]) =>
@@ -108,7 +110,7 @@ export const StripCategorical: React.FC<StripControlProps> = ({
       <StripSelect
         options={ordered}
         available={availableSet}
-        colors={colors}
+        dots={dots}
         selected={selected}
         multiple={mode === 'multi'}
         label={label}
@@ -123,6 +125,7 @@ export const StripCategorical: React.FC<StripControlProps> = ({
       role="group"
       aria-label={label}
       data-has-selection={selected.length > 0}
+      data-dots={dots ? 'true' : 'false'}
     >
       {ordered.map((value) => {
         const on = selected.includes(value);
@@ -138,9 +141,9 @@ export const StripCategorical: React.FC<StripControlProps> = ({
             disabled={disabled}
             title={disabled ? `${value}: no data left under the other filters` : value}
             onClick={() => emit(toggleChip(selected, value, mode))}
-            style={{ '--chip-color': colors.get(value) } as React.CSSProperties}
+            style={dots ? ({ '--chip-color': dots.get(value) } as React.CSSProperties) : undefined}
           >
-            <span className="depictio-strip-chip__dot" aria-hidden />
+            {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
             <span>{value}</span>
           </button>
         );
@@ -152,12 +155,12 @@ export const StripCategorical: React.FC<StripControlProps> = ({
 const StripSelect: React.FC<{
   options: string[];
   available: Set<string> | null;
-  colors: Map<string, string>;
+  dots: Map<string, string> | null;
   selected: string[];
   multiple: boolean;
   label: string;
   onChange: (next: string[]) => void;
-}> = ({ options, available, colors, selected, multiple, label, onChange }) => {
+}> = ({ options, available, dots, selected, multiple, label, onChange }) => {
   const scope = useBrandScopeAttributes();
   const data = useMemo(
     () =>
@@ -170,11 +173,13 @@ const StripSelect: React.FC<{
   );
   const renderOption = ({ option }: ComboboxLikeRenderOptionInput<ComboboxItem>) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <span
-        className="depictio-strip-chip__dot"
-        style={{ '--chip-color': colors.get(option.value) } as React.CSSProperties}
-        aria-hidden
-      />
+      {dots && (
+        <span
+          className="depictio-strip-chip__dot"
+          style={{ '--chip-color': dots.get(option.value) } as React.CSSProperties}
+          aria-hidden
+        />
+      )}
       {option.label}
     </span>
   );

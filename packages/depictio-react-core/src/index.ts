@@ -221,7 +221,9 @@ export {
   categoryColor,
   categoryColorMap,
   dashboardColorway,
+  hasPinnedColors,
   pinnedCategoryColor,
+  pinnedCategoryDots,
   sortCategoryValues,
 } from './categoryColors';
 export type { CategoryColorSource } from './categoryColors';
@@ -229,6 +231,7 @@ export {
   CategoryColorsContext,
   useCategoryColorMap,
   useCategoryColorSource,
+  useCategoryDotColors,
   useCategoryPalette,
 } from './hooks/useCategoryColors';
 export { extractLayoutItems, stripBoxPrefix } from './utils/leftPanelLayout';
