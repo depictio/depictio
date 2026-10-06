@@ -943,7 +943,7 @@ const App: React.FC = () => {
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
-      <BrandScope theme={dashboard?.brand_theme}>
+      <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
       <TabLinkProvider tabs={tabSiblings}>
       <AppShell
       header={{ height: 50 }}
@@ -1024,7 +1024,7 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme} />
       </AppShell.Navbar>
 
       <AppShell.Main

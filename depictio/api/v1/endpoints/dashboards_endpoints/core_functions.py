@@ -192,6 +192,28 @@ def get_parent_dashboard_title(dashboard_dict: dict) -> str | None:
     return parent_dashboard.get("title", "Dashboard")
 
 
+def family_brand_theme(dashboard_dict: dict) -> dict | None:
+    """The brand a tab is drawn in: its own override, else its main tab's.
+
+    A brand is set once for a dashboard, on its main tab, and its child tabs
+    have none of their own. Without this a child tab drew in the instance
+    defaults while its main tab showed the dashboard's brand. Resolved at read
+    time rather than copied into each tab, so a later change on the main tab
+    reaches every tab; a child's own override still wins.
+    """
+    own = dashboard_dict.get("brand_theme")
+    if own:
+        return own
+    parent_id = dashboard_dict.get("parent_dashboard_id")
+    if not parent_id:
+        return None
+    parent = dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(str(parent_id))},
+        {"brand_theme": 1},
+    )
+    return (parent or {}).get("brand_theme") or None
+
+
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
     """Load dashboards from MongoDB with project-based permissions."""
     projection = {

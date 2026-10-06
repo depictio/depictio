@@ -398,6 +398,9 @@ export interface DashboardData {
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
    *  defaults. Unset fields inherit the instance branding. */
   brand_theme?: BrandTheme | null;
+  /** A child tab without its own `brand_theme`: its main tab's, resolved by
+   *  the server on read and never saved back. */
+  inherited_brand_theme?: BrandTheme | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };

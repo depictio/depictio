@@ -141,6 +141,9 @@ async def preview_figure(
         from bson import ObjectId
 
         from depictio.api.v1.db import dashboards_collection
+        from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+            family_brand_theme,
+        )
         from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
 
         try:
@@ -149,11 +152,12 @@ async def preview_figure(
             )
         except Exception:
             dashboard_doc = None
-        if dashboard_doc and dashboard_doc.get("brand_theme"):
+        brand_theme = family_brand_theme(dashboard_doc) if dashboard_doc else None
+        if brand_theme:
             metadata = {
                 **metadata,
                 "dict_kwargs": merge_dashboard_brand_theme(
-                    dashboard_doc["brand_theme"], metadata.get("dict_kwargs") or {}
+                    brand_theme, metadata.get("dict_kwargs") or {}
                 ),
             }
 

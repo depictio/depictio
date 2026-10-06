@@ -43,7 +43,7 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
     init({ mode: 'edit', dashboardId, componentId });
     fetchDashboard(dashboardId)
       .then((dash) => {
-        setBrandTheme(dash.brand_theme ?? null);
+        setBrandTheme(dash.brand_theme ?? dash.inherited_brand_theme ?? null);
         const meta = (dash.stored_metadata || []).find(
           (m: StoredMetadata) => String(m.index) === String(componentId),
         );

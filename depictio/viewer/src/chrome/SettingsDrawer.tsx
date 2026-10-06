@@ -301,6 +301,8 @@ const BrandingBlock: React.FC<{
 }> = ({ dashboard, onChange, onUploadLogo, opened }) => {
   const instance = useBranding();
   const saved = dashboard?.brand_theme ?? null;
+  // A child tab with no brand of its own is drawn in its main tab's.
+  const inherited = dashboard?.inherited_brand_theme ?? null;
   const [draft, setDraft] = React.useState<BrandTheme | null>(saved);
 
   // Adopt whatever the dashboard carries each time the drawer opens; a logo
@@ -339,7 +341,7 @@ const BrandingBlock: React.FC<{
 
   const customising = draft !== null;
   const value = draft ?? {};
-  const resolved = useResolvedBrandTheme(customising ? value : (instance ?? {}));
+  const resolved = useResolvedBrandTheme(customising ? value : (inherited ?? instance ?? {}));
 
   return (
     <Stack gap="sm" data-testid="dashboard-branding-section">
@@ -350,9 +352,11 @@ const BrandingBlock: React.FC<{
         <SegmentedControl
           size="xs"
           value={customising ? 'custom' : 'inherit'}
-          onChange={(mode) => emit(mode === 'custom' ? (saved ?? {}) : null)}
+          // Customising a tab that inherits starts from the main tab's brand,
+          // so overriding one colour doesn't drop its logo and palette.
+          onChange={(mode) => emit(mode === 'custom' ? (saved ?? inherited ?? {}) : null)}
           data={[
-            { value: 'inherit', label: 'Inherit instance' },
+            { value: 'inherit', label: inherited ? 'Inherit main tab' : 'Inherit instance' },
             { value: 'custom', label: 'Customise' },
           ]}
           data-testid="dashboard-branding-mode"
@@ -360,7 +364,9 @@ const BrandingBlock: React.FC<{
         <Text size="xs" c="dimmed">
           {customising
             ? 'Anything left empty still follows the instance branding.'
-            : 'This dashboard uses the instance colors, logo and figure palette.'}
+            : inherited
+              ? "This tab uses the main tab's branding. Change it there for every tab, or customise this tab alone."
+              : 'This dashboard uses the instance colors, logo and figure palette.'}
         </Text>
       </Stack>
 

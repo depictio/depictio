@@ -21,6 +21,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+    family_brand_theme,
     get_child_tabs,
     get_parent_dashboard_title,
     load_dashboards_from_db,
@@ -318,6 +319,12 @@ async def get_dashboard(
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
 
+    # A child tab without its own brand is drawn in its main tab's. Sent apart
+    # from `brand_theme` so the editor's next save doesn't write a copy of it
+    # into this tab, which would then miss later changes to the main tab's.
+    if not dashboard_dict.get("brand_theme"):
+        dashboard_dict["inherited_brand_theme"] = family_brand_theme(dashboard_dict)
+
     # Surface the project's realtime config so the React viewer can decide
     # whether to mount the RealtimeIndicator. A project without
     # ``realtime.enabled = true`` should never show live-update UI.
@@ -439,6 +446,12 @@ async def init_dashboard(
     parent_title = get_parent_dashboard_title(dashboard_dict)
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
+
+    # A child tab without its own brand is drawn in its main tab's. Sent apart
+    # from `brand_theme` so the editor's next save doesn't write a copy of it
+    # into this tab, which would then miss later changes to the main tab's.
+    if not dashboard_dict.get("brand_theme"):
+        dashboard_dict["inherited_brand_theme"] = family_brand_theme(dashboard_dict)
 
     response = {
         "dashboard": dashboard_dict,
@@ -604,6 +617,10 @@ async def save_dashboard(
     # it to `dashboard_id`, matching the `_id == dashboard_id` invariant the
     # import paths call out as CRITICAL (see the YAML/JSON import routes).
     save_payload.pop("_id", None)
+
+    # Read-time only: a child tab's main-tab brand, resolved on every GET.
+    # Stored, it would freeze a copy that later changes to the main tab miss.
+    save_payload.pop("inherited_brand_theme", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
@@ -2955,7 +2972,7 @@ async def render_figure_endpoint(
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
         "dict_kwargs": merge_dashboard_brand_theme(
-            dashboard_data.get("brand_theme"), component.get("dict_kwargs") or {}
+            family_brand_theme(dashboard_data), component.get("dict_kwargs") or {}
         ),
         "mode": mode,
         "code_content": component.get("code_content", ""),

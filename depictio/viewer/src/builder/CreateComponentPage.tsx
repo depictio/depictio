@@ -71,7 +71,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     fetchDashboard(dashboardId)
       .then((dash) => {
         setProjectId(dash.project_id ?? null);
-        setBrandTheme(dash.brand_theme ?? null);
+        setBrandTheme(dash.brand_theme ?? dash.inherited_brand_theme ?? null);
       })
       .catch(() => setProjectId(null));
     return () => reset();

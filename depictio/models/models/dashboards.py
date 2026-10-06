@@ -1747,6 +1747,9 @@ class DashboardData(MongoModel):
     project_realtime: Optional[dict] = (
         None  # Populated at runtime from the parent project's realtime config
     )
+    inherited_brand_theme: Optional[dict] = (
+        None  # Populated at runtime for a child tab: its main tab's brand_theme
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
