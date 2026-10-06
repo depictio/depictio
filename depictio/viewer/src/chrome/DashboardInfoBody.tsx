@@ -5,6 +5,7 @@ import {
   Anchor,
   Badge,
   Code,
+  Collapse,
   CopyButton,
   Divider,
   Group,
@@ -16,6 +17,7 @@ import {
   Text,
   TextInput,
   Tooltip,
+  UnstyledButton,
   ActionIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
@@ -299,12 +301,9 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
         )}
       </Stack>
 
-      <Divider label="Identifiers" labelPosition="left" my="xs" />
-
-      <Stack gap="xs">
-        {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
-        {projectId && <CopyableId label="Project ID" value={projectId} />}
-      </Stack>
+      {(dashboardId || projectId) && (
+        <IdentifiersBlock dashboardId={dashboardId} projectId={projectId} />
+      )}
     </Stack>
   );
 };
@@ -329,6 +328,45 @@ const MetaRow: React.FC<MetaRowProps> = ({ icon, color, label, value }) => (
     </Stack>
   </Group>
 );
+
+/**
+ * Dashboard / project IDs, folded by default: technical detail for someone
+ * filing an issue or calling the API, not something a reader needs on every
+ * open. Local state, so the drawer and the inspector's Info tab each start
+ * folded.
+ */
+const IdentifiersBlock: React.FC<{ dashboardId: string | null; projectId: string | null }> = ({
+  dashboardId,
+  projectId,
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap="xs" data-testid="dashboard-identifiers">
+      <UnstyledButton
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-testid="dashboard-identifiers-toggle"
+      >
+        <Divider
+          labelPosition="left"
+          my={4}
+          label={
+            <Group gap={4} wrap="nowrap">
+              <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={14} />
+              <span>Identifiers</span>
+            </Group>
+          }
+        />
+      </UnstyledButton>
+      <Collapse in={open}>
+        <Stack gap="xs">
+          {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
+          {projectId && <CopyableId label="Project ID" value={projectId} />}
+        </Stack>
+      </Collapse>
+    </Stack>
+  );
+};
 
 const CopyableId: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <Group gap="xs" wrap="nowrap" align="center">

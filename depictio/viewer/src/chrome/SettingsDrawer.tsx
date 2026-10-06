@@ -12,7 +12,6 @@ import {
   Stack,
   Switch,
   Text,
-  ThemeIcon,
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
@@ -21,6 +20,7 @@ import {
   BrandThemeForm,
   BrandThemePreview,
   isEmptyBrandTheme,
+  useBrandScopeAttributes,
   useResolvedBrandTheme,
   Z_LAYERS,
   type BrandTheme,
@@ -45,6 +45,14 @@ const SAVE_DEBOUNCE_MS = 600;
 // Shared layout pieces
 // ---------------------------------------------------------------------------
 
+/** A bare glyph in the (dashboard's) primary colour, the way the chrome draws
+ *  its icons elsewhere (`SectionIcon`, the sidebar): a tinted square read as a
+ *  button in a row that already carries a chevron. */
+const SECTION_ICON_STYLE: React.CSSProperties = {
+  color: 'var(--mantine-primary-color-filled)',
+  flexShrink: 0,
+};
+
 /**
  * Header of one drawer section: icon, title, and a one-line subtitle saying
  * what the section is for and who it affects. Every section uses this one, so
@@ -57,9 +65,7 @@ const SectionHeader: React.FC<{ icon: string; title: string; subtitle: string }>
   subtitle,
 }) => (
   <Group gap="sm" wrap="nowrap" align="center">
-    <ThemeIcon variant="light" size="md" radius="md">
-      <Icon icon={icon} width={16} />
-    </ThemeIcon>
+    <Icon icon={icon} width={20} height={20} style={SECTION_ICON_STYLE} />
     <Stack gap={0} style={{ minWidth: 0 }}>
       <Text size="sm" fw={600} lh={1.3}>
         {title}
@@ -623,6 +629,12 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     writeOpenSections(surface, value);
   };
 
+  // The drawer is portaled to <body>, outside the dashboard's BrandScope
+  // wrapper, so its CSS variables would fall back to the instance theme; these
+  // put the drawer back in the dashboard's brand (primary colour, switches,
+  // segmented controls, icons).
+  const brandScope = useBrandScopeAttributes();
+
   const feedback = useFeedbackLink({
     dashboard: dashboard?.title ?? null,
     dashboardId: dashboard?.dashboard_id ?? dashboard?._id ?? null,
@@ -653,9 +665,11 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       // Above the floating map card, so the drawer's overlay dims it like the
       // rest of the dashboard instead of leaving it lit on top.
       zIndex={Z_LAYERS.overlay}
+      className={brandScope?.className}
+      data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
       title={
         <Group gap="xs">
-          <Icon icon="mdi:cog" width={20} />
+          <Icon icon="ic:baseline-settings" width={20} height={20} style={SECTION_ICON_STYLE} />
           <Text fw={600}>Dashboard settings</Text>
         </Group>
       }

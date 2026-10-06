@@ -536,9 +536,11 @@ export {
   BrandThemeForm,
   BrandThemePreview,
   PLOT_TEMPLATE_OPTIONS,
+  useBrandScopeAttributes,
   useResolvedBrandTheme,
 } from './components/branding';
 export type {
+  BrandScopeAttributes,
   BrandFormScope,
   BrandThemeFormProps,
   BrandThemePreviewProps,
