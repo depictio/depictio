@@ -1044,6 +1044,8 @@ class DashboardDataLite(BaseModel):
                         "title_color",
                         "title_font_size",
                         "value_font_size",
+                        "icon_style",
+                        "caption",
                     ],
                 )
                 if display:
@@ -1135,6 +1137,22 @@ class DashboardDataLite(BaseModel):
                 for field in _MAP_NOT_NONE_FIELDS:
                     if comp.get(field) is not None:
                         lite_comp[field] = comp[field]
+
+            elif comp_type == "text":
+                # The mirror of `to_full`'s text branch. Without it an export
+                # kept a text tile's title and nothing else: no body, no level.
+                if comp.get("order", 1) != 1:
+                    lite_comp["order"] = comp["order"]
+                if comp.get("alignment", "left") != "left":
+                    lite_comp["alignment"] = comp["alignment"]
+                if comp.get("vertical_alignment", "center") != "center":
+                    lite_comp["vertical_alignment"] = comp["vertical_alignment"]
+                if comp.get("body"):
+                    lite_comp["body"] = comp["body"]
+                if comp.get("surface", "none") != "none":
+                    lite_comp["surface"] = comp["surface"]
+                if comp.get("accent"):
+                    lite_comp["accent"] = comp["accent"]
 
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
@@ -1341,6 +1359,8 @@ class DashboardDataLite(BaseModel):
                     "title_color",
                     "title_font_size",
                     "value_font_size",
+                    "icon_style",
+                    "caption",
                 ]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
@@ -1482,6 +1502,8 @@ class DashboardDataLite(BaseModel):
                 full_comp["alignment"] = comp_dict.get("alignment", "left")
                 full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "center")
                 full_comp["body"] = comp_dict.get("body", "")
+                full_comp["surface"] = comp_dict.get("surface", "none")
+                full_comp["accent"] = comp_dict.get("accent")
 
             full_components.append(full_comp)
 

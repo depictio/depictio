@@ -230,6 +230,18 @@ class CardLiteComponent(BaseLiteComponent):
     title_color: str | None = Field(default=None, description="Title text color")
     title_font_size: str | None = Field(default=None, description="Title font size")
     value_font_size: str | None = Field(default=None, description="Value font size")
+    caption: str | None = Field(
+        default=None,
+        description="One line under the value, in place of the aggregation label "
+        '("(Nunique) · Top 3 = 100%"), which moves to a tooltip on the header. For a '
+        "headline number whose method a reader does not need at first glance.",
+    )
+    icon_style: Literal["watermark", "badge"] | None = Field(
+        default=None,
+        description="`watermark` (default): large faint icon revealed on hover. `badge`: "
+        "small icon on a tint of `icon_color`, always shown beside the title — for a "
+        "row of headline numbers whose icons tie each card to a tab.",
+    )
 
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero
@@ -635,6 +647,19 @@ class TextLiteComponent(BaseLiteComponent):
         description="Vertical placement of the text block within its tile",
     )
     body: str = Field(default="", description="Optional paragraph below the heading")
+    # A tile on a landing page is a card of its own (a finding, a fact box);
+    # one in a tab's flow is prose between figures. `surface` says which.
+    surface: Literal["none", "card", "tinted"] = Field(
+        default="none",
+        description="`none`: bare prose. `card`: framed like a card; with `accent`, a "
+        "coloured rule on top. `tinted`: on a tint of `accent` (grey without one).",
+    )
+    accent: str | None = Field(
+        default=None,
+        description="Mantine palette name, CSS colour, or `tab:<Tab name>` to borrow a "
+        "sibling tab's colour. Colours the `card` rule or the `tinted` ground, and a "
+        "body's leading `#` heading, which then reads as a headline figure.",
+    )
 
     # Text tiles don't bind to a data source — keep these optional/empty.
     workflow_tag: str = Field(default="", description="Unused for text components")

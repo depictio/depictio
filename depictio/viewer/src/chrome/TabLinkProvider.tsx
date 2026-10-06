@@ -28,6 +28,7 @@ const TabLinkProvider: React.FC<{ tabs: DashboardSummary[]; children: React.Reac
         label,
         icon: image ?? resolveTabIcon(d, isParent),
         color: resolveTabColor(d, isParent, brand),
+        description: d.subtitle?.trim() || null,
       };
       for (const name of [label, d.title]) {
         const key = name ? tabLinkKey(name) : '';

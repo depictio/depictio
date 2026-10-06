@@ -285,7 +285,16 @@ export interface StoredMetadata {
   value_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   icon_name?: string;
   icon_color?: string;
+  /** `badge`: icon on a tint, beside the title. Default: hover watermark. */
+  icon_style?: 'watermark' | 'badge';
+  /** One line under the value, replacing the aggregation label. */
+  caption?: string;
   metric_theme?: string;
+  // Text
+  /** Frame of a text tile: bare prose, a card, or a tinted panel. */
+  surface?: 'none' | 'card' | 'tinted';
+  /** Palette name, CSS colour, or `tab:<name>` for that tab's colour. */
+  accent?: string;
   parent_index?: string;
   // Interactive
   interactive_component_type?: string;
@@ -503,6 +512,8 @@ export async function fetchCrossTabComponents(
 export interface DashboardSummary {
   dashboard_id: string;
   title?: string;
+  /** One line on what the tab shows; tab tiles fall back to it. */
+  subtitle?: string;
   parent_dashboard_id?: string | null;
   project_id?: string;
   /** Order within parent (0 = main tab). Mirrors the Dash sort key. */

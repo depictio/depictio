@@ -1,0 +1,13 @@
+.depictio-tab-tile {
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.depictio-tab-tile:hover {
+  background: var(--tile-tint) !important;
+  border-color: var(--tile-edge) !important;
+}
+
+.depictio-tab-tile:focus-visible {
+  outline: 2px solid var(--tile-edge);
+  outline-offset: 2px;
+}

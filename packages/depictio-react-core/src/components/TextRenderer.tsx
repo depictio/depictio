@@ -4,9 +4,10 @@ import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core'
 import { StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
 import { parseBlocks } from './blockMarkdown';
-import Glyph from './Glyph';
+import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
-import { TabLinkResolver, useTabLinkResolver } from './tabLinks';
+import TabTiles from './TabTiles';
+import { parseTabTile, TabLinkResolver, TabTileItem, useTabLinkResolver } from './tabLinks';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
@@ -82,6 +83,61 @@ const renderInlineMarkdown = (
     }
   });
 
+/**
+ * A tile's accent as CSS: a palette name, a literal colour, or `tab:<name>`
+ * for the colour that tab wears in the sidebar. Null when unset or when the
+ * tab is unknown here (the editor preview has no tab family).
+ */
+function resolveAccent(raw: unknown, resolveTab: TabLinkResolver | null): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const accent = raw.trim();
+  if (accent.startsWith('tab:')) {
+    const target = resolveTab?.(accent.slice(4)) ?? null;
+    return target?.color ? glyphColorVar(target.color) : null;
+  }
+  return glyphColorVar(accent);
+}
+
+const RULE_PX = 3;
+const PAD_Y = 14;
+
+/**
+ * The frame a surface draws, and the height it adds around the prose. `card`
+ * matches a metric card's border and radius so the two sit in one row; its
+ * accent is a rule along the top. `tinted` lays the prose on a wash of the
+ * accent, grey without one.
+ */
+function surfaceStyle(
+  surface: 'none' | 'card' | 'tinted',
+  accent: string | null,
+): { style: React.CSSProperties; extra: number } {
+  if (surface === 'card') {
+    const top = accent ? RULE_PX : 1;
+    return {
+      style: {
+        padding: `${PAD_Y}px 18px`,
+        border: '1px solid var(--mantine-color-default-border)',
+        borderTop: accent ? `${RULE_PX}px solid ${accent}` : undefined,
+        borderRadius: 'var(--mantine-radius-md)',
+        background: 'var(--mantine-color-body)',
+      },
+      extra: PAD_Y * 2 + top + 1,
+    };
+  }
+  if (surface === 'tinted') {
+    const base = accent ?? 'var(--mantine-color-gray-6)';
+    return {
+      style: {
+        padding: `${PAD_Y}px 18px`,
+        borderRadius: 'var(--mantine-radius-md)',
+        background: `color-mix(in srgb, ${base} 8%, var(--mantine-color-body))`,
+      },
+      extra: PAD_Y * 2,
+    };
+  }
+  return { style: {}, extra: 0 };
+}
+
 const BODY_TEXT_STYLE: React.CSSProperties = {
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
@@ -95,10 +151,12 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
  * Headings start one level below the tile's own title scale (`#` → H3), so a
  * body never outshouts the title above it.
  */
-const MarkdownBody: React.FC<{ body: string; alignment: 'left' | 'center' | 'right' }> = ({
-  body,
-  alignment,
-}) => {
+const MarkdownBody: React.FC<{
+  body: string;
+  alignment: 'left' | 'center' | 'right';
+  /** Set on an accented tile: its leading heading becomes the headline figure. */
+  accentColor?: string | null;
+}> = ({ body, alignment, accentColor = null }) => {
   const resolveTab = useTabLinkResolver();
   const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
   return (
@@ -106,6 +164,27 @@ const MarkdownBody: React.FC<{ body: string; alignment: 'left' | 'center' | 'rig
       {parseBlocks(body).map((block, idx) => {
         switch (block.type) {
           case 'heading':
+            if (accentColor && idx === 0) {
+              // A finding card opens on its number ("# 41%"): large, in the
+              // accent, with figures that line up across neighbouring cards.
+              return (
+                <Text
+                  key={idx}
+                  ta={alignment}
+                  fw={600}
+                  style={{
+                    fontSize: block.level === 1 ? 34 : block.level === 2 ? 28 : 22,
+                    lineHeight: 1.05,
+                    letterSpacing: '-0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: accentColor,
+                    margin: 0,
+                  }}
+                >
+                  {inline(block.text)}
+                </Text>
+              );
+            }
             return (
               <Title
                 key={idx}
@@ -117,12 +196,27 @@ const MarkdownBody: React.FC<{ body: string; alignment: 'left' | 'center' | 'rig
               </Title>
             );
           case 'list': {
+            const tiles = resolveTab ? block.items.map(parseTabTile) : [];
+            if (tiles.length && tiles.every(Boolean)) {
+              return (
+                <TabTiles
+                  key={idx}
+                  items={tiles as TabTileItem[]}
+                  ordered={block.ordered}
+                  resolveTab={resolveTab as TabLinkResolver}
+                />
+              );
+            }
             return (
               <List
                 key={idx}
                 type={block.ordered ? 'ordered' : 'unordered'}
                 spacing={4}
-                style={{ lineHeight: 1.45, textAlign: 'left' }}
+                // Mantine lays an item out as an inline-flex wrapper, which
+                // sizes to its text instead of the tile: long items ran past
+                // the edge and were clipped. Inline flow wraps them.
+                styles={{ itemWrapper: { display: 'inline' }, itemLabel: { display: 'inline' } }}
+                style={{ lineHeight: 1.45, textAlign: 'left', paddingRight: 4 }}
               >
                 {block.items.map((item, i) => (
                   <List.Item key={i}>{inline(item)}</List.Item>
@@ -179,6 +273,7 @@ const MarkdownBody: React.FC<{ body: string; alignment: 'left' | 'center' | 'rig
  *   - alignment ('left' | 'center' | 'right'; default 'left')
  *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'center')
  *   - body (optional paragraph)
+ *   - surface ('none' | 'card' | 'tinted'; default 'none') and accent
  *
  * No data fetching, no editing UI. Same shape in viewer and editor — the
  * editor injects its own action chrome (incl. the Edit menu) around it.
@@ -203,12 +298,24 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
 
   const hasTitle = rawTitle.trim().length > 0;
 
+  const resolveTab = useTabLinkResolver();
+  const surface =
+    metadata.surface === 'card' || metadata.surface === 'tinted' ? metadata.surface : 'none';
+  const accentColor = resolveAccent(metadata.accent, resolveTab);
+  const frame = surfaceStyle(surface, accentColor);
+
   // Measure the prose itself, not the tile. The Stack below is `h="100%"`, so
   // it always reports the height it was given; this inner wrapper is
   // height-auto, so its scrollHeight is what the text actually needs.
   const contentRef = useRef<HTMLDivElement | null>(null);
   const index = typeof metadata.index === 'string' ? metadata.index : '';
-  useAutofitHeight(index, contentRef, [rawTitle, body, order, alignment]);
+  useAutofitHeight(
+    index,
+    contentRef,
+    [rawTitle, body, order, alignment, surface],
+    // The frame's padding and borders sit outside the measured prose.
+    frame.extra ? (h) => h + frame.extra : undefined,
+  );
 
   return (
     <Stack
@@ -219,7 +326,14 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
       // preview Card are both column flex containers whose height can be
       // indefinite, where a percentage height alone collapses to the content
       // and vertical alignment would have no room to act.
-      style={{ flex: '1 1 auto', textAlign: alignment, width: '100%', padding: 0 }}
+      style={{
+        flex: '1 1 auto',
+        textAlign: alignment,
+        width: '100%',
+        padding: 0,
+        boxSizing: 'border-box',
+        ...frame.style,
+      }}
     >
       <div
         ref={contentRef}
@@ -245,7 +359,13 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           Section title
         </Title>
       ) : null}
-      {body ? <MarkdownBody body={body} alignment={alignment} /> : null}
+      {body ? (
+        <MarkdownBody
+          body={body}
+          alignment={alignment}
+          accentColor={surface !== 'none' ? accentColor : null}
+        />
+      ) : null}
       </div>
     </Stack>
   );

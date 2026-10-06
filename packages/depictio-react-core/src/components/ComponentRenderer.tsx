@@ -728,6 +728,9 @@ const CardRenderer: React.FC<{
   // own dedicated row inside the secondary strip. Restructures vertical
   // density: instead of stacking ``(Count) / Top 3 cover 83% of N / bar 1 / …``
   // we get ``(Count · Top 3 = 83%) / bar 1 / …``.
+  const caption =
+    typeof metadata.caption === 'string' && metadata.caption.trim() ? metadata.caption.trim() : '';
+
   const aggDesc = (() => {
     if (!metadata.aggregation) return undefined;
     const base = `(${capitalize(metadata.aggregation)})`;
@@ -785,6 +788,7 @@ const CardRenderer: React.FC<{
         value={displayValue}
         icon_name={metadata.icon_name}
         icon_color={metadata.icon_color}
+        icon_style={metadata.icon_style === 'badge' ? 'badge' : 'watermark'}
         title_color={metadata.title_color}
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
@@ -793,9 +797,11 @@ const CardRenderer: React.FC<{
         // beside the title) and the aggregation description moves into a
         // hover tooltip on that header — both rows yield their height to the
         // strip below.
-        aggregation_description={compactHeader ? undefined : aggDesc}
+        // An author's caption takes the description line; the aggregation it
+        // displaces is still one hover away on the header.
+        aggregation_description={compactHeader ? undefined : caption || aggDesc}
         inline_header={compactHeader}
-        header_tooltip={compactHeader ? aggDesc : undefined}
+        header_tooltip={compactHeader || caption ? aggDesc : undefined}
         filter_applied={filterApplied}
         secondaryStrip={
           showSecondaryMetrics || groupCompare !== undefined ? (
