@@ -242,6 +242,12 @@ class CardLiteComponent(BaseLiteComponent):
         "small icon on a tint of `icon_color`, always shown beside the title — for a "
         "row of headline numbers whose icons tie each card to a tab.",
     )
+    variant: Literal["default", "headline"] | None = Field(
+        default=None,
+        description="`headline`: a key-figure card for a landing page. The value is drawn "
+        "large, the icon sits faint on the right at all times, and a composition or "
+        "coverage strip shrinks to its bar (its numbers stay in the tooltip).",
+    )
 
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero

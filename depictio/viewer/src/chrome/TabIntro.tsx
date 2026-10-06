@@ -49,29 +49,31 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const showIcon = Boolean(iconRaw);
 
   return (
-    <Box px={6} pt={2} pb={8}>
-      <Group gap={8} align="center" wrap="nowrap">
+    <Box px={0} pt={4} pb={10}>
+      <Group gap={10} align="center" wrap="nowrap">
         {iconImageSrc ? (
           <img
             src={iconImageSrc}
             alt=""
-            width={20}
-            height={20}
+            width={24}
+            height={24}
             style={{ flexShrink: 0, objectFit: 'contain' }}
           />
         ) : (
           iconRaw && (
             <Icon
               icon={iconRaw}
-              width={20}
-              height={20}
+              width={24}
+              height={24}
               color={`var(--mantine-color-${iconColor}-6)`}
               style={{ flexShrink: 0 }}
             />
           )
         )}
         {name && (
-          <Title order={3} fw={700} style={{ minWidth: 0 }}>
+          // The page's own title: the largest heading on the canvas, so a
+          // text tile's heading below it reads as part of the page.
+          <Title order={2} fw={700} style={{ minWidth: 0, lineHeight: 1.2 }}>
             {name}
           </Title>
         )}
@@ -83,7 +85,7 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
           mt={2}
           /* Aligned under the title rather than the icon — the icon is a
              marker for the title, not a bullet for the paragraph. */
-          ml={showIcon ? 28 : 0}
+          ml={showIcon ? 34 : 0}
           style={{ lineHeight: 1.4 }}
         >
           {description}

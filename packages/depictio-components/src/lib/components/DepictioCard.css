@@ -85,3 +85,22 @@
     height: 96px;
   }
 }
+
+/* ``variant: headline`` — the icon rests on the card instead of appearing on
+   hover: a landing page's key figures are read at a glance, and the mark is
+   what tells one card from the next. Kept faint and sized to the value so it
+   anchors the card without competing with the number. Declared after the
+   container query so its placement wins at every width. */
+.depictio-card-icon--rest,
+.depictio-card:hover .depictio-card-icon--rest {
+  opacity: 0.32;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
+}
+
+.depictio-card-icon--rest svg,
+.depictio-card .depictio-card-icon--rest svg {
+  width: 44px;
+  height: 44px;
+}

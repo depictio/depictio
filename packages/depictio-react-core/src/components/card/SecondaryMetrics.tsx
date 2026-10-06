@@ -57,6 +57,9 @@ interface SecondaryMetricsProps {
   coverageValue?: number | null;
   /** Denominator for ``coverage`` / ``gauge`` — e.g. 44 samples / 11 ORFs. */
   coverageMax?: number | null;
+  /** Bar only: a headline card keeps a composition or coverage strip to its
+   *  meter, the numbers it would print staying in the tooltip. */
+  minimal?: boolean;
 }
 
 /** Pull one server-computed payload out of the rows array. The strips dispatch
@@ -84,6 +87,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   color,
   coverageValue,
   coverageMax,
+  minimal = false,
 }) => {
   // Categorical layouts — all four read the same ``__breakdown__`` payload and
   // differ only in how they draw it.
@@ -97,7 +101,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
       return <ConcentrationMetric payload={breakdown} color={color} />;
     }
     if (layout === 'composition') {
-      return <CompositionMetric payload={breakdown} color={color} />;
+      return <CompositionMetric payload={breakdown} color={color} minimal={minimal} />;
     }
     return <DonutMetric payload={breakdown} color={color} />;
   }
@@ -130,8 +134,12 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
       typeof coverageMax === 'number' &&
       coverageMax > 0;
     if (usable) {
-      const Metric = layout === 'gauge' ? GaugeMetric : CoverageMetric;
-      return <Metric value={coverageValue} max={coverageMax} color={color} />;
+      if (layout === 'gauge') {
+        return <GaugeMetric value={coverageValue} max={coverageMax} color={color} />;
+      }
+      return (
+        <CoverageMetric value={coverageValue} max={coverageMax} color={color} minimal={minimal} />
+      );
     }
     // Fall through to the stat list rather than draw an always-zero bar.
   }

@@ -24,7 +24,9 @@ import type { BreakdownPayload } from './types';
 const CompositionMetric: React.FC<{
   payload: BreakdownPayload;
   color?: string | null;
-}> = ({ payload, color }) => {
+  /** The bar alone; the legend stays in the tooltip. */
+  minimal?: boolean;
+}> = ({ payload, color, minimal = false }) => {
   if (!payload.top.length) return null;
 
   // Derive the remainder from top_share rather than by summing the segments:
@@ -53,11 +55,13 @@ const CompositionMetric: React.FC<{
           { key: '__other__', share: otherShare, color: METRIC.remainder },
         ]}
       />
-      <MetricCaption>
-        {legend}
-        {otherShare > 0 ? ` · other ${percent(otherShare)}` : ''}
-      </MetricCaption>
-      {evenness !== null ? (
+      {minimal ? null : (
+        <MetricCaption>
+          {legend}
+          {otherShare > 0 ? ` · other ${percent(otherShare)}` : ''}
+        </MetricCaption>
+      )}
+      {evenness !== null && !minimal ? (
         <MetricCaption>
           {evennessLabel(evenness)} ({evenness.toFixed(2)}) ·{' '}
           {payload.unique_values.toLocaleString()} values

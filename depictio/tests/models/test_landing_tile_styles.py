@@ -60,3 +60,10 @@ def test_card_badge_and_caption_round_trip():
     card = DashboardDataLite.from_full(_dash(KPI).to_full()).components[0]
     assert card.display["icon_style"] == "badge"
     assert card.display["caption"] == "AML 52 · TARA 33"
+
+
+def test_card_headline_variant_round_trip():
+    kpi = {**KPI, "display": {**KPI["display"], "variant": "headline"}}
+    assert _dash(kpi).to_full()["stored_metadata"][0]["variant"] == "headline"
+    card = DashboardDataLite.from_full(_dash(kpi).to_full()).components[0]
+    assert card.display["variant"] == "headline"

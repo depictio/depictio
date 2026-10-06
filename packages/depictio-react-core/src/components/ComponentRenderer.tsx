@@ -789,6 +789,7 @@ const CardRenderer: React.FC<{
         icon_name={metadata.icon_name}
         icon_color={metadata.icon_color}
         icon_style={metadata.icon_style === 'badge' ? 'badge' : 'watermark'}
+        variant={metadata.variant === 'headline' ? 'headline' : 'default'}
         title_color={metadata.title_color}
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
@@ -822,6 +823,7 @@ const CardRenderer: React.FC<{
                   }
                   coverageValue={typeof value === 'number' ? value : null}
                   coverageMax={coverageMax}
+                  minimal={metadata.variant === 'headline'}
                 />
               )}
               {groupCompare && (

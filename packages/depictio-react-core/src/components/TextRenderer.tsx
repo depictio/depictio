@@ -157,62 +157,52 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
 };
 
 /**
- * A list of `![](icon:…) **Label** value` items, drawn as a grid of facts: the
- * icon on a tint, a small label over its value. What a study's method box is
- * made of (pipeline, markers, reference databases), legible at a glance where
- * a run of bold-led lines reads as a paragraph.
+ * A list of `![](icon:…) **Label** value` items, drawn as a row of chips: the
+ * icon, a quiet label, the value. What a study's method box is made of
+ * (pipeline, markers, reference databases) reads at a glance as tags, and a
+ * row of chips wraps to whatever width the tile has, from a phone to a wide
+ * screen, where a grid of label-over-value cells leaves holes.
  */
-const FactGrid: React.FC<{
+const FactChips: React.FC<{
   facts: Fact[];
   accentColor: string | null;
   inline: (text: string) => React.ReactNode[];
-}> = ({ facts, accentColor, inline }) => {
-  const tint = accentColor ?? 'var(--mantine-color-gray-6)';
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(min(170px, 100%), 1fr))',
-        gap: '12px 18px',
-        width: '100%',
-      }}
-    >
-      {facts.map((fact, i) => (
-        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-          {fact.icon ? (
-            <span
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                flex: 'none',
-                display: 'grid',
-                placeItems: 'center',
-                background: `color-mix(in srgb, ${tint} 14%, var(--mantine-color-body))`,
-              }}
-            >
-              <Glyph icon={fact.icon} color={accentColor ?? 'gray'} size={18} />
-            </span>
-          ) : null}
-          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <Text
-              size="xs"
-              c="dimmed"
-              fw={600}
-              tt="uppercase"
-              style={{ letterSpacing: '0.04em', lineHeight: 1.3 }}
-            >
-              {fact.label}
-            </Text>
-            <Text size="sm" fw={500} style={{ lineHeight: 1.35, wordBreak: 'break-word' }}>
-              {inline(fact.value)}
-            </Text>
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-};
+}> = ({ facts, accentColor, inline }) => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, width: '100%' }}>
+    {facts.map((fact, i) => (
+      <span
+        key={i}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          minWidth: 0,
+          maxWidth: '100%',
+          padding: '4px 12px 4px 10px',
+          borderRadius: 999,
+          border: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-body)',
+          fontSize: 'var(--mantine-font-size-sm)',
+          lineHeight: 1.4,
+        }}
+      >
+        {fact.icon ? (
+          <Glyph
+            icon={fact.icon}
+            color={accentColor ?? 'var(--mantine-primary-color-filled)'}
+            size={15}
+          />
+        ) : null}
+        <span style={{ color: 'var(--mantine-color-dimmed)', whiteSpace: 'nowrap' }}>
+          {fact.label}
+        </span>
+        <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>
+          {inline(fact.value)}
+        </span>
+      </span>
+    ))}
+  </div>
+);
 
 /**
  * A body's blocks (see `blockMarkdown.ts`). A body with no block syntax is one
@@ -268,7 +258,7 @@ const MarkdownBody: React.FC<{
             const facts = block.ordered ? [] : block.items.map(parseFact);
             if (facts.length && facts.every(Boolean)) {
               return (
-                <FactGrid
+                <FactChips
                   key={idx}
                   facts={facts as Fact[]}
                   accentColor={accentColor}

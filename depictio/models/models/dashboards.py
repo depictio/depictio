@@ -1046,6 +1046,7 @@ class DashboardDataLite(BaseModel):
                         "value_font_size",
                         "icon_style",
                         "caption",
+                        "variant",
                     ],
                 )
                 if display:
@@ -1361,6 +1362,7 @@ class DashboardDataLite(BaseModel):
                     "value_font_size",
                     "icon_style",
                     "caption",
+                    "variant",
                 ]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]

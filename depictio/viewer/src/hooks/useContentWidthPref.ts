@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * Page-width preference for the dashboard canvas, like Notion's "full width"
@@ -69,14 +69,12 @@ export function useContentWidthPref() {
 }
 
 /**
- * Side padding that centres the canvas at the chosen width. Padding rather
- * than a max-width wrapper, so the scroll container keeps its scrollbar at
- * the window edge and nothing inside it has to change.
+ * The content width cap in px for the chosen preference, or null for full
+ * width. Applied to the filter panel and the canvas together, so an open
+ * panel stays beside the content it filters instead of being stranded at the
+ * window edge while the canvas centres.
  */
-export function useContentWidthStyle(basePadPx = 4): CSSProperties | undefined {
+export function useContentMaxWidth(): number | null {
   const { width } = useContentWidthPref();
-  const maxPx = CONTENT_WIDTHS.find((w) => w.value === width)?.maxPx ?? null;
-  if (maxPx === null) return undefined;
-  const pad = `max(${basePadPx}px, calc((100% - ${maxPx}px) / 2))`;
-  return { paddingLeft: pad, paddingRight: pad, transition: 'padding 200ms ease' };
+  return CONTENT_WIDTHS.find((w) => w.value === width)?.maxPx ?? null;
 }

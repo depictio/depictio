@@ -39,6 +39,9 @@ export interface DepictioCardProps {
   /** `watermark` (default): a large faint mark revealed on hover. `badge`: a
    *  small icon on a tint of its colour, always shown beside the title. */
   icon_style?: 'watermark' | 'badge';
+  /** `headline`: a key figure for a landing page — a large value, and the
+   *  icon resting faint on the right instead of appearing on hover. */
+  variant?: 'default' | 'headline';
   title_color?: string;
   background_color?: string;
   /** Mantine size token: xs / sm / md / lg / xl. Mirrors `dmc.Text size=...`. */
@@ -83,6 +86,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   icon_name,
   icon_color,
   icon_style = 'watermark',
+  variant = 'default',
   title_color,
   background_color,
   title_font_size = 'md',
@@ -97,7 +101,8 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   contentRef,
 }) => {
   const hasCustomBg = !!background_color;
-  const badge = icon_name && icon_style === 'badge';
+  const headline = variant === 'headline' && !inline_header;
+  const badge = icon_name && icon_style === 'badge' && !headline;
 
   const header = inline_header ? (
     // Title left, value right: glued side by side the two bold texts read as
@@ -163,6 +168,32 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         {value !== null && value !== undefined ? value : '—'}
       </Text>
     </Group>
+  ) : headline ? (
+    <>
+      <Text
+        size={title_font_size === 'md' ? 'sm' : title_font_size}
+        fw={600}
+        c={title_color || undefined}
+        style={{ margin: 0, lineHeight: 1.3 }}
+      >
+        {title}
+      </Text>
+      <Text
+        fw={800}
+        c={title_color || undefined}
+        style={{
+          margin: 0,
+          // The number is what the card is for. Scales with the card (see the
+          // container on .depictio-card) so a narrow card still fits it.
+          fontSize: 'clamp(26px, 15cqw, 40px)',
+          lineHeight: 1.05,
+          letterSpacing: '-0.02em',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {value !== null && value !== undefined ? value : '—'}
+      </Text>
+    </>
   ) : (
     <>
       {badge ? (
@@ -256,7 +287,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           @iconify/react renders an <svg> we can size via .depictio-card-icon
           svg{...} rules. */}
       {icon_name && !inline_header && !badge && (
-        <Box className="depictio-card-icon">
+        <Box className={headline ? 'depictio-card-icon depictio-card-icon--rest' : 'depictio-card-icon'}>
           <Icon
             icon={icon_name}
             style={{ color: icon_color || title_color || 'currentColor' }}
@@ -299,8 +330,10 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           (e.g. box-plot) sits closer to the value, not separated by a wide
           gap. */}
       <Card.Section
-        p={hasCustomBg ? '1rem' : 'xs'}
+        p={hasCustomBg || headline ? '1rem' : 'xs'}
         pb={secondaryStrip ? 0 : undefined}
+        // Clear of the resting icon, so a long value never runs under it.
+        pr={headline && icon_name ? 72 : undefined}
         style={{
           // ``flex: 0 0 auto`` so Card.Section sizes to its content rather
           // than stretching to fill the card. The outer Card's

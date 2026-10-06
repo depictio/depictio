@@ -438,25 +438,43 @@ export default Header;
  * filters are folded away and the canvas suddenly runs edge to edge.
  */
 const PageWidthToggle: React.FC = () => {
-  const { width, cycle } = useContentWidthPref();
+  const { width, set } = useContentWidthPref();
   const current = CONTENT_WIDTHS.find((w) => w.value === width) ?? CONTENT_WIDTHS[0];
-  const next = CONTENT_WIDTHS[(CONTENT_WIDTHS.indexOf(current) + 1) % CONTENT_WIDTHS.length];
   return (
-    <Tooltip label={`Page width: ${current.label} (click for ${next.label})`} withArrow>
-      <ActionIcon
-        variant="subtle"
-        color="gray"
-        size="md"
-        onClick={cycle}
-        aria-label={`Page width: ${current.label}. Switch to ${next.label}`}
-        data-testid="page-width-toggle"
-      >
-        <Icon
-          icon={width === 'full' ? 'mdi:arrow-collapse-horizontal' : 'mdi:arrow-expand-horizontal'}
-          width={18}
-        />
-      </ActionIcon>
-    </Tooltip>
+    <Menu position="bottom-end" withArrow shadow="md" width={210}>
+      <Menu.Target>
+        <Tooltip label={`Page width: ${current.label}`} withArrow>
+          <ActionIcon
+            variant={width === 'full' ? 'subtle' : 'light'}
+            color="gray"
+            size="md"
+            aria-label={`Page width: ${current.label}`}
+            data-testid="page-width-toggle"
+          >
+            <Icon icon="mdi:arrow-expand-horizontal" width={18} />
+          </ActionIcon>
+        </Tooltip>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>Page width</Menu.Label>
+        {CONTENT_WIDTHS.map((w) => (
+          <Menu.Item
+            key={w.value}
+            onClick={() => set(w.value)}
+            rightSection={
+              w.value === width ? <Icon icon="mdi:check" width={14} /> : null
+            }
+            leftSection={
+              <span style={{ fontSize: 11, color: 'var(--mantine-color-dimmed)', width: 44 }}>
+                {w.maxPx ? `${w.maxPx}px` : 'window'}
+              </span>
+            }
+          >
+            {w.label}
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
   );
 };
 

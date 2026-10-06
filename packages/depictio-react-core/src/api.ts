@@ -289,6 +289,8 @@ export interface StoredMetadata {
   icon_style?: 'watermark' | 'badge';
   /** One line under the value, replacing the aggregation label. */
   caption?: string;
+  /** `headline`: large value, resting icon mark, bar-only strip. */
+  variant?: 'default' | 'headline';
   metric_theme?: string;
   // Text
   /** Frame of a text tile: bare prose, a card, or a tinted panel. */
