@@ -41,6 +41,8 @@ _PALETTE: dict[str, dict[str, str]] = {
         "hover_border": "#dee2e6",
         "hover_font": "#212529",
         "fallback_group": "#adb5bd",
+        # The card a minimal figure sits on (Mantine's body colour).
+        "surface": "#ffffff",
     },
     "dark": {
         "grid": "rgba(255, 255, 255, 0.09)",
@@ -50,6 +52,7 @@ _PALETTE: dict[str, dict[str, str]] = {
         "hover_border": "#373a40",
         "hover_font": "#c1c2c5",
         "fallback_group": "#5c5f66",
+        "surface": "#242424",
     },
 }
 
@@ -68,6 +71,11 @@ _LINE_SYMBOL = re.compile(r"^(line-|asterisk|hash|y-)|-thin|-open")
 # Trace types that put categories on one axis and values on the other.
 _CATEGORICAL_TYPES = frozenset({"bar", "box", "violin", "histogram", "funnel"})
 
+# Bars end in a slight round, square at the baseline (Plotly rounds the outer
+# end only, and in a stack only the stack's end).
+_BAR_CORNER_RADIUS_PX = 4
+# The gap, in the card's colour, between the segments of a stacked bar.
+_STACK_GAP_PX = 2
 # Top margin for a kept plot title, and for facet titles over the top panels.
 _TITLE_MARGIN_PX = 32
 _FACET_TITLE_MARGIN_PX = 26
@@ -168,7 +176,7 @@ def _apply_minimal(
     # which can be most of the payload, are shared rather than duplicated.
     traces = [dict(t) for t in (figure.get("data") or []) if isinstance(t, dict)]
 
-    _style_traces(traces, layout)
+    _style_traces(traces, layout, palette)
     has_title = _style_title(layout, header_title, palette)
     _style_axes(layout, traces, palette)
     _style_legend(layout, palette, hide_legend)
@@ -255,7 +263,7 @@ def _is_strip(trace: dict) -> bool:
     return trace.get("boxpoints") == "all" and trace.get("hoveron") == "points"
 
 
-def _style_traces(traces: list[dict], layout: dict) -> None:
+def _style_traces(traces: list[dict], layout: dict, palette: dict[str, str]) -> None:
     scatter_points = sum(
         _point_count(t)
         for t in traces
@@ -263,6 +271,7 @@ def _style_traces(traces: list[dict], layout: dict) -> None:
     )
     marker_size = _marker_size(scatter_points)
     has_bars = False
+    stacked = layout.get("barmode") in ("stack", "relative")
 
     for trace in traces:
         kind = trace.get("type", "scatter")
@@ -288,7 +297,13 @@ def _style_traces(traces: list[dict], layout: dict) -> None:
         elif kind in ("bar", "histogram", "funnel"):
             has_bars = has_bars or kind == "bar"
             marker = _sub(trace, "marker")
-            _sub(marker, "line")["width"] = 0
+            line = _sub(marker, "line")
+            if kind == "bar" and stacked:
+                # Segments read apart by a gap of the card's colour, not a
+                # border: an outline in the surface colour is that gap.
+                line.update(width=_STACK_GAP_PX, color=palette["surface"])
+            else:
+                line["width"] = 0
         elif kind in ("box", "violin"):
             strip = _is_strip(trace)
             if not strip:
@@ -304,6 +319,7 @@ def _style_traces(traces: list[dict], layout: dict) -> None:
     if has_bars:
         layout["bargap"] = 0.22
         layout["bargroupgap"] = 0.06
+        layout.setdefault("barcornerradius", _BAR_CORNER_RADIUS_PX)
 
 
 def _style_title(layout: dict, header_title: bool, palette: dict[str, str]) -> bool:

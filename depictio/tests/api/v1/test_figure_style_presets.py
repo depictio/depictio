@@ -220,6 +220,28 @@ def test_box_outliers_stay_small():
     assert apply_figure_style(fig, "minimal")["data"][0]["marker"]["size"] == 5
 
 
+def _stacked_bars(**layout):
+    df = pd.DataFrame(
+        {"city": ["A", "A", "B", "B"], "taxon": ["x", "y", "x", "y"], "share": [0.6, 0.4, 0.3, 0.7]}
+    )
+    fig = json.loads(px.bar(df, x="share", y="city", color="taxon", orientation="h").to_json())
+    fig["layout"].update(barmode="stack", **layout)
+    return fig
+
+
+@pytest.mark.parametrize("theme, surface", [("light", "#ffffff"), ("dark", "#242424")])
+def test_stacked_segments_are_parted_by_a_gap_of_the_cards_colour(theme, surface):
+    out = apply_figure_style(_stacked_bars(), "minimal", theme=theme)
+    for trace in out["data"]:
+        assert trace["marker"]["line"] == {"width": 2, "color": surface}
+
+
+def test_bars_get_rounded_ends_unless_the_author_set_a_radius():
+    assert apply_figure_style(_stacked_bars(), "minimal")["layout"]["barcornerradius"] == 4
+    kept = apply_figure_style(_stacked_bars(barcornerradius=10), "minimal")
+    assert kept["layout"]["barcornerradius"] == 10
+
+
 def test_bars_lose_their_outline_and_the_category_axis_its_grid():
     fig = {
         "data": [
