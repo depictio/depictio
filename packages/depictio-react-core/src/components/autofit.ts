@@ -119,6 +119,8 @@ interface SizedItem {
 interface FittableMember {
   index: string;
   component_type?: string;
+  /** A text tile's frame; framed tiles size as a row, like cards. */
+  surface?: unknown;
 }
 
 /**
@@ -149,6 +151,21 @@ export function fitLayoutHeights<T extends SizedItem>(
   // to fit a breakdown its neighbours don't have turns that band into a
   // staircase. Keyed on the stored `y`, i.e. the row as the author laid it out,
   // before packing moves anything.
+  // Framed text tiles (a row of finding cards) follow the same rule for the
+  // same reason: one finding a line longer than the rest left a ragged band.
+  // Unlike cards they still shrink — their height is their prose.
+  const framedIds = new Set(
+    members
+      .filter((m) => m.component_type === 'text' && (m.surface === 'card' || m.surface === 'tinted'))
+      .map((m) => m.index),
+  );
+  const framedRowDemand = new Map<number, number>();
+  for (const l of layouts) {
+    if (!framedIds.has(l.i) || !fittedIds.has(l.i)) continue;
+    const measured = autoHeights[l.i];
+    if (!measured) continue;
+    framedRowDemand.set(l.y, Math.max(framedRowDemand.get(l.y) ?? 0, rowsForHeight(measured)));
+  }
   const cardRowDemand = new Map<number, number>();
   for (const l of layouts) {
     if (!cardIds.has(l.i) || !fittedIds.has(l.i)) continue;
@@ -165,6 +182,10 @@ export function fitLayoutHeights<T extends SizedItem>(
       // out of line with the row it belongs to.
       const grown = demand ? Math.max(l.h, demand) : l.h;
       return grown === l.h ? l : { ...l, h: grown };
+    }
+    if (framedIds.has(l.i)) {
+      const demand = framedRowDemand.get(l.y);
+      return !demand || demand === l.h ? l : { ...l, h: demand };
     }
     const measured = fittedIds.has(l.i) ? autoHeights[l.i] : undefined;
     if (!measured) return l;

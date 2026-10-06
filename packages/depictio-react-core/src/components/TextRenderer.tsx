@@ -58,6 +58,8 @@ const renderInlineMarkdown = (
               href={target.href}
               inherit
               fw={600}
+              // In the tab's colour as well as its icon: the link is the tab.
+              c={target.color ? glyphColorVar(target.color) : undefined}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
             >
               {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
