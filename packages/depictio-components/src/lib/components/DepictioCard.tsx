@@ -80,6 +80,9 @@ export interface DepictioCardProps {
  *  content needs. */
 const CARD_MIN_CONTENT_HEIGHT = 120;
 
+/** The tallest secondary strip (a box plot over its three numbers). */
+const HEADLINE_STRIP_MIN_PX = 60;
+
 const DepictioCard: React.FC<DepictioCardProps> = ({
   title = '',
   value = null,
@@ -403,6 +406,10 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
             // up to sit tight under the value text) doesn't get clipped.
             // ``hidden visible`` resolves to ``overflow-x: hidden; overflow-y: visible``.
             overflow: 'hidden visible',
+            // A headline card's strip holds the height of the tallest one (a
+            // box plot): the cards of a row centre their contents, and equal
+            // contents put every title and value on one line across the row.
+            ...(headline ? { minHeight: HEADLINE_STRIP_MIN_PX } : {}),
             // With the compact header the strip is the card's main content:
             // let it take the freed height and distribute it (the strip's own
             // containers justify space-evenly) instead of pooling dead space

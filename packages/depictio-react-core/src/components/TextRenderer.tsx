@@ -238,7 +238,7 @@ const FactTable: React.FC<{
   >
     {facts.map((fact, i) => {
       const cell: React.CSSProperties = {
-        padding: '7px 0',
+        padding: '6px 0',
         borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
       };
       return (
