@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { ActionIcon, Group, Menu, ScrollArea, Text } from '@mantine/core';
+import { ActionIcon, Group, Menu, ScrollArea, Text, useComputedColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { Glyph, SectionIcon, tabDisplayName, useBranding } from 'depictio-react-core';
 import type { DashboardSummary, FilterSectionSpec } from 'depictio-react-core';
-import { resolveTabColor, resolveTabIcon } from '../chrome/Sidebar';
+import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar';
 
 /**
  * Edit menu rendered as a chrome action icon (passed via the
@@ -115,6 +115,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   const [page, setPage] = useState<'actions' | 'sections' | 'tabs'>('actions');
   // Tabs are listed with the icon and colour their sidebar pill wears.
   const brand = useBranding();
+  const isDark = useComputedColorScheme('light') === 'dark';
 
   if (!editMode) return null;
 
@@ -283,15 +284,27 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
             <ScrollArea.Autosize mah={240} type="auto">
               {copyTargets?.map((tab) => {
                 const isParent = !tab.parent_dashboard_id;
+                // The same icon as the tab's sidebar pill, image icons included.
+                const image = tabImageSrc(tab, isParent, isDark);
                 return (
                   <Menu.Item
                     key={tab.dashboard_id}
                     leftSection={
-                      <Glyph
-                        icon={resolveTabIcon(tab, isParent)}
-                        color={resolveTabColor(tab, isParent, brand)}
-                        size={14}
-                      />
+                      image ? (
+                        <img
+                          src={image}
+                          alt=""
+                          width={14}
+                          height={14}
+                          style={{ objectFit: 'contain', display: 'block' }}
+                        />
+                      ) : (
+                        <Glyph
+                          icon={resolveTabIcon(tab, isParent)}
+                          color={resolveTabColor(tab, isParent, brand)}
+                          size={14}
+                        />
+                      )
                     }
                     onClick={() => onCopyToTab?.(componentId, tab.dashboard_id)}
                   >

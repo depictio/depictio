@@ -104,6 +104,33 @@ function resolveAssetUrl(s: string): string {
   return s;
 }
 
+/**
+ * The loadable URL of a tab's YAML-supplied image icon, or null when the tab
+ * uses an Iconify name. For the parent (main) tab, mirror the Header's
+ * `tab_icon || icon` precedence so a dashboard-level favicon (stored on
+ * `icon`, the common single-tab case) shows the SAME image in the sidebar pill
+ * as in the header — otherwise the two disagree (header shows the favicon,
+ * sidebar falls through to a keyword default). Child tabs deliberately do NOT
+ * fall back to `icon`: they inherit the dashboard's generic favicon, which
+ * would override their per-tab Iconify defaults and strip their distinct color.
+ */
+export function tabImageSrc(
+  tab: DashboardSummary,
+  isParent: boolean,
+  isDark: boolean,
+  onFilled = false,
+): string | null {
+  const raw =
+    tab.tab_icon && isImagePath(tab.tab_icon)
+      ? tab.tab_icon
+      : isParent && tab.icon && isImagePath(tab.icon)
+        ? tab.icon
+        : null;
+  if (!raw) return null;
+  const themed = themedIconSrc(raw, isDark, onFilled);
+  return themed.startsWith('/dashboard/') ? themed : resolveAssetUrl(themed);
+}
+
 /** Dash precedence: `tab.tab_icon || tab.icon`, `tab.tab_icon_color || tab.icon_color`.
  *  When the value is a path/URL (legacy YAML), fall through to a keyword-based
  *  Iconify default since the SPA doesn't proxy Dash's `/assets/` mount. */
@@ -285,21 +312,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const label = isParent
       ? d.main_tab_name || d.title || d.dashboard_id
       : d.title || d.dashboard_id;
-    // Resolve a YAML-supplied image. For the parent (main) tab, mirror the
-    // Header's `tab_icon || icon` precedence so a dashboard-level favicon
-    // (stored on `icon`, the common single-tab case) shows the SAME image in
-    // the sidebar pill as in the header — otherwise the two disagree (header
-    // shows the favicon, sidebar falls through to a keyword default).
-    // Child tabs deliberately do NOT fall back to `icon`: they inherit the
-    // dashboard's generic favicon, which would override their per-tab Iconify
-    // defaults and strip their distinct color.
-    const yamlImageRaw =
-      d.tab_icon && isImagePath(d.tab_icon)
-        ? d.tab_icon
-        : isParent && d.icon && isImagePath(d.icon)
-          ? d.icon
-          : null;
-    const yamlImage = yamlImageRaw ? themedIconSrc(yamlImageRaw, theme === 'dark', isActive) : null;
+    const yamlImage = tabImageSrc(d, isParent, theme === 'dark', isActive);
     const iconName = resolveTabIcon(d, isParent);
     const leftSection = yamlImage ? (
       <span
@@ -313,7 +326,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         }}
       >
         <img
-          src={yamlImage.startsWith('/dashboard/') ? yamlImage : resolveAssetUrl(yamlImage)}
+          src={yamlImage}
           alt=""
           style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
         />
