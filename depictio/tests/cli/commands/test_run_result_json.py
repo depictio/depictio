@@ -121,11 +121,33 @@ def test_without_result_json_nothing_is_written_or_looked_up(app, data_root, mak
     http_get.assert_not_called()
 
 
-def test_a_directory_no_pipeline_claims_says_what_would_work(app, data_root):
+def test_a_directory_nothing_recognises_says_what_would_work(app, data_root):
+    """No pipeline identity and nothing the catalog knows: composing has nothing to build."""
+    (data_root / "notes.md").write_text("not a table\n")
+
     result = CliRunner().invoke(app, ["--data-root", str(data_root)])
 
     assert result.exit_code == 1
     output = " ".join(result.output.split())
     assert f"Could not tell which pipeline produced {data_root}" in output
-    assert "Pass --template" in output
+    assert "is recognised by the catalog" in output
+    assert "--template" in output
     assert "--project-config-path" in output
+
+
+def test_a_directory_with_only_unknown_tables_points_at_include_unknown(app, data_root):
+    (data_root / "stats.tsv").write_text("sample\treads\nA\t10\nB\t20\n")
+
+    result = CliRunner().invoke(app, ["--data-root", str(data_root)])
+
+    assert result.exit_code == 1
+    assert "--include-unknown ingests them" in " ".join(result.output.split())
+
+
+def test_compose_and_template_do_not_go_together(app, data_root):
+    result = CliRunner().invoke(
+        app, ["--data-root", str(data_root), "--template", "nf-core/rnaseq/latest", "--compose"]
+    )
+
+    assert result.exit_code == 1
+    assert "--compose builds the template itself" in " ".join(result.output.split())

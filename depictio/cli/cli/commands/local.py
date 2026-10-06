@@ -70,7 +70,11 @@ def _has_display() -> bool:
 
 
 def _check_up_flags(
-    template: str | None, data_root: Path | None, examples: str | None, refresh: bool
+    template: str | None,
+    data_root: Path | None,
+    examples: str | None,
+    refresh: bool,
+    composing: bool = False,
 ) -> str:
     """Reject flags that do not go together, before anything starts; returns the seed."""
     if data_root is None:
@@ -78,6 +82,10 @@ def _check_up_flags(
             _fail("--template needs --data-root, the directory to ingest")
         if refresh:
             _fail("--refresh needs --data-root, the directory to ingest again")
+        if composing:
+            _fail("--compose, --include-unknown and --include need --data-root")
+    elif template is not None and composing:
+        _fail("--compose, --include-unknown and --include build the template: drop --template")
     elif not data_root.is_dir():
         _fail(f"--data-root {data_root} is not a directory")
     try:
@@ -182,6 +190,9 @@ def _ingest(
     variables: list[str] | None,
     project_name: str | None,
     refresh: bool,
+    compose: bool = False,
+    include_unknown: bool = False,
+    include: list[str] | None = None,
 ) -> dict | None:
     """Ingest with `depictio run`; on failure the server keeps running.
 
@@ -189,12 +200,29 @@ def _ingest(
     directory a second time is not a failure: `run` changes nothing and names the
     existing project, which is then what gets opened.
     """
-    how = f"with template {template}" if template else "(template picked from the run)"
+    how = (
+        f"with template {template}"
+        if template
+        else "(template composed from the catalog)"
+        if compose
+        else "(template picked from the run, or composed from the catalog)"
+    )
     _info(f"{'Re-ingesting' if refresh else 'Ingesting'} {data_root} {how}")
     result_file = paths.last_ingestion
     result_file.unlink(missing_ok=True)
     try:
-        code = ingest(paths, template, data_root, variables, project_name, refresh, result_file)
+        code = ingest(
+            paths,
+            template,
+            data_root,
+            variables,
+            project_name,
+            refresh,
+            result_file,
+            compose=compose,
+            include_unknown=include_unknown,
+            include=include,
+        )
     except KeyboardInterrupt:
         _warn("Ingestion interrupted; the server is still running (depictio local down to stop)")
         raise typer.Exit(code=130)
@@ -281,6 +309,28 @@ def up(
         Path | None,
         typer.Option("--data-root", help="Pipeline results directory to ingest"),
     ] = None,
+    compose: Annotated[
+        bool,
+        typer.Option(
+            "--compose",
+            help="Compose the dashboard from the catalog even when a bundled template fits "
+            "(it does by itself when none does)",
+        ),
+    ] = False,
+    include_unknown: Annotated[
+        bool,
+        typer.Option(
+            "--include-unknown",
+            help="When composing: also ingest the tabular files the catalog does not recognise",
+        ),
+    ] = False,
+    include: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--include",
+            help="When composing: ingest the unrecognised files matching this glob; repeatable",
+        ),
+    ] = None,
     refresh: Annotated[
         bool,
         typer.Option(
@@ -333,14 +383,25 @@ def up(
     ] = None,
 ):
     """Start MongoDB, Redis, SeaweedFS, the API and the worker locally, then ingest --data-root."""
-    seed = _check_up_flags(template, data_root, examples, refresh)
+    composing = compose or include_unknown or bool(include)
+    seed = _check_up_flags(template, data_root, examples, refresh, composing)
     paths = Paths(local_home())
     paths.ensure_dirs()
     state = _start_or_reuse(paths, port, seed, examples is not None, screenshots)
     present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
     result = None
     if data_root is not None:
-        result = _ingest(paths, template, data_root, variables, project_name, refresh)
+        result = _ingest(
+            paths,
+            template,
+            data_root,
+            variables,
+            project_name,
+            refresh,
+            compose=compose,
+            include_unknown=include_unknown,
+            include=include,
+        )
     _print_summary(paths, state, present, template, data_root, result)
     if open_browser:
         _open(state, _landing(result))

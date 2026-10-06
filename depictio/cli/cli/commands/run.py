@@ -101,6 +101,7 @@ def _write_result_json(
     viewer_url: str | None,
     template_id: str | None,
     locations: list[str] | None = None,
+    composed: dict | None = None,
 ) -> None:
     """Write how the run ended for ``--result-json``; never fails the run.
 
@@ -131,6 +132,8 @@ def _write_result_json(
         ],
         "template_id": template_id,
     }
+    if composed is not None:
+        result["composed"] = composed
     try:
         Path(path).expanduser().write_text(json.dumps(result, indent=2))
     except OSError as e:
@@ -681,6 +684,28 @@ def register_run_command(app: typer.Typer):
         dry_run: bool = typer.Option(
             False, "--dry-run", help="Show what would be executed without running it"
         ),
+        compose: bool = typer.Option(
+            False,
+            "--compose",
+            help=(
+                "Compose the template from the catalog even when a bundled template "
+                "fits the run. Without it, composing is the fallback when none does."
+            ),
+        ),
+        include_unknown: bool = typer.Option(
+            False,
+            "--include-unknown",
+            help="When composing: also ingest the tabular files the catalog does not "
+            "recognise, in an 'Other data' tab",
+        ),
+        include: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--include",
+                help="When composing: ingest the unrecognised files matching this glob "
+                "(relative to --data-root, e.g. 'stats/*.tsv'); repeatable",
+            ),
+        ] = None,
         result_json: Annotated[
             str | None,
             typer.Option(
@@ -779,7 +804,7 @@ def register_run_command(app: typer.Typer):
         # template too. This is the fallback for a pipeline whose manifest the
         # trigger could not forward (an older Nextflow, a hand-run CLI, a
         # non-Nextflow engine).
-        if detected_info is not None and not template and not project_config_path:
+        if detected_info is not None and not template and not project_config_path and not compose:
             from depictio.cli.cli.utils.templates import select_template_for_run
 
             detected_template = select_template_for_run(detected_info)
@@ -787,13 +812,27 @@ def register_run_command(app: typer.Typer):
                 template = detected_template
                 rich_print_checked_statement(f"Auto-selected template: {template}", "success")
 
-        # Nothing describes the project, and the run directory could not either.
-        # Without this the run went on to validate an empty --project-config-path
-        # and failed there, on an error that named neither the directory nor
-        # what would have fixed it.
-        if not template and not project_config_path:
-            if not data_root:
-                reason = "Nothing to ingest"
+        if compose and (template or project_config_path):
+            rich_print_checked_statement(
+                "--compose builds the template itself: drop --template / --project-config-path.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        # No template fits (or --compose): compose one from the files the catalog
+        # recognises, the way MultiQC builds a report from what it finds. The
+        # result is an ordinary template directory, so everything below is the
+        # template path every bundled pipeline takes.
+        composed = None
+        if data_root and not template and not project_config_path:
+            from depictio.cli.cli.utils.compose import (
+                ComposedTemplate,
+                compose_template,
+                print_report,
+            )
+
+            if compose:
+                reason = "--compose"
             elif detected_info is None or not detected_info.pipeline_name:
                 reason = (
                     f"Could not tell which pipeline produced {data_root} "
@@ -801,9 +840,46 @@ def register_run_command(app: typer.Typer):
                 )
             else:
                 reason = f"No bundled template ships for {detected_info.pipeline_name}"
+            rich_print_section_separator("Step 0-: Composing a template from the catalog")
             rich_print_checked_statement(
-                f"{reason}. Pass --template (a template id or the path to a template.yaml) "
-                "with --data-root, or --project-config-path with a depictio project YAML.",
+                f"{reason}: composing the dashboard from the files the catalog recognises",
+                "info",
+            )
+            result = compose_template(
+                data_root,
+                include_unknown=include_unknown,
+                include=include or (),
+                project_name=project_name,
+                pipeline_name=detected_info.pipeline_name if detected_info else None,
+                pipeline_version=detected_info.pipeline_version if detected_info else None,
+                engine=detected_info.engine if detected_info else None,
+            )
+            print_report(result)
+            if not isinstance(result, ComposedTemplate):
+                found = result.unrecognised_total
+                hint = (
+                    f" It holds {found} tabular file(s): --include-unknown ingests them."
+                    if found
+                    else ""
+                )
+                rich_print_checked_statement(
+                    f"Nothing in {data_root} is recognised by the catalog.{hint} Or pass "
+                    "--template (a template id or the path to a template.yaml), or "
+                    "--project-config-path with a depictio project YAML.",
+                    "error",
+                )
+                raise typer.Exit(code=1)
+            composed = result
+            template = str(result.template_dir)
+            rich_print_checked_statement(
+                f"Composed template: {result.template_dir} (tabs: {', '.join(result.tabs)})",
+                "success",
+            )
+
+        if not template and not project_config_path:
+            rich_print_checked_statement(
+                "Nothing to ingest. Pass --data-root (with --template, or to let the run "
+                "pick or compose one), or --project-config-path with a depictio project YAML.",
                 "error",
             )
             raise typer.Exit(code=1)
@@ -1638,6 +1714,15 @@ def register_run_command(app: typer.Typer):
             dashboards=imported_dashboards,
             viewer_url=viewer_url,
             template_id=resolved_template_id,
+            composed={
+                "template_dir": str(composed.template_dir),
+                "tabs": composed.tabs,
+                "unrecognised": len(
+                    [p for p in composed.composition.unrecognised if not p.get("_include")]
+                ),
+            }
+            if composed is not None
+            else None,
         )
         if success_count == total_steps:
             rich_print_checked_statement(

@@ -216,6 +216,27 @@ class ProvenanceEntry(BaseModel):
     highlight: bool = Field(default=False, description="Listed in the spec's highlight set")
 
 
+class UnrecognisedFile(BaseModel):
+    """A tabular file no catalog output recognised, with what it could show.
+
+    Written by the composer (``depictio template compose``) into a composed
+    template, and carried onto the project's ``TemplateOrigin`` so the project
+    page can list what was left out and how to add it.
+    """
+
+    path: str = Field(..., description="Path relative to the data root")
+    format: str = Field(..., description="csv, tsv or parquet")
+    n_columns: int = Field(default=0, description="Number of columns read")
+    columns: list[str] = Field(default_factory=list, description="Its first columns, at most 30")
+    sample_column: str | None = Field(
+        default=None, description="The column that looks like a sample identifier"
+    )
+    proposal: list[str] = Field(
+        default_factory=list,
+        description="The tiles it would get if included, e.g. 'card: mean of reads'",
+    )
+
+
 class TemplateMetadata(BaseModel):
     """Metadata section declared in a template project.yaml.
 
@@ -281,6 +302,11 @@ class TemplateMetadata(BaseModel):
         default=None,
         description="How to collect this pipeline's run provenance (params, thresholds, "
         "tool versions) — see ProvenanceSpec. None = the CLI's generic default.",
+    )
+    unrecognised_files: list[UnrecognisedFile] = Field(
+        default_factory=list,
+        description="Set by the composer: tabular files of the run no catalog output "
+        "recognised, left out of the template, each with a proposal",
     )
 
     @field_validator("template_id")
@@ -361,6 +387,11 @@ class TemplateOrigin(BaseModel):
         default_factory=list,
         description="The files the provenance was collected from (relative to data_root "
         "where possible)",
+    )
+    unrecognised_files: list[UnrecognisedFile] = Field(
+        default_factory=list,
+        description="For a composed template: the run's tabular files no catalog output "
+        "recognised and that were not included, with a proposal for each",
     )
 
     @field_validator("config_snapshot", mode="before")

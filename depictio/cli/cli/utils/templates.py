@@ -1473,6 +1473,7 @@ def resolve_template(
         expected_data_collections=expected_dcs,
         run_provenance=run_provenance,
         run_provenance_files=run_provenance_files,
+        unrecognised_files=template_metadata.unrecognised_files,
     )
 
     # 10. Inject template_origin into config

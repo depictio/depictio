@@ -295,6 +295,42 @@ def test_flags_that_need_a_data_root(stack, args, message):
     stack.start_services.assert_not_called()
 
 
+def test_compose_flags_reach_run(stack, tmp_path, monkeypatch):
+    call = _fake_run(monkeypatch, 0, _INGESTED)
+
+    result, out = _invoke(
+        "up",
+        "--data-root",
+        str(tmp_path),
+        "--compose",
+        "--include-unknown",
+        "--include",
+        "stats/*.tsv",
+        "--no-open",
+    )
+
+    assert result.exit_code == 0, out
+    cmd = call.call_args.args[0]
+    assert "--compose" in cmd and "--include-unknown" in cmd
+    assert cmd[cmd.index("--include") + 1] == "stats/*.tsv"
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--compose"], "need --data-root"),
+        (["--include", "x.tsv"], "need --data-root"),
+        (["--template", "t.yaml", "--data-root", ".", "--compose"], "drop --template"),
+    ],
+)
+def test_compose_flags_that_cannot_apply(stack, args, message):
+    result, out = _invoke("up", *args, "--no-open")
+
+    assert result.exit_code == 1
+    assert message in out
+    stack.start_services.assert_not_called()
+
+
 def test_open_over_ssh_prints_a_tunnel_instead(stack, monkeypatch):
     monkeypatch.setenv("SSH_CONNECTION", "10.0.0.1 50000 10.0.0.2 22")
 

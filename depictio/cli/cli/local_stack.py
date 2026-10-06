@@ -1003,11 +1003,16 @@ def ingest(
     project_name: str | None = None,
     refresh: bool = False,
     result_json: Path | None = None,
+    compose: bool = False,
+    include_unknown: bool = False,
+    include: list[str] | None = None,
 ) -> int:
     """Ingest ``data_root`` into the local server with `depictio run`; returns its exit code.
 
     Without ``template``, `run` picks the bundled template from the run's own
-    provenance (``pipeline_info/``). ``refresh`` re-ingests a project that
+    provenance (``pipeline_info/``), or composes one from the catalog when none
+    fits (``compose`` forces that; ``include_unknown`` / ``include`` add the
+    files the catalog does not recognise). ``refresh`` re-ingests a project that
     already exists and resets its dashboards to the template's; without it `run`
     exits 2 on such a project and changes nothing. ``result_json`` is where `run`
     writes how it ended.
@@ -1036,6 +1041,12 @@ def ingest(
         cmd += ["--update-config", "--overwrite"]
     if result_json is not None:
         cmd += ["--result-json", str(result_json)]
+    if compose:
+        cmd += ["--compose"]
+    if include_unknown:
+        cmd += ["--include-unknown"]
+    for pattern in include or []:
+        cmd += ["--include", pattern]
     for var in variables or []:
         cmd += ["--var", _absolutize_path_var(var)]
     return subprocess.call(cmd, env=_ingestion_env())
