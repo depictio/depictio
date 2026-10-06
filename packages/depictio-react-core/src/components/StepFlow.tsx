@@ -44,8 +44,8 @@ const StepFlow: React.FC<{
             <span className="depictio-step-label">{step.label}</span>
             <span className="depictio-step-value">{inline(text)}</span>
             {links.length > 0 && (
-              // One link per line under the value: the parameters and the
-              // tabs behind a step, listed rather than run into its text.
+              // The parameters and tabs behind a step, as pills under its
+              // value rather than run into its text.
               <span className="depictio-step-links">
                 {links.map((link, j) => (
                   <span key={j} className="depictio-step-link">

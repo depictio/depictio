@@ -77,21 +77,54 @@
   line-height: 1.35;
 }
 
-/* The links behind a step, one per line under its value: quieter than the
-   value, so the step still reads as what was done first. */
+/* The links behind a step, as small pills under its value: one look for a
+   run parameter and a tab alike, so the row reads as "where to look" rather
+   than as a mix of coloured link styles competing with the value. */
 .depictio-step-links {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  margin-top: 6px;
-  font-size: var(--mantine-font-size-xs);
-  font-weight: 500;
-  line-height: 1.4;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 .depictio-step-link {
+  display: inline-flex;
+  align-items: center;
   max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depictio-step-link > a,
+.depictio-step-link > button {
+  /* Over the anchor's own colour (a tab link wears its tab's): the pill
+     and its icon already say what it opens. */
+  color: var(--mantine-color-text) !important;
+  font-size: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.depictio-step-link:hover {
+  border-color: var(--step-accent);
+}
+
+.depictio-step-link svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* A run parameter's tune icon in the step's accent; a tab keeps its own. */
+.depictio-step-link > button svg {
+  color: var(--step-accent);
 }
 
 /* Too narrow to go across: down the tile, the rail between the marks. */
