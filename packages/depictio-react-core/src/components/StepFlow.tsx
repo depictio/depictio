@@ -1,4 +1,5 @@
 import React from 'react';
+import { Tooltip } from '@mantine/core';
 
 import { splitStepValue, type Fact } from './blockMarkdown';
 import Glyph from './Glyph';
@@ -15,6 +16,11 @@ import './stepFlow.css';
  * query in stepFlow.css): five steps side by side on a phone would leave a
  * word per line.
  */
+/** `[Settings](params:x)` → `Settings`: the name an icon-only link shows on hover. */
+function linkLabel(link: string): string {
+  return link.match(/^\[([^\]]*)\]/)?.[1] ?? link;
+}
+
 const StepFlow: React.FC<{
   steps: Fact[];
   inline: (text: string) => React.ReactNode[];
@@ -41,19 +47,27 @@ const StepFlow: React.FC<{
             <span className="depictio-step-line" />
           </span>
           <span className="depictio-step-body">
-            <span className="depictio-step-label">{step.label}</span>
+            <span className="depictio-step-head">
+              <span className="depictio-step-label">{step.label}</span>
+              {links.length > 0 && (
+                // The parameters and tabs behind a step, as small icons
+                // beside its name: there when looked for, out of the way of
+                // the value, which is what the step says.
+                <span className="depictio-step-links">
+                  {links.map((link, j) => {
+                    const name = linkLabel(link);
+                    return (
+                      <Tooltip key={j} label={name} withArrow openDelay={150}>
+                        <span className="depictio-step-link" aria-label={name}>
+                          {inline(link)}
+                        </span>
+                      </Tooltip>
+                    );
+                  })}
+                </span>
+              )}
+            </span>
             <span className="depictio-step-value">{inline(text)}</span>
-            {links.length > 0 && (
-              // The parameters and tabs behind a step, as pills under its
-              // value rather than run into its text.
-              <span className="depictio-step-links">
-                {links.map((link, j) => (
-                  <span key={j} className="depictio-step-link">
-                    {inline(link)}
-                  </span>
-                ))}
-              </span>
-            )}
           </span>
         </li>
         );

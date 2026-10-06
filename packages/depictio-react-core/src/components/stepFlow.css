@@ -77,54 +77,58 @@
   line-height: 1.35;
 }
 
-/* The links behind a step, as small pills under its value: one look for a
-   run parameter and a tab alike, so the row reads as "where to look" rather
-   than as a mix of coloured link styles competing with the value. */
-.depictio-step-links {
+/* The step's name, with the links behind it as icons on the same line. */
+.depictio-step-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The links behind a step (its run parameters, the tab showing its result)
+   as bare icons beside its name: dimmed so the row still reads as the
+   step's name, in the accent on hover. Their names are in the tooltips. */
+.depictio-step-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .depictio-step-link {
   display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.6;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .depictio-step-link > a,
 .depictio-step-link > button {
-  /* Over the anchor's own colour (a tab link wears its tab's): the pill
-     and its icon already say what it opens. */
-  color: var(--mantine-color-text) !important;
-  font-size: inherit;
-  font-weight: inherit;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 4px;
+  /* The text is the tooltip's; only the icon shows. */
+  font-size: 0 !important;
+  line-height: 0;
+  color: var(--mantine-color-dimmed) !important;
   text-decoration: none;
+  opacity: 0.75;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
 }
 
-.depictio-step-link:hover {
-  border-color: var(--step-accent);
+.depictio-step-link > a:hover,
+.depictio-step-link > button:hover,
+.depictio-step-link > a:focus-visible,
+.depictio-step-link > button:focus-visible {
+  opacity: 1;
+  color: var(--step-accent) !important;
+  background: color-mix(in srgb, var(--step-accent) 12%, transparent);
 }
 
 .depictio-step-link svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* A run parameter's tune icon in the step's accent; a tab keeps its own. */
-.depictio-step-link > button svg {
-  color: var(--step-accent);
+  width: 14px;
+  height: 14px;
+  margin: 0 !important;
+  color: inherit !important;
 }
 
 /* Too narrow to go across: down the tile, the rail between the marks. */
