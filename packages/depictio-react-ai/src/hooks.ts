@@ -86,8 +86,14 @@ export function useComponentFromPrompt(dashboardId: string) {
     ): Promise<ComponentFromPromptResponse> => {
       setPending(true);
       setError(null);
+      // The hook already knows the dashboard, so callers only spell out
+      // `dashboard_id` to override it (or pass null to withhold it). This is
+      // what gives a `text` request its context without every caller
+      // repeating the id.
+      const request: ComponentFromPromptRequest =
+        body.dashboard_id === undefined ? { ...body, dashboard_id: dashboardId } : body;
       try {
-        const res = await apiComponentFromPrompt(body, session.llmKey || null);
+        const res = await apiComponentFromPrompt(request, session.llmKey || null);
         setLastResponse(res);
         return res;
       } catch (e) {
@@ -98,7 +104,7 @@ export function useComponentFromPrompt(dashboardId: string) {
         setPending(false);
       }
     },
-    [session.llmKey],
+    [dashboardId, session.llmKey],
   );
 
   return useMemo(

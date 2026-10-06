@@ -9,7 +9,8 @@ The router is only registered when ``settings.ai.enabled`` is true (see
 
 * ``POST /ai/suggest-figures`` — data-driven figure suggestions
 * ``POST /ai/component-from-prompt`` — prompt-driven typed component
-  creation (any of the 7 component types). Emits YAML validated through
+  creation (any of the 9 builder types, text and advanced_viz included).
+  Emits YAML validated through
   ``DashboardDataLite.from_yaml(...)`` — the same offline validator the
   CLI uses for ``depictio-cli dashboard import``.
 * ``POST /ai/resolve-filters`` — direct NL → dashboard filters (widget
@@ -38,7 +39,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.endpoints.ai_endpoints import analyses, component_yaml, llm_client, prompts
+from depictio.api.v1.endpoints.ai_endpoints import (
+    analyses,
+    component_yaml,
+    llm_client,
+    prompts,
+    routing,
+)
 from depictio.api.v1.endpoints.ai_endpoints import summaries as summaries_mod
 from depictio.api.v1.endpoints.ai_endpoints.code_gen import figure_python_code
 from depictio.api.v1.endpoints.ai_endpoints.context import (
@@ -46,6 +53,7 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     build_dashboard_context,
     build_dashboard_data_context,
     build_data_context,
+    build_project_inventory,
 )
 from depictio.api.v1.endpoints.ai_endpoints.filter_resolver import resolve_proposals
 from depictio.api.v1.endpoints.ai_endpoints.sandbox import AnalysisSandbox, FrameSpec
@@ -60,6 +68,7 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     ResolvedFilter,
     ResolveFiltersRequest,
     ResolveFiltersResponse,
+    RoutingInfo,
     StreamEvent,
     SuggestFiguresRequest,
     SuggestFiguresResponse,
@@ -163,17 +172,74 @@ async def component_from_prompt(
 ) -> ComponentFromPromptResponse:
     """Prompt-driven typed component creation.
 
-    The LLM emits one YAML component block; we run it through the same
-    offline validator the CLI uses for `dashboard import`
-    (`DashboardDataLite.from_yaml`). On validation failure we feed the
-    error back into the conversation and retry once before bailing out.
+    The component type and the data collection are optional pins. When
+    either is left open, the request is routed first (see `routing`):
+    the dashboard's project inventory is built, no-LLM shortcuts are
+    tried for a pinned type with a single fitting collection, and
+    otherwise one routing completion names the type and the collection.
+
+    Generation is then the same for every path: the LLM emits one YAML
+    component block; we run it through the same offline validator the
+    CLI uses for `dashboard import` (`DashboardDataLite.from_yaml`). On
+    validation failure we feed the error back into the conversation and
+    retry once before bailing out.
+
+    A `text` component has no data source, so it skips the data context
+    and is prompted with a summary of the dashboard it is being added to
+    (when `dashboard_id` is given) instead.
     """
-    ctx = await build_data_context(body.data_collection_id, current_user)
+    component_type = body.component_type
+    data_collection_id = body.data_collection_id
+    routing_info: RoutingInfo | None = RoutingInfo(source="user")
+
+    if body.needs_routing:
+        if not body.dashboard_id:
+            # The request model already enforces this; kept as a guard
+            # against a bypassed validator.
+            raise HTTPException(status_code=422, detail="dashboard_id is required for routing.")
+        inventory = await build_project_inventory(
+            body.dashboard_id,
+            current_user,
+            prioritize=[data_collection_id] if data_collection_id else None,
+        )
+        try:
+            decision = await routing.route_component(
+                body.prompt,
+                inventory,
+                pinned_type=component_type,
+                pinned_dc_id=data_collection_id,
+                complete=lambda messages: llm_client.completion(
+                    messages, user_api_key=user_api_key
+                ),
+            )
+        except routing.RoutingError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+        component_type = decision.component_type
+        data_collection_id = decision.entry.data_collection_id if decision.entry else None
+        routing_info = decision.routing
+
+    if component_type is None:  # pragma: no cover - routing always settles it
+        raise HTTPException(status_code=500, detail="component_type was not resolved.")
+
+    # `text` has no data source: it is prompted with the dashboard it is being
+    # added to instead of a data context. Every other type is the reverse.
+    ctx: DataContext | None = None
+    dashboard_block: str | None = None
+    if component_type == "text":
+        if body.dashboard_id:
+            dashboard_ctx, _ = await build_dashboard_context(body.dashboard_id, current_user)
+            dashboard_block = dashboard_ctx.components_block()
+    else:
+        if not data_collection_id:  # pragma: no cover - routing always settles it
+            raise HTTPException(status_code=422, detail="data_collection_id is required.")
+        ctx = await build_data_context(data_collection_id, current_user)
+
     messages = prompts.component_from_prompt_messages(
         ctx,
         body.prompt,
-        component_type=body.component_type,
+        component_type=component_type,
         current=body.current,
+        dashboard_block=dashboard_block,
     )
 
     last_error: str | None = None
@@ -205,11 +271,14 @@ async def component_from_prompt(
 
         title = parsed.get("title")
         return ComponentFromPromptResponse(
-            component_type=parsed.get("component_type", body.component_type),
+            component_type=parsed.get("component_type", component_type),
             yaml=component_yaml.dump_single(parsed),
             parsed=parsed,
             explanation=title.strip() if isinstance(title, str) else "",
             validation_attempts=attempt + 1,
+            data_collection_id=ctx.data_collection_id if ctx else None,
+            workflow_id=ctx.workflow_id if ctx else None,
+            routing=routing_info,
         )
 
     raise HTTPException(

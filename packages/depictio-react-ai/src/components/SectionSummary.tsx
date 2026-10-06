@@ -24,7 +24,7 @@ import { Icon } from '@iconify/react';
 
 import { getSummaries } from '../api';
 import { useSummarizeSection } from '../hooks';
-import { AI_ICON } from '../icons';
+import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
 import MarkdownLite from './MarkdownLite';
 import type {
   SummarizeSectionResponse,
@@ -185,7 +185,7 @@ export const SummarizeSectionButton: React.FC<ButtonProps> = ({
     <ActionIcon
       size="sm"
       variant="subtle"
-      color="violet"
+      color={AI_COLOR}
       loading={pending}
       onClick={(e) => {
         e.stopPropagation();
@@ -227,7 +227,7 @@ export const SectionSummaryPanel: React.FC<PanelProps> = ({
       radius="md"
       p="sm"
       mb="xs"
-      style={{ borderColor: 'var(--mantine-color-violet-3)' }}
+      style={{ borderColor: aiColorVar(3) }}
       data-testid={`ai-summary-panel-${entry.section ?? 'dashboard'}`}
     >
       <Stack gap={6}>
@@ -235,7 +235,7 @@ export const SectionSummaryPanel: React.FC<PanelProps> = ({
           <Icon
             icon={AI_ICON}
             width={16}
-            color="var(--mantine-color-violet-6)"
+            color={aiColorVar(6)}
           />
           <Text size="sm" fw={600}>
             AI summary
@@ -252,7 +252,7 @@ export const SectionSummaryPanel: React.FC<PanelProps> = ({
               <Button
                 size="compact-xs"
                 variant="light"
-                color="violet"
+                color={AI_COLOR}
                 loading={pending}
                 onClick={() => onRegenerate(entry.section, true)}
               >

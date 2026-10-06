@@ -31,6 +31,7 @@ from pydantic import (
     model_validator,
 )
 
+from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
 from depictio.models.components.lite import (
     CardLiteComponent,
     FigureLiteComponent,
@@ -40,6 +41,7 @@ from depictio.models.components.lite import (
     MapLiteComponent,
     MultiQCLiteComponent,
     TableLiteComponent,
+    TextLiteComponent,
 )
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
@@ -304,6 +306,8 @@ class DashboardDataLite(BaseModel):
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
         "map": MapLiteComponent,
+        "text": TextLiteComponent,
+        "advanced_viz": AdvancedVizLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -997,6 +1001,11 @@ class DashboardDataLite(BaseModel):
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
 
+            # Assistant provenance (`{flow, prompt}`) travels out with the export
+            # so a re-import still knows which tiles the assistant drafted.
+            if comp.get("ai_source"):
+                lite_comp["ai_source"] = comp["ai_source"]
+
             if comp_type == "figure":
                 lite_comp["visu_type"] = comp.get("visu_type", "scatter")
                 figure_params = filter_dict_kwargs(comp.get("dict_kwargs", {}))
@@ -1202,7 +1211,10 @@ class DashboardDataLite(BaseModel):
             # catalog button and the origin block. A YAML-authored component can
             # declare the same thing, so carry it through: without this an
             # imported dashboard built entirely from catalog outputs claims none.
-            for provenance_field in ("catalog_source", "use"):
+            # `ai_source` is the same kind of record for the assistant's flows
+            # (`{flow, prompt}`), written client-side by the builder and kept
+            # here so an import does not strip it.
+            for provenance_field in ("catalog_source", "use", "ai_source"):
                 if comp_dict.get(provenance_field):
                     base[provenance_field] = comp_dict[provenance_field]
             # A `use:` handle already names the tool and the output it came

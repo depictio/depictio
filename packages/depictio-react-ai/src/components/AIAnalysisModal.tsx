@@ -20,7 +20,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useAnalysisReport } from '../hooks';
-import { AI_ICON } from '../icons';
+import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
 import { renderInlineMarkdown } from 'depictio-react-core';
 import MarkdownLite from './MarkdownLite';
 import type { AnalysisReport, Finding } from '../types';
@@ -91,7 +91,7 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
         <Group gap="xs">
           <Icon icon={AI_ICON} width={20} />
           <Title order={4}>Analyze this dashboard</Title>
-          <Badge variant="light" color="violet">
+          <Badge variant="light" color={AI_COLOR}>
             read-only
           </Badge>
         </Group>
@@ -148,7 +148,7 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
             {state.plan && (
               <Alert
                 variant="light"
-                color="violet"
+                color={AI_COLOR}
                 icon={<Icon icon="material-symbols:route" width={16} />}
                 title="Plan"
               >
