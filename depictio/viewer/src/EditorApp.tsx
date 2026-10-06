@@ -2254,15 +2254,12 @@ const EditorApp: React.FC = () => {
         )}
         {dashboard && !loading && !error && (
           <div
-            // Under the Guide: kept mounted for when it closes (see App.tsx).
-            aria-hidden={guide.open || undefined}
             style={{
               display: 'flex',
               flexDirection: 'column',
               height: '100%',
               width: '100%',
               overflow: 'hidden',
-              visibility: guide.open ? 'hidden' : undefined,
             }}
           >
           <div
@@ -2352,7 +2349,11 @@ const EditorApp: React.FC = () => {
             <Box
               data-tour-id="editor-grid"
               data-testid="dashboard-content"
+              // Under the Guide: kept mounted for when it closes; the filter
+              // panel stays beside it (see App.tsx).
+              aria-hidden={guide.open || undefined}
               style={{
+                visibility: guide.open ? 'hidden' : undefined,
                 // The same page width as the viewer, so the author lays the
                 // tab out at the width its readers get. Padding goes here
                 // rather than as `px`/`py` props: Mantine writes those as
@@ -2497,9 +2498,14 @@ const EditorApp: React.FC = () => {
             />
           )}
         </div>
-        {guide.open && guideModel && dashboard && (
+        {guide.open && guideModel && dashboard && dashboardId && (
           <DashboardGuide
             model={guideModel}
+            dashboardId={dashboardId}
+            dashboard={dashboard}
+            components={editorComponents}
+            tabs={tabSiblings}
+            persistentSections={crossTab.persistentSections}
             dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
             tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
             intro={guideSettings.intro}

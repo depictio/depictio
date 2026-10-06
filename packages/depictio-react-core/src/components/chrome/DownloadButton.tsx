@@ -3,6 +3,9 @@ import { ActionIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
+import { TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.download;
 
 type ExportKind = 'csv' | 'png' | 'none';
 
@@ -65,18 +68,18 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   }, [kind, agGridApiRef, fullscreenRef, metadata]);
 
   const label =
-    kind === 'csv' ? 'Download CSV' : kind === 'png' ? 'Download PNG' : 'Download';
+    kind === 'csv' ? STYLE.label : kind === 'png' ? 'Download PNG' : 'Download';
 
   return (
     <Tooltip label={label} withArrow>
       <ActionIcon
         variant="subtle"
-        color="green"
+        color={STYLE.color}
         size="sm"
         onClick={onClick}
         aria-label={label}
       >
-        <Icon icon="mdi:download" width={16} height={16} />
+        <Icon icon={STYLE.icon} width={16} height={16} />
       </ActionIcon>
     </Tooltip>
   );

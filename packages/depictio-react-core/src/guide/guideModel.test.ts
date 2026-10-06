@@ -6,6 +6,7 @@ import type {
   PersistentSection,
   StoredMetadata,
 } from '../api';
+import { TILE_ACTION_STYLE } from '../components/chrome/actionStyles';
 import { buildGuideModel, resolveGuideSettings, tileActions } from './guideModel';
 
 const meta = (m: Partial<StoredMetadata> & { index: string; component_type: string }) =>
@@ -202,9 +203,27 @@ describe('buildGuideModel: actions', () => {
       ['duplicate', 3],
       ['move-section', 6],
       ['copy-tab', 6],
+      ['highlight', 2],
       ['font-size', 2],
       ['delete', 6],
     ]);
+  });
+
+  it('draws each action in the colour its control uses', () => {
+    const model = buildGuideModel({ ...base, mode: 'edit' });
+    const colour = (key: string) =>
+      [...model.actions, ...model.editActions].find((a) => a.key === key)?.color;
+    expect(colour('metadata')).toBe(TILE_ACTION_STYLE.metadata.color);
+    expect(colour('fullscreen')).toBe('indigo');
+    expect(colour('reset')).toBe('orange');
+    expect(colour('delete')).toBe('red');
+    expect(colour('group')).toBeUndefined();
+  });
+
+  it('counts the kinds of tile on the tab', () => {
+    const model = buildGuideModel(base);
+    expect(model.tileTypes.every((t) => t.count > 0)).toBe(true);
+    expect(model.tileTypes.map((t) => t.type)).toContain('figure');
   });
 
   it('reads one tile the way ComponentChrome draws it', () => {

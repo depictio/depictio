@@ -14,6 +14,7 @@ import {
   mapSelectionFilter,
   mapSelectionValues,
 } from '../../selection';
+import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 
 // AG Grid is ~250kB of CSS plus its own chunk, and the map branch of
 // ComponentRenderer is imported eagerly — a static import here would put the
@@ -132,14 +133,14 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
       <Popover.Target>
         <ActionIcon
           variant={opened ? 'filled' : 'subtle'}
-          color="violet"
+          color={TILE_ACTION_STYLE.data.color}
           size="sm"
           aria-label="Show underlying data"
-          title="Show data"
+          title={TILE_ACTION_STYLE.data.label}
           data-no-drag
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:table" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown

@@ -2,8 +2,15 @@
  * "Show me": point at the real element a Guide part is about.
  *
  * Deliberately not the walkthrough: no overlay, no step sequence, nothing to
- * dismiss. The Guide closes, the page is back, and the element gets a pulsing
- * ring for about two seconds, then the ring goes away on its own.
+ * dismiss. The element gets a pulsing ring for about two seconds, then the
+ * ring goes away on its own.
+ *
+ * Where the element is decides whether the Guide stays open. The Guide covers
+ * the tab's canvas only, so the sidebar, the header and the filter panel are on
+ * screen beside it: those are ringed in place and the reader keeps reading.
+ * What lives in the canvas (a section, a tile's actions, a figure to select
+ * on) is under the Guide, so for those the Guide closes first — onto the same
+ * tab, which never left — and the ring follows.
  *
  * The ring is a separate fixed element on <body> rather than a style on the
  * target: most targets sit inside a scroll container or an `overflow: hidden`
@@ -20,10 +27,11 @@ export type GuideTarget =
   | 'pinned'
   | 'actions'
   | 'analysis'
-  | 'settings';
+  | 'settings'
+  | 'guide';
 
 /** The tab's canvas: the scroll container every tile lives in. */
-const CONTENT = '[data-testid="dashboard-content"]';
+export const CANVAS_SELECTOR = '[data-testid="dashboard-content"]';
 
 const RING_MS = 2200;
 const RING_PAD = 4;
@@ -58,7 +66,7 @@ function sectionHeader(item: HTMLElement | null): HTMLElement | null {
  * tile with any.
  */
 function pickActionRow(): { row: HTMLElement; chrome: HTMLElement } | null {
-  const content = document.querySelector(CONTENT);
+  const content = document.querySelector(CANVAS_SELECTOR);
   if (!content) return null;
   const view = content.getBoundingClientRect();
   let fallback: { row: HTMLElement; chrome: HTMLElement } | null = null;
@@ -78,44 +86,73 @@ export interface ShowMeOptions {
   selectionIds?: readonly string[];
 }
 
-/** The element `target` points at on the page now, or null when it has none. */
-export function findGuideTarget(
-  target: GuideTarget,
-  opts: ShowMeOptions = {},
-): HTMLElement | null {
+/** The elements `target` points at on the page now; empty when it has none. */
+export function findGuideTargets(target: GuideTarget, opts: ShowMeOptions = {}): HTMLElement[] {
+  const one = (el: HTMLElement | null) => (el ? [el] : []);
   switch (target) {
     case 'tabs':
       // No size check: a collapsed sidebar still holds the list, and showing
       // it opens the sidebar first (see `useGuideShowMe`).
-      return document.querySelector<HTMLElement>('[data-guide-target="tabs"]');
+      return one(document.querySelector<HTMLElement>('[data-guide-target="tabs"]'));
     case 'sections':
-      return sectionHeader(first(`${CONTENT} .depictio-section-item:not(.is-plain)`));
+      // A tab whose sections are all headings still has them: the ring then
+      // shows where the tab's parts begin, which is what the note beside the
+      // button says.
+      return one(
+        sectionHeader(
+          first(`${CANVAS_SELECTOR} .depictio-section-item:not(.is-plain)`) ??
+            first(`${CANVAS_SELECTOR} .depictio-section-item`),
+        ),
+      );
     case 'filters':
       // The panel on a wide screen (open or folded to its rail); on a phone it
       // lives in a drawer, opened from the header's Filters button.
-      return first('[data-tour-id="filter-panel"]') ?? first('[data-guide-target="filters-button"]');
+      return one(
+        first('[data-tour-id="filter-panel"]') ?? first('[data-guide-target="filters-button"]'),
+      );
     case 'selection': {
       for (const id of opts.selectionIds ?? []) {
-        const el = first(`${CONTENT} [data-component-id="${CSS.escape(id)}"]`);
-        if (el) return el;
+        const el = first(`${CANVAS_SELECTOR} [data-component-id="${CSS.escape(id)}"]`);
+        if (el) return [el];
       }
       // Then the map panel: floating, docked in the filter panel, or folded
       // away behind its control.
-      return (
+      return one(
         first('[data-testid="map-panel-surface"]') ??
-        first('[data-testid="map-panel-dock"]') ??
-        first('[data-testid="map-panel-control"]', inViewportX)
+          first('[data-testid="map-panel-dock"]') ??
+          first('[data-testid="map-panel-control"]', inViewportX),
       );
     }
     case 'pinned':
-      return sectionHeader(first('[data-guide-target="pinned-sections"] .depictio-section-item'));
+      return one(sectionHeader(first('[data-guide-target="pinned-sections"] .depictio-section-item')));
     case 'actions':
-      return pickActionRow()?.row ?? null;
+      return one(pickActionRow()?.row ?? null);
     case 'analysis':
-      return first('[data-guide-target="analysis"]', inViewportX);
+      return one(first('[data-guide-target="analysis"]', inViewportX));
     case 'settings':
-      return first('[data-guide-target="settings"]', inViewportX);
+      return one(first('[data-guide-target="settings"]', inViewportX));
+    case 'guide':
+      // Both ways back in: the header's "?" and the sidebar's Guide entry.
+      return [
+        ...one(first('[data-testid="dashboard-guide-button"]', inViewportX)),
+        ...one(first('[data-testid="sidebar-guide"]')),
+      ];
   }
+}
+
+/** The first element `target` points at, or null. */
+export function findGuideTarget(target: GuideTarget, opts: ShowMeOptions = {}): HTMLElement | null {
+  return findGuideTargets(target, opts)[0] ?? null;
+}
+
+/**
+ * Whether `el` is under the Guide while it is open: in the tab's canvas, or in
+ * the page furniture hidden with it (the floating map panel). Those need the
+ * Guide closed to be seen; everything else is ringed in place. `visibility`
+ * is inherited, so a hidden ancestor shows on the element itself.
+ */
+export function isUnderGuide(el: HTMLElement): boolean {
+  return Boolean(el.closest(CANVAS_SELECTOR)) || getComputedStyle(el).visibility === 'hidden';
 }
 
 let active: (() => void) | null = null;
@@ -125,42 +162,50 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * Ring `el` for a couple of seconds. `reveal` gets a class for the same time —
- * the tile chrome uses it to keep its hover-only action row on screen.
+ * Ring `els` for a couple of seconds, scrolling the first into view. `reveal`
+ * gets a class for the same time — the tile chrome uses it to keep its
+ * hover-only action row on screen.
  */
-export function ringElement(
-  el: HTMLElement,
+export function ringElements(
+  els: HTMLElement[],
   opts: { reveal?: HTMLElement | null; scroll?: ScrollLogicalPosition } = {},
 ): void {
   active?.();
+  if (els.length === 0) return;
   const reduced = prefersReducedMotion();
-  // The ring takes the colour of the element's own scope: the dashboard's
-  // primary under a brand, the app's otherwise.
-  const color =
-    getComputedStyle(el).getPropertyValue('--mantine-primary-color-filled').trim() ||
-    'var(--mantine-primary-color-filled)';
+  const lead = els[0];
 
   // Centring something taller than the screen would scroll its top away.
-  const tall = el.getBoundingClientRect().height > window.innerHeight * 0.6;
-  el.scrollIntoView({
+  const tall = lead.getBoundingClientRect().height > window.innerHeight * 0.6;
+  lead.scrollIntoView({
     block: tall ? 'start' : (opts.scroll ?? 'nearest'),
     inline: 'nearest',
     behavior: reduced ? 'auto' : 'smooth',
   });
   opts.reveal?.classList.add('depictio-guide-reveal');
 
-  const ring = document.createElement('div');
-  ring.className = 'depictio-guide-ring';
-  ring.setAttribute('aria-hidden', 'true');
-  ring.style.setProperty('--depictio-guide-ring', color);
-  document.body.appendChild(ring);
+  const rings = els.map((el) => {
+    const ring = document.createElement('div');
+    ring.className = 'depictio-guide-ring';
+    ring.setAttribute('aria-hidden', 'true');
+    // The ring takes the colour of the element's own scope: the dashboard's
+    // primary under a brand, the app's otherwise.
+    const color =
+      getComputedStyle(el).getPropertyValue('--mantine-primary-color-filled').trim() ||
+      'var(--mantine-primary-color-filled)';
+    ring.style.setProperty('--depictio-guide-ring', color);
+    document.body.appendChild(ring);
+    return { el, ring };
+  });
 
   const place = () => {
-    const r = el.getBoundingClientRect();
-    ring.style.left = `${r.left - RING_PAD}px`;
-    ring.style.top = `${r.top - RING_PAD}px`;
-    ring.style.width = `${r.width + RING_PAD * 2}px`;
-    ring.style.height = `${r.height + RING_PAD * 2}px`;
+    for (const { el, ring } of rings) {
+      const r = el.getBoundingClientRect();
+      ring.style.left = `${r.left - RING_PAD}px`;
+      ring.style.top = `${r.top - RING_PAD}px`;
+      ring.style.width = `${r.width + RING_PAD * 2}px`;
+      ring.style.height = `${r.height + RING_PAD * 2}px`;
+    }
   };
 
   let frame = 0;
@@ -169,7 +214,7 @@ export function ringElement(
   const cleanup = () => {
     cancelAnimationFrame(frame);
     window.clearTimeout(fade);
-    ring.remove();
+    for (const { ring } of rings) ring.remove();
     opts.reveal?.classList.remove('depictio-guide-reveal');
     if (active === cleanup) active = null;
   };
@@ -178,7 +223,7 @@ export function ringElement(
     if (now - start < RING_MS) {
       frame = requestAnimationFrame(tick);
     } else {
-      ring.classList.add('is-leaving');
+      for (const { ring } of rings) ring.classList.add('is-leaving');
       fade = window.setTimeout(cleanup, 300);
     }
   };
@@ -192,12 +237,11 @@ export function showGuideTarget(target: GuideTarget, opts: ShowMeOptions = {}): 
   if (target === 'actions') {
     const picked = pickActionRow();
     if (!picked) return false;
-    ringElement(picked.row, { reveal: picked.chrome, scroll: 'center' });
+    ringElements([picked.row], { reveal: picked.chrome, scroll: 'center' });
     return true;
   }
-  const el = findGuideTarget(target, opts);
-  if (!el) return false;
-  const inCanvas = Boolean(el.closest(CONTENT));
-  ringElement(el, { scroll: inCanvas ? 'center' : 'nearest' });
+  const els = findGuideTargets(target, opts);
+  if (els.length === 0) return false;
+  ringElements(els, { scroll: els[0].closest(CANVAS_SELECTOR) ? 'center' : 'nearest' });
   return true;
 }

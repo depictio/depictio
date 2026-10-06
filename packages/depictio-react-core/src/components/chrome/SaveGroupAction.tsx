@@ -12,6 +12,9 @@ import {
   type SelectionGroup,
 } from '../../selectionGroups';
 import GroupColorSwatches from '../GroupColorSwatches';
+import { TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.group;
 
 /**
  * Everything the per-component "save selection as group" action needs from the
@@ -86,7 +89,7 @@ const SaveGroupAction: React.FC<{ filter: InteractiveFilter }> = ({ filter }) =>
       shadow="md"
     >
       <Popover.Target>
-        <Tooltip label="Save selection as group" withArrow openDelay={300}>
+        <Tooltip label={STYLE.label} withArrow openDelay={300}>
           <ActionIcon
             // Same glyph, same color and the same light→filled progression as
             // the header "Analysis" button (GroupingHeaderControl): filled is
@@ -94,14 +97,14 @@ const SaveGroupAction: React.FC<{ filter: InteractiveFilter }> = ({ filter }) =>
             variant="filled"
             color={groupingColor}
             size="sm"
-            aria-label="Save selection as group"
+            aria-label={STYLE.label}
             onClick={(e) => {
               e.stopPropagation();
               setError(null);
               setOpened((o) => !o);
             }}
           >
-            <Icon icon="mdi:select-group" width={16} height={16} />
+            <Icon icon={STYLE.icon} width={16} height={16} />
           </ActionIcon>
         </Tooltip>
       </Popover.Target>
@@ -171,7 +174,7 @@ export const SelectionHintAction: React.FC = () => {
         aria-label="Selectable: create an analysis group from a selection here"
         style={{ cursor: 'default' }}
       >
-        <Icon icon="mdi:select-group" width={16} height={16} />
+        <Icon icon={STYLE.icon} width={16} height={16} />
       </ActionIcon>
     </Tooltip>
   );

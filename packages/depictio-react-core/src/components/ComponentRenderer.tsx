@@ -29,6 +29,7 @@ import SecondaryMetrics, {
 import { wrapWithChrome } from './chrome';
 import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import { TILE_ACTION_STYLE } from './chrome/actionStyles';
 import SaveGroupAction, {
   SaveGroupContext,
   SelectionHintAction,
@@ -694,7 +695,7 @@ const SourceTabAction: React.FC<{ link: TabLinkTarget }> = ({ link }) => (
       aria-label={`Open in ${link.label}`}
       data-testid="highlight-source-action"
     >
-      <Icon icon="mdi:arrow-top-right" width={15} />
+      <Icon icon={TILE_ACTION_STYLE.source.icon} width={15} />
     </ActionIcon>
   </Tooltip>
 );

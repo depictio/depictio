@@ -2,6 +2,10 @@ import React from 'react';
 import { ActionIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.reset;
+
 interface ResetButtonProps {
   onResetFilter?: () => void;
   /** When true, this component is the SOURCE of an active dashboard filter —
@@ -23,18 +27,18 @@ const ResetButton: React.FC<ResetButtonProps> = ({ onResetFilter, active = false
   const disabled = !onResetFilter || !active;
   return (
     <Tooltip
-      label={active ? 'Reset filter from this component' : 'Reset selection'}
+      label={active ? 'Reset filter from this component' : STYLE.label}
       withArrow
     >
       <ActionIcon
         variant={active ? 'filled' : 'subtle'}
-        color="orange"
+        color={STYLE.color}
         size="sm"
         disabled={disabled}
         onClick={() => onResetFilter?.()}
-        aria-label="Reset selection"
+        aria-label={STYLE.label}
       >
-        <Icon icon="bx:reset" width={16} height={16} />
+        <Icon icon={STYLE.icon} width={16} height={16} />
       </ActionIcon>
     </Tooltip>
   );

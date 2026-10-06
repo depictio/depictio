@@ -11,6 +11,7 @@ const DataGridBody = lazy(() => import('../data/DataGridBody'));
 import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
@@ -112,13 +113,13 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
       <Popover.Target>
         <ActionIcon
           variant={opened ? 'filled' : 'subtle'}
-          color="teal"
+          color={TILE_ACTION_STYLE.settings.color}
           size="sm"
-          aria-label="Viz settings"
-          title="Viz settings"
+          aria-label={TILE_ACTION_STYLE.settings.label}
+          title={TILE_ACTION_STYLE.settings.label}
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:adjustments-horizontal" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       {/* Capped and scrolled: a renderer with a dozen controls (sashimi has
@@ -220,13 +221,13 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
       <Popover.Target>
         <ActionIcon
           variant={opened ? 'filled' : 'subtle'}
-          color="violet"
+          color={TILE_ACTION_STYLE.data.color}
           size="sm"
           aria-label="Show underlying data"
-          title="Show data"
+          title={TILE_ACTION_STYLE.data.label}
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:table" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown

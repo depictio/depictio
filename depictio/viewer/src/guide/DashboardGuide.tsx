@@ -4,13 +4,17 @@
  *
  * Not a tour. There are no steps and nothing to dismiss: the page is a column
  * of parts, each a short explanation, a small working demo, and a "Show me"
- * that closes the Guide and rings the real control on the tab for a moment.
- * The explanations are generic; what fills them — the tabs, the sections, the
- * filters, the actions — is read from the tab the Guide was opened on
- * (`buildGuideModel`), so the Guide never describes a control the dashboard
- * does not have.
+ * that rings the real control. The explanations are generic; what fills them —
+ * the tabs, the sections, the filters, the actions — is read from the tab the
+ * Guide was opened on (`buildGuideModel`), and the demos are built from the
+ * dashboard's own components (`useGuideSources`), so the Guide never describes
+ * a control the dashboard does not have.
+ *
+ * The page covers the tab's canvas only. The sidebar, the header and the
+ * filter panel stay beside it, so "Show me" on one of those rings it with the
+ * Guide still open; only what is in the canvas closes the Guide first.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -24,25 +28,35 @@ import {
   Text,
   ThemeIcon,
   Title,
-  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { SectionIcon, TextRenderer } from 'depictio-react-core';
-import type { GuideFilterSection, GuideModel, StoredMetadata } from 'depictio-react-core';
+import { TextRenderer } from 'depictio-react-core';
+import type {
+  DashboardData,
+  DashboardSummary,
+  GuideModel,
+  PersistentSection,
+  StoredMetadata,
+} from 'depictio-react-core';
 
-import {
-  ActionsDemo,
-  AnalysisDemo,
-  DemoFrame,
-  FilterDemo,
-  SectionsDemo,
-  TabPillsDemo,
-  YourViewDemo,
-} from './GuideDemos';
-import { findGuideTarget, type GuideTarget } from './showMe';
+import { AnalysisDemo, DemoFrame, TabPillsDemo, YourViewDemo } from './GuideDemos';
+import { ActionsDemo } from './demos/ActionsDemo';
+import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
+import { SectionsDemo } from './demos/SectionsDemo';
+import { CANVAS_SELECTOR, findGuideTarget, type GuideTarget } from './showMe';
+import { useGuideSources } from './useGuideSources';
 
 export interface DashboardGuideProps {
   model: GuideModel;
+  /** The open tab. */
+  dashboardId: string;
+  dashboard: DashboardData;
+  /** The open tab's canvas components, as drawn. */
+  components: readonly StoredMetadata[];
+  /** The tab family, sidebar order, main tab first. */
+  tabs: readonly DashboardSummary[];
+  /** The family's pinned sections, whichever tab owns them. */
+  persistentSections: readonly PersistentSection[];
   /** The dashboard's name: the main tab's title. */
   dashboardName: string;
   /** The tab the Guide was opened on. */
@@ -86,6 +100,7 @@ const TARGETS: GuideTarget[] = [
   'actions',
   'analysis',
   'settings',
+  'guide',
 ];
 
 /**
@@ -117,39 +132,94 @@ function useTargetAvailability(selectionIds: readonly string[]): Record<GuideTar
 }
 
 // ---------------------------------------------------------------------------
+// The layer's place: over the canvas, and only the canvas
+// ---------------------------------------------------------------------------
+
+type LayerBox = { top: number; left: number; width: number; height: number };
+
+/**
+ * The canvas's box on screen, followed as the sidebar slides, the filter panel
+ * folds or the window resizes (each changes the canvas's size, which is what
+ * the observer sees). Null until measured, or with no canvas on the page: the
+ * stylesheet's AppShell offsets place the layer then.
+ */
+function useCanvasBox(): LayerBox | null {
+  const [box, setBox] = useState<LayerBox | null>(null);
+  useLayoutEffect(() => {
+    let canvas = document.querySelector<HTMLElement>(CANVAS_SELECTOR);
+    if (!canvas) return;
+    const measure = () => {
+      if (!canvas?.isConnected) canvas = document.querySelector<HTMLElement>(CANVAS_SELECTOR);
+      if (!canvas) return;
+      const r = canvas.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      setBox((prev) =>
+        prev &&
+        prev.top === r.top &&
+        prev.left === r.left &&
+        prev.width === r.width &&
+        prev.height === r.height
+          ? prev
+          : { top: r.top, left: r.left, width: r.width, height: r.height },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return box;
+}
+
+// ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
 
-const ShowMe: React.FC<{
+interface ShowMeSpec {
   target: GuideTarget;
-  available: boolean;
+  label: string;
+  /** Said in the footer when the page has nothing to point at; nothing when absent. */
+  absent?: string;
+}
+
+/** The part's main action: rings the real thing the part is about. */
+const ShowMeButton: React.FC<{
+  spec: ShowMeSpec;
   onShowMe: (target: GuideTarget) => void;
-  label?: string;
-  /** Said instead of the button when the tab has nothing to point at. */
-  absent: string;
-}> = ({ target, available, onShowMe, label = 'Show me', absent }) =>
-  available ? (
-    <Button
-      variant="light"
-      size="xs"
-      leftSection={<Icon icon="mdi:target" width={14} />}
-      onClick={() => onShowMe(target)}
-      data-testid={`guide-show-${target}`}
-    >
-      {label}
-    </Button>
-  ) : (
-    <Group gap={6} wrap="nowrap" data-testid={`guide-absent-${target}`}>
-      <Icon
-        icon="mdi:eye-off-outline"
-        width={14}
-        style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0 }}
-      />
-      <Text size="xs" c="dimmed">
-        {absent}
-      </Text>
-    </Group>
-  );
+  size?: 'sm' | 'xs';
+}> = ({ spec, onShowMe, size = 'sm' }) => (
+  <Button
+    variant="light"
+    size={size}
+    radius="md"
+    leftSection={<Icon icon="mdi:crosshairs-gps" width={size === 'sm' ? 18 : 15} />}
+    onClick={() => onShowMe(spec.target)}
+    data-testid={`guide-show-${spec.target}`}
+    style={{ flexShrink: 0 }}
+  >
+    {spec.label}
+  </Button>
+);
+
+const Absent: React.FC<{ target: GuideTarget; children: React.ReactNode }> = ({
+  target,
+  children,
+}) => (
+  <Group gap={6} wrap="nowrap" data-testid={`guide-absent-${target}`}>
+    <Icon
+      icon="mdi:eye-off-outline"
+      width={14}
+      style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0 }}
+    />
+    <Text size="xs" c="dimmed">
+      {children}
+    </Text>
+  </Group>
+);
 
 interface PartProps {
   id: string;
@@ -157,116 +227,119 @@ interface PartProps {
   title: string;
   subtitle: string;
   points: React.ReactNode[];
-  /** Below the points: a legend the points introduce. */
-  extra?: React.ReactNode;
   demo?: React.ReactNode;
   demoLabel?: string;
-  footer: React.ReactNode;
+  /** A small aside under the demo. */
+  note?: React.ReactNode;
+  /** The part's "Show me", in its header. */
+  showMe?: ShowMeSpec;
+  /** Secondary actions, under the demo. */
+  footer?: React.ReactNode;
 }
 
 /** One part of the Guide: what it is about, a few lines, a demo, Show me. */
-const GuidePart: React.FC<PartProps> = ({
-  id,
-  icon,
-  title,
-  subtitle,
-  points,
-  extra,
-  demo,
-  demoLabel,
-  footer,
-}) => (
-  <Paper
-    component="section"
-    id={`guide-${id}`}
-    aria-labelledby={`guide-${id}-title`}
-    withBorder
-    radius="lg"
-    p={{ base: 'md', sm: 'lg' }}
-    style={{ scrollMarginTop: 16 }}
-    data-testid={`guide-part-${id}`}
-  >
-    <Stack gap="md">
-      <Group gap="md" wrap="nowrap" align="flex-start">
-        <ThemeIcon size={40} radius="md" variant="light" style={{ flexShrink: 0 }}>
-          <Icon icon={icon} width={22} height={22} />
-        </ThemeIcon>
-        <Box style={{ minWidth: 0 }}>
-          <Title order={2} size="h4" id={`guide-${id}-title`} lh={1.25}>
-            {title}
-          </Title>
-          <Text size="sm" c="dimmed" lh={1.4}>
-            {subtitle}
-          </Text>
-        </Box>
-      </Group>
-      <List
-        size="sm"
-        spacing={6}
-        icon={
-          <Icon
-            icon="mdi:circle-small"
-            width={18}
-            style={{ color: 'var(--mantine-primary-color-filled)', display: 'block' }}
-          />
-        }
-        styles={{ itemWrapper: { alignItems: 'flex-start' }, itemIcon: { marginTop: 1 } }}
-      >
-        {points.filter(Boolean).map((p, i) => (
-          <List.Item key={i}>{p}</List.Item>
-        ))}
-      </List>
-      {extra}
-      {demo && <DemoFrame label={demoLabel}>{demo}</DemoFrame>}
-      <Group gap="sm" wrap="wrap">
-        {footer}
-      </Group>
-    </Stack>
-  </Paper>
-);
-
-/** The filter panel's sections, named and iconed as the panel draws them. */
-const FilterSectionList: React.FC<{ sections: GuideFilterSection[] }> = ({ sections }) => (
-  <Stack gap={6} mt={8} data-testid="guide-filter-sections">
-    {sections.map((s) => (
-      <Group key={s.name} gap="sm" wrap="nowrap">
-        <SectionIcon spec={s.spec ?? { name: s.name }} size={18} />
-        <Text size="sm" fw={500} truncate style={{ minWidth: 0 }}>
-          {s.name}
-        </Text>
-        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-          {plural(s.controls, 'filter')}
-        </Text>
-        {s.persistent && (
-          <Tooltip label="Its values stay set when you switch tabs" withArrow>
-            <Badge
-              size="xs"
-              variant="light"
-              color="gray"
-              leftSection={<Icon icon="mdi:pin" width={10} />}
-              style={{ flexShrink: 0 }}
-            >
-              Every tab
-            </Badge>
-          </Tooltip>
+const GuidePart: React.FC<
+  PartProps & {
+    available: Record<GuideTarget, boolean>;
+    onShowMe: (target: GuideTarget) => void;
+  }
+> = ({ id, icon, title, subtitle, points, demo, demoLabel, note, showMe, footer, available, onShowMe }) => {
+  const showMeHere = showMe && available[showMe.target];
+  const absent = showMe && !showMeHere && showMe.absent;
+  const shownPoints = points.filter(Boolean);
+  return (
+    <Paper
+      component="section"
+      id={`guide-${id}`}
+      aria-labelledby={`guide-${id}-title`}
+      withBorder
+      radius="lg"
+      p={{ base: 'md', sm: 'lg' }}
+      style={{ scrollMarginTop: 16 }}
+      data-testid={`guide-part-${id}`}
+    >
+      <Stack gap="md">
+        <Group gap="md" wrap="wrap" align="flex-start" justify="space-between">
+          <Group gap="md" wrap="nowrap" align="flex-start" style={{ flex: '1 1 260px', minWidth: 0 }}>
+            <ThemeIcon size={40} radius="md" variant="light" style={{ flexShrink: 0 }}>
+              <Icon icon={icon} width={22} height={22} />
+            </ThemeIcon>
+            <Box style={{ minWidth: 0 }}>
+              <Title order={2} size="h4" id={`guide-${id}-title`} lh={1.25}>
+                {title}
+              </Title>
+              <Text size="sm" c="dimmed" lh={1.4}>
+                {subtitle}
+              </Text>
+            </Box>
+          </Group>
+          {showMeHere && <ShowMeButton spec={showMe} onShowMe={onShowMe} />}
+        </Group>
+        {shownPoints.length > 0 && (
+          <List
+            size="sm"
+            spacing={6}
+            icon={
+              <Icon
+                icon="mdi:circle-small"
+                width={18}
+                style={{ color: 'var(--mantine-primary-color-filled)', display: 'block' }}
+              />
+            }
+            styles={{ itemWrapper: { alignItems: 'flex-start' }, itemIcon: { marginTop: 1 } }}
+          >
+            {shownPoints.map((p, i) => (
+              <List.Item key={i}>{p}</List.Item>
+            ))}
+          </List>
         )}
-      </Group>
-    ))}
-  </Stack>
-);
+        {demo && <DemoFrame label={demoLabel}>{demo}</DemoFrame>}
+        {note}
+        {(footer || absent) && (
+          <Group gap="sm" wrap="wrap">
+            {footer}
+            {absent && showMe && <Absent target={showMe.target}>{absent}</Absent>}
+          </Group>
+        )}
+      </Stack>
+    </Paper>
+  );
+};
 
 /** An inline mention of a control, drawn as the control's own icon. */
-const Kbd: React.FC<{ icon?: string; children: React.ReactNode }> = ({ icon, children }) => (
+const Kbd: React.FC<{ icon?: string; color?: string; children: React.ReactNode }> = ({
+  icon,
+  color,
+  children,
+}) => (
   <Text span inherit fw={600} style={{ whiteSpace: 'nowrap' }}>
     {icon && (
       <Icon
         icon={icon}
         width={14}
-        style={{ verticalAlign: '-2px', marginRight: 3, color: 'var(--mantine-primary-color-filled)' }}
+        style={{
+          verticalAlign: '-2px',
+          marginRight: 3,
+          color: color ? `var(--mantine-color-${color}-filled)` : 'var(--mantine-primary-color-filled)',
+        }}
       />
     )}
     {children}
   </Text>
+);
+
+/** A one-line aside, under a demo. */
+const Note: React.FC<{ children: React.ReactNode; testId?: string }> = ({ children, testId }) => (
+  <Group gap={6} wrap="nowrap" align="flex-start" data-testid={testId}>
+    <Icon
+      icon="mdi:information-outline"
+      width={15}
+      style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0, marginTop: 2 }}
+    />
+    <Text size="xs" c="dimmed" lh={1.45}>
+      {children}
+    </Text>
+  </Group>
 );
 
 // ---------------------------------------------------------------------------
@@ -275,6 +348,11 @@ const Kbd: React.FC<{ icon?: string; children: React.ReactNode }> = ({ icon, chi
 
 const DashboardGuide: React.FC<DashboardGuideProps> = ({
   model,
+  dashboardId,
+  dashboard,
+  components,
+  tabs: family,
+  persistentSections,
   dashboardName,
   tabName,
   intro,
@@ -285,6 +363,14 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   selectionIds,
 }) => {
   const available = useTargetAvailability(selectionIds);
+  const sources = useGuideSources({
+    dashboardId,
+    dashboard,
+    components,
+    tabs: family,
+    persistentSections,
+  });
+  const canvasBox = useCanvasBox();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
 
@@ -312,7 +398,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     [intro],
   );
 
-  const { tabs, sections, filters, selection, actions, editActions, analysis } = model;
+  const { tabs, sections, filters, selection, actions, analysis } = model;
   const isEdit = mode === 'edit';
   const foldableNames = sections.foldable.map((s) => s.name);
   const pinnedNames = sections.pinned.map((s) => s.name);
@@ -352,34 +438,29 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     ],
     demoLabel: tabs.count > 1 ? 'The tabs · click one to open it' : 'The tab',
     demo: <TabPillsDemo model={model} mode={mode} onCurrent={onClose} />,
-    footer: (
-      <ShowMe
-        target="tabs"
-        available={available.tabs}
-        onShowMe={onShowMe}
-        label="Show me the tabs"
-        absent="The sidebar is not on this page."
-      />
-    ),
+    showMe: { target: 'tabs', label: 'Show me the tabs', absent: 'The sidebar is not on this page.' },
   });
 
   // 2. Reading a tab
+  const sectionsSource = sources.sections;
+  const foldableHere = foldableNames.length > 0;
+  const headingsOnly = !foldableHere && sections.headings > 0;
+  const demoSections = sectionsSource?.sections.length ?? 2;
   parts.push({
     id: 'reading',
     navLabel: 'Sections',
     icon: 'mdi:view-agenda-outline',
     title: 'Read a tab',
-    subtitle:
-      foldableNames.length > 0
-        ? `${plural(foldableNames.length, 'section')} on ${tabName} fold and unfold`
-        : 'Components in a grid, at the width and size that suit you',
+    subtitle: foldableHere
+      ? `${plural(foldableNames.length, 'section')} on ${tabName} fold and unfold`
+      : 'A grid of components, gathered into sections that fold',
     points: [
       <>
         A tab is a grid of components: figures, tables, cards and text, often gathered into
         sections. Click a section's header to fold it; folded, it keeps showing its key numbers.
       </>,
-      foldableNames.length > 0 && <>On {tabName}: {listNames(foldableNames, 5)}.</>,
-      foldableNames.length > 1 && (
+      foldableHere && <>On {tabName}: {listNames(foldableNames, 5)}.</>,
+      (foldableNames.length > 1 || (!foldableHere && demoSections > 1)) && (
         <>
           <Kbd icon="mdi:unfold-more-horizontal">Expand all</Kbd> /{' '}
           <Kbd icon="mdi:unfold-less-horizontal">Collapse all</Kbd>, above the sections, opens or
@@ -397,27 +478,31 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
         this browser and change nothing for anyone else.
       </>,
     ],
-    demoLabel: 'Fold a section',
-    demo: <SectionsDemo model={model} />,
+    demoLabel:
+      sectionsSource === null
+        ? 'An example · fold a section'
+        : sectionsSource?.scope === 'pinned'
+          ? 'A pinned section · fold it'
+          : sectionsSource?.scope === 'sibling'
+            ? `From ${sectionsSource.tabLabel} · fold a section`
+            : 'Fold a section',
+    demo: <SectionsDemo source={sectionsSource} />,
+    note: headingsOnly && (
+      <Note testId="guide-headings-note">
+        On {tabName}, sections are headings only: they name the parts of the tab and do not fold.
+      </Note>
+    ),
+    showMe: { target: 'sections', label: headingsOnly ? 'Show me the headings' : 'Show me a section' },
     footer: (
-      <>
-        <ShowMe
-          target="sections"
-          available={available.sections}
-          onShowMe={onShowMe}
-          label="Show me a section"
-          absent="This tab has no sections to fold."
-        />
-        <Button
-          variant="default"
-          size="xs"
-          leftSection={<Icon icon="mdi:monitor-eye" width={14} />}
-          onClick={onOpenYourView}
-          data-testid="guide-open-your-view"
-        >
-          Open Your view
-        </Button>
-      </>
+      <Button
+        variant="default"
+        size="xs"
+        leftSection={<Icon icon="mdi:monitor-eye" width={14} />}
+        onClick={onOpenYourView}
+        data-testid="guide-open-your-view"
+      >
+        Open Your view
+      </Button>
     ),
   });
 
@@ -432,23 +517,25 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   const selectionSubject =
     selectsPoints && selectsRows ? 'Figures, maps and tables' : selectsRows ? 'Tables' : 'Figures and maps';
   const selectionHow = [
-    selectsPoints && 'click a point, or draw a lasso or box around some',
-    selectsRows && 'select rows in a table',
+    selectsPoints && 'draw a lasso or box, or click a point',
+    selectsRows && 'select rows',
   ]
     .filter(Boolean)
     .join(', or ');
   const acrossTabs = (() => {
     const kept = persistentFilters.length
-      ? `the values set in ${listNames(persistentFilters)} stay set when you switch tabs`
+      ? `${listNames(persistentFilters)} ${persistentFilters.length === 1 ? 'keeps its' : 'keep their'} values`
       : '';
-    const map = model.mapPanel ? 'a selection made on the map panel' : '';
-    if (kept && map) return `Across tabs: ${kept}, and so does ${map}. The other filters belong to their own tab.`;
-    if (kept) return `Across tabs: ${kept}. The other filters belong to their own tab.`;
-    if (map) return `Across tabs: ${map} stays when you switch tabs. The other filters belong to their own tab.`;
+    const map = model.mapPanel ? 'the map panel keeps its selection' : '';
+    const rest = 'the other filters belong to their tab';
+    if (kept && map) return `Switching tabs: ${kept}, ${map}; ${rest}.`;
+    if (kept) return `Switching tabs: ${kept}; ${rest}.`;
+    if (map) return `Switching tabs: ${map}; ${rest}.`;
     return tabs.count > 1 && filters.total > 0
       ? "Filters belong to their tab: switching tabs starts from that tab's own."
       : '';
   })();
+  const filterSource = sources.filter;
   parts.push({
     id: 'filters',
     navLabel: 'Filters',
@@ -465,75 +552,57 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     points: [
       filters.total > 0 && (
         <>
-          The filter panel on the left holds this tab's filters; on a phone it opens from{' '}
-          <Kbd icon="mdi:filter-variant">Filters</Kbd> in the header. Pick values and every
-          component reading the same data follows.
-          {filters.sections.length > 0 && <FilterSectionList sections={filters.sections} />}
+          The filter panel, left of the tab (on a phone,{' '}
+          <Kbd icon="mdi:filter-variant">Filters</Kbd> in the header), holds the tab's filters. Pick
+          values and every component on the same data follows.
         </>
       ),
       acrossTabs,
       selectionPlaces.length > 0 && (
         <>
-          {selectionSubject} filter too: {selectionHow}, and the rest of the tab follows. Here:{' '}
-          {listNames(selectionPlaces, 3)}. A tile's <Kbd icon="bx:reset">Reset selection</Kbd>{' '}
-          clears its own.
+          {selectionSubject} filter too: {selectionHow}. Here: {listNames(selectionPlaces, 3)}.
         </>
       ),
-      sections.fannedOut.length > 0 || pinnedNames.length > 0 ? (
+      (filters.total > 0 || selectionPlaces.length > 0) && (
         <>
-          While something is filtered, a pinned section says{' '}
+          While anything is filtered, pinned sections say{' '}
           <Badge size="xs" variant="light" component="span">
             Filtered
           </Badge>{' '}
-          and, folded, reads its numbers as <Text span inherit fw={600}>n / N</Text>: what is left, out of
-          the whole.
-        </>
-      ) : (
-        filters.total > 0 && (
-          <>
-            The panel's header counts the filters that are on, and lists them so you can drop one
-            at a time.
-          </>
-        )
-      ),
-      filters.total > 0 && (
-        <>
-          <Kbd icon="bx:reset">Reset</Kbd> in the panel's header, orange while anything is
-          filtered, clears every filter on the tab.
+          and read <Text span inherit fw={600}>n / N</Text>;{' '}
+          <Kbd icon="bx:reset" color="orange">
+            Reset
+          </Kbd>
+          , orange in the panel's header, clears it all.
         </>
       ),
     ],
-    demoLabel: 'Pick a value',
-    demo: <FilterDemo />,
-    footer: (
+    demoLabel: 'Live · pick a value',
+    demo:
+      filterSource === undefined ? (
+        <LiveFilterDemoSkeleton />
+      ) : filterSource ? (
+        <LiveFilterDemo source={filterSource} />
+      ) : undefined,
+    showMe: { target: 'filters', label: 'Show me the filters', absent: 'This tab has no filter panel.' },
+    footer: (available.selection && selectionPlaces.length > 0) || available.pinned ? (
       <>
-        <ShowMe
-          target="filters"
-          available={available.filters}
-          onShowMe={onShowMe}
-          label="Show me the filters"
-          absent="This tab has no filter panel."
-        />
         {selectionPlaces.length > 0 && available.selection && (
-          <ShowMe
-            target="selection"
-            available
+          <ShowMeButton
+            spec={{ target: 'selection', label: 'Where to select' }}
             onShowMe={onShowMe}
-            label="Where to select"
-            absent=""
+            size="xs"
           />
         )}
         {available.pinned && (
-          <ShowMe
-            target="pinned"
-            available
+          <ShowMeButton
+            spec={{ target: 'pinned', label: 'A pinned section' }}
             onShowMe={onShowMe}
-            label="A pinned section"
-            absent=""
+            size="xs"
           />
         )}
       </>
-    ),
+    ) : undefined,
   });
 
   // 4. Component actions
@@ -542,76 +611,30 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     navLabel: 'Components',
     icon: 'mdi:cursor-default-click-outline',
     title: "Use a component's actions",
-    subtitle:
-      actions.length > 0
-        ? `Hover a component: its actions show in its top-right corner`
-        : 'The components on this tab carry no actions',
+    subtitle: 'Hover a component: its actions show in its top-right corner',
     points: [
-      actions.length > 0 && (
+      <>
+        Each icon has a tooltip; a card keeps its row along its bottom edge.{' '}
+        <Kbd icon="bx:reset" color="orange">
+          Reset selection
+        </Kbd>{' '}
+        stays on screen, filled, while that component's selection filters the tab.
+      </>,
+      <>Pick a kind of component: the tile shows its row, the lists say what each icon does.</>,
+      isEdit && (
         <>
-          Each icon has a tooltip. Most show only while the pointer is over the component;{' '}
-          <Kbd icon="bx:reset">Reset selection</Kbd> stays, in orange, while its selection filters.
-        </>
-      ),
-      isEdit && editActions.length > 0 && (
-        <>
-          In the editor each tile also has <Kbd icon="mdi:dots-grid">a grip</Kbd> to move it and a{' '}
-          <Kbd icon="tabler:dots-vertical">⋮</Kbd> menu:{' '}
-          {listNames(
-            editActions.filter((a) => a.key !== 'drag').map((a) => a.label),
-            8,
-          )}
-          .
+          In the editor every tile also has a grip to move it, a corner to resize it and a{' '}
+          <Kbd icon="tabler:dots-vertical">menu</Kbd>.
         </>
       ),
     ],
-    extra: actions.length > 0 && (
-      <Stack gap={8} data-testid="guide-action-legend">
-        {actions.map((a) => (
-          <Group key={a.key} gap="sm" wrap="nowrap" align="flex-start">
-            <ThemeIcon
-              size={26}
-              radius="sm"
-              variant="default"
-              color={a.key === 'reset' ? 'orange' : undefined}
-              style={{ flexShrink: 0 }}
-            >
-              <Icon
-                icon={a.icon}
-                width={16}
-                style={
-                  a.key === 'reset'
-                    ? { color: 'var(--mantine-color-orange-6)' }
-                    : a.key === 'group'
-                      ? { color: 'var(--mantine-primary-color-filled)' }
-                      : undefined
-                }
-              />
-            </ThemeIcon>
-            <Text size="sm" lh={1.45} style={{ minWidth: 0 }}>
-              <Text span inherit fw={600}>
-                {a.label}
-              </Text>{' '}
-              — {a.meaning}{' '}
-              <Text span size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                {a.count === 1 ? 'On one component here' : `On ${a.count} components here`}
-              </Text>
-            </Text>
-          </Group>
-        ))}
-      </Stack>
-    ),
-    demoLabel: isEdit ? 'Hover the icons · open the ⋮ menu' : 'Hover or pick an icon',
-    demo: <ActionsDemo actions={actions} editActions={editActions} />,
-    footer: (
-      <ShowMe
-        target="actions"
-        available={available.actions}
-        onShowMe={onShowMe}
-        label="Show me on a component"
-        absent="No component on this tab has actions."
-      />
-    ),
+    demoLabel: isEdit ? 'Hover the icons · open the ⋮ menu' : 'Hover the icons',
+    demo: <ActionsDemo model={model} components={components} mode={mode} />,
+    showMe: {
+      target: 'actions',
+      label: 'Show me on a component',
+      absent: actions.length > 0 ? undefined : 'No component on this tab has actions.',
+    },
   });
 
   // 5. Analysis — only where the header offers it.
@@ -642,15 +665,11 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       ],
       demoLabel: 'Turn it on',
       demo: <AnalysisDemo />,
-      footer: (
-        <ShowMe
-          target="analysis"
-          available={available.analysis}
-          onShowMe={onShowMe}
-          label="Show me Analysis"
-          absent="The Analysis button is off screen at this width."
-        />
-      ),
+      showMe: {
+        target: 'analysis',
+        label: 'Show me Analysis',
+        absent: 'The Analysis button is off screen at this width.',
+      },
     });
   }
 
@@ -671,24 +690,20 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     ],
     demoLabel: 'Width and text size',
     demo: <YourViewDemo />,
+    showMe: {
+      target: 'settings',
+      label: 'Show me Settings',
+      absent: 'Settings is off screen at this width.',
+    },
     footer: (
-      <>
-        <Button
-          variant="light"
-          size="xs"
-          leftSection={<Icon icon="mdi:monitor-eye" width={14} />}
-          onClick={onOpenYourView}
-        >
-          Open Your view
-        </Button>
-        <ShowMe
-          target="settings"
-          available={available.settings}
-          onShowMe={onShowMe}
-          label="Show me Settings"
-          absent="Settings is off screen at this width."
-        />
-      </>
+      <Button
+        variant="default"
+        size="xs"
+        leftSection={<Icon icon="mdi:monitor-eye" width={14} />}
+        onClick={onOpenYourView}
+      >
+        Open Your view
+      </Button>
     ),
   });
 
@@ -699,6 +714,19 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       role="region"
       aria-labelledby="guide-heading"
       data-testid="dashboard-guide"
+      style={
+        canvasBox
+          ? {
+              top: canvasBox.top,
+              left: canvasBox.left,
+              width: canvasBox.width,
+              height: canvasBox.height,
+              right: 'auto',
+              bottom: 'auto',
+              transition: 'none',
+            }
+          : undefined
+      }
     >
       <Container size={900} px={{ base: 'md', sm: 'xl' }} py={{ base: 'lg', sm: 'xl' }}>
         <Stack gap="lg">
@@ -785,7 +813,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
           </Group>
 
           {parts.map(({ navLabel: _navLabel, ...p }) => (
-            <GuidePart key={p.id} {...p} />
+            <GuidePart key={p.id} {...p} available={available} onShowMe={onShowMe} />
           ))}
 
           <Group justify="center" py="md">
@@ -798,15 +826,24 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
               Back to {tabName}
             </Button>
           </Group>
-          <Text size="xs" c="dimmed" ta="center" pb="md">
-            The Guide is always one click away:{' '}
-            <Text span inherit fw={600}>
-              Guide
-            </Text>{' '}
-            at the end of the tab list, or{' '}
-            <Icon icon="mdi:help-circle-outline" width={13} style={{ verticalAlign: '-2px' }} /> in
-            the header.
-          </Text>
+          <Group justify="center" gap="xs" pb="md" wrap="wrap">
+            <Text size="xs" c="dimmed" ta="center">
+              The Guide is always one click away:{' '}
+              <Text span inherit fw={600}>
+                Guide
+              </Text>{' '}
+              at the end of the tab list, or{' '}
+              <Icon icon="mdi:help-circle-outline" width={13} style={{ verticalAlign: '-2px' }} />{' '}
+              in the header.
+            </Text>
+            {available.guide && (
+              <ShowMeButton
+                spec={{ target: 'guide', label: 'Show me' }}
+                onShowMe={onShowMe}
+                size="xs"
+              />
+            )}
+          </Group>
         </Stack>
       </Container>
     </div>

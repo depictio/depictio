@@ -21,12 +21,20 @@ import type {
   PersistentSection,
   StoredMetadata,
 } from '../api';
-import { actionsFor } from '../components/chrome/chromeActions';
+import {
+  EDIT_MENU_STYLE,
+  TILE_ACTION_STYLE,
+  type TileActionStyle,
+} from '../components/chrome/actionStyles';
+import { actionsFor, canDuplicate } from '../components/chrome/chromeActions';
 import { canCopyToTab } from '../components/copyToTab';
+import { canHighlight } from '../components/highlightTile';
+import { isStripSection } from '../components/interactive/strip/stripLayout';
 import { tabDisplayName } from '../components/tabFamily';
 import { groupTabs } from '../components/tabGroups';
 import { isMapSelectionEnabled, supportsSelectionGrouping } from '../selection';
 import { sectionComponents } from '../utils/groupInteractive';
+import { GUIDE_TILE_TYPES, type GuideTileType } from './tileActionCatalog';
 
 // ---------------------------------------------------------------------------
 // Author settings
@@ -147,6 +155,7 @@ export type GuideEditActionKey =
   | 'duplicate'
   | 'move-section'
   | 'copy-tab'
+  | 'highlight'
   | 'font-size'
   | 'delete';
 
@@ -154,6 +163,8 @@ export interface GuideAction<K extends string = GuideActionKey> {
   key: K;
   /** The icon the real control shows. */
   icon: string;
+  /** The Mantine colour it is drawn in; absent for the theme's primary. */
+  color?: string;
   /** The real control's tooltip or menu label. */
   label: string;
   /** One line on what it does. */
@@ -179,6 +190,8 @@ export interface GuideModel<T extends DashboardSummary = DashboardSummary> {
     /** Pinned sections drawn here on behalf of another tab: the ones whose
      *  header says "Filtered" and reads their numbers as n / N. */
     fannedOut: GuideGridSection[];
+    /** Named sections on this tab drawn as headings only (`plain`). */
+    headings: number;
   };
   filters: {
     /** The panel's named sections, in panel order. */
@@ -199,6 +212,9 @@ export interface GuideModel<T extends DashboardSummary = DashboardSummary> {
   actions: GuideAction[];
   /** The editor's per-tile actions (its ⋮ menu); empty outside the editor. */
   editActions: GuideAction<GuideEditActionKey>[];
+  /** The kinds of tile on this tab and how many of each, in the Guide's
+   *  order. A highlight counts as the kind of view it shows. */
+  tileTypes: { type: GuideTileType; count: number }[];
   analysis: {
     /** The header offers Analysis on this surface. */
     available: boolean;
@@ -236,50 +252,44 @@ export interface GuideModelInput<T extends DashboardSummary = DashboardSummary> 
 // The actions, as the chrome labels them
 // ---------------------------------------------------------------------------
 
-type ActionInfo = Pick<GuideAction, 'icon' | 'label' | 'meaning'>;
+type ActionInfo = Pick<GuideAction, 'icon' | 'color' | 'label' | 'meaning'>;
 
-/** Labels are the controls' own tooltips (see components/chrome). */
+/** The control's own look (`actionStyles`), with what it does. */
+const styled = (style: TileActionStyle, meaning: string): ActionInfo => ({
+  icon: style.icon,
+  ...(style.color ? { color: style.color } : {}),
+  label: style.label,
+  meaning,
+});
+
+/** Labels, icons and colours are the controls' own (see components/chrome). */
 export const GUIDE_ACTIONS: Record<GuideActionKey, ActionInfo> = {
-  group: {
-    icon: 'mdi:select-group',
-    label: 'Save selection as group',
-    meaning: 'With Analysis on: marks the tiles you can select on, then keeps a selection as a group.',
-  },
-  inspect: {
-    icon: 'mdi:dock-right',
-    label: 'Inspect',
-    meaning: 'Opens the component in the inspector on the right.',
-  },
-  catalog: {
-    icon: 'mdi:hammer',
-    label: 'From the tools catalog',
-    meaning: 'The component came from a catalog recipe; shows which one.',
-  },
-  description: {
-    icon: 'mdi:text-box-outline',
-    label: 'About this component',
-    meaning: "The author's note on what the component shows.",
-  },
-  metadata: {
-    icon: 'mdi:information-outline',
-    label: 'Component metadata',
-    meaning: 'Where the data comes from: data collection, columns and settings.',
-  },
-  fullscreen: {
-    icon: 'mdi:fullscreen',
-    label: 'Toggle fullscreen',
-    meaning: 'Fills the screen with it; Esc or the same icon brings it back.',
-  },
-  download: {
-    icon: 'mdi:download',
-    label: 'Download CSV',
-    meaning: 'Saves the rows the table shows, filters applied, as a CSV file.',
-  },
-  reset: {
-    icon: 'bx:reset',
-    label: 'Reset selection',
-    meaning: 'Clears the selection made on it. Turns orange, and stays visible, while it filters.',
-  },
+  group: styled(
+    TILE_ACTION_STYLE.group,
+    'With Analysis on: marks the tiles you can select on, then keeps a selection as a group.',
+  ),
+  inspect: styled(TILE_ACTION_STYLE.inspect, 'Opens the component in the inspector on the right.'),
+  catalog: styled(
+    TILE_ACTION_STYLE.catalog,
+    'The component came from a catalog recipe; shows which one.',
+  ),
+  description: styled(TILE_ACTION_STYLE.description, "The author's note on what the component shows."),
+  metadata: styled(
+    TILE_ACTION_STYLE.metadata,
+    'Where the data comes from: data collection, columns and settings.',
+  ),
+  fullscreen: styled(
+    TILE_ACTION_STYLE.fullscreen,
+    'Fills the screen with it; Esc or the same icon brings it back.',
+  ),
+  download: styled(
+    TILE_ACTION_STYLE.download,
+    'Saves the rows the table shows, filters applied, as a CSV file.',
+  ),
+  reset: styled(
+    TILE_ACTION_STYLE.reset,
+    'Clears the selection made on it. Turns orange, and stays visible, while it filters.',
+  ),
 };
 
 /** The chrome's left-to-right order (`ComponentChrome`): the grouping action
@@ -297,41 +307,26 @@ const ACTION_ORDER: GuideActionKey[] = [
 
 /** The editor's tile menu (`GridItemEditOverlay`) and the grip beside it. */
 export const GUIDE_EDIT_ACTIONS: Record<GuideEditActionKey, ActionInfo> = {
-  drag: {
-    icon: 'mdi:dots-grid',
-    label: 'Drag to move',
-    meaning: 'Grab it to move the tile; its edges resize it.',
-  },
-  edit: {
-    icon: 'tabler:edit',
-    label: 'Edit',
-    meaning: 'Opens the component in the builder.',
-  },
-  duplicate: {
-    icon: 'tabler:copy',
-    label: 'Duplicate',
-    meaning: 'Adds a copy right below it (cards, filters and figures).',
-  },
-  'move-section': {
-    icon: 'mdi:format-list-group',
-    label: 'Move to section',
-    meaning: "Files it under another of this tab's sections, or none.",
-  },
-  'copy-tab': {
-    icon: 'mdi:content-duplicate',
-    label: 'Copy to tab…',
-    meaning: 'Puts a copy on another tab of this dashboard.',
-  },
-  'font-size': {
-    icon: 'mdi:format-font-size-increase',
-    label: 'Font size',
-    meaning: "The figure's own text size, on top of the reader's setting.",
-  },
-  delete: {
-    icon: 'tabler:trash',
-    label: 'Delete',
-    meaning: 'Removes it from the tab.',
-  },
+  drag: styled(TILE_ACTION_STYLE.drag, 'Grab it to move the tile; its edges resize it.'),
+  edit: styled(EDIT_MENU_STYLE.edit, 'Opens the component in the builder.'),
+  duplicate: styled(
+    EDIT_MENU_STYLE.duplicate,
+    'Adds a copy right below it (cards, filters and figures).',
+  ),
+  'move-section': styled(
+    EDIT_MENU_STYLE['move-section'],
+    "Files it under another of this tab's sections, or none.",
+  ),
+  'copy-tab': styled(EDIT_MENU_STYLE['copy-tab'], 'Puts a copy on another tab of this dashboard.'),
+  highlight: styled(
+    EDIT_MENU_STYLE.highlight,
+    'Shows it on another tab, restyled; edits made here show there too.',
+  ),
+  'font-size': styled(
+    EDIT_MENU_STYLE['font-size'],
+    "The figure's own text size, on top of the reader's setting.",
+  ),
+  delete: styled(EDIT_MENU_STYLE.delete, 'Removes it from the tab.'),
 };
 
 const EDIT_ACTION_ORDER: GuideEditActionKey[] = [
@@ -340,11 +335,10 @@ const EDIT_ACTION_ORDER: GuideEditActionKey[] = [
   'duplicate',
   'move-section',
   'copy-tab',
+  'highlight',
   'font-size',
   'delete',
 ];
-
-const DUPLICATABLE = new Set(['card', 'interactive', 'figure']);
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -405,6 +399,25 @@ function selectionKind(m: StoredMetadata): GuideSelectionKind | null {
   }
 }
 
+/** The Guide's kind for a tile. A highlight is another tab's figure (or
+ *  advanced view) drawn here; its own chrome is a figure's. */
+function tileTypeOf(m: StoredMetadata): GuideTileType | null {
+  const type = m.component_type === 'highlight' ? 'figure' : m.component_type;
+  return (GUIDE_TILE_TYPES as readonly string[]).includes(type) ? (type as GuideTileType) : null;
+}
+
+function countTileTypes(tiles: readonly StoredMetadata[]): GuideModel['tileTypes'] {
+  const counts = new Map<GuideTileType, number>();
+  for (const m of tiles) {
+    const type = tileTypeOf(m);
+    if (type) counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  return GUIDE_TILE_TYPES.filter((t) => counts.has(t)).map((type) => ({
+    type,
+    count: counts.get(type) ?? 0,
+  }));
+}
+
 export function buildGuideModel<T extends DashboardSummary>(
   input: GuideModelInput<T>,
 ): GuideModel<T> {
@@ -437,12 +450,13 @@ export function buildGuideModel<T extends DashboardSummary>(
   const current = groups.flatMap((g) => g.tabs).find((t) => t.isCurrent) ?? null;
 
   // The canvas: the tab's own sections that fold, then the pinned ones other
-  // tabs fan out here. A `plain` section is a heading with no fold.
+  // tabs fan out here. A `plain` section is a heading with no fold, and a
+  // filter bar has neither header nor fold.
   const ownSections: GuideGridSection[] = sectionComponents(
     [...components],
     [...(gridSections ?? [])],
   )
-    .filter((s) => s.sectionName && s.spec?.appearance !== 'plain')
+    .filter((s) => s.sectionName && s.spec?.appearance !== 'plain' && !isStripSection(s.spec))
     .map((s) => ({
       name: s.sectionName as string,
       spec: s.spec,
@@ -505,9 +519,10 @@ export function buildGuideModel<T extends DashboardSummary>(
     mode === 'edit'
       ? countActions(components, EDIT_ACTION_ORDER, GUIDE_EDIT_ACTIONS, (m) => {
           const keys: GuideEditActionKey[] = ['drag', 'edit'];
-          if (DUPLICATABLE.has(m.component_type)) keys.push('duplicate');
+          if (canDuplicate(m.component_type)) keys.push('duplicate');
           if (hasSections) keys.push('move-section');
           if (hasOtherTabs && canCopyToTab(m)) keys.push('copy-tab');
+          if (hasOtherTabs && canHighlight(m)) keys.push('highlight');
           if (m.component_type === 'figure') keys.push('font-size');
           keys.push('delete');
           return keys;
@@ -525,6 +540,12 @@ export function buildGuideModel<T extends DashboardSummary>(
       foldable,
       pinned: foldable.filter((s) => s.pinned),
       fannedOut,
+      headings: (gridSections ?? []).filter(
+        (g) =>
+          g.appearance === 'plain' &&
+          !isStripSection(g) &&
+          components.some((m) => m.section === g.name),
+      ).length,
     },
     filters: {
       sections: filterSections,
@@ -536,6 +557,7 @@ export function buildGuideModel<T extends DashboardSummary>(
     mapPanel: floating.some((f) => f.metadata.component_type === 'map'),
     actions,
     editActions,
+    tileTypes: countTileTypes(tiles),
     analysis: {
       available: analysisAvailable,
       selectable: tiles.filter((m) => supportsSelectionGrouping(m, true)).length,

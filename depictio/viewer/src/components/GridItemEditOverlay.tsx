@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
 import { ActionIcon, Group, Menu, ScrollArea, Text, useComputedColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { Glyph, SectionIcon, tabDisplayName, useBranding } from 'depictio-react-core';
+import {
+  EDIT_MENU_STYLE,
+  Glyph,
+  canDuplicate,
+  SectionIcon,
+  TILE_ACTION_STYLE,
+  tabDisplayName,
+  useBranding,
+} from 'depictio-react-core';
 import type { DashboardSummary, FilterSectionSpec } from 'depictio-react-core';
 import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar';
 
@@ -29,8 +37,6 @@ import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar'
  * Hidden via the `editMode` prop so the same renderer tree can be reused for
  * read-only mode.
  */
-const DUPLICATABLE_COMPONENT_TYPES = new Set(['card', 'interactive', 'figure']);
-
 /** Steps for the per-figure font-size multiplier. Wider than the
  *  dashboard-wide preference on purpose: axis labels on a dense figure are
  *  the case that motivates going up to 2×. */
@@ -142,10 +148,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
     onDelete(componentId);
   };
 
-  const showDuplicate =
-    !!onDuplicate &&
-    !!componentType &&
-    DUPLICATABLE_COMPONENT_TYPES.has(componentType);
+  const showDuplicate = !!onDuplicate && !!componentType && canDuplicate(componentType);
 
   // No sections declared yet means nothing to move into — the Sections manager
   // is where that starts, so offering only "No section" here would be a dead
@@ -182,25 +185,25 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
       }}
     >
       <Menu.Target>
-        <ActionIcon variant="subtle" size="sm" aria-label="Component actions">
-          <Icon icon="tabler:dots-vertical" width={16} />
+        <ActionIcon variant="subtle" size="sm" aria-label={TILE_ACTION_STYLE.menu.label}>
+          <Icon icon={TILE_ACTION_STYLE.menu.icon} width={16} />
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
         {page === 'actions' ? (
           <>
             <Menu.Item
-              leftSection={<Icon icon="tabler:edit" width={14} />}
+              leftSection={<Icon icon={EDIT_MENU_STYLE.edit.icon} width={14} />}
               onClick={handleEdit}
             >
-              Edit
+              {EDIT_MENU_STYLE.edit.label}
             </Menu.Item>
             {showDuplicate && (
               <Menu.Item
-                leftSection={<Icon icon="tabler:copy" width={14} />}
+                leftSection={<Icon icon={EDIT_MENU_STYLE.duplicate.icon} width={14} />}
                 onClick={handleDuplicate}
               >
-                Duplicate
+                {EDIT_MENU_STYLE.duplicate.label}
               </Menu.Item>
             )}
             {showMoveToSection && (
@@ -208,38 +211,38 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                 // Opens the second page instead of firing an action, so the
                 // menu has to stay open.
                 closeMenuOnClick={false}
-                leftSection={<Icon icon="mdi:format-list-group" width={14} />}
+                leftSection={<Icon icon={EDIT_MENU_STYLE['move-section'].icon} width={14} />}
                 rightSection={<Icon icon="mdi:chevron-right" width={14} />}
                 onClick={() => setPage('sections')}
               >
-                Move to section
+                {EDIT_MENU_STYLE['move-section'].label}
               </Menu.Item>
             )}
             {showCopyToTab && (
               <Menu.Item
                 closeMenuOnClick={false}
-                leftSection={<Icon icon="mdi:content-duplicate" width={14} />}
+                leftSection={<Icon icon={EDIT_MENU_STYLE['copy-tab'].icon} width={14} />}
                 rightSection={<Icon icon="mdi:chevron-right" width={14} />}
                 onClick={() => setPage('tabs')}
               >
-                Copy to tab…
+                {EDIT_MENU_STYLE['copy-tab'].label}
               </Menu.Item>
             )}
             {showHighlightOn && (
               <Menu.Item
                 closeMenuOnClick={false}
-                leftSection={<Icon icon="mdi:star-four-points-outline" width={14} />}
+                leftSection={<Icon icon={EDIT_MENU_STYLE.highlight.icon} width={14} />}
                 rightSection={<Icon icon="mdi:chevron-right" width={14} />}
                 onClick={() => setPage('highlight')}
                 data-testid="highlight-on-tab"
               >
-                Highlight on…
+                {EDIT_MENU_STYLE.highlight.label}
               </Menu.Item>
             )}
             {showFontScale && (
               <>
                 <Menu.Divider />
-                <Menu.Label>Font size</Menu.Label>
+                <Menu.Label>{EDIT_MENU_STYLE['font-size'].label}</Menu.Label>
                 {/* Inline control rather than Menu.Items so stepping A− / A+
                     doesn't close the menu between clicks. */}
                 <Group gap={6} px="sm" pb={6} wrap="nowrap" data-testid="figure-font-scale">
@@ -262,7 +265,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                       data-testid="figure-font-scale-increase"
                       aria-label="Increase figure font size"
                     >
-                      <Icon icon="mdi:format-font-size-increase" width={14} />
+                      <Icon icon={EDIT_MENU_STYLE['font-size'].icon} width={14} />
                     </ActionIcon>
                   </ActionIcon.Group>
                   <Text size="xs" c={currentScale === 1 ? 'dimmed' : undefined} w={38} ta="center">
@@ -284,11 +287,11 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
             )}
             <Menu.Divider />
             <Menu.Item
-              color="red"
-              leftSection={<Icon icon="tabler:trash" width={14} />}
+              color={EDIT_MENU_STYLE.delete.color}
+              leftSection={<Icon icon={EDIT_MENU_STYLE.delete.icon} width={14} />}
               onClick={handleDelete}
             >
-              Delete
+              {EDIT_MENU_STYLE.delete.label}
             </Menu.Item>
           </>
         ) : page === 'tabs' || page === 'highlight' ? (

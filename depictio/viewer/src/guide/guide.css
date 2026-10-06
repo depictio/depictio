@@ -104,6 +104,72 @@
   opacity: 0.55;
 }
 
+/* The Filters part's live card and filter: drawn by the real renderers, which
+ * size themselves to their grid cell, so each gets a framed cell of its own. */
+.depictio-guide-live {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.depictio-guide-live > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The Components part's tile: the real chrome around a schematic body, with
+ * its hover-only row kept on screen — the demo is there to show the row. */
+.depictio-guide-demo-tile {
+  position: relative;
+  max-width: 560px;
+}
+.depictio-guide-demo-tile .depictio-component-actions > * {
+  opacity: 1;
+  pointer-events: auto;
+}
+.depictio-guide-demo-tile .depictio-component-actions::before {
+  opacity: 1;
+}
+.depictio-guide-tile-body {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+  overflow: hidden;
+}
+.depictio-guide-row {
+  height: 12px;
+  border-radius: 3px;
+  background: var(--mantine-color-default-hover);
+  max-width: 70%;
+}
+.depictio-guide-row[data-head] {
+  background: var(--mantine-primary-color-light);
+}
+.depictio-guide-line {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-default-hover);
+}
+.depictio-guide-thumb {
+  aspect-ratio: 1;
+  max-height: 64px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-primary-color-light);
+}
+.depictio-guide-input {
+  height: 30px;
+  max-width: 60%;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+}
+/* Legend rows: the icon column lines up across a part. */
+.depictio-guide-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* "Show me": a ring around the real element, pulsing twice, then gone. */
 .depictio-guide-ring {
   position: fixed;

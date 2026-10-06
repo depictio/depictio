@@ -4,6 +4,7 @@ import ComponentChrome from './ComponentChrome';
 import type { StoredMetadata } from '../../api';
 
 export { default as ComponentChrome, actionsFor } from './ComponentChrome';
+export { canDuplicate } from './chromeActions';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
 export { default as MetadataPopover } from './MetadataPopover';
 export { default as MetadataBody } from './MetadataBody';
@@ -15,6 +16,16 @@ export { InspectorProvider, useInspectorControl } from './InspectorContext';
 export type { InspectorControl } from './InspectorContext';
 export { default as DownloadButton } from './DownloadButton';
 export { default as ResetButton } from './ResetButton';
+export { default as LoadAllButton } from './LoadAllButton';
+export type { LoadAllState } from './LoadAllButton';
+export { SelectionHintAction } from './SaveGroupAction';
+export {
+  EDIT_MENU_STYLE,
+  FULLSCREEN_EXIT_ICON,
+  LOAD_ALL_ACTIVE_ICON,
+  TILE_ACTION_STYLE,
+} from './actionStyles';
+export type { EditMenuStyleKey, TileActionStyle, TileActionStyleKey } from './actionStyles';
 
 export interface WrapWithChromeOpts {
   onResetFilter?: () => void;

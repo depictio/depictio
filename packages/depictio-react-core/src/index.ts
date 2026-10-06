@@ -12,7 +12,8 @@ import './styles/realtime-highlight.css';
 import './plotlyStrictMode';
 
 // Grid + top-level renderer
-export { default as DashboardGrid } from './components/DashboardGrid';
+export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
+export type { ComponentSection } from './utils/groupInteractive';
 export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
 export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
 // The grid's own geometry + per-type default box, for consumers that render a
@@ -307,15 +308,26 @@ export {
   FullscreenButton,
   DownloadButton,
   ResetButton,
+  LoadAllButton,
+  SelectionHintAction,
   InspectorProvider,
   useInspectorControl,
   actionsFor,
+  canDuplicate,
   wrapWithChrome,
+  EDIT_MENU_STYLE,
+  FULLSCREEN_EXIT_ICON,
+  LOAD_ALL_ACTIVE_ICON,
+  TILE_ACTION_STYLE,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
   ChromeAction,
+  EditMenuStyleKey,
   InspectorControl,
+  LoadAllState,
+  TileActionStyle,
+  TileActionStyleKey,
   WrapWithChromeOpts,
 } from './components/chrome';
 
@@ -517,6 +529,7 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
   enrichFilterWithDcId,
+  supportsSelectionGrouping,
 } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
@@ -832,6 +845,20 @@ export {
   resolveGuideSettings,
   tileActions,
 } from './guide/guideModel';
+export { foldableSectionsOf, pickFilterDemo } from './guide/demoSources';
+export type { GuideDemoSection, GuideFilterDemoPick } from './guide/demoSources';
+export {
+  editActionsFor,
+  GUIDE_TILE_TYPES,
+  ownControlsFor,
+  rowActionsFor,
+} from './guide/tileActionCatalog';
+export type {
+  GuideEditAction,
+  GuideOwnControl,
+  GuideRowAction,
+  GuideTileType,
+} from './guide/tileActionCatalog';
 export type {
   GuideAction,
   GuideActionKey,

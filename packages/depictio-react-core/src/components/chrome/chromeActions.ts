@@ -48,3 +48,10 @@ export function actionsFor(componentType: string): ChromeAction[] {
       return ['metadata'];
   }
 }
+
+/** Types the editor's tile menu offers "Duplicate" on. */
+const DUPLICATABLE_TYPES = new Set(['card', 'interactive', 'figure']);
+
+export function canDuplicate(componentType: string): boolean {
+  return DUPLICATABLE_TYPES.has(componentType);
+}

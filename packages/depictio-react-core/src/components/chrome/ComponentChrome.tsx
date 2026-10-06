@@ -14,6 +14,7 @@ import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGr
 import { supportsSelectionGrouping } from '../../selection';
 import { useGroupingColorVar } from '../../selectionGroups';
 import { actionsFor, type ChromeAction } from './chromeActions';
+import { TILE_ACTION_STYLE } from './actionStyles';
 import './chrome.css';
 
 export { actionsFor };
@@ -197,11 +198,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           >
             <ActionIcon
               variant="subtle"
-              color="teal"
+              color={TILE_ACTION_STYLE.description.color}
               size="sm"
               aria-label={`About this component: ${description}`}
             >
-              <Icon icon="mdi:text-box-outline" width={16} height={16} />
+              <Icon icon={TILE_ACTION_STYLE.description.icon} width={16} height={16} />
             </ActionIcon>
           </Tooltip>
         );
@@ -347,12 +348,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           >
             <ActionIcon
               variant="subtle"
-              color="gray"
+              color={TILE_ACTION_STYLE.drag.color}
               size="sm"
-              aria-label="Drag to move"
+              aria-label={TILE_ACTION_STYLE.drag.label}
               tabIndex={-1}
             >
-              <Icon icon="mdi:dots-grid" width={16} height={16} />
+              <Icon icon={TILE_ACTION_STYLE.drag.icon} width={16} height={16} />
             </ActionIcon>
           </span>
         )}

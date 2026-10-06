@@ -1325,16 +1325,12 @@ const App: React.FC = () => {
         {error && <Text c="red" p="lg">{error}</Text>}
         {dashboard && !loading && !error && (
           <div
-            // Under the Guide: kept mounted (and its figures loaded) for when
-            // the Guide closes, but neither painted nor in the focus order.
-            aria-hidden={guide.open || undefined}
             style={{
               display: 'flex',
               flexDirection: 'column',
               height: '100%',
               width: '100%',
               overflow: 'hidden',
-              visibility: guide.open ? 'hidden' : undefined,
             }}
           >
           <div
@@ -1430,7 +1426,13 @@ const App: React.FC = () => {
             )}
             <Box
               data-testid="dashboard-content"
+              // Under the Guide: kept mounted (and its figures loaded) for when
+              // the Guide closes, but neither painted nor in the focus order.
+              // Only the canvas: the filter panel stays on screen beside the
+              // Guide, so its "Show me" rings the real panel in place.
+              aria-hidden={guide.open || undefined}
               style={{
+                visibility: guide.open ? 'hidden' : undefined,
                 // Page-width preference: the canvas centres in what the
                 // filter panel leaves, the panel staying by the sidebar.
                 padding: 4,
@@ -1633,9 +1635,14 @@ const App: React.FC = () => {
             />
           )}
         </div>
-        {guide.open && guideModel && dashboard && (
+        {guide.open && guideModel && dashboard && dashboardId && (
           <DashboardGuide
             model={guideModel}
+            dashboardId={dashboardId}
+            dashboard={dashboard}
+            components={rightComponents}
+            tabs={tabSiblings}
+            persistentSections={crossTab.persistentSections}
             dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
             tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
             intro={guideSettings.intro}
