@@ -53,26 +53,55 @@ re-run does not reshuffle the dashboard.
    to ingest again, the ingested dashboard opened rather than the list,
    `run --template <path>`, `run --result-json`, and `run` using a running local
    server's CLI config when there is no `~/.depictio/CLI.yaml`.
-2. **Composer** (`depictio/cli/cli/utils/compose.py`): catalog matches → collections
-   (raw → table, recipe → `transform` with `source_overrides` on the matched path,
-   `multiqc.parquet` → multiqc; promote the helpers of
-   `projects/init/catalog_conformance/scripts/generate_project.py`) and a multi-tab
-   dashboard YAML (`{main_dashboard, tabs}`); `template compose`; the fallback in
-   `run` where it now reports "Could not tell which pipeline produced …".
-3. **Catalog**: `headline`, `priority`, `stage` and optional `warn`/`fail` thresholds on
-   a render (`catalog.py`, the JSON schemas, `SCHEMA.md`, `dev catalog validate`);
-   MultiQC sections kept only when the parquet has them (shared out of
-   `catalog_endpoints/routes.py::_multiqc_sections`); every plot of a MultiQC module,
-   not only the first; a cross-tool general-stats table joined on a normalised
-   sample id (`recipes/lib/sample_ids.py`).
-4. **Unrecognised files**: a deterministic proposal from the Polars schema (sample
-   column, numeric metrics → cards, categoricals of at most 50 values → MultiSelect,
-   `suggest_viz_kinds`); reported by `template compose` and at the end of `run`,
-   added with `--include-unknown` / `--include <glob>` into an "Other data" tab;
-   listed on the project page (v1: the command to copy; v2: one click in local
-   mode, where the server shares the file system).
-5. **Optional AI**, then a standalone HTML report, a Python API and catalog
-   enrichment.
+2. **Composer** (done, `depictio/cli/cli/utils/compose.py`):
+   - catalog matches → collections: raw → table; recipe → `transform` with
+     `source_overrides` re-rooted from the matched file; `multiqc.parquet` →
+     multiqc, read off the parquet itself (`multiqc_parquet.py`);
+   - a `dc_ref` a recipe needs is tagged as it expects, or synthesised from its raw
+     files (mosdepth's recipes read a collection named like their own output);
+   - every composed collection is `optional`, so a failed one is skipped and its
+     tiles dropped by the import instead of failing the run;
+   - a multi-tab dashboard (`{main_dashboard, tabs}`) with explicit layouts
+     (`compose_layout.py`), validated with the lite models before it is written;
+   - `depictio template compose <dir> [-o out/]`; the fallback in `run`, forced
+     with `--compose`.
+3. **Catalog** (done): `stage` on a tool and as an output override, `headline` on a
+   card, `priority` on any render; thresholds reuse the card's `threshold_*`
+   fields. Every MultiQC plot present in the report is on the dashboard. A
+   cross-tool general-stats table (`general_stats.tsv` next to the composed
+   template) joins each tool's headline cards per normalised sample.
+4. **Unrecognised files** (done): a deterministic proposal from the Polars schema
+   (sample column, numeric columns → cards, categoricals of at most 50 values →
+   filters, a scatter or box figure, the table), printed by `template compose` and
+   `run`, stored on `TemplateOrigin.unrecognised_files` and listed on the project
+   page with the command that adds each file; `--include-unknown` /
+   `--include <glob>` adds them to an "Other data" tab.
+5. **Not done here**: the optional AI layer (it needs the #964 → #1045 stack on
+   main: hand it the composed plan through the `plan` hook of #1032), a standalone
+   HTML report, a Python API, and catalog enrichment (most outputs still render
+   mostly advanced visualisations; about 31 of 183 MultiQC modules have a section,
+   which only matters for their stage, since every plot of a report is shown).
+
+Known limits:
+
+- Composed collections are not linked, so the Overview's sample filter narrows
+  the MultiQC plots only, not the other tools' tiles.
+- A recipe whose inputs are other collections (`dc_ref`) is left out of the
+  general statistics, which are computed before ingestion.
+- A one-click "add this file" on the project page needs the server to see the
+  files (local mode); the page shows the command instead.
+
+## Validation
+
+- Unit: `depictio/tests/cli/utils/test_compose.py` (matching against
+  `match_run_dir`, determinism, the composed YAML against the lite models, full
+  card rows, every MultiQC plot, recipe re-rooting, `dc_ref` providers, proposals,
+  the `template compose` command).
+- End to end: `depictio local up --data-root` on the catalog conformance run,
+  nf-core/ampliseq 2.14.0 (with and without `--include-unknown`) and
+  nf-core/viralrecon (`--compose`), then
+  `depictio/tests/e2e-playwright/tests/local/composed-dashboard.spec.ts`, which
+  opens every tab and the project page and fails on any server error.
 
 ## Layout of a composed dashboard
 
