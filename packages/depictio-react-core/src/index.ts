@@ -54,8 +54,16 @@ export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tab
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
 export { groupTabs, tabGroupNames, tabGroupOf } from './components/tabGroups';
 export type { GroupableTab, TabGroup } from './components/tabGroups';
+export { tabDisplayName, tabFamilyOf } from './components/tabFamily';
+export type { FamilyTab } from './components/tabFamily';
 export { parseBlocks } from './components/blockMarkdown';
 export type { Block as MarkdownBlock } from './components/blockMarkdown';
+export { MARKDOWN_CHEATSHEET } from './components/markdownCheatsheet';
+export type {
+  MarkdownExample,
+  MarkdownExampleGroup,
+  MarkdownRendering,
+} from './components/markdownCheatsheet';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 

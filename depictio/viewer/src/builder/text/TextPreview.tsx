@@ -5,17 +5,20 @@
  */
 import React from 'react';
 import { TextRenderer } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import type { DashboardSummary, StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import PreviewPanel from '../shared/PreviewPanel';
+import PreviewTabLinks from '../shared/PreviewTabLinks';
 
-const TextPreview: React.FC = () => {
+const TextPreview: React.FC<{ tabs: DashboardSummary[] }> = ({ tabs }) => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
     order?: number | string;
     alignment?: string;
     vertical_alignment?: string;
     body?: string;
+    surface?: StoredMetadata['surface'];
+    accent?: string;
   };
   const componentId = useBuilderStore((s) => s.componentId);
 
@@ -34,11 +37,17 @@ const TextPreview: React.FC = () => {
     alignment: config.alignment ?? 'left',
     vertical_alignment: config.vertical_alignment ?? 'center',
     body: config.body ?? '',
+    surface: config.surface ?? 'none',
+    accent: config.accent,
   };
 
   return (
     <PreviewPanel minHeight={200}>
-      <TextRenderer metadata={fakeMetadata} placeholder />
+      {/* With the tab family, `tab:` accents, tab links and tab tiles render
+          as they will on the dashboard instead of as plain text. */}
+      <PreviewTabLinks tabs={tabs}>
+        <TextRenderer metadata={fakeMetadata} placeholder />
+      </PreviewTabLinks>
     </PreviewPanel>
   );
 };

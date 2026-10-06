@@ -319,7 +319,10 @@ function buildText(
     alignment?: string;
     vertical_alignment?: string;
     body?: string;
+    surface?: string;
+    accent?: string;
   }>(state.config);
+  const surface = c.surface === 'card' || c.surface === 'tinted' ? c.surface : 'none';
   return {
     ...existing,
     ...base,
@@ -338,6 +341,10 @@ function buildText(
         ? c.vertical_alignment
         : 'center',
     body: c.body ?? '',
+    surface,
+    // An unframed tile draws no accent, so one left over from a framed draft
+    // would persist a setting that does nothing.
+    accent: surface !== 'none' ? c.accent?.trim() || undefined : undefined,
   };
 }
 
