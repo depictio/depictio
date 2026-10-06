@@ -33,8 +33,10 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: var(--step-accent);
-  background: color-mix(in srgb, var(--step-accent) 12%, var(--mantine-color-body));
+  /* Solid, in the accent: a tint of it read as a pastel of the brand rather
+     than the brand, and the marks are what carry the colour here. */
+  color: var(--mantine-color-white);
+  background: var(--step-accent);
   font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -46,7 +48,7 @@
   height: 2px;
   margin: 0 10px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--step-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--step-accent) 45%, transparent);
 }
 
 .depictio-step:last-child .depictio-step-line {
