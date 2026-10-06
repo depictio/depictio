@@ -44,6 +44,7 @@ from depictio.api.v1.endpoints.ai_endpoints.dashboard_plan import (
     normalize_plan,
     parse_plan,
 )
+from depictio.api.v1.endpoints.ai_endpoints.dashboard_probe import ProbeVerdict
 from depictio.api.v1.endpoints.ai_endpoints.dashboard_validate import validate_envelope
 from depictio.api.v1.endpoints.ai_endpoints.routes import ai_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
@@ -279,6 +280,20 @@ _TAG_RE = re.compile(r"this component's tag: (\S+)")
 _PLAN_MARKER = "You plan a complete Depictio dashboard"
 
 
+def _latest_components(events) -> dict[str, dict]:
+    """The last `component` event per tag: the run's final word on each tile.
+
+    A tag is reported twice now, once by the fill loop and once by the render
+    pass, which is what lets the panel show a verdict as soon as there is one
+    and correct it when the probe has run. Tests want the settled answer.
+    """
+    latest: dict[str, dict] = {}
+    for kind, data in events:
+        if kind == "component":
+            latest[data["tag"]] = data
+    return latest
+
+
 class FakeLLM:
     """Answers the planning call with `plan` and each fill call by the tag in its prompt.
 
@@ -344,16 +359,25 @@ class Pipeline:
         self.persist_error: HTTPException | None = None
         self.persist_failures = 0
         # The render check: every filled tile is probed, and a tag listed in
-        # `probe_errors` answers with that reason instead of None. Faked here
-        # like every other collaborator, so no test needs the real probe (it
-        # reads the data) to know what the check does with its answer.
+        # `probe_errors` answers with that reason instead of passing. Faked
+        # here like every other collaborator, so no test needs the real probe
+        # (it reads the data) to know what the check does with its answer.
+        # `probe_skips` is the third answer the verdict can give: a tile whose
+        # type has no cheap probe is neither a pass nor a failure.
         self.probe_errors: dict[str, str] = {}
+        self.probe_skips: dict[str, str] = {}
         self.probed: list[tuple[str, str | None]] = []
 
         def fake_probe(component, ctx_, user):
             tag = str(component.get("tag") or "")
             self.probed.append((tag, ctx_.data_collection_tag if ctx_ else None))
-            return self.probe_errors.get(tag)
+            error = self.probe_errors.get(tag)
+            if error is not None:
+                return ProbeVerdict("failed", error)
+            skip = self.probe_skips.get(tag)
+            if skip is not None:
+                return ProbeVerdict("skipped", skip)
+            return ProbeVerdict("passed")
 
         async def fake_context(project_id, user, dc_ids=None, *, max_collections=6):
             self.context_call = SimpleNamespace(
@@ -389,7 +413,7 @@ class Pipeline:
             dashboard_gen, "compose_offers_for_project", lambda doc: {"modules": []}
         )
         monkeypatch.setattr(dashboard_gen, "_persist_lite_dashboard", fake_persist)
-        monkeypatch.setattr(dashboard_gen, "probe_component", fake_probe)
+        monkeypatch.setattr(dashboard_gen, "probe_verdict", fake_probe)
         monkeypatch.setattr(dashboard_gen, "projects_collection", _FakeProjects(project_doc()))
         monkeypatch.setattr(
             dashboard_gen, "check_project_permission", lambda pid, user, perm: self.permission
@@ -521,6 +545,81 @@ class TestIrisGolden:
         assert [c["status"] for c in run.components] == ["ok"] * 12
         assert run.budget_spent.tokens == 13 * TOKENS_PER_CALL
         assert run.yaml == dashboard["yaml"]
+
+    def test_every_tile_records_the_gates_it_went_through(self, client, iris, monkeypatch):
+        """The stream and the draft both say how each tile was checked.
+
+        The event is what the running panel draws; the stamp is what the
+        review panel draws a day later, when the run is gone. They have to
+        agree, and a tile that skipped a gate has to say so rather than
+        letting a reader read four green marks as five.
+        """
+        # One tile is probed and clears the render gate; one is not probed at
+        # all, which has to read differently.
+        iris.probe_skips = {"variety_filter": "no render check for this widget"}
+        events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
+        components = _latest_components(events)
+
+        # A data-bound tile clears all five, the render check included.
+        scatter = components["sepal_scatter"]
+        assert [(c["layer"], c["status"]) for c in scatter["checks"]] == [
+            ("model", "passed"),
+            ("style", "passed"),
+            ("substance", "passed"),
+            ("schema", "passed"),
+            ("render", "passed"),
+        ]
+        assert scatter["repair"] is None
+
+        # The unprobed one is kept, and says the render gate did not run
+        # rather than showing the green of the four that did.
+        widget = components["variety_filter"]
+        assert widget["status"] == "ok"
+        render = widget["checks"][-1]
+        assert (render["layer"], render["status"]) == ("render", "skipped")
+        assert render["detail"] == "no render check for this widget"
+
+        # And the same record is stamped on the draft, so the review panel
+        # needs no second fetch and outlives the run record.
+        (persisted,) = iris.persisted
+        stamped = {row["tag"]: row for row in persisted.extra_fields["ai_generation"]["checks"]}
+        assert stamped["sepal_scatter"]["checks"] == scatter["checks"]
+        assert stamped["sepal_scatter"]["attempts"] == 1
+        assert stamped["sepal_scatter"]["repair"] == ""
+        # Section headers are written from the plan without a model call, so
+        # there is nothing to record about them and nothing is claimed.
+        assert set(stamped) == set(components)
+
+    def test_a_tile_that_will_not_render_says_which_gate_stopped_it(
+        self, client, iris, monkeypatch
+    ):
+        iris.probe_errors = {"sepal_scatter": "duplicate column 'sepal.length'"}
+        events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
+        dropped = _latest_components(events)["sepal_scatter"]
+        assert dropped["status"] == "dropped"
+        # The four it passed are kept, so the reason it is missing is legible.
+        assert [(c["layer"], c["status"]) for c in dropped["checks"]] == [
+            ("model", "passed"),
+            ("style", "passed"),
+            ("substance", "passed"),
+            ("schema", "passed"),
+            ("render", "failed"),
+        ]
+        assert dropped["checks"][-1]["detail"] == "duplicate column 'sepal.length'"
+
+    def test_a_repaired_tile_carries_what_the_repair_corrected(self, client, iris, monkeypatch):
+        answers = dict(IRIS_ANSWERS)
+        answers["sepal_scatter"] = [
+            _y(component_type="figure", title="Empty"),
+            *IRIS_ANSWERS["sepal_scatter"],
+        ]
+        events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, answers))
+        scatter = _latest_components(events)["sepal_scatter"]
+        assert scatter["status"] == "repaired"
+        assert scatter["attempts"] == 2
+        assert "dict_kwargs is empty" in scatter["repair"]
+        # The checks are the successful attempt's, not the failed one's.
+        assert all(c["status"] != "failed" for c in scatter["checks"])
 
     def test_yaml_round_trips_and_lays_out_the_funnel(self, client, iris, monkeypatch):
         events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
@@ -934,11 +1033,23 @@ class TestRenderCheck:
         def boom(component, ctx, user):
             raise RuntimeError("the probe module is not there")
 
-        monkeypatch.setattr(dashboard_gen, "probe_component", boom)
+        monkeypatch.setattr(dashboard_gen, "probe_verdict", boom)
         events = generate(client, monkeypatch, FakeLLM(IRIS_PLAN, IRIS_ANSWERS))
         dashboard = _one(events, "dashboard")
         assert dashboard["dropped"] == []
         assert sum("could not run" in w for w in dashboard["warnings"]) == 1
+        # The tiles are kept, and every one of them says it went unchecked
+        # rather than showing the green of a probe that never ran.
+        renders = [
+            check
+            for _, data in events
+            if isinstance(data, dict) and "checks" in data
+            for check in data["checks"]
+            if check["layer"] == "render"
+        ]
+        assert renders, "the render pass should still report on every tile"
+        assert {c["status"] for c in renders} == {"skipped"}
+        assert {c["detail"] for c in renders} == {"the render check could not run"}
 
 
 # ---------------------------------------------------------------------------
@@ -1578,17 +1689,30 @@ class TestBindAndValidate:
         planned = PlannedComponent(
             tag="f", section="Analysis", component_type="figure", data_collection_tag="physical"
         )
-        component, error = dashboard_gen._Generation._validate_answer(
+        component, error, checks = dashboard_gen._Generation._validate_answer(
             _y(component_type="figure", title="Empty"), planned, ctx
         )
         assert component is None
         assert "dict_kwargs is empty" in error
-        component, error = dashboard_gen._Generation._validate_answer(
+        # The gates that ran, and the one that stopped it. Nothing after
+        # substance is reported, because nothing after it ran.
+        assert [(c.layer, c.status) for c in checks] == [
+            ("model", "passed"),
+            ("style", "passed"),
+            ("substance", "failed"),
+        ]
+        component, error, checks = dashboard_gen._Generation._validate_answer(
             _figure(*_P, "histogram", x="bill_length_mm"), planned, ctx
         )
         assert error is None
         assert component["dict_kwargs"] == {"x": "bill_length_mm"}
         assert component["tag"] == "f"
+        assert [(c.layer, c.status) for c in checks] == [
+            ("model", "passed"),
+            ("style", "passed"),
+            ("substance", "passed"),
+            ("schema", "passed"),
+        ]
 
     def test_schema_error_names_the_field(self):
         ctx = penguins_context().collections[0]

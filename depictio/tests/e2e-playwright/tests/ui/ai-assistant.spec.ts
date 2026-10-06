@@ -289,6 +289,13 @@ async function mockCatalogCompose(page: Page, dc: () => Collection | null): Prom
   });
 }
 
+/** One gate's verdict on one tile, as `ai_generation.checks` stores it. */
+interface AICheck {
+  layer: string;
+  status: "passed" | "failed" | "skipped";
+  detail: string;
+}
+
 /** Mirrors AIGenerationInfo, the `ai_generation` block on a dashboard. */
 interface AIGeneration {
   status: "draft" | "promoted";
@@ -297,6 +304,8 @@ interface AIGeneration {
   generated_at: string;
   run_id: string;
   warnings: string[];
+  sections?: { name: string; kind: "filter" | "grid"; rationale: string }[];
+  checks?: { tag: string; attempts: number; repair: string; checks: AICheck[] }[];
 }
 
 /** Proxies GET /dashboards/get/{id} (`route.fetch`) and stamps the real
@@ -568,6 +577,13 @@ interface DraftReviewState {
   components: Record<string, unknown>[];
   /** Tags the review route has been told to keep. */
   reviewed: string[];
+  /** The planner rationales stamped alongside the tiles. */
+  sections: { name: string; kind: "filter" | "grid"; rationale: string }[];
+  /** Tags the proxy stamped check verdicts on, and the one it deliberately
+   *  left out so the panel's "not recorded" wording is reachable. Empty on a
+   *  one-tile draft, which has no tile to spare. */
+  checkedTags: string[];
+  uncheckedTag: string;
   reviews: { tag: string; action: string }[];
   regenerated: { index: string; instruction?: string }[];
   /** index → the tag its regeneration gave it. The GET proxy applies these
@@ -578,6 +594,11 @@ interface DraftReviewState {
 }
 
 const DRAFT_PROMPT = "compare body mass across species";
+/** The finding the mocked run says a repair round corrected on the first tile. */
+const DRAFT_REPAIR = "average is not available on a String column";
+/** A real skip reason from `probe_verdict`, so the panel draws a gate that
+ *  did not run rather than one that passed. */
+const DRAFT_SKIP = "no data collection to render against";
 
 /** The review flow's counterpart to `mockDraftDashboard`: the same proxy over
  *  GET /dashboards/get/{id} (so a seeded dashboard plays a fresh AI draft),
@@ -597,6 +618,9 @@ async function mockDraftReview(page: Page): Promise<DraftReviewState> {
     tagByIndex: {},
     components: [],
     reviewed: [],
+    sections: [],
+    checkedTags: [],
+    uncheckedTag: "",
     reviews: [],
     regenerated: [],
     retagged: {},
@@ -620,6 +644,52 @@ async function mockDraftReview(page: Page): Promise<DraftReviewState> {
       state.tagByIndex[index] = tag;
     });
     state.components = components;
+
+    // The planner's reason per section, built from the sections the seeded
+    // tiles actually name so the quote lands on a section the panel shows.
+    const named = new Set<string>();
+    components.forEach((m) => {
+      if (typeof m.section === "string" && m.section) named.add(m.section);
+    });
+    state.sections = [...named].map((name) => ({
+      name,
+      kind: "grid" as const,
+      rationale: `${name} answers the prompt directly.`,
+    }));
+
+    // What the run proved about each tile. The first tile is the interesting
+    // one: a finding the repair round corrected, and a render the probe could
+    // not run, so the panel has to draw a repaired tile and a skipped gate
+    // rather than a row of green. The last tile is left out on purpose, so a
+    // draft stamped before the run kept verdicts is on screen too.
+    const spare = state.tags.length > 1;
+    state.checkedTags = spare ? state.tags.slice(0, -1) : [...state.tags];
+    state.uncheckedTag = spare ? state.tags[state.tags.length - 1] : "";
+    const checks = state.checkedTags.map((tag, i) =>
+      i === 0
+        ? {
+            tag,
+            attempts: 2,
+            repair: DRAFT_REPAIR,
+            checks: [
+              { layer: "model", status: "passed" as const, detail: "" },
+              { layer: "style", status: "passed" as const, detail: "" },
+              { layer: "substance", status: "passed" as const, detail: "" },
+              { layer: "schema", status: "passed" as const, detail: "" },
+              { layer: "render", status: "skipped" as const, detail: DRAFT_SKIP },
+            ],
+          }
+        : {
+            tag,
+            attempts: 1,
+            repair: "",
+            checks: [
+              { layer: "model", status: "passed" as const, detail: "" },
+              { layer: "render", status: "passed" as const, detail: "" },
+            ],
+          },
+    );
+
     const info: AIGeneration & { reviewed: string[] } = {
       status: state.promoted ? "promoted" : "draft",
       model: "test/canned-model",
@@ -628,6 +698,8 @@ async function mockDraftReview(page: Page): Promise<DraftReviewState> {
       run_id: "run-canned",
       warnings: [],
       reviewed: [...state.reviewed],
+      sections: state.sections,
+      checks,
     };
     json.ai_generation = info;
     await route.fulfill({ json });
@@ -1507,6 +1579,58 @@ test.describe("AI assistant", () => {
       // instead of offering three dead buttons.
       await expect(panel).toContainText("reviewed");
       await expect(page.locator("[data-testid='draft-review-keep']")).toHaveCount(0);
+    }
+  });
+
+  test("AI draft: the review panel says how each tile was checked", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    const panel = page.locator("[data-testid='draft-review-panel']");
+    const strip = page.locator("[data-testid='draft-review-checks']");
+    const current = page.locator("[data-testid='draft-review-current']");
+
+    // The cursor opens on the first tile, the one the mocked run repaired.
+    await expect(current).toHaveAttribute("data-tag", String(draft.tags[0]));
+    await expect(strip).toBeVisible();
+
+    // Every gate the run recorded is named, and the gate that did not run
+    // says so with its reason rather than passing quietly.
+    for (const layer of ["model", "style", "substance", "schema"]) {
+      await expect(strip.locator(`[data-layer='${layer}']`)).toHaveAttribute(
+        "data-status",
+        "passed",
+      );
+    }
+    const render = strip.locator("[data-layer='render']");
+    await expect(render).toHaveAttribute("data-status", "skipped");
+    await expect(render).toContainText(DRAFT_SKIP);
+
+    // A repaired tile shows what the repair round corrected.
+    await expect(page.locator("[data-testid='draft-review-repair']")).toContainText(DRAFT_REPAIR);
+
+    // The planner's reason for the tile's section is quoted next to it.
+    const section = draft.components[0]?.section;
+    if (typeof section === "string" && section) {
+      await expect(panel).toContainText(`${section} answers the prompt directly.`);
+    }
+
+    // A tile the run never recorded verdicts for says so. Drawing nothing
+    // would read as "fine" beside a neighbour carrying a row of green.
+    if (draft.uncheckedTag) {
+      await reviewPanelItem(page, draft.uncheckedTag).click();
+      await expect(current).toHaveAttribute("data-tag", draft.uncheckedTag);
+      await expect(strip).toHaveAttribute("data-status", "not-recorded");
+      await expect(strip).toContainText("Checks not recorded");
     }
   });
 
