@@ -125,7 +125,7 @@ import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
-import type { TabModalSubmitPayload } from './chrome';
+import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
@@ -751,6 +751,35 @@ const EditorApp: React.FC = () => {
         setSaveStatus('saved');
       } catch (err) {
         console.error('[EditorApp] funnel toggle save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * The tab's display defaults from the settings drawer: page width, filter
+   * panel and tab header. Dashboard-level settings like funnel filtering, so
+   * the same save-now path: apply optimistically, POST the full document.
+   * The brand theme's targeted PATCH takes a brand theme and nothing else.
+   */
+  const handleTabDefaultsChange = useCallback(
+    async (patch: TabDefaults) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, ...patch };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] tab defaults save failed:', err);
         setSaveStatus('error');
       }
     },
@@ -2016,6 +2045,7 @@ const EditorApp: React.FC = () => {
         onToggleFunnelFiltering={handleToggleFunnelFiltering}
         onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
+        onChangeTabDefaults={handleTabDefaultsChange}
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />

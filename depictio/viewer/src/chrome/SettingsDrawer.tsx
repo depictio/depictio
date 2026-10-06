@@ -64,6 +64,71 @@ const PageWidthBlock: React.FC = () => {
   );
 };
 
+/** The dashboard-level defaults this drawer can change, saved on the tab. */
+export type TabDefaults = Pick<
+  DashboardData,
+  'content_width_default' | 'filter_panel_default' | 'show_tab_header'
+>;
+
+/**
+ * What a tab opens with before a viewer has chosen otherwise: its page width,
+ * whether the filter panel starts open, whether its name sits above the
+ * canvas. Editor only, and set apart from the Page width above on purpose:
+ * that one is the reader's own preference, kept in their browser, while
+ * these are saved with the dashboard for everyone.
+ */
+const TabDefaultsBlock: React.FC<{
+  dashboard: DashboardData | null;
+  onChange: (patch: TabDefaults) => void;
+}> = ({ dashboard, onChange }) => (
+  <Stack gap="sm" data-testid="tab-defaults-section">
+    <Stack gap={4}>
+      <Text fw={500} size="sm">
+        This tab&apos;s defaults
+      </Text>
+      <Text size="xs" c="dimmed">
+        Saved with the dashboard, for everyone who opens this tab. They only set where it
+        starts: a viewer who picks a page width or toggles the filter panel keeps their own
+        choice.
+      </Text>
+    </Stack>
+    <Stack gap={6}>
+      <Text size="sm">Page width</Text>
+      <SegmentedControl
+        size="xs"
+        value={dashboard?.content_width_default ?? 'full'}
+        onChange={(value) =>
+          onChange({ content_width_default: value as TabDefaults['content_width_default'] })
+        }
+        data={CONTENT_WIDTHS.map((w) => ({ value: w.value, label: w.label }))}
+        data-testid="tab-default-width-control"
+      />
+    </Stack>
+    <Stack gap={6}>
+      <Text size="sm">Filter panel</Text>
+      <SegmentedControl
+        size="xs"
+        value={dashboard?.filter_panel_default ?? 'open'}
+        onChange={(value) =>
+          onChange({ filter_panel_default: value === 'collapsed' ? 'collapsed' : 'open' })
+        }
+        data={[
+          { value: 'open', label: 'Open' },
+          { value: 'collapsed', label: 'Collapsed' },
+        ]}
+        data-testid="tab-default-filter-panel-control"
+      />
+    </Stack>
+    <Switch
+      label="Show the tab's name"
+      description="The tab's name and subtitle above its content. Off for a tab that opens on its own title, such as a landing page."
+      checked={dashboard?.show_tab_header !== false}
+      onChange={(e) => onChange({ show_tab_header: e.currentTarget.checked })}
+      data-testid="tab-default-header-switch"
+    />
+  </Stack>
+);
+
 /** A− / percent / A+ control for the dashboard content font-size preference
  *  (#854). Scales figures, tables and the other dashboard tiles — never the
  *  app chrome — and is a per-browser preference, so it renders in both the
@@ -384,6 +449,9 @@ interface SettingsDrawerProps {
   /** Editor only: uploads a dashboard logo (the server stamps it on the
    *  dashboard's brand theme) — reject to surface an error. */
   onUploadLogo?: (file: File) => Promise<void>;
+  /** Editor only: saves the tab's display defaults (page width, filter panel,
+   *  tab header) on its dashboard document. */
+  onChangeTabDefaults?: (patch: TabDefaults) => void;
 }
 
 /**
@@ -391,7 +459,8 @@ interface SettingsDrawerProps {
  * "Appearance" section grouping the content font-size preference (#854) and
  * the dashboard's brand override (#397 — logo, colors, surfaces and figure
  * defaults, inheriting the instance branding for anything left unset). The
- * editor also carries the funnel-filtering default (issue #939).
+ * editor also carries the funnel-filtering default (issue #939) and the tab's
+ * display defaults (page width, filter panel, tab header).
  *
  * The metadata content lives in `DashboardInfoBody`, shared with the
  * inspector's Info tab — which is what the inspector replaces this drawer
@@ -404,6 +473,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onChangeBrandTheme,
   onToggleFunnelFiltering,
   onUploadLogo,
+  onChangeTabDefaults,
 }) => (
   <Drawer
     opened={opened}
@@ -445,6 +515,12 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         </Group>
         <FontSizeBlock />
         <PageWidthBlock />
+        {onChangeTabDefaults && (
+          <>
+            <Divider />
+            <TabDefaultsBlock dashboard={dashboard} onChange={onChangeTabDefaults} />
+          </>
+        )}
         {onChangeBrandTheme && (
           <>
             <Divider />
