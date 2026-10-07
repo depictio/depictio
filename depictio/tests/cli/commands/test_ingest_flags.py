@@ -766,6 +766,22 @@ class TestServerCheckKeepsAReportedExit:
 
 
 class TestAttachMessages:
+    def test_a_run_name_clash_is_refused_before_the_run_is_announced(
+        self, app, runner, tmp_path, data_root, make_harness
+    ):
+        # Same directory name as data_root, elsewhere: both would be run 'run_b'.
+        twin = tmp_path / "elsewhere" / data_root.name
+        twin.mkdir(parents=True)
+        harness = make_harness(data_root, remote_locations=[str(twin)])
+
+        result = _invoke(app, runner, harness, _template(data_root, "--attach-run"))
+
+        assert result.exit_code == 1, result.output
+        output = normalize(result.output)
+        assert "would both be run 'run_b'" in output
+        assert "run location(s) ->" not in output
+        harness.sync.assert_not_called()
+
     def test_already_attached_run_says_no_run_is_added(self, app, runner, data_root, make_harness):
         harness = make_harness(data_root, remote_locations=[str(data_root)])
 
@@ -1133,6 +1149,26 @@ class TestDashboardsOnARefresh:
         for line in ("Dashboard 'D0' created", "Dashboard 'D1' kept", "Dashboard 'D2' replaced"):
             assert line in summary
         assert "--reset-dashboards replaces them" in output
+
+    def test_the_summary_counts_the_tabs_a_kept_dashboard_gained(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        results = self._results("kept")
+        results[0]["tabs_added"] = 2
+        harness.import_dashboards.return_value = results
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(data_root, "--dashboard", str(dashboard_file), "--update-config"),
+        )
+
+        assert result.exit_code == 0, result.output
+        output = normalize(result.output)
+        summary = output[output.index("Ingestion summary") :]
+        assert "Dashboard 'D0' kept (2 tabs added)" in summary
 
     def test_reset_warns_that_the_viewer_edits_are_lost(
         self, app, runner, data_root, dashboard_file, make_harness

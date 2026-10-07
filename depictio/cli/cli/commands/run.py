@@ -527,6 +527,22 @@ def _stop_on_missing_locations(report: dict) -> None:
     raise typer.Exit(code=1)
 
 
+def _stop_on_run_tag_clash(project_config) -> None:
+    """End the command when two flat locations of a workflow would share a run name.
+
+    Checked once the locations are final, before the sync records them (the scan
+    would refuse them only after the project was updated) and before the runs they
+    add or keep are announced.
+    """
+    for wf in project_config.workflows:
+        clash = flat_run_tag_clash(wf.data_location)
+        if clash:
+            rich_print_checked_statement(
+                f"Workflow '{escape(str(wf.workflow_tag))}': {escape(clash)}", "error"
+            )
+            raise typer.Exit(code=1)
+
+
 def _report_run_locations(project_config, report: dict) -> None:
     """Say, for a refresh, which runs the project keeps and which it loses."""
     for wf_tag, missing in report["missing"].items():
@@ -1565,6 +1581,7 @@ def register_run_command(app: typer.Typer):
                 )
                 if not drop_missing_runs and any(run_locations["missing"].values()):
                     _stop_on_missing_locations(run_locations)
+                _stop_on_run_tag_clash(project_config)
                 _report_run_locations(project_config, run_locations)
 
         # Step 3b (--attach-run): fold the run into an EXISTING project instead of
@@ -1590,6 +1607,7 @@ def register_run_command(app: typer.Typer):
                     raise typer.Exit(code=2)
 
                 report = attach_run_to_project(project_config, remote.json())
+                _stop_on_run_tag_clash(project_config)
                 added_locations = {tag: locs for tag, locs in report["added"].items() if locs}
                 for wf_tag, new_locations in added_locations.items():
                     rich_print_checked_statement(
@@ -1626,15 +1644,8 @@ def register_run_command(app: typer.Typer):
                 _rec("attach_run", "failed", str(e))
                 raise typer.Exit(code=1)
 
-        # Once the locations are final, and before the sync records them: the scan
-        # would refuse them only after the project was updated.
-        for wf in project_config.workflows:
-            clash = flat_run_tag_clash(wf.data_location)
-            if clash:
-                rich_print_checked_statement(
-                    f"Workflow '{escape(str(wf.workflow_tag))}': {escape(clash)}", "error"
-                )
-                raise typer.Exit(code=1)
+        # The locations of a first ingest or a dry run, which no step above checked.
+        _stop_on_run_tag_clash(project_config)
 
         # Open the monitoring ingestion record now that CLI_config is validated.
         # Best-effort: a monitoring outage must never affect the ingestion.
@@ -2074,7 +2085,7 @@ def register_run_command(app: typer.Typer):
                                 (
                                     str(r.get("title") or "dashboard"),
                                     str(r["dashboard_id"]),
-                                    r["status"],
+                                    dashboard_outcome(r),
                                 )
                             )
                         rich_print_checked_statement(
