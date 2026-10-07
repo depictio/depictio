@@ -10,6 +10,7 @@ import type { FilterSectionSpec, StoredMetadata } from '../api';
 import { isStripSection } from '../components/interactive/strip/stripLayout';
 import { advancedVizSelectionColumn, supportsSelectionGrouping } from '../selection';
 import { sectionComponents } from '../utils/groupInteractive';
+import { readMultiqcSelection } from '../utils/multiqcSelection';
 
 /** A key figure and a filter whose values change it. */
 export interface GuideFilterDemoPick {
@@ -218,6 +219,12 @@ export function actionsTileRank(
       case 'interactive':
         if (!m.dc_id || !m.column_name) return null;
         return CATEGORICAL.has(String(m.interactive_component_type ?? '')) ? 0 : 1;
+      case 'multiqc':
+        // A plot of the report: its zoom, its camera, its legend. The General
+        // Statistics tile is a table with toggles of its own, the one tile of
+        // the kind that shows none of that, so it is shown only where the
+        // report has nothing else.
+        return readMultiqcSelection(m as Record<string, unknown>).isGeneralStats ? 1 : 0;
       default:
         return 0;
     }

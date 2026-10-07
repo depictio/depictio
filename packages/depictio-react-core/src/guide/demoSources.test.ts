@@ -255,6 +255,30 @@ describe('actionsTileRank', () => {
     expect(figure(meta({ index: 'd', component_type: 'figure' }))).toBe(3);
   });
 
+  it('shows a MultiQC plot before the General Statistics table', () => {
+    const multiqc = actionsTileRank('multiqc');
+    const tile = (extra: Record<string, unknown>) =>
+      meta({ index: 'q', component_type: 'multiqc', ...extra } as never);
+    expect(multiqc(tile({ selected_module: 'fastqc', selected_plot: 'Sequence Counts' }))).toBe(0);
+    expect(multiqc(tile({ selected_module: 'general_stats', selected_plot: 'general_stats' }))).toBe(1);
+    expect(multiqc(tile({ multiqc_module: 'general_stats' }))).toBe(1);
+    expect(multiqc(tile({ is_general_stats: true }))).toBe(1);
+    expect(multiqc(meta({ index: 'f', component_type: 'figure' }))).toBeNull();
+    // In the family, a plot wins wherever it sits after the table.
+    const docs: Record<string, GuideFamilyDoc> = {
+      qc: {
+        stored_metadata: [
+          tile({ index: 'gs', selected_module: 'general_stats', selected_plot: 'general_stats' }),
+          tile({ index: 'bars', selected_module: 'cutadapt', selected_plot: 'Filtered Reads' }),
+        ],
+      },
+    };
+    expect(pickFromFamily(['qc'], (id) => docs[id], multiqc)).toMatchObject({
+      status: 'found',
+      metadata: { index: 'bars' },
+    });
+  });
+
   it('picks a second advanced view for its rows, of another kind where it can', () => {
     const view = (index: string, viz_kind: string) =>
       meta({ index, component_type: 'advanced_viz', viz_kind });
