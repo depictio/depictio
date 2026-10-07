@@ -290,10 +290,22 @@ _AGG_TITLE = {
 }
 
 
+def _short(label: str, length: int = 28) -> str:
+    return label if len(label) <= length else label[: length - 1].rstrip() + "…"
+
+
+def _lower_first(label: str) -> str:
+    """``Reads`` → ``reads``, but ``LR``, ``modelR`` and ``GC content`` stay as they are."""
+    word = label.split(" ", 1)[0]
+    if word[:2].isupper() or any(c.isupper() for c in word[1:]):
+        return label
+    return label[:1].lower() + label[1:]
+
+
 def card_title(column: str, aggregation: str) -> str:
     label = pretty(column)
     template = _AGG_TITLE.get(aggregation, "{} (" + aggregation + ")")
-    title = template.format(label if template.startswith("{}") else label.lower())
+    title = template.format(label if template.startswith("{}") else _lower_first(label))
     return title[:1].upper() + title[1:]
 
 
@@ -322,6 +334,7 @@ class Collection:
     general_stats: bool = False
     recipe: str | None = None
     overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    sample_values: list[str] = field(default_factory=list)  # read off its paths
 
     def to_template(self) -> dict[str, Any]:
         return {
@@ -742,7 +755,12 @@ def compose_run(
         if (shape := file_shape(root, path)) is not None
     }
     unrecognised: list[dict[str, Any]] = []
-    for group in group_files(shapes, files):
+    groups = group_files(shapes, files)
+    for twin, kept in drop_format_twins(groups):
+        skipped.append(Skipped(twin.glob, f"the same table as {kept.glob}"))
+    place_groups(groups, catalog_homes(entries))
+    name_kinds(groups)
+    for group in groups:
         # The listing is capped; a file asked for by name is not.
         named = any(r.match(f) for f in group.files for r in include_regexes)
         if len(unrecognised) >= MAX_UNRECOGNISED and not named:
@@ -832,6 +850,8 @@ _SEPARATORS = "._-"
 MAX_SCANNED = 2000
 MAX_WILDCARD_VALUES = 500
 MAX_GROUP_READ = 20
+MAX_GROUP_FILTERS = 2
+MAX_GROUP_FILTER_VALUES = 12
 
 
 @dataclass
@@ -848,6 +868,9 @@ class FileGroup:
     values: list[str] = field(default_factory=list)
     glob: str = ""
     label: str = ""
+    home: Home | None = None
+    kind: str = ""
+    headerless: bool | None = None  # None: decided from the first file's header
 
     @property
     def wildcard_regex(self) -> str:
@@ -1047,9 +1070,45 @@ def group_files(
         for group in found:
             _name_wildcard(group, columns, all_files or list(shapes))
         groups.extend(found)
+    groups = _headerless_groups(groups, shapes, all_files or list(shapes))
     groups.sort(key=lambda g: g.files[0])
     _label_groups(groups)
     return groups
+
+
+def _headerless_groups(
+    groups: list[FileGroup], shapes: dict[str, tuple[Any, ...]], all_files: Sequence[str]
+) -> list[FileGroup]:
+    """Group files whose "header" is their first row of data.
+
+    Files of one directory and one name pattern, as wide as each other, whose
+    first rows share no name at all (``bowtie2out`` mappings) have no header:
+    one row of data each, read as names. Files that share a column (``gene_id``
+    and a sample's name) have one, and stay apart.
+    """
+    singles = [g for g in groups if len(g.files) == 1 and shapes[g.files[0]][0] == "named"]
+    buckets: dict[tuple[Any, ...], list[str]] = {}
+    for group in singles:
+        path = group.files[0]
+        posix = PurePosixPath(path)
+        width = len(shapes[path][1])
+        buckets.setdefault((str(posix.parent), posix.suffix.lower(), width), []).append(path)
+    merged: set[str] = set()
+    found: list[FileGroup] = []
+    for members in buckets.values():
+        if len(members) < 2:
+            continue
+        names = [set(shapes[p][1]) for p in members]
+        if set.intersection(*names):
+            continue
+        group = _as_group(sorted(members), "value")
+        if group is None:
+            continue
+        group.headerless = True
+        _name_wildcard(group, (), all_files)
+        found.append(group)
+        merged.update(members)
+    return [g for g in groups if g.files[0] not in merged or len(g.files) > 1] + found
 
 
 def _group_label(group: FileGroup) -> str:
@@ -1087,6 +1146,215 @@ def _label_groups(groups: list[FileGroup]) -> None:
             continue
         for group, where in zip(same, distinct_labels([g.glob for g in same])):
             group.label = f"{group.label} ({where})"
+
+
+# Where a group goes: the section of the tool that wrote it. A directory the
+# catalog names (a tool, or a MultiQC module) gives the tool's name and stage;
+# any other gives a section in Other data, named after the directory.
+
+
+@dataclass
+class Home:
+    """The section a group of unrecognised files goes to: the tool that wrote it."""
+
+    key: str  # the directory it is named after
+    name: str  # what the section says
+    stage: str  # the stage tab it goes to; "other" is Other data
+    catalog: bool = False
+
+
+_WORDS = re.compile(r"[._\-\s]+")
+_FORMAT_RANK = {".parquet": 0, ".tsv": 1, ".tab": 2, ".csv": 3, ".txt": 4}
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in _WORDS.split(text) if w]
+
+
+def catalog_homes(entries: Iterable[CatalogEntry]) -> dict[str, tuple[str, str]]:
+    """Every tool the catalog knows, by normalised id and name: its name and stage.
+
+    MultiQC modules count (``kraken`` / "Kraken 2" is MultiQC's), and a tool's
+    own entry wins over its module.
+    """
+    entries = list(entries)
+    homes: dict[str, tuple[str, str]] = {}
+    for entry in entries:
+        if entry.id != "multiqc":
+            continue
+        for output in entry.outputs:
+            origin = getattr(output, "origin_tool", None)
+            if not origin:
+                continue
+            for key in (getattr(output, "mode", None), origin):
+                if key and _norm(key):
+                    homes.setdefault(_norm(key), (origin, entry.stage_of(output) or "other"))
+    for entry in entries:
+        if entry.id == "multiqc":
+            continue
+        for key in (entry.id, entry.name):
+            if _norm(key):
+                homes[_norm(key)] = (entry.name, entry.stage or "other")
+    return homes
+
+
+def _literal_dirs(group: FileGroup) -> list[str]:
+    return [p for p in PurePosixPath(group.glob).parts[:-1] if "*" not in p]
+
+
+def _name_part(group: FileGroup) -> str:
+    """The group's file name without its extension or the value that varies."""
+    name = PurePosixPath(group.glob).name
+    stem = name.rsplit(".", 1)[0] if "." in name.lstrip("*") else name
+    return stem.replace("*", " ")
+
+
+def _display(key: str) -> str:
+    text = key.replace("_", " ").strip()
+    return text[:1].upper() + text[1:] if text.islower() else text
+
+
+def _catalog_key(directory: str, homes: dict[str, tuple[str, str]]) -> str | None:
+    """The catalog tool a directory names: all of it, or exactly one of its words.
+
+    ``deseq2_qc`` is DESeq2's; ``star_salmon`` names two tools, so neither.
+    """
+    if _norm(directory) in homes:
+        return _norm(directory)
+    hits = {_norm(w) for w in _words(directory)} & homes.keys()
+    return hits.pop() if len(hits) == 1 else None
+
+
+def place_groups(groups: Sequence[FileGroup], homes: dict[str, tuple[str, str]]) -> None:
+    """Give each group a home: the tool directory it sits in.
+
+    The deepest directory the catalog names is the tool (a tool's directory
+    sits under its pipeline route: ``star_salmon/dupradar``).
+    Otherwise it is the first directory below what every such group shares; a
+    top directory that only holds tool directories (``arg/abricate``,
+    ``arg/deeparg``) is looked through once.
+    """
+    rest: list[FileGroup] = []
+    for group in groups:
+        hit = next(
+            (
+                (d, key)
+                for d in reversed(_literal_dirs(group))
+                if (key := _catalog_key(d, homes)) is not None
+            ),
+            None,
+        )
+        if hit:
+            name, stage = homes[hit[1]]
+            group.home = Home(hit[0], name, stage, catalog=True)
+        else:
+            rest.append(group)
+    if not rest:
+        return
+    lists = [_literal_dirs(g) for g in rest]
+    root = 0
+    while all(len(dirs) > root + 1 for dirs in lists) and len({dirs[root] for dirs in lists}) == 1:
+        root += 1
+    for group, dirs in zip(rest, lists):
+        below = dirs[root:]
+        if not below:
+            key = " ".join(_words(_name_part(group))) or "files"
+        else:
+            key = below[0]
+            if root == 0:
+                # Looked through when no file sits in it and its directories are
+                # not its own parts (``bracken/bracken-db`` stays Bracken's).
+                under = [d[root:] for d in lists if d[root:][:1] == [key]]
+                children = {u[1] for u in under if len(u) > 1}
+                if all(len(u) > 1 for u in under) and not all(
+                    _norm(child).startswith(_norm(key)) for child in children
+                ):
+                    key = below[1]
+        group.home = Home(key, _display(key), "other")
+
+
+def name_kinds(groups: Sequence[FileGroup]) -> None:
+    """``group.kind``: what a group holds, in the words its section does not already say.
+
+    Words of the tool's directory, words every group of files shares across the
+    run (``Illumina_Hiseq_3000``, ``db``), numbers and repeats are dropped:
+    ``bracken/bracken-db/{sample}_Illumina_Hiseq_3000_bracken-db.bracken.kraken2.report_bracken.txt``
+    is a "Kraken2 report" of Bracken.
+    """
+
+    def name_words(group: FileGroup) -> set[str]:
+        return {_norm(w) for w in _words(_name_part(group))}
+
+    # Words every group of files of the run shares, and every group of a section.
+    named = [g for g in groups if len(g.files) > 1]
+    common: set[str] = set()
+    if len(named) > 1:
+        common = set.intersection(*(name_words(g) for g in named))
+    by_home: dict[str, list[FileGroup]] = {}
+    for group in groups:
+        by_home.setdefault(group.home.name if group.home else "", []).append(group)
+    shared = {
+        home: set.intersection(*(name_words(g) for g in members)) if len(members) > 1 else set()
+        for home, members in by_home.items()
+    }
+    for group in groups:
+        dirs = _literal_dirs(group)
+        home = group.home
+        at = dirs.index(home.key) + 1 if home and home.key in dirs else 0
+        drop = {_norm(w) for d in dirs[:at] for w in _words(d)} | common
+        drop |= shared[home.name if home else ""]
+        if home:
+            drop |= {_norm(w) for w in _words(home.key) + _words(home.name)}
+        parts: list[str] = []
+        for segment in [*dirs[at:], _name_part(group)]:
+            words = [w for w in _words(segment) if _norm(w) not in drop and not w.isdigit()]
+            words = [
+                w for i, w in enumerate(words) if _norm(w) not in {_norm(x) for x in words[:i]}
+            ]
+            drop |= {_norm(w) for w in words}
+            if words:
+                parts.append(" ".join(words))
+        kind = " · ".join(parts)
+        group.kind = kind[:1].upper() + kind[1:]
+    # Two groups of one section saying the same: tell them apart by their paths.
+    same: dict[tuple[str, str], list[FileGroup]] = {}
+    for group in groups:
+        same.setdefault((group.home.name if group.home else "", group.kind), []).append(group)
+    for twins in same.values():
+        if len(twins) > 1:
+            for group, where in zip(twins, distinct_labels([g.glob for g in twins])):
+                group.kind = f"{group.kind} ({where})" if group.kind else where
+    for group in groups:
+        name = group.home.name if group.home else group.label
+        group.label = f"{name} · {group.kind}" if group.kind else name
+
+
+def drop_format_twins(groups: list[FileGroup]) -> list[tuple[FileGroup, FileGroup]]:
+    """Keep one of a table written in two formats (``x.csv`` and ``x.tsv``).
+
+    Returns the (dropped, kept) pairs; the kept one is the more typed format.
+    """
+    best: dict[str, FileGroup] = {}
+    dropped: list[tuple[FileGroup, FileGroup]] = []
+    for group in groups:
+        posix = PurePosixPath(group.glob)
+        key = str(posix.with_suffix(""))
+        rank = _FORMAT_RANK.get(posix.suffix.lower(), 9)
+        kept = best.get(key)
+        if kept is None:
+            best[key] = group
+        elif rank < _FORMAT_RANK.get(PurePosixPath(kept.glob).suffix.lower(), 9):
+            dropped.append((kept, group))
+            best[key] = group
+        else:
+            dropped.append((group, kept))
+    gone = {id(d) for d, _ in dropped}
+    groups[:] = [g for g in groups if id(g) not in gone]
+    return dropped
 
 
 def file_shape(data_root: Path, path: str) -> tuple[Any, ...] | None:
@@ -1136,7 +1404,9 @@ def propose_group(data_root: Path, group: FileGroup) -> dict[str, Any] | None:
     first = read_sample(data_root / group.files[0], rows=20)
     if first is None:
         return None
-    headerless = looks_headerless(first.columns)
+    headerless = (
+        group.headerless if group.headerless is not None else looks_headerless(first.columns)
+    )
     frame = _read_group(data_root, group, has_header=not headerless)
     if frame is None:
         return None
@@ -1166,6 +1436,20 @@ def propose_group(data_root: Path, group: FileGroup) -> dict[str, Any] | None:
     categorical = categorical[:3]
     # Colour and group by a real category, not by the sample (one colour per row).
     groups = [c for c in categorical if c != sample] or categorical
+    # The sample has its own filter, on every tab; a group's filters are what
+    # else narrows it: which file (variants of one output), a few-valued category.
+    # Numbered columns (no header) mean nothing to filter by.
+    filters = [group.wildcard] if group.wildcard == "file" else []
+    filters += [
+        c
+        for c, t in types.items()
+        if not headerless
+        and column_type(t) in ("object", "category")
+        and c not in (sample, group.wildcard)
+        and not _is_identifier(c)
+        and 1 < frame[c].n_unique() <= MAX_GROUP_FILTER_VALUES
+    ]
+    filters = filters[:MAX_GROUP_FILTERS]
     figure: dict[str, Any] | None = None
     if len(numeric) >= 2:
         kwargs = {"x": numeric[0], "y": numeric[1]}
@@ -1180,7 +1464,7 @@ def propose_group(data_root: Path, group: FileGroup) -> dict[str, Any] | None:
     if headerless:
         proposal.append("no header row: columns numbered")
     proposal += [f"card: mean of {c}" for c in numeric]
-    proposal += [f"filter: {c}" for c in categorical]
+    proposal += [f"filter: {c}" for c in filters]
     if figure:
         kw = figure["dict_kwargs"]
         proposal.append(f"figure: {figure['visu_type']} of {kw['y']} against {kw['x']}")
@@ -1199,6 +1483,7 @@ def propose_group(data_root: Path, group: FileGroup) -> dict[str, Any] | None:
         "_headerless": headerless,
         "_numeric": numeric,
         "_categorical": categorical,
+        "_filters": filters,
         "_figure": figure,
     }
 
@@ -1237,6 +1522,7 @@ def _unknown_collection(proposal: dict[str, Any]) -> Collection:
         config=config,
         files=list(group.files),
         columns=proposal["_types"],
+        sample_values=list(group.values) if group.wildcard == "sample" else [],
     )
 
 
@@ -1449,8 +1735,17 @@ def _unknown_tiles(
     tagger: _Tagger,
     models: dict[str, Any],
     skipped: list[Skipped],
+    shared: bool = False,
 ) -> list[dict[str, Any]]:
-    section = proposal["title"]
+    """A group's tiles, in its tool's section, titled by what the group holds.
+
+    ``shared``: the section holds other groups too, so cards and filters say
+    which group they read.
+    """
+    group: FileGroup = proposal["_group"]
+    section = group.home.name if group.home else proposal["title"]
+    kind = group.kind
+    tell = f"{kind} · " if shared and kind else ""
     base = {
         "workflow_tag": workflow,
         "data_collection_tag": collection.tag,
@@ -1465,34 +1760,36 @@ def _unknown_tiles(
                 f"{collection.tag}-card",
                 "card",
                 **base,
-                title=card_title(column, "average"),
+                title=tell + card_title(column, "average"),
                 column_name=column,
                 aggregation="average",
                 column_type=column_type(types[column]),
                 secondary_layout="histogram",
             )
         )
-    for column in proposal["_categorical"]:
+    for column in proposal["_filters"]:
         built.append(
             _component(
                 tagger,
                 f"{collection.tag}-filter",
                 "interactive",
                 **base,
-                title=pretty(column),
+                title=pretty(column) + (f" ({kind})" if shared and kind else ""),
                 interactive_component_type="MultiSelect",
                 column_name=column,
                 column_type=column_type(types[column]),
             )
         )
     if proposal["_figure"]:
+        kw = proposal["_figure"]["dict_kwargs"]
         built.append(
             _component(
                 tagger,
                 f"{collection.tag}-figure",
                 "figure",
                 **base,
-                title=section,
+                title=tell
+                + f"{_short(pretty(kw['y']))} against {_lower_first(_short(pretty(kw['x'])))}",
                 **proposal["_figure"],
             )
         )
@@ -1502,7 +1799,7 @@ def _unknown_tiles(
             f"{collection.tag}-table",
             "table",
             **base,
-            title=section,
+            title=kind or "Table",
         )
     )
     kept: list[dict[str, Any]] = []
@@ -1553,7 +1850,10 @@ def _collection_frame(collection: Collection, data_root: Path):  # -> pl.DataFra
 
 
 def general_statistics(
-    collections: Sequence[Collection], tiles: dict[str, list[Tile]], data_root: Path
+    collections: Sequence[Collection],
+    tiles: dict[str, list[Tile]],
+    data_root: Path,
+    frame_of=None,
 ):  # -> pl.DataFrame | None
     """One row per sample, one column per headline card, joined across tools.
 
@@ -1580,7 +1880,7 @@ def general_statistics(
         sample = _sample_column(collection.columns)
         if sample is None:
             continue
-        frame = _collection_frame(collection, data_root)
+        frame = frame_of(collection) if frame_of else _collection_frame(collection, data_root)
         if frame is None or sample not in frame.columns:
             continue
         exprs = []
@@ -1613,8 +1913,178 @@ def general_statistics(
 
 
 # ---------------------------------------------------------------------------
+# One Samples filter for every collection
+# ---------------------------------------------------------------------------
+
+SAMPLES_FILE = "samples.tsv"
+MAX_SAMPLE_VALUES = 5000
+MAX_SAMPLE_NAME = 80
+HUB_SAMPLE_COLUMNS = tuple(c for c in SAMPLE_COLUMNS if c != "id")
+
+
+@dataclass
+class SampleHub:
+    """Every sample of the run, one row each, and the links that let it filter everything."""
+
+    collection: Collection
+    links: list[dict[str, Any]]
+    samples: list[str]
+
+
+def canonical_samples(values: Iterable[str]) -> dict[str, str]:
+    """Each value's sample: the shortest value it extends at a separator.
+
+    ``MOCK_001_Illumina_Hiseq_3000_1`` (a MultiQC name) is ``MOCK_001`` when the
+    run also names ``MOCK_001`` (a path); ``S1`` and ``S10`` stay two samples.
+    Stage suffixes go first (``.sorted.bam``).
+    """
+    from depictio.recipes.lib.sample_ids import strip_stage_suffixes
+
+    base = {v: strip_stage_suffixes(v) for v in values}
+    keys = sorted(set(base.values()), key=lambda k: (len(k), k))
+    canon: dict[str, str] = {}
+    for i, key in enumerate(keys):
+        canon[key] = key
+        for shorter in keys[:i]:
+            if len(shorter) < len(key) and key.startswith(shorter) and key[len(shorter)] in "_-. ":
+                canon[key] = canon[shorter]
+                break
+    return {v: canon[b] for v, b in base.items()}
+
+
+def _sample_values(
+    collection: Collection, data_root: Path, frame_of
+) -> tuple[str, list[str]] | None:
+    """A collection's sample column and the values in it, or None."""
+    import polars as pl
+
+    try:
+        if collection.kind == "multiqc":
+            # The General Statistics rows: other tables key their rows by other
+            # things (FastQC's overrepresented sequences, by sequence).
+            frame = (
+                pl.scan_parquet(data_root / collection.files[0])
+                .select("anchor", "sample")
+                .filter(pl.col("anchor").str.contains("general_stats"))
+                .select("sample")
+                .drop_nulls()
+                .unique()
+                .collect()
+            )
+            return "sample", frame["sample"].cast(pl.String).to_list()
+        if collection.sample_values:
+            return "sample", list(collection.sample_values)
+        if collection.kind not in ("raw", "recipe", "unknown", "general_stats"):
+            return None
+        # Named for samples, not merely ``id``: an id column names genes or reads too.
+        column = next((c for c in collection.columns if c.lower() in HUB_SAMPLE_COLUMNS), None)
+        if column is None or column_type(collection.columns[column]) not in ("object", "category"):
+            return None
+        frame = frame_of(collection)
+        if frame is None or column not in frame.columns:
+            return None
+        values = frame[column].cast(pl.String).drop_nulls().unique().to_list()
+        if any(len(v) > MAX_SAMPLE_NAME for v in values):
+            return None  # sequences, paths or free text, not sample names
+        return column, values
+    except Exception as exc:
+        logger.info(f"Samples: skipped {collection.tag} ({exc})")
+        return None
+
+
+def sample_hub(
+    collections: Sequence[Collection], data_root: Path, out: Path, frame_of
+) -> SampleHub | None:
+    """The run's samples as one table, linked to every collection that names them.
+
+    Samples are read from each collection's sample column (or its paths), and
+    from MultiQC's report; a value extending another at a separator is the
+    same sample. Each link says how the collection names each sample: as is
+    (``direct``), or through explicit variants (``sample_mapping``).
+    """
+    import polars as pl
+
+    sources: list[tuple[Collection, str, list[str]]] = []
+    for collection in collections:
+        found = _sample_values(collection, data_root, frame_of)
+        if found and found[1]:
+            sources.append((collection, found[0], sorted({str(v) for v in found[1]})))
+        elif collection.kind == "multiqc":
+            # No General Statistics to read names from: the server maps them live.
+            sources.append((collection, "sample", []))
+    values = {v for _, _, vs in sources for v in vs}
+    if not sources or len(values) > MAX_SAMPLE_VALUES:
+        return None
+    canon = canonical_samples(values)
+    samples = sorted(set(canon.values()))
+    if len(samples) < 2:
+        return None
+    path = out / SAMPLES_FILE
+    pl.DataFrame({"sample": samples}).write_csv(path, separator="\t")
+    taken = {c.tag for c in collections}
+    tag = next(t for t in ("samples", "run_samples", "all_samples_of_the_run") if t not in taken)
+    hub = Collection(
+        tag=tag,
+        kind="samples",
+        description="Every sample of the run, one row each: the Samples filter, linked to "
+        "every collection that names samples",
+        config={
+            "type": "Table",
+            "scan": {"mode": "single", "scan_parameters": {"filename": str(path)}},
+            "dc_specific_properties": {"format": "tsv", "polars_kwargs": {"separator": "\t"}},
+        },
+        stage="qc",
+        columns={"sample": "object"},
+    )
+    links = []
+    for collection, column, names in sources:
+        mapping: dict[str, list[str]] = {}
+        for name in names:
+            mapping.setdefault(canon[name], []).append(name)
+        same = all(variants == [sample] for sample, variants in mapping.items())
+        if collection.kind == "multiqc":
+            target_type = "multiqc"
+            config = {"resolver": "sample_mapping", **({"mappings": mapping} if mapping else {})}
+        elif same:
+            target_type, config = "table", {"resolver": "direct", "target_field": column}
+        else:
+            target_type = "table"
+            config = {"resolver": "sample_mapping", "mappings": mapping, "target_field": column}
+        links.append(
+            {
+                "source_dc_tag": tag,
+                "source_column": "sample",
+                "target_dc_tag": collection.tag,
+                "target_type": target_type,
+                "link_config": config,
+                "description": f"The Samples filter narrows {collection.tag}",
+                "enabled": True,
+            }
+        )
+    return SampleHub(collection=hub, links=links, samples=samples)
+
+
+# ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
+
+
+def _home_description(members: Sequence[tuple[dict[str, Any], Collection]]) -> str:
+    """Where a tool section's files are, and how many samples they cover."""
+    globs = [proposal["_group"].glob for proposal, _ in members]
+    parts = [PurePosixPath(g).parts[:-1] for g in globs]
+    common: list[str] = []
+    for level in zip(*parts):
+        if len(set(level)) > 1 or "*" in level[0]:
+            break
+        common.append(level[0])
+    where = "/".join(common) + "/" if common else "the results directory"
+    samples = max(
+        (len(p["_group"].values) for p, _ in members if p["_group"].wildcard == "sample"), default=0
+    )
+    files = sum(p.get("n_files", 1) for p, _ in members)
+    count = f"{samples} samples" if samples else f"{files} file{'s' if files != 1 else ''}"
+    return f"{count}, in {where}"
 
 
 def _where(proposal: dict[str, Any]) -> str:
@@ -1733,8 +2203,15 @@ def write_template(
         if collection.kind in ("raw", "recipe"):
             tiles[collection.tag] = _collection_tiles(collection, workflow, tagger, models, skipped)
 
+    frames: dict[str, Any] = {}
+
+    def frame_of(collection: Collection):  # -> pl.DataFrame | None
+        if collection.tag not in frames:
+            frames[collection.tag] = _collection_frame(collection, root)
+        return frames[collection.tag]
+
     # General statistics across tools, written next to the template.
-    stats = general_statistics(collections, tiles, root)
+    stats = general_statistics(collections, tiles, root, frame_of)
     general_path = out / GENERAL_STATS_FILE
     general_path.unlink(missing_ok=True)
     stats_collection: Collection | None = None
@@ -1754,12 +2231,33 @@ def write_template(
         )
         collections.append(stats_collection)
         _unique_tags(collections)
+        frames[stats_collection.tag] = stats
+
+    # One Samples filter for the whole dashboard, linked to every collection.
+    (out / SAMPLES_FILE).unlink(missing_ok=True)
+    hub = sample_hub(collections, root, out, frame_of)
+    if hub is not None:
+        collections.append(hub.collection)
 
     multiqc = [c for c in collections if c.kind == "multiqc"]
     family_filter = None
     overview_components: list[dict[str, Any]] = []
     overview_filters: list[dict[str, Any]] = []
-    if multiqc:
+    if hub is not None:
+        family_filter = _component(
+            tagger,
+            "overview-sample-filter",
+            "interactive",
+            workflow_tag=workflow,
+            data_collection_tag=hub.collection.tag,
+            section="Samples",
+            title="Sample",
+            interactive_component_type="MultiSelect",
+            column_name="sample",
+            column_type="object",
+        )
+        overview_filters.append(family_filter)
+    elif multiqc:
         # Bound to the MultiQC report's own sample list, so it exists on every run
         # and its persistent section counts as every tab's filter.
         family_filter = _component(
@@ -1781,11 +2279,42 @@ def write_template(
     for collection in collections:
         if collection.kind in ("raw", "recipe") and tiles.get(collection.tag):
             by_stage.setdefault(collection.stage, []).append(collection)
+    # Included files the catalog does not recognise, in the section of the tool
+    # that wrote them: its stage's tab when the catalog knows the tool, else
+    # Other data.
+    unknown_by_path = {c.files[0]: c for c in collections if c.kind == "unknown"}
+    placed: dict[str, dict[str, list[tuple[dict[str, Any], Collection]]]] = {}
+    for proposal in composition.unrecognised:
+        group = proposal["_group"]
+        collection = unknown_by_path.get(group.files[0])
+        if proposal.get("_include") and collection is not None and group.home is not None:
+            homes = placed.setdefault(group.home.stage, {})
+            homes.setdefault(group.home.name, []).append((proposal, collection))
     tabs: list[dict[str, Any]] = []
     headline: list[tuple[int, Tile]] = []
 
-    for stage in sorted(by_stage, key=_stage_rank):
-        members = by_stage[stage]
+    def home_sections(stage: str) -> tuple[list[dict], list[dict], list[dict]]:
+        """Components, grid sections and filter sections of a stage's placed groups."""
+        components: list[dict[str, Any]] = []
+        sections: list[dict[str, Any]] = []
+        filter_sections: list[dict[str, Any]] = []
+        for name, members in placed.get(stage, {}).items():
+            built: list[dict[str, Any]] = []
+            for proposal, collection in members:
+                built += _unknown_tiles(
+                    collection, proposal, workflow, tagger, models, skipped, shared=len(members) > 1
+                )
+            if not built:
+                continue
+            components += built
+            sections.append(_section(name, stage, description=_home_description(members)))
+            if any(c["component_type"] == "interactive" for c in built):
+                filter_sections.append(_section(name, stage, icon="mdi:filter-variant"))
+        return components, sections, filter_sections
+
+    stages = set(by_stage) | (set(placed) - {"other"})
+    for stage in sorted(stages, key=_stage_rank):
+        members = by_stage.get(stage, [])
         components: list[dict[str, Any]] = []
         sections: list[dict[str, Any]] = []
         tables: list[dict[str, Any]] = []
@@ -1806,6 +2335,10 @@ def write_template(
                     component["section"] = "Tables"
                     tables.append(component)
                 elif component["component_type"] == "interactive":
+                    if hub is not None and str(component.get("column_name", "")).lower() in (
+                        HUB_SAMPLE_COLUMNS
+                    ):
+                        continue  # the dashboard's own Samples filter covers it
                     component["section"] = filter_section
                     filters.append(component)
                 else:
@@ -1823,10 +2356,14 @@ def write_template(
             for tool in tools
             if tool in shown
         ]
+        extra, extra_sections, extra_filters = home_sections(stage)
+        named = {section["name"] for section in sections}
+        sections += [section for section in extra_sections if section["name"] not in named]
+        tools += [section["name"] for section in extra_sections if section["name"] not in tools]
         if tables:
             # Folded away under the charts; open when the tables are all there is.
             sections.append(
-                _section("Tables", "other", collapsed=bool(components), icon="mdi:table")
+                _section("Tables", "other", collapsed=bool(components or extra), icon="mdi:table")
             )
         tab: dict[str, Any] = {
             "title": STAGE_LABELS[stage],
@@ -1834,10 +2371,16 @@ def write_template(
             "tab_icon": STAGE_STYLE[stage][0],
             "tab_icon_color": STAGE_STYLE[stage][1],
             "grid_sections": sections,
-            "components": components + tables + filters,
+            "components": components + extra + tables + filters,
         }
+        filter_sections = extra_filters
         if filters:
-            tab["filter_sections"] = [_section(filter_section, stage, icon="mdi:filter-variant")]
+            filter_sections = [
+                _section(filter_section, stage, icon="mdi:filter-variant"),
+                *extra_filters,
+            ]
+        if filter_sections:
+            tab["filter_sections"] = filter_sections
         tabs.append(tab)
 
     labels = distinct_labels([c.files[0] for c in multiqc])
@@ -1847,52 +2390,20 @@ def write_template(
         if tab:
             tabs.append(tab)
 
-    # Other data, on request only.
-    included = [p for p in composition.unrecognised if p.get("_include")]
-    if included:
-        unknown_by_path = {c.files[0]: c for c in collections if c.kind == "unknown"}
-        components = []
-        for proposal in included:
-            collection = unknown_by_path.get(proposal["_group"].files[0])
-            if collection is not None:
-                components += _unknown_tiles(
-                    collection, proposal, workflow, tagger, models, skipped
-                )
-        if components:
-            sections = [
-                _section(p["title"], "other", description=_where(p))
-                for p in included
-                if p["_group"].files[0] in unknown_by_path
-            ]
-            tab = {
-                "title": "Other data",
-                "subtitle": "Files the catalog does not recognise, included on request",
-                "tab_icon": "mdi:folder-outline",
-                "tab_icon_color": "gray",
-                "grid_sections": sections,
-                "components": components,
-            }
-            # One filter section per collection, named like its grid section: a
-            # filter narrows its own collection only, so "sample" in two of them is
-            # two controls, and the section says which data each one filters.
-            filter_names = list(
-                dict.fromkeys(
-                    c["section"] for c in components if c["component_type"] == "interactive"
-                )
-            )
-            if filter_names:
-                where = {p["title"]: _where(p) for p in included}
-                tab["filter_sections"] = [
-                    _section(
-                        name,
-                        "other",
-                        icon="mdi:filter-variant",
-                        collapsed=len(filter_names) > 1,
-                        description=where.get(name),
-                    )
-                    for name in filter_names
-                ]
-            tabs.append(tab)
+    # Other data: included files of tools the catalog does not know.
+    components, sections, filter_sections = home_sections("other")
+    if components:
+        tab = {
+            "title": "Other data",
+            "subtitle": ", ".join(section["name"] for section in sections),
+            "tab_icon": "mdi:folder-outline",
+            "tab_icon_color": "gray",
+            "grid_sections": sections,
+            "components": components,
+        }
+        if filter_sections:
+            tab["filter_sections"] = filter_sections
+        tabs.append(tab)
 
     # Overview.
     headline.sort(key=lambda rt: rt[0])
@@ -2008,6 +2519,7 @@ def write_template(
         },
         "name": name,
         "project_type": "advanced",
+        **({"links": hub.links} if hub is not None else {}),
         "workflows": [
             {
                 "name": workflow,

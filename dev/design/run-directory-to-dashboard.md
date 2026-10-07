@@ -80,9 +80,24 @@ re-run does not reshuffle the dashboard.
    collection (`abricate/{sample}/{sample}.txt`): a recursive scan whose
    wildcard becomes a column at ingestion. The column is `sample` when the
    values turn up elsewhere in the run under another kind of name, `file`
-   otherwise (variants of one output, `salmon.merged.gene_*.tsv`). Nothing
-   in this knows a tool; sections and filters are named after the group's
-   last literal directory and kind (`abricate`, `bracken-db · report`).
+   otherwise (variants of one output, `salmon.merged.gene_*.tsv`). Files of
+   one directory and name pattern whose first rows share no name are
+   headerless (`bowtie2out`), and grouped as such.
+   - **Where a group goes**: the deepest directory the catalog names (a tool or
+     a MultiQC module, by id or name, or exactly one word of it:
+     `deseq2_qc`) gives the section its tool's name and its stage's tab;
+     otherwise the first directory below what the groups share, a top
+     directory holding only tool directories looked through once
+     (`arg/abricate`), in Other data. Tiles say what the group holds in the
+     words its section does not already say ("Kraken2 report" of Bracken).
+     A table written twice (`x.csv`, `x.tsv`) is kept once.
+   - **One Samples filter**: `samples.tsv` next to the template holds every
+     sample of the run (sample columns, path values, MultiQC's General
+     Statistics; a value extending another at a separator is the same
+     sample). Its persistent MultiSelect is linked to MultiQC and to every
+     collection naming samples (`direct`, or `sample_mapping` with the
+     variants), so it narrows every tab; per-collection sample filters are
+     dropped, other filters kept when they have 2 to 12 values.
 5. **Not done here**: the optional AI layer (it needs the #964 → #1045 stack on
    main: hand it the composed plan through the `plan` hook of #1032), a standalone
    HTML report, a Python API, and catalog enrichment (most outputs still render
@@ -91,8 +106,9 @@ re-run does not reshuffle the dashboard.
 
 Known limits:
 
-- Composed collections are not linked, so the Overview's sample filter narrows
-  the MultiQC plots only, not the other tools' tiles.
+- The Samples filter reaches a collection only through a sample-named column
+  (`sample`, `sample_id`…) or its path; a table keying rows by another name
+  for samples is not linked.
 - A recipe whose inputs are other collections (`dc_ref`) is left out of the
   general statistics, which are computed before ingestion.
 - A one-click "add this file" on the project page needs the server to see the

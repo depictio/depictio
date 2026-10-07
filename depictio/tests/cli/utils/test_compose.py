@@ -280,8 +280,7 @@ def test_an_unrecognised_table_is_proposed_not_added(run_with_unknown, tmp_path)
     assert proposal["proposal"] == [
         "card: mean of reads",
         "card: mean of gc",
-        "filter: sample",
-        "filter: condition",
+        "filter: condition",  # the sample has the dashboard's own filter
         "figure: scatter of gc against reads",
         "table",
     ]
@@ -297,12 +296,32 @@ def test_include_unknown_adds_an_other_data_tab(run_with_unknown, tmp_path):
     project, dashboard = _load(result)
     tab = next(t for t in dashboard["tabs"] if t["title"] == "Other data")
     kinds = sorted(c["component_type"] for c in tab["components"])
-    assert kinds == ["card", "card", "figure", "interactive", "interactive", "table"]
+    assert kinds == ["card", "card", "figure", "interactive", "table"]
+    # A section per tool directory, the file's kind on its tiles, not its path.
+    assert [s["name"] for s in tab["grid_sections"]] == ["Stats"]
+    assert tab["grid_sections"][0]["description"] == "1 file, in stats/"
+    assert [s["name"] for s in tab["filter_sections"]] == ["Stats"]
+    table = next(c for c in tab["components"] if c["component_type"] == "table")
+    assert table["title"] == "Per sample"
     figure = next(c for c in tab["components"] if c["component_type"] == "figure")
     assert figure["dict_kwargs"] == {"x": "reads", "y": "gc", "color": "condition"}
     assert project["template"]["unrecognised_files"] == []
     tags = [c["data_collection_tag"] for c in project["workflows"][0]["data_collections"]]
     assert "stats_per_sample" in tags
+
+    # One Samples filter, on the run's samples, linked to every collection naming them.
+    main = dashboard["main_dashboard"]
+    (sample_filter,) = [c for c in main["components"] if c["section"] == "Samples"]
+    assert sample_filter["data_collection_tag"] == "samples"
+    links = {link["target_dc_tag"]: link for link in project["links"]}
+    assert links["stats_per_sample"]["link_config"] == {
+        "resolver": "direct",
+        "target_field": "sample",
+    }
+    assert links["multiqc_data"]["target_type"] == "multiqc"
+    assert all(link["source_dc_tag"] == "samples" for link in project["links"])
+    hub = (result.template_dir / "samples.tsv").read_text().split()
+    assert hub[0] == "sample" and {"S0", "S11"} <= set(hub)
 
 
 def test_template_compose_command_writes_and_reports(run_with_unknown, tmp_path):
@@ -558,3 +577,89 @@ def test_a_grid_section_and_a_filter_section_may_share_a_name():
     widths = {c["component_type"]: c["layout"]["w"] for c in dashboard["components"]}
     assert widths["interactive"] == 1
     assert widths["table"] == 8
+
+
+def test_a_sample_extending_another_is_the_same_sample():
+    from depictio.cli.cli.utils.compose import canonical_samples
+
+    canon = canonical_samples(
+        [
+            "MOCK_001",
+            "MOCK_001_Illumina_Hiseq_3000_1",
+            "MOCK_001_Illumina_Hiseq_3000_bracken-db.bracken",
+            "S1",
+            "S10",
+        ]
+    )
+    assert canon["MOCK_001_Illumina_Hiseq_3000_1"] == "MOCK_001"
+    assert canon["MOCK_001_Illumina_Hiseq_3000_bracken-db.bracken"] == "MOCK_001"
+    assert canon["S10"] == "S10"
+
+
+def test_a_group_goes_to_its_tools_section_and_stage(tmp_path):
+    """A directory the catalog names gives the section its tool's name and its stage's tab."""
+    from depictio.cli.cli.utils.compose import name_kinds, place_groups
+
+    for sample in ("MOCK_001", "MOCK_002"):
+        _write(
+            tmp_path,
+            f"bracken/bracken-db/{sample}_run_bracken-db.bracken.tsv",
+            "name\treads\nE\t1\nB\t2\n",
+        )
+        _write(
+            tmp_path,
+            f"bracken/bracken-db/{sample}_run_bracken-db.bracken.kraken2.report_bracken.txt",
+            "100.00\t15\t0\tR\t1\troot\n",
+        )
+        _write(tmp_path, f"mystery/{sample}.mystery.tsv", "x\ty\n1\t2\n")
+    groups = _groups(tmp_path)
+    place_groups(groups, {"bracken": ("Bracken", "taxonomy")})
+    name_kinds(groups)
+    assert [(g.home.name, g.home.stage, g.kind) for g in groups] == [
+        ("Bracken", "taxonomy", "Kraken2 report"),
+        ("Bracken", "taxonomy", ""),
+        ("Mystery", "other", ""),
+    ]
+    assert [g.label for g in groups] == ["Bracken · Kraken2 report", "Bracken", "Mystery"]
+
+
+def test_a_top_directory_holding_tool_directories_is_looked_through(tmp_path):
+    from depictio.cli.cli.utils.compose import name_kinds, place_groups
+
+    for sample in ("ERZ01", "ERZ02"):
+        _write(tmp_path, f"arg/abricate/{sample}/{sample}.txt", "GENE\tCOV\nblaA\t9\n")
+        _write(tmp_path, f"arg/argnorm/abricate/{sample}.normalized.tsv", "GENE\tCLASS\nblaA\tx\n")
+        _write(tmp_path, f"amp/macrel/{sample}.prediction.tsv", "seq\tprob\na\t0.1\n")
+    groups = _groups(tmp_path)
+    place_groups(groups, {})
+    name_kinds(groups)
+    assert sorted((g.home.name, g.kind) for g in groups) == [
+        ("Abricate", ""),
+        ("Argnorm", "Abricate · normalized"),
+        ("Macrel", "Prediction"),  # amp/ holds macrel/ only: looked through too
+    ]
+
+
+def test_a_table_written_twice_is_kept_once(tmp_path):
+    from depictio.cli.cli.utils.compose import drop_format_twins
+
+    _write(tmp_path, "nonpareil/all_samples.csv", "sample,kappa\nA,0.5\nB,0.6\n")
+    _write(tmp_path, "nonpareil/all_samples.tsv", "sample\tkappa\nA\t0.5\nB\t0.6\n")
+    groups = _groups(tmp_path)
+    dropped = drop_format_twins(groups)
+    assert [g.glob for g in groups] == ["nonpareil/all_samples.tsv"]
+    assert [(d.glob, k.glob) for d, k in dropped] == [
+        ("nonpareil/all_samples.csv", "nonpareil/all_samples.tsv")
+    ]
+
+
+def test_files_whose_first_row_is_data_are_one_headerless_group(tmp_path):
+    for sample, first in (("S1", "r1\tg7"), ("S2", "r9\tg2")):
+        _write(tmp_path, f"maps/{sample}.bowtie2out.txt", f"{first}\nr2\tg3\nr3\tg4\n")
+    # A header naming the sample: a header all the same, so these stay apart.
+    _write(tmp_path, "counts/S1.counts.tsv", "gene_id\tS1\ng1\t5\n")
+    _write(tmp_path, "counts/S2.counts.tsv", "gene_id\tS2\ng1\t7\n")
+    groups = _groups(tmp_path)
+    maps = next(g for g in groups if g.glob.startswith("maps/"))
+    assert maps.headerless and maps.values == ["S1", "S2"]
+    assert [len(g.files) for g in groups if g.glob.startswith("counts/")] == [1, 1]
