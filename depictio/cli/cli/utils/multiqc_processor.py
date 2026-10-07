@@ -680,7 +680,7 @@ def process_multiqc_data_collection(
 
                         if overwrite:
                             logger.info(
-                                f"🔄 Overwrite enabled - updating existing report with ID: {report_id}"
+                                f"Overwrite enabled - updating existing report with ID: {report_id}"
                             )
                             logger.info(f"   Original path: {file_path}")
                             logger.info(f"   Existing S3 location: {existing_s3_location}")
@@ -709,7 +709,7 @@ def process_multiqc_data_collection(
                             )
 
                             console.print(
-                                f"[yellow]🔄 Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
+                                f"[yellow]Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
                             )
 
                             # Extract S3 key from existing S3 location to preserve path
@@ -779,21 +779,17 @@ def process_multiqc_data_collection(
                                 )
 
                                 if response.status_code == 200:
-                                    logger.info(
-                                        f"✅ Successfully updated MultiQC report {report_id}"
-                                    )
-                                    console.print("[green]✅ Updated existing report[/green]")
+                                    logger.info(f"Successfully updated MultiQC report {report_id}")
+                                    console.print("[green]✓ Updated existing report[/green]")
                                     created_reports.append(report_id)
                                 else:
                                     logger.error(
                                         f"Failed to update report: {response.status_code} - {response.text}"
                                     )
-                                    console.print(
-                                        "[yellow]⚠️  Warning: Failed to update report[/yellow]"
-                                    )
+                                    console.print("[yellow]! Failed to update report[/yellow]")
                             except Exception as update_error:
                                 logger.error(f"Error updating report: {update_error}")
-                                console.print("[yellow]⚠️  Warning: Error updating report[/yellow]")
+                                console.print("[yellow]! Error updating report[/yellow]")
 
                             # Skip the normal upload and create flow (continue to next file)
                             continue
@@ -835,7 +831,7 @@ def process_multiqc_data_collection(
                             )
                             console.print(f"   [dim]Existing report ID: {report_id}[/dim]")
                             console.print(
-                                "   [yellow]💡 Tip: Use --overwrite to replace this report[/yellow]"
+                                "   [yellow]Use --overwrite to replace this report[/yellow]"
                             )
 
                             # The skipped file's content is identical to the
@@ -915,7 +911,7 @@ def process_multiqc_data_collection(
                                 saved_report = response.json()
                                 report_id = saved_report.get("report", {}).get("id")
                                 logger.info(
-                                    f"✅ MultiQC report {i + 1} saved successfully with ID: {report_id}"
+                                    f"MultiQC report {i + 1} saved successfully with ID: {report_id}"
                                 )
                                 created_reports.append(report_id)
 
@@ -930,7 +926,7 @@ def process_multiqc_data_collection(
                                 logger.debug(f"Raw response: {response.text}")
                         else:
                             logger.error(
-                                f"❌ Failed to save MultiQC report {i + 1}: HTTP {response.status_code}"
+                                f"Failed to save MultiQC report {i + 1}: HTTP {response.status_code}"
                             )
                             logger.error(f"Response body: {response.text}")
                             try:

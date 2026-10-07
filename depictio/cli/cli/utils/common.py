@@ -215,7 +215,7 @@ def load_depictio_config(
                 where, fix = "the default", "pass --server: 'local' or an existing config"
             else:
                 where, fix = "from --server", "point --server at an existing config"
-            logger.error(f"Depictio CLI configuration file not found: {expanded} ({where})")
+            logger.debug(f"Depictio CLI configuration file not found: {expanded} ({where})")
             rich_print_checked_statement(
                 f"Depictio CLI configuration file not found: {display_path(expanded)} ({where}). "
                 f"Create it, or {fix}.",

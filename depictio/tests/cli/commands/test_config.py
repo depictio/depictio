@@ -103,29 +103,33 @@ class TestConfigCommands:
     class TestShow:
         """Tests for the `config show` command"""
 
-        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
+        def test_success(self, command, cli_config_path, base_patches):
             """Test successful execution"""
-            result = command.run("show", cli_config=cli_config_path)
-            assert result.exit_code == 0
-            # mock_load_config.assert_called_once()
+            with patch("depictio.cli.cli.commands.config.load_depictio_config") as mock_load_config:
+                result = command.run("show", cli_config=cli_config_path)
+            assert result.exit_code == 0, result.output
+            mock_load_config.assert_called_once()
 
         def test_error(self, command, cli_config_path, base_patches):
-            """Test error handling"""
+            """A configuration it cannot show is a failure, for scripts too."""
             with patch(
-                "depictio.cli.cli.utils.common.load_depictio_config",
+                "depictio.cli.cli.commands.config.load_depictio_config",
                 side_effect=Exception("Test error"),
             ):
                 result = command.run("show", cli_config=cli_config_path)
-                assert result.exit_code == 0
+                assert result.exit_code == 1
 
-        def test_with_project_name(self, runner, cli_config_path, mock_load_config, base_patches):
+        def test_with_project_name(self, runner, cli_config_path, base_patches):
             """`config show --project-name` also fetches server metadata."""
             mock_project_metadata = MagicMock()
             mock_project_metadata.json.return_value = {"name": "test-project"}
 
-            with patch(
-                "depictio.cli.cli.commands.config.api_get_project_from_name",
-                return_value=mock_project_metadata,
+            with (
+                patch("depictio.cli.cli.commands.config.load_depictio_config"),
+                patch(
+                    "depictio.cli.cli.commands.config.api_get_project_from_name",
+                    return_value=mock_project_metadata,
+                ),
             ):
                 result = runner.invoke(
                     app,
@@ -292,3 +296,52 @@ class TestServerOption:
 
         assert result.exit_code == 2
         assert "not both" in result.output
+
+
+def test_show_prints_a_real_configuration_with_its_secrets_masked(tmp_path):
+    """Not mocked: SecretStr fields made `config show` fail on every real configuration."""
+    import yaml
+
+    config = tmp_path / "CLI.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "api_base_url": "http://127.0.0.1:8058",
+                "user": {
+                    "email": "admin@example.com",
+                    "is_admin": True,
+                    "id": "507f1f77bcf86cd799439011",
+                    "token": {
+                        "user_id": "507f1f77bcf86cd799439011",
+                        "access_token": "access-token-example",
+                        "refresh_token": "refresh-token-example",
+                        "token_type": "bearer",
+                        "token_lifetime": "short-lived",
+                        "expire_datetime": "2099-12-31T23:59:59",
+                        "refresh_expire_datetime": "2099-12-31T23:59:59",
+                        "name": "test_token",
+                        "created_at": "2025-06-30T18:00:00",
+                        "logged_in": False,
+                    },
+                },
+                "s3_storage": {
+                    "service_name": "localhost",
+                    "service_port": 9000,
+                    "external_host": "localhost",
+                    "external_port": 9000,
+                    "external_protocol": "http",
+                    "root_user": "depictio",
+                    "root_password": "s3-password-example",
+                    "bucket": "depictio-bucket",
+                },
+            }
+        )
+    )
+
+    result = CliRunner().invoke(app, ["show", "--server", str(config)])
+
+    assert result.exit_code == 0, result.output
+    assert "http://127.0.0.1:8058" in result.output
+    for secret in ("s3-password-example", "access-token-example", "refresh-token-example"):
+        assert secret not in result.output
+    assert "**********" in result.output

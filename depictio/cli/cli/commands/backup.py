@@ -195,6 +195,7 @@ def validate(
 ):
     """
     Validate a backup file on the server against Pydantic models.
+
     \f
     Args:
         backup_id: ID of the backup to validate
@@ -307,11 +308,9 @@ def check_coverage(
 
         # Check if coverage is valid
         if coverage_report["valid"]:
-            rich_print_checked_statement(
-                "✅ All expected collections have backup coverage", "success"
-            )
+            rich_print_checked_statement("All expected collections have backup coverage", "success")
         else:
-            rich_print_checked_statement("❌ Missing backup coverage detected", "error")
+            rich_print_checked_statement("Missing backup coverage detected", "error")
 
             if coverage_report["missing_from_expected"]:
                 rich_print_checked_statement(
@@ -421,9 +420,7 @@ def restore(
 
         if not dry_run and not force:
             # Confirm destructive operation
-            rich_print_checked_statement(
-                "⚠️  WARNING: This will DELETE and REPLACE existing data!", "warning"
-            )
+            rich_print_checked_statement("This will DELETE and REPLACE existing data!", "warning")
             if collections_list:
                 rich_print_checked_statement(
                     f"Collections to restore: {', '.join(collections_list)}", "warning"
@@ -472,7 +469,7 @@ def restore(
 
             errors = restore_result.get("errors", [])
             if errors:
-                rich_print_checked_statement("⚠️  Some errors occurred:", "warning")
+                rich_print_checked_statement("Some errors occurred:", "warning")
                 for error in errors:
                     rich_print_checked_statement(f"  • {error}", "error")
         else:

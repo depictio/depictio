@@ -520,12 +520,13 @@ def import_yaml(
         console.print("\n[yellow]Dry run mode - skipping import[/yellow]")
         raise typer.Exit(0)
 
-    # Step 2: Load CLI config for authentication
-    console.print("\n[cyan]Loading CLI configuration...[/cyan]")
+    # Step 2: Load CLI config for authentication. It names its server itself.
+    console.print()
     try:
+        explicit_api = api_url
         api_url, headers = _connect(config_file, api_url)
-        console.print("[green]✓ Configuration loaded[/green]")
-        console.print(f"  API URL: {api_url}")
+        if explicit_api:
+            console.print(f"  API URL: {api_url} (from --api)")
     except typer.Exit:
         # No configuration file: load_depictio_config named the one it looked for.
         console.print("[yellow]Hint: Use --dry-run for local validation without a server[/yellow]")
@@ -620,8 +621,7 @@ def export(
     """
     config_file = resolve_server(server, config_path, legacy_option="--config")
 
-    # Load CLI config for authentication
-    console.print("[cyan]Loading CLI configuration...[/cyan]")
+    # Load CLI config for authentication. It names its server itself.
     try:
         api_url, headers = _connect(config_file, api_url)
     except typer.Exit:

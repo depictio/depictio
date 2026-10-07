@@ -654,12 +654,7 @@ def client_aggregate_data(
     if destination_exists and not overwrite:
         logger.debug("Destination already exists, overwrite mode is disabled")
 
-        from depictio.cli.cli.utils.rich_utils import console
-
-        console.print("[yellow]⚠️  Destination already exists and overwrite is disabled[/yellow]")
-        console.print(f"   [dim]Destination: {destination_prefix}[/dim]")
-        console.print("   [cyan]💡 Tip: Use --overwrite flag to replace existing data[/cyan]")
-
+        # No output here: the caller reports this message, once per data collection.
         return {
             "result": "error",
             "message": f"Destination {destination_prefix} already exists and overwrite is disabled. Use --overwrite to replace.",
@@ -784,8 +779,8 @@ def client_aggregate_data(
             )
 
     record("delta_bytes", deltatable_size_bytes)
-    logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
-    logger.info(f"🔍 DEBUG: Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
+    logger.debug(f"Calculated deltatable_size_bytes = {deltatable_size_bytes}")
+    logger.debug(f"Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
 
     # Rich summaries need a materialized frame — unavailable on the streaming path.
     if aggregated_df is not None:
@@ -803,7 +798,7 @@ def client_aggregate_data(
 
     # 6. Upsert object in the remote DB with size information
     logger.info(
-        f"🔍 DEBUG: About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
+        f"About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
     )
     with timed("upsert"):
         api_upsert_result = api_upsert_deltatable(
@@ -813,7 +808,7 @@ def client_aggregate_data(
             update=overwrite,
             deltatable_size_bytes=deltatable_size_bytes,
         )
-    logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
+    logger.debug(f"API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"
         logger.error(error_msg)

@@ -3,6 +3,11 @@ import os
 from itertools import groupby
 
 os.environ["DEPICTIO_CONTEXT"] = "CLI"
+# MultiQC calls load_dotenv() when imported, which loads the first .env found walking
+# up from the installed package: a project's or a workspace's, whose DEPICTIO_* values
+# then reach the CLI and, through it, the server `depictio local up` starts. Only that
+# call is switched off: pydantic-settings still reads its env_file.
+os.environ.setdefault("PYTHON_DOTENV_DISABLED", "1")
 
 import typer
 from rich.console import Console, Group

@@ -54,7 +54,7 @@ def scan(
     Registers what it finds on the server; `depictio data process` then turns those
     files into tables. The project configuration must already be synced.
     """
-    rich_print_command_usage("scan")
+    rich_print_command_usage("data scan")
 
     if sync_files:
         rescan_folders = True
@@ -121,14 +121,17 @@ def scan(
                 rich_print_checked_statement(
                     "Local and remote project configurations do not match.", "error"
                 )
+                raise typer.Exit(code=1)
         else:
             rich_print_checked_statement(
                 "Error fetching remote project configuration. Please create the project first if it does not exist.",
                 "error",
             )
+            raise typer.Exit(code=1)
 
     else:
         rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
 
     # Step 2: Process project
     # process_project_helper(cli_config, project_config, headers, update, scan_files, data_collection_tag)
@@ -161,7 +164,7 @@ def process(
     """
     Build each data collection's Delta table from the files `depictio data scan` found.
     """
-    rich_print_command_usage("process")
+    rich_print_command_usage("data process")
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -206,16 +209,29 @@ def process(
                 rich_print_section_separator("Processing files")
                 logger.info("Processing files")
                 logger.info(f"Command parameters: {command_parameters}")
-                process_project_helper(
+                result = process_project_helper(
                     CLI_config=CLI_config,
                     project_config=project_config,
                     mode="process",
                     command_parameters=command_parameters,
                 )
+                # A data collection that failed fails the command, as it fails `ingest`.
+                if result and result.get("result") != "success":
+                    raise typer.Exit(code=1)
             else:
                 rich_print_checked_statement(
                     "Local and remote project configurations do not match.", "error"
                 )
+                raise typer.Exit(code=1)
+        else:
+            rich_print_checked_statement(
+                "Error fetching remote project configuration. Please create the project first if it does not exist.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+    else:
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -264,7 +280,7 @@ def join(
     """
     from depictio.cli.cli.utils.joins import process_project_joins
 
-    rich_print_command_usage("join")
+    rich_print_command_usage("data join")
 
     # Validate configurations and prepare headers
     CLI_config, response = validate_project_config_and_check_S3_storage(

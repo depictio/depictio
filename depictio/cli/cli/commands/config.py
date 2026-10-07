@@ -49,12 +49,23 @@ def show(
     config_path = resolve_server(server, CLI_config_path)
     try:
         cli_config = load_depictio_config(yaml_config_path=config_path)
-        rich_print_json("Current Depictio CLI Configuration: ", cli_config.model_dump())
+        # mode="json" masks the SecretStr fields. The tokens are plain strings but
+        # credentials all the same: masked too, so the output can be shared.
+        shown = cli_config.model_dump(mode="json")
+        token = (shown.get("user") or {}).get("token") or {}
+        for key in ("access_token", "refresh_token"):
+            if token.get(key):
+                token[key] = "**********"
+        rich_print_json("Current Depictio CLI Configuration: ", shown)
         if project_name:
             metadata = api_get_project_from_name(project_name, cli_config).json()
             rich_print_json(f"Server metadata for project '{project_name}': ", metadata)
+    except typer.Exit:
+        # load_depictio_config already said which file it could not read.
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Unable to load configuration - {e}", "error")
+        raise typer.Exit(code=1)
 
 
 @app.command()

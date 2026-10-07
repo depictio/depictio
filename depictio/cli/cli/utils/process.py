@@ -126,7 +126,7 @@ def process_project_data_collections(
 
                 if result["success"]:
                     rich_print_checked_statement(
-                        f"  ✓ Data collection [italic]'{dc.data_collection_tag}'[/italic] processed successfully. {result['data']['message']}",
+                        f"Data collection [italic]'{dc.data_collection_tag}'[/italic] processed successfully. {result['data']['message']}",
                         "success",
                     )
                     total_processed += 1
@@ -136,13 +136,13 @@ def process_project_data_collections(
                     # canonical DCs that depend on intermediate DCs not produced by
                     # a plain CLI ingestion. They stay populated from committed seeds.
                     rich_print_checked_statement(
-                        f"  ⊘ Skipped optional data collection '{dc.data_collection_tag}': {result.get('message', 'inputs unavailable')}",
+                        f"Skipped optional data collection '{dc.data_collection_tag}': {result.get('message', 'inputs unavailable')}",
                         "warning",
                     )
                     skipped_optional.append(dc.data_collection_tag)
                 else:
                     rich_print_checked_statement(
-                        f"  ✗ Failed to process data collection '{dc.data_collection_tag}': {result.get('message', 'Unknown error')}",
+                        f"Failed to process data collection '{dc.data_collection_tag}': {result.get('message', 'Unknown error')}",
                         "error",
                     )
                     failed_tags.append(dc.data_collection_tag)
@@ -150,14 +150,14 @@ def process_project_data_collections(
             except Exception as e:
                 if getattr(dc, "optional", False):
                     rich_print_checked_statement(
-                        f"  ⊘ Skipped optional data collection '{dc.data_collection_tag}': {e}",
+                        f"Skipped optional data collection '{dc.data_collection_tag}': {e}",
                         "warning",
                     )
                     logger.info(f"Optional DC {dc.data_collection_tag} skipped: {e}")
                     skipped_optional.append(dc.data_collection_tag)
                     continue
                 rich_print_checked_statement(
-                    f"  ✗ Error processing data collection '{dc.data_collection_tag}': {e}",
+                    f"Error processing data collection '{dc.data_collection_tag}': {e}",
                     "error",
                 )
                 logger.error(f"Detailed error for {dc.data_collection_tag}: {e}", exc_info=True)
@@ -283,7 +283,8 @@ def process_single_data_collection(
         else:
             return {
                 "success": False,
-                "message": f"Failed to process data collection {data_collection.data_collection_tag}: {result.get('message', 'Unknown error')}",
+                # Printed after "Failed to process data collection '<tag>': ", so the reason only.
+                "message": result.get("message", "Unknown error"),
                 "data": result,
             }
 

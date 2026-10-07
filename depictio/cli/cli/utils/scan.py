@@ -573,7 +573,7 @@ def scan_files_for_workflow(
             console=None,
         ) as progress:
             task_id = progress.add_task(
-                "📋 Loading existing files from database", total=len(data_collections)
+                "Loading existing files from database", total=len(data_collections)
             )
 
             for dc in data_collections:
@@ -582,7 +582,7 @@ def scan_files_for_workflow(
                     :25
                 ]  # Left-align and pad/truncate to 25 chars
                 # Total description length: 45 chars to match run scanning
-                progress.update(task_id, description=f"📋 Loading files for {formatted_dc_tag}")
+                progress.update(task_id, description=f"Loading files for {formatted_dc_tag}")
                 response = api_get_files_by_dc_id(dc_id=str(dc.id), CLI_config=CLI_config)
                 if response.status_code == 200:
                     existing_files = response.json()
@@ -654,7 +654,7 @@ def scan_files_for_workflow(
                 TextColumn("[progress.description]{task.description}"),
                 console=None,
             ) as progress:
-                progress.add_task(f"🔍 Scanning single location: {run_tag}")
+                progress.add_task(f"Scanning single location: {run_tag}")
 
                 workflow_run = scan_run_for_multiple_data_collections(
                     run_location=location,
@@ -700,7 +700,7 @@ def scan_files_for_workflow(
                     console=None,  # Use default console
                 ) as progress:
                     task_id = progress.add_task(
-                        f"🔍 Scanning runs in {os.path.basename(location)}", total=len(valid_runs)
+                        f"Scanning runs in {os.path.basename(location)}", total=len(valid_runs)
                     )
 
                     for run_path, run in valid_runs:
@@ -712,7 +712,7 @@ def scan_files_for_workflow(
                         # Format run name to consistent width to avoid line changes
                         # Need 29 chars for run name to match total description length of 45 chars
                         formatted_run = f"{run:<29}"[:29]  # Left-align and pad/truncate to 29 chars
-                        progress.update(task_id, description=f"🔍 Scanning run: {formatted_run}")
+                        progress.update(task_id, description=f"Scanning run: {formatted_run}")
 
                         workflow_run = scan_run_for_multiple_data_collections(
                             run_location=run_path,
@@ -732,7 +732,7 @@ def scan_files_for_workflow(
 
                         progress.advance(task_id)
 
-                    progress.update(task_id, description="✅ Scanning completed")
+                    progress.update(task_id, description="Scanning completed")
 
     # Handle missing runs if rescanning. Runs ONCE, after every location has been
     # walked: `all_workflow_runs` accumulates across locations, so doing this inside
@@ -765,7 +765,7 @@ def scan_files_for_workflow(
             TextColumn("[progress.description]{task.description}"),
             console=None,
         ) as progress:
-            progress.add_task(f"💾 Uploading {len(all_workflow_runs)} run(s) to server")
+            progress.add_task(f"Uploading {len(all_workflow_runs)} run(s) to server")
             api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
 
     # Generate single summary table for the entire workflow

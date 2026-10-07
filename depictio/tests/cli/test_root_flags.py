@@ -2,6 +2,7 @@
 
 import io
 import logging
+import os
 import re
 import sys
 
@@ -79,6 +80,19 @@ def test_the_former_level_option_says_it_is_log_level(cli):
 
     assert result.exit_code == 0, result.output
     assert "-vl/--verbose-level is now --log-level" in " ".join(result.stderr.split())
+
+
+def test_the_cli_switches_load_dotenv_off(cli, tmp_path, monkeypatch):
+    """MultiQC calls load_dotenv() when imported: a .env found above the installed
+    package must not fill the CLI's environment, nor the local server's it starts."""
+    from dotenv import load_dotenv
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("DEPICTIO_DOTENV_PROBE=leaked\n")
+    monkeypatch.delenv("DEPICTIO_DOTENV_PROBE", raising=False)
+
+    assert not load_dotenv(env_file)
+    assert "DEPICTIO_DOTENV_PROBE" not in os.environ
 
 
 def test_an_unknown_log_level_is_a_usage_error(cli):
