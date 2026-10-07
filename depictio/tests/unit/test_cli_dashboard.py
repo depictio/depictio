@@ -23,6 +23,8 @@ runner = CliRunner()
 def no_default_server(tmp_path: Path, monkeypatch):
     """validate uses a configured server when there is one: keep the developer's out."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    # The local server is the default when nothing else is configured: its home too.
+    monkeypatch.delenv("DEPICTIO_LOCAL_HOME", raising=False)
     monkeypatch.delenv("DEPICTIO_CLI_CONFIG_PATH", raising=False)
 
 

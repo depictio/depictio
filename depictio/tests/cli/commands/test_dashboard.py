@@ -3,7 +3,8 @@ Unit Tests for Dashboard CLI Commands.
 
 Tests the CLI commands for dashboard YAML validation, import, and export,
 and the server they talk to: --server, the hidden -c/--config and --api, and
-the default configuration ($DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml).
+the default configuration ($DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml, else
+the local server).
 """
 
 from pathlib import Path
@@ -23,11 +24,19 @@ OLD_API_DEFAULT = "http://localhost:8058"
 
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path: Path, monkeypatch):
-    """No developer configuration: HOME is empty and the CLI env vars are unset."""
+    """No developer configuration: HOME is empty and the CLI env vars are unset.
+
+    The local home then lies under HOME too, and holds no configuration either.
+    """
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    for var in ("DEPICTIO_CLI_CONFIG_PATH", "DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+    for var in (
+        "DEPICTIO_CLI_CONFIG_PATH",
+        "DEPICTIO_CLI_API_BASE_URL",
+        "DEPICTIO_CLI_TOKEN",
+        "DEPICTIO_LOCAL_HOME",
+    ):
         monkeypatch.delenv(var, raising=False)
     return home
 
@@ -138,7 +147,7 @@ class TestCLIConfigRequirement:
             ],
         )
         assert result.exit_code == 1
-        assert "configuration file not found" in result.output
+        assert "No server configured" in result.output
         assert "--dry-run" in result.output
 
     def test_import_dry_run_without_config_succeeds(self, valid_yaml_file: Path):
@@ -192,7 +201,8 @@ access_token: fake-token
             ],
         )
         assert result.exit_code == 1
-        assert "configuration file not found" in result.output
+        assert "No server configured" in result.output
+        assert "depictio local up" in " ".join(result.output.split())
 
     def test_export_with_config_attempts_server(self, tmp_path: Path):
         """Export with --config tries the server it names, and says it cannot connect."""
@@ -316,6 +326,21 @@ class TestServerSelection:
 
         assert result.exit_code == 0, result.output
         assert http_client.post.call_args.args[0].startswith("http://local.test/")
+
+    def test_import_with_nothing_configured_goes_to_the_local_server(
+        self, valid_yaml_file: Path, isolated_home: Path, http_client
+    ):
+        """No --server, no ~/.depictio/CLI.yaml: the local server, and the output says why."""
+        _write_cli_config(
+            isolated_home / ".depictio" / "local" / "cli" / "admin_config.yaml",
+            "http://local.test",
+        )
+
+        result = runner.invoke(app, ["import", str(valid_yaml_file), "--offline"])
+
+        assert result.exit_code == 0, result.output
+        assert http_client.post.call_args.args[0].startswith("http://local.test/")
+        assert "local server, as no ~/.depictio/CLI.yaml exists" in " ".join(result.output.split())
 
     def test_server_and_config_together_are_refused(self, valid_yaml_file: Path):
         result = runner.invoke(
@@ -516,7 +541,35 @@ class TestValidateServer:
         result = runner.invoke(app, ["validate", str(valid_yaml_file)])
 
         assert result.exit_code == 0, result.output
-        assert "Pass 2: skipped" in result.output
+        assert (
+            "Pass 2: skipped (no --server, no ~/.depictio/CLI.yaml, and no local server"
+            in " ".join(result.output.split())
+        )
+        online.assert_not_called()
+
+    def test_with_nothing_else_configured_the_local_server_is_checked(
+        self, tagged_yaml_file: Path, isolated_home: Path, online
+    ):
+        _write_cli_config(
+            isolated_home / ".depictio" / "local" / "cli" / "admin_config.yaml",
+            "http://local.test",
+        )
+
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file)])
+
+        assert result.exit_code == 0, result.output
+        assert online.call_args.args[1] == "http://local.test"
+
+    def test_a_missing_env_var_configuration_is_named_when_skipped(
+        self, valid_yaml_file: Path, tmp_path: Path, monkeypatch, online
+    ):
+        monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(tmp_path / "gone.yaml"))
+
+        result = runner.invoke(app, ["validate", str(valid_yaml_file)])
+
+        assert result.exit_code == 0, result.output
+        assert "no configuration at" in result.output
+        assert "gone.yaml" in result.output
         online.assert_not_called()
 
     def test_the_default_configuration_is_used_with_its_url(
@@ -781,7 +834,7 @@ class TestCLIImportOverwrite:
             ["import", str(valid_yaml_file), "--overwrite"],
         )
         assert result.exit_code == 1
-        assert "configuration file not found" in result.output
+        assert "No server configured" in result.output
 
     def test_import_overwrite_with_config_attempts_server(
         self, valid_yaml_file: Path, tmp_path: Path, http_client

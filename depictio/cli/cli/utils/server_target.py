@@ -2,15 +2,15 @@
 
 Every command that reaches a Depictio server takes ``--server``: ``local`` for the
 server `depictio local up` runs, or the path to a CLI configuration file. Without it,
-load_depictio_config reads $DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml.
-`depictio migrate` names its second server with ``--to-server``, which takes the same
-values.
+load_depictio_config reads $DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml, else
+the local server's configuration: see default_server. `depictio migrate` names its
+second server with ``--to-server``, which takes the same values but not that fallback.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 import typer
 
@@ -21,8 +21,14 @@ LOCAL = "local"
 
 SERVER_HELP = (
     "Server to use: 'local' for the one `depictio local up` runs, or a CLI "
-    "configuration file. Default: $DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml."
+    "configuration file. Default: $DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml, "
+    "else the local server."
 )
+
+# Either one set means the command is meant for a remote server: without a
+# configuration, it then fails on the missing ~/.depictio/CLI.yaml rather than reach
+# the local server.
+_REMOTE_ENV_VARS = ("DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN")
 
 
 def _server_option(former: str):
@@ -88,6 +94,37 @@ def is_local_cli_config(path: str) -> bool:
     return os.path.realpath(os.path.expanduser(path)) == os.path.realpath(local_cli_config())
 
 
+class ConfigFile(NamedTuple):
+    """The CLI configuration file a command reads, expanded, and how it was chosen."""
+
+    path: str
+    # DEPICTIO_CLI_CONFIG_PATH named it.
+    from_env: bool = False
+    # No server was named and nothing else is configured: the local server's.
+    local_fallback: bool = False
+
+
+def default_server(default: str = DEFAULT_CLI_CONFIG) -> ConfigFile:
+    """The configuration a command reads when it names no server.
+
+    $DEPICTIO_CLI_CONFIG_PATH, else ``default``, else the local server's when nothing
+    else is configured: ``default`` does not exist and neither DEPICTIO_CLI_API_BASE_URL
+    nor DEPICTIO_CLI_TOKEN is set. A fixed rule, not a check that a local server runs,
+    so the same command reaches the same server whether it is up or not.
+    """
+    env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
+    if env_path:
+        # The --server help says the variable is its default, so it takes 'local' too.
+        path = local_cli_config() if is_local(env_path) else os.path.expanduser(env_path)
+        return ConfigFile(path, from_env=True)
+    path = os.path.expanduser(default)
+    # lexists: a dangling link there is a configuration gone missing, to report, not a
+    # reason to switch servers.
+    if os.path.lexists(path) or any(os.environ.get(var) for var in _REMOTE_ENV_VARS):
+        return ConfigFile(path)
+    return ConfigFile(local_cli_config(), local_fallback=True)
+
+
 def _resolve(
     value: str | None, legacy_path: str | None, *, option: str, legacy_option: str, default: str
 ) -> str:
@@ -106,10 +143,10 @@ def _resolve(
         note_renamed(legacy_option, option)
     chosen = value or legacy_path
     if chosen is None:
-        # Left at the default, so DEPICTIO_CLI_CONFIG_PATH still applies to --server.
+        # Left at the default, resolved when read: for --server, by default_server.
         return default
     if is_local(chosen):
         return local_cli_config()
     # Expanded, so a default file named on purpose is not taken for the unexpanded
-    # default, which DEPICTIO_CLI_CONFIG_PATH replaces.
+    # default, which DEPICTIO_CLI_CONFIG_PATH or the local server may stand in for.
     return os.path.expanduser(chosen)

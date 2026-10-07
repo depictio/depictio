@@ -480,7 +480,7 @@ class TestFailuresAreReportedNotRaised:
         result = self.runner.invoke(app, ["check"])
 
         assert result.exit_code == 1
-        assert _flat(result).count("configuration file not found") == 1
+        assert _flat(result).count("No server configured") == 1
         assert "Unable to access server" not in result.output
         assert "unreadable" not in result.output
 

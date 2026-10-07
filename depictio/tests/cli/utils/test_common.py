@@ -214,8 +214,12 @@ class TestCommon:
                 # Verify the result
                 assert isinstance(result, CLIConfig)
 
-        def test_file_not_found(self):
+        def test_file_not_found(self, tmp_path, monkeypatch):
             """Test load_depictio_config when file is not found"""
+            # Which default file is read depends on what HOME holds: not the developer's.
+            monkeypatch.setenv("HOME", str(tmp_path))
+            monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+            monkeypatch.delenv("DEPICTIO_CLI_CONFIG_PATH", raising=False)
             # Mock the get_config function to raise FileNotFoundError
             with (
                 patch("depictio.cli.cli.utils.common.get_config") as mock_get_config,
@@ -356,8 +360,10 @@ class TestCommon:
         @pytest.fixture(autouse=True)
         def isolated_home(self, monkeypatch, tmp_path):
             monkeypatch.setenv("HOME", str(tmp_path))
+            monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
             monkeypatch.delenv("DEPICTIO_CLI_CONFIG_PATH", raising=False)
             monkeypatch.delenv("DEPICTIO_CLI_API_BASE_URL", raising=False)
+            monkeypatch.delenv("DEPICTIO_CLI_TOKEN", raising=False)
 
         @pytest.fixture
         def env_config(self, monkeypatch, tmp_path, sample_cli_config):
@@ -374,9 +380,18 @@ class TestCommon:
             assert cli_config_file("other.yaml") == "other.yaml"
 
         def test_the_default_is_expanded(self, tmp_path):
-            assert cli_config_file() == str(tmp_path / ".depictio" / "CLI.yaml")
+            default = tmp_path / ".depictio" / "CLI.yaml"
+            default.parent.mkdir()
+            default.write_text("{}")
 
-        def test_a_missing_default_is_not_blamed_on_server(self):
+            assert cli_config_file() == str(default)
+
+        def test_without_the_default_the_local_server_is_read(self, tmp_path):
+            assert cli_config_file() == str(tmp_path / "local" / "cli" / "admin_config.yaml")
+
+        def test_a_missing_default_is_not_blamed_on_server(self, monkeypatch):
+            """Missing while a remote server variable is set: no local fallback then."""
+            monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "remote-token")
             with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
                 with pytest.raises(Exit):
                     load_depictio_config()
@@ -686,7 +701,9 @@ class TestDescribeApiTarget:
         for var in ("DEPICTIO_CLI_CONFIG_PATH", "DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
             monkeypatch.delenv(var, raising=False)
 
-    def test_a_missing_file_is_missing_not_unreadable(self):
+    def test_a_missing_file_is_missing_not_unreadable(self, monkeypatch):
+        # A remote server variable keeps the default file, missing or not.
+        monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "https://remote.example.org")
         with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
             described = describe_api_target("~/.depictio/CLI.yaml")
 
@@ -715,6 +732,16 @@ class TestDescribeApiTarget:
 
         assert described.startswith("http://127.0.0.1:8058, read from ")
         assert "(the local server is not running: start it with `depictio local up`)" in described
+
+    def test_the_local_server_by_default_gets_the_hint_too(self, tmp_path):
+        local = tmp_path / "local" / "cli" / "admin_config.yaml"
+        local.parent.mkdir(parents=True)
+        local.write_text(yaml.safe_dump(_valid_config("http://127.0.0.1:8058")))
+
+        described = describe_api_target("~/.depictio/CLI.yaml")
+
+        assert described.startswith(f"http://127.0.0.1:8058, read from {local}")
+        assert "start it with `depictio local up`" in described
 
     def test_another_server_gets_no_local_hint(self, tmp_path):
         config = tmp_path / "CLI.yaml"

@@ -17,7 +17,12 @@ import httpx
 import typer
 from rich.console import Console
 
-from depictio.cli.cli.utils.server_target import DashboardServerOption, resolve_server
+from depictio.cli.cli.utils.server_target import (
+    DEFAULT_CLI_CONFIG,
+    DashboardServerOption,
+    default_server,
+    resolve_server,
+)
 
 if TYPE_CHECKING:
     from depictio.models.models.dashboards import DashboardDataLite
@@ -385,9 +390,10 @@ def validate(
     2. Server schema (when a server is configured): resolves each component's
        workflow_tag + data_collection_tag against the server delta table schema, checks
        that column_name exists, and validates aggregation/interactive_component_type
-       against the inferred column type. Without --server it is skipped when neither
-       $DEPICTIO_CLI_CONFIG_PATH nor ~/.depictio/CLI.yaml exists, and what that default
-       server reports is shown as warnings only. Use --offline to skip it.
+       against the inferred column type. Without --server it uses the default server
+       ($DEPICTIO_CLI_CONFIG_PATH, else ~/.depictio/CLI.yaml, else the local server),
+       is skipped when that has no configuration, and what it reports is shown as
+       warnings only. Use --offline to skip it.
 
     Example:
         depictio dashboard validate dashboard.yaml --server local
@@ -397,7 +403,6 @@ def validate(
 
     from depictio.cli.cli.utils.common import (
         CLIConfigError,
-        cli_config_file,
         display_path,
         read_depictio_config,
     )
@@ -428,14 +433,17 @@ def validate(
     console.print("  [green]✓ Schema + domain OK[/green]")
 
     # --- Pass 2: server schema validation ---
-    default_file = None if explicit else cli_config_file(config_file)
+    # Without --server, the file the default resolves to when read: see default_server.
+    default = None if explicit else default_server()
     if offline:
         console.print("  [dim]Pass 2: skipped (--offline)[/dim]")
-    elif default_file and not os.path.isfile(default_file):
-        console.print(
-            "  [dim]Pass 2: skipped (no --server, and no configuration at "
-            f"{display_path(default_file)})[/dim]"
+    elif default and not os.path.isfile(default.path):
+        missing = (
+            f"no {DEFAULT_CLI_CONFIG}, and no local server from `depictio local up`"
+            if default.local_fallback
+            else f"and no configuration at {display_path(default.path)}"
         )
+        console.print(f"  [dim]Pass 2: skipped (no --server, {missing})[/dim]")
     else:
         console.print("  [dim]Pass 2: server schema validation[/dim]")
         try:
@@ -555,7 +563,8 @@ def import_yaml(
     2. project_tag field in the YAML file
 
     Imports into the server --server names, else the one $DEPICTIO_CLI_CONFIG_PATH
-    or ~/.depictio/CLI.yaml describes (none needed for --dry-run validation).
+    or ~/.depictio/CLI.yaml describes, else the local server (none needed for
+    --dry-run validation).
 
     Example:
         # Validate without a server

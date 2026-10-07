@@ -66,8 +66,9 @@ class TestLanding:
         assert result.output.startswith("Depictio CLI version:")
 
     def test_the_steps_after_local_up_use_its_server(self, cli):
-        """Without --server a command reads ~/.depictio/CLI.yaml, which `local up`
-        does not write: run straight after it, they would fail."""
+        """Without --server a command reads ~/.depictio/CLI.yaml when there is one,
+        which `local up` does not write: run straight after it, they would reach that
+        other server."""
         (_, first), *rest = cli.GET_STARTED
 
         assert first == "depictio local up"
