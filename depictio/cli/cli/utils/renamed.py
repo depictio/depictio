@@ -20,6 +20,27 @@ def note_renamed(former: str, current: str) -> None:
     )
 
 
+def pick_renamed(
+    value: str | None,
+    former_value: str | None,
+    current: str,
+    former: str,
+    described_as: str | None = None,
+) -> str | None:
+    """The value given under ``current`` or under its former name ``former``.
+
+    Both given is a usage error: one of the two would go unused without a word.
+    ``former`` alone works and says what it is called now, ``described_as`` when
+    ``current`` is not something to type as is, such as an argument's name.
+    """
+    if value is not None and former_value is not None:
+        raise typer.BadParameter(f"give {current} or {former}, not both", param_hint=current)
+    if former_value is not None:
+        note_renamed(former, described_as or current)
+        return former_value
+    return value
+
+
 def note_if_called_as(ctx: typer.Context, former: str, current: str) -> None:
     """note_renamed, when the running command was called by its former name.
 

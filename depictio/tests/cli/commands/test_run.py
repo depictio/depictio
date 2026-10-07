@@ -69,12 +69,12 @@ class TestNextflowManifestResolution:
     @pytest.mark.parametrize("manifest", SHIPPED_MANIFESTS)
     def test_known_manifest_resolves_to_template(self, app, runner, manifest):
         """A shipped manifest becomes template mode and falls through to the
-        next guard (``--data-root``), proving resolution succeeded."""
+        next guard (``DATA_DIR``), proving resolution succeeded."""
         result = runner.invoke(app, ["ingest", "--pipeline-id", manifest])
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
-        assert "--data-root is required when using --template" in output
+        assert "--template needs DATA_DIR" in output
         assert result.exit_code == 1
 
     def test_explicit_project_config_path_wins_over_manifest(self, app, runner, tmp_path):
@@ -95,8 +95,8 @@ class TestNextflowManifestResolution:
                 "--project-config-path",
                 str(project_config),
                 "--dry-run",
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
             ],
         )
 
@@ -119,8 +119,8 @@ class TestNextflowManifestResolution:
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
-        # Stopped at the --data-root guard, i.e. --template was used as-is.
-        assert "--data-root is required when using --template" in output
+        # Stopped at the DATA_DIR guard, i.e. --template was used as-is.
+        assert "--template needs DATA_DIR" in output
         assert result.exit_code == 1
 
 
@@ -167,8 +167,8 @@ class TestDashboardImportIsNotTemplateOnly:
                 "--project-config-path",
                 str(project_config),
                 "--dry-run",
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
                 *extra,
             ],
         )

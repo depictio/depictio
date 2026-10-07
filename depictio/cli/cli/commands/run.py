@@ -23,6 +23,7 @@ from depictio.cli.cli.utils.common import (
     describe_api_target,
     generate_api_headers,
     load_depictio_config,
+    say_local_server_running,
 )
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
@@ -30,7 +31,7 @@ from depictio.cli.cli.utils.image_upload import (
     image_collections_to_upload,
     upload_collection_images,
 )
-from depictio.cli.cli.utils.renamed import note_if_called_as
+from depictio.cli.cli.utils.renamed import note_if_called_as, note_renamed, pick_renamed
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
@@ -561,6 +562,46 @@ def validate_project_locally(config: dict):
         ) from exc
 
 
+# The panels of `ingest --help` past the essentials, which stay in the default one.
+PROJECT_PANEL = "Project and runs"
+DASHBOARDS_PANEL = "Dashboards"
+STEPS_PANEL = "Scope and steps"
+AUTOMATION_PANEL = "Automation"
+DEBUG_PANEL = "Performance and debugging"
+
+# The steps --skip takes, each with the flag that skipped it before.
+SKIP_STEPS = {
+    "server-check": "--skip-server-check",
+    "s3-check": "--skip-s3-check",
+    "sync": "--skip-sync",
+    "scan": "--skip-scan",
+    "process": "--skip-process",
+    "join": "--skip-join",
+    "dashboards": "--skip-dashboard-import",
+}
+
+# What step 8 did to each dashboard, as the server reports it.
+DASHBOARD_STATUSES = ("created", "kept", "replaced")
+
+
+def parse_skip(values: list[str] | None) -> list[str]:
+    """The steps --skip names, comma-separated, repeated or both.
+
+    An unknown step is a usage error that lists the known ones: ignored, a typo
+    would run the very step it was meant to skip.
+    """
+    steps: list[str] = []
+    for value in values or []:
+        for step in (part.strip().lower() for part in value.split(",")):
+            if not step:
+                continue
+            if step not in SKIP_STEPS:
+                raise typer.BadParameter(f"unknown step '{step}'. Steps: {', '.join(SKIP_STEPS)}")
+            if step not in steps:
+                steps.append(step)
+    return steps
+
+
 def register_run_command(app: typer.Typer):
     """Register ``ingest`` and, out of the help, ``run``: its former name, which
     Nextflow hooks installed from older releases, CI and scripts still call."""
@@ -568,89 +609,46 @@ def register_run_command(app: typer.Typer):
     @_closes_ingestion_record
     def ingest(
         ctx: typer.Context,
+        data_dir: Annotated[
+            str | None,
+            typer.Argument(
+                metavar="DATA_DIR",
+                help="Directory of the pipeline results to ingest. Without --template or "
+                "--project-config-path, the template is detected from it. Formerly "
+                "`--data-root`.",
+                show_default=False,
+            ),
+        ] = None,
+        # The essentials stay in the default panel, with --help.
         server: ServerOption = None,
         CLI_config_path: LegacyConfigPathOption = None,
-        project_config_path: Annotated[
-            str,
-            typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
-        ] = "",
-        # Template options
         template: Annotated[
             str | None,
             typer.Option(
                 "--template",
-                help="Template ID to use (e.g., nf-core/ampliseq/2.16.0, or "
-                "nf-core/ampliseq/latest to resolve the newest shipped version). "
-                "Mutually exclusive with --project-config-path.",
+                help="Template to build the project from, e.g. nf-core/ampliseq/2.16.0, or "
+                "nf-core/ampliseq/latest for the newest shipped version. Default: detected "
+                "from DATA_DIR. Not with --project-config-path.",
             ),
         ] = None,
-        pipeline_id: Annotated[
-            str | None,
-            typer.Option(
-                "--pipeline-id",
-                help=(
-                    "Which pipeline produced this data, as '<name>/<version>' (e.g. "
-                    "'nf-core/ampliseq/2.16.0'). When neither --template nor "
-                    "--project-config-path is given, the CLI resolves a bundled template "
-                    "matching it; otherwise it is ignored. Distinct from --template, which "
-                    "names a Depictio template directly even though both take the same shape. "
-                    "Automated triggers fill this from whatever their engine knows: a "
-                    "Nextflow pipeline's workflow.manifest, for instance."
-                ),
-            ),
-        ] = None,
-        data_root: Annotated[
-            str | None,
-            typer.Option(
-                "--data-root",
-                help="Root directory containing data for template. Required when --template is used.",
-            ),
-        ] = None,
-        project_name: Annotated[
-            str | None,
-            typer.Option(
-                "--project-name",
-                help=(
-                    "Project name. Replaces the name generated from --template, or the "
-                    "`name` in the --project-config-path file. --attach-run and "
-                    "--update-config look the project up by this name."
-                ),
-            ),
-        ] = None,
-        attach_run: bool = typer.Option(
-            False,
-            "--attach-run",
-            help=(
-                "Add --data-root to an EXISTING project as an additional run instead of "
-                "creating a new project. The project must already exist (resolved by "
-                "--project-name, else by the template's own name). Implies --update-config "
-                "and skips dashboard import. The tables of file-based collections are "
-                "rebuilt from all runs; collections a recipe computes still read the "
-                "project's first run only."
-            ),
-        ),
-        triggered_by: Annotated[
+        project_config_path: Annotated[
             str,
             typer.Option(
-                "--triggered-by",
-                help=(
-                    "What invoked this ingestion, recorded on the project and shown in its "
-                    "ingestion report. Defaults to 'manual'; a pipeline's completion trigger "
-                    "passes its engine (e.g. 'nextflow') so an automated project is "
-                    "distinguishable from one someone ingested by hand."
-                ),
+                "--project-config-path",
+                help="Project YAML, for a pipeline Depictio ships no template for. Not with "
+                "--template.",
             ),
-        ] = "manual",
-        dashboard_name: Annotated[
-            str | None,
+        ] = "",
+        update_config: Annotated[
+            bool,
             typer.Option(
-                "--dashboard-name",
-                help="Custom title for the main dashboard. Without it, a new dashboard takes "
-                "the title in its YAML and a refresh keeps the current one, even if renamed "
-                "in the viewer. With it, a refresh renames the existing main dashboard rather "
-                "than adding a second one. Child tabs keep their titles and stay attached.",
+                "--update-config",
+                help="Refresh a project that exists: its configuration, and its tables with "
+                "every run rescanned. Runs added with --attach-run are kept. Its dashboards "
+                "are kept as they are, edits made in the viewer included; the template's "
+                "dashboards it lacks are added. A project not on the server yet is created.",
             ),
-        ] = None,
+        ] = False,
         var: Annotated[
             list[str],
             typer.Option(
@@ -662,6 +660,36 @@ def register_run_command(app: typer.Typer):
                 ),
             ),
         ] = [],
+        dry_run: Annotated[
+            bool,
+            typer.Option(
+                "--dry-run",
+                help="Validate the project configuration locally and list the steps that "
+                "would run, without contacting the server",
+            ),
+        ] = False,
+        project: Annotated[
+            str | None,
+            typer.Option(
+                "--project",
+                help="Project name. Replaces the name the template gives, or the `name` in "
+                "the --project-config-path file. --attach-run and --update-config find the "
+                "project by it. Formerly `--project-name`.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = None,
+        attach_run: Annotated[
+            bool,
+            typer.Option(
+                "--attach-run",
+                help="Add DATA_DIR to an EXISTING project as one more run, instead of "
+                "creating a project. The project is found by --project, else by the "
+                "template's own name. Implies --update-config, dashboards included. The "
+                "tables of file-based collections are rebuilt from all runs; collections a "
+                "recipe computes still read the project's first run only.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = False,
         provenance_file: Annotated[
             list[str] | None,
             typer.Option(
@@ -671,24 +699,103 @@ def register_run_command(app: typer.Typer):
                     "key/value) whose entries are listed in the project's run-"
                     "provenance report under 'User provided'. Repeatable."
                 ),
+                rich_help_panel=PROJECT_PANEL,
             ),
         ] = None,
         dashboard: Annotated[
             list[str] | None,
             typer.Option(
                 "--dashboard",
-                help=(
-                    "Override template default dashboards with custom YAML file paths. "
-                    "Can be specified multiple times."
-                ),
+                help="Dashboard YAML file to import instead of the template's own. Repeatable.",
+                rich_help_panel=DASHBOARDS_PANEL,
             ),
         ] = None,
-        skip_dashboard_import: bool = typer.Option(
-            False,
-            "--skip-dashboard-import",
-            help="Skip automatic dashboard import from template.",
-        ),
-        # Provisioning options
+        dashboard_name: Annotated[
+            str | None,
+            typer.Option(
+                "--dashboard-name",
+                help="Title of the main dashboard. Without it, a new dashboard takes the "
+                "title in its YAML and a refresh keeps the current one, even if renamed in "
+                "the viewer. With it, a refresh renames the existing main dashboard and "
+                "leaves its contents as they are. Child tabs keep their titles and stay "
+                "attached.",
+                rich_help_panel=DASHBOARDS_PANEL,
+            ),
+        ] = None,
+        reset_dashboards: Annotated[
+            bool,
+            typer.Option(
+                "--reset-dashboards",
+                help="Import the template's dashboards (or --dashboard's) over the ones "
+                "the project has: the layout and components edited in the viewer are lost, "
+                "the titles are kept. Implies --update-config, as only a project that "
+                "exists has dashboards to reset.",
+                rich_help_panel=DASHBOARDS_PANEL,
+            ),
+        ] = False,
+        workflow_name: Annotated[
+            str | None,
+            typer.Option(
+                "--workflow-name",
+                help="Scan and process only this workflow (its tag)",
+                rich_help_panel=STEPS_PANEL,
+            ),
+        ] = None,
+        data_collection_tag: Annotated[
+            str | None,
+            typer.Option(
+                "--data-collection-tag",
+                help="Scan and process only this data collection",
+                rich_help_panel=STEPS_PANEL,
+            ),
+        ] = None,
+        skip: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--skip",
+                metavar="STEP",
+                callback=parse_skip,
+                help=f"Steps to skip, comma-separated or repeated: {', '.join(SKIP_STEPS)}. "
+                "Skipping process skips the image upload too. Formerly the "
+                "`--skip-<step>` flags.",
+                rich_help_panel=STEPS_PANEL,
+            ),
+        ] = None,
+        continue_on_error: Annotated[
+            bool,
+            typer.Option(
+                "--continue-on-error",
+                help="Continue execution even if a step fails",
+                rich_help_panel=STEPS_PANEL,
+            ),
+        ] = False,
+        pipeline_id: Annotated[
+            str | None,
+            typer.Option(
+                "--pipeline-id",
+                help=(
+                    "The pipeline that produced the data, as '<name>/<version>' (e.g. "
+                    "'nf-core/ampliseq/2.16.0'). Without --template or --project-config-path, "
+                    "the bundled template that matches it is used; otherwise it is ignored. "
+                    "Pipeline triggers fill it in, from a Nextflow pipeline's "
+                    "workflow.manifest for instance."
+                ),
+                rich_help_panel=AUTOMATION_PANEL,
+            ),
+        ] = None,
+        triggered_by: Annotated[
+            str,
+            typer.Option(
+                "--triggered-by",
+                help=(
+                    "What invoked this ingestion, recorded on the project and shown in its "
+                    "ingestion report. Defaults to 'manual'; a pipeline's completion trigger "
+                    "passes its engine (e.g. 'nextflow') so an automated project is "
+                    "distinguishable from one someone ingested by hand."
+                ),
+                rich_help_panel=AUTOMATION_PANEL,
+            ),
+        ] = "manual",
         user: Annotated[
             str | None,
             typer.Option(
@@ -698,6 +805,7 @@ def register_run_command(app: typer.Typer):
                     "them, then emit a passwordless login link to their dashboard. "
                     "Requires --provisioning-key."
                 ),
+                rich_help_panel=AUTOMATION_PANEL,
             ),
         ] = None,
         provisioning_key: Annotated[
@@ -709,87 +817,58 @@ def register_run_command(app: typer.Typer):
                     "(or set DEPICTIO_AUTH_PROVISIONING_API_KEY)."
                 ),
                 envvar="DEPICTIO_AUTH_PROVISIONING_API_KEY",
+                rich_help_panel=AUTOMATION_PANEL,
             ),
         ] = None,
-        # Existing options
-        workflow_name: Annotated[
-            str | None,
-            typer.Option("--workflow-name", help="Scan and process only this workflow (its tag)"),
-        ] = None,
-        data_collection_tag: Annotated[
-            str | None,
+        streaming: Annotated[
+            bool,
             typer.Option(
-                "--data-collection-tag", help="Scan and process only this data collection"
+                "--streaming",
+                help=(
+                    "Stream the Delta write instead of materialising the whole table in "
+                    "memory (lower peak RSS on large ingests). Experimental; falls back "
+                    "to the standard write on any failure."
+                ),
+                rich_help_panel=DEBUG_PANEL,
             ),
-        ] = None,
-        # Flow control options
-        skip_server_check: bool = typer.Option(
-            False, "--skip-server-check", help="Skip server accessibility check"
-        ),
-        skip_s3_check: bool = typer.Option(False, "--skip-s3-check", help="Skip S3 storage check"),
-        skip_sync: bool = typer.Option(
-            False, "--skip-sync", help="Skip syncing project config to server"
-        ),
-        skip_scan: bool = typer.Option(False, "--skip-scan", help="Skip data scanning step"),
-        skip_process: bool = typer.Option(
-            False,
-            "--skip-process",
-            help="Skip data processing step, and with it the image upload",
-        ),
-        skip_join: bool = typer.Option(False, "--skip-join", help="Skip join execution step"),
-        # Sync options
-        update_config: bool = typer.Option(
-            False,
-            "--update-config",
-            help="Refresh the project in place: its configuration, its tables (every run "
-            "rescanned) and its dashboards (each found by the file it came from; titles "
-            "renamed in the viewer are kept, --dashboard-name renames the main one). Runs "
-            "added with --attach-run are kept. A project not on the server yet is created. "
-            "Same as --overwrite",
-        ),
-        # Scan options
-        rescan_folders: bool = typer.Option(
-            False, "--rescan-folders", help="Reprocess all runs for the data collection"
-        ),
-        sync_files: bool = typer.Option(
-            False, "--sync-files", help="Update files for the data collection"
-        ),
-        rich_tables: bool = typer.Option(
-            False,
-            "--rich-tables",
-            help="Show detailed summary of the workflow execution",
-        ),
-        # Process options
-        overwrite: bool = typer.Option(
-            False,
-            "--overwrite",
-            help="Same as --update-config: refresh the project in place, rewriting the "
-            "tables and dashboards it already has after rescanning every run",
-        ),
-        preview_recipes: bool = typer.Option(
-            False,
-            "--preview-recipes",
-            help="Show recipe input sources and transformed output before writing to Delta Lake",
-        ),
-        streaming: bool = typer.Option(
-            False,
-            "--streaming",
-            help=(
-                "Stream the Delta write instead of materialising the whole table in "
-                "memory (lower peak RSS on large ingests). Experimental; falls back "
-                "to the standard write on any failure."
+        ] = False,
+        preview_recipes: Annotated[
+            bool,
+            typer.Option(
+                "--preview-recipes",
+                help="Show recipe input sources and transformed output before writing to "
+                "Delta Lake",
+                rich_help_panel=DEBUG_PANEL,
             ),
-        ),
-        # General options
-        continue_on_error: bool = typer.Option(
-            False, "--continue-on-error", help="Continue execution even if a step fails"
-        ),
-        dry_run: bool = typer.Option(
-            False,
-            "--dry-run",
-            help="Validate the project configuration locally and list the steps that "
-            "would run, without contacting the server",
-        ),
+        ] = False,
+        rich_tables: Annotated[
+            bool,
+            typer.Option(
+                "--rich-tables",
+                help="Show detailed summary of the workflow execution",
+                rich_help_panel=DEBUG_PANEL,
+            ),
+        ] = False,
+        # Out of the help, for the scripts, CI jobs and Nextflow hooks that call them.
+        # The former names of DATA_DIR and --project.
+        data_root: Annotated[str | None, typer.Option("--data-root", hidden=True)] = None,
+        project_name: Annotated[str | None, typer.Option("--project-name", hidden=True)] = None,
+        # What --skip <step> replaced.
+        skip_server_check: Annotated[
+            bool, typer.Option("--skip-server-check", hidden=True)
+        ] = False,
+        skip_s3_check: Annotated[bool, typer.Option("--skip-s3-check", hidden=True)] = False,
+        skip_sync: Annotated[bool, typer.Option("--skip-sync", hidden=True)] = False,
+        skip_scan: Annotated[bool, typer.Option("--skip-scan", hidden=True)] = False,
+        skip_process: Annotated[bool, typer.Option("--skip-process", hidden=True)] = False,
+        skip_join: Annotated[bool, typer.Option("--skip-join", hidden=True)] = False,
+        skip_dashboard_import: Annotated[
+            bool, typer.Option("--skip-dashboard-import", hidden=True)
+        ] = False,
+        # --update-config under another name, and two parts of what it does.
+        overwrite: Annotated[bool, typer.Option("--overwrite", hidden=True)] = False,
+        rescan_folders: Annotated[bool, typer.Option("--rescan-folders", hidden=True)] = False,
+        sync_files: Annotated[bool, typer.Option("--sync-files", hidden=True)] = False,
     ):
         """
         Ingest pipeline results into a Depictio server, from validation to dashboards.
@@ -803,12 +882,46 @@ def register_run_command(app: typer.Typer):
           5. Scan the data files
           6. Process the data collections, uploading images where local_images_path is set
           7. Run the table joins the project configuration defines
-          8. Import the dashboards (from the template, or from --dashboard)
+          8. Import the dashboards the project lacks (from the template, or from --dashboard)
 
-        Example, from a template:
-          depictio ingest --template nf-core/ampliseq/latest --data-root /path/to/data
+        Example, the template detected from the results directory:
+          depictio ingest results/
+
+        Refreshed after a new run, the dashboards kept as edited in the viewer:
+          depictio ingest results/ --update-config
         """
         note_if_called_as(ctx, "run", "ingest")
+        # Usage errors first, before anything is printed.
+        data_root = pick_renamed(
+            data_dir, data_root, "DATA_DIR", "--data-root", described_as="the DATA_DIR argument"
+        )
+        project_name = pick_renamed(project, project_name, "--project", "--project-name")
+        skipped = set(skip or [])
+        for step, given in (
+            ("server-check", skip_server_check),
+            ("s3-check", skip_s3_check),
+            ("sync", skip_sync),
+            ("scan", skip_scan),
+            ("process", skip_process),
+            ("join", skip_join),
+            ("dashboards", skip_dashboard_import),
+        ):
+            if given:
+                note_renamed(SKIP_STEPS[step], f"--skip {step}")
+                skipped.add(step)
+        if reset_dashboards and "dashboards" in skipped:
+            raise typer.BadParameter(
+                "give --reset-dashboards or --skip dashboards, not both",
+                param_hint="--reset-dashboards",
+            )
+        skip_server_check = "server-check" in skipped
+        skip_s3_check = "s3-check" in skipped
+        skip_sync = "sync" in skipped
+        skip_scan = "scan" in skipped
+        skip_process = "process" in skipped
+        skip_join = "join" in skipped
+        skip_dashboard_import = "dashboards" in skipped
+
         rich_print_command_usage("ingest")
         CLI_config_path = resolve_server(server, CLI_config_path)
 
@@ -821,7 +934,7 @@ def register_run_command(app: typer.Typer):
         # message, whichever way the project was described.
         if data_root and not Path(data_root).is_dir():
             rich_print_checked_statement(
-                f"--data-root does not exist or is not a directory: {escape(data_root)}",
+                f"DATA_DIR does not exist or is not a directory: {escape(data_root)}",
                 "error",
             )
             raise typer.Exit(code=1)
@@ -906,17 +1019,21 @@ def register_run_command(app: typer.Typer):
             raise typer.Exit(code=1)
 
         if template and not data_root:
-            rich_print_checked_statement("--data-root is required when using --template.", "error")
+            rich_print_checked_statement(
+                "--template needs DATA_DIR, the results to ingest: depictio ingest "
+                "<results dir> --template <id>.",
+                "error",
+            )
             raise typer.Exit(code=1)
 
         # Without either there is no project to ingest into. It used to run steps 1
         # and 2 first, then fail at step 3 on an empty file name.
         if not template and not project_config_path:
-            undetected = " No bundled template matches what --data-root holds." if data_root else ""
+            undetected = " No bundled template matches what DATA_DIR holds." if data_root else ""
             rich_print_checked_statement(
-                "Say which project to ingest: --template <id> --data-root <dir> for a "
-                "pipeline Depictio ships a template for, or --project-config-path "
-                f"<project.yaml>.{undetected}",
+                "Say which project to ingest: depictio ingest <results dir> --template <id> "
+                "for a pipeline Depictio ships a template for (detected from the results "
+                f"when it can be), or --project-config-path <project.yaml>.{undetected}",
                 "error",
             )
             raise typer.Exit(code=2)
@@ -926,27 +1043,23 @@ def register_run_command(app: typer.Typer):
                 "DRY RUN MODE - No actual operations will be performed", "info"
             )
 
-        # The flag the summary names when step 8 does not run.
-        dashboard_skip_reason = "--skip-dashboard-import"
         # `--overwrite` normally implies a full re-scan. In attach mode that would be
         # wrong: the point is to add ONE run, and the scan is already incremental
         # (a known run_tag is skipped). We still need overwrite for the *process*
         # step, because write_delta_table refuses to rewrite an existing table
         # without it, and the rebuild must include the runs already ingested.
+        # Its dashboards are imported as on any refresh: the ones the project has
+        # are kept as they are, so only those it lacks are added.
         if attach_run:
             update_config = True
             overwrite = True
-            if not skip_dashboard_import:
-                # The dashboards already exist for this project; re-importing would
-                # either 409 or overwrite edits the user made since the first run.
-                skip_dashboard_import = True
-                dashboard_skip_reason = "--attach-run"
-                rich_print_checked_statement(
-                    "--attach-run: skipping dashboard import (dashboards already exist).",
-                    "info",
-                )
-        # Refreshing a project in place rewrites what it already has: its tables, which
-        # write_delta_table refuses to replace without overwrite, and its dashboards.
+        # A reset re-imports dashboards over those of a project that exists, which
+        # only the refresh path reaches: without it, the sync stops on that project.
+        if reset_dashboards:
+            update_config = True
+        # Refreshing a project in place rewrites the tables it already has, which
+        # write_delta_table refuses to replace without overwrite (its dashboards are
+        # kept, unless --reset-dashboards).
         # --update-config alone used to update the configuration, then fail every data
         # collection on its existing table; the Nextflow hook always passed both.
         # And --overwrite alone used to rewrite nothing: the sync stopped on the
@@ -972,10 +1085,11 @@ def register_run_command(app: typer.Typer):
         # collections directly instead of going through template variables.
         template_variables: dict[str, str] = {}
         template_dashboard_paths: list[Path] = []
-        # (title, id) per imported dashboard, for the summary's links. Step 8
-        # already prints them, but that scrolls past; the summary is where
-        # someone reading a finished pipeline log looks for somewhere to click.
-        imported_dashboards: list[tuple[str, str]] = []
+        # (title, id, created/kept/replaced) per imported dashboard, for the
+        # summary. Step 8 already prints them, but that scrolls past; the summary is
+        # where someone reading a finished pipeline log looks for somewhere to click,
+        # and for what a refresh did to the dashboards edited in the viewer.
+        imported_dashboards: list[tuple[str, str, str]] = []
         # --dashboard is honoured whether or not a template is in play. It used
         # to be read only inside the template branch, so a pipeline Depictio
         # ships no template for could ask for a dashboard and be silently
@@ -1200,6 +1314,7 @@ def register_run_command(app: typer.Typer):
                     f"Server accessibility check failed: {escape(str(e))}", "error"
                 )
                 rich_print_checked_statement(f"Tried {escape(target)}", "info")
+                say_local_server_running(CLI_config_path)
                 _rec("server_check", "failed", f"{e} (tried {target})")
                 if not continue_on_error:
                     raise typer.Exit(code=1)
@@ -1256,7 +1371,7 @@ def register_run_command(app: typer.Typer):
                         resolved_config=template_resolved_config,
                     )
                 elif project_name:
-                    # --project-name applies to a project file too. It renames the
+                    # --project applies to a project file too. It renames the
                     # project before the server is asked for its ids: renamed
                     # afterwards, the configuration would carry the ids of the
                     # project the file names, and the sync would update that one.
@@ -1321,7 +1436,7 @@ def register_run_command(app: typer.Typer):
                     rich_print_checked_statement(
                         f"--attach-run: no project named '{escape(str(project_config.name))}' "
                         f"on this server (HTTP {remote.status_code}). Ingest once without "
-                        f"--attach-run to create it, or pass --project-name to target another "
+                        f"--attach-run to create it, or pass --project to target another "
                         f"project.",
                         "error",
                     )
@@ -1435,7 +1550,7 @@ def register_run_command(app: typer.Typer):
                     rich_print_checked_statement("Project configuration sync completed", "success")
 
                 # Resolve tag-based link IDs now that the server has assigned real DC
-                # IDs. A project file renamed with --project-name has its links
+                # IDs. A project file renamed with --project has its links
                 # turned into tags too (see load_project_file).
                 if (is_template_mode or project_name) and not dry_run:
                     try:
@@ -1744,6 +1859,13 @@ def register_run_command(app: typer.Typer):
         if not skip_dashboard_import and template_dashboard_paths:
             rich_print_section_separator(f"Step {total_steps}/{total_steps}: Importing dashboards")
             ingestion.current_step = "dashboard_import"
+            if reset_dashboards:
+                rich_print_checked_statement(
+                    "--reset-dashboards: each dashboard is imported over the one the project "
+                    "has, so the layout and components edited in the viewer are lost. The "
+                    "titles are kept.",
+                    "warning",
+                )
             try:
                 if not dry_run:
                     from depictio.cli.cli.utils.templates import (
@@ -1766,7 +1888,7 @@ def register_run_command(app: typer.Typer):
                         api_url=api_url,
                         headers=headers,
                         project_id=project_id,
-                        overwrite=overwrite,
+                        reset=reset_dashboards,
                         variables=template_variables,
                         dashboard_name=dashboard_name,
                         # What each dashboard's source key is built from, so a
@@ -1787,11 +1909,14 @@ def register_run_command(app: typer.Typer):
                     for r in imported:
                         if r.get("dashboard_id"):
                             imported_dashboards.append(
-                                (str(r.get("title") or "dashboard"), str(r["dashboard_id"]))
+                                (
+                                    str(r.get("title") or "dashboard"),
+                                    str(r["dashboard_id"]),
+                                    r["status"],
+                                )
                             )
-                        action = "updated" if r.get("updated") else "imported"
                         rich_print_checked_statement(
-                            f"Dashboard {action}: {escape(str(r.get('title', 'unknown')))}",
+                            f"Dashboard {r['status']}: {escape(str(r.get('title', 'unknown')))}",
                             "success",
                         )
                         if r.get("dash_url"):
@@ -1799,6 +1924,13 @@ def register_run_command(app: typer.Typer):
                                 f"  View at: {r['dash_url']}/dashboard/{r.get('dashboard_id')}",
                                 "info",
                             )
+
+                    if any(r["status"] == "kept" for r in imported):
+                        rich_print_checked_statement(
+                            "Dashboards the project already had are kept as they are, edits "
+                            "made in the viewer included; --reset-dashboards replaces them.",
+                            "info",
+                        )
 
                     for r in failed:
                         rich_print_checked_statement(
@@ -1815,13 +1947,28 @@ def register_run_command(app: typer.Typer):
 
                 _step_done(
                     "Dashboard import completed",
-                    f"Would import {len(template_dashboard_paths)} dashboard(s)",
+                    f"Would import {len(template_dashboard_paths)} dashboard(s)"
+                    + (
+                        " over those the project has"
+                        if reset_dashboards
+                        else ", keeping those the project already has"
+                        if update_config
+                        else ""
+                    ),
                 )
                 success_count += 1
                 # `imported`/`failed` are only bound in the non-dry-run branch above.
                 _imp = locals().get("imported") or []
                 _fld = locals().get("failed") or []
-                _rec("dashboard_import", "success", f"{len(_imp)} imported / {len(_fld)} failed")
+                _done = [sum(r.get("status") == s for r in _imp) for s in DASHBOARD_STATUSES]
+                _rec(
+                    "dashboard_import",
+                    "success",
+                    " / ".join(
+                        f"{n} {status}" for n, status in zip(_done, DASHBOARD_STATUSES, strict=True)
+                    )
+                    + f" / {len(_fld)} failed",
+                )
             except Exception as e:
                 rich_print_checked_statement(f"Dashboard import failed: {escape(str(e))}", "error")
                 _rec("dashboard_import", "failed", str(e))
@@ -1832,9 +1979,7 @@ def register_run_command(app: typer.Typer):
         # outside template mode used to count nothing: every step worked, and the
         # run still exited 1.
         elif skip_dashboard_import and (is_template_mode or template_dashboard_paths):
-            rich_print_checked_statement(
-                f"Skipping dashboard import ({dashboard_skip_reason})", "info"
-            )
+            rich_print_checked_statement("Skipping dashboard import (--skip dashboards)", "info")
             success_count += 1
             _rec("dashboard_import", "skipped")
         elif is_template_mode:
@@ -1884,12 +2029,11 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(
                 f"Project: {viewer_url}/projects/{ingestion.project_id}", "info"
             )
-        for dashboard_title, dashboard_id in imported_dashboards:
-            if viewer_url:
-                rich_print_checked_statement(
-                    f"Dashboard '{dashboard_title}': {viewer_url}/dashboard/{dashboard_id}",
-                    "info",
-                )
+        for dashboard_title, dashboard_id, dashboard_status in imported_dashboards:
+            link = f": {viewer_url}/dashboard/{dashboard_id}" if viewer_url else ""
+            rich_print_checked_statement(
+                f"Dashboard '{escape(dashboard_title)}' {dashboard_status}{link}", "info"
+            )
 
         if template_metadata is not None:
             # Resolved id, not the raw --template arg: "nf-core/ampliseq/latest"

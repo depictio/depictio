@@ -1,10 +1,11 @@
 """The source key `ingest` sends with each dashboard, and `--dashboard-name`.
 
-The server files an imported dashboard under its source key and a refresh with
-overwrite updates the dashboard with the same key, so the key has to stay put
-across a rename and across template versions. A refresh keeps the titles given
-in the viewer (`keep_titles`); `--dashboard-name` is sent as `main_title` with
-the main dashboard's file, and a child tab file names its parent's key.
+The server files an imported dashboard under its source key and a later import
+finds the dashboard with the same key, so the key has to stay put across a rename
+and across template versions. A dashboard the project has is kept as edited in
+the viewer (`existing=keep`), or with `reset` replaced under the title it has now
+(`existing=replace`, `keep_titles`); `--dashboard-name` is sent as `main_title`
+with the main dashboard's file, and a child tab file names its parent's key.
 """
 
 from pathlib import Path
@@ -233,6 +234,45 @@ class TestImportDashboards:
         assert tab["parent_source_key"] == "file:dashboards/main.yaml"
         # A parent this import does not bring is still found by its title.
         assert "parent_source_key" not in stray
+
+    def test_existing_dashboards_are_kept_unless_reset(
+        self, tmp_path: Path, post: MagicMock
+    ) -> None:
+        path = _write(tmp_path / "main.yaml", {"title": "Main"})
+
+        import_dashboards_from_template([path], "http://api", {})
+        import_dashboards_from_template([path], "http://api", {}, reset=True)
+
+        (kept, _), (reset, _) = _sent(post)
+        assert kept["existing"] == "keep"
+        assert reset["existing"] == "replace"
+        # overwrite too, which a server from before `existing` reads instead: it then
+        # refreshes them as it used to, titles kept.
+        for params in (kept, reset):
+            assert params["overwrite"] is True
+            assert params["keep_titles"] is True
+
+    @pytest.mark.parametrize(
+        ("response", "status"),
+        [
+            ({"status": "kept", "updated": False}, "kept"),
+            ({"status": "created", "updated": False}, "created"),
+            # A server from before `existing` says whether it updated, only.
+            ({"updated": True}, "replaced"),
+            ({"updated": False}, "created"),
+        ],
+    )
+    def test_each_result_says_what_became_of_the_dashboard(
+        self, tmp_path: Path, post: MagicMock, response: dict, status: str
+    ) -> None:
+        post.return_value.json.return_value = {"dashboard_id": "x", "title": "t", **response}
+
+        (result,) = import_dashboards_from_template(
+            [_write(tmp_path / "main.yaml", {"title": "Main"})], "http://api", {}
+        )
+
+        assert result["success"] is True
+        assert result["status"] == status
 
     def test_failure_is_returned_not_logged_as_an_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, post: MagicMock

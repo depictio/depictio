@@ -50,10 +50,9 @@ def _invoke(harness, data_root, finish, start=None):
                 "ingest",
                 "--template",
                 "nf-core/ampliseq/2.16.0",
-                "--data-root",
                 str(data_root),
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
             ],
         )
     finally:

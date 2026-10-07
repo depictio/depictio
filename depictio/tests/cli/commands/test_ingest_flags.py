@@ -13,10 +13,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands import run as run_module
 from depictio.cli.cli.commands.run import (
+    AUTOMATION_PANEL,
+    DASHBOARDS_PANEL,
+    DEBUG_PANEL,
+    PROJECT_PANEL,
+    SKIP_STEPS,
+    STEPS_PANEL,
     load_project_file,
     merge_run_locations,
     register_run_command,
@@ -56,6 +63,11 @@ links:
 
 def normalize(output: str) -> str:
     return re.sub(r"\s+", " ", output)
+
+
+def usage_error(output: str) -> str:
+    """A usage error's text, out of the panel it wraps in."""
+    return normalize(output.replace("│", " "))
 
 
 @pytest.fixture
@@ -107,10 +119,9 @@ def _template(data_root, *flags):
         "ingest",
         "--template",
         TEMPLATE,
-        "--data-root",
         str(data_root),
-        "--skip-server-check",
-        "--skip-s3-check",
+        "--skip",
+        "server-check,s3-check",
         *flags,
     ]
 
@@ -124,8 +135,8 @@ def _project_mode(harness, project_file, *flags):
         "ingest",
         "--project-config-path",
         str(project_file),
-        "--skip-server-check",
-        "--skip-s3-check",
+        "--skip",
+        "server-check,s3-check",
         *flags,
     ]
     return args, [
@@ -151,7 +162,7 @@ class TestFailedJoinFailsTheRun:
             runner,
             harness,
             # The sync would serialise the stand-in join definition.
-            _template(data_root, "--skip-sync"),
+            _template(data_root, "--skip", "sync"),
             [patch("depictio.cli.cli.utils.joins.process_project_joins", joins)],
         )
         assert result.exit_code == 1
@@ -169,7 +180,7 @@ class TestFailedJoinFailsTheRun:
             app,
             runner,
             harness,
-            _template(data_root, "--continue-on-error", "--skip-sync"),
+            _template(data_root, "--continue-on-error", "--skip", "sync"),
             [patch("depictio.cli.cli.utils.joins.process_project_joins", joins)],
         )
         assert result.exit_code == 1
@@ -248,14 +259,16 @@ class TestMergeRunLocations:
 
 
 class TestProjectNameAppliesToAProjectFile:
+    # --project-name is its former name, still taken.
+    @pytest.mark.parametrize("option", ["--project", "--project-name"])
     def test_the_file_is_validated_under_the_new_name(
-        self, app, runner, data_root, project_file, make_harness
+        self, app, runner, data_root, project_file, make_harness, option
     ):
         harness = make_harness(data_root, remote_locations=[])
         validate = MagicMock(
             return_value=(MagicMock(), {"success": True, "project_config": harness.project})
         )
-        args, _ = _project_mode(harness, project_file, "--project-name", "Renamed")
+        args, _ = _project_mode(harness, project_file, option, "Renamed")
 
         result = _invoke(
             app,
@@ -344,37 +357,40 @@ class TestFailedDashboardFailsTheRun:
 
 
 class TestEveryStepWorkedExitsZero:
+    # --skip-dashboard-import is the former spelling, still taken.
     @pytest.mark.parametrize(
-        ("flags", "steps", "reason"),
-        [
-            (["--update-config", "--skip-dashboard-import"], "8/8", "--skip-dashboard-import"),
-            (["--attach-run"], "9/9", "--attach-run"),
-        ],
+        "flags", [["--skip", "dashboards"], ["--skip-dashboard-import"]], ids=["skip", "former"]
     )
     def test_a_skipped_dashboard_outside_template_mode(
-        self,
-        app,
-        runner,
-        data_root,
-        project_file,
-        dashboard_file,
-        make_harness,
-        flags,
-        steps,
-        reason,
+        self, app, runner, data_root, project_file, dashboard_file, make_harness, flags
     ):
         harness = make_harness(data_root, remote_locations=[str(data_root)])
         args, extra = _project_mode(
-            harness, project_file, "--dashboard", str(dashboard_file), *flags
+            harness, project_file, "--dashboard", str(dashboard_file), "--update-config", *flags
         )
 
         result = _invoke(app, runner, harness, args, extra)
 
         assert result.exit_code == 0, result.output
         output = normalize(result.output)
-        assert f"({steps} steps)" in output
-        assert f"Skipping dashboard import ({reason})" in output
+        assert "(8/8 steps)" in output
+        assert "Skipping dashboard import (--skip dashboards)" in output
         harness.import_dashboards.assert_not_called()
+
+    def test_an_attached_run_imports_the_dashboards_too(
+        self, app, runner, data_root, project_file, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        args, extra = _project_mode(
+            harness, project_file, "--dashboard", str(dashboard_file), "--attach-run"
+        )
+
+        result = _invoke(app, runner, harness, args, extra)
+
+        assert result.exit_code == 0, result.output
+        assert "(9/9 steps)" in normalize(result.output)
+        # Keeping the ones the project has: a reset is asked for, never implied.
+        assert harness.import_dashboards.call_args.kwargs["reset"] is False
 
 
 class TestDryRun:
@@ -389,8 +405,8 @@ class TestDryRun:
                 "--project-config-path",
                 str(project),
                 "--dry-run",
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
             ],
         )
 
@@ -471,7 +487,7 @@ class TestArgumentsCheckedUpfront:
         harness.sync.assert_not_called()
 
     def test_neither_template_nor_project_file_is_a_usage_error(self, app, runner):
-        result = runner.invoke(app, ["ingest", "--skip-server-check", "--skip-s3-check"])
+        result = runner.invoke(app, ["ingest", "--skip", "server-check", "--skip", "s3-check"])
 
         assert result.exit_code == 2
         output = normalize(result.output)
@@ -536,7 +552,7 @@ class TestServerCheckKeepsAReportedExit:
             app,
             runner,
             harness,
-            ["ingest", "--template", TEMPLATE, "--data-root", str(data_root), "--skip-s3-check"],
+            ["ingest", "--template", TEMPLATE, str(data_root), "--skip", "s3-check"],
             [patch.object(run_module, "api_login", login)],
         )
 
@@ -554,7 +570,6 @@ class TestAttachMessages:
         output = normalize(result.output)
         assert "already one of the project's runs, so no run is added" in output
         assert "Re-scanning it only" not in output
-        assert "Skipping dashboard import (--attach-run)" in output
 
     def test_exists_in_project_file_mode_does_not_offer_the_file_as_a_run(
         self, app, runner, data_root, project_file, make_harness
@@ -578,7 +593,7 @@ class TestRunAliasHelp:
         assert result.exit_code == 0
         output = normalize(result.output)
         assert "Old name of `ingest`" in output or "Old name of ingest" in output
-        assert "Formerly" not in output.split("Options")[0]
+        assert "Formerly `run`" not in output
 
 
 class TestProvisioningReadsTheConfigurationInUse:
@@ -605,3 +620,363 @@ class TestProvisioningReadsTheConfigurationInUse:
 
         assert result.exit_code == 1
         get_config.assert_called_once_with(str(config))
+
+
+def _resolve_into(harness):
+    """Record the template resolution: what DATA_DIR and --project reached it as."""
+    meta = MagicMock(template_id=TEMPLATE)
+    harness.resolve = MagicMock(
+        return_value=({"name": harness.project.name, "workflows": []}, meta, {}, [], {})
+    )
+    return harness.resolve
+
+
+class TestDataDirArgument:
+    """The results to ingest are ingest's argument. --data-root, their former option,
+    is still taken from the scripts, CI jobs and Nextflow hooks that pass it."""
+
+    def test_the_argument_is_what_the_template_resolves_against(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        resolve = _resolve_into(harness)
+
+        result = _invoke(app, runner, harness, _template(data_root))
+
+        assert result.exit_code == 0, result.output
+        assert resolve.call_args.kwargs["data_root"] == str(data_root)
+        assert "is now" not in result.output
+
+    def test_the_former_option_still_works_and_says_its_new_name(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        resolve = _resolve_into(harness)
+        args = ["ingest", "--template", TEMPLATE, "--data-root", str(data_root)]
+
+        result = _invoke(app, runner, harness, [*args, "--skip", "server-check,s3-check"])
+
+        assert result.exit_code == 0, result.output
+        assert resolve.call_args.kwargs["data_root"] == str(data_root)
+        assert "--data-root is now the DATA_DIR argument" in normalize(result.stderr)
+
+    def test_both_are_a_usage_error(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        args = _template(data_root, "--data-root", str(data_root))
+
+        result = _invoke(app, runner, harness, args)
+
+        assert result.exit_code == 2
+        assert "give DATA_DIR or --data-root, not both" in usage_error(result.output)
+        harness.sync.assert_not_called()
+
+    def test_a_missing_directory_is_named_as_the_argument(self, app, runner, tmp_path):
+        result = runner.invoke(app, ["ingest", str(tmp_path / "nope"), "--template", TEMPLATE])
+
+        assert result.exit_code == 1
+        assert "DATA_DIR does not exist or is not a directory" in normalize(result.output)
+
+    def test_a_template_without_it_names_the_argument(self, app, runner):
+        result = runner.invoke(app, ["ingest", "--template", TEMPLATE])
+
+        assert result.exit_code == 1
+        assert "--template needs DATA_DIR" in normalize(result.output)
+
+
+class TestProjectOption:
+    def test_project_names_the_project(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        resolve = _resolve_into(harness)
+
+        result = _invoke(app, runner, harness, _template(data_root, "--project", "Mine"))
+
+        assert result.exit_code == 0, result.output
+        assert resolve.call_args.kwargs["project_name"] == "Mine"
+
+    def test_the_former_name_still_works_and_says_its_new_one(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        resolve = _resolve_into(harness)
+
+        result = _invoke(app, runner, harness, _template(data_root, "--project-name", "Mine"))
+
+        assert result.exit_code == 0, result.output
+        assert resolve.call_args.kwargs["project_name"] == "Mine"
+        assert "--project-name is now --project" in normalize(result.stderr)
+
+    def test_both_are_a_usage_error(self, app, runner, data_root):
+        result = runner.invoke(
+            app, ["ingest", str(data_root), "--project", "a", "--project-name", "b"]
+        )
+
+        assert result.exit_code == 2
+        assert "give --project or --project-name, not both" in usage_error(result.output)
+
+
+class TestSkip:
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            ["--skip", "sync,scan"],
+            ["--skip", "sync", "--skip", "scan"],
+            ["--skip", " Scan , SYNC,"],
+        ],
+        ids=["comma", "repeated", "spaced-and-cased"],
+    )
+    def test_the_steps_named_are_skipped(self, app, runner, data_root, make_harness, flags):
+        harness = make_harness(data_root, remote_locations=[])
+
+        result = _invoke(app, runner, harness, _template(data_root, *flags))
+
+        assert result.exit_code == 0, result.output
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+        harness.process.assert_called_once()
+        output = normalize(result.output)
+        assert "Skipping project configuration sync" in output
+        assert "Skipping data scanning" in output
+
+    def test_an_unknown_step_is_a_usage_error_naming_the_known_ones(self, app, runner):
+        result = runner.invoke(app, ["ingest", "--skip", "scan,joins"])
+
+        assert result.exit_code == 2
+        output = usage_error(result.output)
+        assert "unknown step 'joins'" in output
+        for step in SKIP_STEPS:
+            assert step in output
+
+    def test_the_former_flags_still_skip_and_say_what_they_are_now(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        args = ["ingest", str(data_root), "--template", TEMPLATE]
+        former = ["--skip-server-check", "--skip-s3-check", "--skip-sync", "--skip-scan"]
+
+        result = _invoke(app, runner, harness, [*args, *former])
+
+        assert result.exit_code == 0, result.output
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+        stderr = normalize(result.stderr)
+        assert "--skip-sync is now --skip sync" in stderr
+        assert "--skip-server-check is now --skip server-check" in stderr
+
+    def test_every_step_has_its_former_flag(self, app):
+        command = get_command(app).commands["ingest"]
+        options = {opt for param in command.params for opt in param.opts}
+        assert set(SKIP_STEPS.values()) <= options
+
+
+class TestHelpSurface:
+    """`ingest --help` shows the essentials first, the rest in named panels, and
+    neither the former names nor the flags --update-config folds in."""
+
+    HIDDEN = {
+        "--CLI-config-path",
+        "--data-root",
+        "--project-name",
+        *SKIP_STEPS.values(),
+        "--overwrite",
+        "--rescan-folders",
+        "--sync-files",
+    }
+    ESSENTIALS = [
+        "--server",
+        "--template",
+        "--project-config-path",
+        "--update-config",
+        "--var",
+        "--dry-run",
+        "--help",
+    ]
+    PANELS = [
+        "Arguments",
+        "Options",
+        PROJECT_PANEL,
+        DASHBOARDS_PANEL,
+        STEPS_PANEL,
+        AUTOMATION_PANEL,
+        DEBUG_PANEL,
+    ]
+
+    @pytest.fixture
+    def help_text(self, app, runner, monkeypatch):
+        monkeypatch.setenv("COLUMNS", "200")
+        result = runner.invoke(app, ["ingest", "--help"])
+        assert result.exit_code == 0, result.output
+        return result.output
+
+    def test_the_hidden_options(self, app):
+        command = get_command(app).commands["ingest"]
+        hidden = {param.opts[0] for param in command.params if getattr(param, "hidden", False)}
+        assert hidden == self.HIDDEN
+
+    def test_hidden_options_have_no_row(self, help_text):
+        rows = set(re.findall(r"│ +(--[\w-]+)", help_text))
+        assert not rows & self.HIDDEN
+        assert "--skip" in rows and "--project" in rows
+
+    def test_the_panels_in_order(self, help_text):
+        starts = [help_text.index(f"─ {panel} ─") for panel in self.PANELS]
+        assert starts == sorted(starts)
+
+    def test_the_argument_and_the_essentials_come_first(self, help_text):
+        arguments = help_text[help_text.index("─ Arguments ─") : help_text.index("─ Options ─")]
+        assert "DATA_DIR" in arguments
+        options = help_text[
+            help_text.index("─ Options ─") : help_text.index(f"─ {PROJECT_PANEL} ─")
+        ]
+        assert re.findall(r"│ +(--[\w-]+)", options) == self.ESSENTIALS
+
+    def test_the_new_names_say_their_former_ones(self, help_text):
+        text = normalize(help_text.replace("│", " "))
+        assert "Formerly `--data-root`" in text
+        assert "Formerly `--project-name`" in text
+        assert "Formerly the `--skip-<step>` flags" in text
+
+    def test_run_shows_the_same_panels(self, app, runner, monkeypatch):
+        monkeypatch.setenv("COLUMNS", "200")
+        output = runner.invoke(app, ["run", "--help"]).output
+        for panel in self.PANELS:
+            assert f"─ {panel} ─" in output
+
+
+class TestDashboardsOnARefresh:
+    """A refresh keeps the dashboards the project has, edits made in the viewer
+    included; --reset-dashboards replaces them, as a refresh used to."""
+
+    @staticmethod
+    def _results(*statuses):
+        return [
+            {
+                "path": f"/d/{i}.yaml",
+                "success": True,
+                "dashboard_id": f"id{i}",
+                "title": f"D{i}",
+                "status": status,
+            }
+            for i, status in enumerate(statuses)
+        ]
+
+    @pytest.mark.parametrize(
+        ("flags", "reset", "update"),
+        [
+            ([], False, False),
+            (["--update-config"], False, True),
+            (["--attach-run"], False, True),
+            (["--reset-dashboards"], True, True),
+            (["--update-config", "--reset-dashboards"], True, True),
+        ],
+        ids=["first-ingest", "update-config", "attach-run", "reset", "update-and-reset"],
+    )
+    def test_what_each_mode_asks_of_the_import(
+        self, app, runner, data_root, dashboard_file, make_harness, flags, reset, update
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        harness.import_dashboards.return_value = self._results("created")
+
+        result = _invoke(
+            app, runner, harness, _template(data_root, "--dashboard", str(dashboard_file), *flags)
+        )
+
+        assert result.exit_code == 0, result.output
+        harness.import_dashboards.assert_called_once()
+        assert harness.import_dashboards.call_args.kwargs["reset"] is reset
+        assert harness.sync.call_args.kwargs["update"] is update
+
+    def test_each_dashboard_says_what_became_of_it(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        harness.import_dashboards.return_value = self._results("created", "kept", "replaced")
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(data_root, "--dashboard", str(dashboard_file), "--update-config"),
+        )
+
+        assert result.exit_code == 0, result.output
+        output = normalize(result.output)
+        for line in ("Dashboard created: D0", "Dashboard kept: D1", "Dashboard replaced: D2"):
+            assert line in output
+        # Again in the summary, where a pipeline log is read.
+        summary = output[output.index("Ingestion summary") :]
+        for line in ("Dashboard 'D0' created", "Dashboard 'D1' kept", "Dashboard 'D2' replaced"):
+            assert line in summary
+        assert "--reset-dashboards replaces them" in output
+
+    def test_reset_warns_that_the_viewer_edits_are_lost(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        harness.import_dashboards.return_value = self._results("replaced")
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(data_root, "--dashboard", str(dashboard_file), "--reset-dashboards"),
+        )
+
+        assert result.exit_code == 0, result.output
+        output = normalize(result.output)
+        assert "layout and components edited in the viewer are lost" in output
+        # It refreshes the project, tables included, as --update-config does.
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+        assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
+
+    def test_a_refresh_does_not_warn(self, app, runner, data_root, dashboard_file, make_harness):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        harness.import_dashboards.return_value = self._results("kept")
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(data_root, "--dashboard", str(dashboard_file), "--update-config"),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "are lost" not in normalize(result.output)
+
+    def test_reset_with_the_dashboards_skipped_is_a_usage_error(self, app, runner, data_root):
+        result = runner.invoke(
+            app, ["ingest", str(data_root), "--reset-dashboards", "--skip", "dashboards"]
+        )
+
+        assert result.exit_code == 2
+        assert "give --reset-dashboards or --skip dashboards" in usage_error(result.output)
+
+    def test_the_dry_run_says_which(self, app, runner, data_root, dashboard_file, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        origin = SimpleNamespace(
+            template_id=TEMPLATE, template_version="2.16.0", data_root=str(data_root)
+        )
+        harness.resolve = MagicMock(
+            return_value=(
+                {"name": "n", "workflows": []},
+                MagicMock(template_id=TEMPLATE),
+                origin,
+                [],
+                {},
+            )
+        )
+        validate = MagicMock(return_value=harness.project)
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(
+                data_root, "--dashboard", str(dashboard_file), "--update-config", "--dry-run"
+            ),
+            [patch.object(run_module, "validate_project_locally", validate)],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Would import 1 dashboard(s), keeping those the project already has" in normalize(
+            result.output
+        )

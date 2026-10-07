@@ -8,7 +8,7 @@ that dispatches a directory to the highest-priority connector that recognises
 it.
 
 The split matters because the consumers are engine-agnostic: the CLI uses the
-result to auto-select a bundled template for ``depictio-cli ingest --data-root``,
+result to auto-select a bundled template for ``depictio ingest <results dir>``,
 and nothing in that path should know about Nextflow specifically. Adding
 Snakemake, WDL or CWL support is then a new connector module plus one entry in
 ``_CONNECTOR_MODULES`` — no change here and no change in the CLI.

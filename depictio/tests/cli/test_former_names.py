@@ -26,7 +26,7 @@ def _stderr(result) -> str:
 @pytest.mark.parametrize(
     ("former", "current", "args"),
     [
-        ("run", "ingest", ["--template", "x/y", "--data-root", "/nonexistent"]),
+        ("run", "ingest", ["/nonexistent", "--template", "x/y"]),
         ("images push", "data push-images", ["/nonexistent", "s3://bucket/images/"]),
     ],
 )
@@ -62,6 +62,38 @@ def test_a_former_server_option_says_it_is_server(cli, tmp_path):
     assert "--CLI-config-path is now --server" in _stderr(result)
     # Still honoured: the file it names is the one looked for.
     assert "CLI.yaml" in result.output
+
+
+@pytest.mark.parametrize(
+    ("args", "notice"),
+    [
+        (["--data-root", "/nonexistent"], "--data-root is now the DATA_DIR argument"),
+        (["/nonexistent", "--project-name", "p"], "--project-name is now --project"),
+        (["/nonexistent", "--skip-s3-check"], "--skip-s3-check is now --skip s3-check"),
+        (["/nonexistent", "--skip-dashboard-import"], "--skip-dashboard-import is now --skip"),
+    ],
+)
+def test_a_former_ingest_option_says_its_new_name(cli, args, notice):
+    result = runner.invoke(cli.app, ["ingest", "--template", "x/y", *args])
+
+    # Taken as before: the run stops at the missing directory.
+    assert result.exit_code == 1, result.output
+    assert notice in _stderr(result)
+    assert "is now" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["/nonexistent", "--data-root", "/nonexistent"],
+        ["/nonexistent", "--project", "a", "--project-name", "b"],
+    ],
+)
+def test_an_ingest_option_and_its_former_name_together_are_a_usage_error(cli, args):
+    result = runner.invoke(cli.app, ["ingest", *args])
+
+    assert result.exit_code == 2, result.output
+    assert "not both" in " ".join(result.output.replace("│", " ").split())
 
 
 def test_server_says_nothing(cli, tmp_path):

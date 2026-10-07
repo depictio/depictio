@@ -49,6 +49,7 @@ from depictio.cli.cli.local_stack import (
 )
 from depictio.cli.cli.utils.renamed import note_if_called_as
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
+from depictio.cli.cli.utils.server_target import local_is_default_server
 
 app = typer.Typer(
     help="Run a complete Depictio server on this machine, without Docker.",
@@ -191,15 +192,16 @@ def _moved_to_ingest(
     1.12.0b1 ingested with `up --template --data-root`, so the flags are still
     parsed, to point there rather than fail as unknown options.
     """
-    # Placeholders where the old flags were incomplete; given values quoted as typed.
-    args = [
-        ("--template", shlex.quote(template) if template is not None else "<template>"),
-        ("--data-root", shlex.quote(data_root) if data_root is not None else "<dir>"),
-    ]
+    # A placeholder for a missing data root; given values quoted as typed. Without
+    # --template, ingest detects the template from the results.
+    data_dir = shlex.quote(data_root) if data_root is not None else "<results dir>"
+    args = [("--template", shlex.quote(template))] if template is not None else []
     if project_name is not None:
-        args.append(("--project-name", shlex.quote(project_name)))
+        args.append(("--project", shlex.quote(project_name)))
     args += [("--var", shlex.quote(var)) for var in variables or []]
-    command = " ".join(["depictio ingest --server local", *(f"{f} {v}" for f, v in args)])
+    command = " ".join(
+        [f"depictio ingest {data_dir} --server local", *(f"{f} {v}" for f, v in args)]
+    )
     rich_print_checked_statement(
         "depictio local up starts the server only: add data with depictio ingest", "error"
     )
@@ -412,9 +414,11 @@ def _print_summary(paths: Paths, state: State, examples: list[str]) -> None:
     where = [("Examples", ", ".join(examples))] if examples else []
     where += [("Data", str(paths.home)), ("Logs", str(paths.logs))]
     # --server local reads the CLI configuration this home holds, admin token included.
+    # Left out where a command reaches this server without it: no ~/.depictio/CLI.yaml.
+    server = "" if local_is_default_server() else " --server local"
     next_steps = [
-        ("Add data", "depictio ingest --server local --template <template> --data-root <dir>"),
-        ("Use the CLI", "depictio <command> --server local"),
+        ("Add data", f"depictio ingest <results dir>{server}"),
+        ("Use the CLI", f"depictio <command>{server}"),
         ("Stop", "depictio local down"),
     ]
     width = max(len(label) for label, _ in where + next_steps)
@@ -483,7 +487,7 @@ def up(
     Run from a source checkout, it first builds the viewer when its sources changed
     since the last build (this needs pnpm).
 
-    Then add data with: depictio ingest --server local --template <template> --data-root <dir>
+    Then add data with: depictio ingest <results dir> --server local
     """
     if template is not None or data_root is not None or project_name is not None or variables:
         flags = _up_flags(examples, template, port, screenshots, open_browser)

@@ -6,7 +6,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import yaml
@@ -5594,6 +5594,49 @@ def _import_title(
     return yaml_title
 
 
+def _keep_existing_dashboard(
+    existing: dict,
+    project_id: PyObjectId,
+    source_key: str | None,
+    title: str | None,
+    with_tabs: bool = False,
+) -> dict[str, Any]:
+    """The response of an import that leaves a dashboard the project has as it is.
+
+    Its layout and components stay as edited in the viewer. Only `title`
+    (`main_title`) renames it, and a dashboard imported before keys existed takes
+    `source_key`, so that later imports still find it once renamed.
+    """
+    changes: dict[str, Any] = {}
+    if title and title != existing.get("title"):
+        changes["title"] = title
+    if source_key and not existing.get("source_key"):
+        changes["source_key"] = source_key
+    if changes:
+        dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
+    kept = {**existing, **changes}
+    response: dict[str, Any] = {
+        "success": True,
+        "updated": False,
+        "status": "kept",
+        "message": "Dashboard kept as it is" + (", renamed" if "title" in changes else ""),
+        "dashboard_id": str(kept["dashboard_id"]),
+        "title": kept.get("title"),
+        "project_id": str(project_id),
+        "dash_url": settings.viewer.external_url,
+    }
+    if with_tabs:
+        # The tabs it has now. One the YAML has and the family lacks is not added:
+        # it may be a tab removed in the viewer.
+        tabs = dashboards_collection.find(
+            {"parent_dashboard_id": kept["dashboard_id"]}, {"title": 1, "dashboard_id": 1}
+        ).sort("tab_order", 1)
+        response["tabs"] = [
+            {"title": tab.get("title"), "dashboard_id": str(tab["dashboard_id"])} for tab in tabs
+        ]
+    return response
+
+
 def _import_multi_tab_dashboard(
     yaml_data: dict,
     project_id: PyObjectId,
@@ -5602,6 +5645,7 @@ def _import_multi_tab_dashboard(
     source_key: str | None = None,
     keep_titles: bool = False,
     main_title: str | None = None,
+    keep_existing: bool = False,
 ) -> dict[str, Any]:
     """
     Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
@@ -5618,6 +5662,9 @@ def _import_multi_tab_dashboard(
             their current titles instead of taking the YAML's
         main_title: Title of the main dashboard, over the YAML's and over
             keep_titles; the tabs are not affected
+        keep_existing: A main dashboard the project has (same source_key, else
+            same title) is left as it is, tabs included; main_title still
+            renames it
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -5632,7 +5679,13 @@ def _import_multi_tab_dashboard(
     main_yaml = yaml.dump(main_dashboard_data, default_flow_style=False, allow_unicode=True)
     main_lite = DashboardDataLite.from_yaml(main_yaml)
 
-    existing_main = _existing_import_target(project_id, main_lite.title, source_key, overwrite)
+    existing_main = _existing_import_target(
+        project_id, main_lite.title, source_key, overwrite or keep_existing
+    )
+    if keep_existing and existing_main is not None:
+        return _keep_existing_dashboard(
+            existing_main, project_id, source_key, main_title, with_tabs=True
+        )
 
     main_dashboard_dict = main_lite.to_full()
     main_dashboard_dict["title"] = _import_title(
@@ -5820,6 +5873,7 @@ def _import_multi_tab_dashboard(
     return {
         "success": True,
         "updated": is_update,
+        "status": "replaced" if is_update else "created",
         "message": f"Multi-tab dashboard {'updated' if is_update else 'imported'} successfully",
         "dashboard_id": str(main_dashboard_id),
         "title": main_dashboard.title,
@@ -5838,6 +5892,7 @@ async def import_dashboard_from_yaml(
     keep_titles: bool = False,
     main_title: str | None = None,
     parent_source_key: str | None = None,
+    existing: Literal["keep", "replace"] | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -5853,6 +5908,15 @@ async def import_dashboard_from_yaml(
     is updated instead of creating a new one, whatever its title is now; without
     one, a dashboard with the same title in the project is. Either kind of match
     is a 409 without `overwrite`.
+
+    `existing` says what becomes of a dashboard so matched, over `overwrite`:
+    - `replace`: as `overwrite=True`;
+    - `keep`: it is left as it is, its layout and components as edited in the
+      viewer, and the response says `"status": "kept"` with its id. `main_title`
+      still renames a kept main dashboard, which changes nothing else. A kept
+      multi-tab main keeps its tabs as they are: a tab the YAML adds is not
+      imported. A dashboard with no match is created as usual.
+    Every response says what happened in `status`: `created`, `replaced` or `kept`.
 
     Titles: a dashboard takes the title in the YAML, unless
     - `keep_titles=True` and the import replaces an existing dashboard: that
@@ -5884,6 +5948,8 @@ async def import_dashboard_from_yaml(
         main_title: Optional title for the main dashboard, over the YAML's and
             over keep_titles
         parent_source_key: Optional source_key of a child tab's parent dashboard
+        existing: Optional "keep" or "replace", for a dashboard the project
+            already has; without it, `overwrite` decides
         current_user: The authenticated user (will be set as owner)
 
     Returns:
@@ -5912,6 +5978,11 @@ async def import_dashboard_from_yaml(
         {"_id": ObjectId(project_id)}, {"_id": 1}
     ):
         raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
+
+    # `existing` wins over `overwrite`, which clients from before it still send.
+    if existing is not None:
+        overwrite = existing == "replace"
+    keep_existing = existing == "keep"
 
     # Parse YAML to detect format
     try:
@@ -5955,6 +6026,7 @@ async def import_dashboard_from_yaml(
             source_key=source_key,
             keep_titles=keep_titles,
             main_title=main_title,
+            keep_existing=keep_existing,
         )
 
     # Single dashboard format
@@ -5990,7 +6062,11 @@ async def import_dashboard_from_yaml(
             detail="You don't have permission to create dashboards in this project.",
         )
 
-    existing_dashboard = _existing_import_target(project_id, lite.title, source_key, overwrite)
+    existing_dashboard = _existing_import_target(
+        project_id, lite.title, source_key, overwrite or keep_existing
+    )
+    if keep_existing and existing_dashboard is not None:
+        return _keep_existing_dashboard(existing_dashboard, project_id, source_key, main_title)
     if existing_dashboard:
         logger.info(
             f"Found existing dashboard '{existing_dashboard.get('title')}' "
@@ -6091,6 +6167,7 @@ async def import_dashboard_from_yaml(
     return {
         "success": True,
         "updated": is_update,
+        "status": "replaced" if is_update else "created",
         "message": f"Dashboard {'updated' if is_update else 'imported'} successfully",
         "dashboard_id": str(new_dashboard_id),
         "title": dashboard.title,

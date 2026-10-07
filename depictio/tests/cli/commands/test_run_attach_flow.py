@@ -69,10 +69,9 @@ def _invoke(app, runner, harness, extra_args):
                 "ingest",
                 "--template",
                 "nf-core/ampliseq/2.16.0",
-                "--data-root",
                 str(extra_args["data_root"]),
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
                 *extra_args["flags"],
             ],
         )
@@ -95,7 +94,7 @@ class TestAttachRunFlags:
         assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is False
         # The delta tables are rebuilt, including the runs already ingested.
         assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
-        # The existing dashboards are left alone.
+        # The template brings no dashboard here; with one, see TestDashboardsOnARefresh.
         harness.import_dashboards.assert_not_called()
         # And the new run really was appended after the existing one.
         assert harness.sync.call_args.kwargs["ProjectConfig"]["workflows"][0]["data_location"][
@@ -168,10 +167,9 @@ class TestProvenanceStamping:
                 app,
                 [
                     "ingest",
-                    "--data-root",
                     str(root),
-                    "--skip-server-check",
-                    "--skip-s3-check",
+                    "--skip",
+                    "server-check,s3-check",
                     *flags,
                 ],
             )
@@ -284,9 +282,9 @@ class TestServerCheckHonoursTheVerdict:
                     "ingest",
                     "--template",
                     "nf-core/ampliseq/2.16.0",
-                    "--data-root",
                     str(data_root),
-                    "--skip-s3-check",
+                    "--skip",
+                    "s3-check",
                 ],
             )
         finally:
@@ -318,9 +316,9 @@ class TestServerCheckHonoursTheVerdict:
                     "ingest",
                     "--template",
                     "nf-core/ampliseq/2.16.0",
-                    "--data-root",
                     str(data_root),
-                    "--skip-s3-check",
+                    "--skip",
+                    "s3-check",
                 ],
             )
         finally:

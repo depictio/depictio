@@ -63,10 +63,9 @@ def _template_args(command, data_root, *flags):
         str(data_root.parent / "absent-CLI.yaml"),
         "--template",
         "nf-core/ampliseq/2.16.0",
-        "--data-root",
         str(data_root),
-        "--skip-server-check",
-        "--skip-s3-check",
+        "--skip",
+        "server-check,s3-check",
         *flags,
     ]
 
@@ -119,9 +118,9 @@ class TestServerOption:
                 str(config),
                 "--template",
                 "nf-core/ampliseq/2.16.0",
-                "--data-root",
                 str(data_root),
-                "--skip-s3-check",
+                "--skip",
+                "s3-check",
             ],
             [patch("depictio.cli.cli.commands.run.api_login", login)],
         )
@@ -143,9 +142,9 @@ class TestServerOption:
                 str(config),
                 "--template",
                 "nf-core/ampliseq/2.16.0",
-                "--data-root",
                 str(data_root),
-                "--skip-s3-check",
+                "--skip",
+                "s3-check",
             ],
             [patch("depictio.cli.cli.commands.run.api_login", login)],
         )
@@ -249,7 +248,8 @@ class TestImagesInStepSix:
             data_root,
             upload,
             [image_dc],
-            "--skip-process",
+            "--skip",
+            "process",
         )
 
         assert result.exit_code == 0, result.output

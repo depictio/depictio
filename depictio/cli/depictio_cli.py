@@ -301,13 +301,14 @@ _BLOCKS = {
 }
 
 # What the landing suggests trying first: (what it does, the command). The steps after
-# `local up` name its server: without --server a command reads ~/.depictio/CLI.yaml,
-# which `local up` does not write.
+# `local up` name its server: without --server a command reads ~/.depictio/CLI.yaml when
+# there is one, which `local up` does not write, and the local server only otherwise.
+# ingest detects the template from the results.
 GET_STARTED = (
     ("Start a server on this machine, with example dashboards", "depictio local up"),
     (
         "Build dashboards on it from a pipeline's results",
-        "depictio ingest --server local --template nf-core/rnaseq/latest --data-root <dir>",
+        "depictio ingest <results dir> --server local",
     ),
     ("Check that the CLI reaches it and its storage", "depictio config check --server local"),
 )

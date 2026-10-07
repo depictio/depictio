@@ -58,6 +58,9 @@ def stack(tmp_path, monkeypatch):
         return {name: held[name] for name in names if name in held}
 
     monkeypatch.setattr(local_cmd, "examples_status", examples_status)
+    # A ~/.depictio/CLI.yaml exists, so the hints name the local server: whatever the
+    # machine running the tests has.
+    monkeypatch.setattr(local_cmd, "local_is_default_server", lambda: False)
     # The checks `up` runs itself, then what start_stack calls.
     for name in (
         "check_platform_supported",
@@ -94,7 +97,7 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     state = State.load(stack.paths)
     assert f"Depictio is ready: {state.url}/dashboards" in out
     assert "Examples iris, penguins" in out
-    assert "Add data depictio ingest --server local --template <template> --data-root <dir>" in out
+    assert "Add data depictio ingest <results dir> --server local" in out
     assert "Use the CLI depictio <command> --server local" in out
     assert "Stop depictio local down" in out
     assert state.start_times == dict.fromkeys(PROCESS_ORDER, 123.0)
@@ -104,6 +107,17 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     assert local_stack.load_ports(stack.paths) == state.ports
     stack.webbrowser.open.assert_not_called()
     assert stack.paths.marker.is_file()
+
+
+def test_the_next_steps_leave_server_out_when_local_is_the_default(stack, monkeypatch):
+    """Without a ~/.depictio/CLI.yaml, a command reaches the local server unprompted."""
+    monkeypatch.setattr(local_cmd, "local_is_default_server", lambda: True)
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    assert "Add data depictio ingest <results dir> Use the CLI depictio <command> Stop" in out
+    assert "--server local" not in out
 
 
 @pytest.mark.parametrize(
@@ -130,8 +144,7 @@ def test_up_seeds_both_examples_unless_told_otherwise(stack, args, seed):
     [
         (
             ["--template", "nf-core/rnaseq/latest", "--data-root", "my results"],
-            "depictio ingest --server local --template nf-core/rnaseq/latest "
-            "--data-root 'my results'",
+            "depictio ingest 'my results' --server local --template nf-core/rnaseq/latest",
         ),
         (
             # Every flag, with --examples, which `up` still takes, ignored.
@@ -149,12 +162,12 @@ def test_up_seeds_both_examples_unless_told_otherwise(stack, args, seed):
                 "--var",
                 "LABEL=a b",
             ],
-            "depictio ingest --server local --template t --data-root /data "
-            "--project-name 'My run' --var SAMPLESHEET_FILE=s.csv --var 'LABEL=a b'",
+            "depictio ingest /data --server local --template t "
+            "--project 'My run' --var SAMPLESHEET_FILE=s.csv --var 'LABEL=a b'",
         ),
         (
             ["--var", "X=1"],
-            "depictio ingest --server local --template <template> --data-root <dir> --var X=1",
+            "depictio ingest <results dir> --server local --var X=1",
         ),
     ],
     ids=["template-and-data-root", "every-flag", "incomplete"],

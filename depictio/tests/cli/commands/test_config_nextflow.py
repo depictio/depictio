@@ -266,6 +266,14 @@ class TestTheHandlerCallsIngest:
         assert "argv += ['--server', cliConfig]" in snippet
         assert "--CLI-config-path" not in snippet
 
+    def test_the_data_root_is_the_argument_and_the_project_is_project(self):
+        """The CLI's current names, so a pipeline log carries no rename notice."""
+        snippet = self._snippet()
+        assert "argv.add(dataRoot)" in snippet
+        assert "argv += ['--project', projectName]" in snippet
+        # --update-config alone: a refresh keeps the dashboards edited in the viewer.
+        assert "argv += ['--update-config']" in snippet
+
     def test_local_is_documented(self):
         """`depictio_cli_config = 'local'` targets the server `depictio local up` runs."""
         assert "--depictio_cli_config local" in self._snippet()
@@ -277,5 +285,13 @@ class TestTheHandlerCallsIngest:
         files += sorted((self._nextflow_dir() / "example").iterdir())
         for path in files:
             text = path.read_text()
-            for former in ("depictio-cli run", "depictio run", "--CLI-config-path"):
+            for former in (
+                "depictio-cli run",
+                "depictio run",
+                "--CLI-config-path",
+                "--data-root <",
+                "'--data-root'",
+                "--project-name",
+                "'--overwrite'",
+            ):
                 assert former not in text, f"{former!r} in {path.name}"

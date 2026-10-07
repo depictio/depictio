@@ -154,7 +154,7 @@ def locate_template(template_id: str) -> Path:
 def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
     """Identify the pipeline that produced ``run_dir`` and pick a bundled template.
 
-    Powers ``depictio ingest --data-root <dir>`` with no ``--template``: the
+    Powers ``depictio ingest <results dir>`` with no ``--template``: the
     results directory itself says which pipeline and release made it, so the
     user should not have to.
 
@@ -1562,7 +1562,7 @@ def import_dashboards_from_template(
     api_url: str,
     headers: dict[str, str],
     project_id: str | None = None,
-    overwrite: bool = True,
+    reset: bool = False,
     variables: dict[str, str] | None = None,
     dashboard_name: str | None = None,
     template_id: str | None = None,
@@ -1570,11 +1570,13 @@ def import_dashboards_from_template(
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
-    Called after project sync during ``depictio ingest --template`` to automatically
-    create the template's default dashboards.
+    Called after project sync during ``depictio ingest`` to create the template's
+    default dashboards, or the ``--dashboard`` files.
 
-    A dashboard this refreshes keeps its current title, so a rename made in the
-    viewer survives; only ``dashboard_name`` changes the main dashboard's title.
+    A dashboard the project already has (imported from the same file, found by
+    ``dashboard_source_key``, else by title) is kept as it is, edits made in the
+    viewer included; only ``dashboard_name`` renames the main one. With ``reset``
+    it is replaced by the file's, keeping its current title.
 
     Args:
         dashboard_paths: Absolute paths to dashboard YAML files.
@@ -1582,8 +1584,8 @@ def import_dashboards_from_template(
         headers: Auth headers (from ``generate_api_headers``).
         project_id: Project ObjectId string. When provided, overrides
             ``project_tag`` inside the YAML.
-        overwrite: If True, update the dashboards imported from the same files
-            before (matched by ``dashboard_source_key``, else by title).
+        reset: Replace the dashboards the project already has, instead of
+            keeping them.
         variables: Template variables to substitute in dashboard YAML
             (e.g., ``{GROUP_COL}`` placeholders).
         dashboard_name: When provided, titles the main dashboard, on a refresh
@@ -1595,7 +1597,8 @@ def import_dashboards_from_template(
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
-        ``path``, ``success``, and either ``dashboard_id``/``title`` or ``error``.
+        ``path``, ``success``, and either ``dashboard_id``/``title``/``status``
+        (``created``, ``kept`` or ``replaced``) or ``error``.
     """
     results: list[dict[str, Any]] = []
     url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
@@ -1646,10 +1649,17 @@ def import_dashboards_from_template(
                 yaml.dump(parsed, default_flow_style=False, allow_unicode=True) if edited else text
             )
 
-            # A refresh keeps the titles the dashboards have now (renamed in the
-            # viewer, say); --dashboard-name still titles the main one. The parent
-            # is found by its key, as its title may be one the YAML does not know.
-            params: dict[str, str | bool] = {"source_key": key, "keep_titles": True}
+            # A dashboard the project has is kept, or replaced under its current
+            # title (renamed in the viewer, say); --dashboard-name still titles the
+            # main one. overwrite too, for a server from before `existing`: it
+            # replaces them, titles kept, as a refresh used to. The parent is
+            # found by its key, as its title may be one the YAML does not know.
+            params: dict[str, str | bool] = {
+                "source_key": key,
+                "keep_titles": True,
+                "overwrite": True,
+                "existing": "replace" if reset else "keep",
+            }
             if dashboard_name and renamed is not None and parsed is renamed:
                 params["main_title"] = dashboard_name
             parent_tag = parsed.get("parent_dashboard_tag") if isinstance(parsed, dict) else None
@@ -1657,8 +1667,6 @@ def import_dashboards_from_template(
                 params["parent_source_key"] = main_keys[parent_tag]
             if project_id:
                 params["project_id"] = project_id
-            if overwrite:
-                params["overwrite"] = True
 
             response = httpx.post(
                 url,
@@ -1670,14 +1678,17 @@ def import_dashboards_from_template(
 
             if response.status_code == 200:
                 data = response.json()
+                updated = data.get("updated", False)
                 entry.update(
                     success=True,
                     dashboard_id=data.get("dashboard_id"),
                     title=data.get("title"),
-                    updated=data.get("updated", False),
+                    updated=updated,
+                    # A server from before `existing` reports `updated` only.
+                    status=data.get("status") or ("replaced" if updated else "created"),
                     dash_url=data.get("dash_url"),
                 )
-                logger.info(f"Dashboard imported: {data.get('title')} ({path.name})")
+                logger.info(f"Dashboard {entry['status']}: {data.get('title')} ({path.name})")
             else:
                 detail = response.text
                 try:
