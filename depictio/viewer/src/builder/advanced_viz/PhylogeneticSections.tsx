@@ -51,6 +51,7 @@ import {
   abundanceRankCoverage,
   fetchPolarsSchema,
   fetchProjectFromDashboard,
+  orderTaxonomicRanks,
   phyloRankChoices,
   phyloSourcePatch,
   preferredTipMetadata,
@@ -363,14 +364,19 @@ export const PhyloViewSection: React.FC<{
   const remembered = useRef<string | null>(rank);
   if (rank) remembered.current = rank;
 
-  // A rank is a category of the tips, so a text column; the tip id is not one.
-  const textColumns = Object.entries(metadataSchema ?? {})
-    .filter(([c, t]) => TEXT.has(t) && c !== (taxonCol || 'taxon'))
-    .map(([c]) => c);
+  // A rank is a category of the tips, so a text column; the tip id is not one,
+  // nor the tip's display label (the label column, `label` when the config
+  // names none). Ranks root to leaf, then the rest.
+  const label = str(merged?.label_col) ?? 'label';
+  const textColumns = orderTaxonomicRanks(
+    Object.entries(metadataSchema ?? {})
+      .filter(([c, t]) => TEXT.has(t) && c !== (taxonCol || 'taxon') && c !== label)
+      .map(([c]) => c),
+  );
   const offered = Array.isArray(merged?.extra_color_cols)
     ? (merged!.extra_color_cols as unknown[]).filter((c): c is string => typeof c === 'string')
     : [];
-  const rankOptions = Array.from(new Set([...textColumns, ...(rank ? [rank] : [])]));
+  const rankOptions = orderTaxonomicRanks(Array.from(new Set([...textColumns, ...(rank ? [rank] : [])])));
   const firstRank = () =>
     (remembered.current && rankOptions.includes(remembered.current) && remembered.current) ||
     rankOptions.find((c) => c.toLowerCase() === 'phylum') ||
@@ -466,7 +472,7 @@ export const PhyloViewSection: React.FC<{
             label={optional('Columns viewers can switch to')}
             description="Offered in the tile’s settings on the dashboard: Colour by on the full tree, Collapse to on the summary. Nothing changes here until a viewer picks one."
             placeholder="Pick columns"
-            data={Array.from(new Set([...textColumns, ...offered]))}
+            data={orderTaxonomicRanks(Array.from(new Set([...textColumns, ...offered])))}
             value={offered}
             onChange={(v) => setVizOverride({ extra_color_cols: v.length ? v : null })}
             searchable

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextSummaryRank, rankChoices, summaryBlocker } from './view';
+import { nextSummaryRank, orderTaxonomicRanks, rankChoices, summaryBlocker } from './view';
 
 const META = { metadata_wf_id: 'wf', metadata_dc_id: 'dc' };
 
 describe('rankChoices', () => {
-  it('lists the rank columns, then the colour column', () => {
+  it('lists the ranks root to leaf, whatever order the config names them in', () => {
     expect(
       rankChoices({ extra_color_cols: ['Phylum', 'Class'], color_col: 'Kingdom' }),
-    ).toEqual(['Phylum', 'Class', 'Kingdom']);
+    ).toEqual(['Kingdom', 'Phylum', 'Class']);
   });
 
   it('keeps a rank set in YAML that no other key names', () => {
@@ -34,6 +34,27 @@ describe('rankChoices', () => {
 
   it('leaves the label column out: a label is per tip, not a group', () => {
     expect(rankChoices({ color_col: 'group', label_col: 'strain' })).toEqual(['group']);
+  });
+});
+
+describe('orderTaxonomicRanks', () => {
+  it('puts ranks root to leaf, ignoring case, PR2 levels in their place', () => {
+    expect(orderTaxonomicRanks(['Genus', 'class', 'Subdivision', 'Domain', 'Kingdom'])).toEqual([
+      'Domain',
+      'Kingdom',
+      'Subdivision',
+      'class',
+      'Genus',
+    ]);
+  });
+
+  it('keeps other columns after the ranks, in the order given', () => {
+    expect(orderTaxonomicRanks(['habitat', 'Phylum', 'group', 'Kingdom'])).toEqual([
+      'Kingdom',
+      'Phylum',
+      'habitat',
+      'group',
+    ]);
   });
 });
 

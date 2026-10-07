@@ -297,6 +297,7 @@ export {
   tipLabelColumn,
 } from './components/advanced_viz/phylo/sources';
 export type { PhyloDcRef, PhyloSource } from './components/advanced_viz/phylo/sources';
+export { orderTaxonomicRanks } from './components/advanced_viz/phylo/view';
 export { rankChoices as phyloRankChoices } from './components/advanced_viz/phylo/view';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.

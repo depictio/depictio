@@ -27,13 +27,40 @@ export interface PhyloView {
   setRank: (rank: string | null) => void;
 }
 
+/** Taxonomic ranks, root to leaf: SILVA's (Kingdom … Species) with PR2's own
+ *  levels (Domain, Supergroup, Division, Subdivision) where they sit. */
+const TAXONOMIC_RANKS = [
+  'domain',
+  'kingdom',
+  'supergroup',
+  'division',
+  'subdivision',
+  'phylum',
+  'class',
+  'order',
+  'family',
+  'genus',
+  'species',
+];
+
 /**
- * The tip-metadata columns the summary can collapse to.
+ * Columns in taxonomic order: the ones named after a rank root to leaf
+ * (Kingdom before Phylum, whatever order they came in), then the others
+ * (a habitat, a group) in the order given. Case is ignored.
+ */
+export function orderTaxonomicRanks(columns: readonly string[]): string[] {
+  const depth = (c: string) => TAXONOMIC_RANKS.indexOf(c.toLowerCase());
+  const ranks = columns.filter((c) => depth(c) >= 0).sort((a, b) => depth(a) - depth(b));
+  return [...ranks, ...columns.filter((c) => depth(c) < 0)];
+}
+
+/**
+ * The tip-metadata columns the summary can collapse to, in taxonomic order
+ * (`orderTaxonomicRanks`).
  *
  * Only columns the config already names, because they are the ones the tree
  * fetches and offers as "Colour by": the rank columns listed in
- * `extra_color_cols` (in the order the author listed them, which for ranks is
- * root to leaf), then `color_col`, then whatever `collapse_rank` already holds,
+ * `extra_color_cols`, `color_col`, and whatever `collapse_rank` already holds,
  * so a rank set in YAML is never missing from its own picker. `taxon_col` is
  * the tip id, one value per tip, and collapsing to it would redraw the tree.
  * `label_col` is left out for the same reason: a label is per tip, not a group.
@@ -52,7 +79,7 @@ export function rankChoices(
   ]) {
     if (c && c !== taxon && !out.includes(c)) out.push(c);
   }
-  return out;
+  return orderTaxonomicRanks(out);
 }
 
 /** Why the summary cannot be drawn from this config, said as the fix; null
