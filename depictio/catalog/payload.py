@@ -1265,7 +1265,7 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
     """
     if not TEMPLATE_PATH.exists():
         raise CatalogPayloadError(
-            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
+            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing. Run "
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
     blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
@@ -1279,7 +1279,7 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
         if marker not in html:
             raise CatalogPayloadError(
                 f"catalog-preview bundle at {TEMPLATE_PATH} has no {marker!r} tag to "
-                "nonce — rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
+                "nonce. Rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
             )
         html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
     # Patch server-relative logo paths → inline data URIs so they render offline.

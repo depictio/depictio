@@ -7,7 +7,6 @@ import re
 import sys
 
 import pytest
-import typer
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -46,11 +45,6 @@ def cli(monkeypatch):
 )
 def test_log_level(cli, verbose, explicit, expected):
     assert cli._log_level(verbose, explicit) == expected
-
-
-def test_log_level_rejects_an_unknown_level(cli):
-    with pytest.raises(typer.BadParameter, match="bogus"):
-        cli._log_level(0, "bogus")
 
 
 @pytest.mark.parametrize(
@@ -95,11 +89,38 @@ def test_the_cli_switches_load_dotenv_off(cli, tmp_path, monkeypatch):
     assert "DEPICTIO_DOTENV_PROBE" not in os.environ
 
 
-def test_an_unknown_log_level_is_a_usage_error(cli):
-    result = runner.invoke(cli.app, ["--log-level", "bogus", "version"])
+@pytest.mark.parametrize("value", ["debug", "Info", "WARNING", "error", "critical"])
+def test_log_level_takes_the_five_levels_in_any_case(cli, value):
+    result = runner.invoke(cli.app, ["--log-level", value, "version"])
+
+    assert result.exit_code == 0, result.output
+    assert logging.getLogger("depictio-cli").level == logging.getLevelNamesMapping()[value.upper()]
+
+
+@pytest.mark.parametrize(
+    ("args", "named"),
+    [
+        (["--log-level", "bogus"], "'--log-level'"),
+        # NOTSET would defer to the root logger, which shows WARNING and up.
+        (["--log-level", "notset"], "'--log-level'"),
+        (["-vl", "bogus"], "'-vl'"),
+    ],
+)
+def test_an_unknown_level_is_a_usage_error_naming_the_option_typed(cli, args, named):
+    result = runner.invoke(cli.app, [*args, "version"])
 
     assert result.exit_code == 2
-    assert "unknown level 'bogus'" in result.output
+    message = " ".join(result.output.replace("│", " ").split())
+    assert "Invalid value for" in message and named in message and f"'{args[1]}'" in message
+    if args[0] == "-vl":
+        assert "--log-level" not in message
+
+
+def test_log_level_shows_what_it_takes(cli):
+    out = runner.invoke(cli.app, ["--help"], terminal_width=200).output
+
+    assert re.search(r"--log-level +<level> +Show logs from this level up", out)
+    assert "CRITICAL" in out
 
 
 def test_log_lines_are_short_and_plain_when_redirected(cli, monkeypatch):
@@ -115,6 +136,26 @@ def test_log_lines_are_short_and_plain_when_redirected(cli, monkeypatch):
     assert re.fullmatch(
         r"\d\d:\d\d:\d\d\.\d{3} DEBUG    test_root_flags: hello\n", stderr.getvalue()
     )
+
+
+class _Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.parametrize(("term", "coloured"), [("dumb", False), ("xterm-256color", True)])
+def test_log_lines_are_plain_on_a_dumb_terminal(cli, monkeypatch, term, coloured):
+    from depictio.cli.cli_logging import setup_logging
+
+    stderr = _Terminal()
+    monkeypatch.setattr(sys, "stderr", stderr)
+    monkeypatch.setenv("TERM", term)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+
+    setup_logging(True, "DEBUG").debug("hello")
+
+    assert ("\x1b[" in stderr.getvalue()) is coloured
 
 
 def test_the_api_and_worker_keep_the_detailed_format(cli, monkeypatch):

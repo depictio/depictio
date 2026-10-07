@@ -86,14 +86,27 @@ def _env_flag(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _value_tokens(command: Any) -> dict[str, int]:
+    """How many tokens follow each of ``command``'s options that take a value, from
+    their declarations: flags and counters such as ``-v`` take none."""
+    return {
+        name: param.nargs
+        for param in getattr(command, "params", ())
+        if getattr(param, "param_type_name", None) == "option"
+        and not getattr(param, "is_flag", False)
+        and not getattr(param, "count", False)
+        for name in param.opts
+    }
+
+
 def resolve_command_path(argv: list[str], root_command: Any) -> str:
     """Reconstruct the command path from argv, keeping only registered names.
 
     Walks ``argv`` alongside the Click command tree. A token is kept only if it
     names a sub-command of the group reached so far; the first token that does not
-    ends the walk. Options (anything starting with ``-``) are skipped, and their
-    values are never examined — an option value is exactly the kind of
-    user-supplied string this function exists to keep out.
+    ends the walk. Options (anything starting with ``-``) are skipped, and so is the
+    value of one declared to take a value, unread: an option value is exactly the
+    kind of user-supplied string this function exists to keep out.
 
     Args:
         argv: Arguments after the program name, i.e. ``sys.argv[1:]``.
@@ -105,12 +118,17 @@ def resolve_command_path(argv: list[str], root_command: Any) -> str:
     """
     parts: list[str] = []
     node = root_command
+    values_to_skip = 0
 
     for token in argv:
+        if values_to_skip:
+            values_to_skip -= 1
+            continue
         if token.startswith("-"):
-            # An option. Its value may follow as a separate token, but since only
-            # registered command names are ever kept, a stray value simply fails
-            # to match and ends the walk — which is the safe outcome.
+            # An option, and the tokens its value takes when given apart, as in
+            # `--log-level debug ingest`: read as a command name, the value would
+            # end the walk before `ingest`. `--log-level=debug` is one token.
+            values_to_skip = _value_tokens(node).get(token, 0)
             continue
 
         get_command = getattr(node, "get_command", None)

@@ -23,6 +23,18 @@ def cli(monkeypatch):
     return depictio_cli
 
 
+@pytest.fixture
+def typer_styles(monkeypatch):
+    """The names of Typer's help styles, which brand_help sets for the whole process:
+    monkeypatch puts Typer's own back once the test is over."""
+    from typer import rich_utils
+
+    styles = [name for name in vars(rich_utils) if name.startswith("STYLE_")]
+    for name in styles:
+        monkeypatch.setattr(rich_utils, name, getattr(rich_utils, name))
+    return styles
+
+
 def _console(width: int = 100, **kwargs) -> Console:
     """A colour terminal of ``width`` columns writing to a string."""
     options = {"force_terminal": True, "color_system": "truecolor", **kwargs}
@@ -52,6 +64,24 @@ class TestLanding:
         result = runner.invoke(cli.app, ["version"])
 
         assert result.output.startswith("Depictio CLI version:")
+
+    def test_the_steps_after_local_up_use_its_server(self, cli):
+        """Without --server a command reads ~/.depictio/CLI.yaml, which `local up`
+        does not write: run straight after it, they would fail."""
+        (_, first), *rest = cli.GET_STARTED
+
+        assert first == "depictio local up"
+        assert rest and all("--server local" in command for _, command in rest)
+
+    def test_a_narrow_terminal_keeps_the_steps_indented(self, cli):
+        console = _console(width=40)
+        cli.print_landing(console)
+
+        out = re.sub(r"\x1b\[[0-9;]*m", "", console.file.getvalue())
+        steps = out.split("Get started\n", 1)[1].split("\n\n", 1)[0].splitlines()
+        # Some purposes took two lines, and every line kept its indent.
+        assert len(steps) > 2 * len(cli.GET_STARTED)
+        assert all(line.startswith("  ") and line == line.rstrip() for line in steps)
 
 
 class TestBanner:
@@ -209,18 +239,91 @@ class TestHelp:
         for subcommand in ("local up", "data scan", "backup restore", "catalog list"):
             assert subcommand in result.output
 
-    def test_help_takes_the_landing_colours_and_drops_yellow(self, cli, monkeypatch):
+    def test_help_takes_the_landing_colours_and_drops_yellow(self, cli, typer_styles):
         from typer import rich_utils
-
-        styles = [name for name in vars(rich_utils) if name.startswith("STYLE_")]
-        # Put Typer's own styles back afterwards, for the tests that follow.
-        for name in styles:
-            monkeypatch.setattr(rich_utils, name, getattr(rich_utils, name))
 
         cli.brand_help()
 
         assert rich_utils.STYLE_COMMANDS_TABLE_FIRST_COLUMN == f"bold {cli.COMMAND_COLOR}"
-        assert not [name for name in styles if "yellow" in str(getattr(rich_utils, name))]
+        assert not [name for name in typer_styles if "yellow" in str(getattr(rich_utils, name))]
+
+    @pytest.mark.parametrize("args", [["ingest", "--bogus"], ["data", "nope"], ["--bogus"]])
+    def test_a_usage_error_takes_them_too(self, cli, typer_styles, args):
+        from typer import rich_utils
+
+        result = runner.invoke(cli.app, args)
+
+        assert result.exit_code == 2, result.output
+        assert rich_utils.STYLE_USAGE == f"bold {cli.ACCENT_COLOR}"
+
+    @pytest.mark.parametrize(
+        ("argv", "shows"),
+        [
+            (["--help"], True),
+            (["ingest", "-h"], True),
+            # A group without a subcommand shows its help.
+            (["local"], True),
+            (["-v", "data"], True),
+            (["data", "scan"], False),
+            (["version"], False),
+            # The landing, not help.
+            ([], False),
+            (["-v"], False),
+        ],
+    )
+    def test_help_is_given_them_wherever_it_shows(self, cli, argv, shows):
+        """main() brands help before Typer draws it, only where it will: the module
+        costs 30 to 50 ms to import."""
+        from depictio.cli.cli.utils.telemetry import resolve_command_path
+
+        assert cli._shows_help(argv, resolve_command_path(argv, cli.depictiocli)) is shows
+
+    @pytest.mark.parametrize("args", [["-h"], ["data", "-h"], ["data", "scan", "-h"]])
+    def test_h_is_short_for_help(self, cli, args):
+        result = runner.invoke(cli.app, args)
+
+        assert result.exit_code == 0, result.output
+        assert "Usage:" in result.output and "--help" in result.output
+
+    def test_log_level_names_its_former_option(self, cli):
+        out = runner.invoke(cli.app, ["--help"], terminal_width=200).output
+
+        assert "Formerly `-vl/--verbose-level`." in " ".join(out.replace("│", " ").split())
+
+    @pytest.mark.parametrize(
+        ("args", "hidden"),
+        [
+            (["--verbose-lvl", "x"], "--verbose-level"),
+            (["data", "scan", "--CLI-path", "x"], "--CLI-config-path"),
+        ],
+    )
+    def test_a_mistyped_option_is_not_offered_a_hidden_name(self, cli, typer_styles, args, hidden):
+        result = runner.invoke(cli.app, args)
+
+        assert result.exit_code == 2
+        assert f"No such option: {args[-2]}" in result.output
+        assert hidden not in result.output
+
+    def test_a_mistyped_option_is_still_offered_the_listed_ones(self, cli, typer_styles):
+        result = runner.invoke(cli.app, ["data", "scan", "--serve", "x"])
+
+        assert result.exit_code == 2
+        assert "Possible options: --server" in result.output
+
+    def test_the_commands_table_takes_the_terminal_s_width(self, cli, monkeypatch):
+        from depictio.cli.cli.utils import rich_utils
+
+        def table(width: int) -> str:
+            console = Console(file=io.StringIO(), width=width)
+            monkeypatch.setattr(rich_utils, "console", console)
+            assert runner.invoke(cli.app, ["commands"]).exit_code == 0
+            return console.file.getvalue()
+
+        # Cut short on 80 columns, whole on 200.
+        assert "..." in table(80)
+        wide = table(200)
+        assert "..." not in wide
+        assert max(len(line) for line in wide.splitlines()) > 110
 
 
 class TestStatusLines:
@@ -243,18 +346,26 @@ class TestStatusLines:
 
         assert printed() == f"{symbol} Project synced\n"
 
-    def test_a_long_message_wraps_under_its_text(self, printed):
+    def test_a_long_message_stays_on_one_line(self, printed):
+        """Wider than the console (40 columns), and still one line: a path or a
+        command in it copies and greps intact. The terminal wraps it."""
         from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 
         rich_print_checked_statement(
-            "The viewer bundle is not built: the API runs but dashboards do not render",
+            "Logs in /home/someone/.depictio/local/logs/api.log and /tmp/out dir/my stack",
             "warning",
         )
 
-        first, *rest = printed().splitlines()
-        assert first.startswith("! The viewer")
-        assert rest and all(line.startswith("  ") and line[2] != " " for line in rest)
-        assert all(line == line.rstrip() for line in [first, *rest])
+        assert printed() == (
+            "! Logs in /home/someone/.depictio/local/logs/api.log and /tmp/out dir/my stack\n"
+        )
+
+    def test_a_message_of_several_lines_continues_under_its_text(self, printed):
+        from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+
+        rich_print_checked_statement("Two files differ:\na.yaml\nb.yaml", "loading")
+
+        assert printed() == "… Two files differ:\n  a.yaml\n  b.yaml\n"
 
     def test_markup_is_rendered(self, printed):
         from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
@@ -262,3 +373,44 @@ class TestStatusLines:
         rich_print_checked_statement("Scanning [bold]asv_table[/bold]", "info")
 
         assert printed() == "• Scanning asv_table\n"
+
+    @pytest.mark.parametrize(("mode", "colour"), [("error", 1), ("warning", 3), ("success", None)])
+    def test_in_colour_the_message_takes_its_mode_s_colour(self, monkeypatch, mode, colour):
+        """In a terminal, the whole message is in its mode's colour (red 1, yellow 3),
+        and nothing in it is highlighted: no bold brackets, no coloured numbers."""
+        from rich.text import Text
+
+        from depictio.cli.cli.utils import rich_utils
+
+        console = _console()
+        monkeypatch.setattr(rich_utils, "console", console)
+        message = "Not found: nope.yaml (from --server), 2 tries at /srv/CLI.yaml"
+
+        rich_utils.rich_print_checked_statement(message, mode)
+
+        out = Text.from_ansi(console.file.getvalue())
+        start = out.plain.index(message)
+        styles = {
+            out.get_style_at_offset(console, offset)
+            for offset in range(start, start + len(message))
+        }
+        assert {(s.color.number if s.color else None, bool(s.bold)) for s in styles} == {
+            (colour, False)
+        }
+
+    def test_an_ascii_console_gets_ascii_symbols(self, monkeypatch):
+        """PYTHONIOENCODING=ascii, or a Latin-1 locale: the glyphs would raise
+        UnicodeEncodeError, so ASCII stands in for them, and '?' for anything else in
+        the message the encoding lacks."""
+        from depictio.cli.cli.utils import rich_utils
+
+        stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+        monkeypatch.setattr(rich_utils, "console", Console(file=stream, width=80))
+
+        for mode in rich_utils._STATUS_STYLES:
+            rich_utils.rich_print_checked_statement("Copied a.png → s3://bucket/a.png", mode)
+
+        stream.flush()
+        assert stream.buffer.getvalue().decode("ascii").splitlines() == [
+            f"{symbol} Copied a.png ? s3://bucket/a.png" for symbol in ("v", "x", "!", "*", "...")
+        ]

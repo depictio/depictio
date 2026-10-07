@@ -28,7 +28,7 @@ def scan(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     workflow_name: Annotated[
         str | None,  # Now explicitly Optional
@@ -145,7 +145,7 @@ def process(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     # update: Optional[bool] = typer.Option(False, "--update", help="Update the workflow if it already exists"),
     overwrite: bool | None = typer.Option(
@@ -240,7 +240,7 @@ def join(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     join_name: Annotated[
         str | None,
@@ -434,6 +434,7 @@ def push_images(
     from rich.table import Table
 
     from depictio.cli.cli.utils.image_upload import (
+        image_key,
         parse_s3_folder,
         s3_client,
         scan_directory_for_images,
@@ -442,6 +443,9 @@ def push_images(
     from depictio.cli.cli.utils.rich_utils import console
 
     note_if_called_as(ctx, "images push", "data push-images")
+    # Before anything else, a dry run included: a --server it could not use, or one
+    # given with --CLI-config-path, is a usage error either way.
+    config_path = resolve_server(server, CLI_config_path)
     rich_print_command_usage("data push-images")
 
     source_path = Path(source_directory).expanduser().resolve()
@@ -478,7 +482,8 @@ def push_images(
         console.print("\n[yellow][DRY RUN] Would upload:[/yellow]")
         for img in images[:20]:
             rel_path = img.relative_to(source_path)
-            s3_key = f"{prefix}{rel_path}".replace("\\", "/")
+            # The key the upload itself would write.
+            s3_key = image_key(s3_destination, rel_path.as_posix())
             console.print(f"  {rel_path} → s3://{bucket}/{s3_key}")
         if len(images) > 20:
             console.print(f"  ... and {len(images) - 20} more")
@@ -489,7 +494,7 @@ def push_images(
 
     from depictio.cli.cli.utils.common import load_depictio_config
 
-    CLI_config = load_depictio_config(resolve_server(server, CLI_config_path))
+    CLI_config = load_depictio_config(config_path)
     try:
         client = s3_client(CLI_config)
     except Exception as e:
@@ -513,17 +518,20 @@ def push_images(
     table.add_column("Status", style="dim")
     table.add_column("Count", justify="right")
     table.add_row("[green]Uploaded[/green]", str(counts["uploaded"]))
+    # With --overwrite, an image already in storage is uploaded again, as a replacement.
+    table.add_row("[green]Replaced[/green]", str(counts["replaced"]))
     table.add_row("[yellow]Skipped (existing)[/yellow]", str(counts["skipped"]))
     table.add_row("[red]Errors[/red]", str(counts["error"]))
     table.add_row("[bold]Total[/bold]", str(len(images)))
     console.print(table)
 
     if counts["error"] > 0:
-        rich_print_checked_statement(f"Upload completed with {counts['error']} errors", "warning")
-    else:
-        rich_print_checked_statement(
-            f"Successfully uploaded {counts['uploaded']} images", "success"
-        )
+        rich_print_checked_statement(f"Upload completed with {counts['error']} errors", "error")
+        # A pipeline step must not pass with images missing from storage.
+        raise typer.Exit(code=1)
+    rich_print_checked_statement(
+        f"Successfully uploaded {counts['uploaded'] + counts['replaced']} images", "success"
+    )
 
 
 # DC link subcommands. Links are authored declaratively in the project YAML
@@ -541,7 +549,7 @@ def link_list(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     target_dc: Annotated[
         str | None,
@@ -557,10 +565,10 @@ def link_list(
 
     Examples:
         # List all links in a project
-        depictio data link list --project-config-path project.yaml
+        depictio dev link list --project-config-path project.yaml
 
         # List links targeting a specific DC
-        depictio data link list --project-config-path project.yaml --target-dc multiqc_dc_id
+        depictio dev link list --project-config-path project.yaml --target-dc multiqc_dc_id
     """
     from depictio.cli.cli.utils.links import (
         api_get_links_for_source_dc,
@@ -570,7 +578,7 @@ def link_list(
     )
     from depictio.cli.cli.utils.rich_utils import console, render_records_table
 
-    rich_print_command_usage("link list")
+    rich_print_command_usage("dev link list")
 
     # Validate configurations
     CLI_config, response = validate_project_config_and_check_S3_storage(
@@ -601,7 +609,7 @@ def link_list(
 
     if not links:
         console.print("\n[yellow]No links found for this project.[/yellow]")
-        console.print("Use [bold]depictio data link create[/bold] to create a link between DCs.")
+        console.print("Use [bold]depictio dev link create[/bold] to create a link between DCs.")
         raise typer.Exit(code=0)
 
     # Display links
@@ -629,7 +637,7 @@ def link_create(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     source_dc: Annotated[
         str,
@@ -664,7 +672,7 @@ def link_create(
 
     Examples:
         # Create a direct link between two table DCs
-        depictio data link create \\
+        depictio dev link create \\
             --project-config-path project.yaml \\
             --source-dc metadata_table \\
             --source-column sample_id \\
@@ -673,7 +681,7 @@ def link_create(
             --resolver direct
 
         # Create a sample_mapping link to a MultiQC DC
-        depictio data link create \\
+        depictio dev link create \\
             --project-config-path project.yaml \\
             --source-dc metadata_table \\
             --source-column sample_id \\
@@ -684,7 +692,7 @@ def link_create(
     from depictio.cli.cli.utils.links import api_create_link
     from depictio.cli.cli.utils.rich_utils import console
 
-    rich_print_command_usage("link create")
+    rich_print_command_usage("dev link create")
 
     # Validate required options
     if not source_dc or not source_column or not target_dc:
@@ -763,7 +771,7 @@ def link_resolve(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     source_dc: Annotated[
         str,
@@ -790,7 +798,7 @@ def link_resolve(
 
     Examples:
         # Resolve sample IDs to MultiQC sample names
-        depictio data link resolve \\
+        depictio dev link resolve \\
             --project-config-path project.yaml \\
             --source-dc metadata_table \\
             --source-column sample_id \\
@@ -800,7 +808,7 @@ def link_resolve(
     from depictio.cli.cli.utils.links import api_resolve_link
     from depictio.cli.cli.utils.rich_utils import console
 
-    rich_print_command_usage("link resolve")
+    rich_print_command_usage("dev link resolve")
 
     # Validate required options
     if not source_dc or not source_column or not target_dc or not filter_values:
@@ -868,7 +876,7 @@ def link_resolve(
     elif api_response.status_code == 404:
         rich_print_checked_statement(
             f"No link found between {source_dc} and {target_dc}. "
-            "Create a link first using 'depictio data link create'.",
+            "Create a link first using 'depictio dev link create'.",
             "error",
         )
         raise typer.Exit(code=1)
@@ -883,7 +891,7 @@ def link_delete(
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
         str,
-        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+        typer.Option("--project-config-path", help="Project configuration file (YAML)"),
     ] = "",
     link_id: Annotated[
         str,
@@ -899,15 +907,15 @@ def link_delete(
 
     Examples:
         # Delete a link with confirmation
-        depictio data link delete --project-config-path project.yaml --link-id abc123
+        depictio dev link delete --project-config-path project.yaml --link-id abc123
 
         # Delete without confirmation
-        depictio data link delete --project-config-path project.yaml --link-id abc123 --force
+        depictio dev link delete --project-config-path project.yaml --link-id abc123 --force
     """
     from depictio.cli.cli.utils.links import api_delete_link
     from depictio.cli.cli.utils.rich_utils import console
 
-    rich_print_command_usage("link delete")
+    rich_print_command_usage("dev link delete")
 
     # Validate required options
     if not link_id:

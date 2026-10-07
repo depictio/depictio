@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import json
 import sys
 from collections import defaultdict
 from io import StringIO
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import polars as pl
 from pydantic import validate_call
 from rich import box
 from rich.console import Console
@@ -12,7 +13,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from depictio.models.models.workflows import Workflow, WorkflowRun
+# Every command imports this module for its status lines, so it imports neither
+# polars nor the models (beanie, pymongo) itself: they are named here in annotations
+# only, and imported where they are used.
+if TYPE_CHECKING:
+    import polars as pl
+
+    from depictio.models.models.workflows import Workflow, WorkflowRun
 
 # Single shared console for the whole CLI. Everything routes through this so
 # styling/width stays consistent and we never shadow the builtin ``print``.
@@ -35,19 +42,39 @@ _STATUS_STYLES = {
     "info": ("•", "bold blue", ""),
     "loading": ("…", "bold yellow", ""),
 }
+# The symbols where the console's encoding has no room for the glyphs above
+# (PYTHONIOENCODING=ascii, a Latin-1 locale): writing those would raise.
+_ASCII_SYMBOLS = {"success": "v", "error": "x", "warning": "!", "info": "*", "loading": "..."}
+
+
+def _encodable(text: str, encoding: str) -> bool:
+    try:
+        text.encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        return False
+    return True
 
 
 def _print_status(statement: str, mode: str, target: Optional[Console] = None) -> None:
     # Looked up at each call, as tests swap the module's console for their own.
     target = target or console
     symbol, symbol_style, text_style = _STATUS_STYLES[mode]
-    text = target.render_str(statement, style=text_style)
-    # Wrapped here with a hanging indent, so a long message continues under its text
-    # rather than under the symbol (a Table would also pad lines with spaces).
-    for i, line in enumerate(text.wrap(target, max(target.width - 2, 20))):
-        line.rstrip()
-        prefix = Text(symbol, style=symbol_style) if i == 0 else Text(" ")
-        target.print(Text.assemble(prefix, " ", line), soft_wrap=True)
+    if not _encodable(symbol, target.encoding):
+        symbol = _ASCII_SYMBOLS[mode]
+    # Not highlighted: the highlighter returns a new Text without the message's style,
+    # so an error would lose its red, and it would bold every bracket in it.
+    text = target.render_str(statement, style=text_style, highlight=False)
+    if not _encodable(text.plain, target.encoding):
+        # One '?' per character the encoding lacks, so the styles still line up.
+        text.plain = text.plain.encode(target.encoding, "replace").decode(target.encoding)
+    # Never wrapped here, so a path or a command in the message copies and greps
+    # intact, as in _print_rows: the terminal wraps a long line. A line the message
+    # breaks itself continues under its text rather than under the symbol.
+    for i, line in enumerate(text.split("\n", allow_blank=True)):
+        prefix = Text(symbol, style=symbol_style) if i == 0 else Text(" " * len(symbol))
+        row = Text.assemble(prefix, " ", line)
+        row.rstrip()
+        target.print(row, soft_wrap=True)
 
 
 @validate_call
@@ -329,6 +356,7 @@ def add_rich_display_to_polars():
     Add rich display methods to Polars DataFrame.
     Call this once to enable df.rich_print() methods.
     """
+    import polars as pl
 
     def rich_print(self, title=None, max_rows=20, max_cols=10, show_dtypes=True, console=None):
         print_polars_with_rich(

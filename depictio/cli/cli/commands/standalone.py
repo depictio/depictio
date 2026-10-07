@@ -1,3 +1,5 @@
+from typing import Any
+
 import typer
 
 
@@ -25,9 +27,6 @@ def register_standalone_commands(app: typer.Typer):
         # table stays in sync automatically (no hardcoded command list).
         root = ctx.find_root().command
 
-        def short_help(cmd) -> str:
-            return (cmd.get_short_help_str(limit=70) or "").strip()
-
         def visible(group) -> list:
             return [
                 (name, group.commands[name])
@@ -40,19 +39,13 @@ def register_standalone_commands(app: typer.Typer):
             # are not click.Group instances.
             return hasattr(cmd, "commands")
 
-        table = Table(
-            title="depictio command reference",
-            title_style="bold",
-            header_style="bold cyan",
-            show_lines=False,
-            expand=False,
-        )
-        table.add_column("Command", style="cyan", no_wrap=True)
-        table.add_column("Description")
+        # (label, command or None for a panel heading, starts a new section): collected
+        # first, so the descriptions can take whatever width the labels leave.
+        rows: list[tuple[str, Any, bool]] = []
 
         def add_subcommands(group, path: str) -> None:
             for name, sub in visible(group):
-                table.add_row(f"  {path} {name}", short_help(sub))
+                rows.append((f"  {path} {name}", sub, False))
                 if is_group(sub):
                     add_subcommands(sub, f"{path} {name}")
 
@@ -62,13 +55,31 @@ def register_standalone_commands(app: typer.Typer):
         for name, cmd in visible(root):
             cmd_panel = getattr(cmd, "rich_help_panel", None) or "Commands"
             if cmd_panel != panel:
-                if panel is not None:
-                    table.add_section()
-                table.add_row(f"[bold magenta]{cmd_panel}[/bold magenta]", "")
+                rows.append((f"[bold magenta]{cmd_panel}[/bold magenta]", None, panel is not None))
                 panel = cmd_panel
-            table.add_row(f"[bold]{name}[/bold]", short_help(cmd))
+            rows.append((f"[bold]{name}[/bold]", cmd, False))
             if is_group(cmd):
                 add_subcommands(cmd, name)
+
+        # The terminal's width less the widest label and the table's borders and
+        # padding (7 columns), so each description fits on its row.
+        label_width = max(console.measure(label).maximum for label, _, _ in rows)
+        limit = max(console.width - label_width - 7, 30)
+
+        table = Table(
+            title="depictio command reference",
+            title_style="bold",
+            header_style="bold cyan",
+            show_lines=False,
+            expand=False,
+        )
+        table.add_column("Command", style="cyan", no_wrap=True)
+        table.add_column("Description")
+        for label, cmd, new_section in rows:
+            if new_section:
+                table.add_section()
+            short_help = (cmd.get_short_help_str(limit=limit) or "").strip() if cmd else ""
+            table.add_row(label, short_help)
 
         console.print(table)
         console.print(

@@ -25,9 +25,15 @@ LOG_COLORS = {
 def make_formatter(stream: TextIO) -> ColoredFormatter:
     """The formatter for a handler writing to ``stream``, in the CLI or server format."""
     if os.getenv("DEPICTIO_CONTEXT", "server").lower() == "cli":
-        # No escape codes when stderr is redirected to a file or a pipe.
+        # No escape codes when stderr is redirected to a file or a pipe (colorlog checks
+        # that, and NO_COLOR), nor on a terminal that says it cannot show them.
         return ColoredFormatter(
-            CLI_FORMAT, datefmt="%H:%M:%S", reset=True, log_colors=LOG_COLORS, stream=stream
+            CLI_FORMAT,
+            datefmt="%H:%M:%S",
+            reset=True,
+            log_colors=LOG_COLORS,
+            stream=stream,
+            no_color=os.getenv("TERM") == "dumb",
         )
     return ColoredFormatter(SERVER_FORMAT, datefmt=None, reset=True, log_colors=LOG_COLORS)
 

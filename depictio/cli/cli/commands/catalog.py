@@ -110,6 +110,41 @@ def catalog_info(
             console.print(f"     [dim]render:[/dim]  {tgt}{roles}")
 
 
+def _require_bundle() -> None:
+    """Stop now when the prebuilt bundle the page goes into is missing, rather than
+    after building every output for it: some 20 seconds for the gallery."""
+    from rich.markup import escape
+
+    from depictio.catalog.payload import TEMPLATE_PATH
+    from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+
+    if not TEMPLATE_PATH.exists():
+        rich_print_checked_statement(
+            f"The catalog-preview bundle is not built: {escape(str(TEMPLATE_PATH))} is "
+            "missing. Build it with `cd depictio/viewer && pnpm run build:catalog-preview`.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+
+@contextlib.contextmanager
+def _quiet_multiqc() -> Iterator[None]:
+    """MultiQC's warnings off while the outputs build, unless -v asked for logs: its
+    fixtures log one per colour it cannot convert, some 200 for the gallery."""
+    import logging
+
+    from depictio.cli.cli_logging import logger as cli_logger
+
+    multiqc_logger = logging.getLogger("multiqc")
+    level = multiqc_logger.level
+    if not cli_logger.isEnabledFor(logging.INFO):
+        multiqc_logger.setLevel(logging.ERROR)
+    try:
+        yield
+    finally:
+        multiqc_logger.setLevel(level)
+
+
 def _emit_html(html: str, out_path: Path, message: str, no_open: bool) -> None:
     """Write a self-contained HTML file, report it, and open it in a browser tab."""
     import webbrowser
@@ -180,6 +215,7 @@ def catalog_preview(
     from depictio.catalog.payload import CatalogPayloadError, render_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
+    _require_bundle()
     pair = next(
         ((e, o) for e in load_catalog_entries() for o in e.outputs if o.id == output_id),
         None,
@@ -190,7 +226,8 @@ def catalog_preview(
     entry, output = pair
 
     try:
-        html = render_html(output, theme, tool=entry)
+        with _quiet_multiqc():
+            html = render_html(output, theme, tool=entry)
     except CatalogPayloadError as exc:
         typer.echo(f"  could not preview {output_id!r}: {exc}")
         raise typer.Exit(code=1)
@@ -223,19 +260,23 @@ def catalog_gallery(
 
     Clicking an output opens its full live preview (same renderer as
     catalog preview). Pass --out FILE to export a portable, self-contained HTML
-    instead; needs the prebuilt bundle
+    instead.
+
+    Served or exported, the page needs the prebuilt bundle
     (cd depictio/viewer && pnpm run build:catalog-preview).
     """
     from depictio.catalog.payload import CatalogPayloadError, render_gallery_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
+    _require_bundle()
     entries = load_catalog_entries()
     if not entries:
         typer.echo("No catalog entries found.")
         raise typer.Exit(code=1)
 
     try:
-        html = render_gallery_html(entries, theme)
+        with _quiet_multiqc():
+            html = render_gallery_html(entries, theme)
     except CatalogPayloadError as exc:
         typer.echo(f"  could not build catalog gallery: {exc}")
         raise typer.Exit(code=1)

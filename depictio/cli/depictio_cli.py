@@ -1,5 +1,7 @@
-import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from enum import Enum
 from itertools import groupby
 
 os.environ["DEPICTIO_CONTEXT"] = "CLI"
@@ -14,6 +16,9 @@ from rich.console import Console, Group
 from rich.style import Style
 from rich.table import Table
 from rich.text import Text
+
+# Typer 0.27 runs on its own copy of Click, whose exceptions these are.
+from typer._click.exceptions import ClickException, NoSuchOption
 from typer.core import TyperGroup
 from typer.main import get_command
 
@@ -48,6 +53,36 @@ HELP_PANELS = {
 # Each command's panel, and its rank in the order HELP_PANELS lists them.
 _PANEL_OF = {name: panel for panel, names in HELP_PANELS.items() for name in names}
 _COMMAND_ORDER = {name: rank for rank, name in enumerate(_PANEL_OF)}
+# Every command's help, -h included: no command takes -h for anything else.
+HELP_OPTIONS = ("--help", "-h")
+
+
+def _drop_hidden_suggestions(exc: NoSuchOption) -> None:
+    """Keep hidden options, the former names among them, out of the "Possible
+    options" a mistyped option is offered: Click draws those from every name."""
+    command = getattr(exc.ctx, "command", None)
+    hidden = {
+        name
+        for param in getattr(command, "params", ())
+        if getattr(param, "hidden", False)
+        for name in (*param.opts, *param.secondary_opts)
+    }
+    if exc.possibilities:
+        exc.possibilities = [name for name in exc.possibilities if name not in hidden]
+
+
+@contextmanager
+def _usage_errors() -> Iterator[None]:
+    """Usage errors, raised anywhere below the root, as the CLI shows them: in the
+    help's colours and suggesting only the options the help lists. Typer draws them
+    after they leave the root group, and reads its styles when it does."""
+    try:
+        yield
+    except ClickException as exc:
+        if isinstance(exc, NoSuchOption):
+            _drop_hidden_suggestions(exc)
+        brand_help()
+        raise
 
 
 class _PanelOrderGroup(TyperGroup):
@@ -56,6 +91,9 @@ class _PanelOrderGroup(TyperGroup):
     Rich help draws the panels in the order their first command is listed, and Typer
     lists plain commands (ingest, version, commands) before groups, which would put
     Reference second.
+
+    Every usage error passes through it, the root's own while it parses its options
+    and its commands' while it invokes them, so they are shaped here (_usage_errors).
     """
 
     def list_commands(self, ctx) -> list[str]:
@@ -63,6 +101,14 @@ class _PanelOrderGroup(TyperGroup):
             super().list_commands(ctx),
             key=lambda name: _COMMAND_ORDER.get(name, len(_COMMAND_ORDER)),
         )
+
+    def parse_args(self, ctx, args):
+        with _usage_errors():
+            return super().parse_args(ctx, args)
+
+    def invoke(self, ctx):
+        with _usage_errors():
+            return super().invoke(ctx)
 
 
 app = typer.Typer(
@@ -72,6 +118,8 @@ app = typer.Typer(
     # Rich markup, not Markdown: Markdown would reflow the indented examples in the
     # commands' help and drop <placeholders> such as '<name>/<version>'.
     rich_markup_mode="rich",
+    # Every command's context inherits these from the root's.
+    context_settings={"help_option_names": list(HELP_OPTIONS)},
 )
 
 register_standalone_commands(app)
@@ -92,13 +140,22 @@ def _version_callback(value: bool) -> None:
     raise typer.Exit()
 
 
+class LogLevel(str, Enum):
+    """The levels --log-level takes, in any case. Not NOTSET: on these loggers it
+    defers to the root logger, which shows WARNING and up."""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
 def _log_level(verbose: int, explicit: str | None) -> str | None:
     """The logging level -v/-vv/--log-level ask for, or None to stay quiet."""
     if explicit:
-        level = explicit.upper()
-        if level not in logging.getLevelNamesMapping():
-            raise typer.BadParameter(f"unknown level {explicit!r}", param_hint="--log-level")
-        return level
+        # Click has checked it is a LogLevel.
+        return explicit.upper()
     return {0: None, 1: "INFO"}.get(verbose, "DEBUG")
 
 
@@ -117,15 +174,20 @@ def verbose_callback(
         show_default=False,
         is_eager=True,
     ),
-    log_level: str | None = typer.Option(
+    log_level: LogLevel | None = typer.Option(
         None,
         "--log-level",
-        help="Show logs from this level up (DEBUG, INFO, WARNING, ERROR); no -v needed",
+        help="Show logs from this level up (DEBUG, INFO, WARNING, ERROR, CRITICAL); no -v "
+        "needed. Formerly `-vl/--verbose-level`.",
+        case_sensitive=False,
+        # The five choices would take a third of the help's width.
+        metavar="<level>",
         is_eager=True,
     ),
     # The former spelling, which only took effect together with -v. Kept for scripts.
-    verbose_level: str | None = typer.Option(
-        None, "--verbose-level", "-vl", hidden=True, is_eager=True
+    # Checked by Click like --log-level, so an error about it names -vl, as typed.
+    verbose_level: LogLevel | None = typer.Option(
+        None, "--verbose-level", "-vl", case_sensitive=False, hidden=True, is_eager=True
     ),
     version: bool = typer.Option(
         False,
@@ -237,14 +299,16 @@ _BLOCKS = {
     (1, 1, 1, 1): "█",
 }
 
-# What the landing suggests trying first: (what it does, the command).
+# What the landing suggests trying first: (what it does, the command). The steps after
+# `local up` name its server: without --server a command reads ~/.depictio/CLI.yaml,
+# which `local up` does not write.
 GET_STARTED = (
     ("Start a server on this machine, with example dashboards", "depictio local up"),
     (
-        "Build dashboards from a pipeline's results",
-        "depictio ingest --template nf-core/rnaseq/latest --data-root <dir>",
+        "Build dashboards on it from a pipeline's results",
+        "depictio ingest --server local --template nf-core/rnaseq/latest --data-root <dir>",
     ),
-    ("Check the server and storage the CLI is set up for", "depictio config check"),
+    ("Check that the CLI reaches it and its storage", "depictio config check --server local"),
 )
 
 
@@ -348,7 +412,10 @@ def print_landing(console: Console | None = None) -> None:
     console.print()
     console.print("Get started", style=Style(color=ACCENT_COLOR, bold=True))
     for purpose, command in GET_STARTED:
-        console.print(f"  {purpose}", highlight=False)
+        # Wrapped here, so a narrow terminal continues it under its indent.
+        for line in Text(purpose).wrap(console, max(console.width - 2, 20)):
+            line.rstrip()
+            console.print(Text.assemble("  ", line), soft_wrap=True)
         # soft_wrap: a long command stays on one line, so it copy-pastes intact.
         console.print(
             Text.assemble("    ", (prompt, "dim"), (command, command_style)), soft_wrap=True
@@ -381,6 +448,20 @@ def brand_help() -> None:
     rich_utils.STYLE_COMMANDS_PANEL_BORDER = ACCENT_COLOR
 
 
+def _shows_help(argv: list[str], command: str) -> bool:
+    """Whether Typer will draw help for ``argv``, whose command path is ``command``:
+    asked for, or a group named without a subcommand, which shows its help."""
+    if any(arg in HELP_OPTIONS for arg in argv):
+        return True
+    node = depictiocli
+    for name in command.split():
+        # None for the placeholder of a path that matched no command.
+        node = node.get_command(None, name)
+        if node is None:
+            return False
+    return node is not depictiocli and hasattr(node, "commands")
+
+
 def main():
     # Add rich display support for Polars DataFrames
     add_rich_display_to_polars()
@@ -388,11 +469,6 @@ def main():
     # No banner here: `depictio` alone shows one on its landing, and every other
     # command's output starts straight away.
     import sys
-
-    # Only when help is asked for: Typer's help module takes some 25 ms to import,
-    # which every other command would pay too.
-    if "--help" in sys.argv[1:]:
-        brand_help()
 
     from depictio.cli.cli.utils.telemetry import (
         CommandTimer,
@@ -402,15 +478,22 @@ def main():
         send_command_event,
     )
 
+    # Resolved from argv up front: Typer/Click raise SystemExit for --help and for
+    # bad usage, so by the time we reach the finally block the parsed context is
+    # gone. Only tokens matching registered command names survive this call.
+    command = resolve_command_path(sys.argv[1:], depictiocli)
+
+    # Only where help shows: Typer's help module takes 30 to 50 ms to import, which
+    # every other command would pay too. Usage errors get the colours as they are
+    # raised (_usage_errors).
+    if _shows_help(sys.argv[1:], command):
+        brand_help()
+
     # Before the command runs, not after: an opt-out notice printed underneath a
     # command's output is one the user has already been counted by.
     maybe_print_first_run_notice()
 
     timer = CommandTimer()
-    # Resolved from argv up front: Typer/Click raise SystemExit for --help and for
-    # bad usage, so by the time we reach the finally block the parsed context is
-    # gone. Only tokens matching registered command names survive this call.
-    command = resolve_command_path(sys.argv[1:], depictiocli)
     succeeded = True
     interrupted = False
 
