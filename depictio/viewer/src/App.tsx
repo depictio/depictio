@@ -115,6 +115,7 @@ import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
+import { DashboardSpotlight } from './spotlight';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 
 /**
@@ -220,6 +221,7 @@ const App: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
   // The section the settings open on when something asks for one (the Guide's
   // "Open Your view"); unset, they open on the one last visited.
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
@@ -1098,6 +1100,17 @@ const App: React.FC = () => {
   useEffect(() => {
     if (guide.open) setAnalysisOpen(false);
   }, [guide.open]);
+  // Before the dashboard search lands on something of this tab: the Guide and,
+  // on a phone, the tab list both cover the canvas, and a filter lives in a
+  // drawer there.
+  const uncoverForSearch = useCallback(
+    (index: string | null) => {
+      if (guide.open) guide.closeGuide();
+      if (isNarrow && mobileOpened) toggleMobile();
+      if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
+    },
+    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+  );
 
   return (
     <AvailableFilterValuesProvider
@@ -1144,6 +1157,7 @@ const App: React.FC = () => {
           onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={activeFilterCount}
+          onOpenSearch={dashboard ? openSearch : undefined}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
           titleExtras={
@@ -1649,6 +1663,18 @@ const App: React.FC = () => {
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
+      {/* Cmd/Ctrl+K and the header's magnifier: search every tab. */}
+      <DashboardSpotlight
+        opened={searchOpened}
+        onOpen={openSearch}
+        onClose={closeSearch}
+        tabs={tabSiblings}
+        currentId={dashboardId}
+        dashboard={dashboard}
+        mode="view"
+        ready={Boolean(dashboard) && !loading && !error}
+        onBeforeFocus={uncoverForSearch}
+      />
     </AppShell>
       </TabLinkProvider>
       </CategoryColorsContext.Provider>

@@ -154,6 +154,7 @@ import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
+import { DashboardSpotlight } from './spotlight';
 import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
 
 const API_BASE = '/depictio/api/v1';
@@ -262,6 +263,7 @@ const EditorApp: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
   // The section the settings open on when something asks for one (the Guide's
   // "Open Your view"); unset, they open on the one last visited.
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
@@ -2038,6 +2040,42 @@ const EditorApp: React.FC = () => {
   useEffect(() => {
     if (guide.open) setAnalysisOpen(false);
   }, [guide.open]);
+  // Before the dashboard search lands on something of this tab: as in the
+  // viewer, the Guide and a phone's tab list cover the canvas, and a filter
+  // lives in a drawer on a phone.
+  const uncoverForSearch = useCallback(
+    (index: string | null) => {
+      if (guide.open) guide.closeGuide();
+      if (isNarrow && mobileOpened) toggleMobile();
+      if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
+    },
+    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+  );
+  /** Before the search leaves for another tab, which is a full page load: save
+   *  what the debounce still holds, and wait for it, or a layout change made a
+   *  moment ago leaves with the page. A failed save keeps the author here. */
+  const saveBeforeLeaving = useCallback(async (): Promise<boolean> => {
+    if (!dashboardId || !saveTimer.current) return true;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const cur = dashboardRef.current;
+    if (!cur) return true;
+    setSaveStatus('saving');
+    try {
+      await saveDashboard(dashboardId, cur);
+      setSaveStatus('saved');
+      return true;
+    } catch (err) {
+      console.error('[EditorApp] save before leaving the tab failed:', err);
+      setSaveStatus('error');
+      notifications.show({
+        color: 'red',
+        title: "Couldn't save this tab",
+        message: 'Your last change is not saved yet, so you are still on this tab.',
+      });
+      return false;
+    }
+  }, [dashboardId]);
 
   /**
    * The Guide's author settings, from the settings' Guide section. They are
@@ -2128,6 +2166,7 @@ const EditorApp: React.FC = () => {
           onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={countActiveFilters(filters) + groupSummaryRows.length}
+          onOpenSearch={dashboard ? openSearch : undefined}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
@@ -2522,6 +2561,20 @@ const EditorApp: React.FC = () => {
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
+      {/* Cmd/Ctrl+K and the header's magnifier: search every tab, landing in
+          the editor of the tab a result is on. */}
+      <DashboardSpotlight
+        opened={searchOpened}
+        onOpen={openSearch}
+        onClose={closeSearch}
+        tabs={tabSiblings}
+        currentId={dashboardId}
+        dashboard={dashboard}
+        mode="edit"
+        ready={Boolean(dashboard) && !loading && !error}
+        onBeforeFocus={uncoverForSearch}
+        onBeforeLeave={saveBeforeLeaving}
+      />
 
       {tabGroupActions.modals}
       <TabModal

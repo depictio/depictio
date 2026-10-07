@@ -78,7 +78,7 @@ export function findDemoTargets(target: GuideTarget, demo: ParentNode): HTMLElem
 
 let active: (() => void) | null = null;
 
-function prefersReducedMotion(): boolean {
+export function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
@@ -87,10 +87,19 @@ function prefersReducedMotion(): boolean {
  * `scroll` is false: a ring that answers a hover must not move the page under
  * the pointer). `reveal` gets a class for the same time — the tile chrome uses
  * it to keep its hover-only action row on screen.
+ *
+ * `durationMs` and `className` are for callers outside the Guide: the
+ * dashboard search lands on a tile and flashes it for a shorter beat, with a
+ * class that speeds the pulse up to match.
  */
 export function ringElements(
   els: HTMLElement[],
-  opts: { reveal?: HTMLElement | null; scroll?: ScrollLogicalPosition | false } = {},
+  opts: {
+    reveal?: HTMLElement | null;
+    scroll?: ScrollLogicalPosition | false;
+    durationMs?: number;
+    className?: string;
+  } = {},
 ): void {
   active?.();
   if (els.length === 0) return;
@@ -110,7 +119,7 @@ export function ringElements(
 
   const rings = els.map((el) => {
     const ring = document.createElement('div');
-    ring.className = 'depictio-guide-ring';
+    ring.className = opts.className ? `depictio-guide-ring ${opts.className}` : 'depictio-guide-ring';
     ring.setAttribute('aria-hidden', 'true');
     // The ring takes the colour of the element's own scope: the dashboard's
     // primary under a brand, the app's otherwise.
@@ -135,6 +144,7 @@ export function ringElements(
   let frame = 0;
   let fade = 0;
   const start = performance.now();
+  const duration = opts.durationMs ?? RING_MS;
   const cleanup = () => {
     cancelAnimationFrame(frame);
     window.clearTimeout(fade);
@@ -144,7 +154,7 @@ export function ringElements(
   };
   const tick = (now: number) => {
     place();
-    if (now - start < RING_MS) {
+    if (now - start < duration) {
       frame = requestAnimationFrame(tick);
     } else {
       for (const { ring } of rings) ring.classList.add('is-leaving');
