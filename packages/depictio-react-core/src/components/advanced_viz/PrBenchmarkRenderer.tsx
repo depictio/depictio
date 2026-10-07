@@ -574,6 +574,8 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     layout: plotLayout,
     pointIdIndex: 0,
     pointIdColumn: config.label_col || undefined,
+    // The PR and ROC views have different axes, so a mark made on one stays on it.
+    variant: offeredViews.length > 1 ? activeView : undefined,
   });
 
   return (
