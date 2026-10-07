@@ -569,7 +569,8 @@ class TestValidateServer:
 
         assert result.exit_code == 0, result.output
         assert "no configuration at" in result.output
-        assert "gone.yaml" in result.output
+        # Rich wraps a long path anywhere, even inside its file name.
+        assert "gone.yaml" in "".join(result.output.split())
         online.assert_not_called()
 
     def test_the_default_configuration_is_used_with_its_url(
