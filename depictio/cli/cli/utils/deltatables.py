@@ -5,6 +5,7 @@ from datetime import datetime
 import polars as pl
 from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
@@ -311,7 +312,7 @@ def streaming_write_enabled(command_parameters: dict | None = None) -> bool:
     """Whether to stream the Delta write instead of materializing the frame.
 
     Opt-in (default off) because ``LazyFrame.sink_delta`` is marked unstable in
-    polars 1.41.x. Enabled by ``depictio run --streaming`` or by exporting
+    polars 1.41.x. Enabled by ``depictio ingest --streaming`` or by exporting
     ``DEPICTIO_INGEST_STREAMING_WRITE=true`` (the benchmark toggles the env var
     to measure both paths of the same cell).
     """
@@ -942,7 +943,8 @@ def process_geojson_data_collection(
         return result
 
     rich_print_checked_statement(
-        f"GeoJSON data collection processed: {data_collection.data_collection_tag}", "success"
+        f"GeoJSON data collection processed: {escape(data_collection.data_collection_tag)}",
+        "success",
     )
 
     return {
@@ -1015,7 +1017,8 @@ def process_phylogeny_data_collection(
         s3_location = f"s3://{bucket}/{s3_key}"
 
     rich_print_checked_statement(
-        f"Phylogeny data collection processed: {data_collection.data_collection_tag}", "success"
+        f"Phylogeny data collection processed: {escape(data_collection.data_collection_tag)}",
+        "success",
     )
 
     return {
@@ -1148,7 +1151,7 @@ def process_recipe_data_collection(
 
     recipe_name = transform_config.recipe
     pipeline_version: str | None = getattr(workflow, "version", None)
-    rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
+    rich_print_checked_statement(f"Running recipe: {escape(recipe_name)}", "info")
 
     # Build source overrides dict. A SourceOverride carries either a single-file
     # 'path' or a multi-file 'glob_pattern'; resolve_sources interprets the value
@@ -1182,14 +1185,15 @@ def process_recipe_data_collection(
                 if run_data_dirs:
                     data_dir = run_data_dirs[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {base_location} ({len(run_data_dirs)} run(s))", "info"
+                        f"Recipe data dir: {escape(base_location)} ({len(run_data_dirs)} run(s))",
+                        "info",
                     )
                 else:
                     data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                    rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
             else:
                 data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -1322,7 +1326,7 @@ def process_recipe_data_collection(
         return api_result
 
     rich_print_checked_statement(
-        f"Recipe '{recipe_name}' produced {result_df.height} rows, written to Delta Lake",
+        f"Recipe '{escape(recipe_name)}' produced {result_df.height} rows, written to Delta Lake",
         "success",
     )
 

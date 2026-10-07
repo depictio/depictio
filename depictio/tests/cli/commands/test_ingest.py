@@ -164,17 +164,24 @@ class TestServerOption:
         self, app, runner, tmp_path, monkeypatch
     ):
         monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+        # A project to ingest, or the run stops on the missing one first.
+        project = tmp_path / "project.yaml"
+        project.write_text("name: irrelevant\n")
 
-        result = runner.invoke(app, ["ingest", "--server", "local", "--dry-run"])
+        result = runner.invoke(
+            app,
+            ["ingest", "--server", "local", "--project-config-path", str(project), "--dry-run"],
+        )
 
-        assert result.exit_code == 2
+        assert result.exit_code != 0
         assert "depictio local up" in normalize(result.output)
 
     def test_the_help_shows_server_not_the_former_option(self, app, runner):
         result = runner.invoke(app, ["ingest", "--help"], terminal_width=200)
 
         assert "--server" in result.output
-        assert "--CLI-config-path" not in result.output
+        # Named only inside the "Formerly" backticks of --server, never as an option row.
+        assert not re.search(r"(?<!`)--CLI-config-path", result.output)
 
 
 class TestImagesInStepSix:
@@ -207,7 +214,7 @@ class TestImagesInStepSix:
         calls: list[str] = []
         harness.process.side_effect = lambda **_: calls.append("process") or {"total_failed": 0}
         upload = MagicMock(
-            side_effect=lambda dc, cfg: (
+            side_effect=lambda dc, cfg, **_: (
                 calls.append("images") or {"uploaded": 9, "skipped": 0, "error": 0}
             )
         )

@@ -154,7 +154,7 @@ def locate_template(template_id: str) -> Path:
 def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
     """Identify the pipeline that produced ``run_dir`` and pick a bundled template.
 
-    Powers ``depictio-cli run --data-root <dir>`` with no ``--template``: the
+    Powers ``depictio ingest --data-root <dir>`` with no ``--template``: the
     results directory itself says which pipeline and release made it, so the
     user should not have to.
 
@@ -1379,8 +1379,10 @@ def resolve_template(
             f"Provided: {', '.join(variables.keys())}"
         )
 
+    # Only what --var passed: the defaults filled in above (GROUP_COL,
+    # METADATA_ID_COL, the params.json flags) are not the user's to explain.
     declared_var_names = {var.name for var in template_metadata.variables}
-    for v in variables:
+    for v in extra_vars or {}:
         if v not in declared_var_names and v != "DATA_ROOT":
             logger.warning(f"Variable '{v}' provided via --var but not declared in template")
 
@@ -1493,7 +1495,7 @@ def import_dashboards_from_template(
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
-    Called after project sync during ``depictio run --template`` to automatically
+    Called after project sync during ``depictio ingest --template`` to automatically
     create the template's default dashboards.
 
     Args:

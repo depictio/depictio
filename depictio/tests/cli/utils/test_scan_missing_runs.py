@@ -233,3 +233,60 @@ def test_without_rescan_nothing_is_reconciled(workflow, two_run_dirs):
     # Only the run that was not already registered gets scanned.
     scanned = {r.run_tag for r in upsert.call_args.args[0]}
     assert scanned == {run_b.name}
+
+
+def test_a_gone_run_the_cli_cannot_load_is_deleted_too(workflow, two_run_dirs, monkeypatch):
+    """In the CLI context a run's directory must exist to load it at all.
+
+    A refresh after a run directory was moved used to fail the whole scan on that
+    run's own record; it is now removed like any run the rescan no longer finds.
+    """
+    run_a, run_b = two_run_dirs
+    existing = [
+        _existing_run(workflow.id, run_a.name, str(run_a)),
+        _existing_run(workflow.id, run_b.name, str(run_b)),
+    ]
+    gone = _existing_run(workflow.id, "run_gone", str(run_a))
+    gone["run_location"] = "/nowhere/run_gone"
+    existing.append(gone)
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
+
+    files_resp = MagicMock(status_code=200)
+    files_resp.json.return_value = []
+    runs_resp = MagicMock(status_code=200)
+    runs_resp.json.return_value = existing
+
+    def fake_scan(**kwargs):
+        return WorkflowRun(
+            workflow_id=workflow.id,
+            run_tag=kwargs["run_tag"],
+            workflow_config_id=PyObjectId(WF_CONFIG_ID),
+            run_location=kwargs["run_location"],
+            creation_time=NOW,
+            last_modification_time=NOW,
+            permissions=Permission(owners=[UserBase.model_validate(OWNER)]),
+        )
+
+    with (
+        patch("depictio.cli.cli.utils.scan.api_get_files_by_dc_id", return_value=files_resp),
+        patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_resp),
+        patch(
+            "depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections",
+            side_effect=fake_scan,
+        ),
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
+        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_file"),
+    ):
+        from depictio.cli.cli.utils.scan import scan_files_for_workflow
+
+        result = scan_files_for_workflow(
+            workflow=workflow,
+            data_collections=workflow.data_collections,
+            CLI_config=_cli_config(),
+            command_parameters={"rescan_folders": True, "rich_tables": False},
+        )
+
+    assert result["result"] == "success"
+    assert delete_run.call_count == 1
+    assert delete_run.call_args.kwargs["run_id"] == str(gone["_id"])

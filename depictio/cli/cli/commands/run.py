@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import (
     api_create_magic_link,
@@ -18,6 +19,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_sync_project_config_to_server,
 )
 from depictio.cli.cli.utils.common import (
+    cli_config_file,
     describe_api_target,
     generate_api_headers,
     load_depictio_config,
@@ -328,13 +330,63 @@ def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str
     return path
 
 
-def attach_run_to_project(project_config, remote_project: dict) -> dict:
-    """Fold this run into an existing project, in place, and report what changed.
+def merge_run_locations(project_config, remote_project: dict, drop_missing: bool = False) -> dict:
+    """Put the run locations the server holds back in front of this run's, in place.
 
     ``data_location.locations`` is a list and the scan treats each entry as its own
     run (``structure: flat``) or walks it for run subdirectories
-    (``sequencing-runs``), so appending this run's directory is all it takes to add
-    a run. The scan is incremental, so the runs already registered are skipped.
+    (``sequencing-runs``), so the locations are the project's runs. A configuration
+    resolved from one data root lists that root only: pushed as-is, it would drop
+    every run added since with ``--attach-run``.
+
+    Locations are compared by real path, so a data root reached through a symlink
+    is the run it points to, not a second one. With ``drop_missing``, a location
+    the server holds that is no longer a directory is left out: the scan fails on
+    a location it cannot walk, so keeping it would fail the whole refresh.
+
+    Returns ``{"added": {workflow_tag: [locations]}, "kept": {workflow_tag:
+    [locations]}, "missing": {workflow_tag: [locations]}}``, where ``kept`` are
+    the server's locations this configuration did not list.
+    """
+    remote_locations: dict[str, list[str]] = {}
+    for wf_doc in remote_project.get("workflows", []) or []:
+        wf_tag = wf_doc.get("workflow_tag")
+        if wf_tag:
+            remote_locations[wf_tag] = list(
+                (wf_doc.get("data_location") or {}).get("locations") or []
+            )
+
+    added: dict[str, list[str]] = {}
+    kept: dict[str, list[str]] = {}
+    missing: dict[str, list[str]] = {}
+    for wf in project_config.workflows:
+        known = remote_locations.get(wf.workflow_tag, [])
+        if drop_missing:
+            missing[wf.workflow_tag] = [loc for loc in known if not os.path.isdir(loc)]
+            known = [loc for loc in known if loc not in missing[wf.workflow_tag]]
+        seen = {os.path.realpath(loc) for loc in known}
+        ours = set()
+        new_locations = []
+        for loc in wf.data_location.locations:
+            real = os.path.realpath(loc)
+            ours.add(real)
+            if real not in seen:
+                seen.add(real)
+                new_locations.append(loc)
+        # A fresh list, so the remote entry is never aliased into the model.
+        wf.data_location.locations = known + new_locations
+        added[wf.workflow_tag] = new_locations
+        kept[wf.workflow_tag] = [loc for loc in known if os.path.realpath(loc) not in ours]
+
+    return {"added": added, "kept": kept, "missing": missing}
+
+
+def attach_run_to_project(project_config, remote_project: dict) -> dict:
+    """Fold this run into an existing project, in place, and report what changed.
+
+    Appending this run's directory to the locations is all it takes to add a run
+    (see :func:`merge_run_locations`). The scan is incremental, so the runs already
+    registered are skipped.
 
     Two things are deliberately preserved from the server:
 
@@ -348,13 +400,11 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
 
     Returns ``{"added": {workflow_tag: [locations]}, "kept_single": [dc_tags]}``.
     """
-    remote_locations: dict[str, list[str]] = {}
     remote_single: dict[tuple[str, str], str] = {}
     for wf_doc in remote_project.get("workflows", []) or []:
         wf_tag = wf_doc.get("workflow_tag")
         if not wf_tag:
             continue
-        remote_locations[wf_tag] = list((wf_doc.get("data_location") or {}).get("locations") or [])
         for dc_doc in wf_doc.get("data_collections", []) or []:
             scan_doc = (dc_doc.get("config") or {}).get("scan") or {}
             if str(scan_doc.get("mode", "")).lower() != "single":
@@ -364,13 +414,7 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
             if filename and dc_tag:
                 remote_single[(wf_tag, dc_tag)] = filename
 
-    added: dict[str, list[str]] = {}
-    for wf in project_config.workflows:
-        known = remote_locations.get(wf.workflow_tag, [])
-        new_locations = [loc for loc in wf.data_location.locations if loc not in known]
-        # A fresh list, so the remote entry is never aliased into the model.
-        wf.data_location.locations = known + new_locations
-        added[wf.workflow_tag] = new_locations
+    added = merge_run_locations(project_config, remote_project)["added"]
 
     kept_single: list[str] = []
     for wf in project_config.workflows:
@@ -383,6 +427,133 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
                 kept_single.append(dc.data_collection_tag)
 
     return {"added": added, "kept_single": kept_single}
+
+
+def _report_kept_locations(project_config, merge: dict) -> None:
+    """Say, for a refresh, which runs the project keeps and which it loses."""
+    for wf_tag, gone in merge["missing"].items():
+        for location in gone:
+            rich_print_checked_statement(
+                f"Workflow '{escape(wf_tag)}': run location {escape(location)} is no longer "
+                f"on disk. It is left out, so this refresh removes its runs and files from "
+                f"the project and rebuilds the tables without them.",
+                "warning",
+            )
+    total = sum(len(wf.data_location.locations) for wf in project_config.workflows)
+    earlier = sum(len(locations) for locations in merge["kept"].values())
+    rich_print_checked_statement(
+        f"The project keeps {total} run location(s)"
+        + (f", {earlier} of them from earlier ingests" if earlier else ""),
+        "info",
+    )
+
+
+def _stop_without_project(continue_on_error: bool) -> None:
+    """End the run after the step that should have produced the project configuration.
+
+    Every later step reads it, so ``--continue-on-error`` cannot carry on: it used to
+    try, and each step failed on the missing configuration before a traceback.
+    """
+    if continue_on_error:
+        rich_print_checked_statement(
+            "Stopping despite --continue-on-error: every later step needs the project "
+            "configuration.",
+            "error",
+        )
+    raise typer.Exit(code=1)
+
+
+def unknown_filter_error(
+    project_config, workflow_name: str | None, data_collection_tag: str | None
+) -> str | None:
+    """Why ``--workflow-name`` / ``--data-collection-tag`` select nothing, or ``None``.
+
+    Both match the way the scan and the processing filter: the workflow by its tag,
+    the collection by its tag within the selected workflows.
+    """
+    workflows = list(project_config.workflows)
+    if workflow_name:
+        known = [wf.workflow_tag for wf in workflows]
+        workflows = [wf for wf in workflows if wf.workflow_tag == workflow_name]
+        if not workflows:
+            return (
+                f"--workflow-name '{workflow_name}' matches no workflow of this project. "
+                f"Known: {', '.join(known) or 'none'}"
+            )
+    if data_collection_tag:
+        known = [dc.data_collection_tag for wf in workflows for dc in wf.data_collections]
+        if data_collection_tag not in known:
+            where = f"workflow '{workflow_name}'" if workflow_name else "this project"
+            return (
+                f"--data-collection-tag '{data_collection_tag}' matches no data collection "
+                f"of {where}. Known: {', '.join(known) or 'none'}"
+            )
+    return None
+
+
+def _drop_pinned_ids(config: dict) -> None:
+    """Drop the ids a project file pins, in place, so a renamed copy is a project of its own.
+
+    Kept, they would make it the same project under another name: the sync finds a
+    project by id before name, and a data collection's id names its Delta table.
+    The server's ids still come back by name through ``merge_existing_ids`` when the
+    renamed project already exists. Links that point at a pinned collection id point
+    at its tag instead, which the validation resolves once ids are assigned.
+    """
+    tag_by_id: dict[str, str] = {}
+    collections = list(config.get("data_collections") or [])
+    for wf in config.get("workflows") or []:
+        wf.pop("id", None)
+        wf.pop("_id", None)
+        collections.extend(wf.get("data_collections") or [])
+    for dc in collections:
+        dc_id = dc.pop("id", None) or dc.pop("_id", None)
+        if dc_id and dc.get("data_collection_tag"):
+            tag_by_id[str(dc_id)] = dc["data_collection_tag"]
+    for join in config.get("joins") or []:
+        join.pop("id", None)
+    for link in config.get("links") or []:
+        link.pop("id", None)
+        for side in ("source", "target"):
+            tag = tag_by_id.get(str(link.get(f"{side}_dc_id")))
+            if tag:
+                link.pop(f"{side}_dc_id")
+                link[f"{side}_dc_tag"] = link.get(f"{side}_dc_tag") or tag
+    config.pop("id", None)
+    config.pop("_id", None)
+
+
+def load_project_file(path: str, project_name: str | None = None) -> dict:
+    """The project file as the dict validation takes, renamed when ``project_name`` is given."""
+    from depictio.models.utils import get_config
+
+    config = get_config(path)
+    config["yaml_config_path"] = os.path.abspath(path)
+    if project_name and project_name != config.get("name"):
+        config["name"] = project_name
+        _drop_pinned_ids(config)
+    return config
+
+
+def validate_project_locally(config: dict):
+    """The configuration as a ``Project``, checked without a server.
+
+    For a dry run: no owner to add and no ids to merge, but a missing file, a
+    location that is not there or an invalid field fails as it would for real.
+    """
+    import copy
+
+    from pydantic import ValidationError
+
+    from depictio.models.models.projects import Project
+    from depictio.models.utils import substitute_env_vars
+
+    config = copy.deepcopy(config)
+    config["permissions"] = {"owners": [], "editors": [], "viewers": []}
+    try:
+        return Project(**substitute_env_vars(config))
+    except ValidationError as exc:
+        raise ValueError(f"Project configuration validation failed: {exc}") from exc
 
 
 def register_run_command(app: typer.Typer):
@@ -434,7 +605,11 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Option(
                 "--project-name",
-                help="Custom project name (auto-generated from template if omitted).",
+                help=(
+                    "Project name. Replaces the name generated from --template, or the "
+                    "`name` in the --project-config-path file. --attach-run and "
+                    "--update-config look the project up by this name."
+                ),
             ),
         ] = None,
         attach_run: bool = typer.Option(
@@ -443,8 +618,10 @@ def register_run_command(app: typer.Typer):
             help=(
                 "Add --data-root to an EXISTING project as an additional run instead of "
                 "creating a new project. The project must already exist (resolved by "
-                "--project-name, else by the template's own name). Implies --update-config, "
-                "rebuilds the delta tables from all runs, and skips dashboard import."
+                "--project-name, else by the template's own name). Implies --update-config "
+                "and skips dashboard import. The tables of file-based collections are "
+                "rebuilt from all runs; collections a recipe computes still read the "
+                "project's first run only."
             ),
         ),
         triggered_by: Annotated[
@@ -464,7 +641,9 @@ def register_run_command(app: typer.Typer):
             typer.Option(
                 "--dashboard-name",
                 help="Custom title for the template's main dashboard "
-                "(defaults to the title defined in the dashboard YAML). Child tabs keep their titles.",
+                "(defaults to the title defined in the dashboard YAML). Child tabs keep their titles. "
+                "Dashboards are matched by title, so a refresh with a different name adds a "
+                "new dashboard instead of updating the existing one.",
             ),
         ] = None,
         var: Annotated[
@@ -530,11 +709,13 @@ def register_run_command(app: typer.Typer):
         # Existing options
         workflow_name: Annotated[
             str | None,
-            typer.Option("--workflow-name", help="Name of the workflow to be scanned"),
+            typer.Option("--workflow-name", help="Scan and process only this workflow (its tag)"),
         ] = None,
         data_collection_tag: Annotated[
             str | None,
-            typer.Option("--data-collection-tag", help="Data collection tag to be processed"),
+            typer.Option(
+                "--data-collection-tag", help="Scan and process only this data collection"
+            ),
         ] = None,
         # Flow control options
         skip_server_check: bool = typer.Option(
@@ -555,8 +736,9 @@ def register_run_command(app: typer.Typer):
         update_config: bool = typer.Option(
             False,
             "--update-config",
-            help="Refresh a project already on the server in place: its configuration, its "
-            "tables and its dashboards. Implies --overwrite",
+            help="Refresh the project in place: its configuration, its tables (every run "
+            "rescanned) and its dashboards (matched by title). Runs added with --attach-run "
+            "are kept. A project not on the server yet is created. Same as --overwrite",
         ),
         # Scan options
         rescan_folders: bool = typer.Option(
@@ -574,8 +756,8 @@ def register_run_command(app: typer.Typer):
         overwrite: bool = typer.Option(
             False,
             "--overwrite",
-            help="Rewrite the tables and dashboards that already exist, and rescan every run. "
-            "Implied by --update-config and --attach-run",
+            help="Same as --update-config: refresh the project in place, rewriting the "
+            "tables and dashboards it already has after rescanning every run",
         ),
         preview_recipes: bool = typer.Option(
             False,
@@ -596,7 +778,10 @@ def register_run_command(app: typer.Typer):
             False, "--continue-on-error", help="Continue execution even if a step fails"
         ),
         dry_run: bool = typer.Option(
-            False, "--dry-run", help="Show what would be executed without running it"
+            False,
+            "--dry-run",
+            help="Validate the project configuration locally and list the steps that "
+            "would run, without contacting the server",
         ),
     ):
         """
@@ -629,10 +814,22 @@ def register_run_command(app: typer.Typer):
         # message, whichever way the project was described.
         if data_root and not Path(data_root).is_dir():
             rich_print_checked_statement(
-                f"--data-root does not exist or is not a directory: {data_root}",
+                f"--data-root does not exist or is not a directory: {escape(data_root)}",
                 "error",
             )
             raise typer.Exit(code=1)
+        # The same for the other paths: a dashboard file used to be read at step 8
+        # only, after every table had been written.
+        for option, paths in (
+            ("--project-config-path", [project_config_path] if project_config_path else []),
+            ("--dashboard", dashboard or []),
+        ):
+            for path in paths:
+                if not Path(path).is_file():
+                    rich_print_checked_statement(
+                        f"{option} does not exist or is not a file: {escape(path)}", "error"
+                    )
+                    raise typer.Exit(code=1)
 
         # Step 0-: resolve a bundled template from the pipeline identity. The
         # trigger forwards what its engine reported and lets the CLI decide the
@@ -645,14 +842,14 @@ def register_run_command(app: typer.Typer):
             except FileNotFoundError:
                 rich_print_checked_statement(
                     f"No bundled depictio template matches pipeline "
-                    f"'{pipeline_id}'. Provide --project-config-path with a depictio "
+                    f"'{escape(pipeline_id)}'. Provide --project-config-path with a depictio "
                     f"project YAML for this pipeline (or --template for a known one).",
                     "error",
                 )
                 raise typer.Exit(code=1)
             template = pipeline_id
             rich_print_checked_statement(
-                f"Resolved pipeline '{pipeline_id}' to a bundled template.",
+                f"Resolved pipeline '{escape(pipeline_id)}' to a bundled template.",
                 "success",
             )
 
@@ -688,7 +885,9 @@ def register_run_command(app: typer.Typer):
             detected_template = select_template_for_run(detected_info)
             if detected_template:
                 template = detected_template
-                rich_print_checked_statement(f"Auto-selected template: {template}", "success")
+                rich_print_checked_statement(
+                    f"Auto-selected template: {escape(template)}", "success"
+                )
 
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
@@ -703,11 +902,25 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement("--data-root is required when using --template.", "error")
             raise typer.Exit(code=1)
 
+        # Without either there is no project to ingest into. It used to run steps 1
+        # and 2 first, then fail at step 3 on an empty file name.
+        if not template and not project_config_path:
+            undetected = " No bundled template matches what --data-root holds." if data_root else ""
+            rich_print_checked_statement(
+                "Say which project to ingest: --template <id> --data-root <dir> for a "
+                "pipeline Depictio ships a template for, or --project-config-path "
+                f"<project.yaml>.{undetected}",
+                "error",
+            )
+            raise typer.Exit(code=2)
+
         if dry_run:
             rich_print_checked_statement(
                 "DRY RUN MODE - No actual operations will be performed", "info"
             )
 
+        # The flag the summary names when step 8 does not run.
+        dashboard_skip_reason = "--skip-dashboard-import"
         # `--overwrite` normally implies a full re-scan. In attach mode that would be
         # wrong: the point is to add ONE run, and the scan is already incremental
         # (a known run_tag is skipped). We still need overwrite for the *process*
@@ -720,6 +933,7 @@ def register_run_command(app: typer.Typer):
                 # The dashboards already exist for this project; re-importing would
                 # either 409 or overwrite edits the user made since the first run.
                 skip_dashboard_import = True
+                dashboard_skip_reason = "--attach-run"
                 rich_print_checked_statement(
                     "--attach-run: skipping dashboard import (dashboards already exist).",
                     "info",
@@ -728,8 +942,10 @@ def register_run_command(app: typer.Typer):
         # write_delta_table refuses to replace without overwrite, and its dashboards.
         # --update-config alone used to update the configuration, then fail every data
         # collection on its existing table; the Nextflow hook always passed both.
-        if update_config:
-            overwrite = True
+        # And --overwrite alone used to rewrite nothing: the sync stopped on the
+        # existing project, so the two are one behaviour under two names.
+        if update_config or overwrite:
+            update_config = overwrite = True
         if sync_files or (overwrite and not attach_run):
             rescan_folders = True
 
@@ -764,6 +980,9 @@ def register_run_command(app: typer.Typer):
         # passwordless login link emitted at the end of the run.
         provisioned_dashboard_id: str | None = None
 
+        # Bound by step 0 in template mode; the summary names the resolved id.
+        template_metadata = None
+
         success_count = 0
         total_steps = 8 if (is_template_mode or template_dashboard_paths) else 7
         # --attach-run adds step 3b (folding the run into the existing project).
@@ -785,30 +1004,39 @@ def register_run_command(app: typer.Typer):
         def _rec(name: str, status: str, detail: str | None = None) -> None:
             run_steps.append({"name": name, "status": status, "detail": detail})
 
+        def _step_done(done: str, would: str) -> None:
+            """The line a step ends on: what it did, or in a dry run what it would do."""
+            if dry_run:
+                rich_print_checked_statement(would, "info")
+            else:
+                rich_print_checked_statement(done, "success")
+
         # Step 0a (provisioning only): create-or-get the user and switch the run
         # to act as them by pointing CLI_config_path at a temporary per-user
         # config. Everything downstream then owns its resources as that user.
         if user and not dry_run:
             rich_print_section_separator("Provisioning user account")
             try:
-                import os
-
                 from depictio.models.utils import get_config
 
                 base_config = load_depictio_config(yaml_config_path=CLI_config_path)
-                base_raw_config = get_config(os.path.expanduser(CLI_config_path))
+                # The file the load above read, DEPICTIO_CLI_CONFIG_PATH included.
+                base_raw_config = get_config(cli_config_file(CLI_config_path))
                 provision = api_provision_user(
                     str(base_config.api_base_url), user, provisioning_key
                 )
                 CLI_config_path = _write_provisioned_cli_config(base_raw_config, provision)
                 action = "Created account for" if provision.get("created") else "Reusing account"
                 rich_print_checked_statement(
-                    f"{action} {provision['email']} — running pipeline as this user",
+                    f"{action} {provision['email']}: running the pipeline as this user",
                     "success",
                 )
                 _rec("provisioning", "success", f"{action} {provision.get('email')}")
+            except typer.Exit:
+                _rec("provisioning", "failed", "the CLI configuration could not be read")
+                raise
             except Exception as e:
-                rich_print_checked_statement(f"User provisioning failed: {e}", "error")
+                rich_print_checked_statement(f"User provisioning failed: {escape(str(e))}", "error")
                 _rec("provisioning", "failed", str(e))
                 raise typer.Exit(code=1)
 
@@ -823,7 +1051,7 @@ def register_run_command(app: typer.Typer):
                 for v in var:
                     if "=" not in v:
                         rich_print_checked_statement(
-                            f"--var must be KEY=VALUE format, got: {v!r}", "error"
+                            f"--var must be KEY=VALUE format, got: {escape(repr(v))}", "error"
                         )
                         raise typer.Exit(code=1)
                     k, val = v.split("=", 1)
@@ -890,98 +1118,128 @@ def register_run_command(app: typer.Typer):
                         )
 
                 if dry_run:
-                    import json
-
+                    # A summary, not the full config. Printed, not logged: at the
+                    # default log level the heading used to be followed by nothing.
                     rich_print_checked_statement("Resolved template configuration:", "info")
-                    # Print a summary, not the full config
-                    summary = {
-                        "name": resolved_config.get("name"),
-                        "template_origin": {
-                            "template_id": template_origin.template_id,
-                            "template_version": template_origin.template_version,
-                            "data_root": template_origin.data_root,
-                        },
-                        "workflows": [
-                            {
-                                "name": w.get("name"),
-                                "data_collections": [
-                                    dc.get("data_collection_tag")
-                                    for dc in w.get("data_collections", [])
-                                ],
-                            }
+                    for line in (
+                        f"Project: {resolved_config.get('name')}",
+                        f"Template: {template_origin.template_id} "
+                        f"(template version {template_origin.template_version})",
+                        f"Data root: {template_origin.data_root}",
+                        *(
+                            f"Workflow '{w.get('name')}': "
+                            f"{len(w.get('data_collections', []))} data collection(s): "
+                            + ", ".join(
+                                str(dc.get("data_collection_tag"))
+                                for dc in w.get("data_collections", [])
+                            )
                             for w in resolved_config.get("workflows", [])
-                        ],
-                    }
-                    logger.info(f"Template config summary: {json.dumps(summary, indent=2)}")
+                        ),
+                    ):
+                        rich_print_checked_statement(f"  {escape(line)}", "info")
 
             except typer.Exit:
                 raise
             except Exception as e:
-                rich_print_checked_statement(f"Template resolution failed: {e}", "error")
+                rich_print_checked_statement(
+                    f"Template resolution failed: {escape(str(e))}", "error"
+                )
                 _rec("template_resolve", "failed", str(e))
-                if not continue_on_error:
-                    raise typer.Exit(code=1)
+                _stop_without_project(continue_on_error)
 
         # Step 1: Check server accessibility
-        if not skip_server_check:
+        if skip_server_check:
+            rich_print_checked_statement("Skipping server accessibility check", "info")
+            success_count += 1
+            _rec("server_check", "skipped")
+        elif dry_run:
+            rich_print_section_separator(f"Step 1/{total_steps}: Checking server accessibility")
+            # Read, not contacted: it names the server, and a configuration that
+            # is not there fails here as it would for real.
+            load_depictio_config(yaml_config_path=CLI_config_path)
+            rich_print_checked_statement("Would check that this server answers", "info")
+            success_count += 1
+        else:
             rich_print_section_separator(f"Step 1/{total_steps}: Checking server accessibility")
             try:
-                if not dry_run:
-                    # api_login reports a rejected configuration by RETURNING
-                    # {"success": False}, not by raising, so the except below
-                    # cannot see it. Unchecked, an expired token printed its own
-                    # error and was immediately followed by "check passed"; the
-                    # run then died at step 3 on a validation error that named
-                    # nothing about authentication. For a pipeline-triggered run
-                    # that is the difference between a log saying "your token
-                    # expired" and one nobody can act on.
-                    if not api_login(CLI_config_path).get("success"):
-                        raise RuntimeError(
-                            "the server rejected this CLI configuration (see the error "
-                            "above). The token is most likely expired, or was minted "
-                            "for a different Depictio instance."
-                        )
+                # api_login reports a rejected configuration by RETURNING
+                # {"success": False}, not by raising, so the except below
+                # cannot see it. Unchecked, an expired token printed its own
+                # error and was immediately followed by "check passed"; the
+                # run then died at step 3 on a validation error that named
+                # nothing about authentication. For a pipeline-triggered run
+                # that is the difference between a log saying "your token
+                # expired" and one nobody can act on.
+                if not api_login(CLI_config_path).get("success"):
+                    raise RuntimeError(
+                        "the server rejected this CLI configuration (see the error "
+                        "above). The token is most likely expired, or was minted "
+                        "for a different Depictio instance."
+                    )
                 rich_print_checked_statement("Server accessibility check passed", "success")
                 success_count += 1
                 _rec("server_check", "success", "server reachable")
+            except typer.Exit:
+                # Already reported, by the configuration load. `typer.Exit`
+                # subclasses RuntimeError, so the handler below used to catch it
+                # and print a failure with an empty reason.
+                _rec("server_check", "failed", "the CLI configuration could not be read")
+                raise
             except Exception as e:
                 # Name the endpoint and the file it came from; see
                 # describe_api_target for why that matters here in particular.
                 target = describe_api_target(CLI_config_path)
-                rich_print_checked_statement(f"Server accessibility check failed: {e}", "error")
-                rich_print_checked_statement(f"Tried {target}", "info")
+                rich_print_checked_statement(
+                    f"Server accessibility check failed: {escape(str(e))}", "error"
+                )
+                rich_print_checked_statement(f"Tried {escape(target)}", "info")
                 _rec("server_check", "failed", f"{e} (tried {target})")
                 if not continue_on_error:
                     raise typer.Exit(code=1)
-        else:
-            rich_print_checked_statement("Skipping server accessibility check", "info")
-            success_count += 1
-            _rec("server_check", "skipped")
 
         # Step 2: Check S3 storage
-        if not skip_s3_check:
-            rich_print_section_separator(f"Step 2/{total_steps}: Checking S3 storage configuration")
-            try:
-                if not dry_run:
-                    CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-                    S3_storage_checks(CLI_config.s3_storage)
-                rich_print_checked_statement("S3 storage configuration check passed", "success")
-                success_count += 1
-                _rec("s3_check", "success", "S3 storage reachable")
-            except Exception as e:
-                rich_print_checked_statement(f"S3 storage check failed: {e}", "error")
-                _rec("s3_check", "failed", str(e))
-                if not continue_on_error:
-                    raise typer.Exit(code=1)
-        else:
+        if skip_s3_check:
             rich_print_checked_statement("Skipping S3 storage check", "info")
             success_count += 1
             _rec("s3_check", "skipped")
+        elif dry_run:
+            rich_print_section_separator(f"Step 2/{total_steps}: Checking S3 storage configuration")
+            rich_print_checked_statement("Would check the S3 storage configuration", "info")
+            success_count += 1
+        else:
+            rich_print_section_separator(f"Step 2/{total_steps}: Checking S3 storage configuration")
+            try:
+                CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+                S3_storage_checks(CLI_config.s3_storage)
+                rich_print_checked_statement("S3 storage configuration check passed", "success")
+                success_count += 1
+                _rec("s3_check", "success", "S3 storage reachable")
+            except typer.Exit:
+                _rec("s3_check", "failed", "the CLI configuration could not be read")
+                raise
+            except Exception as e:
+                rich_print_checked_statement(f"S3 storage check failed: {escape(str(e))}", "error")
+                _rec("s3_check", "failed", str(e))
+                if not continue_on_error:
+                    raise typer.Exit(code=1)
 
         # Step 3: Validate project configuration
         rich_print_section_separator(f"Step 3/{total_steps}: Validating project configuration")
         try:
-            if not dry_run:
+            if dry_run:
+                # Locally only, as a dry run contacts no server; a missing or
+                # invalid file used to pass here and fail the real run.
+                project_config = validate_project_locally(
+                    template_resolved_config
+                    if is_template_mode and template_resolved_config is not None
+                    else load_project_file(project_config_path, project_name)
+                )
+                rich_print_checked_statement(
+                    "Project configuration is valid (checked locally; a dry run does not "
+                    "contact the server)",
+                    "success",
+                )
+            else:
                 if is_template_mode and template_resolved_config is not None:
                     # Template mode: use resolved config dict
                     from depictio.cli.cli.utils.config import validate_template_project_config
@@ -989,6 +1247,18 @@ def register_run_command(app: typer.Typer):
                     CLI_config, validation_response = validate_template_project_config(
                         CLI_config_path=CLI_config_path,
                         resolved_config=template_resolved_config,
+                    )
+                elif project_name:
+                    # --project-name applies to a project file too. It renames the
+                    # project before the server is asked for its ids: renamed
+                    # afterwards, the configuration would carry the ids of the
+                    # project the file names, and the sync would update that one.
+                    # The dict path of the template mode merges them by the new name.
+                    from depictio.cli.cli.utils.config import validate_template_project_config
+
+                    CLI_config, validation_response = validate_template_project_config(
+                        CLI_config_path=CLI_config_path,
+                        resolved_config=load_project_file(project_config_path, project_name),
                     )
                 else:
                     # Standard mode: load from YAML file
@@ -999,14 +1269,35 @@ def register_run_command(app: typer.Typer):
                 if not validation_response["success"]:
                     raise Exception("Project configuration validation failed")
                 project_config = validation_response["project_config"]
-            rich_print_checked_statement("Project configuration validation passed", "success")
+                rich_print_checked_statement("Project configuration validation passed", "success")
             success_count += 1
             _rec("validate_config", "success", "config valid")
+        except typer.Exit:
+            _rec("validate_config", "failed", "project configuration could not be validated")
+            raise
         except Exception as e:
-            rich_print_checked_statement(f"{e}", "error")
+            rich_print_checked_statement(escape(str(e)), "error")
             _rec("validate_config", "failed", str(e))
-            if not continue_on_error:
-                raise typer.Exit(code=1)
+            _stop_without_project(continue_on_error)
+
+        # --workflow-name and --data-collection-tag select what the scan and the
+        # processing touch. Checked before anything is written: an unknown tag used
+        # to be a warning, and every collection was then processed anyway.
+        filter_error = unknown_filter_error(project_config, workflow_name, data_collection_tag)
+        if filter_error:
+            rich_print_checked_statement(escape(filter_error), "error")
+            raise typer.Exit(code=1)
+
+        # A refresh keeps the runs the project already has. The configuration lists
+        # only this run's data root, and pushed as-is it dropped every run added with
+        # --attach-run: the full rescan then deleted them from the project.
+        if update_config and not attach_run and not dry_run:
+            remote = api_get_project_from_name(str(project_config.name), CLI_config)
+            if remote.status_code == 200:
+                _report_kept_locations(
+                    project_config,
+                    merge_run_locations(project_config, remote.json(), drop_missing=True),
+                )
 
         # Step 3b (--attach-run): fold the run into an EXISTING project instead of
         # creating a new one. `data_location.locations` is a list and the scan treats
@@ -1021,9 +1312,10 @@ def register_run_command(app: typer.Typer):
                 remote = api_get_project_from_name(str(project_config.name), CLI_config)
                 if remote.status_code != 200:
                     rich_print_checked_statement(
-                        f"--attach-run: no project named '{project_config.name}' on this "
-                        f"server (HTTP {remote.status_code}). Ingest once without --attach-run "
-                        f"to create it, or pass --project-name to target another project.",
+                        f"--attach-run: no project named '{escape(str(project_config.name))}' "
+                        f"on this server (HTTP {remote.status_code}). Ingest once without "
+                        f"--attach-run to create it, or pass --project-name to target another "
+                        f"project.",
                         "error",
                     )
                     _rec("attach_run", "failed", "target project not found")
@@ -1033,21 +1325,22 @@ def register_run_command(app: typer.Typer):
                 added_locations = {tag: locs for tag, locs in report["added"].items() if locs}
                 for wf_tag, new_locations in added_locations.items():
                     rich_print_checked_statement(
-                        f"Workflow '{wf_tag}': +{len(new_locations)} run location(s) -> "
-                        f"{', '.join(new_locations)}",
+                        f"Workflow '{escape(wf_tag)}': +{len(new_locations)} run location(s) -> "
+                        f"{escape(', '.join(new_locations))}",
                         "success",
                     )
                 if not added_locations:
                     rich_print_checked_statement(
-                        "--attach-run: no new location to add; this run is already "
-                        "registered on the project. Re-scanning it only.",
+                        "--attach-run: this data location is already one of the project's "
+                        "runs, so no run is added. Its tables are rebuilt from the runs it "
+                        "already has.",
                         "info",
                     )
                 if report["kept_single"]:
                     rich_print_checked_statement(
                         f"{len(report['kept_single'])} single-file data collection(s) keep "
                         f"the file they were first ingested from, and do not pick up this "
-                        f"run's copy: {', '.join(report['kept_single'])}",
+                        f"run's copy: {escape(', '.join(report['kept_single']))}",
                         "warning",
                     )
 
@@ -1056,7 +1349,7 @@ def register_run_command(app: typer.Typer):
             except typer.Exit:
                 raise
             except Exception as e:
-                rich_print_checked_statement(f"--attach-run failed: {e}", "error")
+                rich_print_checked_statement(f"--attach-run failed: {escape(str(e))}", "error")
                 _rec("attach_run", "failed", str(e))
                 raise typer.Exit(code=1)
 
@@ -1087,7 +1380,13 @@ def register_run_command(app: typer.Typer):
             )
             ingestion.current_step = "sync_project"
             try:
-                if not dry_run:
+                if dry_run:
+                    rich_print_checked_statement(
+                        f"Would create project '{escape(str(project_config.name))}' on the "
+                        f"server{', or refresh it in place' if update_config else ''}",
+                        "info",
+                    )
+                else:
                     project_config_dict = convert_model_to_dict(project_config)
                     # Stamped here rather than at validation because this is the
                     # single funnel every mode goes through: new project, update
@@ -1110,19 +1409,28 @@ def register_run_command(app: typer.Typer):
                     # for: nothing can be ingested, so say so plainly and stop with
                     # a distinct exit code instead of pretending the run succeeded.
                     if sync_verdict.get("action") == "exists":
+                        # A project file names no run directory of its own: what an
+                        # attach adds is the locations it lists.
+                        new_run = (
+                            escape(data_root)
+                            if data_root
+                            else "the data locations this configuration lists"
+                        )
                         rich_print_checked_statement(
-                            f"Project '{project_config.name}' already exists on this server. "
-                            f"Ingest again with --update-config to refresh its configuration, or "
-                            f"with --attach-run to add {data_root or project_config_path} as "
-                            f"an additional run of that project.",
+                            f"Project '{escape(str(project_config.name))}' already exists on "
+                            f"this server. Ingest again with --update-config to refresh it in "
+                            f"place, or with --attach-run to add {new_run} as an additional run "
+                            f"of that project.",
                             "error",
                         )
                         _rec("sync_project", "failed", "project exists, no --update-config")
                         raise typer.Exit(code=2)
-                rich_print_checked_statement("Project configuration sync completed", "success")
+                    rich_print_checked_statement("Project configuration sync completed", "success")
 
-                # Resolve tag-based link IDs now that the server has assigned real DC IDs
-                if is_template_mode and not dry_run:
+                # Resolve tag-based link IDs now that the server has assigned real DC
+                # IDs. A project file renamed with --project-name has its links
+                # turned into tags too (see load_project_file).
+                if (is_template_mode or project_name) and not dry_run:
                     try:
                         from depictio.cli.cli.utils.api_calls import (
                             api_get_project_from_id,
@@ -1186,7 +1494,9 @@ def register_run_command(app: typer.Typer):
                 # it would be caught below and re-reported as an empty failure.
                 raise
             except Exception as e:
-                rich_print_checked_statement(f"Project configuration sync failed: {e}", "error")
+                rich_print_checked_statement(
+                    f"Project configuration sync failed: {escape(str(e))}", "error"
+                )
                 _rec("sync_project", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
@@ -1194,6 +1504,17 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement("Skipping project configuration sync", "info")
             success_count += 1
             _rec("sync_project", "skipped")
+
+        # What a dry run says steps 5 and 6 would touch.
+        selected = [
+            f"{kind} '{escape(value)}'"
+            for kind, value in (
+                ("workflow", workflow_name),
+                ("data collection", data_collection_tag),
+            )
+            if value
+        ]
+        scope = f" ({', '.join(selected)} only)" if selected else ""
 
         # Step 5: Scan data files
         if not skip_scan:
@@ -1241,11 +1562,11 @@ def register_run_command(app: typer.Typer):
                     else:
                         raise Exception("Failed to fetch remote project configuration")
 
-                rich_print_checked_statement("Data scanning completed", "success")
+                _step_done("Data scanning completed", f"Would scan the data files{scope}")
                 success_count += 1
                 _rec("scan", "success", "data files scanned")
             except Exception as e:
-                rich_print_checked_statement(f"Data scanning failed: {e}", "error")
+                rich_print_checked_statement(f"Data scanning failed: {escape(str(e))}", "error")
                 _rec("scan", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
@@ -1283,6 +1604,8 @@ def register_run_command(app: typer.Typer):
                                 CLI_config=CLI_config,
                                 project_config=project_config,
                                 mode="process",
+                                workflow_name=workflow_name,
+                                data_collection_tag=data_collection_tag,
                                 command_parameters=command_parameters,
                             )
                             # Surface per-DC processing failures: a data collection
@@ -1295,14 +1618,24 @@ def register_run_command(app: typer.Typer):
                                     f"{', '.join(process_result.get('failed_tags', []))}"
                                 )
                             # After the tables, which say which images they reference.
-                            for dc in image_collections_to_upload(project_config):
-                                image_uploads.append(upload_collection_images(dc, CLI_config))
+                            # A refresh replaces the images too: one changed on disk
+                            # under the same name used to be skipped as stored.
+                            for dc in image_collections_to_upload(
+                                project_config,
+                                workflow_name=workflow_name,
+                                data_collection_tag=data_collection_tag,
+                            ):
+                                image_uploads.append(
+                                    upload_collection_images(dc, CLI_config, overwrite=overwrite)
+                                )
                         else:
                             raise Exception("Local and remote project configurations do not match")
                     else:
                         raise Exception("Failed to fetch remote project configuration")
 
-                rich_print_checked_statement("Data processing completed", "success")
+                _step_done(
+                    "Data processing completed", f"Would process the data collections{scope}"
+                )
                 success_count += 1
                 _proc = locals().get("process_result") or {}
                 _n_ok = _proc.get("total_processed")
@@ -1318,10 +1651,11 @@ def register_run_command(app: typer.Typer):
                         "images",
                         "success",
                         f"{sum(u['uploaded'] for u in image_uploads)} uploaded / "
+                        f"{sum(u.get('replaced', 0) for u in image_uploads)} replaced / "
                         f"{sum(u['skipped'] for u in image_uploads)} already stored",
                     )
             except Exception as e:
-                rich_print_checked_statement(f"Data processing failed: {e}", "error")
+                rich_print_checked_statement(f"Data processing failed: {escape(str(e))}", "error")
                 _rec("process", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
@@ -1354,22 +1688,32 @@ def register_run_command(app: typer.Typer):
                             auto_process_dependencies=True,
                         )
 
-                        if join_result.get("result") not in ["success", "partial"]:
-                            raise Exception("Join execution failed")
-
                         # Show summary
                         if join_result.get("processed"):
                             rich_print_checked_statement(
                                 f"Processed {len(join_result['processed'])} join(s)", "success"
                             )
-                        if join_result.get("errors"):
-                            rich_print_checked_statement(
-                                f"Failed {len(join_result['errors'])} join(s)", "warning"
+                        # "partial" is a failed join too: it used to be reported as
+                        # a completed step, and the run exited 0.
+                        if join_result.get("result") != "success":
+                            failed_joins = [
+                                str(err.get("join")) for err in join_result.get("errors") or []
+                            ]
+                            raise Exception(
+                                f"{len(failed_joins)} join(s) failed: {', '.join(failed_joins)}"
+                                if failed_joins
+                                else join_result.get("message") or "no detail"
                             )
+                        rich_print_checked_statement("Join execution completed", "success")
                     else:
                         rich_print_checked_statement("No joins defined in project config", "info")
+                elif project_config.joins:
+                    rich_print_checked_statement(
+                        f"Would run {len(project_config.joins)} table join(s)", "info"
+                    )
+                else:
+                    rich_print_checked_statement("No joins defined in project config", "info")
 
-                rich_print_checked_statement("Join execution completed", "success")
                 success_count += 1
                 _join = locals().get("join_result") or {}
                 _n_join = len(_join.get("processed") or [])
@@ -1380,7 +1724,7 @@ def register_run_command(app: typer.Typer):
                     f"{_n_join} processed / {_n_join_err} failed" if _join else "no joins defined",
                 )
             except Exception as e:
-                rich_print_checked_statement(f"Join execution failed: {e}", "error")
+                rich_print_checked_statement(f"Join execution failed: {escape(str(e))}", "error")
                 _rec("joins", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
@@ -1434,7 +1778,8 @@ def register_run_command(app: typer.Typer):
                             )
                         action = "updated" if r.get("updated") else "imported"
                         rich_print_checked_statement(
-                            f"Dashboard {action}: {r.get('title', 'unknown')}", "success"
+                            f"Dashboard {action}: {escape(str(r.get('title', 'unknown')))}",
+                            "success",
                         )
                         if r.get("dash_url"):
                             rich_print_checked_statement(
@@ -1444,31 +1789,42 @@ def register_run_command(app: typer.Typer):
 
                     for r in failed:
                         rich_print_checked_statement(
-                            f"Dashboard failed: {Path(r['path']).name} - {r.get('error', 'unknown')}",
+                            f"Dashboard failed: {escape(Path(r['path']).name)} - "
+                            f"{escape(str(r.get('error', 'unknown')))}",
                             "error",
                         )
 
-                    if failed and not continue_on_error:
+                    # Every dashboard was attempted already, so this only decides
+                    # the step's outcome: under --continue-on-error a failed
+                    # import used to be counted as a completed step, exit 0.
+                    if failed:
                         raise Exception(f"{len(failed)} dashboard(s) failed to import")
 
-                rich_print_checked_statement("Dashboard import completed", "success")
+                _step_done(
+                    "Dashboard import completed",
+                    f"Would import {len(template_dashboard_paths)} dashboard(s)",
+                )
                 success_count += 1
                 # `imported`/`failed` are only bound in the non-dry-run branch above.
                 _imp = locals().get("imported") or []
                 _fld = locals().get("failed") or []
                 _rec("dashboard_import", "success", f"{len(_imp)} imported / {len(_fld)} failed")
             except Exception as e:
-                rich_print_checked_statement(f"Dashboard import failed: {e}", "error")
+                rich_print_checked_statement(f"Dashboard import failed: {escape(str(e))}", "error")
                 _rec("dashboard_import", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
-        elif is_template_mode and skip_dashboard_import:
+        # The step is counted whenever a template or --dashboard is in play (see
+        # total_steps), so every way past it counts it too. A --dashboard skipped
+        # outside template mode used to count nothing: every step worked, and the
+        # run still exited 1.
+        elif skip_dashboard_import and (is_template_mode or template_dashboard_paths):
             rich_print_checked_statement(
-                "Skipping dashboard import (--skip-dashboard-import)", "info"
+                f"Skipping dashboard import ({dashboard_skip_reason})", "info"
             )
             success_count += 1
             _rec("dashboard_import", "skipped")
-        elif is_template_mode and not template_dashboard_paths:
+        elif is_template_mode:
             rich_print_checked_statement("No dashboards defined in template", "info")
             success_count += 1
             _rec("dashboard_import", "skipped", "no dashboards in template")
@@ -1496,6 +1852,8 @@ def register_run_command(app: typer.Typer):
         # terminal, they read it afterwards and need a link to click.
         viewer_url = None
         try:
+            if dry_run:
+                raise RuntimeError("a dry run does not contact the server")
             import httpx as _httpx
 
             # Re-read rather than reuse: CLI_config is only bound inside the
@@ -1520,18 +1878,29 @@ def register_run_command(app: typer.Typer):
                     "info",
                 )
 
-        if is_template_mode:
-            # Resolved id, not the raw --template arg — "nf-core/ampliseq/latest"
+        if template_metadata is not None:
+            # Resolved id, not the raw --template arg: "nf-core/ampliseq/latest"
             # would otherwise print unresolved, hiding which version actually ran.
-            rich_print_checked_statement(f"Template used: {template_metadata.template_id}", "info")
-        if success_count == total_steps:
+            rich_print_checked_statement(
+                f"Template used: {escape(str(template_metadata.template_id))}", "info"
+            )
+        if dry_run:
+            rich_print_checked_statement(
+                f"Dry run complete ({success_count}/{total_steps} steps): the configuration "
+                f"is valid, and nothing was changed.",
+                "success",
+            )
+        elif success_count == total_steps:
             rich_print_checked_statement(
                 f"Ingestion completed successfully! ({success_count}/{total_steps} steps)",
                 "success",
             )
         else:
+            failed_steps = [s["name"] for s in run_steps if s.get("status") == "failed"]
             rich_print_checked_statement(
-                f"Ingestion completed with some issues ({success_count}/{total_steps} steps)",
+                f"Ingestion completed with some issues ({success_count}/{total_steps} steps"
+                + (f"; failed: {', '.join(failed_steps)}" if failed_steps else "")
+                + ")",
                 "warning",
             )
 
@@ -1549,5 +1918,11 @@ def register_run_command(app: typer.Typer):
 
     app.command("ingest")(ingest)
     # Same command, same options: only its place in the help is gone, and it says
-    # what it is called now.
-    app.command("run", hidden=True)(ingest)
+    # what it is called now. Its own help, as ingest's docstring says "Formerly
+    # `run`", which read oddly under `run --help`.
+    app.command(
+        "run",
+        hidden=True,
+        help="Ingest pipeline results into a Depictio server. Old name of `ingest`, kept "
+        "for compatibility: same options, same behaviour. See `depictio ingest --help`.",
+    )(ingest)
