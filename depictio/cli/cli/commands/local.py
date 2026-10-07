@@ -253,7 +253,7 @@ def _restore_cli_config(paths: Paths, state: State) -> None:
     if paths.cli_config.exists():
         return
     try:
-        rebuild_cli_config(paths, state.api_port, load_secrets(paths, create=False))
+        rebuild_cli_config(paths, state.api_port, load_secrets(paths, create=False), warn=_warn)
         sync_cli_config(paths, state.ports)
     except LocalStackError as exc:
         _warn(str(exc))

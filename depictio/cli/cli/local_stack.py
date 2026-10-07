@@ -15,6 +15,7 @@ import contextlib
 import importlib.util
 import json
 import os
+import re
 import secrets
 import shlex
 import shutil
@@ -1022,6 +1023,7 @@ def wait_for_api(
     proc: subprocess.Popen,
     timeout: float = 300,
     rebuild_from: dict | None = None,
+    warn=print,
 ) -> None:
     """Wait for the API, then for the CLI configuration it writes.
 
@@ -1037,7 +1039,7 @@ def wait_for_api(
         paths.logs / "api.log",
     )
     if rebuild_from is not None and not paths.cli_config.exists():
-        rebuild_cli_config(paths, ports["api"], rebuild_from)
+        rebuild_cli_config(paths, ports["api"], rebuild_from, warn=warn)
     # Written by the API when it creates the admin token, before /health answers.
     wait_until(
         paths.cli_config.exists,
@@ -1102,30 +1104,41 @@ def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
     return changed
 
 
-def _api_call(url: str, token: str | None = None, form: dict | None = None, body=None) -> dict:
-    """POST ``form`` (url-encoded) or ``body`` (JSON) to the local API; the JSON answer."""
+def _api_call(
+    url: str, token: str | None = None, form: dict | None = None, body=None, method: str = "POST"
+) -> dict | list:
+    """Call the local API; the JSON answer. A POST sends ``form`` (url-encoded) or
+    ``body`` (JSON), a GET or DELETE nothing."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
+    data = None
     if form is not None:
         data = urllib.parse.urlencode(form).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
-    else:
+    elif method == "POST":
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     with _DIRECT.open(request, timeout=30) as resp:
         return json.load(resp)
 
 
-def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict) -> None:
+# The name rebuild_cli_config gives its token. The first run's token is the API's
+# default_token, and the CLI agents page lets the user pick any name.
+REBUILT_TOKEN_NAME = re.compile(r"depictio-local-\d{14}")
+
+
+def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict, warn=print) -> None:
     """Write the CLI configuration again, through the running API, as the admin.
 
     The same three calls as the CLI agents page: sign in, create a long-lived token,
-    have the API generate the configuration for it.
+    have the API generate the configuration for it. Then the tokens earlier rebuilds
+    created are revoked; ``warn`` names those that could not be.
     """
     import yaml
 
     logger.info("No %s: writing it again through the API", paths.cli_config)
     auth = f"http://127.0.0.1:{api_port}/depictio/api/v1/auth"
+    name = f"depictio-local-{time.strftime('%Y%m%d%H%M%S')}"
     try:
         session = _api_call(
             f"{auth}/login",
@@ -1134,7 +1147,7 @@ def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict) -> None
         token = _api_call(
             f"{auth}/me/tokens",
             token=session["access_token"],
-            body={"name": f"depictio-local-{time.strftime('%Y%m%d%H%M%S')}"},
+            body={"name": name},
         )
         fields_sent = (
             "user_id",
@@ -1162,6 +1175,65 @@ def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict) -> None
         mode=0o600,
     )
     logger.info("Wrote %s again", paths.cli_config)
+    left = _revoke_rebuilt_tokens(auth, session["access_token"], name, _token_id(token))
+    if left != 0:
+        page = f"http://127.0.0.1:{api_port}/cli-agents"
+        warn(
+            f"Could not list the earlier depictio-local tokens, which stay valid: see {page}"
+            if left is None
+            else f"{left} earlier depictio-local token{'s' if left > 1 else ''} could not be "
+            f"revoked and stay{'' if left > 1 else 's'} valid: delete "
+            f"{'them' if left > 1 else 'it'} on {page}"
+        )
+
+
+def _token_id(token: dict) -> str:
+    """A token's id: the API answers ``_id``, the CLI agents page also accepts ``id``."""
+    return str(token.get("_id") or token.get("id") or "")
+
+
+def _revoke_rebuilt_tokens(auth: str, session: str, kept_name: str, kept_id: str) -> int | None:
+    """Delete the admin's tokens from earlier rebuilds, all but the one just created.
+
+    No configuration holds them any more, yet each stays valid for a year. Only names
+    matching REBUILT_TOKEN_NAME are touched. Returns how many could not be deleted,
+    None when the list itself failed.
+    """
+    try:
+        tokens = _api_call(
+            f"{auth}/list_tokens?token_lifetime=long-lived", token=session, method="GET"
+        )
+        if not isinstance(tokens, list):
+            raise ValueError(f"a {type(tokens).__name__} instead of a list")
+    except (OSError, ValueError) as exc:
+        logger.debug("Listing the admin's tokens failed: %s", _probe_error(exc))
+        return None
+    earlier = [
+        t
+        for t in tokens
+        if isinstance(t, dict)
+        and REBUILT_TOKEN_NAME.fullmatch(str(t.get("name") or ""))
+        and t["name"] != kept_name
+        and _token_id(t) != kept_id
+    ]
+    left = 0
+    for t in earlier:
+        try:
+            if not _token_id(t):
+                raise ValueError("no id in the token list")
+            _api_call(
+                f"{auth}/me/tokens/{urllib.parse.quote(_token_id(t))}",
+                token=session,
+                method="DELETE",
+            )
+            logger.debug("Revoked the earlier token %s (%s)", t["name"], _token_id(t))
+        except (OSError, ValueError) as exc:
+            left += 1
+            logger.debug(
+                "Revoking the token %s (%s) failed: %s", t["name"], _token_id(t), _probe_error(exc)
+            )
+    logger.info("Revoked %d of %d earlier depictio-local tokens", len(earlier) - left, len(earlier))
+    return left
 
 
 def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
@@ -1639,6 +1711,8 @@ def _start_stack(paths: Paths, port: int | None, seed: str, screenshots: bool, l
     state.start_times = {name: process_start_time(proc.pid) for name, proc in procs.items()}
     state.save(paths)
     log(f"Services started (logs in {paths.logs}); waiting for the API")
-    wait_for_api(paths, ports, procs["api"], rebuild_from=secret_values if rebuild else None)
+    wait_for_api(
+        paths, ports, procs["api"], rebuild_from=secret_values if rebuild else None, warn=warn
+    )
     check_alive(paths, procs)
     return state

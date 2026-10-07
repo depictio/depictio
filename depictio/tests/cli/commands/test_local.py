@@ -812,6 +812,8 @@ def test_a_cli_config_deleted_after_the_first_run_is_written_again(paths, fake_s
     assert fake_start.wait_for_api.call_args.kwargs["rebuild_from"] == local_stack.load_secrets(
         paths
     )
+    # warn defaults to log: a token that could not be revoked is printed, not raised.
+    assert fake_start.wait_for_api.call_args.kwargs["warn"] == logged.append
     assert any("admin_config.yaml is missing" in line for line in logged)
 
 
@@ -827,48 +829,134 @@ def test_an_unparsable_cli_config_fails_before_anything_starts(paths, fake_start
 
 
 class _Auth(http.server.BaseHTTPRequestHandler):
-    """/auth/login, /auth/me/tokens and /auth/generate_agent_config, as the API answers them."""
+    """/auth/login, /auth/me/tokens, /auth/generate_agent_config, /auth/list_tokens and
+    DELETE /auth/me/tokens/{id}, as the API answers them.
 
+    ``tokens``: the admin's other long-lived tokens; the one POST /me/tokens creates
+    (id "new") is listed with them. ``failing``: ids whose DELETE answers 500.
+    """
+
+    AUTH = "/depictio/api/v1/auth"
     calls: list = []
+    tokens: list = []
+    failing: set = set()
+    created: dict = {}
+
+    def _answer(self, status: int, payload) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode())
 
     def do_POST(self):  # noqa: N802 - http.server API
         body = self.rfile.read(int(self.headers["Content-Length"])).decode()
-        type(self).calls.append((self.path, self.headers.get("Authorization"), body))
+        type(self).calls.append(("POST", self.path, self.headers.get("Authorization"), body))
+        if self.path == f"{self.AUTH}/me/tokens":
+            name = json.loads(body)["name"]
+            type(self).created = {"_id": "new", "name": name, "token_lifetime": "long-lived"}
         answers = {
-            "/depictio/api/v1/auth/login": {"access_token": "session"},
-            "/depictio/api/v1/auth/me/tokens": {"access_token": "long", "user_id": "u1"},
-            "/depictio/api/v1/auth/generate_agent_config": {
+            f"{self.AUTH}/login": {"access_token": "session"},
+            f"{self.AUTH}/me/tokens": {**self.created, "access_token": "long", "user_id": "u1"},
+            f"{self.AUTH}/generate_agent_config": {
                 "api_base_url": "http://127.0.0.1:1",
                 "user": {"email": local_stack.ADMIN_EMAIL, "token": {"access_token": "long"}},
                 "s3_storage": {"service_port": 2, "external_port": 2},
             },
         }
-        self.send_response(200 if self.path in answers else 404)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(answers.get(self.path, {})).encode())
+        self._answer(200 if self.path in answers else 404, answers.get(self.path, {}))
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        type(self).calls.append(("GET", self.path, self.headers.get("Authorization"), ""))
+        if self.path == f"{self.AUTH}/list_tokens?token_lifetime=long-lived":
+            self._answer(200, [*self.tokens, self.created])
+        else:
+            self._answer(404, {})
+
+    def do_DELETE(self):  # noqa: N802 - http.server API
+        type(self).calls.append(("DELETE", self.path, self.headers.get("Authorization"), ""))
+        token_id = self.path.rsplit("/", 1)[-1]
+        if token_id in self.failing:
+            self._answer(500, {"detail": "boom"})
+        else:
+            self._answer(200, {"success": True, "message": "Token deleted successfully"})
 
     def log_message(self, *_args):
         pass
 
 
-def test_rebuild_cli_config_writes_it_owner_only_through_the_api(paths):
-    _Auth.calls = []
+def _rebuild_against_fake_api(paths, tokens=(), failing=()):
+    """rebuild_cli_config against _Auth; the warnings it printed."""
+    _Auth.calls, _Auth.tokens, _Auth.failing, _Auth.created = [], list(tokens), set(failing), {}
     server = http.server.HTTPServer(("127.0.0.1", 0), _Auth)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    warnings = []
     try:
-        local_stack.rebuild_cli_config(paths, server.server_address[1], SECRETS)
+        local_stack.rebuild_cli_config(
+            paths, server.server_address[1], SECRETS, warn=warnings.append
+        )
     finally:
         server.shutdown()
         server.server_close()
+    return warnings
+
+
+def _deleted() -> list[str]:
+    return [path.rsplit("/", 1)[-1] for method, path, *_ in _Auth.calls if method == "DELETE"]
+
+
+def test_rebuild_cli_config_writes_it_owner_only_through_the_api(paths):
+    warnings = _rebuild_against_fake_api(paths)
 
     config = yaml.safe_load(paths.cli_config.read_text())
     assert config["user"]["token"]["access_token"] == "long"
     assert paths.cli_config.stat().st_mode & 0o777 == 0o600
-    login, token, generate = _Auth.calls
-    assert "username=admin%40example.com" in login[2]
-    assert token[1] == generate[1] == "Bearer session"
-    assert json.loads(generate[2])["access_token"] == "long"
+    login, token, generate, listing = _Auth.calls
+    assert "username=admin%40example.com" in login[3]
+    assert token[2] == generate[2] == listing[2] == "Bearer session"
+    assert json.loads(generate[3])["access_token"] == "long"
+    assert _deleted() == [] and warnings == []
+
+
+def test_rebuild_cli_config_revokes_only_the_tokens_of_earlier_rebuilds(paths):
+    tokens = [
+        {"_id": "first-run", "name": "default_token"},
+        {"_id": "old1", "name": "depictio-local-20260101120000"},
+        {"_id": "old2", "name": "depictio-local-20260102120000"},
+        # Made by hand on the CLI agents page.
+        {"_id": "laptop", "name": "laptop"},
+        {"_id": "lookalike", "name": "depictio-local-laptop"},
+    ]
+
+    warnings = _rebuild_against_fake_api(paths, tokens)
+
+    assert _deleted() == ["old1", "old2"]
+    assert local_stack.REBUILT_TOKEN_NAME.fullmatch(_Auth.created["name"])
+    assert warnings == []
+
+
+def test_a_token_that_cannot_be_revoked_is_a_warning(paths):
+    tokens = [
+        {"_id": "old1", "name": "depictio-local-20260101120000"},
+        {"_id": "old2", "name": "depictio-local-20260102120000"},
+    ]
+
+    warnings = _rebuild_against_fake_api(paths, tokens, failing={"old1"})
+
+    assert paths.cli_config.exists()
+    assert _deleted() == ["old1", "old2"]
+    assert len(warnings) == 1
+    assert warnings[0].startswith("1 earlier depictio-local token could not be revoked")
+    assert "/cli-agents" in warnings[0]
+
+
+def test_a_token_list_that_fails_is_a_warning(paths, monkeypatch):
+    monkeypatch.setattr(_Auth, "do_GET", lambda self: self._answer(500, {"detail": "boom"}))
+
+    warnings = _rebuild_against_fake_api(paths)
+
+    assert paths.cli_config.exists()
+    assert _deleted() == []
+    assert len(warnings) == 1 and warnings[0].startswith("Could not list the earlier")
 
 
 def test_rebuild_cli_config_failing_names_the_file(paths):
