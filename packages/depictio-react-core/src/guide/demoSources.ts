@@ -168,17 +168,30 @@ const isNumericCard = (m: StoredMetadata) =>
 const isFloatingMap = (m: StoredMetadata) =>
   m.component_type === 'map' && m.placement === 'floating';
 
+/** A figure that sums up a tab: it links to it, in its header or its row. */
+const linksToTab = (m: StoredMetadata) => typeof m.link === 'string' && m.link.startsWith('tab:');
+
 /**
  * Which of the family's components the Guide shows a kind of tile's actions
  * on: one that carries the most of them. A scatter a selection can be made on
  * shows the reset and the lasso, a table with row selection its checkboxes.
+ *
+ * With `secondTo`, a second advanced view beside that one (see
+ * `secondViewRank`).
  */
-export function actionsTileRank(type: string): (m: StoredMetadata) => number | null {
+export function actionsTileRank(
+  type: string,
+  opts: { secondTo?: StoredMetadata | null } = {},
+): (m: StoredMetadata) => number | null {
+  if (opts.secondTo !== undefined) return secondViewRank(opts.secondTo);
   return (m) => {
     if (m.component_type !== type) return null;
     switch (type) {
       case 'figure':
-        return supportsSelectionGrouping(m, true) ? 0 : 1;
+        // Selection first; a link to a tab breaks the tie, being the only
+        // way to show the row's "open in its tab" (the header's link, in the
+        // minimal style).
+        return (supportsSelectionGrouping(m, true) ? 0 : 2) + (linksToTab(m) ? 0 : 1);
       case 'card':
         return m.dc_id ? 0 : null;
       case 'table':
@@ -208,6 +221,23 @@ export function actionsTileRank(type: string): (m: StoredMetadata) => number | n
       default:
         return 0;
     }
+  };
+}
+
+/**
+ * A second advanced view, besides `first`, for the rows it lists behind its
+ * table icon. The first is picked for its selection, and the one that comes
+ * up on a tab is as often a tree, which lists rows only when it has tip
+ * metadata. Every other kind lists the rows it drew. Another kind than the
+ * first's beats a second of the same kind, a light one a heatmap.
+ */
+function secondViewRank(first: StoredMetadata | null): (m: StoredMetadata) => number | null {
+  return (m) => {
+    if (m.component_type !== 'advanced_viz' || m.index === first?.index) return null;
+    // Heavy, its rows conditional, and a copy shares its plot's page-wide id.
+    if (m.viz_kind === 'phylogenetic') return null;
+    const heavy = m.viz_kind === 'complex_heatmap' ? 2 : 0;
+    return heavy + (first && m.viz_kind === first.viz_kind ? 1 : 0);
   };
 }
 

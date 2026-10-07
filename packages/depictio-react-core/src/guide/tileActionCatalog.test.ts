@@ -47,9 +47,11 @@ describe('rowActionsFor', () => {
       'description',
       'metadata',
     ]);
-    const viz = rowActionsFor('advanced_viz').map((a) => a.key);
-    expect(viz).not.toContain('description');
-    expect(viz).toEqual(expect.arrayContaining(['settings', 'data', 'source']));
+    const viz = rowActionsFor('advanced_viz');
+    expect(viz.map((a) => a.key)).toEqual(expect.arrayContaining(['settings', 'data', 'source']));
+    // The chrome shows a view's description only in the minimal style.
+    expect(viz.find((a) => a.key === 'description')?.when).toMatch(/minimal style/);
+    expect(rowActionsFor('figure').map((a) => a.key).slice(-2)).toEqual(['loadAll', 'source']);
     expect(rowActionsFor('map').map((a) => a.key)).toEqual(
       expect.arrayContaining(['settings', 'data', 'reset']),
     );

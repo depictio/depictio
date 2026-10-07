@@ -245,4 +245,30 @@ describe('actionsTileRank', () => {
     expect(text(meta({ index: 't', component_type: 'text', body: '' }))).toBeNull();
     expect(text(meta({ index: 't', component_type: 'text', body: 'See [it](tab:Alpha)' }))).toBe(0);
   });
+
+  it('puts selection before a link to a tab on a figure', () => {
+    const figure = actionsTileRank('figure');
+    const scatter = { component_type: 'figure', visu_type: 'scatter', selection_enabled: true };
+    expect(figure(meta({ index: 'a', ...scatter, link: 'tab:Alpha' }))).toBe(0);
+    expect(figure(meta({ index: 'b', ...scatter }))).toBe(1);
+    expect(figure(meta({ index: 'c', component_type: 'figure', link: 'tab:Alpha' }))).toBe(2);
+    expect(figure(meta({ index: 'd', component_type: 'figure' }))).toBe(3);
+  });
+
+  it('picks a second advanced view for its rows, of another kind where it can', () => {
+    const view = (index: string, viz_kind: string) =>
+      meta({ index, component_type: 'advanced_viz', viz_kind });
+    const first = view('tree', 'phylogenetic');
+    const second = actionsTileRank('advanced_viz', { secondTo: first });
+    expect(second(first)).toBeNull();
+    expect(second(view('tree-2', 'phylogenetic'))).toBeNull();
+    expect(second(view('volcano', 'volcano'))).toBe(0);
+    expect(second(view('heatmap', 'complex_heatmap'))).toBe(2);
+    expect(second(meta({ index: 'f', component_type: 'figure' }))).toBeNull();
+
+    const embedding = view('pcoa', 'embedding');
+    const besides = actionsTileRank('advanced_viz', { secondTo: embedding });
+    expect(besides(view('pcoa-2', 'embedding'))).toBe(1);
+    expect(besides(view('upset', 'upset_plot'))).toBe(0);
+  });
 });

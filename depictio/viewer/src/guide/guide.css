@@ -229,3 +229,31 @@
 .depictio-component-chrome.depictio-guide-reveal .js-plotly-plot .plotly .modebar {
   opacity: 1;
 }
+
+/* An actions list that folds: its title is the toggle, the chevron turning as
+ * it opens. The title keeps the look of the lists that do not fold. */
+.depictio-guide-legend-toggle {
+  border-radius: var(--mantine-radius-sm);
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+.depictio-guide-legend-toggle:hover {
+  background: var(--mantine-color-default-hover);
+}
+.depictio-guide-legend-toggle:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+.depictio-guide-legend-chevron {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+  transition: transform 150ms ease;
+}
+.depictio-guide-legend-toggle[aria-expanded='true'] .depictio-guide-legend-chevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .depictio-guide-legend-chevron {
+    transition: none;
+  }
+}

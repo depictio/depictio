@@ -113,8 +113,19 @@ const SELECTION_WHEN: Partial<Record<GuideTileType, string>> = {
 };
 
 /** Actions a renderer adds to the row, after the chrome's own, in its order. */
-const EXTRAS: Partial<Record<GuideTileType, { key: TileActionStyleKey; when?: string }[]>> = {
-  figure: [{ key: 'loadAll', when: 'When the figure shows a sample of its points' }],
+const EXTRAS: Partial<
+  Record<GuideTileType, { key: TileActionStyleKey; when?: string; meaning?: string }[]>
+> = {
+  figure: [
+    { key: 'loadAll', when: 'When the figure shows a sample of its points' },
+    // `link: tab:<name>` (FigureBlock). The minimal style draws the same link
+    // in the figure's header instead, listed with what is inside the tile.
+    {
+      key: 'source',
+      when: 'Figures linked to a tab, in the default style',
+      meaning: 'Opens the tab the figure sums up.',
+    },
+  ],
   table: [{ key: 'loadAll', when: 'When the table shows a page of its rows' }],
   map: [{ key: 'settings', when: 'Once the map has drawn' }, { key: 'data' }],
   advanced_viz: [
@@ -142,8 +153,16 @@ export function rowActionsFor(type: GuideTileType): GuideRowAction[] {
   if (selection) out.push(action('group', `With Analysis on · ${selection.toLowerCase()}`));
   out.push(action('inspect', 'With the inspector on'));
   out.push(action('catalog', 'Tiles added from the tools catalog'));
-  // advanced_viz prints its description under its title instead.
-  if (type !== 'advanced_viz') out.push(action('description', 'When the author wrote one'));
+  // An advanced view prints its description under its title; only the minimal
+  // style's header, which shows the short subtitle there, leaves it to the icon.
+  out.push(
+    action(
+      'description',
+      type === 'advanced_viz'
+        ? 'In the minimal style, when the author wrote one'
+        : 'When the author wrote one',
+    ),
+  );
   for (const key of actionsFor(type)) {
     if (key === 'reset') {
       if (type === 'interactive') {
@@ -157,7 +176,7 @@ export function rowActionsFor(type: GuideTileType): GuideRowAction[] {
       out.push(action(key));
     }
   }
-  for (const extra of EXTRAS[type] ?? []) out.push(action(extra.key, extra.when));
+  for (const extra of EXTRAS[type] ?? []) out.push(action(extra.key, extra.when, extra.meaning));
   return out;
 }
 
