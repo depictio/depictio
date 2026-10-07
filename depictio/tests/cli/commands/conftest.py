@@ -54,15 +54,25 @@ def _project(locations: list[str]) -> Project:
 class _Harness:
     """Every mock the run pipeline needs, plus the recorded call arguments."""
 
-    def __init__(self, data_root, remote_locations: list[str], project_found: bool = True):
+    def __init__(
+        self,
+        data_root,
+        remote_locations: list[str],
+        project_found: bool = True,
+        attached_locations: list[str] | None = None,
+    ):
         self.project = _project([str(data_root)])
+        data_location = {"structure": "flat", "locations": remote_locations}
+        # Absent unless given, as a server leaves an empty record out.
+        if attached_locations is not None:
+            data_location["attached_locations"] = attached_locations
         self.remote_doc = {
             "name": self.project.name,
             "hash": None,
             "workflows": [
                 {
                     "workflow_tag": self.project.workflows[0].workflow_tag,
-                    "data_location": {"structure": "flat", "locations": remote_locations},
+                    "data_location": data_location,
                     "data_collections": [],
                 }
             ],

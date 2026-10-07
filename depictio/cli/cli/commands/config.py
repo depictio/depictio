@@ -408,6 +408,29 @@ def check(
         raise typer.Exit(code=1)
 
 
+def _keep_attached_runs(CLI_config: CLIConfig, project_config) -> None:
+    """Keep, in ``project_config``, the run locations added with ``depictio ingest
+    --attach-run``, as a refresh does.
+
+    The server records them in ``attached_locations``. Pushing the file's locations
+    as they are would erase that record, and the next refresh would then remove the
+    runs of those locations.
+    """
+    # Imported here: the ingest command module is large, and only --update needs it.
+    from depictio.cli.cli.commands.run import refresh_run_locations
+
+    remote = api_get_project_from_name(str(project_config.name), CLI_config)
+    if remote.status_code != 200:
+        return
+    report = refresh_run_locations(project_config, remote.json())
+    attached = sum(len(locations) for locations in report["attached"].values())
+    if attached:
+        rich_print_checked_statement(
+            f"Keeps {attached} run location(s) added with `depictio ingest --attach-run`",
+            "info",
+        )
+
+
 @app.command()
 def sync(
     ctx: typer.Context,
@@ -435,8 +458,10 @@ def sync(
         project_config_path=project_config_path,
     )
     rich_print_checked_statement("Pipeline configuration validated", "success")
-    project_config = convert_model_to_dict(validation_response["project_config"])
     try:
+        if update:
+            _keep_attached_runs(CLI_config, validation_response["project_config"])
+        project_config = convert_model_to_dict(validation_response["project_config"])
         sync_verdict = api_sync_project_config_to_server(
             CLI_config=CLI_config, ProjectConfig=project_config, update=update
         )

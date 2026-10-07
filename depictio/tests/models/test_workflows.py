@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from depictio.models.models.base import PyObjectId
+from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import (
     DataCollection,
     DataCollectionConfig,
@@ -100,6 +100,40 @@ class TestWorkflowDataLocation:
         """Test location handling in non-CLI context."""
         config = WorkflowDataLocation(structure="flat", locations=["/path/with/{ENV_VAR}"])
         assert config.locations == ["/path/with/{ENV_VAR}"]
+
+    def test_no_location_is_attached_by_default(self):
+        config = WorkflowDataLocation(structure="flat", locations=["/data/run_a"])
+        assert config.attached_locations == []
+
+    def test_an_empty_record_is_left_out_of_the_payload(self):
+        """A server older than the record rejects a field it does not know
+        (extra="forbid"), so a project without attached runs must not send it."""
+
+        class DataLocationBeforeTheRecord(MongoModel):
+            structure: str
+            locations: list[str]
+            runs_regex: str | None = None
+
+        empty = WorkflowDataLocation(structure="flat", locations=["/data/run_a"])
+        assert "attached_locations" not in empty.model_dump()
+        assert "attached_locations" not in empty.mongo()
+        DataLocationBeforeTheRecord.model_validate(empty.model_dump())
+
+        recorded = WorkflowDataLocation(
+            structure="flat",
+            locations=["/data/run_a", "/data/run_b"],
+            attached_locations=["/data/run_b"],
+        )
+        assert recorded.model_dump()["attached_locations"] == ["/data/run_b"]
+        with pytest.raises(ValidationError, match="attached_locations"):
+            DataLocationBeforeTheRecord.model_validate(recorded.model_dump())
+
+    def test_the_record_round_trips(self):
+        recorded = WorkflowDataLocation(
+            structure="flat", locations=["/data/run_b"], attached_locations=["/data/run_b"]
+        )
+        again = WorkflowDataLocation.model_validate(recorded.model_dump())
+        assert again.attached_locations == ["/data/run_b"]
 
 
 class TestWorkflowConfig:

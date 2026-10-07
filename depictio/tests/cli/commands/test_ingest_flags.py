@@ -26,6 +26,7 @@ from depictio.cli.cli.commands.run import (
     STEPS_PANEL,
     load_project_file,
     merge_run_locations,
+    refresh_run_locations,
     register_run_command,
     unknown_filter_error,
 )
@@ -187,46 +188,181 @@ class TestFailedJoinFailsTheRun:
         assert "failed: joins" in normalize(result.output)
 
 
-class TestUpdateKeepsAttachedRuns:
-    def test_the_server_runs_are_kept_and_a_missing_one_is_reported(
+def _synced_location(harness) -> dict:
+    """The data location the sync sent for the project's workflow."""
+    return harness.sync.call_args.kwargs["ProjectConfig"]["workflows"][0]["data_location"]
+
+
+class TestRunLocationsOnARefresh:
+    """A refresh's runs are the locations it is given plus those --attach-run added.
+
+    It used to keep every location the server held: a results directory that moved
+    was ingested next to the old one, and a location taken out of a project file
+    came back from the server.
+    """
+
+    def test_attached_runs_are_kept_and_any_other_is_dropped(
         self, app, runner, tmp_path, data_root, make_harness
     ):
+        previous = tmp_path / "run_previous"
         attached = tmp_path / "run_a"
+        previous.mkdir()
         attached.mkdir()
-        gone = str(tmp_path / "run_gone")
-        harness = make_harness(data_root, remote_locations=[str(attached), gone])
+        harness = make_harness(
+            data_root,
+            remote_locations=[str(previous), str(attached)],
+            attached_locations=[str(attached)],
+        )
 
         result = _invoke(app, runner, harness, _template(data_root, "--update-config"))
 
         assert result.exit_code == 0, result.output
-        synced = harness.sync.call_args.kwargs["ProjectConfig"]["workflows"][0]
-        assert synced["data_location"]["locations"] == [str(attached), str(data_root)]
+        synced = _synced_location(harness)
+        assert synced["locations"] == [str(data_root), str(attached)]
+        assert synced["attached_locations"] == [str(attached)]
         output = normalize(result.output)
-        assert "run_gone is no longer on disk" in output
-        assert "removes its runs and files" in output
-        assert "The project keeps 2 run location(s), 1 of them from earlier ingests" in output
+        assert (
+            "run_previous is not in this configuration and was not added with --attach-run, "
+            "so this refresh removes its runs and files" in output
+        )
+        assert (
+            "The project keeps 2 run location(s): 1 from this configuration, 1 added with "
+            "--attach-run" in output
+        )
 
-    def test_a_project_with_this_run_only_keeps_it(self, app, runner, data_root, make_harness):
+    def test_a_moved_results_directory_replaces_the_old_one(
+        self, app, runner, tmp_path, make_harness
+    ):
+        # Both are run `results` in a flat workflow: kept together, every sample of
+        # the project was listed twice.
+        old = tmp_path / "a" / "results"
+        new = tmp_path / "b" / "results"
+        old.mkdir(parents=True)
+        new.mkdir(parents=True)
+        harness = make_harness(new, remote_locations=[str(old)])
+
+        result = _invoke(app, runner, harness, _template(new, "--update-config"))
+
+        assert result.exit_code == 0, result.output
+        assert _synced_location(harness)["locations"] == [str(new)]
+        assert f"{old} is not in this configuration" in normalize(result.output)
+
+    def test_a_location_taken_out_of_the_project_file_goes_away(
+        self, app, runner, tmp_path, data_root, project_file, make_harness
+    ):
+        removed = tmp_path / "run_removed"
+        removed.mkdir()
+        harness = make_harness(data_root, remote_locations=[str(data_root), str(removed)])
+        args, extra = _project_mode(harness, project_file, "--update-config")
+
+        result = _invoke(app, runner, harness, args, extra)
+
+        assert result.exit_code == 0, result.output
+        assert _synced_location(harness)["locations"] == [str(data_root)]
+
+    def test_a_run_attached_before_the_record_existed_is_dropped(
+        self, app, runner, tmp_path, data_root, make_harness
+    ):
+        """The server holds no record for it, so it counts as not attached: what a
+        refresh did before attached runs were kept at all."""
+        legacy = tmp_path / "run_legacy"
+        legacy.mkdir()
+        harness = make_harness(data_root, remote_locations=[str(data_root), str(legacy)])
+
+        result = _invoke(app, runner, harness, _template(data_root, "--update-config"))
+
+        assert result.exit_code == 0, result.output
+        assert _synced_location(harness)["locations"] == [str(data_root)]
+
+    def test_no_attached_run_sends_no_record(self, app, runner, data_root, make_harness):
+        """A server older than the record forbids unknown fields: a refresh without
+        attached runs must still reach it."""
         harness = make_harness(data_root, remote_locations=[str(data_root)])
 
         result = _invoke(app, runner, harness, _template(data_root, "--update-config"))
 
         assert result.exit_code == 0, result.output
+        assert "attached_locations" not in _synced_location(harness)
         output = normalize(result.output)
-        assert "The project keeps 1 run location(s)" in output
-        assert "earlier ingests" not in output
+        assert "The project keeps 1 run location(s): those of this configuration" in output
+        assert "added with --attach-run" not in output
+
+    def test_a_missing_attached_location_stops_before_any_change(
+        self, app, runner, tmp_path, data_root, make_harness
+    ):
+        gone = str(tmp_path / "run_gone")
+        harness = make_harness(
+            data_root, remote_locations=[str(data_root), gone], attached_locations=[gone]
+        )
+
+        result = _invoke(app, runner, harness, _template(data_root, "--update-config"))
+
+        assert result.exit_code == 1
+        output = normalize(result.output)
+        assert f"run location {gone}, added with --attach-run, is not on this host" in output
+        assert "nothing was changed" in output
+        assert "--drop-missing-runs" in output
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+
+    def test_drop_missing_runs_removes_it(self, app, runner, tmp_path, data_root, make_harness):
+        gone = str(tmp_path / "run_gone")
+        harness = make_harness(
+            data_root, remote_locations=[str(data_root), gone], attached_locations=[gone]
+        )
+
+        result = _invoke(
+            app, runner, harness, _template(data_root, "--update-config", "--drop-missing-runs")
+        )
+
+        assert result.exit_code == 0, result.output
+        synced = _synced_location(harness)
+        assert synced["locations"] == [str(data_root)]
+        assert "attached_locations" not in synced
+        output = normalize(result.output)
+        assert "run_gone is not on this host. --drop-missing-runs is given" in output
+        assert "was not added with --attach-run" not in output
+        # The full rescan is what removes its runs.
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+
+    def test_two_runs_of_the_same_name_are_refused(self, app, runner, tmp_path, make_harness):
+        attached = tmp_path / "a" / "results"
+        new = tmp_path / "b" / "results"
+        attached.mkdir(parents=True)
+        new.mkdir(parents=True)
+        harness = make_harness(
+            new, remote_locations=[str(attached)], attached_locations=[str(attached)]
+        )
+
+        result = _invoke(app, runner, harness, _template(new, "--update-config"))
+
+        assert result.exit_code == 1
+        output = normalize(result.output)
+        assert f"{new} and {attached} would both be run 'results'" in output
+        harness.sync.assert_not_called()
+
+    def test_drop_missing_runs_with_attach_run_is_a_usage_error(self, app, runner, data_root):
+        result = runner.invoke(
+            app, ["ingest", str(data_root), "--attach-run", "--drop-missing-runs"]
+        )
+
+        assert result.exit_code == 2
+        assert "give --drop-missing-runs or --attach-run, not both" in usage_error(result.output)
 
 
-class TestMergeRunLocations:
+class TestRunLocationHelpers:
     def _project(self, make_harness, root):
         return make_harness(root, remote_locations=[]).project
 
-    def _remote(self, project, locations):
+    def _remote(self, project, locations, attached=None):
+        data_location = {"locations": locations}
+        if attached is not None:
+            data_location["attached_locations"] = attached
         return {
             "workflows": [
                 {
                     "workflow_tag": project.workflows[0].workflow_tag,
-                    "data_location": {"locations": locations},
+                    "data_location": data_location,
                 }
             ]
         }
@@ -240,22 +376,67 @@ class TestMergeRunLocations:
 
         report = merge_run_locations(project, self._remote(project, [str(real)]))
 
-        assert report["added"] == {project.workflows[0].workflow_tag: []}
+        tag = project.workflows[0].workflow_tag
+        assert report["added"] == {tag: []}
         assert project.workflows[0].data_location.locations == [str(real)]
+        # Recorded under the name the locations list it by.
+        assert project.workflows[0].data_location.attached_locations == [str(real)]
 
-    def test_missing_locations_are_dropped_only_when_asked(self, tmp_path, make_harness):
-        root = tmp_path / "run"
+    def test_an_attach_records_the_run(self, tmp_path, make_harness):
+        root = tmp_path / "run_b"
         root.mkdir()
         project = self._project(make_harness, root)
-        remote = self._remote(project, ["/nowhere/run_x"])
+        remote = self._remote(project, ["/data/run_a", "/data/run_x"], attached=["/data/run_x"])
 
-        merge_run_locations(project, remote)
-        assert project.workflows[0].data_location.locations == ["/nowhere/run_x", str(root)]
+        report = merge_run_locations(project, remote)
+
+        tag = project.workflows[0].workflow_tag
+        location = project.workflows[0].data_location
+        assert location.locations == ["/data/run_a", "/data/run_x", str(root)]
+        assert location.attached_locations == ["/data/run_x", str(root)]
+        assert report == {"added": {tag: [str(root)]}, "recorded": {tag: [str(root)]}}
+
+    def test_a_refresh_keeps_its_own_then_the_attached_ones(self, tmp_path, make_harness):
+        root, attached = tmp_path / "run_b", tmp_path / "run_a"
+        root.mkdir()
+        attached.mkdir()
+        project = self._project(make_harness, root)
+        remote = self._remote(
+            project, ["/data/old", str(attached), str(root)], attached=[str(attached)]
+        )
+
+        report = refresh_run_locations(project, remote)
+
+        tag = project.workflows[0].workflow_tag
+        location = project.workflows[0].data_location
+        assert location.locations == [str(root), str(attached)]
+        assert location.attached_locations == [str(attached)]
+        assert report == {
+            "attached": {tag: [str(attached)]},
+            "dropped": {tag: ["/data/old"]},
+            "missing": {tag: []},
+        }
+
+    def test_a_missing_attached_location_is_dropped_only_when_asked(self, tmp_path, make_harness):
+        root = tmp_path / "run"
+        root.mkdir()
+        remote_args = (["/nowhere/run_x"], ["/nowhere/run_x"])
 
         project = self._project(make_harness, root)
-        report = merge_run_locations(project, remote, drop_missing=True)
-        assert project.workflows[0].data_location.locations == [str(root)]
-        assert report["missing"] == {project.workflows[0].workflow_tag: ["/nowhere/run_x"]}
+        report = refresh_run_locations(project, self._remote(project, *remote_args))
+        tag = project.workflows[0].workflow_tag
+        assert report["missing"] == {tag: ["/nowhere/run_x"]}
+        assert project.workflows[0].data_location.locations == [str(root), "/nowhere/run_x"]
+
+        project = self._project(make_harness, root)
+        report = refresh_run_locations(
+            project, self._remote(project, *remote_args), drop_missing=True
+        )
+        location = project.workflows[0].data_location
+        assert location.locations == [str(root)]
+        assert location.attached_locations == []
+        assert report["missing"] == {tag: ["/nowhere/run_x"]}
+        assert report["dropped"] == {tag: []}
 
 
 class TestProjectNameAppliesToAProjectFile:
@@ -293,6 +474,30 @@ class TestProjectNameAppliesToAProjectFile:
         assert "id" not in config["workflows"][0]["data_collections"][0]
         assert "id" not in config["joins"][0]
         link = config["links"][0]
+        assert "source_dc_id" not in link and "target_dc_id" not in link
+        assert link["source_dc_tag"] == link["target_dc_tag"] == "samples"
+
+    def test_a_collection_with_both_id_keys_loses_both(self, tmp_path, data_root):
+        """`id` short-circuited the pop of `_id`, so the renamed copy kept the
+        original's id, and with it the original's Delta table."""
+        path = tmp_path / "both.yaml"
+        path.write_text(
+            PINNED_PROJECT.replace(
+                '      - id: "646b0f3c1e4a2d7f8e5b8c9f"\n',
+                '      - id: "646b0f3c1e4a2d7f8e5b8c9f"\n        _id: "646b0f3c1e4a2d7f8e5b8cb0"\n',
+            ).replace(
+                'target_dc_id: "646b0f3c1e4a2d7f8e5b8c9f"',
+                'target_dc_id: "646b0f3c1e4a2d7f8e5b8cb0"',
+            )
+            % {"root": data_root}
+        )
+
+        config = load_project_file(str(path), "Renamed")
+
+        dc = config["workflows"][0]["data_collections"][0]
+        assert "id" not in dc and "_id" not in dc
+        link = config["links"][0]
+        # A link to either id now names the collection by its tag.
         assert "source_dc_id" not in link and "target_dc_id" not in link
         assert link["source_dc_tag"] == link["target_dc_tag"] == "samples"
 
@@ -570,6 +775,21 @@ class TestAttachMessages:
         output = normalize(result.output)
         assert "already one of the project's runs, so no run is added" in output
         assert "Re-scanning it only" not in output
+        assert "It is now recorded as attached, so a refresh keeps it" in output
+
+    def test_a_run_already_recorded_is_not_recorded_again(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(
+            data_root, remote_locations=[str(data_root)], attached_locations=[str(data_root)]
+        )
+
+        result = _invoke(app, runner, harness, _template(data_root, "--attach-run"))
+
+        assert result.exit_code == 0, result.output
+        output = normalize(result.output)
+        assert "so no run is added" in output
+        assert "now recorded as attached" not in output
 
     def test_exists_in_project_file_mode_does_not_offer_the_file_as_a_run(
         self, app, runner, data_root, project_file, make_harness
@@ -829,6 +1049,12 @@ class TestHelpSurface:
         ]
         assert re.findall(r"│ +(--[\w-]+)", options) == self.ESSENTIALS
 
+    def test_drop_missing_runs_is_with_the_runs_not_the_essentials(self, help_text):
+        panel = help_text[
+            help_text.index(f"─ {PROJECT_PANEL} ─") : help_text.index(f"─ {DASHBOARDS_PANEL} ─")
+        ]
+        assert "--drop-missing-runs" in re.findall(r"│ +(--[\w-]+)", panel)
+
     def test_the_new_names_say_their_former_ones(self, help_text):
         text = normalize(help_text.replace("│", " "))
         assert "Formerly `--data-root`" in text
@@ -941,6 +1167,36 @@ class TestDashboardsOnARefresh:
 
         assert result.exit_code == 0, result.output
         assert "are lost" not in normalize(result.output)
+
+    def test_reset_of_a_project_file_without_dashboards_is_a_usage_error(
+        self, app, runner, project_file
+    ):
+        """A project file brings no dashboards: the reset would reset nothing and still
+        refresh the whole project."""
+        result = runner.invoke(
+            app, ["ingest", "--project-config-path", str(project_file), "--reset-dashboards"]
+        )
+
+        assert result.exit_code == 2
+        assert (
+            "--reset-dashboards: needs dashboards to reset, and a project file has none: pass "
+            "--dashboard, or use --template" in usage_error(result.output)
+        )
+        assert "Step" not in result.output
+
+    def test_reset_of_a_project_file_with_a_dashboard(
+        self, app, runner, data_root, project_file, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        harness.import_dashboards.return_value = self._results("replaced")
+        args, extra = _project_mode(
+            harness, project_file, "--dashboard", str(dashboard_file), "--reset-dashboards"
+        )
+
+        result = _invoke(app, runner, harness, args, extra)
+
+        assert result.exit_code == 0, result.output
+        assert harness.import_dashboards.call_args.kwargs["reset"] is True
 
     def test_reset_with_the_dashboards_skipped_is_a_usage_error(self, app, runner, data_root):
         result = runner.invoke(
