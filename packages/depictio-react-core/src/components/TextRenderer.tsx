@@ -12,6 +12,7 @@ import {
   parseFact,
   parseLinkRow,
   parseStatRow,
+  readsAsSteps,
   StatRow,
 } from './blockMarkdown';
 import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
@@ -492,18 +493,19 @@ const MarkdownBody: React.FC<{
               );
             }
             const facts = block.items.map(parseFact);
-            if (facts.length && facts.every(Boolean)) {
-              // Numbered facts are steps: their order is what they say.
-              if (block.ordered) {
-                return (
-                  <StepFlow
-                    key={idx}
-                    steps={facts as Fact[]}
-                    inline={inline}
-                    accentColor={accentColor}
-                  />
-                );
-              }
+            // Numbered facts with an icon each are steps: their order is what
+            // they say. Without the icons, a numbered list stays a list.
+            if (block.ordered && readsAsSteps(block.items)) {
+              return (
+                <StepFlow
+                  key={idx}
+                  steps={facts as Fact[]}
+                  inline={inline}
+                  accentColor={accentColor}
+                />
+              );
+            }
+            if (!block.ordered && facts.length && facts.every(Boolean)) {
               return framed ? (
                 <FactTable key={idx} facts={facts as Fact[]} inline={inline} />
               ) : (

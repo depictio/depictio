@@ -134,6 +134,15 @@ export function parseFact(item: string): Fact | null {
   return { icon: m[1] ?? null, label: m[2].trim(), value: m[3].trim() };
 }
 
+/**
+ * Whether a numbered list is drawn as steps: every item a fact with its icon.
+ * The icon is what asks for it. `1. **Bold** text` is how a plain numbered
+ * list is usually written, and stays one.
+ */
+export function readsAsSteps(items: string[]): boolean {
+  return items.length > 0 && items.every((item) => Boolean(parseFact(item)?.icon));
+}
+
 const LINKS_ONLY = /^(?:\s*\[[^\]\n]+\]\([^)\n]+(?:\([^)\n]*\))?[^)\n]*\)\s*[·|,]?)+\s*$/;
 
 /** True for a paragraph made of links and nothing else: a card's footer. */

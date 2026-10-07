@@ -6,6 +6,7 @@ import {
   parseFact,
   parseLinkRow,
   parseStatRow,
+  readsAsSteps,
   splitStepValue,
 } from './blockMarkdown';
 
@@ -182,5 +183,19 @@ describe('splitStepValue', () => {
   });
   it('keeps a value made only of a link as text', () => {
     expect(splitStepValue('[Ordination](tab:Ordination)').links).toEqual([]);
+  });
+});
+
+describe('readsAsSteps', () => {
+  it('needs an icon on every item', () => {
+    expect(
+      readsAsSteps(['![](icon:mdi:dna) **Amplicon** V4–V5', '![](icon:mdi:sigma) **Test** PERMANOVA']),
+    ).toBe(true);
+  });
+
+  it('leaves a bold-led numbered list a list', () => {
+    expect(readsAsSteps(['**Install** the CLI', '**Run** the pipeline'])).toBe(false);
+    expect(readsAsSteps(['![](icon:mdi:dna) **Amplicon** V4–V5', '**Denoise** DADA2'])).toBe(false);
+    expect(readsAsSteps([])).toBe(false);
   });
 });
