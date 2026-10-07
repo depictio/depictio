@@ -29,7 +29,7 @@ one YAML per output, and each output's **co-located fixture**:
 ```
 depictio/catalog/
   ivar/
-    module.yaml          # lightweight tool identity: id, name, nf_core_url (pointer)
+    module.yaml          # tool identity: id, name, description, homepage, links
     variants_long.yaml   # one output per file — find + recipe + renders_as live HERE
     variants_long.tsv    # its fixture, right next to it
   qiime2/
@@ -43,13 +43,16 @@ depictio/catalog/
 Adding a tool = a PR that adds **one folder** (`module.yaml` + output YAML(s) +
 fixture). **No Python** unless an output needs a reshape (a recipe).
 
-`module.yaml` is deliberately **lightweight**: it carries the folder anchor
-(`id`), a display `name`, and the `nf_core_url` **pointer** — nothing else. The
-rest of the identity (homepage, bio.tools id, EDAM topics) already lives in the
-module's nf-core `meta.yml`, so we don't duplicate it. Declare an identity field
-in `module.yaml` only to **override** a stale `meta.yml` (e.g. MultiQC's homepage
-moved to Seqera) or when there is **no** nf-core module to derive from (QIIME 2,
-whose `nf_core_url` is per-output and whose identity stays declared in full).
+`module.yaml` carries the folder anchor (`id`), a display `name`, the
+`nf_core_url` **pointer** (or `source_url` for a tool with no nf-core module),
+and the identity the catalog card shows: `description`, `homepage` and
+`biotools_url`. Nothing derives them from the nf-core `meta.yml` (the payload
+reads them from `module.yaml` alone), so copy them from it: `description` in one
+or two sentences, `homepage` from `homepage`, else `tool_dev_url`, else
+`documentation`, and `biotools_url` from the `biotools:` identifier. When
+bio.tools has no entry for the tool, write `biotools_url: null` so the gap is
+explicit. `catalog validate` rejects a module without a description or
+homepage, and the catalog tests reject one that leaves out `biotools_url`.
 All depictio-specific glue — `find`, `recipe`, `fixture`, `renders_as` — lives in
 the **output** YAMLs, never in `module.yaml`.
 

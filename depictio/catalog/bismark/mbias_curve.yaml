@@ -1,0 +1,16 @@
+id: bismark_mbias_curve
+name: CpG M-bias curve
+mode: methylation/mbias
+description: >-
+  % methylation by read position, CpG context, read 1 and read 2 separately.
+  MultiQC draws the same curve but as a static picture; here it is linkable
+  through the sample filter, and the raw coverage behind each position stays
+  queryable next to it.
+find:
+  path_glob: "**/*.M-bias.txt"
+recipe: bismark/mbias_curve.py
+fixture: mbias_curve.tsv
+renders_as:
+  - { id: mbias_cpg_profile, component: advanced_viz, kind: profile, roles: {series: series, x: position, y: pct_methylation} }
+  - { component: card, column: pct_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

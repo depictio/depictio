@@ -19,15 +19,28 @@ main_dashboard:
     description: Which samples, conditions and replicates every tab is about
     persistent: true
     pin: top
-  # Right panel, in reading order: the QC funnel in the order the pipeline runs
-  # it (reads, alignment, quantification, transcript QC). This tab is named
-  # MultiQC and carries MultiQC panels only, so the cards that summarise the
-  # run design sit in `Sample sheet`, above the sheet they are computed from.
-  # `Sample sheet` is pinned to the top and `Reference tables` to the bottom,
-  # so the cohort the whole dashboard is filtered by and the raw rows every
-  # tile is computed from trail each tab. Both are declared here, on the tab no
-  # route conditional can remove.
+  # Persistent, like the table it narrows: the merged count matrix sits in the
+  # pinned Reference tables section on every tab, so its gene control has to
+  # follow it rather than work from the MultiQC tab only.
+  - name: Reference scope
+    icon: mdi:database-outline
+    color: gray
+    description: Narrow the merged count matrix in Reference tables to named genes
+    persistent: true
+  # Right panel, in reading order: the general statistics, then the QC funnel in
+  # the order the pipeline runs it (reads, alignment, quantification, transcript QC). This tab is named
+  # MultiQC and carries MultiQC panels only, which is why the four run-design
+  # cards sit in a PINNED PERSISTENT section: `Run at a glance` is open, rides
+  # every tab and is the strip each tab opens with, and pinned persistent
+  # sections are the documented exception to the MultiQC-only rule.
+  # `Reference tables` is pinned to the bottom and holds the rows every tile is
+  # computed from, the samplesheet included. Both are declared here, on the tab
+  # no route conditional can remove.
   grid_sections:
+  - name: General statistics
+    icon: mdi:table
+    color: blue
+    description: One row per library, the headline numbers of every QC module
   - name: Read quality
     icon: mdi:chart-bell-curve
     color: blue
@@ -39,23 +52,29 @@ main_dashboard:
   - name: Quantification and strandedness
     icon: mdi:chart-box-outline
     color: teal
-    description: What Salmon quantified, whether the library strandedness matched the samplesheet, and how the pipeline's own DESeq2 QC ordered the samples
+    description: What Salmon quantified, and whether the library strandedness matched the samplesheet
   - name: Transcript QC
     icon: mdi:microscope
     color: grape
     description: Where the reads landed on the transcriptome and whether duplication tracks expression
     collapsed: true
-  - name: Sample sheet
+  - name: Run at a glance
     icon: mdi:table-account
     color: teal
-    description: The cohort every other tab is filtered by, and the design it lays out
+    description: The size and design of the run, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samples of the run as the samplesheet declares them
     collapsed: true
     persistent: true
     pin: top
   - name: Reference tables
     icon: mdi:table
     color: gray
-    description: The raw merged count matrix behind every tile, on every tab
+    description: The raw merged count matrix behind every expression tile, on every tab
     collapsed: true
     persistent: true
     pin: bottom
@@ -80,10 +99,10 @@ main_dashboard:
       it follow the pipeline: [STAR](https://github.com/alexdobin/STAR)
       alignment, [Salmon](https://combine-lab.github.io/salmon/)
       quantification and transcript QC.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rna-qc-general-stats
-    section: Read quality
+    section: General statistics
     workflow_tag: rnaseq
     data_collection_tag: multiqc_data
     use: multiqc/general_stats
@@ -93,7 +112,7 @@ main_dashboard:
     description: One row per library, pooling the FastQC, Trim Galore, STAR, Salmon, samtools, Picard, RSeQC, Qualimap and dupRadar headline numbers. The per-read rows are named after the read rather than the sample, so a sample filter drops them instead of narrowing them.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-raw-counts
     section: Read quality
@@ -105,7 +124,7 @@ main_dashboard:
     title: Raw sequence counts
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-raw-quality
     section: Read quality
@@ -117,7 +136,7 @@ main_dashboard:
     title: Raw per-base quality
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-cutadapt-filtered
     section: Read quality
@@ -129,7 +148,7 @@ main_dashboard:
     title: Reads kept by Trim Galore
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 11, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-trimmed-quality
     section: Read quality
@@ -141,7 +160,7 @@ main_dashboard:
     title: Trimmed per-base quality
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 11, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-trimmed-status
     section: Read quality
@@ -153,7 +172,7 @@ main_dashboard:
     title: FastQC status after trimming
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 16, w: 8, h: 5}
+    layout: {x: 0, y: 12, w: 8, h: 5}
 
   # ----------------------------------------------------------------- alignment
   - component_type: text
@@ -171,7 +190,7 @@ main_dashboard:
       reference; a high multimapping share points at repeats or rRNA. The
       [Picard](https://broadinstitute.github.io/picard/) panel shows how much
       of what was mapped was then marked duplicate.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rna-qc-star-summary
     section: Alignment
@@ -183,7 +202,7 @@ main_dashboard:
     title: STAR alignment summary
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-samtools-mapped
     section: Alignment
@@ -195,7 +214,7 @@ main_dashboard:
     title: Percent mapped
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-picard-dedup
     section: Alignment
@@ -207,7 +226,7 @@ main_dashboard:
     title: Duplicate marking
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 7, w: 8, h: 5}
 
   # ------------------------------------------- quantification and strandedness
   - component_type: text
@@ -223,9 +242,7 @@ main_dashboard:
     body: >
       Salmon reports the fragment-length distribution it inferred. The
       strandedness panels compare what the samplesheet declared against what
-      Salmon and RSeQC measured, and the
-      [DESeq2](https://bioconductor.org/packages/DESeq2) PCA is the pipeline's
-      own view of how the libraries group.
+      Salmon and RSeQC measured.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rna-qc-salmon-fld
@@ -261,18 +278,6 @@ main_dashboard:
     title_size: sm
     title_align: left
     layout: {x: 0, y: 7, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rna-qc-deseq2-pca
-    section: Quantification and strandedness
-    workflow_tag: rnaseq
-    data_collection_tag: multiqc_data
-    selected_module: sample-relationships
-    selected_plot: STAR_SALMON DESeq2 PCA plot
-    title: DESeq2 PCA (pipeline QC)
-    description: The pipeline's own PCA, computed on the regularised-log counts. The Expression overview tab plots the interactive TPM equivalent.
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
 
   # -------------------------------------------------------------- transcript QC
   - component_type: text
@@ -286,36 +291,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      RSeQC and [Qualimap](http://qualimap.conesalab.org/) split the
-      alignments by transcript feature: a library heavy in introns or
-      intergenic space is one where the RNA, not the sequencing, went wrong.
-      dupRadar separates natural high-expression duplicates from
-      library-preparation ones.
+      A library heavy at the 3' end of the gene body points at degraded RNA,
+      not at the sequencing. dupRadar separates natural high-expression
+      duplicates from library-preparation ones; where each library's reads
+      landed on the annotation is on the Expression overview tab.
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: rna-qc-rseqc-distribution
-    section: Transcript QC
-    workflow_tag: rnaseq
-    data_collection_tag: multiqc_data
-    selected_module: rseqc
-    selected_plot: Read Distribution
-    use: multiqc/rseqc
-    title: Read distribution over features
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rna-qc-qualimap-origin
-    section: Transcript QC
-    workflow_tag: rnaseq
-    data_collection_tag: multiqc_data
-    selected_module: qualimap
-    selected_plot: Genomic origin of reads
-    use: multiqc/qualimap
-    title: Genomic origin of reads
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-qualimap-coverage
     section: Transcript QC
@@ -327,7 +307,7 @@ main_dashboard:
     title: Gene body coverage profile
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-dupradar
     section: Transcript QC
@@ -339,7 +319,7 @@ main_dashboard:
     title: Duplication against expression
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-rseqc-inner-distance
     section: Transcript QC
@@ -351,16 +331,18 @@ main_dashboard:
     title: Inner distance between mates
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 12, w: 8, h: 5}
+    layout: {x: 0, y: 7, w: 8, h: 5}
 
-  # ------------------------------------------------------------------ samplesheet
-  # The four design cards are computed from the samplesheet, so they live with
-  # it: one full row of four `w: 2` cards above the sheet itself. The section
-  # is persistent and pinned to the top, so they still open every tab, and the
-  # MultiQC tab stays MultiQC only.
+  # --------------------------------------------------------- run at a glance
+  # One full row of four `w: 2` cards, in a section that is persistent, pinned
+  # to the top and open, so it is the first thing on every tab. Three read the
+  # samplesheet (how big the run is and how it is laid out) and the fourth the
+  # merged count matrix (how much of the annotation it actually covers).
+  # The samplesheet itself moved down to `Reference tables`, with the other raw
+  # rows: it is 8 lines of provenance, not a glance metric.
   - component_type: card
     tag: rna-qc-card-samples
-    section: Sample sheet
+    section: Run at a glance
     workflow_tag: rnaseq
     data_collection_tag: samplesheet
     aggregation: nunique
@@ -376,7 +358,7 @@ main_dashboard:
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     tag: rna-qc-card-conditions
-    section: Sample sheet
+    section: Run at a glance
     workflow_tag: rnaseq
     data_collection_tag: samplesheet
     aggregation: nunique
@@ -391,41 +373,66 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     tag: rna-qc-card-replicates
-    section: Sample sheet
+    section: Run at a glance
     workflow_tag: rnaseq
     data_collection_tag: samplesheet
     aggregation: max
     column_name: replicate
     column_type: int64
-    secondary_layout: histogram
+    secondary_layout: top_n
     display: {icon_name: 'mdi:counter', icon_color: '#7B1FA2', title_color: '#7B1FA2', title_font_size: xl, value_font_size: xl}
     title: Replicates per condition
     title_size: sm
     title_align: left
+    breakdown_col: condition
+    top_n_count: 4
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # Replaces a `strandedness` composition card: the samplesheet declares one
+  # value for the whole run (`reverse` here), so the ring had a single segment
+  # and the hero number was 1 whatever the filters said. The annotation
+  # coverage of the count matrix is the run-level number that does move: how
+  # many of the quantified genes carry a symbol, and how many are an Ensembl
+  # identifier with nothing attached.
   - component_type: card
-    tag: rna-qc-card-strandedness
-    section: Sample sheet
+    tag: rna-qc-card-annotated
+    section: Run at a glance
     workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    aggregation: nunique
-    column_name: strandedness
+    data_collection_tag: gene_counts
+    aggregation: count
+    column_name: gene_name
     column_type: object
-    secondary_layout: composition
-    breakdown_col: strandedness
-    display: {icon_name: 'mdi:arrow-left-right', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title: Declared strandedness
+    secondary_layout: completeness
+    display: {icon_name: 'mdi:tag-text-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title: Genes with a symbol
     title_size: sm
     title_align: left
     layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ----------------------------------------------------------- sample sheet
+  - component_type: text
+    tag: rna-sheet-intro
+    section: Sample sheet
+    workflow_tag: rnaseq
+    data_collection_tag: samplesheet
+    title: What was sequenced
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample, as the run's input sheet declared it, with the
+      condition and replicate the Sample scope filters read. Check it first
+      when a condition looks wrong on a later tab.
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: rna-table-samplesheet
     section: Sample sheet
     workflow_tag: rnaseq
     data_collection_tag: samplesheet
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     title: Samplesheet
-    description: One row per sample, with the condition and replicate parsed from its name.
+    description: One row per sample, with the condition and replicate the recipe reads from the nf-core sample name convention.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 4}
@@ -442,10 +449,10 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The raw merged count matrix tximport wrote, before any normalisation.
-      Filters picked in the left panel narrow it too; the samplesheet those
-      filters read sits in its own section at the top of every tab.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+      The raw merged count matrix tximport wrote, before any normalisation,
+      the matrix a differential-expression tool is handed. Name genes in
+      `Reference scope` to cut it down to the ones you care about.
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: rna-table-gene-counts
     section: Reference tables
@@ -458,7 +465,7 @@ main_dashboard:
     description: Estimated counts per gene and sample, the matrix a differential-expression tool is handed.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 5}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -503,6 +510,22 @@ main_dashboard:
     placement: left
     title: Replicate
     layout: {x: 0, y: 6, w: 1, h: 3}
+  # Persistent with its section: it narrows the merged count matrix pinned in
+  # Reference tables, which rides every tab.
+  - component_type: interactive
+    tag: rna-filter-reference-gene
+    index: rna-reference-gene-filter
+    section: Reference scope
+    group: Reference
+    workflow_tag: rnaseq
+    data_collection_tag: gene_counts
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display: {title_size: md, custom_color: '#607D8B', icon_name: 'mdi:magnify'}
+    placement: left
+    title: Gene symbol
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
 tabs:
 - title: Expression overview
@@ -516,8 +539,7 @@ tabs:
   - name: Library scope
     icon: mdi:tune
     color: cyan
-    description: Narrow to the libraries inside a depth or expression band
-    collapsed: true
+    description: Narrow to the libraries inside a depth, expression or mapping band
   grid_sections:
   - name: Libraries at a glance
     icon: mdi:counter
@@ -526,11 +548,15 @@ tabs:
   - name: Sample relationships
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Which libraries look alike, on the TPM matrix and on the pipeline's own DESeq2 distances
+    description: Which libraries look alike, on the pipeline's own DESeq2 QC PCA and distances
   - name: Library composition
     icon: mdi:chart-donut
     color: teal
     description: What kind of RNA each library is made of, and how many genes it reaches
+  - name: Library QC profile
+    icon: mdi:chart-timeline-variant
+    color: orange
+    description: Every MultiQC headline metric of a library on one line, so the odd library out shows as a line that bends away
   components:
   - component_type: text
     tag: rna-ovw-intro
@@ -543,28 +569,27 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Every tile on this tab is computed from the merged gene-level TPM matrix.
-      A library that detects far fewer genes than its peers, or whose median TPM
-      is far higher, is one whose reads concentrated on too little of the
+      Each card is one number per library, summarised across the run. A
+      library that detects far fewer genes than its peers, or whose median TPM
+      is far higher, concentrated its reads on too little of the
       transcriptome.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: rna-ovw-card-libraries
+    tag: rna-ovw-card-unique
     section: Libraries at a glance
     workflow_tag: rnaseq
-    data_collection_tag: sample_overview
-    use: salmon/sample_pca
-    aggregation: nunique
-    column_name: sample_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: group
-    top_n_count: 4
-    display: {icon_name: 'mdi:flask', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title: Libraries
+    data_collection_tag: general_stats
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_uniquely_mapped
+    column_type: float64
+    display: {icon_name: 'mdi:target', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title: Uniquely mapped (%)
+    description: Share of each library's reads STAR placed at a single locus; the box shows the spread across libraries.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rna-ovw-card-median-tpm
     section: Libraries at a glance
@@ -580,43 +605,41 @@ tabs:
     title: Median TPM
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rna-ovw-card-expressed
     section: Libraries at a glance
     workflow_tag: rnaseq
     data_collection_tag: sample_overview
     use: salmon/sample_pca
-    aggregation: average
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     column_name: genes_expressed
     column_type: int64
-    secondary_layout: threshold
-    threshold_value: 10000
-    threshold_direction: min
-    threshold_warn: 8000
     display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
     title: Genes expressed
-    description: Genes at 1 TPM or more. A bulk human library below 10000 is usually under-sequenced or degraded.
+    description: Genes at 1 TPM or more per library. What counts as low depends on the organism and the annotation, so read a library against its peers.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rna-ovw-card-detected
     section: Libraries at a glance
     workflow_tag: rnaseq
     data_collection_tag: sample_overview
     use: salmon/sample_pca
-    aggregation: average
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     column_name: genes_detected
     column_type: int64
-    secondary_layout: gauge
-    coverage_max: 30000
     display: {icon_name: 'mdi:gauge', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title: Genes detected
-    description: Genes with any signal at all, against a 30000 reference for a protein-coding-heavy annotation.
+    description: Genes with any signal at all per library, against the spread across libraries.
     title_size: sm
     title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: rna-ovw-pca-intro
@@ -629,39 +652,53 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The embedding is a PCA of the log2(TPM + 1) matrix over its most
-      variable genes, coloured by condition. Selecting points, or rows in the
-      table below, narrows the heatmap and the gene explorer to those
-      libraries. The [MultiQC](https://multiqc.info) panel beside it is the
-      pipeline's own sample-distance view.
+      The pipeline's own DESeq2 QC PCA and sample distances, read from the
+      files MultiQC draws. Replicates should sit together in both; select
+      points or table rows to narrow the other tiles to those libraries.
     layout: {x: 0, y: 0, w: 8, h: 2}
+  # The pipeline publishes its DESeq2 QC PCA as a text file next to the plot
+  # MultiQC embeds. Reading the file instead of the picture is what makes the
+  # points selectable and the axes filterable, and the percentages in the
+  # subtitle come from the file's own header.
   - component_type: advanced_viz
-    tag: rna-ovw-pca
-    index: rna-ovw-pca-embedding
+    tag: rna-ovw-qc-pca
+    index: rna-ovw-qc-pca-embedding
     section: Sample relationships
     workflow_tag: rnaseq
-    data_collection_tag: sample_overview
-    use: salmon/pca
+    data_collection_tag: deseq2_qc_pca
+    use: deseq2/qc_pca_embedding
     config:
-      color_col: group
       point_size: 12
       show_density: false
       selection_enabled: true
-    title: Sample PCA on Salmon TPMs
-    description: One point per library. Points far from their replicate are the ones to check on the QC tab.
+      selection_column: sample_id
+      hover_cols: [dim_1_percent, dim_2_percent, pca_set]
+      controls_placement: header
+    title: DESeq2 QC PCA
+    description: The pipeline's own PCA on the regularised-log counts, read from deseq2.pca.vals.txt rather than recomputed.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
-  - component_type: multiqc
-    tag: rna-ovw-deseq2-similarity
+    layout: {x: 0, y: 2, w: 4, h: 7}
+  # Replaces the static MultiQC sample-similarity image: the same square
+  # Euclidean distance matrix, clustered in the browser, and narrowed to the
+  # selected samples on BOTH axes because `sample` is a real column here.
+  - component_type: advanced_viz
+    tag: rna-ovw-qc-dists
+    index: rna-ovw-qc-dists-heatmap
     section: Sample relationships
     workflow_tag: rnaseq
-    data_collection_tag: multiqc_data
-    selected_module: sample-relationships
-    selected_plot: STAR_SALMON DESeq2 sample similarity
-    title: Sample correlation heatmap
-    description: Pairwise sample distances on the regularised-log counts, as the pipeline's DESeq2 QC step computed them.
+    data_collection_tag: deseq2_qc_dists
+    use: deseq2/qc_distance_heatmap
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: none
+      colorscale: Blues
+    title: Sample distance matrix
+    description: Pairwise Euclidean distances on the regularised-log counts, the matrix the pipeline clusters its QC dendrogram on.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 6}
+    layout: {x: 4, y: 2, w: 4, h: 7}
   - component_type: table
     tag: rna-ovw-table-samples
     section: Sample relationships
@@ -671,10 +708,30 @@ tabs:
     row_selection_enabled: true
     row_selection_column: sample_id
     title: Library summary
-    description: Select rows to narrow the heatmap and the gene explorer to those libraries.
+    description: Select rows to read a library in the record beside it and narrow the gene explorer to those libraries.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 14, w: 8, h: 4}
+    layout: {x: 0, y: 9, w: 5, h: 6}
+  - component_type: advanced_viz
+    tag: rna-ovw-record
+    index: rna-ovw-record
+    section: Sample relationships
+    workflow_tag: rnaseq
+    data_collection_tag: sample_overview
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: sample_id
+      selection_source: any
+      linked_component: rna-ovw-table-samples
+      sections:
+        Library: [sample_id, group]
+        Expression: [genes_detected, genes_expressed, median_tpm]
+        Position: [dim_1, dim_2, dim_3]
+    title: Library record
+    description: The library selected in the summary beside it, or picked on the PCA, as a fact panel with its position on the first three components.
+    title_size: h3
+    layout: {x: 5, y: 9, w: 3, h: 6}
 
   - component_type: text
     tag: rna-ovw-composition-intro
@@ -687,10 +744,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The biotype panel is featureCounts as MultiQC renders it: a library with a
-      large rRNA or non-coding share has fewer reads left for the genes anyone
-      wants to measure, which is what the bar beside it counts.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+      A library with a large rRNA or non-coding share has fewer reads left for
+      the genes anyone wants to measure. The strip below splits every library
+      over the annotation, so an intronic or intergenic library shows as a
+      short exonic bar.
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rna-ovw-biotype
     section: Library composition
@@ -701,7 +759,7 @@ tabs:
     title: Biotype composition
     description: Reads overlapping each gene biotype, counted by featureCounts.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 4, h: 6}
   - component_type: figure
     tag: rna-ovw-fig-expressed
     index: rna-ovw-expressed-bar
@@ -714,22 +772,76 @@ tabs:
     title: Genes expressed per library
     description: Genes at 1 TPM or more, coloured by condition.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
-
-  - component_type: interactive
-    tag: rna-ovw-filter-group
-    index: rna-ovw-group-filter
-    section: Library scope
-    group: Depth
+    layout: {x: 4, y: 2, w: 4, h: 6}
+  # RSeQC publishes its upstream and downstream bands nested inside each
+  # other; the recipe differences them into disjoint rings and adds the
+  # unassigned tags, so this composition sums to one. The rank switch moves
+  # between the five region classes and the individual RSeQC features.
+  - component_type: advanced_viz
+    tag: rna-ovw-rseqc-composition
+    index: rna-ovw-rseqc-distribution
+    section: Library composition
     workflow_tag: rnaseq
-    data_collection_tag: sample_overview
-    interactive_component_type: MultiSelect
-    column_name: group
-    column_type: object
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Condition
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    data_collection_tag: rseqc_read_distribution
+    use: rseqc/distribution_composition
+    config:
+      default_rank: Region class
+      normalise_to_one: true
+      sample_sort: input
+      sort_by: abundance
+      top_n: 12
+      controls_placement: header
+    title: Where the reads landed on the annotation
+    description: Share of each library's tags per annotation feature, from the RSeQC read_distribution reports.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: text
+    tag: rna-ovw-qcprofile-intro
+    section: Library QC profile
+    workflow_tag: rnaseq
+    data_collection_tag: general_stats
+    title: The odd library out, across every metric at once
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One line per library across eleven MultiQC general statistics, coloured
+      by condition: a library unremarkable on every single metric can still
+      bend away from its replicates on several at once. Drag along an axis to
+      keep the libraries inside that range.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: rna-ovw-qcprofile
+    index: rna-ovw-qcprofile-parcoords
+    section: Library QC profile
+    workflow_tag: rnaseq
+    data_collection_tag: general_stats
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      sample_col: sample
+      group_col: condition
+      scale: minmax
+      metric_cols:
+        - total_reads_m
+        - pct_trimmed
+        - pct_gc
+        - pct_uniquely_mapped
+        - pct_salmon_mapped
+        - pct_duplication
+        - dupradar_intercept
+        - pct_exonic
+        - bias_5_3
+        - error_rate
+        - insert_size
+      controls_placement: header
+    title: Per-library QC profile
+    description: Eleven MultiQC general statistics per library, each axis rescaled to its own range while the ticks keep the original units. Brushing an axis filters the libraries.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
   - component_type: interactive
     tag: rna-ovw-filter-expressed
     index: rna-ovw-expressed-range
@@ -740,6 +852,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: genes_expressed
     column_type: int64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:counter'}
     placement: left
     title: Genes expressed
@@ -754,35 +867,220 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: median_tpm
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: Median TPM
     layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: rna-ovw-filter-unique-mapping
+    index: rna-ovw-unique-mapping-range
+    section: Library scope
+    group: QC profile
+    workflow_tag: rnaseq
+    data_collection_tag: general_stats
+    interactive_component_type: RangeSlider
+    column_name: pct_uniquely_mapped
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:target'}
+    placement: left
+    title: Uniquely mapped (%)
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
-- title: Expression heatmap
-  subtitle: The 500 most variable genes, clustered, with the samplesheet design on top
+- title: Gene explorer
+  subtitle: The genes that separate the conditions, then any gene across conditions and libraries
   tab_order: 2
-  tab_icon: mdi:grid
-  tab_icon_color: grape
+  tab_icon: mdi:dna
+  tab_icon_color: green
   icon: /assets/images/workflows/nf-core.png
   workflow_system: nf-core
   filter_sections:
-  - name: Heatmap scope
-    icon: mdi:filter-variant
-    color: grape
-    description: Which sample columns the matrix keeps
-    collapsed: true
+  - name: Gene scope
+    icon: mdi:dna
+    color: green
+    description: Which genes and which expression range the panels cover
+  # Cards, then the gene-level distributions (the clustered top-variable
+  # matrix, the per-condition boxes), then the gene detail (mean-variance
+  # plane driving the record card), then the rows, collapsed.
   grid_sections:
+  - name: Picked genes
+    icon: mdi:counter
+    color: green
+    description: What the current gene and sample selection covers
   - name: Top variable genes
     icon: mdi:chart-box-outline
     color: grape
-    description: The genes that separate the conditions, on the log2(TPM + 1) scale
+    description: The genes that separate the conditions on the log2(TPM + 1) scale, clustered, with the samplesheet design on top
+  - name: Expression by condition
+    icon: mdi:chart-bell-curve
+    color: green
+    description: The distribution of the picked genes in each condition
+  - name: Gene detail
+    icon: mdi:dna
+    color: teal
+    description: Pick a gene on the mean-variance plane and read its record beside it
+  - name: Gene rows
+    icon: mdi:table
+    color: lime
+    description: One row per gene and sample, selectable
+    collapsed: true
   - name: Matrix rows
     icon: mdi:database-outline
     color: gray
-    description: The same matrix as rows, one gene per row
+    description: The top variable gene matrix as rows, one gene per row
     collapsed: true
   components:
+  - component_type: text
+    tag: rna-gene-intro
+    section: Picked genes
+    workflow_tag: rnaseq
+    data_collection_tag: gene_expression
+    title: Start from the gene filter
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every gene expressed at 1 TPM or more in at least one library. Pick
+      genes in the left panel, on the mean-variance plane or in the rows at
+      the foot, and the box plot and cards follow.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: rna-gene-card-genes
+    section: Picked genes
+    workflow_tag: rnaseq
+    data_collection_tag: gene_expression
+    use: salmon/gene_expression
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    display: {icon_name: 'mdi:dna', icon_color: '#2E7D32', title_color: '#2E7D32', title_font_size: xl, value_font_size: xl}
+    title: Genes in view
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: rna-gene-card-peak
+    section: Picked genes
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    aggregation: nunique
+    column_name: gene_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: top_condition
+    top_n_count: 4
+    display: {icon_name: 'mdi:arrow-up-bold-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title: Genes by peak condition
+    description: Expressed genes, split by the condition each one is highest in.
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: rna-gene-card-samples
+    section: Picked genes
+    workflow_tag: rnaseq
+    data_collection_tag: gene_expression
+    use: salmon/gene_expression
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 4
+    display: {icon_name: 'mdi:flask', icon_color: '#558B2F', title_color: '#558B2F', title_font_size: xl, value_font_size: xl}
+    title: Libraries in view
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: rna-gene-card-log2
+    section: Picked genes
+    workflow_tag: rnaseq
+    data_collection_tag: gene_expression
+    use: salmon/gene_expression
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: log2_tpm
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title: log2(TPM + 1)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: rna-gene-record-intro
+    section: Gene detail
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    title: Genes that separate the conditions sit high on this plane
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One point per expressed gene: mean log2(TPM + 1) across the libraries
+      against its spread, coloured by the condition it peaks in. Click a point
+      to open its record and narrow the box plot and the gene rows to it.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: rna-gene-record-plane
+    index: rna-gene-record-plane
+    section: Gene detail
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mean_log2_tpm
+      y_col: sd_log2_tpm
+      label_col: gene_name
+      color_col: top_condition
+      x_title: Mean log2(TPM + 1)
+      y_title: Standard deviation of log2(TPM + 1)
+      marker_size: 4
+      opacity: 0.6
+      marker_outline: false
+      top_n_labels: 10
+      # About 19,000 expressed genes: keep the points (a click needs a point)
+      # rather than the binned view the renderer switches to above 3,000 rows.
+      # The reader can still turn density on from the header.
+      density_threshold: 40000
+      selection_enabled: true
+      selection_column: gene_id
+      legend_pos: bottom
+      controls_placement: header
+    title: Mean-variance plane
+    description: Every gene expressed at 1 TPM or more in at least one library. Selection is on the Ensembl gene id, which the card beside it and the gene explorer read.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: rna-gene-record-card
+    index: rna-gene-record-card
+    section: Gene detail
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: rna-gene-record-plane
+      sections:
+        Gene: [gene_name, gene_id]
+        Expression: [mean_log2_tpm, sd_log2_tpm, max_tpm, libraries_detected]
+        Where it peaks: [top_condition, top_sample, log2fc_top_vs_rest]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    title: Gene record
+    description: The picked gene as a fact panel; it stays empty until a gene is picked. Ensembl resolves the stable identifier for any species.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 9}
+
   - component_type: text
     tag: rna-heat-intro
     section: Top variable genes
@@ -794,11 +1092,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Genes are ranked by variance across the libraries on the log2(TPM + 1)
-      scale and the top 500 are kept, so the block structure you see is the
-      structure the conditions actually impose. The strips above the columns
-      are what the samplesheet declared each library to be, and only the
-      fields that actually vary across this run get one.
+      The 500 genes with the highest variance across libraries on the log2(TPM
+      + 1) scale, clustered on both axes. The strips above the columns are
+      what the samplesheet declared each library to be, one per field that
+      varies in the run.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: rna-heat-heatmap
@@ -825,170 +1122,6 @@ tabs:
     layout: {x: 0, y: 2, w: 8, h: 9}
 
   - component_type: text
-    tag: rna-heat-rows-intro
-    section: Matrix rows
-    workflow_tag: rnaseq
-    data_collection_tag: expression_heatmap
-    title: The matrix as rows
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The same 500 genes, one per row, sorted by decreasing variance. Sorting on
-      a sample column is the quickest way to the genes that library is highest
-      in.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: table
-    tag: rna-heat-table
-    section: Matrix rows
-    workflow_tag: rnaseq
-    data_collection_tag: expression_heatmap
-    use: salmon/expression_heatmap
-    row_selection_enabled: false
-    page_size: 25
-    title: Top variable gene matrix
-    description: log2(TPM + 1) per gene and sample.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
-
-  - component_type: interactive
-    tag: rna-heat-filter-sample
-    index: rna-heat-sample-filter
-    section: Heatmap scope
-    group: Columns
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:flask'}
-    placement: left
-    title: Sample
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: rna-heat-filter-condition
-    index: rna-heat-condition-filter
-    section: Heatmap scope
-    group: Columns
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    interactive_component_type: MultiSelect
-    column_name: condition
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Condition
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-- title: Gene explorer
-  subtitle: Pick genes and compare their expression across conditions, one row per gene and sample
-  tab_order: 3
-  tab_icon: mdi:dna
-  tab_icon_color: green
-  icon: /assets/images/workflows/nf-core.png
-  workflow_system: nf-core
-  filter_sections:
-  - name: Gene scope
-    icon: mdi:dna
-    color: green
-    description: Which genes and which expression range the panels cover
-  grid_sections:
-  - name: Picked genes
-    icon: mdi:counter
-    color: green
-    description: What the current gene and sample selection covers
-  - name: Expression by condition
-    icon: mdi:chart-bell-curve
-    color: green
-    description: The distribution of the picked genes in each condition
-  - name: Gene rows
-    icon: mdi:table
-    color: lime
-    description: One row per gene and sample, selectable
-  components:
-  - component_type: text
-    tag: rna-gene-intro
-    section: Picked genes
-    workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    title: Start from the gene filter
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The table holds every gene expressed at 1 TPM or more in at least one
-      library. Pick genes in the left panel, or select rows in the table, and the
-      box plot follows.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: rna-gene-card-genes
-    section: Picked genes
-    workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    use: salmon/gene_expression
-    aggregation: nunique
-    column_name: gene_name
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: group
-    display: {icon_name: 'mdi:dna', icon_color: '#2E7D32', title_color: '#2E7D32', title_font_size: xl, value_font_size: xl}
-    title: Genes in view
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rna-gene-card-tpm
-    section: Picked genes
-    workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    use: salmon/gene_expression
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: tpm
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title: TPM
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rna-gene-card-samples
-    section: Picked genes
-    workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    use: salmon/gene_expression
-    aggregation: nunique
-    column_name: sample
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: group
-    top_n_count: 4
-    display: {icon_name: 'mdi:flask', icon_color: '#558B2F', title_color: '#558B2F', title_font_size: xl, value_font_size: xl}
-    title: Libraries in view
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rna-gene-card-log2
-    section: Picked genes
-    workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    use: salmon/gene_expression
-    aggregation: average
-    column_name: log2_tpm
-    column_type: float64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:chart-histogram', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title: log2(TPM + 1)
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
-  - component_type: text
     tag: rna-gene-box-intro
     section: Expression by condition
     workflow_tag: rnaseq
@@ -999,10 +1132,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Each box is one gene in one condition, with the individual libraries drawn
-      beside it, so a difference backed by two consistent replicates is
-      distinguishable from one driven by a single outlier. Selecting points
-      filters the table below to those genes.
+      Each box is one gene in one condition, with the libraries drawn beside
+      it, so a difference backed by consistent replicates stands apart from
+      one driven by a single outlier. Selecting points filters the rows below
+      to those genes.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: rna-gene-fig-box
@@ -1022,10 +1155,13 @@ tabs:
       colors = depictio_group_kwargs.get('color_discrete_map') or {}
       # Cap the genes drawn: the box plot is a comparison of a handful of genes,
       # and an unfiltered frame would put thousands of boxes on one axis.
+      # Rank by spread across libraries, not by level: the highest-TPM genes
+      # are housekeeping and mitochondrial transcripts that never separate
+      # conditions.
       top_genes = (
           df.group_by('gene_name')
-          .agg(pl.col('tpm').max().alias('_max_tpm'))
-          .sort('_max_tpm', descending=True)
+          .agg(pl.col('log2_tpm').std().fill_null(0).alias('_sd'))
+          .sort('_sd', descending=True)
           .head(12)['gene_name']
           .to_list()
       )
@@ -1045,7 +1181,7 @@ tabs:
     selection_enabled: true
     selection_column: gene_name
     title: Expression by condition
-    description: The 12 highest-expressed genes in view, one box per condition. Select points to filter the table.
+    description: The 12 most variable genes in view, one box per condition. Pick genes to replace them; select points to filter the table.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
 
@@ -1078,6 +1214,34 @@ tabs:
     title_align: left
     layout: {x: 0, y: 1, w: 8, h: 6}
 
+  - component_type: text
+    tag: rna-heat-rows-intro
+    section: Matrix rows
+    workflow_tag: rnaseq
+    data_collection_tag: expression_heatmap
+    title: The matrix as rows
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The same 500 genes, one per row. Sorting on a sample column is the
+      quickest way to the genes that library is highest in.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: rna-heat-table
+    section: Matrix rows
+    workflow_tag: rnaseq
+    data_collection_tag: expression_heatmap
+    use: salmon/expression_heatmap
+    row_selection_enabled: false
+    page_size: 25
+    title: Top variable gene matrix
+    description: log2(TPM + 1) per gene and sample.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+
   - component_type: interactive
     tag: rna-gene-filter-gene
     index: rna-gene-gene-filter
@@ -1093,20 +1257,6 @@ tabs:
     title: Gene
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: rna-gene-filter-group
-    index: rna-gene-group-filter
-    section: Gene scope
-    group: Genes
-    workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    interactive_component_type: MultiSelect
-    column_name: group
-    column_type: object
-    display: {title_size: md, custom_color: '#558B2F', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Condition
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
     tag: rna-gene-filter-tpm
     index: rna-gene-tpm-range
     section: Gene scope
@@ -1116,7 +1266,38 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: log2_tpm
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: log2(TPM + 1)
     layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: rna-gene-filter-plane-mean
+    index: rna-gene-plane-mean-range
+    section: Gene scope
+    group: Mean-variance plane
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    interactive_component_type: RangeSlider
+    column_name: mean_log2_tpm
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Mean log2(TPM + 1)
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: interactive
+    tag: rna-heat-filter-gene
+    index: rna-heat-gene-filter
+    section: Gene scope
+    group: Top variable genes
+    workflow_tag: rnaseq
+    data_collection_tag: expression_heatmap
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Top variable gene
+    description: Keep only the named genes among the 500 most variable, in the heatmap and its matrix rows.
+    layout: {x: 0, y: 12, w: 1, h: 3}

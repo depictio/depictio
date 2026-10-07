@@ -1,0 +1,347 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d64"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d64"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "ci-text",
+      "component_type": "text",
+      "title": "Benchmark confidence intervals",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence intervals",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "A forest plot per metric: the dot is the caller's precision or recall against the truth set, the bar its 95% confidence interval, so two callers whose bars overlap are not distinguishable on this truth set. Sorting and value labels sit in the tile header. The intervals come from the true and false positive counts that hap.py or vcfeval report in nf-core/variantbenchmarking.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ci-precision",
+      "component_type": "advanced_viz",
+      "title": "Precision, 95% CI",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Precision per caller with its 95% confidence interval.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence intervals",
+      "viz_kind": "metric_ci_bars",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "metric_ci_bars",
+        "label_col": "tool",
+        "value_col": "precision",
+        "lower_col": "precision_lower",
+        "upper_col": "precision_upper",
+        "metric_name": "Precision",
+        "sort_desc": true,
+        "colorscale": "Tealgrn"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ci-recall",
+      "component_type": "advanced_viz",
+      "title": "Recall, 95% CI",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Recall per caller with its 95% confidence interval.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence intervals",
+      "viz_kind": "metric_ci_bars",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "metric_ci_bars",
+        "label_col": "tool",
+        "value_col": "recall",
+        "lower_col": "recall_lower",
+        "upper_col": "recall_upper",
+        "metric_name": "Recall",
+        "sort_desc": true,
+        "colorscale": "Tealgrn"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ci-f-tool",
+      "component_type": "interactive",
+      "title": "Caller",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ci-f-f1",
+      "component_type": "interactive",
+      "title": "F1",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "f1",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ci-f-tool",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ci-f-f1",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ci-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ci-precision",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ci-recall",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Benchmark confidence intervals",
+  "subtitle": "Precision and recall per caller with their 95% confidence intervals",
+  "icon": "mdi:ruler",
+  "icon_color": "pink",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 27,
+  "main_tab_name": null,
+  "tab_icon": "mdi:ruler",
+  "tab_icon_color": "pink",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Caller scope",
+      "icon": "mdi:filter-variant",
+      "color": "pink",
+      "description": "Restricts which callers are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Confidence intervals",
+      "icon": "mdi:ruler",
+      "color": "pink",
+      "description": "Point estimate and 95% interval per caller, one metric per tile",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

@@ -18,21 +18,21 @@
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "ampliseq",
-      "data_collection_tag": "multiqc_data",
+      "data_collection_tag": "metadata",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "MultiQC report data",
-        "data_collection_tag": "multiqc_data",
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
         }
       },
       "cols_json": {},
@@ -51,6 +51,8 @@
       "group": "Sample scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
       "wf_tag": "nextflow/ampliseq"
@@ -93,8 +95,276 @@
       "group": "Sample scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#984EA3",
       "icon_name": "mdi:earth",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "mqc-sample-filter",
+      "component_type": "interactive",
+      "title": "Sample ID (MultiQC)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "MultiQC report",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Run at a glance",
+      "aggregation": "nunique",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:flask",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-groups",
+      "component_type": "card",
+      "title": "Habitat groups",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Run at a glance",
+      "aggregation": "nunique",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:earth",
+      "icon_color": "#984EA3",
+      "title_color": "#984EA3",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-phyla",
+      "component_type": "card",
+      "title": "Phyla detected",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
+      "section": "Run at a glance",
+      "aggregation": "nunique",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "Kingdom",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-donut",
+      "icon_color": "#8E44AD",
+      "title_color": "#8E44AD",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "alpha-card-shannon",
+      "component_type": "card",
+      "title": "Shannon (median)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "alpha_diversity_multi_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)",
+        "data_collection_tag": "alpha_diversity_multi_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
+      "section": "Run at a glance",
+      "aggregation": "median",
+      "column_name": "shannon",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-bell-curve",
+      "icon_color": "#F68B33",
+      "title_color": "#F68B33",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -117,11 +387,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "[MultiQC](https://multiqc.info) aggregates the per-sample [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and [Cutadapt](https://cutadapt.readthedocs.io) reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.",
+      "body": "[MultiQC](https://multiqc.info) aggregates the per-sample [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and [Cutadapt](https://cutadapt.readthedocs.io) reports: read how many reads survived trimming, how evenly they spread across samples, and whether base quality holds to the end of the read. The other panels are folded into *QC details* below.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "888a37d7-a293-4d2b-9472-0f978fbab531",
+      "index": "0f4739ed-e09b-4405-9c65-c56756d6a31a",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -161,7 +431,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "f14268d4-d3d6-4f40-85e8-04e49b45b8ff",
+      "index": "319c78e7-7a07-4fd8-957c-9d8e52224e74",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -201,7 +471,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d32723a6-1e08-40d8-b65a-32b719c69521",
+      "index": "2bb21404-dd50-45b1-a6c4-afef2d2c0935",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -241,7 +511,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "3c29dcc2-5a8e-49ae-804d-fac43864e65a",
+      "index": "825cff43-a867-493c-9ff4-f38784913242",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -300,11 +570,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Ten more MultiQC panels, one per FastQC or Cutadapt module: GC content, adapter contamination, duplication, length distribution, N content and overrepresented sequences. They start collapsed because each only becomes interesting once a panel above has flagged something. A tile inside a collapsed section is also never fetched, so opening this section is what triggers the requests.",
+      "body": "The remaining FastQC and Cutadapt panels: adapter content, duplication, length distribution, N content and overrepresented sequences. Open them once a panel above has flagged something.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "2568ed4a-1a98-4e4e-a0d5-ecefc47b6221",
+      "index": "cbd36ffa-4f6a-4c97-b498-4ccca0453cb4",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -344,7 +614,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "7b66652d-f2f7-43b2-87a2-c0db946c19a5",
+      "index": "42b0a423-b611-4f58-861e-c924552669cc",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -384,7 +654,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "75a3072a-33a5-4fa0-8539-64daf22c19d8",
+      "index": "f03c5a19-3efa-41e0-8527-679cb67cb852",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -424,7 +694,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "80f824f3-573a-4c42-bb35-2984142f0953",
+      "index": "e987d398-fdd1-46dd-9b40-9645d85034d8",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -464,7 +734,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "27be2684-5510-420d-92ae-e62eadbead56",
+      "index": "81fdd40e-9d35-46ec-9a9f-889bd2111df5",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -504,7 +774,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "6480b98d-e983-4088-8de0-34e2de8216ce",
+      "index": "3af83f91-5876-4440-92fa-eea3edf8da8d",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -544,7 +814,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8e6fb441-20f9-4140-a93a-849fd38343db",
+      "index": "6454fb53-34ab-44bf-a1db-d78fb52deebc",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -584,7 +854,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "e3021d84-ad1b-4b32-b0da-4f9247f9e9cf",
+      "index": "8d2eebac-68c4-45f5-bc96-41deaf4452c8",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -624,7 +894,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "47e64163-1669-484e-8628-6237cf8c4245",
+      "index": "29bb8784-9e99-4dfe-a82f-a835322350ed",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -666,7 +936,7 @@
     {
       "index": "meta-header",
       "component_type": "text",
-      "title": "Sample metadata",
+      "title": "Sample sheet",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "",
       "wf_id": {
@@ -679,217 +949,17 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Sample metadata",
+      "section": "Sample sheet",
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The sample sheet this project was ingested with, plus four summaries of it. The section is pinned to the bottom of every tab, so the cohort stays one scroll away wherever the viewer lands. The cards count the samples, show how they split across Habitat, and report how complete and how unique the two key columns are.",
+      "body": "The metadata table this project was ingested with, one row per sample and one column per annotation. It sits one collapse away at the top of every tab, and the persistent filters above read their values from it.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "meta-samples",
-      "component_type": "card",
-      "title": "Samples",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "metadata",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
-        "data_collection_tag": "metadata",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Sample metadata",
-      "aggregation": "nunique",
-      "column_name": "sample",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "top_n",
-      "breakdown_col": "habitat",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:flask",
-      "icon_color": "#45B8AC",
-      "title_color": "#45B8AC",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "meta-groups",
-      "component_type": "card",
-      "title": "Habitat groups",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "metadata",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
-        "data_collection_tag": "metadata",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Sample metadata",
-      "aggregation": "nunique",
-      "column_name": "habitat",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "donut",
-      "breakdown_col": "habitat",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:earth",
-      "icon_color": "#984EA3",
-      "title_color": "#984EA3",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "meta-filled",
-      "component_type": "card",
-      "title": "Habitat coverage",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "metadata",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
-        "data_collection_tag": "metadata",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Sample metadata",
-      "aggregation": "count",
-      "column_name": "habitat",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "completeness",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:check-decagram",
-      "icon_color": "#2E7D32",
-      "title_color": "#2E7D32",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "meta-unique",
-      "component_type": "card",
-      "title": "Sample identifiers",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "metadata",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
-        "data_collection_tag": "metadata",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Sample metadata",
-      "aggregation": "count",
-      "column_name": "sample",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "uniqueness",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:fingerprint",
-      "icon_color": "#1976D2",
-      "title_color": "#1976D2",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "e0dd6d44-1fe3-4bee-a2dc-33f34ea7b684",
+      "index": "c9d6cf26-38a9-46d8-921d-ead7e9facdbd",
       "component_type": "table",
-      "title": "Sample Metadata",
+      "title": "Sample sheet",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "metadata",
       "wf_id": {
@@ -913,7 +983,7 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Sample metadata",
+      "section": "Sample sheet",
       "columns": [],
       "page_size": 100,
       "sortable": true,
@@ -961,6 +1031,8 @@
       "group": "Where & when",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#3F51B5",
       "icon_name": "mdi:calendar-outline",
       "wf_tag": "nextflow/ampliseq"
@@ -1003,6 +1075,8 @@
       "group": "Where & when",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#3F51B5",
       "icon_name": "mdi:map-marker-outline",
       "wf_tag": "nextflow/ampliseq"
@@ -1045,6 +1119,8 @@
       "group": "Sonde readings",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:thermometer",
       "wf_tag": "nextflow/ampliseq"
@@ -1087,6 +1163,8 @@
       "group": "Sonde readings",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:flash",
       "wf_tag": "nextflow/ampliseq"
@@ -1129,6 +1207,8 @@
       "group": "Sonde readings",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:water-percent",
       "wf_tag": "nextflow/ampliseq"
@@ -1171,6 +1251,8 @@
       "group": "Sonde readings",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:molecule",
       "wf_tag": "nextflow/ampliseq"
@@ -1225,8 +1307,8 @@
       "selection_column": "sample",
       "dict_kwargs": {
         "color_discrete_map": {
-          "Groundwater": "#45B8AC",
           "Riverwater": "#348ABD",
+          "Groundwater": "#45B8AC",
           "Sediment": "#8B5A2B",
           "Soil": "#E24A33"
         }
@@ -1265,6 +1347,14 @@
       "y": 3,
       "w": 1,
       "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-mqc-sample-filter",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
       "static": false
     },
     {
@@ -1318,6 +1408,38 @@
   ],
   "right_panel_layout_data": [
     {
+      "i": "box-meta-samples",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-meta-groups",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-community-phyla",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-alpha-card-shannon",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
       "i": "box-multiqc-section-header",
       "x": 0,
       "y": 0,
@@ -1333,7 +1455,7 @@
       ]
     },
     {
-      "i": "box-888a37d7-a293-4d2b-9472-0f978fbab531",
+      "i": "box-0f4739ed-e09b-4405-9c65-c56756d6a31a",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -1348,7 +1470,7 @@
       ]
     },
     {
-      "i": "box-f14268d4-d3d6-4f40-85e8-04e49b45b8ff",
+      "i": "box-319c78e7-7a07-4fd8-957c-9d8e52224e74",
       "x": 0,
       "y": 7,
       "w": 8,
@@ -1363,7 +1485,7 @@
       ]
     },
     {
-      "i": "box-d32723a6-1e08-40d8-b65a-32b719c69521",
+      "i": "box-2bb21404-dd50-45b1-a6c4-afef2d2c0935",
       "x": 0,
       "y": 11,
       "w": 4,
@@ -1378,7 +1500,7 @@
       ]
     },
     {
-      "i": "box-3c29dcc2-5a8e-49ae-804d-fac43864e65a",
+      "i": "box-825cff43-a867-493c-9ff4-f38784913242",
       "x": 4,
       "y": 11,
       "w": 4,
@@ -1397,7 +1519,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1408,9 +1530,9 @@
       ]
     },
     {
-      "i": "box-2568ed4a-1a98-4e4e-a0d5-ecefc47b6221",
+      "i": "box-cbd36ffa-4f6a-4c97-b498-4ccca0453cb4",
       "x": 4,
-      "y": 2,
+      "y": 1,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1423,9 +1545,9 @@
       ]
     },
     {
-      "i": "box-7b66652d-f2f7-43b2-87a2-c0db946c19a5",
+      "i": "box-42b0a423-b611-4f58-861e-c924552669cc",
       "x": 0,
-      "y": 2,
+      "y": 1,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1438,9 +1560,9 @@
       ]
     },
     {
-      "i": "box-75a3072a-33a5-4fa0-8539-64daf22c19d8",
+      "i": "box-f03c5a19-3efa-41e0-8527-679cb67cb852",
       "x": 4,
-      "y": 7,
+      "y": 6,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1453,9 +1575,9 @@
       ]
     },
     {
-      "i": "box-80f824f3-573a-4c42-bb35-2984142f0953",
+      "i": "box-e987d398-fdd1-46dd-9b40-9645d85034d8",
       "x": 0,
-      "y": 7,
+      "y": 6,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1468,9 +1590,9 @@
       ]
     },
     {
-      "i": "box-27be2684-5510-420d-92ae-e62eadbead56",
+      "i": "box-81fdd40e-9d35-46ec-9a9f-889bd2111df5",
       "x": 4,
-      "y": 12,
+      "y": 11,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1483,9 +1605,9 @@
       ]
     },
     {
-      "i": "box-6480b98d-e983-4088-8de0-34e2de8216ce",
+      "i": "box-3af83f91-5876-4440-92fa-eea3edf8da8d",
       "x": 0,
-      "y": 12,
+      "y": 11,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1498,9 +1620,9 @@
       ]
     },
     {
-      "i": "box-8e6fb441-20f9-4140-a93a-849fd38343db",
+      "i": "box-6454fb53-34ab-44bf-a1db-d78fb52deebc",
       "x": 4,
-      "y": 17,
+      "y": 16,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1513,9 +1635,9 @@
       ]
     },
     {
-      "i": "box-e3021d84-ad1b-4b32-b0da-4f9247f9e9cf",
+      "i": "box-8d2eebac-68c4-45f5-bc96-41deaf4452c8",
       "x": 0,
-      "y": 17,
+      "y": 16,
       "w": 4,
       "h": 5,
       "static": false,
@@ -1528,9 +1650,9 @@
       ]
     },
     {
-      "i": "box-47e64163-1669-484e-8628-6237cf8c4245",
+      "i": "box-29bb8784-9e99-4dfe-a82f-a835322350ed",
       "x": 0,
-      "y": 22,
+      "y": 21,
       "w": 8,
       "h": 5,
       "static": false,
@@ -1547,7 +1669,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1558,41 +1680,9 @@
       ]
     },
     {
-      "i": "box-meta-samples",
+      "i": "box-c9d6cf26-38a9-46d8-921d-ead7e9facdbd",
       "x": 0,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-meta-groups",
-      "x": 2,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-meta-filled",
-      "x": 4,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-meta-unique",
-      "x": 6,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-e0dd6d44-1fe3-4bee-a2dc-33f34ea7b684",
-      "x": 0,
-      "y": 5,
+      "y": 1,
       "w": 8,
       "h": 6,
       "static": false,
@@ -1616,6 +1706,15 @@
       "pin": "top"
     },
     {
+      "name": "MultiQC report",
+      "icon": "mdi:file-document-outline",
+      "color": "orange",
+      "description": "Fallback sample list, read from the MultiQC report itself",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
       "name": "Campaign design",
       "icon": "mdi:calendar-outline",
       "color": "indigo",
@@ -1636,6 +1735,15 @@
   ],
   "grid_sections": [
     {
+      "name": "Run at a glance",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "What the run is, in four numbers, on every tab",
+      "collapsed": false,
+      "persistent": true,
+      "pin": "top"
+    },
+    {
       "name": "QC overview",
       "icon": "mdi:chart-box-outline",
       "color": "teal",
@@ -1654,7 +1762,7 @@
       "pin": "top"
     },
     {
-      "name": "Sample metadata",
+      "name": "Sample sheet",
       "icon": "mdi:table-account",
       "color": "teal",
       "description": "The sample sheet every other tab is filtered by",
@@ -1664,6 +1772,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "header",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
@@ -1675,7 +1785,7 @@
     "count": 0
   },
   "title": "nf-core/ampliseq",
-  "subtitle": "Ammer catchment reference dataset \u2014 QC, diversity, campaign and environment",
+  "subtitle": "Ammer catchment reference dataset: QC, diversity, campaign and environment",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",

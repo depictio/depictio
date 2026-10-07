@@ -3,3 +3,5 @@ id: truvari
 name: Truvari
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/truvari/bench
 biotools_url: https://bio.tools/truvari
+description: Structural variant comparison tool for VCFs.
+homepage: https://github.com/ACEnglish/truvari

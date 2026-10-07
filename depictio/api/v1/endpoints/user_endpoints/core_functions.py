@@ -263,6 +263,11 @@ async def _cleanup_expired_temporary_users() -> dict:
                     try:
                         dashboards_collection.delete_one({"_id": dashboard["_id"]})
                         dashboards_count += 1
+                        from depictio.api.v1.endpoints.comments_endpoints.cascade import (
+                            delete_threads_for_dashboards,
+                        )
+
+                        delete_threads_for_dashboards([dashboard.get("dashboard_id")])
                     except Exception as e:
                         logger.warning(f"Failed to delete dashboard {dashboard.get('_id')}: {e}")
 

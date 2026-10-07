@@ -1,0 +1,15 @@
+id: snpeff_gene_heatmap
+name: Gene burden heatmap
+mode: matrix
+description: >-
+  The genes carrying the most coding variants, as a gene by callset matrix of
+  variant counts. Clustering the columns says whether the callers separate more
+  than the sequencing depths do.
+find:
+  path_glob: "**/*_snpEff.genes.txt"
+recipe: snpeff/gene_heatmap.py
+fixture: gene_heatmap.tsv
+renders_as:
+  - { id: burden_matrix, component: advanced_viz, kind: complex_heatmap,
+      roles: {index: gene_name} }
+  - { component: table }

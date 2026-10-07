@@ -1,11 +1,11 @@
-# Oncoplot — one tab of the advanced-visualisation showcase.
+# Somatic mutation landscape: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Oncoplot'
+title: 'Somatic mutation landscape'
 subtitle: 'Sample × gene mutation matrix'
 icon: 'mdi:grid'
 icon_color: 'red'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d45'
 is_main_tab: false
 tab_order: 21
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:grid'
+tab_icon: 'mdi:stethoscope'
 tab_icon_color: 'red'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,18 +44,19 @@ components:
     vertical_alignment: top
     section: 'Mutation matrix'
     body: >
-      Samples on one axis, genes on the other, each cell coloured by the class of the
-      mutation it carries. Rows and columns are reordered so that co-occurring mutations
-      line up into blocks, which is the pattern the plot exists to surface. Filtering to one
-      mutation class shows which genes carry it.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Tumour samples on one axis, genes on the other, each cell coloured by the class of the
+      mutation it carries, with per-gene and per-sample counts in the margins. Sorting by
+      frequency (tile header) lines co-occurring mutations up into blocks and exposes mutually
+      exclusive genes. Filter to one mutation class on the left. Input: annotated somatic
+      calls (MAF) from nf-core/sarek.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-oncoplot
     index: 'onc-plot'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'oncoplot_demo'
-    title: 'Oncoplot — sample × gene mutation matrix'
+    title: 'Samples by genes, coloured by mutation class'
     description: 'Discrete heatmap by mutation type, with per-sample and per-gene mutation count strips.'
     section: 'Mutation matrix'
     viz_kind: 'oncoplot'
@@ -64,7 +65,8 @@ components:
       sample_id_col: "sample_id"
       gene_col: "gene"
       mutation_type_col: "mutation_type"
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-oncoplot-type
     index: onc-f-type

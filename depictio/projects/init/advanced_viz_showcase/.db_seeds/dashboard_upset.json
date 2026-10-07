@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The readable alternative to a five-way Venn diagram: bars count the features in each intersection, and the dot matrix underneath names which sets the intersection belongs to. Sorting by cardinality puts the largest overlaps first; sorting by degree groups the exclusives together.\n",
+      "body": "Which features are called in which of five contrasts: bars count the features in each intersection, the dot matrix below names the contrasts it spans, and the side bars give each contrast's total. Sorting and the minimum intersection size are in the tile header. The readable alternative to a five-way Venn diagram for nf-core/differentialabundance results across contrasts.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via packages/plotly-upset; Settings \u2699 tunes Sort / Min size / Colour / set-size bars. Cached by (DC, params).",
+      "description": "Set intersections as bars over a membership matrix, computed via packages/plotly-upset and cached per parameters. Sorting and minimum size sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Set overlap",
       "viz_kind": "upset_plot",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "upset_plot",
         "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
         "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8d28",
@@ -74,6 +75,7 @@
           "contrastD",
           "contrastE"
         ],
+        "set_columns_pattern": null,
         "sort_by": "cardinality",
         "sort_order": "descending",
         "min_size": 1,
@@ -125,6 +127,7 @@
       "group": "Set filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#F68B33",
       "icon_name": "mdi:form-select",
       "wf_tag": "python/advanced_viz_demo"
@@ -150,7 +153,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -163,9 +166,9 @@
     {
       "i": "box-ups-upset",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -185,8 +188,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "UpSet plot",
-  "subtitle": "Alternative to Venn diagrams for >3 sets. Server-side compute via packages/plotly-upset; cached by (DC, params, filters).",
+  "title": "Shared hits across contrasts",
+  "subtitle": "Features called per contrast, and which contrasts share them, computed on the server via packages/plotly-upset",
   "icon": "mdi:set-merge",
   "icon_color": "yellow",
   "icon_variant": "filled",
@@ -248,5 +251,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

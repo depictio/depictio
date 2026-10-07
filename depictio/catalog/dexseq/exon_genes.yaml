@@ -1,0 +1,21 @@
+id: dexseq_exon_genes
+name: Differential exon usage per gene
+mode: splicing/exon-usage
+description: >-
+  DEXSeq differential exon usage as nf-core/rnasplice's dexseq_exon route
+  writes it, summarised to one row per contrast and gene: the gene-level
+  q-value, how many exonic bins were tested and called, and the most
+  significant bin's log2 fold change, oriented treatment over control.
+find: { path_glob: "**/DEXSeqResults.*.csv" }
+recipe: dexseq/exon_genes.py
+fixture: exon_genes.tsv
+renders_as:
+  - id: exon_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: gene_id, effect_size: log2fc, significance: padj, category: direction }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: bins_significant, aggregation: sum, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }
+  - { component: card, column: abs_log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: direction }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

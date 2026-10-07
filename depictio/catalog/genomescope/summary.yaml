@@ -1,0 +1,26 @@
+id: genomescope_summary
+name: Genome profile from reads
+mode: summary
+description: >-
+  GenomeScope's fit to the read k-mer spectrum: the haploid genome length, the
+  share of it in repeats, the heterozygosity and the read error rate, each as a
+  min to max range. The haploid length is the size an assembly should approach;
+  a high heterozygosity warns that a collapsed assembly will carry duplicated
+  haplotigs, and a poor model fit that the other numbers are not to be trusted.
+find:
+  path_glob: "**/*_genomescope.txt"
+  path_glob_alt:
+    - "**/*summary.txt"
+recipe: genomescope/summary.py
+fixture: summary.tsv
+renders_as:
+  - { component: card, column: haploid_length_max, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: heterozygosity_max, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: repeat_fraction, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: model_fit_max, aggregation: min,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: read_set, y: haploid_length_max, title: Estimated haploid genome length per read set} }
+  - { component: table }

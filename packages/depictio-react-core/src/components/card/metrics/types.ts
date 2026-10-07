@@ -148,14 +148,41 @@ export interface UniquenessPayload {
 export interface BreakdownPayload {
   column: string;
   total: number;
+  /** ``count`` is the group's value (a row count, a sum, or, under a max /
+   *  average / ... hero, that aggregation per group). ``percent`` and
+   *  ``top_share`` are null when shares do not apply: gate on
+   *  ``breakdownHasShares`` before reading them. */
   top: { name: string; count: number; percent: number }[];
   top_share: number;
   unique_values: number;
-  /** Hero aggregation the per-group counts mirror ('count' / 'nunique' / 'sum'). */
+  /** Hero aggregation the per-group numbers mirror ('count', 'sum', 'nunique',
+   *  'max', 'average', ...). */
   breakdown_kind?: string;
   /** Pielou evenness of the whole distribution, 0–1. Null below two
    *  categories, where the measure is degenerate rather than meaningful. */
   evenness?: number | null;
+}
+
+/** Hero aggregations whose per-group numbers are parts of a whole. */
+const SHARE_BREAKDOWN_KINDS = new Set(['count', 'sum']);
+
+/**
+ * Whether a breakdown's groups are shares of a total (row counts or sums), so
+ * percentages, "Top 3 = 83%", composition bars and donuts mean something.
+ *
+ * Under any other hero (max, average, median, nunique...) each group carries a
+ * value in the card's own unit, and the server sends ``percent`` /
+ * ``top_share`` as null (or, for ``nunique``, as numbers that do not add up to
+ * the hero). One exception: when the breakdown column is the hero column the
+ * server counts rows per group, which are shares again.
+ */
+export function breakdownHasShares(
+  payload: { breakdown_kind?: string; column: string },
+  heroColumn?: string | null,
+): boolean {
+  const kind = (payload.breakdown_kind || 'count').toLowerCase();
+  if (SHARE_BREAKDOWN_KINDS.has(kind)) return true;
+  return Boolean(heroColumn) && heroColumn === payload.column;
 }
 
 export const isBreakdownPayload = (v: unknown): v is BreakdownPayload => {

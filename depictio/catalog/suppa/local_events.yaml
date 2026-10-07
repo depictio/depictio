@@ -1,0 +1,24 @@
+id: suppa_local_events
+name: Differential splicing of local events (SUPPA2)
+mode: splicing/events
+description: >-
+  SUPPA2 diffSplice on local events, one row per contrast and event: the
+  parsed event id (gene, type, chromosome, span, strand), the delta PSI
+  oriented treatment minus control, its empirical p-value and the
+  significance call.
+find: { path_glob: "**/*_local_diffsplice.dpsi" }
+recipe: suppa/local_events.py
+fixture: local_events.tsv
+renders_as:
+  - id: local_event_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: event_id, effect_size: dpsi, significance: pvalue, label: gene_id, category: event_type }
+  - id: local_event_types
+    component: figure
+    visu_type: histogram
+    dict_kwargs: { x: event_type, color: direction, barmode: stack }
+  - { component: card, column: event_id, aggregation: nunique, secondary_layout: donut, breakdown_col: event_type }
+  - { component: card, column: abs_dpsi, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: event_type }
+  - { component: table, row_selection_enabled: true, row_selection_column: event_id }

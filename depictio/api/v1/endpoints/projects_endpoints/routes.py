@@ -18,6 +18,7 @@ from depictio.api.v1.db import (
     runs_collection,
     users_collection,
 )
+from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_project
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
 )
@@ -49,7 +50,7 @@ projects_endpoint_router = APIRouter()
 SEED_PROJECT_IDS: tuple[str, ...] = (
     "646b0f3c1e4a2d7f8e5b8c9a",  # Iris — depictio/projects/init/iris/project.yaml
     "646b0f3c1e4a2d7f8e5b8c9d",  # Penguins — depictio/projects/init/penguins/project.yaml
-    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq 2.14.0 — depictio/projects/nf-core/ampliseq/2.14.0/project.yaml
+    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq, latest version seeded: depictio/projects/nf-core/ampliseq/2.18.0/template.yaml
     "646b0f3c1e4a2d7f8e5b8d00",  # Advanced Visualisations — depictio/projects/init/advanced_viz_showcase/project.yaml
     "746b0f3c1e4a2d7f8e5b9ca2",  # nf-core/viralrecon 3.0.0 — depictio/projects/nf-core/viralrecon/3.0.0/template.yaml
 )
@@ -131,6 +132,7 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
         )
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
+    delete_threads_for_project(project_id)
     projects_collection.delete_one({"_id": ObjectId(project_id)})
     logger.info(f"Project '{project_name}' ({project_id}) deleted with cascade.")
 

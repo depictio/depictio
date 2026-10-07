@@ -79,6 +79,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:flask",
       "icon_color": "#45B8AC",
       "title_color": "#45B8AC",
@@ -129,6 +130,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:earth",
       "icon_color": "#984EA3",
       "title_color": "#984EA3",
@@ -179,6 +181,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:map-marker-outline",
       "icon_color": "#1976D2",
       "title_color": "#1976D2",
@@ -229,6 +232,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": "sampling_date",
+      "follow_region_filter": false,
       "icon_name": "mdi:calendar-outline",
       "icon_color": "#3F51B5",
       "title_color": "#3F51B5",
@@ -309,8 +313,8 @@
       "selection_column": "sample",
       "dict_kwargs": {
         "color_discrete_map": {
-          "Groundwater": "#45B8AC",
           "Riverwater": "#348ABD",
+          "Groundwater": "#45B8AC",
           "Sediment": "#8B5A2B",
           "Soil": "#E24A33"
         }
@@ -696,6 +700,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "popover",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,

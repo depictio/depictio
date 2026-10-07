@@ -222,6 +222,41 @@ def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | 
     return pl.col(column_name).is_in(typed_values)
 
 
+#: How a single-value ``Slider`` compares the column to its value. A slider is a
+#: threshold ("keep rows at or above the value"): an equality filter keeps one
+#: exact value and wipes every neighbouring curve / row, which reads as a broken
+#: filter (review P19). Equality stays available when a component asks for it.
+SLIDER_MODES: dict[str, str] = {
+    "gte": ">=",
+    "gt": ">",
+    "lte": "<=",
+    "lt": "<",
+    "eq": "==",
+    "ne": "!=",
+}
+DEFAULT_SLIDER_MODE = "gte"
+
+
+def _slider_predicate(column_name: str, value, slider_mode: str | None) -> pl.Expr:
+    """The predicate of a single-value Slider, ``>=`` unless ``slider_mode`` says otherwise."""
+    mode = (slider_mode or DEFAULT_SLIDER_MODE).lower()
+    if mode not in SLIDER_MODES:
+        logger.warning(
+            f"Unknown slider_mode {slider_mode!r} on column {column_name!r}; "
+            f"using {DEFAULT_SLIDER_MODE!r} (valid: {', '.join(SLIDER_MODES)})"
+        )
+        mode = DEFAULT_SLIDER_MODE
+    col = pl.col(column_name)
+    return {
+        "gte": col >= value,
+        "gt": col > value,
+        "lte": col <= value,
+        "lt": col < value,
+        "eq": col == value,
+        "ne": col != value,
+    }[mode]
+
+
 def add_filter(
     filter_list: list,
     interactive_component_type: str,
@@ -230,12 +265,16 @@ def add_filter(
     min_value=None,
     max_value=None,
     dtype: pl.DataType | None = None,
+    slider_mode: str | None = None,
 ) -> None:
     """Add filter criteria to a filter list based on component type.
 
     ``dtype`` is the column's Delta dtype when the caller knows it (from the
     cached schema); it only affects categorical filters, where it enables a
     pushable predicate. Omitting it preserves the previous behaviour exactly.
+
+    ``slider_mode`` only affects ``Slider``: one of ``SLIDER_MODES`` (``gte``
+    by default, i.e. a threshold; ``eq`` restores the old equality filter).
     """
     if interactive_component_type == LINK_NO_MATCH:
         # A cross-DC link resolved to zero target values: the user's filter is
@@ -262,8 +301,9 @@ def add_filter(
             filter_list.append(pl.col(column_name).str.contains(value))
 
     elif interactive_component_type == "Slider":
-        if value:
-            filter_list.append(pl.col(column_name) == value)
+        # `is not None`, not truthiness: 0 is a real threshold / value.
+        if value is not None and value != "" and not isinstance(value, list):
+            filter_list.append(_slider_predicate(column_name, value, slider_mode))
 
     elif interactive_component_type == "RangeSlider":
         if value:
@@ -379,10 +419,12 @@ def process_metadata_and_filter(
             interactive_component_type = meta["interactive_component_type"]
             column_name = meta["column_name"]
             filter_expr = meta.get("filter_expr") or component.get("filter_expr")
+            slider_mode = meta.get("slider_mode") or component.get("slider_mode")
         else:
             interactive_component_type = component["interactive_component_type"]
             column_name = component["column_name"]
             filter_expr = component.get("filter_expr")
+            slider_mode = component.get("slider_mode")
 
         add_filter(
             filter_list,
@@ -390,6 +432,7 @@ def process_metadata_and_filter(
             column_name=column_name,
             value=component["value"],
             dtype=schema.get(column_name) if schema else None,
+            slider_mode=slider_mode,
         )
 
         if filter_expr:
@@ -404,6 +447,16 @@ def process_metadata_and_filter(
                 )
 
     return filter_list
+
+
+_GRID_OPERATOR_SLIDER_MODE = {
+    "equals": "eq",
+    "notEqual": "ne",
+    "greaterThan": "gt",
+    "greaterThanOrEqual": "gte",
+    "lessThan": "lt",
+    "lessThanOrEqual": "lte",
+}
 
 
 def convert_filter_model_to_metadata(filter_model):
@@ -448,6 +501,9 @@ def convert_filter_model_to_metadata(filter_model):
                         "metadata": {
                             "interactive_component_type": interactive_component_type,
                             "column_name": column,
+                            # Keep the grid's own operator: a Slider defaults
+                            # to a >= threshold, the grid's "equals" does not.
+                            "slider_mode": _GRID_OPERATOR_SLIDER_MODE[operator],
                         },
                         "value": value,
                     }

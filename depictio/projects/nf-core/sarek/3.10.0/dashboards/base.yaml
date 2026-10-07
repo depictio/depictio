@@ -1,0 +1,2313 @@
+version: 1
+# nf-core/sarek 3.10.0 dashboard.
+#
+# Funnel: the native MultiQC report -> how deeply the targets were covered ->
+# how much each caller called -> which callers agree -> what the calls do to
+# the transcript -> which genes carry them.
+#
+# Nothing here is a truth comparison against a benchmark callset:
+# "concordance" is agreement between callers and samples. For a truth-set
+# benchmark, nf-core/variantbenchmarking has its own template.
+#
+# The MultiQC tab holds MultiQC panels only. The pinned glance strip and the
+# Sample sheet section ride every tab. Structural-variant callers (Manta,
+# TIDDIT) call few SNPs, so every Ts/Tv tile filters `ts_tv > 0`.
+main_dashboard:
+  title: nf-core/sarek
+  subtitle: "Germline and somatic variant calling: QC, callers, consequences, genes"
+  project_tag: Sarek Germline Variant Calling
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: QC thresholds
+    icon: mdi:tune
+    color: cyan
+    description: Ts/Tv floor on the per-caller variant-call summary
+    collapsed: true
+    persistent: true
+    pin: bottom
+  - name: Glance scope
+    icon: mdi:tune
+    color: orange
+    description: Narrows the pinned glance strip to one variant caller
+  grid_sections:
+  # Pinned to the top and carried by every tab: the four numbers that size the
+  # run. Cards are legal on the MultiQC tab only inside a pinned persistent
+  # section, which is exactly what this is.
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The run in four numbers, on every tab
+    persistent: true
+    pin: top
+  - name: MultiQC general statistics
+    icon: mdi:view-dashboard-outline
+    color: blue
+    description: One row per sample, pooling the headline numbers of every module
+  - name: Read quality
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: FastQC and fastp as MultiQC reports them
+  - name: Alignment and recalibration
+    icon: mdi:chart-bar
+    color: indigo
+    description: Mapping rate, duplication, base-quality recalibration and coverage
+  - name: Variant-call QC
+    icon: mdi:check-decagram
+    color: cyan
+    description: bcftools and VCFtools summaries of the variant calls, before any per-caller comparison
+  - name: Annotation
+    icon: mdi:dna
+    color: violet
+    description: SnpEff and VEP functional-effect summaries
+  # Pinned to the top and carried by every tab: the design the whole dashboard
+  # is filtered by should be one collapse away wherever the viewer lands.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The sample hub every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  components:
+  # ------------------------------------------------------------- at a glance
+  - component_type: text
+    tag: sk-qc-intro
+    section: MultiQC general statistics
+    title: From reads to annotated calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The native MultiQC report, module by module: general statistics, read
+      quality, alignment and recalibration, the variant-call QC pooled across
+      callers, and the SnpEff and VEP annotation summaries. Everything
+      computed from the pipeline's own output files lives on the tabs after
+      this one.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sk-qc-general-stats
+    section: MultiQC general statistics
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per sample and per tool run, pooling the FastQC, fastp, samtools, mosdepth, bcftools, SnpEff and VEP headline numbers.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 5}
+
+  # ------------------------------------------------------------ read quality
+  - component_type: text
+    tag: sk-qc-reads-intro
+    section: Read quality
+    title: Raw and filtered reads
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
+      the raw libraries, and what
+      [fastp](https://github.com/OpenGene/fastp) filtered before alignment.
+      Each library carries a lane and a read-pair suffix, so a sample appears
+      here once per read.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sk-qc-fastqc-counts
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    use: multiqc/fastqc
+    title: Sequence counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-fastqc-quality
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    use: multiqc/fastqc
+    title: Per-base sequence quality
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-fastqc-gc
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    use: multiqc/fastqc
+    title: GC content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-fastp-filtered
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    use: multiqc/fastp
+    title: Reads kept after filtering
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 7, w: 4, h: 5}
+
+  # ----------------------------------------------- alignment / recalibration
+  - component_type: text
+    tag: sk-qc-align-intro
+    section: Alignment and recalibration
+    title: Mapping, duplication and base-quality recalibration
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Samtools](http://www.htslib.org) reports the mapping rate, GATK4
+      MarkDuplicates the duplication level and GATK4 BQSR how well the
+      recalibration model fit, next to
+      [mosdepth](https://github.com/brentp/mosdepth)'s coverage distribution.
+      The Cohort QC tab reads the same mosdepth output per contig and per
+      target.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sk-qc-samtools-mapped
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: Percent mapped
+    use: multiqc/samtools
+    title: Percent mapped
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-picard-dup
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    use: multiqc/picard
+    title: Duplication
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-gatk-bqsr
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: gatk
+    selected_plot: Reported Quality vs. Empirical Quality
+    use: multiqc/gatk
+    title: BQSR calibration fit
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-mosdepth-cov
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: mosdepth
+    selected_plot: Cumulative coverage distribution
+    use: multiqc/mosdepth
+    title: Cumulative coverage distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-samtools-insert
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: Insert size distribution
+    use: multiqc/samtools
+    title: Insert size distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 12, w: 8, h: 5}
+
+  # -------------------------------------------------------- variant-call QC
+  - component_type: text
+    tag: sk-qc-varqc-intro
+    section: Variant-call QC
+    title: What bcftools and VCFtools see across every caller pooled together
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [bcftools stats](https://samtools.github.io/bcftools/) and
+      [VCFtools](https://vcftools.github.io/) here pool every caller's VCF
+      into one MultiQC panel per plot. The per-caller breakdown these panels
+      cannot show is the Variant yield tab.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sk-qc-bcftools-subs
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    use: multiqc/bcftools
+    title: Variant substitution types
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-bcftools-indels
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Indel Distribution
+    use: multiqc/bcftools
+    title: Indel length distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-bcftools-depths
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant depths
+    use: multiqc/bcftools
+    title: Variant depths
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-vcftools-count
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: vcftools
+    selected_plot: TsTv by Count
+    use: multiqc/vcftools
+    title: Ts/Tv by allele count
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 7, w: 4, h: 5}
+
+  # --------------------------------------------------------------- annotation
+  - component_type: text
+    tag: sk-qc-annot-intro
+    section: Annotation
+    title: What kind of variants were called
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [SnpEff](https://pcingola.github.io/SnpEff/) and
+      [VEP](https://www.ensembl.org/info/docs/tools/vep/index.html) both
+      annotate the same calls with different vocabularies; SnpEff's impact
+      classes and VEP's SIFT/PolyPhen predictions are two lenses on the same
+      set of consequences. The Consequences and Genes tabs read SnpEff's own
+      output files rather than these panels.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sk-qc-snpeff-impact
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: snpeff
+    selected_plot: Variant Effects by Impact
+    use: multiqc/snpeff
+    title: Effects by impact
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-snpeff-region
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: snpeff
+    selected_plot: Variants by Genomic Region
+    use: multiqc/snpeff
+    title: Variants by genomic region
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-vep-general
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: vep
+    selected_plot: General Statistics
+    use: multiqc/vep
+    title: VEP general statistics
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-vep-sift
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: vep
+    selected_plot: SIFT summary
+    use: multiqc/vep
+    title: SIFT summary
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 7, w: 4, h: 5}
+
+  # ------------------------- sample sheet: the run in four numbers, every tab
+  - component_type: text
+    tag: sk-sheet-intro
+    section: Sample sheet
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample, read from the CSV manifests sarek publishes, with
+      its patient, declared sex, tumour or normal status and the callers run
+      on it. The status is the design every tab can be filtered by, next to
+      the sample picker.
+    workflow_tag: sarek
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sk-glance-card-snps
+    index: sk-glance-card-snps
+    section: Run at a glance
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    column_name: n_snps
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: SNPs called
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sk-glance-card-indels
+    index: sk-glance-card-indels
+    section: Run at a glance
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: n_indels
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Indels per callset
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sk-glance-card-depth
+    index: sk-glance-card-depth
+    section: Run at a glance
+    workflow_tag: sarek
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: status_label
+    display: {icon_name: 'mdi:test-tube', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples by status
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sk-glance-card-tstv
+    index: sk-glance-card-tstv
+    section: Run at a glance
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    aggregation: median
+    column_name: ts_tv
+    column_type: float64
+    filter_expr: "col('ts_tv') > 0"
+    secondary_layout: threshold
+    threshold_value: 1.8
+    threshold_direction: min
+    threshold_warn: 1.5
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Median Ts/Tv
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: table
+    tag: sk-sheet-table-samples
+    section: Sample sheet
+    workflow_tag: sarek
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    title: Sample hub
+    description: One row per sample, with its patient, sex, status and the callers run on it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 3}
+
+  # ---------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: sk-filter-sample
+    index: sk-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: sarek
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-filter-status
+    index: sk-status-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: sarek
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: status_label
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:account-heart-outline'}
+    placement: left
+    title: Status
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-filter-tstv
+    index: sk-tstv-range
+    section: QC thresholds
+    group: Variant-call scope
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    interactive_component_type: RangeSlider
+    column_name: ts_tv
+    column_type: float64
+    filter_expr: "col('ts_tv') > 0"
+    show_histogram: true
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Ts/Tv ratio
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  # Tab-local, not persistent: this tab's own control beside the pinned ones.
+  # It narrows the pinned glance strip and the reference table that ride it.
+  - component_type: interactive
+    tag: sk-mq-filter-caller
+    index: sk-mq-caller-filter
+    section: Glance scope
+    group: Caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    interactive_component_type: Select
+    column_name: caller
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Variant caller
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+# ============================================================================
+# Cohort QC
+# ============================================================================
+# The coverage recipes keep one mosdepth pass per sample (the recalibrated one
+# when present): sarek's duplicate-marked and recalibrated passes carry the
+# same depth. mosdepth_regions bins the per-target bed to 1 Mb windows
+# (mosdepth_windows renames them to chrom / pos) for the genome-wide navigator;
+# mosdepth_targets keeps it per target for the depth track under it, which is
+# only ever read narrowed to a region.
+#
+# Locus section: one genome_view navigator on mosdepth_windows drives three
+# tracks through the region links in template.yaml (per-target depth, the
+# calls over the {GENOME} gene lane) and through follow_region_filter (the
+# annotated VCFs read from their files). The navigator keeps the whole genome
+# and only zooms to its region; the region reaches the tracks and tables, not
+# the cards. coverage_track and genome_view never share a collection here,
+# which test_no_double_track_binding enforces.
+- title: Cohort QC
+  subtitle: How deep coverage is, contig by contig and target by target, with the calls on the same axis
+  tab_order: 2
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Coverage scope
+    icon: mdi:filter-variant
+    color: blue
+    description: Which scope of mosdepth's per-contig summary to read
+  grid_sections:
+  - name: Coverage at a glance
+    icon: mdi:counter
+    color: blue
+    description: The four numbers that size the run's coverage
+  - name: One locus, three tracks
+    icon: mdi:dna
+    color: indigo
+    description: A depth navigator driving the per-target depth, the calls over the genes and the annotated VCFs on one axis
+  - name: Depth per contig
+    icon: mdi:chart-bar
+    color: cyan
+    description: mosdepth's own per-contig summary, over the whole contig and over the targets
+  - name: Sex check
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: X against Y coverage, and the sex the ratio implies
+  components:
+  - component_type: text
+    tag: sk-cov-intro
+    section: Coverage at a glance
+    title: Coverage bounds every call
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A caller cannot report what was not sequenced, so read the depth here
+      before any caller comparison. The cards summarise the capture targets
+      (the regions bed, or the whole genome on a run without one), and the
+      per-contig section compares each whole contig with its targets.
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sk-cov-card-mean
+    index: sk-cov-card-mean
+    section: Coverage at a glance
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_summary
+    use: mosdepth/summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: mean_depth
+    column_type: float64
+    filter_expr: "(col('scope') == 'region') & (col('chrom') != 'total')"
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Target depth per contig
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  # Per-target depth over the whole exome. Cards do not read a genome_selection
+  # region, so these stay run-wide while the locus section below narrows.
+  - component_type: card
+    tag: sk-cov-card-window
+    index: sk-cov-card-window
+    section: Coverage at a glance
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_targets
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: depth
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:chart-line', icon_color: '#3949AB', title_color: '#3949AB', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Depth per capture target
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cov-card-targets
+    index: sk-cov-card-targets
+    section: Coverage at a glance
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_targets
+    aggregation: count
+    column_name: pos
+    column_type: int64
+    filter_expr: "col('depth') < 20"
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
+    display: {icon_name: 'mdi:map-marker-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Targets under 20x
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cov-card-xy
+    index: sk-cov-card-xy
+    section: Coverage at a glance
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_xy_sex_check
+    use: mosdepth/xy_sex_check
+    aggregation: median
+    column_name: xy_ratio
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: X to Y ratio
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: sk-cov-track-intro
+    section: One locus, three tracks
+    title: One locus, three tracks
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The section opens on a default region, the second megabase of chromosome
+      1; type a locus or a gene in the navigator header, or brush its axis,
+      and the depth, calls and VCF tracks below follow. The navigator keeps
+      the whole genome, so zooming out on it returns to the run-wide view.
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_windows
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-cov-av-genome
+    index: sk-cov-av-genome
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_windows
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      controls_placement: header
+      chr_col: chrom
+      pos_col: pos
+      end_col: end
+      score_col: depth
+      feature_col: sample
+      mark: rect
+      assembly: '{GENOME}'
+      score_title: mean depth
+      opacity: 0.8
+      default_region: "chr1:1,000,000-2,000,000"
+      region_filter_enabled: true
+    title: Depth navigator, 1 Mb windows
+    description: Target-length-weighted mean depth per megabase window over the whole genome. The locus field in the header (a region or a gene symbol) and a brush on this axis move every track below.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: sk-cov-av-track
+    index: sk-cov-av-track
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_targets
+    viz_kind: coverage_track
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chrom
+      position_col: pos
+      end_col: end
+      value_col: depth
+      sample_col: sample
+      view_mode: facet
+      color_by: sample
+      mark: rect
+      smoothing_window: 0
+      show_annotation_lane: false
+      view: track
+      views: [track]
+    title: Depth per capture target
+    description: One lane per sample, one bar per capture target at its mean depth, inside the navigator's region. The gaps are the genome between targets, not drop-outs.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 8, h: 4}
+  - component_type: advanced_viz
+    tag: sk-cov-av-calls
+    index: sk-cov-av-calls
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variant_genome_view
+    config:
+      mark: point
+      assembly: '{GENOME}'
+      annotation: "{GENOME}"
+      score_title: variant allele fraction
+      point_size: 5
+      facet_by_sample: true
+      max_facets: 5
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: Calls over the genes, one lane per caller
+    description: Every call in the region at its allele fraction, one lane per caller, over the bundled gene lane. Heterozygous calls sit near 0.5, homozygous ones near 1.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: sk-cov-av-vcf
+    index: sk-cov-av-vcf
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: snpeff_vcf_files
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      source: file
+      chr_col: chrom
+      pos_col: pos
+      assembly: '{GENOME}'
+      point_size: 6
+      file_max_lanes: 8
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: The annotated VCFs, read from the files
+    description: The snpEff-annotated VCF of each callset, range-read by the browser through its tabix index for the window in view, one lane per callset. It starts fetching below 1 Mb, which the default region already is.
+    title_size: h3
+    layout: {x: 0, y: 14, w: 8, h: 5}
+
+  - component_type: text
+    tag: sk-cov-contig-intro
+    section: Depth per contig
+    title: Whole contig against capture targets
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      mosdepth reports each contig twice when it runs with a capture bed: over
+      the whole contig, and over the targets on it, where the callers read
+      their depth. The picker in the left panel opens on the targets.
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-cov-fig-contig
+    section: Depth per contig
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_summary
+    use: mosdepth/summary
+    visu_type: bar
+    dict_kwargs: {x: chrom, y: mean_depth, color: sample, barmode: group, facet_row: scope}
+    title: Mean depth per contig
+    description: One bar per sample and contig, one panel per scope. The run total is mosdepth's own roll-up row.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: sk-cov-table-contig
+    section: Depth per contig
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_summary
+    use: mosdepth/summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Per-contig coverage summary
+    description: Mean, minimum and maximum depth per sample, contig and scope.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: text
+    tag: sk-cov-sex-intro
+    section: Sex check
+    title: X against Y coverage
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A sample with one X and one Y has X and Y depths of the same order,
+      while two X and no Y push the ratio into the tens. The label is a
+      heuristic read of that ratio, not a genotype call.
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_xy_sex_check
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-cov-av-sex
+    index: sk-cov-av-sex
+    section: Sex check
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_xy_sex_check
+    use: mosdepth/sex_check_scatter
+    config:
+      x_title: chromosome X mean depth
+      y_title: chromosome Y mean depth
+      reference_line: diagonal
+      marker_size: 14
+      selection_enabled: true
+      selection_column: sample
+    title: X depth against Y depth
+    description: One point per sample. A point far above the diagonal is a sample with two X chromosomes and no Y.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: sk-cov-table-sex
+    section: Sex check
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_xy_sex_check
+    use: mosdepth/xy_sex_check
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: X and Y coverage per sample
+    description: X and Y depth, their ratio and the sex it implies, per sample.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 3}
+
+
+  - component_type: interactive
+    tag: sk-cov-filter-scope
+    index: sk-cov-scope-filter
+    section: Coverage scope
+    group: Coverage scope
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_summary
+    interactive_component_type: Select
+    column_name: scope
+    column_type: object
+    default_value: region
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Contig or targets
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+# ============================================================================
+# Variant yield
+# ============================================================================
+# Everything the callers' own summary reports carry, compared caller
+# against caller: record counts and Ts/Tv from bcftools stats, the FILTER
+# partition and the quality sweep from VCFtools, and the distribution blocks
+# bcftools writes but no MultiQC panel breaks out per caller.
+- title: Variant yield
+  subtitle: How much each caller called, and what its own filters kept
+  tab_order: 3
+  tab_icon: mdi:dna
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Caller scope
+    icon: mdi:filter-variant
+    color: grape
+    description: Which caller and which FILTER partition to keep in view
+  - name: Distribution scope
+    icon: mdi:tune
+    color: violet
+    description: Which bcftools block to read
+  grid_sections:
+  - name: Caller yield
+    icon: mdi:counter
+    color: grape
+    description: MNPs, multiallelic sites, FILTER partitions and zygosity, across callers
+  - name: SNPs and indels by caller
+    icon: mdi:chart-bar
+    color: indigo
+    description: Every caller's record counts side by side
+  - name: Mutation spectra
+    icon: mdi:chart-bar
+    color: violet
+    description: The substitution classes behind each caller's Ts/Tv, and its indel lengths, as shares of its own calls
+  - name: Callset QC profile
+    icon: mdi:chart-timeline-variant
+    color: blue
+    description: Eight QC numbers per callset on one plot, one line per sample and caller
+  - name: Filters and what they cost
+    icon: mdi:filter-variant
+    color: orange
+    description: How each caller's own FILTER column partitions its calls
+  - name: Quality calibration
+    icon: mdi:chart-line
+    color: red
+    description: Where each caller's quality score stops separating variants from noise
+  - name: Distributions
+    icon: mdi:chart-bell-curve
+    color: cyan
+    description: The indel-length, substitution, depth and allele-frequency blocks of bcftools stats
+  - name: Variant tables
+    icon: mdi:table
+    color: gray
+    description: The rows behind the panels on this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: sk-vc-intro
+    section: Caller yield
+    title: Each caller's own reports, side by side
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every panel here reads the caller's own bcftools stats and VCFtools
+      reports, compared caller against caller. SNP and indel totals ride the
+      pinned strip, and structural-variant callers, which call few SNPs, are
+      left out of every Ts/Tv panel.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sk-vc-card-snps
+    index: sk-vc-card-snps
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    column_name: n_mnps
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: MNPs called
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-vc-card-indels
+    index: sk-vc-card-indels
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    column_name: n_multiallelic_sites
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:call-split', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Multiallelic sites
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-vc-card-pass
+    index: sk-vc-card-pass
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: vcftools_filter_summary
+    use: vcftools/filter_summary
+    aggregation: sum
+    column_name: n_variants
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: filter_label
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Calls by FILTER
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-vc-card-hethom
+    index: sk-vc-card-hethom
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: callset_qc
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: het_hom_ratio
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Het to hom ratio per callset
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: sk-vc-counts-intro
+    section: SNPs and indels by caller
+    title: Record counts, caller by caller
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      SNP and indel counts per caller, one bar per sample. MNPs are counted
+      apart from indels, so a caller's two bars need not add up to its record
+      total.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-vc-fig-snps
+    section: SNPs and indels by caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: n_snps, color: sample, barmode: group}
+    title: SNPs called per caller
+    description: One bar per sample.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: figure
+    tag: sk-vc-fig-indels
+    section: SNPs and indels by caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: n_indels, color: sample, barmode: group}
+    title: Indels called per caller
+    description: One bar per sample. MNP calls are counted apart from indels.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 6}
+
+  - component_type: text
+    tag: sk-vc-spectra-intro
+    section: Mutation spectra
+    title: Ts/Tv drawn as the bars it is made of
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each callset is normalised to its own total, so the bars compare shapes,
+      not yields: C to T and T to C are the transitions, and a caller whose
+      transversion bars rise is the one with the lower Ts/Tv. Indels read left
+      to right from deletions to insertions.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_substitution_spectrum
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-vc-fig-sbs
+    section: Mutation spectra
+    workflow_tag: sarek
+    data_collection_tag: bcftools_substitution_spectrum
+    visu_type: bar
+    dict_kwargs: {x: substitution_class, y: fraction, color: callset, barmode: group}
+    title: Substitution spectrum, six pyrimidine classes
+    description: Share of each callset's SNVs per class, strand-folded onto the pyrimidine reference. C to T and T to C are transitions, the other four transversions.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: figure
+    tag: sk-vc-fig-indel-length
+    section: Mutation spectra
+    workflow_tag: sarek
+    data_collection_tag: bcftools_indel_spectrum
+    visu_type: bar
+    dict_kwargs: {x: length, y: fraction, color: callset, barmode: group}
+    title: Indel length spectrum, deletions negative
+    description: Share of each callset's indels at each length within 20 bp. Longer events, such as a structural-variant caller's, fall outside the window.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: text
+    tag: sk-vc-profile-intro
+    section: Callset QC profile
+    title: Eight QC numbers, one line per callset
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One polyline per callset across record count, SNP fraction, Ts/Tv,
+      multiallelic share, PASS share, het to hom ratio, median depth and
+      median heterozygous allele fraction; brush an axis to keep the callsets
+      inside a range. Callsets without SNPs are left out.
+    workflow_tag: sarek
+    data_collection_tag: callset_qc
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-vc-av-profile
+    index: sk-vc-av-profile
+    section: Callset QC profile
+    workflow_tag: sarek
+    data_collection_tag: callset_qc
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      controls_placement: header
+      sample_col: callset
+      group_col: caller
+      scale: minmax
+      metric_cols: [n_records, snp_fraction, ts_tv, multiallelic_pct, pass_pct, het_hom_ratio, median_dp, median_het_vaf]
+    title: Callset QC profile
+    description: Each axis is rescaled so the axes are comparable while the tick labels keep their units. Colour is the caller.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+
+  - component_type: text
+    tag: sk-vc-filter-intro
+    section: Filters and what they cost
+    title: What each caller threw away
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A caller's FILTER column is its own judgement on its own calls, and the
+      table gives every partition its Ts/Tv. A partition whose ratio sits far
+      below the PASS one is a bucket of noise the caller was right to drop.
+    workflow_tag: sarek
+    data_collection_tag: vcftools_filter_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-vc-fig-filter
+    section: Filters and what they cost
+    workflow_tag: sarek
+    data_collection_tag: vcftools_filter_summary
+    use: vcftools/filter_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: n_variants, color: filter_label, barmode: stack}
+    title: Calls per FILTER partition
+    description: The height of a bar is everything the caller wrote; the PASS slice is what it stands behind.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: sk-vc-table-filter
+    section: Filters and what they cost
+    workflow_tag: sarek
+    data_collection_tag: vcftools_filter_summary
+    use: vcftools/filter_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: FILTER breakdown per caller
+    description: Calls, transitions, transversions and their ratio, one row per sample, caller and FILTER value.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: text
+    tag: sk-vc-qual-intro
+    section: Quality calibration
+    title: Where a caller's quality score stops meaning anything
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each curve is the Ts/Tv of the calls above a rising quality floor: a
+      well-calibrated caller climbs toward the ratio its assay expects and
+      then flattens. Where it flattens is the floor beyond which a stricter
+      threshold only costs sensitivity.
+    workflow_tag: sarek
+    data_collection_tag: vcftools_tstv_qual
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-vc-av-qual
+    index: sk-vc-av-qual
+    section: Quality calibration
+    workflow_tag: sarek
+    data_collection_tag: vcftools_tstv_qual
+    use: vcftools/tstv_quality_sweep
+    config:
+      x_title: quality floor
+      y_title: Ts/Tv above the floor
+    title: Ts/Tv against the quality floor
+    description: One curve per sample and caller, decimated to 200 steps. The callers use different quality scales, so read the shape rather than the x position.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  - component_type: text
+    tag: sk-vc-dist-intro
+    section: Distributions
+    title: The blocks bcftools writes and no panel breaks out per caller
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One long table holds the indel-length, substitution, depth, allele
+      frequency and singleton blocks of every caller's bcftools stats report.
+      The picker in the left panel opens on the depth block; the quality
+      question is the calibration section above.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_sections
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-vc-fig-dist
+    section: Distributions
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_sections
+    use: bcftools/stats_sections
+    visu_type: bar
+    dict_kwargs: {x: bin, y: count, color: caller, barmode: group}
+    title: The chosen distribution, caller by caller
+    description: The numeric blocks plot against their bin; the substitution and singleton blocks carry a label instead and read in the table below.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: sk-vc-table-dist
+    section: Distributions
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_sections
+    use: bcftools/stats_sections
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: bcftools stats distributions
+    description: One row per sample, caller, block and bin.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 7}
+
+  - component_type: text
+    tag: sk-vc-tables-intro
+    section: Variant tables
+    title: The rows behind the panels above
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Both tables are filtered by the sample and caller pickers in the left
+      panel and by the Ts/Tv floor pinned at the bottom of every tab.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: sk-vc-table-summary
+    section: Variant tables
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    row_selection_enabled: true
+    row_selection_column: caller
+    title: Per-caller variant counts
+    description: SNPs, indels, MNPs, others and multiallelic sites, one row per sample and caller.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 5}
+  - component_type: table
+    tag: sk-vc-table-tstv
+    section: Variant tables
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    row_selection_enabled: true
+    row_selection_column: caller
+    title: Per-caller Ts/Tv
+    description: Transitions, transversions and their ratio, one row per sample and caller.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 7, w: 8, h: 5}
+
+  - component_type: interactive
+    tag: sk-vc-filter-caller
+    index: sk-vc-caller-filter
+    section: Caller scope
+    group: Callers
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Caller
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-vc-filter-section
+    index: sk-vc-section-filter
+    section: Distribution scope
+    group: Distributions
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_sections
+    interactive_component_type: Select
+    column_name: section
+    column_type: object
+    default_value: depth
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: bcftools block
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-vc-filter-filterlabel
+    index: sk-vc-filterlabel-filter
+    section: Caller scope
+    group: Callers
+    workflow_tag: sarek
+    data_collection_tag: vcftools_filter_summary
+    interactive_component_type: MultiSelect
+    column_name: filter_label
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:filter-variant'}
+    placement: left
+    title: FILTER value
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Caller concordance
+# ============================================================================
+# The first tab that reads the VCFs themselves. One row per call, so the
+# comparison is per variant rather than per count: which callsets claim the
+# same locus and allele, and which genes they agree are hit.
+- title: Caller concordance
+  subtitle: Which calls the callers share, and where they differ
+  tab_order: 4
+  tab_icon: mdi:set-merge
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Call scope
+    icon: mdi:filter-variant
+    color: teal
+    description: Which caller, which kind of variant and which contig to keep in view
+  grid_sections:
+  - name: Concordance at a glance
+    icon: mdi:counter
+    color: teal
+    description: How many calls each caller made, and what they look like
+  - name: Which callsets agree
+    icon: mdi:set-merge
+    color: green
+    description: Set intersections over variants and over genes
+  - name: Depth sensitivity
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Allele fraction against read depth, the plane a germline callset is read on
+  - name: Calls along the genome
+    icon: mdi:chart-line
+    color: indigo
+    description: Where the calls fall, and how dense they are
+  - name: Call table
+    icon: mdi:table
+    color: gray
+    description: The rows behind the panels on this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: sk-cc-intro
+    section: Concordance at a glance
+    title: Agreement between callers, not truth
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A call present in one callset and absent from another is a sensitivity
+      difference between callers or samples, not a verdict on truth. For a
+      benchmark against a truth set, run nf-core/variantbenchmarking.
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sk-cc-card-calls
+    index: sk-cc-card-calls
+    section: Concordance at a glance
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Calls read from the VCFs
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cc-card-type
+    index: sk-cc-card-type
+    section: Concordance at a glance
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: variant_type
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#43A047', title_color: '#43A047', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Calls by type
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cc-card-vaf
+    index: sk-cc-card-vaf
+    section: Concordance at a glance
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variants
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: vaf
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Allele fraction
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cc-card-dp
+    index: sk-cc-card-dp
+    section: Concordance at a glance
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variants
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: dp
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#3949AB', title_color: '#3949AB', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Depth at the call
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: sk-cc-upset-intro
+    section: Which callsets agree
+    title: Two ways of asking the same question
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The first plot counts PASS calls that match on contig, position and
+      allele, so two callers that left-align the same indel differently
+      disagree there; the second asks only whether a gene carries a coding
+      variant, which survives such differences. Both sets are fixed: the
+      pickers in the left panel do not narrow them.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_variant_upset
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-cc-av-variant-upset
+    index: sk-cc-av-variant-upset
+    section: Which callsets agree
+    workflow_tag: sarek
+    data_collection_tag: snpeff_variant_upset
+    use: snpeff/callset_variant_overlap
+    config:
+      sort_by: cardinality
+      sort_order: descending
+      min_size: 50
+    title: PASS calls shared between callsets
+    description: One set per caller and sample. The tallest bars are the calls every callset agrees on; the bars beside them are what one caller or one sample keeps alone.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+  - component_type: advanced_viz
+    tag: sk-cc-av-gene-upset
+    index: sk-cc-av-gene-upset
+    section: Which callsets agree
+    workflow_tag: sarek
+    data_collection_tag: snpeff_gene_upset
+    use: snpeff/caller_gene_overlap
+    config:
+      sort_by: cardinality
+      sort_order: descending
+      min_size: 5
+    title: Genes hit by a coding variant, shared between callers
+    description: One set per caller, over the genes carrying at least one HIGH or MODERATE variant. Agreement here survives differences in how callers write the same variant.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 9}
+
+  - component_type: text
+    tag: sk-cc-vaf-intro
+    section: Depth sensitivity
+    title: Allele fraction against read depth
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A clean diploid callset stacks on two bands, near 0.5 for heterozygous
+      calls and near 1.0 for homozygous ones. Points off those bands at low
+      depth are where a caller is guessing.
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-cc-av-vaf
+    index: sk-cc-av-vaf
+    section: Depth sensitivity
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/vaf_against_depth
+    config:
+      controls_placement: header
+      x_title: read depth at the call
+      y_title: variant allele fraction
+      log_x: true
+      marker_size: 4
+      reference_line: horizontal
+      reference_value: 0.5
+      density: true
+      density_bins: 40
+    title: Allele fraction against depth, as a density
+    description: The calls binned on depth (log axis) and allele fraction, from the same row sample the scatter draws, so the heterozygous band at 0.5 and the homozygous band at 1 read as ridges rather than as a solid blob. The line marks the heterozygous expectation.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: sk-cc-fig-vaf
+    section: Depth sensitivity
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variants
+    visu_type: histogram
+    dict_kwargs: {x: vaf, color: caller}
+    title: Allele-fraction distribution per caller
+    description: The same calls as a histogram. A caller with a heavy left tail is keeping low-fraction calls the others filtered.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 6}
+
+  - component_type: text
+    tag: sk-cc-genome-intro
+    section: Calls along the genome
+    title: Where the calls fall
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      On a targeted run the calls cluster on the capture targets, so this is a
+      density read: the dense stretches are gene-rich targets, the empty ones
+      the genome between them. To see the calls themselves at a locus, use the
+      Cohort QC locus section.
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-cc-av-rainfall
+    index: sk-cc-av-rainfall
+    section: Calls along the genome
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variant_rainfall
+    config:
+      mode: rainfall
+      rainfall_class_col: variant_type
+      marker_size_below: 3
+      selection_enabled: true
+      selection_column: variant_key
+    title: Rainfall, distance to the previous call
+    description: One point per call at its position, height is log10 of the distance to the previous call on the same contig, colour is the variant type. On a germline callset, clusters of short distances are gene-dense targets, not kataegis.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  - component_type: text
+    tag: sk-cc-table-intro
+    section: Call table
+    title: The calls themselves
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per call as the caller wrote it, filtered by every picker on this
+      tab. The annotated twin of this table, with gene and consequence, is on
+      the Consequences tab.
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: sk-cc-table-calls
+    section: Call table
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variants
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    title: Variant calls
+    description: Locus, allele, quality, FILTER, genotype, depth and allele fraction, one row per call and caller.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  - component_type: interactive
+    tag: sk-cc-filter-caller
+    index: sk-cc-caller-filter
+    section: Call scope
+    group: Call scope
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
+    placement: left
+    title: Caller
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cc-filter-type
+    index: sk-cc-type-filter
+    section: Call scope
+    group: Call scope
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display: {title_size: md, custom_color: '#43A047', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Variant type
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cc-filter-chrom
+    index: sk-cc-chrom-filter
+    section: Call scope
+    group: Call scope
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: chrom
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:map-marker-outline'}
+    placement: left
+    title: Contig
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cc-filter-dp
+    index: sk-cc-dp-filter
+    section: Call scope
+    group: Call scope
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    interactive_component_type: RangeSlider
+    column_name: dp
+    column_type: int64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Depth at the call
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+# ============================================================================
+# Consequences
+# ============================================================================
+# What the calls do to the transcript, from two angles: SnpEff's own CSV
+# summary (the counts it publishes) and the annotated VCF (one row per call,
+# so the same composition can be filtered by depth, quality or contig).
+- title: Consequences
+  subtitle: "What SnpEff makes of the calls: impact classes, consequence terms and genomic regions"
+  tab_order: 5
+  tab_icon: mdi:chart-donut
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Composition scope
+    icon: mdi:filter-variant
+    color: orange
+    description: Which SnpEff section and which caller to read
+  - name: Impact scope
+    icon: mdi:tune
+    color: red
+    description: Which impact class and consequence to keep in the per-call panels
+  grid_sections:
+  - name: Consequences at a glance
+    icon: mdi:counter
+    color: orange
+    description: How the calls distribute over impact classes and regions
+  - name: What kind of variants
+    icon: mdi:chart-bar
+    color: yellow
+    description: SnpEff's own counts, section by section
+  - name: Impact per call
+    icon: mdi:chart-donut
+    color: red
+    description: The same composition computed on the annotated calls, filterable by depth and quality; click a call in the scatter to read its record beside it
+  - name: Annotated calls
+    icon: mdi:table
+    color: gray
+    description: One row per annotated call
+    collapsed: true
+  components:
+  - component_type: text
+    tag: sk-cs-intro
+    section: Consequences at a glance
+    title: Two readings of the same annotations
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      snpEff publishes a summary of what it annotated and writes the
+      annotation into the VCF: the sections below read the summary, and the
+      panels after them recompute the same composition from the calls, which
+      is what makes it follow the caller, depth and contig pickers.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_csv_stats
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sk-cs-card-impact
+    index: sk-cs-card-impact
+    section: Consequences at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/impact_composition
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: impact
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Calls by impact
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cs-card-consequence
+    index: sk-cs-card-consequence
+    section: Consequences at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/ann_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: consequence
+    top_n_count: 4
+    display: {icon_name: 'mdi:dna', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Most common consequence
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cs-card-high
+    index: sk-cs-card-high
+    section: Consequences at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/ann_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    filter_expr: "col('impact') == 'HIGH'"
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:alert-outline', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: HIGH impact calls
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-cs-card-genes
+    index: sk-cs-card-genes
+    section: Consequences at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/ann_variants
+    aggregation: nunique
+    column_name: gene
+    column_type: object
+    filter_expr: "(col('impact') == 'HIGH') | (col('impact') == 'MODERATE')"
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes with a coding call
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: sk-cs-sections-intro
+    section: What kind of variants
+    title: SnpEff's own counts
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Impact classes, functional classes, consequence terms, genomic regions,
+      variant types and zygosity, one section at a time. The zygosity section
+      reports counts only, so its percent column is empty by design.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_csv_stats
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-cs-fig-sections
+    section: What kind of variants
+    workflow_tag: sarek
+    data_collection_tag: snpeff_csv_stats
+    use: snpeff/composition_bars
+    visu_type: bar
+    dict_kwargs: {x: category, y: count, color: caller, barmode: group}
+    title: The chosen section, caller by caller
+    description: Pick a section in the left panel. The gap between two callers on the same class is where their annotations disagree.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: table
+    tag: sk-cs-table-sections
+    section: What kind of variants
+    workflow_tag: sarek
+    data_collection_tag: snpeff_csv_stats
+    use: snpeff/csv_stats
+    row_selection_enabled: true
+    row_selection_column: caller
+    title: SnpEff composition sections
+    description: One row per sample, caller, section and class, with the count and its share of the section.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 7}
+
+  - component_type: text
+    tag: sk-cs-impact-intro
+    section: Impact per call
+    title: The same composition, recomputed on the calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every call carries snpEff's most severe annotation for it, so this
+      composition answers to the pickers the published summary cannot. Click a
+      call in the scatter to open it in the variant record beside it.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-cs-av-impact
+    index: sk-cs-av-impact
+    section: Impact per call
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/annotated_vaf_against_depth
+    config:
+      controls_placement: header
+      x_title: read depth at the call
+      y_title: variant allele fraction
+      log_x: true
+      marker_size: 4
+      selection_enabled: true
+      selection_column: variant_key
+      legend_pos: bottom
+    title: Allele fraction against depth, coloured by impact
+    description: One point per annotated call. A HIGH-impact call at low depth and low allele fraction is the one to distrust. Click or lasso a point to read it in the record beside it.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: sk-cs-av-record
+    index: sk-cs-av-record
+    section: Impact per call
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: sk-cs-av-impact
+      id_col: variant_key
+      title_col: gene
+      selection_source: any
+      sections:
+        Locus: [chrom, pos, ref, alt, variant_type]
+        Call: [sample, caller, filter_status, gt, qual, dp, vaf]
+        Consequence: [gene, gene_id, impact, consequence, hgvs_p, aa_pos]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    title: Variant record
+    description: The call picked in the scatter beside it as a fact panel, one card per callset that made it, with the gene linked to Ensembl. It stays empty until a call is picked.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 9}
+
+  - component_type: text
+    tag: sk-cs-calls-intro
+    section: Annotated calls
+    title: One row per annotated call
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Everything the call table on the concordance tab carries, plus the gene,
+      the impact class, the consequence term and the protein change SnpEff
+      assigned to it.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: sk-cs-table-calls
+    section: Annotated calls
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/ann_variants
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    title: Annotated variant calls
+    description: Locus, allele, depth, allele fraction, gene, impact, consequence and protein change.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  - component_type: interactive
+    tag: sk-cs-filter-section
+    index: sk-cs-section-filter
+    section: Composition scope
+    group: Composition
+    workflow_tag: sarek
+    data_collection_tag: snpeff_csv_stats
+    interactive_component_type: Select
+    column_name: section
+    column_type: object
+    default_value: impact
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: SnpEff section
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cs-filter-caller
+    index: sk-cs-caller-filter
+    section: Composition scope
+    group: Composition
+    workflow_tag: sarek
+    data_collection_tag: snpeff_csv_stats
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display: {title_size: md, custom_color: '#F9A825', icon_name: 'mdi:dna'}
+    placement: left
+    title: Caller
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cs-filter-impact
+    index: sk-cs-impact-filter
+    section: Impact scope
+    group: Impact
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    interactive_component_type: MultiSelect
+    column_name: impact
+    column_type: object
+    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:alert-outline'}
+    placement: left
+    title: Impact class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cs-filter-consequence
+    index: sk-cs-consequence-filter
+    section: Impact scope
+    group: Impact
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    interactive_component_type: MultiSelect
+    column_name: consequence
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Consequence
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Genes
+# ============================================================================
+# The gene-level view, from SnpEff's per-gene effect table and from the protein
+# coordinates in the annotated VCF. This is where a reader stops asking about
+# the run and starts asking about a gene.
+- title: Genes
+  subtitle: Which genes carry the calls, how the callsets differ on them, and where the variants sit on the protein
+  tab_order: 6
+  tab_icon: mdi:dna
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Gene scope
+    icon: mdi:filter-variant
+    color: pink
+    description: Which biotype and which caller to keep in the burden table and the lollipop
+  - name: Protein scope
+    icon: mdi:tune
+    color: violet
+    description: Which impact class to keep on the lollipop
+  grid_sections:
+  - name: Genes at a glance
+    icon: mdi:counter
+    color: pink
+    description: How the variant burden distributes over genes
+  - name: Burden across callsets
+    icon: mdi:relation-many-to-many
+    color: violet
+    description: Do the callers separate more than the depths do
+  - name: Along the protein
+    icon: mdi:chart-timeline-variant
+    color: indigo
+    description: Coding variants at their amino-acid position
+  - name: Gene table
+    icon: mdi:table
+    color: gray
+    description: The per-gene burden behind the panels on this tab
+    collapsed: true
+  components:
+  - component_type: text
+    tag: sk-gn-intro
+    section: Genes at a glance
+    title: From a callset to a gene list
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      snpEff counts, for every gene, how many variants of each impact class a
+      callset put on it. On a germline run the top of that list is usually
+      long, repetitive, poorly mappable genes, so a high burden is a
+      mappability signal before it is a biological one.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: sk-gn-card-burden
+    index: sk-gn-card-burden
+    section: Genes at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    use: snpeff/gene_burden_top
+    aggregation: sum
+    column_name: n_variants
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: gene_name
+    top_n_count: 5
+    display: {icon_name: 'mdi:counter', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Variants on genes
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-gn-card-high
+    index: sk-gn-card-high
+    section: Genes at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    use: snpeff/genes
+    aggregation: sum
+    column_name: n_high
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:alert-outline', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: HIGH impact variants
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-gn-card-coding
+    index: sk-gn-card-coding
+    section: Genes at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    use: snpeff/genes
+    aggregation: sum
+    column_name: n_moderate
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:alert-circle-outline', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: MODERATE impact variants
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: sk-gn-card-lolli
+    index: sk-gn-card-lolli
+    section: Genes at a glance
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/protein_lollipop
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: gene
+    top_n_count: 5
+    display: {icon_name: 'mdi:chart-timeline-variant', icon_color: '#3949AB', title_color: '#3949AB', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Variants with a protein position
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+
+  - component_type: text
+    tag: sk-gn-heat-intro
+    section: Burden across callsets
+    title: Which genes carry the burden, callset by callset
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The genes carrying the most coding variants as a gene by callset matrix
+      of counts, clustered on both axes: callsets that cluster by caller
+      rather than by sample mean the caller shapes the gene list more than the
+      sample does. The matrix is fixed, the pickers in the left panel do not
+      narrow it.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_gene_heatmap
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-gn-av-heat
+    index: sk-gn-av-heat
+    section: Burden across callsets
+    workflow_tag: sarek
+    data_collection_tag: snpeff_gene_heatmap
+    use: snpeff/burden_matrix
+    title: Variant burden, gene against callset
+    description: The genes carrying the most coding variants; columns are callsets (sample and caller).
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+
+  - component_type: text
+    tag: sk-gn-lolli-intro
+    section: Along the protein
+    title: Where on the protein the variants sit
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Only variants whose protein change snpEff could compute appear here, at
+      their amino-acid position. Several callsets stacking a variant at the
+      same residue is a call they agree on; a lone stem is one caller's own.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-gn-av-lolli
+    index: sk-gn-av-lolli
+    section: Along the protein
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/coding_variant_needles
+    config:
+      max_subplot_genes: 4
+      point_size: 8
+      scale_points_by_effect: true
+    title: Coding variants along the protein
+    description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Above four genes the tile switches to a single-gene picker.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: table
+    tag: sk-gn-table-lolli
+    section: Along the protein
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/protein_lollipop
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    title: Coding variants with a protein position
+    description: Gene, amino-acid position, impact, consequence and protein change, one row per call.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+  - component_type: text
+    tag: sk-gn-table-intro
+    section: Gene table
+    title: The per-gene burden behind the panels
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per gene and callset, with the four impact counts summed over the
+      gene's transcripts. Pick a gene here and the lollipop above opens on it.
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: sk-gn-table-genes
+    section: Gene table
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    use: snpeff/genes
+    row_selection_enabled: true
+    row_selection_column: gene_name
+    title: Per-gene variant burden
+    description: Gene, biotype and the HIGH, MODERATE, LOW and MODIFIER counts, one row per gene and callset.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
+  - component_type: interactive
+    tag: sk-gn-filter-biotype
+    index: sk-gn-biotype-filter
+    section: Gene scope
+    group: Gene scope
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    interactive_component_type: MultiSelect
+    column_name: biotype
+    column_type: object
+    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Biotype
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-gn-filter-caller
+    index: sk-gn-caller-filter
+    section: Gene scope
+    group: Gene scope
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Caller
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-gn-filter-impact
+    index: sk-gn-impact-filter
+    section: Protein scope
+    group: Protein scope
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    interactive_component_type: MultiSelect
+    column_name: impact
+    column_type: object
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:alert-outline'}
+    placement: left
+    title: Impact class
+    layout: {x: 0, y: 0, w: 1, h: 3}

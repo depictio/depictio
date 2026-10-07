@@ -1,7 +1,7 @@
 # nf-core/taxprofiler 2.0.1: Depictio dashboards
 
 This template turns the output of [nf-core/taxprofiler](https://nf-co.re/taxprofiler) 2.0.1
-into a single four-tab Depictio dashboard. taxprofiler is a benchmarking pipeline as much as a
+into a single five-tab Depictio dashboard. taxprofiler is a benchmarking pipeline as much as a
 profiling one: it takes one set of reads, runs it through as many taxonomic classifiers and
 reference databases as you ask for, and standardises every result with
 [taxpasta](https://taxpasta.readthedocs.io) so the answers can be put side by side. The
@@ -17,25 +17,39 @@ Oxford Nanopore MinION R9.
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** MultiQC, then Profiles, then Concordance, then Confidence. Each
-  tab answers the question the previous one raises: are the reads worth classifying, what does
-  each classifier say the community is, where do the classifiers disagree, and how much should
-  a given call be trusted.
+- **One funnel, five tabs.** MultiQC, then Depth and diversity, then Profiles, then
+  Concordance, then Confidence. Each tab answers the question the previous one raises: are the
+  reads worth classifying, did the sequencing go deep enough to see the community at all, what
+  does each classifier say that community is, where do the classifiers disagree, and how much
+  should a given call be trusted.
 - **One hub collection.** taxprofiler can run fifteen profilers, so shipping one data
   collection per profiler would make the template's shape depend on the run's flags. Instead
   every `taxpasta/*.tsv` is melted into one long profiler x database x sample x taxon frame,
   and the ordination, the overlap matrix, the taxon-by-run heatmap and the per-run statistics
   are all derived from that hub. Adding or removing a profiler changes rows, never collections.
-- **Persistent filters.** `Samples` (sample, sequencing platform) is pinned to the top of every
-  tab's filter panel, sourced on the taxprofiler samplesheet. The template's links fan a
-  selection there out to the taxpasta collections, the sylph containment table and the MultiQC
-  panels, so one pick narrows composition, concordance and confidence at once.
-- **Pinned sheet and reference tables.** The cohort every tab is filtered on sits in a
-  collapsed `Sample sheet` section pinned to the top of every tab: a card counting the
-  samples and a card counting the sequencing runs, both broken down by sequencing platform,
-  above the samplesheet itself. The rows behind every tile sit in a collapsed
-  `Reference tables` section pinned to the bottom: the long profiles frame, the per-run
-  statistics and the database sheet.
+- **Every tab carries filters, on two levels.** `Samples` (sample, sequencing platform,
+  sequencing run) is `persistent` *and* `pin: top`, so it rides every tab's filter panel;
+  it is sourced on the taxprofiler samplesheet, and the template's links fan a selection out
+  to every taxpasta collection, the widened lineages, both sylph tables, the Nonpareil
+  collections and the MultiQC panels. On top of that each tab declares its own non-persistent
+  filter section on its own columns: `Depth scope` (coverage, Nonpareil diversity,
+  richness, evenness), `Profile scope` (classifier, database, abundance, domain, melon
+  phylum), `Ordination scope` (classifier, platform, overlap, domain, flow classifier) and
+  `Confidence ranges` (ANI, abundance). The landing tab carries only the pinned `Samples`
+  section. The sequencing-run filter is a MultiSelect: the samplesheet is read as text, so
+  numeric and ERR/SRR accessions behave the same. There is no rank filter: the rank picker in
+  each stacked tile's header is the only rank control.
+- **Every tab opens with a glance strip.** `Run at a glance` is a persistent pinned section of
+  four cards on run-level numbers (samples by platform, profiling runs by classifier, distinct
+  taxa, reads assigned per run), so the same four readings head every tab. Each tab then adds
+  its own four-card strip on its own data at the top of its first section, and none of those
+  repeats a glance card.
+- **Two pinned tables, no repeats.** The samplesheet sits in a collapsed `Sample sheet`
+  section pinned to the top of every tab, and the database sheet in a collapsed
+  `Reference tables` section pinned to the bottom. The per-run statistics and the Nonpareil
+  table close the Depth and diversity tab (`Depth tables`, collapsed); the long profiles
+  frame, its lineage-widened copy and the sylph clade table close the Profiles tab
+  (`Profile tables`, collapsed).
 - **Catalog provenance.** Every analysis panel is a catalog render (`use: taxpasta/...`,
   `use: sylph/...`, `use: melon/...`) and every MultiQC tile names its module
   (`use: multiqc/fastqc`, `use: multiqc/bracken`, and so on), so the tile chrome shows where
@@ -44,6 +58,13 @@ Oxford Nanopore MinION R9.
   not a sample plus a profiler: kraken2 against two databases is two answers. The
   `profiler_db` column carries that pairing and it is the key the ordination and the per-run
   table cross-select on.
+- **Selection follows the entity.** Every table and scatter selects on its row entity and
+  narrows the tiles on its tab that read the same collection or one linked from it: the sample
+  sheet on `sample` (every collection and the MultiQC panels), the diversity scatter and the
+  per-run table on `profiler_db`, the Nonpareil scatter and table on `library`, the taxpasta
+  profile and lineage tables on the taxon `name`, the sylph profile on `clade_name`, the melon
+  ranks table on `species`, the sylph scatter on `genome`. The database sheet selects nothing:
+  no other tile reads it.
 
 ---
 
@@ -80,9 +101,11 @@ since taxprofiler only routes nanopore data to melon. Every one of those is decl
 
 ## MultiQC
 
-The main tab. Its three sections are the pipeline's own MultiQC report, from the raw reads
-through host removal to each classifier's top taxa; the pinned `Sample sheet` and
-`Reference tables` sections frame them here as they do on every tab.
+The main tab. Its three own sections are the pipeline's own MultiQC report, from the raw
+reads through host removal to each classifier's top taxa; the pinned `Run at a glance`,
+`Sample sheet` and `Reference tables` sections frame them here as they do on every tab. A tab
+named MultiQC holds MultiQC panels only, which is why the run-level cards live in the pinned
+glance strip rather than in a section of their own here.
 
 `Read quality` opens on MultiQC's general-statistics table, one row per sample pooling every
 module's headline numbers, and then holds the read panels themselves: FastQC sequence counts
@@ -91,9 +114,10 @@ distribution. taxprofiler runs FastQC twice, before and after preprocessing, so 
 labels the second run `fastqc-1`.
 
 `Host removal and long reads` pairs the bowtie2 and samtools views of what the host-genome
-alignment took out with nanoq's nanopore read summary and nonpareil's redundancy curves.
+alignment took out with nanoq's nanopore read summary and Nonpareil's redundancy levels.
 Nonpareil answers a question none of the profilers can: how much of the community the
-sequencing depth actually covered, which is the ceiling on everything downstream.
+sequencing depth actually covered, which is the ceiling on everything downstream. The next
+tab rebuilds the full curve those redundancy levels are a slice of.
 
 `Profiler panels` (collapsed) carries each classifier's own top-taxa panel as MultiQC renders
 it: kraken2, bracken, centrifuge, kaiju, metaphlan, plus MALT's mappability. These are the
@@ -101,16 +125,72 @@ per-classifier view; the cross-classifier view starts on the next tab.
 
 ![MultiQC](screenshots/read-qc.png)
 
+## Depth and diversity
+
+The tab that sets the ceiling. Everything after it is a statement about a community, and a
+statement about a community is only as good as the fraction of it the reads reached.
+
+`Coverage redundancy` carries the Nonpareil curve. taxprofiler publishes only
+`nonpareil/nonpareil_all_samples.tsv`, six fitted numbers per sequencing library, because the
+per-effort samples stay inside the `.npo` files the pipeline does not copy out. Those six
+numbers are enough: Nonpareil models coverage against the log of sequencing effort as a gamma
+CDF whose mean is the published diversity index and whose 95th percentile is the log of the
+projected effort, so the two are solved for the model's parameters and the curve is evaluated
+over a log-spaced effort axis, 200 points per library. The reconstruction is checked against a
+number the fit never sees: feeding each library's own effort back through the model reproduces
+the published coverage to within 0.05, always slightly above, which is the expected sign
+because the published value is the last coverage observed and the model is the curve fitted
+through it. Four cards head the section (coverage, the diversity index and the depth multiple
+still missing as median box plots, libraries measured broken down by sample), and the
+scatter underneath puts coverage against diversity with the missing depth as the point size.
+Only the Illumina libraries are measured: taxprofiler routes Nonpareil at short reads only, so
+the four rows here are `MOCK_001` to `MOCK_003` with `MOCK_003` counted twice for its two
+sequencing runs.
+
+`Alpha diversity` is the same question asked of the classifiers rather than of the reads.
+Shannon diversity and Pielou evenness are computed per profiling run, so one sample has as
+many diversity values as classifiers that profiled it, and the vertical spread of the
+richness-against-diversity scatter is classifier disagreement rather than biology. Its four
+cards (Shannon, taxa observed, evenness and top-taxon share) are medians with a box plot, with
+no fixed threshold or gauge maximum. The diversity dot plot (Shannon as colour, top-taxon
+share as size) moved here from the former Confidence `Profile shape` section, and the
+rank-abundance accumulation curve underneath ranks the taxa inside each run and accumulates
+their shares: a curve that reaches one after a handful of taxa is a profile carried by a few
+organisms, one that keeps climbing has a long low-count tail.
+
 ## Profiles
 
-`Composition` is the tab's centre: one stacked taxonomy panel over the whole hub, switchable
-by taxonomic rank and narrowed by the `Profile scope` filter, so the same tile shows one
-classifier at a time or all of them. Six cards sit under it: the profiling runs the bars stand
-for broken down by profiler, distinct taxa named, median assigned count as a box plot and
-ranks reported as a composition strip, then the share held by the single most dominant taxon
-on a gauge next to mean evenness against a threshold. A profile whose top taxon holds more
-than half the reads is either a very simple community or a classifier that has collapsed onto
-one reference.
+`Composition` is the tab's centre: one stacked taxonomy panel over the whole hub with one bar
+per profiling run (`profiler_db`, the catalog `sample_id` role in `taxpasta/profiles.yaml`),
+so a bar never mixes two classifiers' naming vocabularies. Bars are percentages of each run's
+assigned reads, averaged over the samples in scope; narrowing the persistent sample filter to
+one sample reads that sample's runs side by side. The family defaults apply: genus by
+default, top 12 taxa plus Other, taxa ordered by abundance, the rank picker in the tile header
+only, and a classifier strip above the bars. Its glance strip is four cards: species named
+broken down by classifier, reads per taxon call as a box plot, ranks reported as a composition
+strip, and the share held by the single most dominant taxon on a gauge.
+
+`Lineage rings` is the same rows drawn as a hierarchy, as Krona rings only (the pooled
+sunburst that mixed classifier vocabularies and the second four-card strip were removed). taxprofiler runs taxpasta without
+`--add-lineage`, so the ancestry is read back out of the kraken-style reports the run writes
+anyway: those reports indent each taxon's name by two spaces per level, so walking a report
+with a stack recovers every taxon's parents, and the result is joined onto the hub by NCBI
+taxonomy id. In this megatest that places 94 percent of the rows; reads no classifier could
+assign keep an explicit `unclassified` arc rather than leaving the ring silently, and taxa
+whose database uses identifiers no report named sit under `unresolved` (all of kmcp's, whose
+database is keyed differently). The classifier and database filters in the left panel sit on
+the hub and reach the rings through the `taxpasta_profiles -> taxpasta_lineage` links on
+`profiler` and `database`.
+
+The Krona reading, `Krona rings per classifier`, is the lineage render
+(`taxpasta/lineage_sunburst`) with the profiler prepended to the rank columns, so the
+innermost ring is one wedge per classifier and the domains, phyla and classes fan out from
+it. Phyla keep one colour across every wedge, which is what makes the classifiers
+comparable at a glance. A wedge is as wide as the profiling runs that classifier made, so a
+classifier that ran on fewer samples (the long-read-only tools) draws a narrower wedge. The
+ring window pickers sit above the plot (`advanced_viz_controls: header` on every tab), as do
+the rank picker of both stacked taxonomy panels, the PCoA axes and the two dot plots; every
+threshold slider shows its column's distribution (`show_histogram: true`).
 
 `Containment composition` shows the same communities as sylph reconstructs them. sylph does
 not count reads into a taxonomy; it estimates how much of each reference genome is contained
@@ -131,17 +211,27 @@ long-read samples rather than shown per sample.
 `Ordination` is the tab's signature panel: a Bray-Curtis PCoA over every profiling run, one
 point per sample, profiler and database. Runs that agree about the community land together, so
 the spread reads as classifier disagreement rather than as biological distance, and the
-clusters usually form by profiler family rather than by sample. The scatter beside it has
-selection enabled on `profiler_db`, wired through the template's links to the pinned per-run
-table, so picking a point in the ordination selects that run's row and picking a row highlights
-its point.
+clusters usually form by profiler family rather than by sample. The PCoA tile itself has
+lasso selection on `profiler_db` (the duplicate plotly scatter was removed); the
+`taxpasta_embedding -> taxpasta_lineage` link on `profiler_db` carries a selection to the
+taxonomic flow below, and `samplesheet -> taxpasta_embedding` on `sample` lets the persistent
+sample filter reach the ordination.
 
 `Shared taxa` asks how much of the community the classifiers agree on. The UpSet plot shows
 the intersections a pairwise view cannot: not just "kraken2 and bracken share n taxa" but "this
-many taxa were found by exactly these five classifiers and no others". Four cards report the
-median and maximum number of classifiers per taxon, the taxa detected broken down by rank, and
-the runs ordinated broken down by platform. A long tail of taxa found by exactly one classifier
-is the normal shape, and its length is the interesting number.
+many taxa were found by exactly these five classifiers and no others". A long tail of taxa
+found by exactly one classifier is the normal shape, and its length is the interesting number.
+The tab's glance strip, at the top of `Ordination`, carries the readings that go with it: runs
+ordinated broken down by platform, the median and maximum number of classifiers per taxon (the
+maximum as a plain value, no gauge sized to this run's classifier count), and the taxa detected
+broken down by rank.
+
+`Taxonomic flow` is the Pavian view of the same profiles. Every read leaves the root and
+follows the taxonomy down, so a band's width is the share of the community that took that
+path, and the reads a classifier could not place leave the root as a band of their own: for
+kraken2 in this run that is 3.3 to 3.7 percent, which its top-taxa panel never shows. The
+depth control in the tile settings adds or removes ranks between the root and the species, and
+picking one classifier in the left panel reads a single profile rather than the pooled flow.
 
 `Taxon by run matrix` (collapsed) clusters the top taxa across every profiling run as a heatmap
 with the rank as a row annotation and the profiler and platform as column strips. It is the
@@ -155,17 +245,12 @@ same disagreement the ordination summarises, read taxon by taxon.
 it detects, the adjusted ANI of the containment match alongside the abundance, so abundance and
 identity can be read together: a high-abundance, low-ANI genome is a confident-looking call that
 is really a divergent relative of the reference. The dot plot and the scatter show the same two
-axes at different resolutions, the pinned table has row selection on the sample, and four cards
-report median ANI, genomes detected by sample, median effective coverage and mean k-mer
-containment.
-
-`Profile shape` treats a profile as a distribution rather than a list. The dot plot puts Shannon
-diversity against the top-taxon share for every run, and the rank-abundance accumulation curve
-beside it ranks the taxa inside each run and accumulates their shares: a curve that reaches one
-after a handful of taxa is a profile carried by a few organisms, and one that keeps climbing is
-a profile with a long tail. Because there is one curve per profiling run, the same sample
-appears once per classifier, and the fan between those curves is the classifier's contribution
-to the shape.
+axes at different resolutions; a genome picked on the scatter opens its record in the card
+beside it (a thin rail until something is picked), the table has row selection on the sample, and four cards
+report median ANI, genomes detected by sample, median effective coverage and the genomes
+matched below 95 percent adjusted ANI (the conventional species boundary). The tab is sylph
+only: the former `Profile shape` section repeated the Alpha diversity angle, so its dot plot
+moved to Depth and diversity and its top-taxon bar chart and slider were removed.
 
 ---
 
@@ -173,21 +258,31 @@ to the shape.
 
 ## Catalog modules
 
-The recipes ship as three catalog modules.
+The recipes ship as four catalog modules.
 
 | Module | Output | What it is | Renders as |
 |---|---|---|---|
-| `taxpasta` | `taxpasta_profiles` | Every standardised table melted into one long profiler x database x sample x taxon frame | Stacked taxonomy, 4 cards, 2 interactives, table |
+| `taxpasta` | `taxpasta_profiles` | Every standardised table melted into one long profiler x database x sample x taxon frame | Stacked taxonomy, 6 cards, 2 interactives, table |
+| `taxpasta` | `taxpasta_lineage` | The same rows with the seven NCBI ranks widened into their own columns, ancestry recovered from the indented reports | Sunburst, sankey, 4 cards, 2 interactives, table |
 | `taxpasta` | `taxpasta_matrix` | The top taxa as a wide taxon by run matrix, with profiler and platform column strips | Clustered heatmap, table |
 | `taxpasta` | `taxpasta_embedding` | Bray-Curtis PCoA over every profiling run | Embedding, table |
 | `taxpasta` | `taxpasta_presence` | Per sample and taxon, a 0/1 detection column for every profiler | UpSet, card, table |
-| `taxpasta` | `taxpasta_sample_summary` | Taxa reported, reads assigned, top-hit share, Shannon and evenness per run | Dot plot, 4 cards, scatter, table |
+| `taxpasta` | `taxpasta_sample_summary` | Taxa reported, reads assigned, top-hit share, Shannon and evenness per run | Dot plot, 5 cards, scatter, bar, table |
 | `sylph` | `sylph_ani` | Per-genome containment: adjusted ANI against abundance and coverage | Dot plot, scatter, 3 cards, table |
 | `sylph` | `sylph_profile` | The sylph-tax merged report as long sample x rank x taxon composition | Stacked taxonomy, card, table |
 | `melon` | `melon_ranks` | Genome-copy composition, seven ranks wide, pooled over the long-read samples | Sunburst, 3 cards, table |
+| `nonpareil` | `nonpareil_summary` | Coverage, projected effort and diversity index, one row per sequencing library | 4 cards, scatter, interactive, table |
+| `nonpareil` | `nonpareil_curves` | The coverage curve each library's fitted model describes, 200 points per curve | Profile, line figure, interactive, table |
 
 The MultiQC side gained one entry too: `multiqc/malt` binds the MALT mappability and
 taxonomic-assignment panels, which had no catalog output and therefore no `use:` handle.
+
+`nonpareil` is a new module, and its arithmetic lives in
+`depictio/recipes/lib/nonpareil.py`: a regularised incomplete gamma written out in full
+rather than pulled from scipy, which is not a declared dependency, plus the two-equation
+solve that recovers the model parameters and the log-spaced effort axis the curve is sampled
+on. `depictio/tests/recipes/test_nonpareil_curves.py` pins the reconstruction against the real
+megatest summary.
 
 One recipe is project-local rather than catalog: taxprofiler runs taxpasta with
 `--add-name false`, so the standardised tables identify taxa by NCBI id only.

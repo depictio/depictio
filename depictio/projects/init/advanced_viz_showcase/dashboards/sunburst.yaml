@@ -1,11 +1,11 @@
-# Sunburst — one tab of the advanced-visualisation showcase.
+# Taxonomic hierarchy: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Sunburst'
+title: 'Taxonomic hierarchy'
 subtitle: 'Hierarchical taxonomic composition'
 icon: 'mdi:weather-sunny'
 icon_color: 'orange'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d44'
 is_main_tab: false
 tab_order: 20
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:weather-sunny'
+tab_icon: 'mdi:chart-donut'
 tab_icon_color: 'orange'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,11 +44,12 @@ components:
     vertical_alignment: top
     section: 'Hierarchy'
     body: >
-      The same taxonomy the stacked bars show, drawn as concentric rings from kingdom
-      outwards. Clicking a wedge zooms into it rather than filtering the dashboard, so it is
-      a way to read the hierarchy rather than to select from it. The left panel is what
-      narrows the other tiles.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      The same abundance table as concentric rings from kingdom outwards, arc size set by
+      abundance. Click a wedge to zoom into that lineage; the start rank and the rank that
+      drives colour are in the tile header. It reads the hierarchy rather than selecting from
+      it: the left panel narrows the data. Input: nf-core/ampliseq or nf-core/taxprofiler
+      classifications.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-sunburst
     index: 'sun-plot'
@@ -56,14 +57,15 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'stacked_taxonomy_demo'
     title: 'Taxonomic sunburst'
-    description: 'Hierarchical taxonomic composition — Kingdom → Genus, arc size = abundance.'
+    description: 'Hierarchical taxonomic composition from kingdom to genus, arc size set by abundance.'
     section: 'Hierarchy'
     viz_kind: 'sunburst'
     config:
       viz_kind: "sunburst"
       rank_cols: ["Kingdom", "Phylum", "Class", "Order", "Family", "Genus"]
       abundance_col: "abundance"
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-sunburst-phylum
     index: sun-f-phylum

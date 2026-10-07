@@ -908,6 +908,100 @@ def _build_subsample(
     return fig
 
 
+# --------------------------------------------------------------------------
+# Content demand
+# --------------------------------------------------------------------------
+
+# Grid geometry, mirrored from packages/depictio-react-core/src/components/
+# autofit.ts: a span of n rows offers 104n - 4 px.
+_GRID_ROW_PX = 100
+_GRID_ROW_GAP_PX = 4
+# What a categorical figure spends before its first category: title, axis
+# labels, tick labels, margins.
+_DEMAND_CHROME_PX = 110
+# Room one category is worth. A bar thinner than this reads as a rule rather
+# than a bar; much thicker and two categories fill a screen.
+_DEMAND_PER_CATEGORY_PX = 44
+# Facet strip title, once per row of panels beyond the first.
+_DEMAND_FACET_TITLE_PX = 24
+# Counting stops here: past it the answer is "taller than any tile", which the
+# clamp settles anyway, and the loop is walking raw trace values.
+_DEMAND_MAX_CATEGORIES = 64
+# The visu types whose category count is a statement about height. A scatter or
+# a line says nothing: ten thousand points want the same box as ten.
+_DEMAND_VISU_TYPES = frozenset({"bar", "box", "violin"})
+
+
+def _categorical_values(fig_dict: dict[str, Any]) -> int:
+    """How many distinct categories the figure plots, across every trace."""
+    seen: set[str] = set()
+    for trace in fig_dict.get("data") or []:
+        if not isinstance(trace, dict):
+            continue
+        # A horizontal bar/box puts its categories on y; everything else on x.
+        values = trace.get("y" if trace.get("orientation") == "h" else "x")
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            if value is None:
+                continue
+            seen.add(str(value))
+            if len(seen) >= _DEMAND_MAX_CATEGORIES:
+                return len(seen)
+    return len(seen)
+
+
+def _facet_rows(fig_dict: dict[str, Any]) -> int:
+    """How many rows of panels the figure lays out.
+
+    Read off the y axes' domains rather than the plan: px stacks `facet_row`
+    panels vertically and puts `facet_col` panels side by side, so the number
+    of distinct vertical bands is exactly the number of heights to add up.
+    """
+    bands: set[tuple[float, float]] = set()
+    layout = fig_dict.get("layout")
+    if not isinstance(layout, dict):
+        return 1
+    for key, axis in layout.items():
+        if not key.startswith("yaxis") or not isinstance(axis, dict):
+            continue
+        domain = axis.get("domain")
+        if isinstance(domain, (list, tuple)) and len(domain) == 2:
+            try:
+                bands.add((round(float(domain[0]), 3), round(float(domain[1]), 3)))
+            except (TypeError, ValueError):
+                continue
+    return max(1, len(bands))
+
+
+def figure_content_demand(visu_type: str, fig_dict: Any) -> dict[str, int] | None:
+    """The grid rows this figure's content needs, or None if it has no opinion.
+
+    A categorical figure's height is its category count: two bars want two
+    rows, not the five the author guessed when the data had twenty. Computed
+    here because only the builder knows the count, a Plotly figure fills
+    whatever box the client gives it, so the client can only measure the box
+    back.
+
+    Returns None for every other visu type, and for a figure that turned out
+    to have no categorical axis at all (a code-mode figure declaring
+    ``bar``, a bar of one aggregate). The client treats None as "no demand"
+    and leaves the tile at its stored height.
+    """
+    if visu_type not in _DEMAND_VISU_TYPES or not isinstance(fig_dict, dict):
+        return None
+    categories = _categorical_values(fig_dict)
+    if categories <= 0:
+        return None
+    facets = _facet_rows(fig_dict)
+    per_facet = categories * _DEMAND_PER_CATEGORY_PX
+    height = _DEMAND_CHROME_PX + facets * per_facet
+    if facets > 1:
+        height += facets * _DEMAND_FACET_TITLE_PX
+    rows = math.ceil((height + _GRID_ROW_GAP_PX) / (_GRID_ROW_PX + _GRID_ROW_GAP_PX))
+    return {"rows": max(1, rows)}
+
+
 def _px_kwargs(plan: AggPlan, template: str) -> dict[str, Any]:
     """Rebuild the px call from the plan's roles + the passthrough styling."""
     kwargs: dict[str, Any] = {

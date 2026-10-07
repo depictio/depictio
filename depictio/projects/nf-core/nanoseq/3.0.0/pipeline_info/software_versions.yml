@@ -1,0 +1,32 @@
+BAMBU:
+  bioconductor-bambu: 2.0.3
+  bioconductor-bsgenome: 1.62.0
+  r-base: 4.1.2
+BEDTOOLS_BAMBED:
+  bedtools: 2.29.2
+CUSTOM_DUMPSOFTWAREVERSIONS:
+  python: 3.9.5
+  yaml: 5.4.1
+DESEQ2:
+  bioconductor-deseq2: 1.28.0
+  r-base: 4.0.3
+DEXSEQ:
+  bioconductor-dexseq: 1.36.0
+  bioconductor-drimseq: 1.18.0
+  bioconductor-stager: 1.12.0
+  r-base: 4.0.3
+GET_CHROM_SIZES:
+  samtools: '1.13'
+MINIMAP2_INDEX:
+  minimap2: 2.17-r941
+NANOPLOT:
+  nanoplot: 1.38.0
+SAMTOOLS_STATS:
+  samtools: 1.15.1
+UCSC_BED12TOBIGBED:
+  ucsc_bed12tobigbed: '377'
+UCSC_BEDGRAPHTOBIGWIG:
+  ucsc_bedgraphtobigwig: '377'
+Workflow:
+  Nextflow: 22.04.3
+  nf-core/nanoseq: 3.0.0

@@ -1,0 +1,8 @@
+id: cellranger
+name: Cell Ranger
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cellranger/count
+homepage: https://www.10xgenomics.com/support/software/cell-ranger
+description: >-
+  10x Genomics pipelines that align Chromium single-cell reads, count UMIs per
+  barcode and cluster cells.
+biotools_url: null  # no bio.tools entry for this tool

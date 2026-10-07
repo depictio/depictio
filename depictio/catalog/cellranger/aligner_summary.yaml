@@ -1,0 +1,19 @@
+id: cellranger_aligner_summary
+name: Aligner route summary
+mode: analysis/aligner_summary
+description: >-
+  One row per nf-core/scrnaseq --aligner route: the cells it called, the
+  cells CellBender kept on that route, its median UMI per cell and its
+  mapping rate. Each route reports those through a different tool, so the
+  table is the translation layer a comparison needs.
+find:
+  path_glob: "**/metrics_summary.csv"
+recipe: cellranger/aligner_summary.py
+fixture: aligner_summary.tsv
+renders_as:
+  - { id: aligner_agreement, component: advanced_viz, kind: scatter_xy, roles: {x: cells_called, y: cellbender_cells, label: aligner, color: aligner} }
+  - { id: aligner_cells_bar, component: figure, visu_type: bar, dict_kwargs: {x: aligner, y: cells_called, color: aligner, title: Cells called per aligner route} }
+  - { id: aligner_picker, component: interactive, interactive_type: Select, column_name: aligner }
+  - { component: card, column: cells_called, aggregation: sum, secondary_layout: top_n, breakdown_col: aligner, top_n_count: 3 }
+  - { component: card, column: mapping_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: table }

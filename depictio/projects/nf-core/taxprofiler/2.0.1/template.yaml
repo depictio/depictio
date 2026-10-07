@@ -126,6 +126,10 @@ workflows:
               filename: "{SAMPLESHEET_FILE}"
           dc_specific_properties:
             format: "CSV"
+            # Read every column as text: run accessions are integers in some sheets
+            # and ERR/SRR strings in others, and the filter on them is a select.
+            polars_kwargs:
+              infer_schema_length: 0
             columns_description:
               "sample": "Sample identifier (used for cross-DC filtering via links)"
               "run_accession": "Sequencing run the FASTQ belongs to; several runs per sample are merged"
@@ -137,15 +141,17 @@ workflows:
         # it into the results tree, so it is curl'd from the `databases` URL in
         # params.json into <DATA_ROOT>/input/ (see megatest.yaml post_fetch_help).
         # Matched by pattern rather than by an explicit path because the file is
-        # named after that URL and the template variables carry no defaults.
-        description: "Taxprofiler database sheet under input/: which database every profiler ran against"
+        # named after that URL and the template variables carry no defaults; the
+        # pattern is not anchored on input/, so a sheet placed anywhere under
+        # DATA_ROOT is found.
+        description: "Taxprofiler database sheet: which database every profiler ran against"
         config:
           type: "Table"
           scan:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "input/database.*\\.csv"
+                pattern: "(?:.*/)?database.*\\.csv$"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -191,6 +197,35 @@ workflows:
               "taxonomy_id": "NCBI taxonomy identifier"
               "name": "Scientific name; falls back to 'taxid <id>' when no report named it"
               "rank": "Taxonomic rank"
+              "count": "Reads or genome copies the profiler assigned"
+              "rel_abundance": "Share of that profiling run's assigned total (0-1)"
+
+      - data_collection_tag: "taxpasta_lineage"
+        description: "The same profiler x sample x taxon rows, with the seven NCBI ranks widened into their own columns"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "taxpasta/lineage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "profiler": "Classifier that produced the profile"
+              "database": "Database the classifier ran against"
+              "profiler_db": "Profiler and database as one label"
+              "sample": "Sample identifier (matches the samplesheet)"
+              "platform": "Sequencing platform the sample came from"
+              "taxonomy_id": "NCBI taxonomy identifier"
+              "name": "Scientific name reported for the identifier"
+              "rank": "Rank the profiler assigned the taxon to"
+              "root": "Constant root of the hierarchy: the single node a flow diagram fans out from"
+              "superkingdom": "Domain level of the lineage, or unclassified for reads the profiler could not place"
+              "phylum": "Phylum level of the lineage"
+              "class": "Class level of the lineage"
+              "order": "Order level of the lineage"
+              "family": "Family level of the lineage"
+              "genus": "Genus level of the lineage"
+              "species": "Species level of the lineage"
               "count": "Reads or genome copies the profiler assigned"
               "rel_abundance": "Share of that profiling run's assigned total (0-1)"
 
@@ -306,6 +341,54 @@ workflows:
               "identity_mean": "Mean read identity behind the estimate"
 
       # ----------------------------------------------------------------
+      # Nonpareil. NONPAREIL_SET merges the per-library .npo files into one
+      # summary table of fitted numbers; the redundancy curve those numbers
+      # describe is rebuilt from them (see depictio/recipes/lib/nonpareil.py),
+      # because the .npo files themselves are not published.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "nonpareil_summary"
+        optional: true # only when --run_nonpareil (short reads)
+        description: "Nonpareil coverage, projected sequencing effort and diversity index, one row per library"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nonpareil/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (matches the samplesheet)"
+              "library": "Sequencing library: the sample plus its run accession"
+              "platform": "Sequencing platform the library came from"
+              "kappa": "Redundancy of the reads, as Nonpareil measures it"
+              "coverage": "Share of the metagenome the reads already reach (0-1)"
+              "observed_effort": "Sequencing effort of the run, in base pairs"
+              "model_fit": "Correlation of Nonpareil's model with the observed redundancy"
+              "projected_effort": "Sequencing effort projected for 95 percent coverage, in base pairs"
+              "diversity": "Nonpareil diversity index, on a natural-log scale"
+              "effort_multiple": "How many times deeper the run would have to go to reach 95 percent coverage"
+
+      - data_collection_tag: "nonpareil_curves"
+        optional: true # only when --run_nonpareil (short reads)
+        description: "The coverage each library reaches against sequencing effort, 200 points per curve"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nonpareil/curves.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (matches the samplesheet)"
+              "library": "Sequencing library the curve belongs to"
+              "platform": "Sequencing platform the library came from"
+              "sequencing_effort": "Sequencing effort on the curve, in base pairs"
+              "coverage": "Modelled coverage of the metagenome at that effort (0-1)"
+              "observed_effort": "Sequencing effort the run actually reached"
+              "projected_effort": "Sequencing effort projected for 95 percent coverage"
+              "diversity": "Nonpareil diversity index of the library"
+
+      # ----------------------------------------------------------------
       # The pipeline's own MultiQC report. Every panel the pipeline already
       # renders stays here rather than being recomputed as a figure.
       # ----------------------------------------------------------------
@@ -317,7 +400,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             modules:
               - "fastqc"
@@ -434,12 +517,82 @@ links:
 
   - source_dc_tag: "samplesheet"
     source_column: "sample"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the widened lineages by selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
     target_dc_tag: "sylph_ani"
     target_type: "table"
     link_config:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the sylph containment table by selected samples"
+    enabled: true
+
+  # sylph's merged profile names its samples in a `sample_id` column rather than
+  # `sample`; without this link the persistent sample filter stopped at the
+  # containment table and left the containment composition tile unfiltered.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "sylph_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the sylph clade composition by selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "nonpareil_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Nonpareil per-library statistics by selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "nonpareil_curves"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Nonpareil coverage curves by selected samples"
+    enabled: true
+
+  # The database sheet has no sample column, so the sample scope cannot reach it.
+  # The profiling scope can: picking a classifier or a database in the left panel
+  # narrows the sheet to the references those runs used.
+  - source_dc_tag: "taxpasta_profiles"
+    source_column: "database"
+    target_dc_tag: "database_sheet"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "db_name"
+    description: "Narrow the database sheet to the databases in scope"
+    enabled: true
+
+  # The taxon-by-run matrix is wide: its columns are the profiling runs, so no
+  # sample column exists to filter on. Its rows are taxa, which is what the
+  # profile filters (classifier, rank, abundance band) select, so the link is on
+  # the taxon name instead.
+  - source_dc_tag: "taxpasta_profiles"
+    source_column: "name"
+    target_dc_tag: "taxpasta_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "taxon"
+    description: "Narrow the heatmap rows to the taxa in scope"
     enabled: true
 
   # Link 6: the PCoA scatter and the per-run table share `profiler_db`, so a
@@ -462,4 +615,50 @@ links:
       resolver: "direct"
       target_field: "profiler_db"
     description: "Cross-select the per-run statistics and the ordination on the profiling run"
+    enabled: true
+
+  # The ordination names its points `sample | profiler / database` in sample_id;
+  # the plain sample id is its `sample` column, which the sample scope reaches.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "taxpasta_embedding"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the ordination by selected samples"
+    enabled: true
+
+  # The Profiles tab's classifier and database filters sit on the hub; these two
+  # links carry them to the lineage table the Krona rings are drawn from.
+  - source_dc_tag: "taxpasta_profiles"
+    source_column: "profiler"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "profiler"
+    description: "Narrow the lineage rings to the classifiers in scope"
+    enabled: true
+
+  - source_dc_tag: "taxpasta_profiles"
+    source_column: "database"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "database"
+    description: "Narrow the lineage rings to the databases in scope"
+    enabled: true
+
+  # A lasso on the ordination selects profiling runs; this carries the selection
+  # to the lineage table behind the taxonomic flow on the same tab.
+  - source_dc_tag: "taxpasta_embedding"
+    source_column: "profiler_db"
+    target_dc_tag: "taxpasta_lineage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "profiler_db"
+    description: "Narrow the taxonomic flow to the profiling runs picked in the ordination"
     enabled: true

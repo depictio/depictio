@@ -1,0 +1,16 @@
+id: snpeff_oncoplot
+name: Gene impact oncoplot
+mode: oncoplot
+description: >-
+  Callset by gene matrix coloured by the most severe impact class each cell
+  carries. On a germline run the x axis is the sample-and-caller pair, so the
+  plot reads as caller agreement on damaging genes rather than as a cohort
+  mutation landscape.
+find:
+  path_glob: "**/*_snpEff.genes.txt"
+recipe: snpeff/oncoplot.py
+fixture: oncoplot.tsv
+renders_as:
+  - { id: gene_impact_grid, component: advanced_viz, kind: oncoplot,
+      roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type} }
+  - { component: table }

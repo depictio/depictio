@@ -1,0 +1,121 @@
+feature_id	gene_symbol	gene_name	biotype	chromosome	start	end	strand	effect_size	significance	mean_expression	n_variants	top_consequence	pathway	ensembl_id	uniprot_id
+GENE000	GENE000	protein coding gene 000	protein_coding	chr1	1000000	1074324	-	2.439	5.06e-05	4.397	19	missense	Interferon signalling	ENSG00000000000	P00000
+GENE001	GENE001	lncRNA gene 001	lncRNA	chr2	1137000	1163662	+	0.117	0.337	10.229	10	synonymous	Cell cycle	ENSG00000000001	P00001
+GENE002	GENE002	pseudogene gene 002	pseudogene	chr7	1274000	1354177	+	-0.092	0.813	5.803	12	frameshift	Oxidative phosphorylation	ENSG00000000002	P00002
+GENE003	GENE003	protein coding gene 003	protein_coding	chr12	1411000	1427924	-	-0.572	0.607	7.725	15	stop_gained	Extracellular matrix	ENSG00000000003	P00003
+GENE004	GENE004	lncRNA gene 004	lncRNA	chrX	1548000	1607501	+	3.341	5.62e-05	10.769	12	intronic	Unassigned	ENSG00000000004	P00004
+GENE005	GENE005	pseudogene gene 005	pseudogene	chr1	1685000	1689982	+	-0.007	0.601	1.831	22	missense	Interferon signalling	ENSG00000000005	P00005
+GENE006	GENE006	protein coding gene 006	protein_coding	chr2	1822000	1836241	-	0.463	0.832	6.567	14	synonymous	Cell cycle	ENSG00000000006	P00006
+GENE007	GENE007	lncRNA gene 007	lncRNA	chr7	1959000	2008164	+	0.672	0.857	8.033	8	frameshift	Oxidative phosphorylation	ENSG00000000007	P00007
+GENE008	GENE008	pseudogene gene 008	pseudogene	chr12	2096000	2118348	+	2.218	1.09e-05	2.167	14	stop_gained	Extracellular matrix	ENSG00000000008	P00008
+GENE009	GENE009	protein coding gene 009	protein_coding	chrX	2233000	2248114	-	0.369	0.759	1.233	13	intronic	Unassigned	ENSG00000000009	P00009
+GENE010	GENE010	lncRNA gene 010	lncRNA	chr1	2370000	2425585	+	0.564	0.438	3.803	23	missense	Interferon signalling	ENSG00000000010	P00010
+GENE011	GENE011	pseudogene gene 011	pseudogene	chr2	2507000	2560766	+	-0.814	0.601	3.499	20	synonymous	Cell cycle	ENSG00000000011	P00011
+GENE012	GENE012	protein coding gene 012	protein_coding	chr7	2644000	2684954	-	2.578	8.78e-05	4.243	10	frameshift	Oxidative phosphorylation	ENSG00000000012	P00012
+GENE013	GENE013	lncRNA gene 013	lncRNA	chr12	2781000	2817900	+	-0.697	0.445	11.686	19	stop_gained	Extracellular matrix	ENSG00000000013	P00013
+GENE014	GENE014	pseudogene gene 014	pseudogene	chrX	2918000	2985673	+	0.44	0.627	9.953	21	intronic	Unassigned	ENSG00000000014	P00014
+GENE015	GENE015	protein coding gene 015	protein_coding	chr1	3055000	3101652	-	-0.248	0.101	5.235	20	missense	Interferon signalling	ENSG00000000015	P00015
+GENE016	GENE016	lncRNA gene 016	lncRNA	chr2	3192000	3216700	+	2.2	5.87e-05	4.391	8	synonymous	Cell cycle	ENSG00000000016	P00016
+GENE017	GENE017	pseudogene gene 017	pseudogene	chr7	3329000	3415604	+	-0.801	0.791	10.807	12	frameshift	Oxidative phosphorylation	ENSG00000000017	P00017
+GENE018	GENE018	protein coding gene 018	protein_coding	chr12	3466000	3520480	-	-0.818	0.732	11.852	7	stop_gained	Extracellular matrix	ENSG00000000018	P00018
+GENE019	GENE019	lncRNA gene 019	lncRNA	chrX	3603000	3683590	+	0.328	0.101	1.954	10	intronic	Unassigned	ENSG00000000019	P00019
+GENE020	GENE020	pseudogene gene 020	pseudogene	chr1	3740000	3756653	+	1.723	1.04e-05	6.2	14	missense	Interferon signalling	ENSG00000000020	P00020
+GENE021	GENE021	protein coding gene 021	protein_coding	chr2	3877000	3916202	-	-0.06	0.394	5.214	7	synonymous	Cell cycle	ENSG00000000021	P00021
+GENE022	GENE022	lncRNA gene 022	lncRNA	chr7	4014000	4021027	+	0.318	0.487	8.281	4	frameshift	Oxidative phosphorylation	ENSG00000000022	P00022
+GENE023	GENE023	pseudogene gene 023	pseudogene	chr12	4151000	4233079	+	-0.585	0.535	9.605	2	stop_gained	Extracellular matrix	ENSG00000000023	P00023
+GENE024	GENE024	protein coding gene 024	protein_coding	chrX	4288000	4357170	-	3.2	2.56e-05	4.018	6	intronic	Unassigned	ENSG00000000024	P00024
+GENE025	GENE025	lncRNA gene 025	lncRNA	chr1	4425000	4450147	+	-0.937	0.276	4.543	21	missense	Interferon signalling	ENSG00000000025	P00025
+GENE026	GENE026	pseudogene gene 026	pseudogene	chr2	4562000	4595075	+	0.815	0.134	11.776	4	synonymous	Cell cycle	ENSG00000000026	P00026
+GENE027	GENE027	protein coding gene 027	protein_coding	chr7	4699000	4776630	-	0.627	0.239	10.76	6	frameshift	Oxidative phosphorylation	ENSG00000000027	P00027
+GENE028	GENE028	lncRNA gene 028	lncRNA	chr12	4836000	4923384	+	0.92	4.35e-05	4.391	19	stop_gained	Extracellular matrix	ENSG00000000028	P00028
+GENE029	GENE029	pseudogene gene 029	pseudogene	chrX	4973000	4981335	+	-1.283	0.763	5.945	0	intronic	Unassigned	ENSG00000000029	P00029
+GENE030	GENE030	protein coding gene 030	protein_coding	chr1	5110000	5157538	-	-0.871	0.472	7.765	9	missense	Interferon signalling	ENSG00000000030	P00030
+GENE031	GENE031	lncRNA gene 031	lncRNA	chr2	5247000	5322658	+	0.994	0.272	7.407	5	synonymous	Cell cycle	ENSG00000000031	P00031
+GENE032	GENE032	pseudogene gene 032	pseudogene	chr7	5384000	5396903	+	2.861	8.87e-05	1.828	16	frameshift	Oxidative phosphorylation	ENSG00000000032	P00032
+GENE033	GENE033	protein coding gene 033	protein_coding	chr12	5521000	5610704	-	-0.098	0.545	7.417	5	stop_gained	Extracellular matrix	ENSG00000000033	P00033
+GENE034	GENE034	lncRNA gene 034	lncRNA	chrX	5658000	5681584	+	0.017	0.103	2.388	7	intronic	Unassigned	ENSG00000000034	P00034
+GENE035	GENE035	pseudogene gene 035	pseudogene	chr1	5795000	5878681	+	0.684	0.244	3.928	12	missense	Interferon signalling	ENSG00000000035	P00035
+GENE036	GENE036	protein coding gene 036	protein_coding	chr2	5932000	5984978	-	2.841	7.44e-05	10.75	5	synonymous	Cell cycle	ENSG00000000036	P00036
+GENE037	GENE037	lncRNA gene 037	lncRNA	chr7	6069000	6143263	+	-1.712	0.895	1.428	9	frameshift	Oxidative phosphorylation	ENSG00000000037	P00037
+GENE038	GENE038	pseudogene gene 038	pseudogene	chr12	6206000	6249070	+	-0.879	0.356	10.579	13	stop_gained	Extracellular matrix	ENSG00000000038	P00038
+GENE039	GENE039	protein coding gene 039	protein_coding	chrX	6343000	6391372	-	-0.58	0.76	3.548	24	intronic	Unassigned	ENSG00000000039	P00039
+GENE040	GENE040	lncRNA gene 040	lncRNA	chr1	6480000	6566823	+	2.917	9.71e-05	3.19	7	missense	Interferon signalling	ENSG00000000040	P00040
+GENE041	GENE041	pseudogene gene 041	pseudogene	chr2	6617000	6643846	+	0.807	0.834	2.329	0	synonymous	Cell cycle	ENSG00000000041	P00041
+GENE042	GENE042	protein coding gene 042	protein_coding	chr7	6754000	6832382	-	-1.055	0.281	9.295	24	frameshift	Oxidative phosphorylation	ENSG00000000042	P00042
+GENE043	GENE043	lncRNA gene 043	lncRNA	chr12	6891000	6931401	+	0.038	0.893	1.973	22	stop_gained	Extracellular matrix	ENSG00000000043	P00043
+GENE044	GENE044	pseudogene gene 044	pseudogene	chrX	7028000	7102864	+	2.35	9.72e-05	8.867	16	intronic	Unassigned	ENSG00000000044	P00044
+GENE045	GENE045	protein coding gene 045	protein_coding	chr1	7165000	7252435	-	0.549	0.742	2.864	5	missense	Interferon signalling	ENSG00000000045	P00045
+GENE046	GENE046	lncRNA gene 046	lncRNA	chr2	7302000	7387706	+	0.024	0.757	6.066	22	synonymous	Cell cycle	ENSG00000000046	P00046
+GENE047	GENE047	pseudogene gene 047	pseudogene	chr7	7439000	7484730	+	-0.261	0.277	5.623	11	frameshift	Oxidative phosphorylation	ENSG00000000047	P00047
+GENE048	GENE048	protein coding gene 048	protein_coding	chr12	7576000	7632933	-	2.591	5.7e-05	11.851	19	stop_gained	Extracellular matrix	ENSG00000000048	P00048
+GENE049	GENE049	lncRNA gene 049	lncRNA	chrX	7713000	7725790	+	-1.396	0.787	8.89	9	intronic	Unassigned	ENSG00000000049	P00049
+GENE050	GENE050	pseudogene gene 050	pseudogene	chr1	7850000	7869015	+	0.027	0.144	4.795	17	missense	Interferon signalling	ENSG00000000050	P00050
+GENE051	GENE051	protein coding gene 051	protein_coding	chr2	7987000	8071177	-	-0.377	0.912	5.282	16	synonymous	Cell cycle	ENSG00000000051	P00051
+GENE052	GENE052	lncRNA gene 052	lncRNA	chr7	8124000	8172733	+	3.758	1.9e-05	9.989	15	frameshift	Oxidative phosphorylation	ENSG00000000052	P00052
+GENE053	GENE053	pseudogene gene 053	pseudogene	chr12	8261000	8284040	+	0.099	0.894	6.973	17	stop_gained	Extracellular matrix	ENSG00000000053	P00053
+GENE054	GENE054	protein coding gene 054	protein_coding	chrX	8398000	8479134	-	0.003	0.504	11.268	13	intronic	Unassigned	ENSG00000000054	P00054
+GENE055	GENE055	lncRNA gene 055	lncRNA	chr1	8535000	8547661	+	0.289	0.577	10.293	15	missense	Interferon signalling	ENSG00000000055	P00055
+GENE056	GENE056	pseudogene gene 056	pseudogene	chr2	8672000	8734549	+	2.431	3.48e-05	1.73	18	synonymous	Cell cycle	ENSG00000000056	P00056
+GENE057	GENE057	protein coding gene 057	protein_coding	chr7	8809000	8864637	-	-0.108	0.754	7.626	2	frameshift	Oxidative phosphorylation	ENSG00000000057	P00057
+GENE058	GENE058	lncRNA gene 058	lncRNA	chr12	8946000	8955337	+	-0.29	0.65	5.845	11	stop_gained	Extracellular matrix	ENSG00000000058	P00058
+GENE059	GENE059	pseudogene gene 059	pseudogene	chrX	9083000	9150830	+	-0.031	0.613	6.728	18	intronic	Unassigned	ENSG00000000059	P00059
+GENE060	GENE060	protein coding gene 060	protein_coding	chr1	9220000	9268512	-	1.531	3.24e-05	3.321	24	missense	Interferon signalling	ENSG00000000060	P00060
+GENE061	GENE061	lncRNA gene 061	lncRNA	chr2	9357000	9419756	+	-0.273	0.548	11.365	14	synonymous	Cell cycle	ENSG00000000061	P00061
+GENE062	GENE062	pseudogene gene 062	pseudogene	chr7	9494000	9568120	+	-0.175	0.731	8.251	22	frameshift	Oxidative phosphorylation	ENSG00000000062	P00062
+GENE063	GENE063	protein coding gene 063	protein_coding	chr12	9631000	9664281	-	0.348	0.223	9.18	22	stop_gained	Extracellular matrix	ENSG00000000063	P00063
+GENE064	GENE064	lncRNA gene 064	lncRNA	chrX	9768000	9828217	+	1.178	3.56e-06	5.28	13	intronic	Unassigned	ENSG00000000064	P00064
+GENE065	GENE065	pseudogene gene 065	pseudogene	chr1	9905000	9966458	+	-0.532	0.604	3.793	9	missense	Interferon signalling	ENSG00000000065	P00065
+GENE066	GENE066	protein coding gene 066	protein_coding	chr2	10042000	10096763	-	0.004	0.688	8.561	22	synonymous	Cell cycle	ENSG00000000066	P00066
+GENE067	GENE067	lncRNA gene 067	lncRNA	chr7	10179000	10249683	+	-0.399	0.262	4.026	14	frameshift	Oxidative phosphorylation	ENSG00000000067	P00067
+GENE068	GENE068	pseudogene gene 068	pseudogene	chr12	10316000	10354355	+	2.932	8.03e-05	5.57	21	stop_gained	Extracellular matrix	ENSG00000000068	P00068
+GENE069	GENE069	protein coding gene 069	protein_coding	chrX	10453000	10457452	-	-0.581	0.58	11.118	18	intronic	Unassigned	ENSG00000000069	P00069
+GENE070	GENE070	lncRNA gene 070	lncRNA	chr1	10590000	10637450	+	-1.065	0.301	9.305	10	missense	Interferon signalling	ENSG00000000070	P00070
+GENE071	GENE071	pseudogene gene 071	pseudogene	chr2	10727000	10771314	+	0.398	0.766	4.328	24	synonymous	Cell cycle	ENSG00000000071	P00071
+GENE072	GENE072	protein coding gene 072	protein_coding	chr7	10864000	10908086	-	4.158	7.19e-05	10.537	11	frameshift	Oxidative phosphorylation	ENSG00000000072	P00072
+GENE073	GENE073	lncRNA gene 073	lncRNA	chr12	11001000	11089307	+	-0.139	0.197	8.81	21	stop_gained	Extracellular matrix	ENSG00000000073	P00073
+GENE074	GENE074	pseudogene gene 074	pseudogene	chrX	11138000	11179926	+	-0.331	0.461	8.08	1	intronic	Unassigned	ENSG00000000074	P00074
+GENE075	GENE075	protein coding gene 075	protein_coding	chr1	11275000	11346328	-	0.575	0.753	9.152	4	missense	Interferon signalling	ENSG00000000075	P00075
+GENE076	GENE076	lncRNA gene 076	lncRNA	chr2	11412000	11416594	+	1.94	5.9e-06	10.985	20	synonymous	Cell cycle	ENSG00000000076	P00076
+GENE077	GENE077	pseudogene gene 077	pseudogene	chr7	11549000	11599444	+	0.287	0.384	4.899	12	frameshift	Oxidative phosphorylation	ENSG00000000077	P00077
+GENE078	GENE078	protein coding gene 078	protein_coding	chr12	11686000	11691859	-	-1.201	0.707	1.692	22	stop_gained	Extracellular matrix	ENSG00000000078	P00078
+GENE079	GENE079	lncRNA gene 079	lncRNA	chrX	11823000	11912177	+	-1.51	0.272	2.347	10	intronic	Unassigned	ENSG00000000079	P00079
+GENE080	GENE080	pseudogene gene 080	pseudogene	chr1	11960000	11965953	+	2.718	9.04e-05	4.791	13	missense	Interferon signalling	ENSG00000000080	P00080
+GENE081	GENE081	protein coding gene 081	protein_coding	chr2	12097000	12111634	-	-0.24	0.113	6.718	7	synonymous	Cell cycle	ENSG00000000081	P00081
+GENE082	GENE082	lncRNA gene 082	lncRNA	chr7	12234000	12261458	+	0.582	0.743	4.26	14	frameshift	Oxidative phosphorylation	ENSG00000000082	P00082
+GENE083	GENE083	pseudogene gene 083	pseudogene	chr12	12371000	12411091	+	-1.152	0.6	5.291	0	stop_gained	Extracellular matrix	ENSG00000000083	P00083
+GENE084	GENE084	protein coding gene 084	protein_coding	chrX	12508000	12582702	-	3.516	2.9e-05	11.192	20	intronic	Unassigned	ENSG00000000084	P00084
+GENE085	GENE085	lncRNA gene 085	lncRNA	chr1	12645000	12669075	+	-0.453	0.605	8.478	22	missense	Interferon signalling	ENSG00000000085	P00085
+GENE086	GENE086	pseudogene gene 086	pseudogene	chr2	12782000	12816362	+	0.005	0.804	7.009	13	synonymous	Cell cycle	ENSG00000000086	P00086
+GENE087	GENE087	protein coding gene 087	protein_coding	chr7	12919000	12991006	-	-0.097	0.486	3.589	0	frameshift	Oxidative phosphorylation	ENSG00000000087	P00087
+GENE088	GENE088	lncRNA gene 088	lncRNA	chr12	13056000	13096782	+	2.264	7.29e-05	7.14	21	stop_gained	Extracellular matrix	ENSG00000000088	P00088
+GENE089	GENE089	pseudogene gene 089	pseudogene	chrX	13193000	13224327	+	-1.032	0.946	6.211	20	intronic	Unassigned	ENSG00000000089	P00089
+GENE090	GENE090	protein coding gene 090	protein_coding	chr1	13330000	13361321	-	0.871	0.0654	4.243	4	missense	Interferon signalling	ENSG00000000090	P00090
+GENE091	GENE091	lncRNA gene 091	lncRNA	chr2	13467000	13477895	+	-0.548	0.73	9.906	9	synonymous	Cell cycle	ENSG00000000091	P00091
+GENE092	GENE092	pseudogene gene 092	pseudogene	chr7	13604000	13612101	+	1.29	3.74e-05	4.422	11	frameshift	Oxidative phosphorylation	ENSG00000000092	P00092
+GENE093	GENE093	protein coding gene 093	protein_coding	chr12	13741000	13816343	-	0.231	0.624	11.298	1	stop_gained	Extracellular matrix	ENSG00000000093	P00093
+GENE094	GENE094	lncRNA gene 094	lncRNA	chrX	13878000	13914918	+	-0.198	0.461	4.707	22	intronic	Unassigned	ENSG00000000094	P00094
+GENE095	GENE095	pseudogene gene 095	pseudogene	chr1	14015000	14089995	+	0.193	0.479	8.025	22	missense	Interferon signalling	ENSG00000000095	P00095
+GENE096	GENE096	protein coding gene 096	protein_coding	chr2	14152000	14240026	-	2.98	6.86e-05	6.955	20	synonymous	Cell cycle	ENSG00000000096	P00096
+GENE097	GENE097	lncRNA gene 097	lncRNA	chr7	14289000	14304833	+	0.199	0.0506	11.091	17	frameshift	Oxidative phosphorylation	ENSG00000000097	P00097
+GENE098	GENE098	pseudogene gene 098	pseudogene	chr12	14426000	14490601	+	-0.258	0.879	6.232	20	stop_gained	Extracellular matrix	ENSG00000000098	P00098
+GENE099	GENE099	protein coding gene 099	protein_coding	chrX	14563000	14575891	-	-0.059	0.079	2.9	7	intronic	Unassigned	ENSG00000000099	P00099
+GENE100	GENE100	lncRNA gene 100	lncRNA	chr1	14700000	14785848	+	2.126	3.94e-06	5.699	7	missense	Interferon signalling	ENSG00000000100	P00100
+GENE101	GENE101	pseudogene gene 101	pseudogene	chr2	14837000	14882797	+	0.021	0.202	6.99	22	synonymous	Cell cycle	ENSG00000000101	P00101
+GENE102	GENE102	protein coding gene 102	protein_coding	chr7	14974000	14997393	-	1.159	0.305	3.567	22	frameshift	Oxidative phosphorylation	ENSG00000000102	P00102
+GENE103	GENE103	lncRNA gene 103	lncRNA	chr12	15111000	15159744	+	-0.494	0.6	2.784	11	stop_gained	Extracellular matrix	ENSG00000000103	P00103
+GENE104	GENE104	pseudogene gene 104	pseudogene	chrX	15248000	15320635	+	2.333	2.07e-05	2.705	18	intronic	Unassigned	ENSG00000000104	P00104
+GENE105	GENE105	protein coding gene 105	protein_coding	chr1	15385000	15418988	-	-1.235	0.0668	3.323	24	missense	Interferon signalling	ENSG00000000105	P00105
+GENE106	GENE106	lncRNA gene 106	lncRNA	chr2	15522000	15537120	+	0.322	0.599	1.691	8	synonymous	Cell cycle	ENSG00000000106	P00106
+GENE107	GENE107	pseudogene gene 107	pseudogene	chr7	15659000	15715191	+	0.535	0.473	3.813	2	frameshift	Oxidative phosphorylation	ENSG00000000107	P00107
+GENE108	GENE108	protein coding gene 108	protein_coding	chr12	15796000	15856666	-	1.343	3.24e-05	6.395	6	stop_gained	Extracellular matrix	ENSG00000000108	P00108
+GENE109	GENE109	lncRNA gene 109	lncRNA	chrX	15933000	15969321	+	0.493	0.821	9.934	17	intronic	Unassigned	ENSG00000000109	P00109
+GENE110	GENE110	pseudogene gene 110	pseudogene	chr1	16070000	16111610	+	0.59	0.13	5.472	11	missense	Interferon signalling	ENSG00000000110	P00110
+GENE111	GENE111	protein coding gene 111	protein_coding	chr2	16207000	16215373	-	0.697	0.832	2.942	14	synonymous	Cell cycle	ENSG00000000111	P00111
+GENE112	GENE112	lncRNA gene 112	lncRNA	chr7	16344000	16409920	+	2.492	8.13e-05	9.97	16	frameshift	Oxidative phosphorylation	ENSG00000000112	P00112
+GENE113	GENE113	pseudogene gene 113	pseudogene	chr12	16481000	16531690	+	0.385	0.255	9.957	24	stop_gained	Extracellular matrix	ENSG00000000113	P00113
+GENE114	GENE114	protein coding gene 114	protein_coding	chrX	16618000	16625643	-	-0.479	0.91	3.46	21	intronic	Unassigned	ENSG00000000114	P00114
+GENE115	GENE115	lncRNA gene 115	lncRNA	chr1	16755000	16791143	+	-0.364	0.933	11.33	5	missense	Interferon signalling	ENSG00000000115	P00115
+GENE116	GENE116	pseudogene gene 116	pseudogene	chr2	16892000	16969496	+	2.329	3.99e-05	9.204	19	synonymous	Cell cycle	ENSG00000000116	P00116
+GENE117	GENE117	protein coding gene 117	protein_coding	chr7	17029000	17061246	-	-0.627	0.812	2.721	9	frameshift	Oxidative phosphorylation	ENSG00000000117	P00117
+GENE118	GENE118	lncRNA gene 118	lncRNA	chr12	17166000	17178285	+	-0.194	0.205	10.136	11	stop_gained	Extracellular matrix	ENSG00000000118	P00118
+GENE119	GENE119	pseudogene gene 119	pseudogene	chrX	17303000	17315485	+	-1.313	0.709	11.816	2	intronic	Unassigned	ENSG00000000119	P00119

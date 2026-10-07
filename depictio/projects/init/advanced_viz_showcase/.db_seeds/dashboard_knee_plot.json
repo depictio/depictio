@@ -1,0 +1,314 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d78"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d78"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "knee-text",
+      "component_type": "text",
+      "title": "Knee plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Barcode rank",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Barcodes ranked by UMI count, one curve per library: a plateau over the called cells, then a steep fall into the empty-droplet background, with the dotted line where the is_cell flag switches off. On the right the same curves with their log-log slope underneath: the knee is the dip in the slope, and sample_B calls fewer cells than sample_A. Log axes and the cutoff are in the tile headers. Input: STARsolo, alevin-fry or Cell Ranger barcode counts of nf-core/scrnaseq.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "knee-curve",
+      "component_type": "advanced_viz",
+      "title": "Barcode-rank curve",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "knee_plot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d89"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background",
+        "data_collection_tag": "knee_plot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d89"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "UMI count against barcode rank, log-log, one line per sample. The cell-calling cutoff is read from the is_cell column.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Barcode rank",
+      "viz_kind": "knee_plot",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "knee_plot",
+        "sample_col": "sample",
+        "rank_col": "rank",
+        "umi_count_col": "umi_count",
+        "is_cell_col": "is_cell",
+        "log_x": true,
+        "log_y": true,
+        "show_cutoff": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "knee-slope",
+      "component_type": "advanced_viz",
+      "title": "Barcode-rank slope",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "knee_plot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d89"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background",
+        "data_collection_tag": "knee_plot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d89"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The same curves with their local log-log slope underneath. The steepest dip marks the transition from cells to empty droplets.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Barcode rank",
+      "viz_kind": "profile",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "profile",
+        "series_col": "sample",
+        "x_col": "rank",
+        "y_col": "umi_count",
+        "lower_col": null,
+        "upper_col": null,
+        "reference_x": null,
+        "reference_label": null,
+        "shaded_bands": [],
+        "log_x": false,
+        "log_y": false,
+        "band_opacity": 0.2,
+        "line_width": 2.0,
+        "x_title": "Barcode rank",
+        "y_title": "UMI count",
+        "legend_pos": "bottom",
+        "selection_enabled": false,
+        "selection_column": null,
+        "derivative": true,
+        "derivative_window": 15
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "knee-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "knee_plot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d89"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background",
+        "data_collection_tag": "knee_plot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d89"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Curve scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Curve filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#F76707",
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-knee-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-knee-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-knee-curve",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-knee-slope",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Cell calling",
+  "subtitle": "Barcode-rank curves for 2 synthetic single-cell libraries: a called-cell plateau followed by a power-law drop into the empty-droplet background.",
+  "icon": "mdi:chart-line-variant",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 36,
+  "main_tab_name": null,
+  "tab_icon": "mdi:test-tube",
+  "tab_icon_color": "orange",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Curve scope",
+      "icon": "mdi:filter-variant",
+      "color": "orange",
+      "description": "Restricts which sample curves are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Barcode rank",
+      "icon": "mdi:chart-line",
+      "color": "orange",
+      "description": "UMI count against barcode rank, log-log, with the cell-calling cutoff",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}
