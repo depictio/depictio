@@ -140,3 +140,17 @@ Known limits:
 The deterministic layout of #1028 (`ai_endpoints/dashboard_layout.py`: 8-column grid,
 full card rows, figures in pairs) moves out of `ai_endpoints` so the CLI can use
 it, and learns tabs.
+
+Icons and colours (`compose_style.py`), from structure and words only:
+
+- a tab keeps its stage's icon and colour; its first section takes the tab's
+  colour, the next ones cycle through hues apart from it, tables stay gray;
+- a card takes its section's colour (hex: Mantine shade 6 for the icon, 7 for
+  the title) and an icon from its column's words (`reads` → counter, `length`
+  → ruler, `coverage` → layers, `%` → percent); a filter likewise; the
+  Overview's key metrics keep their stage's colour, after a Samples count;
+- cards of files the catalog does not know show the mean with the median and
+  range under it (`aggregations: [median, min, max]`, `secondary_layout: grid`);
+- every icon used is one the viewer's production icon subset carries
+  (`generate-icon-subset.mjs` scans viewer sources and shipped dashboards
+  only); a unit test guards it. The viewer shows a card's icon on hover.

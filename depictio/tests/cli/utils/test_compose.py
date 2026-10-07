@@ -663,3 +663,80 @@ def test_files_whose_first_row_is_data_are_one_headerless_group(tmp_path):
     maps = next(g for g in groups if g.glob.startswith("maps/"))
     assert maps.headerless and maps.values == ["S1", "S2"]
     assert [len(g.files) for g in groups if g.glob.startswith("counts/")] == [1, 1]
+
+
+# ---------------------------------------------------------------------------
+# Icons and colours
+# ---------------------------------------------------------------------------
+
+
+def test_a_cards_icon_comes_from_its_columns_words():
+    from depictio.cli.cli.utils.compose_style import icon_for
+
+    assert icon_for("reads_mapped") == "mdi:counter"
+    assert icon_for("mean_read_length") == "mdi:ruler"
+    assert icon_for("GC content (%)") == "mdi:dna"
+    assert icon_for("percent_duplicates") == "mdi:percent"
+    assert icon_for("shannon_entropy") == "mdi:chart-bell-curve"
+    assert icon_for("taxonomy_id") == "mdi:bacteria-outline"
+    assert icon_for("readsMapped") == "mdi:counter"
+    assert icon_for("kappa", "nunique") == "mdi:shape-outline"
+
+
+def test_every_icon_the_composer_uses_is_in_the_viewers_icon_subset():
+    """The production bundle only carries icons named in viewer sources and shipped
+    dashboards: one that is not would render as an empty box."""
+    import re
+
+    from depictio.cli.cli.utils import compose_style
+    from depictio.cli.cli.utils.compose import STAGE_STYLE
+
+    used = set(re.findall(r"mdi:[a-z0-9-]+", (Path(compose_style.__file__)).read_text()))
+    used |= {icon for icon, _ in STAGE_STYLE.values()}
+    used |= {"mdi:filter-variant", "mdi:table", "mdi:information-outline", "mdi:counter"}
+    known: set[str] = set()
+    for root, suffixes in (
+        (REPO / "depictio" / "viewer" / "src", (".ts", ".tsx")),
+        (REPO / "packages", (".ts", ".tsx")),
+        (PROJECTS, (".yaml", ".yml", ".json")),
+    ):
+        for path in root.rglob("*"):
+            if path.suffix in suffixes and "node_modules" not in path.parts:
+                known |= set(re.findall(r"mdi:[a-z0-9-]+", path.read_text(errors="ignore")))
+    assert used <= known, sorted(used - known)
+
+
+def test_sections_take_the_tabs_colour_then_others_tables_stay_gray():
+    from depictio.cli.cli.utils.compose_style import section_colors
+
+    colors = section_colors(
+        ["Bracken", "Centrifuge", "Tables", "Kraken 2"], "green", {"Tables": "gray"}
+    )
+    assert colors["Bracken"] == "green"
+    assert colors["Tables"] == "gray"
+    assert len({colors["Bracken"], colors["Centrifuge"], colors["Kraken 2"]}) == 3
+
+
+def test_a_composed_dashboard_is_styled(run_with_unknown, tmp_path):
+    from depictio.cli.cli.utils.compose_style import hex6
+
+    result = compose_template(run_with_unknown, out_dir=tmp_path / "out", include=["stats/*.tsv"])
+    assert isinstance(result, ComposedTemplate)
+    _, dashboard = _load(result)
+    main = dashboard["main_dashboard"]
+    cards = [c for c in main["components"] if c["component_type"] == "card"]
+    assert cards[0]["title"] == "Samples" and cards[0]["icon_name"] == "mdi:test-tube"
+    assert all(c.get("icon_name") and c.get("icon_color", "").startswith("#") for c in cards)
+    tab = next(t for t in dashboard["tabs"] if t["title"] == "Other data")
+    section = tab["grid_sections"][0]
+    for card in (c for c in tab["components"] if c["component_type"] == "card"):
+        assert card["icon_color"] == hex6(section["color"])
+        assert (
+            card["aggregations"] == ["median", "min", "max"] and card["secondary_layout"] == "grid"
+        )
+    table = next(c for c in tab["components"] if c["component_type"] == "table")
+    assert "depictio_run_id" not in table["columns"] and "reads" in table["columns"]
+    (sample_filter,) = [c for c in main["components"] if c["component_type"] == "interactive"]
+    assert sample_filter["icon_name"] == "mdi:test-tube" and sample_filter[
+        "custom_color"
+    ].startswith("#")
