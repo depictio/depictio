@@ -22,11 +22,15 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
+from typing import TextIO
 
 from depictio.cli.cli_logging import logger
 
@@ -85,11 +89,21 @@ DATA_DIRS = (
     "cache",
     "multiqc_prerender",
     "screenshots",
+    "backups",
 )
+# Written by `up` into the folder it makes a local home: `wipe` deletes nothing,
+# and `up` changes the mode of nothing, in a folder without it.
+HOME_MARKER = ".depictio-local-home"
+# Held by `up` while it starts the server, so a second `up` on the home fails fast.
+UP_LOCK = ".up.lock"
 
 
 class LocalStackError(RuntimeError):
     pass
+
+
+class StateUnreadable(LocalStackError):
+    """state.json cannot be read: `down` and `wipe` then find the processes another way."""
 
 
 def check_platform_supported() -> None:
@@ -103,10 +117,20 @@ def check_platform_supported() -> None:
         )
 
 
+def local_home_env_is_blank() -> bool:
+    """Whether DEPICTIO_LOCAL_HOME is set but empty, which `depictio local` refuses
+    rather than take for the current folder."""
+    value = os.environ.get("DEPICTIO_LOCAL_HOME")
+    return value is not None and not value.strip()
+
+
 def local_home() -> Path:
-    home = Path(os.environ.get("DEPICTIO_LOCAL_HOME", "~/.depictio/local")).expanduser()
-    source = "DEPICTIO_LOCAL_HOME" if "DEPICTIO_LOCAL_HOME" in os.environ else "default"
-    logger.debug("Local home: %s (%s)", home, source)
+    """The local home, absolute: the services start in it, so a relative path would
+    be resolved a second time against itself. An empty DEPICTIO_LOCAL_HOME counts
+    as unset here; the `depictio local` commands refuse it first."""
+    value = os.environ.get("DEPICTIO_LOCAL_HOME", "").strip()
+    home = Path(value or "~/.depictio/local").expanduser().resolve()
+    logger.debug("Local home: %s (%s)", home, "DEPICTIO_LOCAL_HOME" if value else "default")
     return home
 
 
@@ -138,10 +162,15 @@ class Paths:
     def cli_config(self) -> Path:
         return self.home / "cli" / f"{ADMIN_EMAIL.split('@')[0]}_config.yaml"
 
+    @property
+    def marker(self) -> Path:
+        return self.home / HOME_MARKER
+
     def bin(self, name: str) -> Path:
         return self.env / "bin" / name
 
     def ensure_dirs(self) -> None:
+        """Create the data directories. Only for a home that claim_home accepted."""
         # Owner-only: keys/ holds the token signing keys and cli/ the admin token and
         # S3 secret, which the API writes with the default umask (world-readable).
         for private in (self.home, self.home / "keys", self.home / "cli"):
@@ -150,6 +179,58 @@ class Paths:
         for sub in DATA_DIRS:
             (self.home / sub).mkdir(parents=True, exist_ok=True)
         logger.debug("Data directories under %s: %s", self.home, ", ".join(DATA_DIRS))
+
+    def has_data(self) -> bool:
+        """Whether anything `wipe` deletes is there."""
+        return any((self.home / sub).exists() for sub in DATA_DIRS) or any(
+            f.exists() for f in (self.state, self.secrets, self.ports)
+        )
+
+
+def is_local_home(home: Path) -> bool:
+    """Whether ``home`` is a Depictio local home: it holds the marker `up` writes or,
+    made before the marker, what `up` leaves there."""
+    if (home / HOME_MARKER).is_file():
+        return True
+    recorded = any((home / name).is_file() for name in ("state.json", "ports.json"))
+    # Every data directory `up` created before the backups one, as after a first
+    # run that failed early.
+    created = all((home / sub).is_dir() for sub in DATA_DIRS if sub != "backups")
+    if created or (
+        recorded and all((home / sub).is_dir() for sub in ("keys", "cli", "mongo", "logs"))
+    ):
+        logger.debug("%s has no %s but the layout of a local home", home, HOME_MARKER)
+        return True
+    # Wiped before the marker existed: only the downloaded binaries are left.
+    try:
+        specs = json.loads((home / "env" / ".depictio-specs.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(specs, dict) and "specs" in specs
+
+
+def claim_home(paths: Paths) -> None:
+    """Make ``paths.home`` a local home before `up` writes to it: a new or empty
+    folder becomes one, a folder holding anything else is refused."""
+    home = paths.home
+    if home.exists() and not home.is_dir():
+        raise LocalStackError(
+            f"DEPICTIO_LOCAL_HOME names {home}, which is a file: point it at a folder"
+        )
+    # Finder drops a .DS_Store into any folder it shows.
+    content = [p.name for p in home.iterdir() if p.name != ".DS_Store"] if home.is_dir() else []
+    if content and not is_local_home(home):
+        raise LocalStackError(
+            f"{home} is not empty and is not a Depictio local home (it has no {HOME_MARKER}): "
+            "point DEPICTIO_LOCAL_HOME at a new or empty folder"
+        )
+    home.mkdir(parents=True, exist_ok=True)
+    if not paths.marker.exists():
+        paths.marker.write_text(
+            "A Depictio local home, made by `depictio local up`. "
+            "`depictio local wipe` deletes its data.\n"
+        )
+        logger.debug("Wrote %s", paths.marker)
 
 
 # ---------------------------------------------------------------------------
@@ -228,37 +309,74 @@ class State:
     ports: dict[str, int] = field(default_factory=dict)
     home: str = ""
     examples: str = ""
-    # Started on an empty database, so the examples are being seeded.
+    # Started on an empty database, so the examples are being seeded; cleared once
+    # they are loaded.
     first_run: bool = False
+    # Whether the server renders dashboard thumbnails; None in older files.
+    screenshots: bool | None = None
     pids: dict[str, int] = field(default_factory=dict)
     # Start time of each process, so a PID reused after a reboot is not taken for ours.
     start_times: dict[str, float | None] = field(default_factory=dict)
 
     @property
+    def api_port(self) -> int:
+        return self.ports.get("api", DEFAULT_PORTS["api"])
+
+    @property
     def url(self) -> str:
-        return f"http://127.0.0.1:{self.ports.get('api', DEFAULT_PORTS['api'])}"
+        return f"http://127.0.0.1:{self.api_port}"
 
     @classmethod
     def load(cls, paths: Paths) -> State | None:
         """The state of the last `up`, or None when nothing is recorded.
 
         Files written by earlier versions load too: a missing key takes its
-        default, and url is derived from the ports rather than read.
+        default, and url is derived from the ports rather than read. Raises
+        StateUnreadable for a file that is not one `up` wrote.
         """
         if not paths.state.exists():
             logger.debug("No %s: nothing recorded", paths.state)
             return None
-        saved = json.loads(paths.state.read_text())
-        known = {f.name for f in fields(cls)}
-        state = cls(**{k: v for k, v in saved.items() if k in known})
+        try:
+            saved = json.loads(paths.state.read_text())
+            if not isinstance(saved, dict):
+                raise ValueError("not a JSON object")
+            known = {f.name for f in fields(cls)}
+            state = cls(**{k: v for k, v in saved.items() if k in known})
+            for name in ("ports", "pids"):
+                value = getattr(state, name)
+                if not isinstance(value, dict) or not all(
+                    isinstance(v, int) for v in value.values()
+                ):
+                    raise ValueError(f"{name} is not a map of numbers")
+            if not isinstance(state.start_times, dict):
+                raise ValueError("start_times is not a map")
+            if not isinstance(state.examples, str):
+                raise ValueError("examples is not text")
+        except (OSError, ValueError) as exc:
+            raise StateUnreadable(
+                f"{paths.state} is unreadable ({_file_error(exc)}). depictio local down "
+                "stops the server without it, then depictio local up starts it again"
+            ) from exc
         state.home = state.home or str(paths.home)
         logger.debug("Loaded %s: %s", paths.state, state)
         return state
 
     def save(self, paths: Paths) -> None:
         # url is written too, for anything reading the file without this class.
-        paths.state.write_text(json.dumps({**asdict(self), "url": self.url}, indent=2))
+        write_file_atomic(paths.state, json.dumps({**asdict(self), "url": self.url}, indent=2))
         logger.debug("Saved %s: ports %s, pids %s", paths.state, self.ports, self.pids)
+
+
+def _file_error(exc: BaseException) -> str:
+    """Why a file could not be read, without quoting its content (it may hold secrets)."""
+    if isinstance(exc, json.JSONDecodeError):
+        return f"not valid JSON: {exc.msg} at line {exc.lineno}"
+    if isinstance(exc, UnicodeDecodeError):
+        return "not text"
+    if isinstance(exc, OSError):
+        return exc.strerror or type(exc).__name__
+    return str(exc) or type(exc).__name__
 
 
 def write_private_file(path: Path, text: str) -> None:
@@ -269,16 +387,56 @@ def write_private_file(path: Path, text: str) -> None:
         fh.write(text)
 
 
-def load_secrets(paths: Paths) -> dict:
+def write_file_atomic(path: Path, text: str, mode: int | None = None) -> None:
+    """Write ``text`` to ``path`` through a file renamed over it, so a reader, or an
+    interrupted write, never leaves half a file. ``mode`` defaults to the file's
+    current one, else the umask's."""
+    if mode is None:
+        with contextlib.suppress(FileNotFoundError):
+            mode = path.stat().st_mode & 0o777
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.unlink(missing_ok=True)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if mode is None else mode)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            if mode is not None:
+                # Exact, whatever the umask.
+                os.fchmod(fh.fileno(), mode)
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def load_secrets(paths: Paths, create: bool = True) -> dict:
+    """The passwords this home was created with, generated on its first run."""
     # The file name only: its content is never logged.
     if paths.secrets.exists():
         logger.debug("Reading the passwords from %s", paths.secrets)
-        return json.loads(paths.secrets.read_text())
+        try:
+            values = json.loads(paths.secrets.read_text())
+            if not isinstance(values, dict):
+                raise ValueError("not a JSON object")
+            missing = [k for k in ("s3_password", "admin_password") if not values.get(k)]
+            if missing:
+                raise ValueError(f"no {' or '.join(missing)}")
+        except (OSError, ValueError) as exc:
+            raise LocalStackError(
+                f"{paths.secrets} is unreadable ({_file_error(exc)}). It holds the passwords "
+                "this local home was created with: restore it from a copy, or start over "
+                "with depictio local wipe, which deletes the data"
+            ) from exc
+        return values
+    if not create:
+        raise LocalStackError(
+            f"{paths.secrets} is missing: it holds the passwords this local home was created with"
+        )
     values = {
         "s3_password": secrets.token_urlsafe(24),
         "admin_password": secrets.token_urlsafe(24),
     }
-    write_private_file(paths.secrets, json.dumps(values))
+    write_file_atomic(paths.secrets, json.dumps(values), mode=0o600)
     logger.debug("Generated new passwords in %s", paths.secrets)
     return values
 
@@ -355,14 +513,22 @@ def load_ports(paths: Paths) -> dict[str, int]:
     if not paths.ports.exists():
         logger.debug("No %s: preferring the default ports %s", paths.ports, DEFAULT_PORTS)
         return {}
-    saved = json.loads(paths.ports.read_text())
+    try:
+        saved = json.loads(paths.ports.read_text())
+        if not isinstance(saved, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as exc:
+        raise LocalStackError(
+            f"{paths.ports} is unreadable ({_file_error(exc)}). Delete it: depictio local up "
+            "then picks the default ports again"
+        ) from exc
     ports = {k: v for k, v in saved.items() if k in DEFAULT_PORTS and isinstance(v, int)}
     logger.debug("Previous run's ports, from %s: %s", paths.ports, ports)
     return ports
 
 
 def save_ports(paths: Paths, ports: dict[str, int]) -> None:
-    paths.ports.write_text(json.dumps(ports, indent=2))
+    write_file_atomic(paths.ports, json.dumps(ports, indent=2))
     logger.debug("Saved %s: %s", paths.ports, ports)
 
 
@@ -385,6 +551,20 @@ def parse_examples(value: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
+def inherited_env() -> dict[str, str]:
+    """This process's environment for the services, without its AWS_* settings.
+
+    The local S3 store is the server's own, with its credentials in DEPICTIO_S3_*: a
+    session token, profile, region or endpoint from the user's shell makes boto3 and
+    deltalake sign for, or look up, another account.
+    """
+    dropped = sorted(k for k in os.environ if k.startswith("AWS_"))
+    if dropped:
+        # Names only: these hold credentials.
+        _debug_on_change("aws", f"Not passed to the local services: {', '.join(dropped)}")
+    return {k: v for k, v in os.environ.items() if not k.startswith("AWS_")}
+
+
 def server_env(
     paths: Paths, ports: dict[str, int], secret_values: dict, seed: str, screenshots: bool
 ) -> dict:
@@ -393,7 +573,7 @@ def server_env(
     # opt-out (DEPICTIO_TELEMETRY_ENABLED=false), which must reach this one too.
     env = {
         k: v
-        for k, v in os.environ.items()
+        for k, v in inherited_env().items()
         if not k.startswith("DEPICTIO_") or k.startswith("DEPICTIO_TELEMETRY_")
     }
     env.update(
@@ -442,6 +622,9 @@ def server_env(
             # Startup prunes thumbnails of dashboards absent from the database, so they
             # must not live inside the installed package.
             "DEPICTIO_PERFORMANCE_SCREENSHOTS_DIR": str(paths.home / "screenshots"),
+            # Backups go to <base dir>/backups, by default inside the installed package,
+            # where every local home would share them and `wipe` would miss them.
+            "DEPICTIO_BACKUP_BASE_DIR": str(paths.home),
         }
     )
     if seed == "none":
@@ -588,7 +771,8 @@ def wait_until(check, what: str, timeout: float, proc: subprocess.Popen, log_pat
                     " It was killed by an illegal instruction: MongoDB 5+ needs AVX on "
                     "x86_64 and ARMv8.2-A on arm64 (not available on e.g. a Raspberry Pi 4)."
                 )
-            raise LocalStackError(f"{what} exited during startup.{hint}")
+            # `what` may start lower case ("the Depictio API"); here it opens the sentence.
+            raise LocalStackError(f"{what[:1].upper()}{what[1:]} exited during startup.{hint}")
         time.sleep(0.5)
     detail = f" (last error: {last_error})" if last_error else ""
     raise LocalStackError(f"Timed out after {timeout:.0f}s waiting for {what}{detail}.{hint}")
@@ -661,11 +845,17 @@ def api_healthy(port: int) -> bool:
 
 
 def start_services(
-    paths: Paths, ports: dict[str, int], secret_values: dict, env: dict
+    paths: Paths,
+    ports: dict[str, int],
+    secret_values: dict,
+    env: dict,
+    record: Callable[[str, subprocess.Popen], None] | None = None,
 ) -> dict[str, subprocess.Popen]:
+    """Start every service; ``record`` is called with each one as soon as it is
+    started, so its PID is on disk before the next one starts."""
     procs: dict[str, subprocess.Popen] = {}
     try:
-        _start_services(paths, ports, secret_values, env, procs)
+        _start_services(paths, ports, secret_values, env, procs, record)
     except BaseException as exc:
         logger.debug("Startup failed (%s): stopping %s", type(exc).__name__, ", ".join(procs))
         for proc in reversed(list(procs.values())):
@@ -684,6 +874,11 @@ def _stop_child(proc: subprocess.Popen, timeout: float = 20) -> None:
 
 
 _PROXY_VARS = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
+# What the API and the worker run, which also tells them apart from other processes.
+API_APP = "depictio.api.main:app"
+WORKER_APP = "depictio.api.celery_worker:celery_app"
+# The native services by the name of their binary under <home>/env/bin.
+NATIVE_BINARIES = {"mongod": "mongo", "redis-server": "redis", "weed": "s3"}
 
 
 def _start_services(
@@ -692,9 +887,15 @@ def _start_services(
     secret_values: dict,
     env: dict,
     procs: dict[str, subprocess.Popen],
+    record: Callable[[str, subprocess.Popen], None] | None = None,
 ) -> None:
-    procs["mongo"] = spawn(
-        paths,
+    def start(name: str, cmd: list[str], env: dict) -> None:
+        procs[name] = spawn(paths, name, cmd, env=env)
+        if record is not None:
+            record(name, procs[name])
+
+    base_env = inherited_env()
+    start(
         "mongo",
         [
             str(paths.bin("mongod")),
@@ -705,9 +906,9 @@ def _start_services(
             "--bind_ip",
             "127.0.0.1",
         ],
+        base_env,
     )
-    procs["redis"] = spawn(
-        paths,
+    start(
         "redis",
         [
             str(paths.bin("redis-server")),
@@ -720,11 +921,12 @@ def _start_services(
             "--save",
             "",
         ],
+        base_env,
     )
     # Same `weed mini` as the Docker and pixi stacks. Its master, volume and filer
     # talk to each other over HTTP: pin them to loopback and keep them away from any
     # proxy in the environment, or they announce and dial the host's public address.
-    s3_env = {k: v for k, v in os.environ.items() if k.lower() not in _PROXY_VARS}
+    s3_env = {k: v for k, v in base_env.items() if k.lower() not in _PROXY_VARS}
     s3_env.update(
         {
             "NO_PROXY": "127.0.0.1,localhost",
@@ -733,8 +935,7 @@ def _start_services(
             "S3_BUCKET": S3_BUCKET,
         }
     )
-    procs["s3"] = spawn(
-        paths,
+    start(
         "s3",
         [
             str(paths.bin("weed")),
@@ -751,7 +952,7 @@ def _start_services(
             # weed mini reports cluster statistics to seaweedfs.com by default.
             "-master.telemetry=false",
         ],
-        env=s3_env,
+        s3_env,
     )
 
     wait_until(
@@ -768,14 +969,13 @@ def _start_services(
         paths.logs / "s3.log",
     )
 
-    procs["api"] = spawn(
-        paths,
+    start(
         "api",
         [
             sys.executable,
             "-m",
             "uvicorn",
-            "depictio.api.main:app",
+            API_APP,
             "--host",
             "127.0.0.1",
             "--port",
@@ -783,22 +983,21 @@ def _start_services(
             "--workers",
             "1",
         ],
-        env=env,
+        env,
     )
-    procs["worker"] = spawn(
-        paths,
+    start(
         "worker",
         [
             sys.executable,
             "-m",
             "celery",
             "-A",
-            "depictio.api.celery_worker:celery_app",
+            WORKER_APP,
             "worker",
             "--loglevel=info",
             *worker_pool_args(),
         ],
-        env=env,
+        env,
     )
 
 
@@ -818,8 +1017,18 @@ def worker_pool_args() -> list[str]:
 
 
 def wait_for_api(
-    paths: Paths, ports: dict[str, int], proc: subprocess.Popen, timeout: float = 300
+    paths: Paths,
+    ports: dict[str, int],
+    proc: subprocess.Popen,
+    timeout: float = 300,
+    rebuild_from: dict | None = None,
 ) -> None:
+    """Wait for the API, then for the CLI configuration it writes.
+
+    ``rebuild_from``: the passwords, on a run after the first one, when the CLI
+    configuration is missing. The API writes it only when it creates the admin
+    token, so it is then written again through the API rather than waited for.
+    """
     wait_until(
         lambda: _probe_api(ports["api"]),
         "the Depictio API",
@@ -827,6 +1036,8 @@ def wait_for_api(
         proc,
         paths.logs / "api.log",
     )
+    if rebuild_from is not None and not paths.cli_config.exists():
+        rebuild_cli_config(paths, ports["api"], rebuild_from)
     # Written by the API when it creates the admin token, before /health answers.
     wait_until(
         paths.cli_config.exists,
@@ -838,6 +1049,24 @@ def wait_for_api(
     sync_cli_config(paths, ports)
 
 
+def read_cli_config(paths: Paths) -> dict:
+    """The CLI configuration the API wrote; LocalStackError if it cannot be parsed."""
+    import yaml
+
+    try:
+        config = yaml.safe_load(paths.cli_config.read_text()) or {}
+        if not isinstance(config, dict):
+            raise ValueError("not a YAML mapping")
+    except (yaml.YAMLError, ValueError) as exc:
+        # The exception type only: a parser message quotes the file, admin token included.
+        reason = "not valid YAML" if isinstance(exc, yaml.YAMLError) else str(exc)
+        raise LocalStackError(
+            f"{paths.cli_config} is unreadable ({reason}). Delete it: depictio local up "
+            "then writes it again"
+        ) from exc
+    return config
+
+
 def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
     """Point the CLI configuration at this run's API and S3 ports; keep it owner-only.
 
@@ -846,7 +1075,7 @@ def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
     """
     import yaml
 
-    config = yaml.safe_load(paths.cli_config.read_text()) or {}
+    config = read_cli_config(paths)
     s3 = config.setdefault("s3_storage", {})
     url = f"http://127.0.0.1:{ports['api']}"
     changed = config.get("api_base_url") != url or any(
@@ -864,11 +1093,75 @@ def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
         config["api_base_url"] = url
         s3["service_port"] = s3["external_port"] = ports["s3"]
         # Replaced in one step, so a CLI reading it meanwhile never sees half a file.
-        tmp = paths.cli_config.with_suffix(".tmp")
-        write_private_file(tmp, yaml.safe_dump(config, default_flow_style=False, sort_keys=False))
-        os.replace(tmp, paths.cli_config)
+        write_file_atomic(
+            paths.cli_config,
+            yaml.safe_dump(config, default_flow_style=False, sort_keys=False),
+            mode=0o600,
+        )
     paths.cli_config.chmod(0o600)
     return changed
+
+
+def _api_call(url: str, token: str | None = None, form: dict | None = None, body=None) -> dict:
+    """POST ``form`` (url-encoded) or ``body`` (JSON) to the local API; the JSON answer."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    if form is not None:
+        data = urllib.parse.urlencode(form).encode()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    else:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    with _DIRECT.open(request, timeout=30) as resp:
+        return json.load(resp)
+
+
+def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict) -> None:
+    """Write the CLI configuration again, through the running API, as the admin.
+
+    The same three calls as the CLI agents page: sign in, create a long-lived token,
+    have the API generate the configuration for it.
+    """
+    import yaml
+
+    logger.info("No %s: writing it again through the API", paths.cli_config)
+    auth = f"http://127.0.0.1:{api_port}/depictio/api/v1/auth"
+    try:
+        session = _api_call(
+            f"{auth}/login",
+            form={"username": ADMIN_EMAIL, "password": secret_values["admin_password"]},
+        )
+        token = _api_call(
+            f"{auth}/me/tokens",
+            token=session["access_token"],
+            body={"name": f"depictio-local-{time.strftime('%Y%m%d%H%M%S')}"},
+        )
+        fields_sent = (
+            "user_id",
+            "access_token",
+            "refresh_token",
+            "token_type",
+            "token_lifetime",
+            "expire_datetime",
+            "refresh_expire_datetime",
+            "name",
+        )
+        config = _api_call(
+            f"{auth}/generate_agent_config",
+            token=session["access_token"],
+            body={key: token.get(key) for key in fields_sent},
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        raise LocalStackError(
+            f"{paths.cli_config} is missing and the API could not write it again "
+            f"({_probe_error(exc)}). See {paths.logs / 'api.log'}"
+        ) from exc
+    write_file_atomic(
+        paths.cli_config,
+        yaml.safe_dump(config, default_flow_style=False, sort_keys=False),
+        mode=0o600,
+    )
+    logger.info("Wrote %s again", paths.cli_config)
 
 
 def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
@@ -883,7 +1176,8 @@ def check_alive(paths: Paths, procs: dict[str, subprocess.Popen]) -> None:
 
 def table_status(url: str, token: str, dc_id: str) -> str:
     """'ready' once the API has a Delta table for the data collection ``dc_id``,
-    'absent' if the data collection does not exist, 'loading' otherwise."""
+    'absent' if the data collection does not exist, 'unreachable' if the API does
+    not answer, 'loading' otherwise."""
     request = urllib.request.Request(
         f"{url}/depictio/api/v1/deltatables/specs/{dc_id}",
         headers={"Authorization": f"Bearer {token}"},
@@ -899,7 +1193,8 @@ def table_status(url: str, token: str, dc_id: str) -> str:
             if exc.code == 404 and b"Data collection not found" in exc.read():
                 status, reason = "absent", f"{reason}, data collection not found"
     except Exception as exc:
-        status, reason = "loading", _probe_error(exc)
+        # Refused, reset or timed out: the API, not the example, is the problem.
+        status, reason = "unreachable", _probe_error(exc)
     _debug_on_change(f"table {dc_id}", f"Delta table of {dc_id}: {status} ({reason})")
     return status
 
@@ -921,52 +1216,79 @@ def requested_examples(state: State) -> list[str]:
     return [name for name in state.examples.split(",") if name in EXAMPLE_TABLES]
 
 
-def examples_status(paths: Paths, state: State) -> dict[str, str]:
-    """'ready', 'loading' or 'absent' for each requested example; empty if unknown.
+def examples_status(paths: Paths, state: State, names: list[str] | None = None) -> dict[str, str]:
+    """'ready', 'loading', 'absent' or 'unreachable' for each example in ``names``,
+    by default the requested ones; empty if unknown.
 
     The API loads them in a background thread once it has started, so /health
     answers first: on a first run they need a few more seconds, and their projects
     appear one after the other. They are seeded on the first run of a local home
-    only, so later a missing one is one the home was created without.
+    only, so later a missing one is one the home was created without, or that was
+    deleted since.
     """
-    import yaml
-
-    names = requested_examples(state)
+    requested = requested_examples(state)
+    names = requested if names is None else names
     if not names:
         logger.debug("No examples to check (requested: %r)", state.examples)
         return {}
     try:
-        config = yaml.safe_load(paths.cli_config.read_text())
-        token = config["user"]["token"]["access_token"]
-    except (OSError, KeyError, TypeError) as exc:
+        token = read_cli_config(paths)["user"]["token"]["access_token"]
+    except (OSError, LocalStackError, KeyError, TypeError) as exc:
         # The exception type only: a message could quote part of the file.
         logger.debug("No admin token in %s (%s)", paths.cli_config, type(exc).__name__)
         return {}
-    not_found = "loading" if state.first_run else "absent"
     status = {}
     for name in names:
+        # Seeding creates each project in turn, so on a first run one not created yet
+        # is still to come.
+        not_found = "loading" if state.first_run and name in requested else "absent"
         tables = {table_status(state.url, token, dc_id) for dc_id in EXAMPLE_TABLES[name]}
         tables = {not_found if s == "absent" else s for s in tables}
-        status[name] = next(s for s in ("absent", "loading", "ready") if s in tables)
+        order = ("absent", "unreachable", "loading", "ready")
+        status[name] = next(s for s in order if s in tables)
     return status
+
+
+# Worth waiting out: a table being written, or an API too busy to answer for a moment.
+_PENDING = ("loading", "unreachable")
 
 
 def wait_for_examples(
     paths: Paths, state: State, timeout: float = 120, interval: float = 1.0
 ) -> dict[str, str]:
-    """examples_status once no example is loading any more, or at the timeout."""
+    """examples_status once no example is pending any more, or at the timeout."""
     start = time.monotonic()
     deadline = start + timeout
+
+    def pending(status: dict[str, str]) -> bool:
+        return any(s in _PENDING for s in status.values())
+
     status = examples_status(paths, state)
     logger.debug("Waiting up to %.0fs for the examples: %s", timeout, status)
-    while "loading" in status.values() and time.monotonic() < deadline:
+    while pending(status) and time.monotonic() < deadline:
         time.sleep(interval)
         previous, status = status, examples_status(paths, state)
         if status != previous:
             logger.debug("Examples after %.0fs: %s", time.monotonic() - start, status)
-    if "loading" in status.values():
+    if pending(status):
         logger.debug("Gave up on the examples after %.0fs: %s", time.monotonic() - start, status)
     return status
+
+
+def mark_examples_loaded(paths: Paths, state: State) -> None:
+    """Record that the first run's examples are loaded: from then on a missing one
+    was deleted, and is not waited for. Left alone if the server was stopped or
+    restarted meanwhile."""
+    state.first_run = False
+    try:
+        current = State.load(paths)
+    except StateUnreadable:
+        return
+    if current is None or current.pids != state.pids:
+        logger.debug("%s changed meanwhile: first_run left as is", paths.state)
+        return
+    current.first_run = False
+    current.save(paths)
 
 
 def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
@@ -1005,8 +1327,15 @@ def terminate_group(pid: int, timeout: float = 20, alive=None) -> None:
 
 
 def stop_all(paths: Paths, log=print) -> list[str]:
-    """Stop the processes `up` recorded; returns the names of those that were running."""
-    live = live_pids(State.load(paths))
+    """Stop the processes `up` recorded; returns the names of those that were running.
+
+    With an unreadable state.json, the processes are found by find_server_processes.
+    """
+    try:
+        live = live_pids(State.load(paths))
+    except StateUnreadable:
+        log(f"{paths.state} is unreadable: looking for the server's processes instead")
+        live = find_server_processes(paths)
     stopped = [name for name in reversed(PROCESS_ORDER) if name in live]
     if not stopped:
         logger.debug("No recorded process is running")
@@ -1017,11 +1346,68 @@ def stop_all(paths: Paths, log=print) -> list[str]:
     return stopped
 
 
+def _service_name(cmdline: list[str]) -> str | None:
+    """Which service ``cmdline`` runs, if it is one `up` starts."""
+    if not cmdline:
+        return None
+    # Redis rewrites its title to "redis-server 127.0.0.1:<port>".
+    binary = os.path.basename(cmdline[0].split(" ")[0])
+    if binary in NATIVE_BINARIES:
+        return NATIVE_BINARIES[binary]
+    if API_APP in cmdline:
+        return "api"
+    if WORKER_APP in cmdline:
+        return "worker"
+    return None
+
+
+def find_server_processes(paths: Paths) -> dict[str, int]:
+    """The services `up` started from this home, found without state.json.
+
+    Each one leads its own session (start_new_session), runs one of the commands
+    `up` starts, and works in the home or one of its folders (Redis in redis/).
+    """
+    try:
+        import psutil
+    except ImportError as exc:
+        raise LocalStackError(
+            f"{paths.state} is unreadable, and finding the server's processes without it "
+            f"needs psutil. Stop the mongod, redis-server, weed, uvicorn and celery processes "
+            f"started from {paths.home}, then delete {paths.state}"
+        ) from exc
+    home = os.path.realpath(paths.home)
+    found: dict[str, int] = {}
+    for proc in psutil.process_iter(["pid", "cmdline", "cwd"]):
+        pid, cwd = proc.info["pid"], proc.info["cwd"]
+        if pid == os.getpid() or not cwd:
+            continue
+        cwd = os.path.realpath(cwd)
+        if home not in (cwd, os.path.dirname(cwd)):
+            continue
+        name = _service_name(proc.info["cmdline"] or [])
+        with contextlib.suppress(OSError):
+            if name and os.getpgid(pid) == pid:
+                found[name] = pid
+    logger.debug("Server processes running from %s: %s", home, found or "none")
+    return found
+
+
 def running_status(paths: Paths, state: State | None = None) -> dict[str, bool]:
     """Whether each process `up` started still runs. ``state``: state.json as the
     caller already loaded it, read here otherwise."""
     live = live_pids(state if state is not None else State.load(paths))
     return {name: name in live for name in PROCESS_ORDER}
+
+
+def api_responds(port: int, patience: float = 10) -> bool:
+    """Whether the API answers its health check within ``patience`` seconds, so a
+    moment of load is not taken for a hung API."""
+    deadline = time.monotonic() + patience
+    while not api_healthy(port):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(1)
+    return True
 
 
 def check_server_installed() -> None:
@@ -1099,14 +1485,80 @@ def install_chromium() -> None:
 
 
 def reset(paths: Paths) -> None:
-    """Delete all local data but keep the downloaded binaries."""
+    """Delete all local data but keep the downloaded binaries. Only for a home
+    is_local_home accepts."""
     for sub in DATA_DIRS:
         logger.debug("Deleting %s", paths.home / sub)
         shutil.rmtree(paths.home / sub, ignore_errors=True)
     for f in (paths.state, paths.secrets, paths.ports):
         logger.debug("Deleting %s", f)
         f.unlink(missing_ok=True)
-    logger.debug("Kept the native binaries in %s", paths.env)
+    logger.debug("Kept the native binaries in %s and %s", paths.env, paths.marker)
+
+
+def lock_for_startup(paths: Paths) -> TextIO:
+    """The lock `up` holds while it starts the server, so a second `up` on the home
+    fails fast instead of starting a second MongoDB on the same data. Closing the
+    returned file releases it."""
+    import fcntl  # POSIX only, as is the process handling above
+
+    handle = open(paths.home / UP_LOCK, "a")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        handle.close()
+        raise LocalStackError(
+            f"Another `depictio local up` is already starting this home ({paths.home})"
+        ) from exc
+    except BaseException:
+        handle.close()
+        raise
+    return handle
+
+
+class Interrupted(KeyboardInterrupt):
+    """SIGTERM or SIGHUP (a closed terminal) during startup, handled as Ctrl-C is."""
+
+    def __init__(self, signum: int):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+@contextlib.contextmanager
+def _signals_interrupt() -> Iterator[None]:
+    """Raise Interrupted on SIGTERM and SIGHUP, as Ctrl-C raises KeyboardInterrupt, so
+    the startup stops what it started. A second signal is ignored, so it cannot cut
+    that cleanup short. The previous handlers are restored on exit."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    received: list[int] = []
+
+    def handler(signum, _frame):
+        if received:
+            logger.debug("Ignored %s: already stopping", signal.Signals(signum).name)
+            return
+        received.append(signum)
+        raise Interrupted(signum)
+
+    signums = [getattr(signal, name) for name in ("SIGTERM", "SIGHUP") if hasattr(signal, name)]
+    previous = {signum: signal.signal(signum, handler) for signum in signums}
+    try:
+        yield
+    finally:
+        for signum, old in previous.items():
+            signal.signal(signum, old)
+
+
+def _quiet_on_error(log):
+    """``log``, minus the errors of a terminal that has gone (after SIGHUP), which
+    would otherwise stop the cleanup halfway."""
+
+    def quiet(msg: str) -> None:
+        with contextlib.suppress(OSError):
+            log(msg)
+
+    return quiet
 
 
 # ---------------------------------------------------------------------------
@@ -1124,49 +1576,69 @@ def start_stack(
 ) -> State:
     """Start every service and wait until the API answers; returns what was recorded.
 
-    Leftovers of an earlier run are stopped first. On any error, Ctrl-C included,
-    what this call started is stopped again before the error propagates.
+    Leftovers of an earlier run are stopped first. On any error, Ctrl-C, SIGTERM
+    and SIGHUP included, what this call started is stopped again before the error
+    propagates. Each PID is saved as soon as its process starts.
     """
     warn = warn or log
-    try:
-        stop_all(paths, log=log)
-        ensure_binaries(paths, log=log)
-        seed_screenshots(paths)
-        saved_ports = load_ports(paths)
-        ports = pick_ports(port, saved_ports)
-        if port is None and saved_ports.get("api", ports["api"]) != ports["api"]:
-            warn(
-                f"Port {saved_ports['api']} is now used by another program: "
-                f"Depictio moves to port {ports['api']}"
-            )
-        save_ports(paths, ports)
-        if screenshots and not chromium_installed():
-            log("Installing Chromium for dashboard thumbnails")
-            install_chromium()
-        secret_values = load_secrets(paths)
-        env = server_env(paths, ports, secret_values, seed, screenshots)
-        state = State(
-            ports=ports,
-            home=str(paths.home),
-            examples=seed,
-            first_run=not any((paths.home / "mongo").glob("*")),
+    with _signals_interrupt():
+        try:
+            return _start_stack(paths, port, seed, screenshots, log, warn)
+        except BaseException as exc:
+            logger.debug("Startup failed (%s): stopping what this run started", type(exc).__name__)
+            stop_all(paths, log=_quiet_on_error(log))
+            raise
+
+
+def _start_stack(paths: Paths, port: int | None, seed: str, screenshots: bool, log, warn) -> State:
+    stop_all(paths, log=log)
+    ensure_binaries(paths, log=log)
+    seed_screenshots(paths)
+    saved_ports = load_ports(paths)
+    ports = pick_ports(port, saved_ports)
+    if port is None and saved_ports.get("api", ports["api"]) != ports["api"]:
+        warn(
+            f"Port {saved_ports['api']} is now used by another program: "
+            f"Depictio moves to port {ports['api']}"
         )
-        logger.debug(
-            "Examples to seed: %s; first run (empty database): %s; thumbnails: %s",
-            seed,
-            state.first_run,
-            screenshots,
-        )
+    save_ports(paths, ports)
+    if screenshots and not chromium_installed():
+        log("Installing Chromium for dashboard thumbnails")
+        install_chromium()
+    secret_values = load_secrets(paths)
+    env = server_env(paths, ports, secret_values, seed, screenshots)
+    state = State(
+        ports=ports,
+        home=str(paths.home),
+        examples=seed,
+        first_run=not any((paths.home / "mongo").glob("*")),
+        screenshots=screenshots,
+    )
+    logger.debug(
+        "Examples to seed: %s; first run (empty database): %s; thumbnails: %s",
+        seed,
+        state.first_run,
+        screenshots,
+    )
+    # The API writes the CLI configuration on the first run only: checked before
+    # anything starts, and a missing one is written again once the API answers.
+    rebuild = not state.first_run and not paths.cli_config.exists()
+    if rebuild:
+        log(f"{paths.cli_config} is missing: it is written again once the API answers")
+    elif not state.first_run:
+        read_cli_config(paths)
+    state.save(paths)
+
+    def record(name: str, proc: subprocess.Popen) -> None:
+        state.pids[name] = proc.pid
+        state.start_times[name] = process_start_time(proc.pid)
         state.save(paths)
-        procs = start_services(paths, ports, secret_values, env)
-        state.pids = {name: proc.pid for name, proc in procs.items()}
-        state.start_times = {name: process_start_time(proc.pid) for name, proc in procs.items()}
-        state.save(paths)
-        log(f"Services started (logs in {paths.logs}); waiting for the API")
-        wait_for_api(paths, ports, procs["api"])
-        check_alive(paths, procs)
-    except BaseException as exc:
-        logger.debug("Startup failed (%s): stopping what this run started", type(exc).__name__)
-        stop_all(paths, log=log)
-        raise
+
+    procs = start_services(paths, ports, secret_values, env, record=record)
+    state.pids = {name: proc.pid for name, proc in procs.items()}
+    state.start_times = {name: process_start_time(proc.pid) for name, proc in procs.items()}
+    state.save(paths)
+    log(f"Services started (logs in {paths.logs}); waiting for the API")
+    wait_for_api(paths, ports, procs["api"], rebuild_from=secret_values if rebuild else None)
+    check_alive(paths, procs)
     return state

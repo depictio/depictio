@@ -176,18 +176,40 @@ def _rebind_seaweedfs(options: Path) -> None:
     options.write_text("\n".join([*lines, *(f"{k}={v}" for k, v in pinned.items())]) + "\n")
 
 
+def _prepare_out(out: Path) -> None:
+    """Create ``out``, owner-only, and check that it can be written to."""
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+        # Owner-only like the local home, since the copies keep their modes and
+        # data/keys holds the token-signing key. Containers reach their bind mounts
+        # without going through this directory.
+        out.chmod(0o700)
+        probe = out / ".depictio-export-probe"
+        probe.write_text("")
+        probe.unlink()
+    except OSError as exc:
+        raise LocalStackError(
+            f"Cannot write to {out} ({exc.strerror or exc}): choose another --out"
+        ) from exc
+
+
 def export_compose(paths: Paths, out: Path, log=print) -> None:
     """Copy the local server's data into ``out`` with what Docker Compose needs to run it.
 
     The data is copied, not shared: MongoDB must never run twice on one data
     directory, and the local server stays usable. A running local server is
     stopped first, so the copy is consistent; everything that can fail before
-    the copy is checked before that.
+    the copy, ``out`` included, is checked before that.
     """
     if not any((paths.home / "mongo").glob("*")):
         raise LocalStackError(f"No local server data under {paths.home}")
-    if out.exists() and any(out.iterdir()):
-        raise LocalStackError(f"{out} is not empty")
+    if out.exists() and not out.is_dir():
+        raise LocalStackError(f"{out} is a file: --out names the folder to create")
+    try:
+        if out.exists() and any(out.iterdir()):
+            raise LocalStackError(f"{out} is not empty")
+    except OSError as exc:
+        raise LocalStackError(f"Cannot read {out} ({exc.strerror or exc})") from exc
     version = release_version()
     compose = compose_file(version, log=log)
     override = compose_override(
@@ -197,17 +219,14 @@ def export_compose(paths: Paths, out: Path, log=print) -> None:
         # the object store run as that user rather than the images' own.
         f"{os.getuid()}:{os.getgid()}" if sys.platform == "linux" else None,
     )
-    secret_values = load_secrets(paths)
+    secret_values = load_secrets(paths, create=False)
+    running = any(running_status(paths).values())
+    _prepare_out(out)
 
-    if any(running_status(paths).values()):
+    if running:
         log("Stopping the local server for a consistent copy (depictio local up restarts it)")
         stop_all(paths, log=lambda _msg: None)
 
-    # Owner-only like the local home, since the copies keep their modes and
-    # data/keys holds the token-signing key. Containers reach their bind mounts
-    # without going through this directory.
-    out.mkdir(parents=True, exist_ok=True)
-    out.chmod(0o700)
     data = out / "data"
     for sub in EXPORTED_DIRS:
         log(f"Copying {sub} data")

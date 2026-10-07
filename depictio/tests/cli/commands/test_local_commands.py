@@ -42,6 +42,19 @@ def stack(tmp_path, monkeypatch):
     }
     fake.process_start_time.return_value = 123.0
     fake.viewer_built.return_value = True
+    fake.api_responds.return_value = True
+    fake.api_healthy.return_value = True
+    # What the home holds: None for the examples this run seeds, all of them ready.
+    fake.home_examples = None
+
+    def examples_status(paths, state, names=None):
+        names = local_stack.requested_examples(state) if names is None else names
+        held = fake.home_examples
+        if held is None:
+            held = dict.fromkeys(local_stack.requested_examples(state), "ready")
+        return {name: held[name] for name in names if name in held}
+
+    monkeypatch.setattr(local_cmd, "examples_status", examples_status)
     # The checks `up` runs itself, then what start_stack calls.
     for name in (
         "check_platform_supported",
@@ -50,6 +63,8 @@ def stack(tmp_path, monkeypatch):
         "running_status",
         "stop_all",
         "webbrowser",
+        "api_responds",
+        "api_healthy",
     ):
         monkeypatch.setattr(local_cmd, name, getattr(fake, name))
     for name in (
@@ -77,9 +92,12 @@ def test_up_prints_where_things_are_and_what_to_do_next(stack):
     assert "Use the CLI depictio <command> --server local" in out
     assert "Stop depictio local down" in out
     assert state.start_times == dict.fromkeys(PROCESS_ORDER, 123.0)
-    assert state.first_run
+    assert state.screenshots is False
+    # Started on an empty database, whose examples are now loaded.
+    assert not state.first_run
     assert local_stack.load_ports(stack.paths) == state.ports
     stack.webbrowser.open.assert_not_called()
+    assert stack.paths.marker.is_file()
 
 
 @pytest.mark.parametrize(
@@ -140,7 +158,7 @@ def test_up_data_flags_exit_2_with_the_ingest_command(stack, args, command):
 
     assert result.exit_code == 2, out
     assert "depictio local up starts the server only: add data with depictio ingest" in out
-    assert "Start the server depictio local up" in out
+    assert "Start the server depictio local up " in out
     assert f"Add the data {command}" in out
     # Before anything starts, or the local home is even created.
     stack.check_platform_supported.assert_not_called()
@@ -154,12 +172,38 @@ def test_up_data_flags_are_hidden_from_the_help():
     assert hidden == {"--template", "--data-root", "--project-name", "--var"}
 
 
-def test_up_rejects_unknown_examples_before_starting_anything(stack):
-    result, out = _invoke("up", "--examples", "all", "--no-open")
+@pytest.mark.parametrize(
+    ("args", "start"),
+    [
+        (
+            ["--port", "18059", "--examples", "iris", "--screenshots", "--template", "t"],
+            "depictio local up --examples iris --port 18059 --screenshots --no-open",
+        ),
+        # 1.12.0b1's `up --template` seeded no example.
+        (["--template", "t", "--data-root", "/d"], "depictio local up --examples none --no-open"),
+        (["--data-root", "/d"], "depictio local up --no-open Add the data"),
+    ],
+    ids=["other-flags", "template-means-no-examples", "data-root-only"],
+)
+def test_the_start_command_keeps_the_other_up_flags(stack, args, start):
+    result, out = _invoke("up", *args, "--no-open")
 
-    assert result.exit_code == 1
-    assert "iris, penguins, iris,penguins or none" in out
+    assert result.exit_code == 2, out
+    assert f"Start the server {start}" in out
+
+
+@pytest.mark.parametrize(
+    "args",
+    [["--examples", "all"], ["--port", "0"], ["--port", "70000"], ["--port", "-5"]],
+    ids=["examples", "port-0", "port-70000", "port-negative"],
+)
+def test_up_rejects_bad_values_as_usage_errors_before_starting_anything(stack, args):
+    result, out = _invoke("up", *args, "--no-open")
+
+    assert result.exit_code == 2, out
+    assert ("iris, penguins, iris,penguins or none" in out) == (args[0] == "--examples")
     stack.start_services.assert_not_called()
+    assert not stack.paths.home.exists()
 
 
 def test_ctrl_c_during_startup_stops_what_was_started(stack):
@@ -186,24 +230,71 @@ def test_a_failed_check_leaves_a_running_server_alone(stack):
 def test_up_on_a_running_server_names_the_flags_it_ignores(stack):
     stack.running_status.return_value = dict.fromkeys(PROCESS_ORDER, True)
     stack.paths.ensure_dirs()
-    State(ports={"api": 18058}, home="x").save(stack.paths)
+    State(ports={"api": 18058}, home="x", screenshots=False).save(stack.paths)
 
-    result, out = _invoke(
-        "up", "--port", "18059", "--examples", "iris", "--screenshots", "--no-open"
-    )
+    result, out = _invoke("up", "--port", "18059", "--screenshots", "--no-open")
 
     assert result.exit_code == 0, out
-    for flag in ("--port", "--examples", "--screenshots"):
+    assert "Depictio is already running at http://127.0.0.1:18058" in out
+    for flag in ("--port", "--screenshots"):
         assert f"{flag} is ignored" in out
     stack.start_services.assert_not_called()
 
-    result, out = _invoke("up", "--port", "18058", "--no-open")
+    # The values the server runs with.
+    result, out = _invoke("up", "--port", "18058", "--no-screenshots", "--no-open")
+    assert result.exit_code == 0, out
     assert "is ignored" not in out
+
+
+def test_up_does_not_reuse_a_server_whose_api_hangs(stack):
+    stack.running_status.return_value = dict.fromkeys(PROCESS_ORDER, True)
+    stack.api_responds.return_value = False
+    stack.paths.ensure_dirs()
+    State(ports={"api": 18058}, home="x", examples="iris").save(stack.paths)
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 1, out
+    assert "Depictio is running but its API at http://127.0.0.1:18058 is not responding" in out
+    assert "depictio local down, then depictio local up" in out
+    assert "did not finish loading" not in out and "wipe" not in out
+    stack.start_services.assert_not_called()
+    stack.stop_all.assert_not_called()
+
+
+def test_up_says_which_process_died_before_restarting(stack):
+    stack.running_status.return_value = {name: name != "worker" for name in PROCESS_ORDER}
+    stack.paths.ensure_dirs()
+    State(ports={"api": 18058}, home="x", pids={"worker": 1}).save(stack.paths)
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    assert "worker is not running: restarting the server" in out
+    stack.start_services.assert_called_once()
+
+
+def test_up_on_a_running_server_writes_a_deleted_cli_config_again(stack, monkeypatch):
+    stack.running_status.return_value = dict.fromkeys(PROCESS_ORDER, True)
+    stack.paths.ensure_dirs()
+    local_stack.load_secrets(stack.paths)
+    ports = {"api": 18058, "mongo": 1, "redis": 2, "s3": 3}
+    State(ports=ports, home="x").save(stack.paths)
+    rebuild, sync = MagicMock(), MagicMock()
+    monkeypatch.setattr(local_cmd, "rebuild_cli_config", rebuild)
+    monkeypatch.setattr(local_cmd, "sync_cli_config", sync)
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    assert rebuild.call_args.args[:2] == (stack.paths, 18058)
+    sync.assert_called_once_with(stack.paths, ports)
+    assert f"Wrote {stack.paths.cli_config} again" in out
 
 
 @pytest.mark.parametrize("given", [True, False], ids=["--examples", "default"])
 def test_examples_missing_from_an_existing_home_are_not_waited_for(stack, monkeypatch, given):
-    monkeypatch.setattr(local_cmd, "examples_status", lambda paths, state: {"iris": "absent"})
+    stack.home_examples = {"iris": "absent", "penguins": "ready"}
     wait = MagicMock()
     monkeypatch.setattr(local_cmd, "wait_for_examples", wait)
 
@@ -211,9 +302,35 @@ def test_examples_missing_from_an_existing_home_are_not_waited_for(stack, monkey
 
     assert result.exit_code == 0, out
     wait.assert_not_called()
-    assert "Examples iris" not in out
+    # What the home holds, whatever this run asked for.
+    assert "Examples penguins" in out
     warning = "This local home has no iris example: examples are added on its first run only"
     assert (warning in out) == given
+
+
+def test_examples_list_only_what_the_home_has_ready(stack, monkeypatch):
+    stack.home_examples = {"iris": "ready", "penguins": "ready"}
+
+    result, out = _invoke("up", "--examples", "iris", "--no-open")
+
+    assert result.exit_code == 0, out
+    assert "Examples iris, penguins" in out
+    # Asked for something the home has: nothing to warn about.
+    assert "first run only" not in out
+
+
+def test_an_api_that_stops_answering_is_not_blamed_on_the_examples(stack, monkeypatch):
+    stack.home_examples = {"iris": "unreachable", "penguins": "ready"}
+    monkeypatch.setattr(
+        local_cmd, "wait_for_examples", lambda paths, state: {"iris": "unreachable"}
+    )
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    assert "did not answer while checking the iris example" in out
+    assert "did not finish loading" not in out and "wipe" not in out
+    assert "Examples penguins" in out
 
 
 def test_open_over_ssh_prints_a_tunnel_instead(stack, monkeypatch):
@@ -270,6 +387,32 @@ def test_open_without_a_running_server_says_how_to_start_one(stack, monkeypatch,
     stack.webbrowser.open.assert_not_called()
 
 
+@pytest.mark.parametrize("healthy", [True, False], ids=["api-answers", "api-down"])
+def test_open_with_a_stopped_worker_says_the_server_is_partly_running(stack, monkeypatch, healthy):
+    monkeypatch.setattr(local_cmd, "_has_display", lambda: True)
+    _save_running_state(stack)
+    stack.running_status.return_value = {name: name != "worker" for name in PROCESS_ORDER}
+    stack.api_healthy.return_value = healthy
+
+    result, out = _invoke("open")
+
+    assert result.exit_code == (0 if healthy else 1), out
+    assert "partly running (worker stopped): run depictio local up" in out
+    assert stack.webbrowser.open.called == healthy
+
+
+def test_open_with_a_hung_api_says_so(stack, monkeypatch):
+    monkeypatch.setattr(local_cmd, "_has_display", lambda: True)
+    _save_running_state(stack)
+    stack.api_healthy.return_value = False
+
+    result, out = _invoke("open")
+
+    assert result.exit_code == 1
+    assert "The Depictio API at http://127.0.0.1:18058 is not responding" in out
+    stack.webbrowser.open.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("platform", "env", "expected"),
     [
@@ -297,21 +440,39 @@ def test_down_says_when_nothing_is_running(tmp_path, monkeypatch):
     assert "Depictio local is not running." in out
 
 
-def test_status_reports_api_health(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("dead", "healthy", "code"),
+    [(None, True, 0), ("worker", True, 1), (None, False, 1)],
+    ids=["all-up", "worker-stopped", "api-unreachable"],
+)
+def test_status_reports_api_health_and_exits_1_unless_all_is_well(
+    tmp_path, monkeypatch, dead, healthy, code
+):
     monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
     ports = {"api": 18058, "mongo": 17018, "redis": 16379, "s3": 19000}
     State(ports=ports, home=str(tmp_path)).save(Paths(tmp_path))
-    monkeypatch.setattr(local_cmd, "running_status", lambda *_: dict.fromkeys(PROCESS_ORDER, True))
-    monkeypatch.setattr(local_cmd, "api_healthy", lambda port: port == 18058)
+    running = {name: name != dead for name in PROCESS_ORDER}
+    monkeypatch.setattr(local_cmd, "running_status", lambda *_: running)
+    monkeypatch.setattr(local_cmd, "api_healthy", lambda port: healthy and port == 18058)
 
     result, out = _invoke("status")
 
-    assert result.exit_code == 0, out
-    assert "API at http://127.0.0.1:18058: reachable" in out
+    assert result.exit_code == code, out
+    reachable = "is reachable" if healthy else "is not reachable"
+    assert f"API at http://127.0.0.1:18058 {reachable}" in out
     assert "mongo running port 17018" in out
     # The worker listens on no port.
-    assert "worker running" in out
+    assert f"worker {'stopped' if dead else 'running'}" in out
     assert "worker running port" not in out
+
+
+def test_status_of_a_server_never_started_exits_1(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+
+    result, out = _invoke("status")
+
+    assert result.exit_code == 1
+    assert "Depictio local is not running" in out
 
 
 def test_a_failure_after_the_checks_stops_what_up_started(stack):
@@ -376,3 +537,183 @@ def test_a_wait_that_cannot_spin_says_what_it_waits_for(capsys):
     out = capsys.readouterr().out
     assert "Loading the examples" in out
     assert "Starting the local server" not in out
+
+
+def test_the_exported_path_is_printed_as_typed(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+    monkeypatch.setattr(local_cmd, "export_compose", MagicMock())
+    out_dir = tmp_path / "stack[red]v2[/x]"
+
+    result, out = _invoke("export", "--out", str(out_dir))
+
+    assert result.exit_code == 0, out
+    assert f"Exported to {out_dir}" in out
+    assert "docker compose up -d" in out
+
+
+def test_the_export_entry_of_the_help_holds_on_one_line():
+    export = get_command(local_cmd.app).commands["export"]
+    first_paragraph = export.help.split("\n\n")[0]
+    assert "\n" not in first_paragraph
+    assert "Formerly `export-compose`" in " ".join(export.help.split())
+
+
+# --- The local home ------------------------------------------------------------
+
+
+def test_wipe_on_a_home_never_used_has_nothing_to_delete(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "never-used"))
+
+    result, out = _invoke("wipe", "--yes")
+
+    assert result.exit_code == 0, out
+    assert f"Nothing to delete under {tmp_path / 'never-used'}" in out
+    assert "Local data deleted" not in out
+
+
+def test_wipe_refuses_a_folder_that_is_not_a_local_home(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    for sub in ("logs", "cache", "src"):
+        (project / sub).mkdir(parents=True)
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(project))
+
+    result, out = _invoke("wipe", "--yes")
+
+    assert result.exit_code == 1
+    assert "is not a Depictio local home" in out and "nothing deleted" in out
+    assert all((project / sub).is_dir() for sub in ("logs", "cache", "src"))
+
+
+def test_an_empty_depictio_local_home_is_refused(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "logs").mkdir()
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", "")
+
+    for command in (["wipe", "--yes"], ["up", "--no-open"], ["down"], ["status"]):
+        result, out = _invoke(*command)
+        assert result.exit_code == 1, (command, out)
+        assert "DEPICTIO_LOCAL_HOME is set but empty" in out
+    assert (tmp_path / "logs").is_dir()
+
+
+@pytest.mark.parametrize("marker", [True, False], ids=["marker", "made-before-the-marker"])
+def test_wipe_deletes_a_local_home(tmp_path, monkeypatch, marker):
+    paths = Paths(tmp_path / "local")
+    local_stack.claim_home(paths)
+    paths.ensure_dirs()
+    local_stack.save_ports(paths, dict(local_stack.DEFAULT_PORTS))
+    if not marker:
+        paths.marker.unlink()
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(paths.home))
+
+    result, out = _invoke("wipe", "--yes")
+
+    assert result.exit_code == 0, out
+    assert "Local data deleted" in out
+    assert not paths.has_data()
+
+
+def test_declining_the_wipe_prompt_says_so(tmp_path, monkeypatch):
+    paths = Paths(tmp_path / "local")
+    local_stack.claim_home(paths)
+    paths.ensure_dirs()
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(paths.home))
+
+    result = runner.invoke(local_cmd.app, ["wipe"], input="n\n")
+
+    assert result.exit_code == 0
+    assert result.output.endswith("Cancelled.\n")
+    assert paths.has_data()
+
+
+def test_up_refuses_a_folder_that_is_not_a_local_home(stack, monkeypatch):
+    project = stack.paths.home
+    (project / "src").mkdir(parents=True)
+    project.chmod(0o755)
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 1
+    assert "is not empty and is not a Depictio local home" in out
+    stack.start_services.assert_not_called()
+    assert project.stat().st_mode & 0o777 == 0o755
+    assert not (project / "mongo").exists() and not stack.paths.marker.exists()
+
+
+def test_up_in_an_unwritable_folder_names_depictio_local_home(stack, tmp_path, monkeypatch):
+    parent = tmp_path / "ro"
+    parent.mkdir()
+    parent.chmod(0o555)
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(parent / "local"))
+    try:
+        result, out = _invoke("up", "--no-open")
+    finally:
+        parent.chmod(0o755)
+
+    assert result.exit_code == 1, out
+    assert "Cannot set up the local home" in out and "DEPICTIO_LOCAL_HOME" in out
+    assert "Traceback" not in out
+
+
+def test_a_relative_depictio_local_home_is_made_absolute(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", "relhome")
+    assert local_stack.local_home() == (tmp_path / "relhome").resolve()
+
+
+def test_a_second_up_on_a_home_being_started_fails_fast(stack):
+    local_stack.claim_home(stack.paths)
+    held = local_stack.lock_for_startup(stack.paths)
+    try:
+        result, out = _invoke("up", "--no-open")
+    finally:
+        held.close()
+
+    assert result.exit_code == 1
+    assert "Another `depictio local up` is already starting this home" in out
+    stack.start_services.assert_not_called()
+    # Released: the next one goes ahead.
+    result, out = _invoke("up", "--no-open")
+    assert result.exit_code == 0, out
+
+
+# --- Unreadable files ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("command", ["status", "open"])
+def test_an_unreadable_state_is_named_with_the_way_out(tmp_path, monkeypatch, command):
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+    Paths(tmp_path).state.write_text("{garbage")
+
+    result, out = _invoke(command)
+
+    assert result.exit_code == 1
+    assert f"{tmp_path / 'state.json'} is unreadable" in out
+    assert "depictio local down stops the server without it" in out
+    assert "Traceback" not in out
+
+
+def test_down_with_an_unreadable_state_finds_the_processes(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+    Paths(tmp_path).state.write_text("")
+    monkeypatch.setattr(local_stack, "find_server_processes", lambda paths: {"mongo": 4242})
+    terminated = []
+    monkeypatch.setattr(local_stack, "terminate_group", lambda pid, *a, **k: terminated.append(pid))
+
+    result, out = _invoke("down")
+
+    assert result.exit_code == 0, out
+    assert "state.json is unreadable: looking for the server's processes instead" in out
+    assert "Stopping mongo (pid 4242)" in out
+    assert terminated == [4242]
+    assert not Paths(tmp_path).state.exists()
+
+
+def test_up_with_an_unreadable_state_starts_again(stack):
+    stack.paths.ensure_dirs()
+    stack.paths.state.write_text("[1, 2]")
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    stack.start_services.assert_called_once()
