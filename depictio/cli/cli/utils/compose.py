@@ -395,6 +395,37 @@ def _table_config(files: Sequence[str]) -> dict[str, Any]:
     return config
 
 
+def _line_column(columns: Sequence[str]) -> str | None:
+    """The one text column a recipe parsing whole reports reads (``line``,
+    ``raw``…), next to ``source_path`` for the file a line came from."""
+    text = [c for c in columns if c != "source_path"]
+    return text[0] if len(text) == 1 else None
+
+
+def _lines_config(files: Sequence[str], column: str, with_path: bool) -> dict[str, Any]:
+    """Text reports read one whole line per row into ``column``, as a recipe that
+    parses them expects: the bundled templates' raw report scans."""
+    kwargs: dict[str, Any] = {
+        # A separator no report holds: the whole line is the one column.
+        "separator": "\x1f",
+        "has_header": False,
+        "new_columns": [column],
+        "quote_char": None,
+        "infer_schema_length": 0,
+        "truncate_ragged_lines": True,
+    }
+    if with_path:
+        kwargs["include_file_paths"] = "source_path"
+    config: dict[str, Any] = {
+        "type": "Table",
+        "scan": _scan(files),
+        "dc_specific_properties": {"format": "TSV", "polars_kwargs": kwargs},
+    }
+    if len(files) > 1:
+        config["metatype"] = "Aggregate"
+    return config
+
+
 def _output_label(output: CatalogOutput) -> str:
     return output.name or pretty(output.id)
 
@@ -512,11 +543,11 @@ def _carries_input_columns(path: Path, source: Any) -> bool:
 
 
 def _has_columns(root: Path | None, path: str, columns: list[str] | None) -> bool:
-    """Whether the table at ``path`` has ``columns`` (true when unknown or unreadable)."""
+    """Whether ``path`` reads as a table with ``columns`` (true when none are asked)."""
     if root is None or not columns:
         return True
     frame = read_sample(root / path, rows=1)
-    return frame is None or all(c in frame.columns for c in columns)
+    return frame is not None and all(c in frame.columns for c in columns)
 
 
 def _resolve_recipe_sources(
@@ -706,11 +737,15 @@ def _resolve_dependencies(
                     if provider is not None:
                         provider.tag = ref
                         provider.renamed = True
+                needed = collection.need_columns.get(ref) or []
                 raw = [
-                    f
-                    for f in collection.files
-                    if table_format(f) and _has_columns(root, f, collection.need_columns.get(ref))
+                    f for f in collection.files if table_format(f) and _has_columns(root, f, needed)
                 ]
+                # Not tables with those columns: a recipe reading one text column
+                # parses the reports themselves, one line per row.
+                line_column = None if raw else _line_column(needed)
+                if line_column:
+                    raw = list(collection.files)
                 if provider is None and raw:
                     if collection.tag == ref:
                         # The recipe reads a collection named like its own output
@@ -720,7 +755,11 @@ def _resolve_dependencies(
                         tag=ref,
                         kind="provider",
                         description=f"Raw input of {collection.tag}",
-                        config=_table_config(raw),
+                        config=(
+                            _lines_config(raw, line_column, "source_path" in needed)
+                            if line_column
+                            else _table_config(raw)
+                        ),
                         stage=collection.stage,
                         tool=collection.tool,
                         files=raw,
