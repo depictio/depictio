@@ -6,7 +6,7 @@
  * order and the event shape in `categoricalOptions`, the slider bounds in
  * `numericScale`. Only the drawing differs.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   MultiSelect,
   RangeSlider,
@@ -74,7 +74,10 @@ const ControlMessage: React.FC<{ error?: boolean; children: React.ReactNode }> =
  * A chip carries a colour dot only when the dashboard gives its column colours
  * (`category_colors`): there the dot is the colour the figures draw the value
  * in. Past `MAX_STRIP_CHIPS` values the chips no longer fit, and a compact
- * select drawn as the same track takes over.
+ * select drawn as the same track takes over. It also takes over whenever the
+ * chips are wider than the room the bar gives them (see `useChipsFit`): the
+ * track scrolls rather than wraps, and a hidden scrollbar meant the values past
+ * the edge were cut off with nothing to say they were there.
  */
 export const StripCategorical: React.FC<StripControlProps> = ({
   metadata,
@@ -100,12 +103,59 @@ export const StripCategorical: React.FC<StripControlProps> = ({
   const mode = chipSelectionMode(type);
   const emit = (next: string[]) =>
     onFilterChange?.(filterEvent(metadata, chipFilterValue(next, type)));
+  const fit = useChipsFit(`${options.join('\u0000')}\u0001${selected.join('\u0000')}`);
 
   if (loading) return <ControlSkeleton />;
   if (error) return <ControlMessage error>Could not load values</ControlMessage>;
   if (options.length === 0) return <ControlMessage>No values</ControlMessage>;
 
   if (categoricalDisplay(options.length) === 'select') {
+    return renderSelect();
+  }
+
+  return (
+    <div ref={fit.cellRef} className="depictio-strip-fit">
+      {fit.fits ? (
+        <div
+          ref={fit.trackRef}
+          className="depictio-strip-track"
+          role="group"
+          aria-label={label}
+          data-has-selection={selected.length > 0}
+          data-dots={dots ? 'true' : 'false'}
+        >
+          {ordered.map((value) => {
+            const on = selected.includes(value);
+            // A selected value stays clickable even once the funnel has exhausted
+            // it, or it could never be deselected.
+            const disabled = Boolean(availableSet) && !availableSet!.has(value) && !on;
+            return (
+              <button
+                key={value}
+                type="button"
+                className="depictio-strip-chip"
+                aria-pressed={on}
+                disabled={disabled}
+                title={disabled ? `${value}: no data left under the other filters` : value}
+                onClick={() => emit(toggleChip(selected, value, mode))}
+                style={dots ? ({ '--chip-color': dots.get(value) } as React.CSSProperties) : undefined}
+              >
+                {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
+                <span>{value}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        renderSelect()
+      )}
+    </div>
+  );
+
+  // A plain function, not a component: a component declared in here would be a
+  // new type on every render, and React would remount the select (closing its
+  // dropdown) each time the bar re-rendered.
+  function renderSelect() {
     return (
       <StripSelect
         options={ordered}
@@ -118,39 +168,45 @@ export const StripCategorical: React.FC<StripControlProps> = ({
       />
     );
   }
-
-  return (
-    <div
-      className="depictio-strip-track"
-      role="group"
-      aria-label={label}
-      data-has-selection={selected.length > 0}
-      data-dots={dots ? 'true' : 'false'}
-    >
-      {ordered.map((value) => {
-        const on = selected.includes(value);
-        // A selected value stays clickable even once the funnel has exhausted
-        // it, or it could never be deselected.
-        const disabled = Boolean(availableSet) && !availableSet!.has(value) && !on;
-        return (
-          <button
-            key={value}
-            type="button"
-            className="depictio-strip-chip"
-            aria-pressed={on}
-            disabled={disabled}
-            title={disabled ? `${value}: no data left under the other filters` : value}
-            onClick={() => emit(toggleChip(selected, value, mode))}
-            style={dots ? ({ '--chip-color': dots.get(value) } as React.CSSProperties) : undefined}
-          >
-            {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
-            <span>{value}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
 };
+
+/**
+ * Whether a track of chips fits the room its cell has, so a bar can fall back
+ * to its select rather than cut values off.
+ *
+ * The chips' natural width is measured once per set of values and selection
+ * (a selected chip is set in a heavier weight, so it is a few pixels wider),
+ * then compared to the cell's width as the bar resizes. Measuring needs the
+ * chips on screen, so a change of key draws them again for one layout pass:
+ * the measure and the switch both happen in layout effects, before paint, so
+ * the select never flickers into chips. The cell stays mounted either way,
+ * which keeps the observer watching across the switch.
+ */
+function useChipsFit(key: string) {
+  // A callback ref, so the observer starts when the cell mounts: the control
+  // renders a skeleton first, while its values load.
+  const [cell, cellRef] = useState<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [needed, setNeeded] = useState<{ key: string; width: number } | null>(null);
+  const [room, setRoom] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    if (track && needed?.key !== key) setNeeded({ key, width: track.scrollWidth });
+  });
+
+  useEffect(() => {
+    if (!cell || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setRoom(entry.contentRect.width));
+    observer.observe(cell);
+    return () => observer.disconnect();
+  }, [cell]);
+
+  const measured = needed?.key === key ? needed.width : null;
+  // A pixel of slack for sub-pixel rounding between the two measurements.
+  const fits = measured == null || room == null || measured <= room + 1;
+  return { cellRef, trackRef, fits };
+}
 
 const StripSelect: React.FC<{
   options: string[];

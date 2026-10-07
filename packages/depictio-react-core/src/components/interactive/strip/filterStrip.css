@@ -325,6 +325,15 @@
 
 /* ------------------------------------------------------------------- chips */
 
+/* The cell a categorical control measures its room in (see useChipsFit): the
+   chips when they fit it, the select when they do not. */
+.depictio-strip-fit {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .depictio-strip-track {
   display: flex;
   align-items: stretch;
