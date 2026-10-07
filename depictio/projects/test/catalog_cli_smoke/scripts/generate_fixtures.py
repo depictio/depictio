@@ -2,7 +2,7 @@
 
 The catalog ships one fixture per output — but a fixture is a recipe's *result*,
 which is what `catalog_conformance` seeds directly. This project takes the other
-route: it stages what the pipeline would have written, so `depictio-cli run`
+route: it stages what the pipeline would have written, so `depictio-cli ingest`
 executes the recipes for real.
 
 So each raw file below is derived from the matching catalog fixture, inverted

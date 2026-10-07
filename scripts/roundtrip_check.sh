@@ -32,7 +32,7 @@ assert_eq() {
 }
 
 echo "=== Step 1: export original dashboard ==="
-"$CLI" dashboard export "$IRIS_ID" --config "$CONFIG" --output "$TMP/yaml1.yaml"
+"$CLI" dashboard export "$IRIS_ID" --server "$CONFIG" --output "$TMP/yaml1.yaml"
 
 echo "=== Step 2: patch title + strip dashboard_id ==="
 # A dashboard with tabs exports as `main_dashboard` + `tabs`, so the title and
@@ -59,7 +59,7 @@ print('Modified title:', title, '(+ %d tab(s))' % len(d.get('tabs') or []))
 "
 
 echo "=== Step 3: import modified YAML ==="
-IMPORT_OUT=$("$CLI" dashboard import "$TMP/modified.yaml" --config "$CONFIG" 2>&1)
+IMPORT_OUT=$("$CLI" dashboard import "$TMP/modified.yaml" --server "$CONFIG" 2>&1)
 echo "$IMPORT_OUT"
 
 # Extract 24-char hex ObjectId from output
@@ -72,7 +72,7 @@ if [ -z "$NEW_ID" ]; then
 fi
 
 echo "=== Step 4: export new dashboard ==="
-"$CLI" dashboard export "$NEW_ID" --config "$CONFIG" --output "$TMP/yaml2.yaml"
+"$CLI" dashboard export "$NEW_ID" --server "$CONFIG" --output "$TMP/yaml2.yaml"
 
 echo "=== Step 5: compare YAMLs ==="
 "$PYTHON" "$SCRIPT_DIR/roundtrip_compare.py" "$TMP/yaml1.yaml" "$TMP/yaml2.yaml"

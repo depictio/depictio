@@ -2,7 +2,7 @@
 collection's ingest wall-clock goes (parse / collect / write / upload) plus the
 process peak RSS.
 
-Motivation: the ``depictio run`` subprocess is a black box to the benchmark
+Motivation: the ``depictio ingest`` subprocess is a black box to the benchmark
 harness — it only sees the total wall. This module lets the ingestion code stamp
 per-phase durations that are flushed as a single line
 
@@ -11,7 +11,7 @@ per-phase durations that are flushed as a single line
 on stdout, which ``benchmark/runner.py`` greps out of the captured subprocess
 output. Emission is opt-in: it happens only when ``DEPICTIO_INGEST_TIMINGS`` is
 set in the environment (the benchmark runner sets it), so an ordinary
-``depictio-cli run`` stays free of marker lines. Measurement itself is
+``depictio ingest`` stays free of marker lines. Measurement itself is
 zero-overhead when no timer is active: the :func:`timed` / :func:`record`
 helpers no-op unless a surrounding :func:`ingest_run` has installed a timer for
 the current context.
@@ -136,7 +136,7 @@ def parse_timing_markers(text: str) -> list[dict[str, Any]]:
     """Extract all ``DEPICTIO_INGEST_TIMINGS=`` payloads from captured stdout.
 
     Used by the benchmark runner to recover the per-phase breakdown from a
-    ``depictio run`` subprocess. Malformed lines are skipped.
+    ``depictio ingest`` subprocess. Malformed lines are skipped.
     """
     out: list[dict[str, Any]] = []
     for line in text.splitlines():

@@ -12,12 +12,16 @@ Profile-gated: `depictio-viewer` (nginx + built bundle, `ci`), `flower` (`monito
 
 ### Python Environment
 Managed with **uv** (`uv.lock`). No venv is checked in — CI does
-`uv venv --python 3.12.9 venv && uv pip install -e ".[dev]"`. Prefix commands with `uv run`.
+`uv venv --python 3.12.9 venv && uv pip install -e ".[dev]"`. Prefix commands with
+`uv run --extra dev`: a fresh env from a plain `uv run` holds only the base install (the
+CLI alone), and a plain `uv sync` removes the extras.
+Extras: `[multiqc]`, `[server]` (API + worker), `[local]` (`depictio local up`), `[dev]`
+(server + test tools). `depictio/cli/pyproject.toml` is only the `depictio-cli` alias.
 `pixi.toml` offers an alternative Docker-free stack (`pixi run start-infra`, `pixi run api`).
 
 ### Testing
 ```bash
-uv run pytest -xvs -n auto     # testpaths (pyproject.toml) = tests/{api,models,cli,unit}
+uv run --extra dev pytest -xvs -n auto     # testpaths (pyproject.toml) = tests/{api,models,cli,unit}
 
 # E2E (Playwright — the suite CI runs)
 cd depictio/tests/e2e-playwright && npx playwright test
@@ -28,7 +32,7 @@ Playwright is the only e2e suite; the legacy Cypress suite has been removed.
 ### Code Quality
 ```bash
 ruff format depictio && ruff check depictio
-uv run ty check depictio/models/   # only gated dir; must pass with zero errors
+uv run --extra dev ty check depictio/models/   # only gated dir; must pass with zero errors
 pre-commit run --all-files         # mandatory after all code changes
 ```
 

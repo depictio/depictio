@@ -1,7 +1,7 @@
 # nf-core/cutandrun Template v3.1 - CUT&RUN / CUT&Tag chromatin profiling
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/cutandrun/3.1 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/cutandrun/3.1 --data-root /path/to/your/data
 #
 # Tested against nf-core/cutandrun AWS megatest results:
 #   s3://nf-core-awsmegatests/cutandrun/results-42502fb44975e930eec865353c5481f472bcf766

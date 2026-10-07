@@ -234,9 +234,9 @@ python -m depictio.dev_scripts.multiqc_reprocess \
 #    parquet: the source-version probe would then read 1.35 back off it.
 
 # 3. Dry run, then the real ingest.
-python -m depictio.cli run --template nf-core/chipseq/1.2.0 \
+python -m depictio.cli ingest --template nf-core/chipseq/1.2.0 \
   --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest --dry-run
-python -m depictio.cli run --template nf-core/chipseq/1.2.0 \
+python -m depictio.cli ingest --template nf-core/chipseq/1.2.0 \
   --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest
 ```
 

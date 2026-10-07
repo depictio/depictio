@@ -5,6 +5,7 @@ from datetime import datetime
 import polars as pl
 from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
@@ -66,7 +67,7 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
     response = api_get_files_by_dc_id(dc_id, CLI_config)
     if response.status_code != 200:
         error_msg = f"Error fetching files for Data Collection {dc_id}: {response.text}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
     files_data = response.json()
@@ -89,7 +90,7 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
             logger.warning(f"Skipping stale file record (path does not exist): {loc}")
     if not valid_files_data:
         error_msg = f"No valid files found for Data Collection {dc_id} (all file paths are stale)."
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     files_data = valid_files_data
 
@@ -131,7 +132,7 @@ def convert_to_file_objects(files_data: list) -> list:
         files = [File.from_mongo(file_dict) for file_dict in files_data]
     except Exception as e:
         error_msg = f"Error converting file dictionaries to File objects: {str(e)}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     return files
 
@@ -185,7 +186,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
             lf = df.lazy()
         else:
             error_msg = f"Unsupported file format: {file_format}"
-            logger.error(error_msg)
+            logger.debug(error_msg)
             raise ValueError(error_msg)
 
         # Optionally, add a column from file_info if available (e.g., run_id)
@@ -195,7 +196,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
 
     except Exception as e:
         error_msg = f"Error scanning file {file_path}: {e}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
 
@@ -217,7 +218,7 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     return lazy_frames
 
@@ -303,7 +304,7 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
 
     except Exception as e:
         error_msg = f"Error collecting concatenated LazyFrame: {e}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
 
@@ -311,7 +312,7 @@ def streaming_write_enabled(command_parameters: dict | None = None) -> bool:
     """Whether to stream the Delta write instead of materializing the frame.
 
     Opt-in (default off) because ``LazyFrame.sink_delta`` is marked unstable in
-    polars 1.41.x. Enabled by ``depictio run --streaming`` or by exporting
+    polars 1.41.x. Enabled by ``depictio ingest --streaming`` or by exporting
     ``DEPICTIO_INGEST_STREAMING_WRITE=true`` (the benchmark toggles the env var
     to measure both paths of the same cell).
     """
@@ -654,12 +655,7 @@ def client_aggregate_data(
     if destination_exists and not overwrite:
         logger.debug("Destination already exists, overwrite mode is disabled")
 
-        from depictio.cli.cli.utils.rich_utils import console
-
-        console.print("[yellow]⚠️  Destination already exists and overwrite is disabled[/yellow]")
-        console.print(f"   [dim]Destination: {destination_prefix}[/dim]")
-        console.print("   [cyan]💡 Tip: Use --overwrite flag to replace existing data[/cyan]")
-
+        # No output here: the caller reports this message, once per data collection.
         return {
             "result": "error",
             "message": f"Destination {destination_prefix} already exists and overwrite is disabled. Use --overwrite to replace.",
@@ -784,8 +780,8 @@ def client_aggregate_data(
             )
 
     record("delta_bytes", deltatable_size_bytes)
-    logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
-    logger.info(f"🔍 DEBUG: Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
+    logger.debug(f"Calculated deltatable_size_bytes = {deltatable_size_bytes}")
+    logger.debug(f"Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
 
     # Rich summaries need a materialized frame — unavailable on the streaming path.
     if aggregated_df is not None:
@@ -803,7 +799,7 @@ def client_aggregate_data(
 
     # 6. Upsert object in the remote DB with size information
     logger.info(
-        f"🔍 DEBUG: About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
+        f"About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
     )
     with timed("upsert"):
         api_upsert_result = api_upsert_deltatable(
@@ -813,10 +809,10 @@ def client_aggregate_data(
             update=overwrite,
             deltatable_size_bytes=deltatable_size_bytes,
         )
-    logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
+    logger.debug(f"API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         return {"result": "error", "message": error_msg}
     result = api_upsert_result.json()
 
@@ -947,7 +943,8 @@ def process_geojson_data_collection(
         return result
 
     rich_print_checked_statement(
-        f"GeoJSON data collection processed: {data_collection.data_collection_tag}", "success"
+        f"GeoJSON data collection processed: {escape(data_collection.data_collection_tag)}",
+        "success",
     )
 
     return {
@@ -1020,7 +1017,8 @@ def process_phylogeny_data_collection(
         s3_location = f"s3://{bucket}/{s3_key}"
 
     rich_print_checked_statement(
-        f"Phylogeny data collection processed: {data_collection.data_collection_tag}", "success"
+        f"Phylogeny data collection processed: {escape(data_collection.data_collection_tag)}",
+        "success",
     )
 
     return {
@@ -1153,7 +1151,7 @@ def process_recipe_data_collection(
 
     recipe_name = transform_config.recipe
     pipeline_version: str | None = getattr(workflow, "version", None)
-    rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
+    rich_print_checked_statement(f"Running recipe: {escape(recipe_name)}", "info")
 
     # Build source overrides dict. A SourceOverride carries either a single-file
     # 'path' or a multi-file 'glob_pattern'; resolve_sources interprets the value
@@ -1187,14 +1185,15 @@ def process_recipe_data_collection(
                 if run_data_dirs:
                     data_dir = run_data_dirs[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {base_location} ({len(run_data_dirs)} run(s))", "info"
+                        f"Recipe data dir: {escape(base_location)} ({len(run_data_dirs)} run(s))",
+                        "info",
                     )
                 else:
                     data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                    rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
             else:
                 data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -1327,7 +1326,7 @@ def process_recipe_data_collection(
         return api_result
 
     rich_print_checked_statement(
-        f"Recipe '{recipe_name}' produced {result_df.height} rows, written to Delta Lake",
+        f"Recipe '{escape(recipe_name)}' produced {result_df.height} rows, written to Delta Lake",
         "success",
     )
 

@@ -378,9 +378,6 @@ prof_files/
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
 dev/flask-login/.env
-dev/token/private_key.pem
-dev/token/public_key.pem
-dev/token/token.txt
 dev/celery/jobs.json
 dev/dev_design_visu/data/
 dev/dev_delta/
@@ -454,3 +451,7 @@ work/
 # never committed — see benchmark/README.md). The glob covers the per-run
 # directories a `--output` flag creates alongside the default one.
 benchmark/output*/
+
+# `uv sync` inside depictio/cli (the depictio-cli alias) writes a lock nobody uses:
+# the root uv.lock is the only one.
+depictio/cli/uv.lock

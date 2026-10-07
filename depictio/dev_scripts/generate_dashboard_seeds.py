@@ -9,7 +9,7 @@ caption meant editing a MongoDB document.
 
 The nf-core reference projects are NOT here, and should not be: their YAML
 leans on ``use:`` catalog bindings that only the importer resolves, so their
-seeds stay derived from a real ``depictio run`` (see each project's
+seeds stay derived from a real ``depictio ingest`` (see each project's
 ``generate_seeds.sh``). None of the three below writes a single ``use:``.
 
 This is the offline half of the seed pipeline, deliberately so. The CLI import

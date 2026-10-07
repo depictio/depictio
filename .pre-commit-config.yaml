@@ -46,7 +46,9 @@ repos:
       - id: ty-check-models
         name: ty check models
         description: 'Run ty type checker on the models folder (must pass)'
-        entry: uv run ty check depictio/models/
+        # --extra dev: ty is pinned there, as in CI. A fresh env from a plain `uv run`
+        # holds only the base install (the CLI).
+        entry: uv run --extra dev ty check depictio/models/
         language: system
         files: ^depictio/models/
         pass_filenames: false

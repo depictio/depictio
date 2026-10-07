@@ -53,8 +53,8 @@ mkdir -p "$SEEDS_DIR"
 cd "$REPO_ROOT"
 # `--overwrite` is required on any re-run: without it the dashboard import
 # hits `_import_multi_tab_dashboard`'s existing-family guard and returns 409.
-python -m depictio.cli run \
-    --CLI-config-path "$CLI_CONFIG" \
+python -m depictio.cli ingest \
+    --server "$CLI_CONFIG" \
     --template "nf-core/viralrecon/3.0.0" \
     --data-root "$DATA_ROOT" \
     --update-config \

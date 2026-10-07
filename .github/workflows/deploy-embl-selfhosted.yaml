@@ -280,12 +280,12 @@ jobs:
             cd depictio/cli
             uv venv venv --python 3.11
             source venv/bin/activate
-            uv pip install -e .
+            uv pip install -e ../..
           else
             cd depictio/cli
             python3 -m venv venv
             source venv/bin/activate
-            pip install -e .
+            pip install -e ../..
           fi
 
       - name: Get admin token from backend pod
@@ -309,8 +309,8 @@ jobs:
 
           echo "📊 Registering Iris demo project..."
           depictio-cli config check \
-            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-            --CLI-config-path ../../admin_config.yaml || true
+            --project-config-path ../projects/init/iris/project.yaml \
+            --server ../../admin_config.yaml || true
 
       - name: Cleanup
         if: always()

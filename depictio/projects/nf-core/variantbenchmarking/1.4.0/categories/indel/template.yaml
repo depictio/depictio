@@ -1,6 +1,6 @@
 # nf-core/variantbenchmarking 1.4.0 — Somatic indels (analysis=somatic, variant_type=indel)
 # One of three per-variant-type projects. See categories/small/template.yaml.
-#   depictio run --template nf-core/variantbenchmarking/1.4.0/categories/indel \
+#   depictio ingest --template nf-core/variantbenchmarking/1.4.0/categories/indel \
 #     --data-root <root with indel/ + multiqc/multiqc_data/multiqc.parquet>
 
 template:

@@ -1,7 +1,7 @@
 # nf-core/ampliseq Template v2.16.0 - Microbial Community Analysis
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/ampliseq/2.16.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/ampliseq/2.16.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/ampliseq AWS megatest results:
 #   s3://nf-core-awsmegatests/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782

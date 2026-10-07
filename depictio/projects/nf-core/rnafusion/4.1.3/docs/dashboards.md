@@ -263,10 +263,10 @@ mkdir -p "$DEST/input" && curl -fsSL -o "$DEST/input/samplesheet.csv" \
   https://raw.githubusercontent.com/nf-core/test-datasets/rnafusion/testdata/human/samplesheet_valid.csv
 
 # 3. Validate the template against the data without ingesting
-depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root "$DEST" --dry-run
+depictio-cli ingest --template nf-core/rnafusion/4.1.3 --data-root "$DEST" --dry-run
 
 # 4. Ingest for real (needs a reachable server and ~/.depictio/CLI.yaml)
-depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root "$DEST"
+depictio-cli ingest --template nf-core/rnafusion/4.1.3 --data-root "$DEST"
 ```
 
 Do not pass `--project-name`: the dashboard's `project_tag` is resolved by name, so
@@ -277,7 +277,7 @@ A run that skipped a step needs the matching variable, because rnafusion's route
 not auto-detected from `params.json`:
 
 ```bash
-depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root "$DEST" \
+depictio-cli ingest --template nf-core/rnafusion/4.1.3 --data-root "$DEST" \
   --var SKIP_FUSIONCATCHER=true --var SKIP_CTATSPLICING=true
 ```
 

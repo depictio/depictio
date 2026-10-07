@@ -1,4 +1,4 @@
-"""Tests for the ``run`` command's early option-resolution branch.
+"""Tests for the ``ingest`` command's early option-resolution branch.
 
 Only the guards that execute *before* any server, S3 or filesystem work are
 covered here: the ``--pipeline-id`` auto-resolution added for automated
@@ -40,7 +40,7 @@ def normalize(output: str) -> str:
 
 @pytest.fixture
 def app():
-    """A minimal Typer app exposing only the ``run`` command."""
+    """A minimal Typer app with only ``ingest`` and its hidden alias ``run``."""
     app = typer.Typer()
     register_run_command(app)
     return app
@@ -56,7 +56,7 @@ class TestNextflowManifestResolution:
 
     def test_unknown_manifest_exits_with_guidance(self, app, runner):
         """An unmatched manifest fails loudly instead of silently doing nothing."""
-        result = runner.invoke(app, ["--pipeline-id", UNKNOWN_MANIFEST])
+        result = runner.invoke(app, ["ingest", "--pipeline-id", UNKNOWN_MANIFEST])
 
         assert result.exit_code == 1
         output = normalize(result.output)
@@ -69,12 +69,12 @@ class TestNextflowManifestResolution:
     @pytest.mark.parametrize("manifest", SHIPPED_MANIFESTS)
     def test_known_manifest_resolves_to_template(self, app, runner, manifest):
         """A shipped manifest becomes template mode and falls through to the
-        next guard (``--data-root``), proving resolution succeeded."""
-        result = runner.invoke(app, ["--pipeline-id", manifest])
+        next guard (``DATA_DIR``), proving resolution succeeded."""
+        result = runner.invoke(app, ["ingest", "--pipeline-id", manifest])
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
-        assert "--data-root is required when using --template" in output
+        assert "--template needs DATA_DIR" in output
         assert result.exit_code == 1
 
     def test_explicit_project_config_path_wins_over_manifest(self, app, runner, tmp_path):
@@ -89,13 +89,14 @@ class TestNextflowManifestResolution:
         result = runner.invoke(
             app,
             [
+                "ingest",
                 "--pipeline-id",
                 UNKNOWN_MANIFEST,
                 "--project-config-path",
                 str(project_config),
                 "--dry-run",
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
             ],
         )
 
@@ -108,6 +109,7 @@ class TestNextflowManifestResolution:
         result = runner.invoke(
             app,
             [
+                "ingest",
                 "--pipeline-id",
                 UNKNOWN_MANIFEST,
                 "--template",
@@ -117,8 +119,8 @@ class TestNextflowManifestResolution:
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
-        # Stopped at the --data-root guard, i.e. --template was used as-is.
-        assert "--data-root is required when using --template" in output
+        # Stopped at the DATA_DIR guard, i.e. --template was used as-is.
+        assert "--template needs DATA_DIR" in output
         assert result.exit_code == 1
 
 
@@ -132,6 +134,7 @@ class TestMutuallyExclusiveOptions:
         result = runner.invoke(
             app,
             [
+                "ingest",
                 "--template",
                 SHIPPED_MANIFESTS[0],
                 "--project-config-path",
@@ -160,11 +163,12 @@ class TestDashboardImportIsNotTemplateOnly:
         return runner.invoke(
             app,
             [
+                "ingest",
                 "--project-config-path",
                 str(project_config),
                 "--dry-run",
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
                 *extra,
             ],
         )
