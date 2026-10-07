@@ -154,7 +154,9 @@ def section_colors(
             continue
         if name in fixed:
             colors[name] = fixed[name]
-        elif not colors or all(n in fixed for n in colors):
+        elif tab_color != "gray" and (not colors or all(n in fixed for n in colors)):
+            # The first section wears the tab's colour; a gray tab (Other
+            # data) has none to lend, so its sections start on the cycle.
             colors[name] = tab_color
         else:
             colors[name] = cycle[i % len(cycle)]
