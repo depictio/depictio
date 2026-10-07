@@ -22,7 +22,9 @@ class TestStringBooleans:
     """Nextflow stores a flag given as `--ancombc true` as the string "true"."""
 
     def test_string_true_ancombc_keeps_the_differential_abundance(self, tmp_path):
-        _write_params(tmp_path / "pipeline_info", "params_2026-08-25_13-30-37.json", {"ancombc": "true"})
+        _write_params(
+            tmp_path / "pipeline_info", "params_2026-08-25_13-30-37.json", {"ancombc": "true"}
+        )
 
         variables: dict[str, str] = {}
         _introspect_pipeline_params(str(tmp_path), variables)

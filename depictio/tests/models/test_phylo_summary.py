@@ -281,6 +281,8 @@ def test_a_source_of_another_workflow_is_bound_by_ids_alone():
 def test_import_resolves_the_source_tags_in_the_target_project():
     """Exported from one instance, imported into a fresh project: every
     `<source>_dc_tag` is rewritten to that project's ids."""
+    # The CLI package's job runs this suite without the API's dependencies.
+    pytest.importorskip("fastapi")
     from unittest.mock import patch
 
     import mongomock
