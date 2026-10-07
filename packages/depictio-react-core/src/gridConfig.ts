@@ -25,6 +25,25 @@ export const GRID_MAX_COLS = GRID_COL_COUNTS.lg;
 /** The only breakpoint whose layout is ever persisted. */
 export const GRID_WIDEST_BREAKPOINT = 'lg';
 
+export type GridBreakpoint = keyof typeof GRID_BREAKPOINTS;
+
+/**
+ * The breakpoint react-grid-layout gives a grid this wide: the widest whose
+ * threshold the width exceeds (its own `getBreakpointFromWidth` rule).
+ *
+ * Read from the width, not from `onBreakpointChange`, which fires only on a
+ * change: a grid that mounts narrow never reports one. A save guard trusting
+ * it took a phone-width editor's 2-column fallback for the desktop layout and
+ * stored it, leaving every tile of a section one column wide on desktop.
+ */
+export function breakpointForWidth(width: number): GridBreakpoint {
+  let match: GridBreakpoint = 'xs';
+  for (const [bp, min] of Object.entries(GRID_BREAKPOINTS) as [GridBreakpoint, number][]) {
+    if (width > min && min >= GRID_BREAKPOINTS[match]) match = bp;
+  }
+  return match;
+}
+
 /**
  * Rows per stored row on a read-only grid.
  *

@@ -5,6 +5,7 @@ import {
   GRID_COL_COUNTS,
   GRID_MAX_COLS,
   GRID_WIDEST_BREAKPOINT,
+  breakpointForWidth,
   phoneLayout,
   scaleLayout,
   toSplitRows,
@@ -473,7 +474,6 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     measureRef.current();
   }, [sections, renderedSections]);
 
-  const breakpointRef = useRef<string>('lg');
   // Latest grid order per section, so a drag in one section can be merged with
   // the others' current positions into the single flat array we persist.
   const sectionLayoutsRef = useRef<Map<string, Layout[]>>(new Map());
@@ -534,12 +534,13 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   );
 
   const handleSectionLayoutChange = useCallback(
-    (sectionKey: string, current: Layout[]) => {
-      // `onLayoutChange` also fires on a breakpoint switch, carrying the
-      // narrowed layout. Persisting that would silently overwrite the desktop
-      // arrangement with its 2-column fallback the first time someone opened
-      // the dashboard on a small screen.
-      if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
+    (sectionKey: string, current: Layout[], width: number) => {
+      // `onLayoutChange` also fires on a breakpoint switch, and on mount,
+      // carrying the narrowed layout. Persisting that would silently overwrite
+      // the desktop arrangement with its 2-column fallback the first time
+      // someone opened the editor on a small screen. The breakpoint is the
+      // grid's width's (see `breakpointForWidth`).
+      if (breakpointForWidth(width) !== GRID_WIDEST_BREAKPOINT) return;
       // A read-only grid counts in half rows: what it reports is not a layout
       // that could be stored.
       if (readOnly) return;
@@ -702,9 +703,6 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // fallback.
       breakpoints={GRID_BREAKPOINTS}
       cols={GRID_COL_COUNTS}
-      onBreakpointChange={(bp) => {
-        breakpointRef.current = bp;
-      }}
       // Half rows when read-only: the unit `layoutsForSection` counts in.
       rowHeight={readOnly ? SPLIT_ROW_PX : GRID_ROW_PX}
       width={gridWidth(section)}
@@ -717,7 +715,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       isDraggable={isDraggable}
       isResizable={isResizable}
       compactType="vertical"
-      onLayoutChange={(current) => handleSectionLayoutChange(section.key, current)}
+      onLayoutChange={(current) =>
+        handleSectionLayoutChange(section.key, current, gridWidth(section))
+      }
       // Live-resize: Plotly's useResizeHandler and AG Grid only listen to
       // the WINDOW ``resize`` event, not container size changes. While the
       // user is dragging a resize handle the cell DIM changes but the
