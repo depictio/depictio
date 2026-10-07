@@ -8,15 +8,13 @@
  */
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  MultiSelect,
+  Popover,
   RangeSlider,
-  Select,
   Skeleton,
   Slider,
   Switch,
   Text,
-  type ComboboxItem,
-  type ComboboxLikeRenderOptionInput,
+  TextInput,
 } from '@mantine/core';
 
 import type { InteractiveFilter, StoredMetadata } from '../../../api';
@@ -77,7 +75,8 @@ const ControlMessage: React.FC<{ error?: boolean; children: React.ReactNode }> =
  * select drawn as the same track takes over. It also takes over whenever the
  * chips are wider than the room the bar gives them (see `useChipsFit`): the
  * track scrolls rather than wraps, and a hidden scrollbar meant the values past
- * the edge were cut off with nothing to say they were there.
+ * the edge were cut off with nothing to say they were there. The select is
+ * the same chips in a popover (`StripSelect`), not a second design.
  */
 export const StripCategorical: React.FC<StripControlProps> = ({
   metadata,
@@ -208,6 +207,21 @@ function useChipsFit(key: string) {
   return { cellRef, trackRef, fits };
 }
 
+/** Past this many values the picker offers a search field. */
+const PICKER_SEARCH_MIN = 10;
+/** Selected values the closed picker spells out before "+n". */
+const PICKER_SHOWN = 2;
+
+/**
+ * The bar's picker for a column with too many values for a track of chips, or
+ * a track too wide for its cell: the same chips, in a popover.
+ *
+ * Closed, it is the grey track itself, holding "All N" or the picked values as
+ * pressed chips (their colour dot included). Open, it shows every value as a
+ * chip of the bar, wrapped onto lines, with a search field once the list is
+ * long and a Clear. A one-of-N filter closes on pick; a multi one stays open.
+ * A Mantine Select would have been a second design for the same control.
+ */
 const StripSelect: React.FC<{
   options: string[];
   available: Set<string> | null;
@@ -218,64 +232,140 @@ const StripSelect: React.FC<{
   onChange: (next: string[]) => void;
 }> = ({ options, available, dots, selected, multiple, label, onChange }) => {
   const scope = useBrandScopeAttributes();
-  const data = useMemo(
-    () =>
-      options.map((value) => ({
-        value,
-        label: value,
-        disabled: available ? !available.has(value) && !selected.includes(value) : false,
-      })),
-    [options, available, selected],
-  );
-  const renderOption = ({ option }: ComboboxLikeRenderOptionInput<ComboboxItem>) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      {dots && (
-        <span
-          className="depictio-strip-chip__dot"
-          style={{ '--chip-color': dots.get(option.value) } as React.CSSProperties}
-          aria-hidden
-        />
-      )}
-      {option.label}
-    </span>
-  );
-  const shared = {
-    'aria-label': label,
-    data,
-    size: 'sm' as const,
-    radius: 'md' as const,
-    searchable: true,
-    clearable: true,
-    maxDropdownHeight: 260,
-    className: 'depictio-strip-select',
-    classNames: { input: 'depictio-strip-select__input' },
-    renderOption,
-    // Portaled to <body>, so the dropdown is put back inside the dashboard's
-    // brand scope by hand (see `useBrandScopeAttributes`).
-    comboboxProps: {
-      withinPortal: true,
-      portalProps: scope
-        ? ({
-            className: scope.className,
-            'data-mantine-color-scheme': scope['data-mantine-color-scheme'],
-          } as React.ComponentPropsWithoutRef<'div'>)
-        : undefined,
-    },
+  const [opened, setOpened] = useState(false);
+  const [query, setQuery] = useState('');
+  const mode = multiple ? 'multi' : 'single';
+  const q = query.trim().toLowerCase();
+  const shown = q ? options.filter((v) => v.toLowerCase().includes(q)) : options;
+  const dotStyle = (value: string) =>
+    dots ? ({ '--chip-color': dots.get(value) } as React.CSSProperties) : undefined;
+  const pick = (value: string) => {
+    onChange(toggleChip(selected, value, mode));
+    if (!multiple) setOpened(false);
   };
-  return multiple ? (
-    <MultiSelect
-      {...shared}
-      value={selected}
-      onChange={onChange}
-      placeholder={selected.length ? undefined : `All ${options.length}`}
-    />
-  ) : (
-    <Select
-      {...shared}
-      value={selected[0] ?? null}
-      onChange={(v) => onChange(v ? [v] : [])}
-      placeholder={`All ${options.length}`}
-    />
+  const close = () => {
+    setOpened(false);
+    setQuery('');
+  };
+
+  return (
+    <Popover
+      opened={opened}
+      onChange={(o) => (o ? setOpened(true) : close())}
+      position="bottom-start"
+      offset={6}
+      radius="md"
+      shadow="md"
+      width="target"
+      // Focus moves into the dropdown on open, so the search field (marked
+      // `data-autofocus`) takes the keys straight away.
+      trapFocus
+      withinPortal
+      // Portaled to <body>, so the dropdown is put back inside the dashboard's
+      // brand scope by hand (see `useBrandScopeAttributes`).
+      portalProps={
+        scope
+          ? ({
+              className: scope.className,
+              'data-mantine-color-scheme': scope['data-mantine-color-scheme'],
+            } as React.ComponentPropsWithoutRef<'div'>)
+          : undefined
+      }
+    >
+      <Popover.Target>
+        <button
+          type="button"
+          className="depictio-strip-track depictio-strip-picker"
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={opened}
+          data-has-selection={selected.length > 0}
+          onClick={() => (opened ? close() : setOpened(true))}
+        >
+          <span className="depictio-strip-picker__values">
+            {selected.length === 0 ? (
+              <span className="depictio-strip-picker__all">All {options.length}</span>
+            ) : (
+              <>
+                {selected.slice(0, PICKER_SHOWN).map((value) => (
+                  <span
+                    key={value}
+                    className="depictio-strip-chip"
+                    aria-pressed="true"
+                    style={dotStyle(value)}
+                  >
+                    {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
+                    <span>{value}</span>
+                  </span>
+                ))}
+                {selected.length > PICKER_SHOWN && (
+                  <span className="depictio-strip-picker__more">
+                    +{selected.length - PICKER_SHOWN}
+                  </span>
+                )}
+              </>
+            )}
+          </span>
+          <svg
+            className="depictio-strip-picker__chevron"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            aria-hidden
+          >
+            <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </button>
+      </Popover.Target>
+      <Popover.Dropdown className="depictio-strip-picker__dropdown" p={8}>
+        {options.length >= PICKER_SEARCH_MIN && (
+          <TextInput
+            size="xs"
+            radius="md"
+            placeholder={`Search ${options.length} values`}
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+            data-autofocus
+            mb={8}
+            aria-label={`Search ${label}`}
+          />
+        )}
+        <div className="depictio-strip-track depictio-strip-picker__chips" role="group" aria-label={label}>
+          {shown.map((value) => {
+            const on = selected.includes(value);
+            const disabled = Boolean(available) && !available!.has(value) && !on;
+            return (
+              <button
+                key={value}
+                type="button"
+                className="depictio-strip-chip"
+                aria-pressed={on}
+                disabled={disabled}
+                title={disabled ? `${value}: no data left under the other filters` : value}
+                onClick={() => pick(value)}
+                style={dotStyle(value)}
+              >
+                {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
+                <span>{value}</span>
+              </button>
+            );
+          })}
+          {shown.length === 0 && (
+            <span className="depictio-strip-picker__all">No value matches “{query}”</span>
+          )}
+        </div>
+        <div className="depictio-strip-picker__foot">
+          <span>
+            {selected.length > 0 ? `${selected.length} of ${options.length}` : `All ${options.length}`}
+          </span>
+          {selected.length > 0 && (
+            <button type="button" className="depictio-strip-picker__clear" onClick={() => onChange([])}>
+              Clear
+            </button>
+          )}
+        </div>
+      </Popover.Dropdown>
+    </Popover>
   );
 };
 

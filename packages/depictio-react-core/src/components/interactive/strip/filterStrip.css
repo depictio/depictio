@@ -426,16 +426,106 @@
 
 /* A select standing in for a long list of chips, drawn as the same grey
    track so the bar keeps one look. */
-.depictio-strip-select {
+/* The picker: the bar's chips in a popover, for a column with too many
+   values for a track, or a track too wide for its cell. Closed, it is the
+   track itself, holding "All N" or the picked values. */
+.depictio-strip-picker {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   max-width: 360px;
+  min-height: var(--strip-control-height);
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--mantine-radius-md);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  cursor: pointer;
 }
 
-.depictio-strip-select .depictio-strip-select__input {
-  min-height: var(--strip-control-height);
-  border-color: transparent;
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+.depictio-strip-picker:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.depictio-strip-picker__values {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.depictio-strip-picker__values .depictio-strip-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  cursor: inherit;
+}
+
+.depictio-strip-picker__values .depictio-strip-chip > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depictio-strip-picker__all,
+.depictio-strip-picker__more {
+  padding: 0 10px;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.depictio-strip-picker__more {
+  padding: 0 6px;
+}
+
+.depictio-strip-picker__chevron {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+  transition: transform 150ms ease;
+}
+
+.depictio-strip-picker[aria-expanded='true'] .depictio-strip-picker__chevron {
+  transform: rotate(180deg);
+}
+
+/* Open: every value as a chip, wrapped onto lines. */
+.depictio-strip-picker__dropdown {
+  min-width: 260px;
+}
+
+.depictio-strip-picker__chips {
+  width: auto;
+  flex-wrap: wrap;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.depictio-strip-picker__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 4px 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.depictio-strip-picker__clear {
+  all: unset;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--mantine-primary-color-filled);
+}
+
+.depictio-strip-picker__clear:hover {
+  text-decoration: underline;
 }
 
 /* ----------------------------------------------------------------- sliders */
@@ -560,7 +650,7 @@
   }
 
   .depictio-strip-slider,
-  .depictio-strip-select {
+  .depictio-strip-picker {
     max-width: none;
   }
 
@@ -614,7 +704,7 @@
   }
 
   .depictio-strip-slider,
-  .depictio-strip-select {
+  .depictio-strip-picker {
     max-width: none;
   }
 
