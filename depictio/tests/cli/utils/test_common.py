@@ -250,10 +250,12 @@ class TestCommon:
         )
 
         @pytest.fixture(autouse=True)
-        def isolated_env(self, monkeypatch):
+        def isolated_env(self, monkeypatch, tmp_path):
             """Start from a clean slate so a developer's shell can't taint results."""
             for var in self._ENV_VARS:
                 monkeypatch.delenv(var, raising=False)
+            # A default target looks for a running local server: not the developer's.
+            monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
             with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
                 yield
 

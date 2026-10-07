@@ -31,6 +31,7 @@ from depictio.cli.cli.utils.common import (
     describe_api_target,
     env_overrides_ignored,
     load_depictio_config,
+    say_local_server_running,
 )
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
@@ -73,6 +74,7 @@ def _login_as_admin(config_path: str, role: str) -> None:
     except httpx.HTTPError as exc:
         rich_print_checked_statement(f"{role}: cannot reach the server: {exc}", "error")
         rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+        say_local_server_running(config_path, "--server" if role == "Source" else "--to-server")
         raise typer.Exit(1) from exc
     if not auth.get("success"):
         rich_print_checked_statement(

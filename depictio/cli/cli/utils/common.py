@@ -17,6 +17,7 @@ from depictio.cli.cli.utils.server_target import (
     ConfigFile,
     default_server,
     is_local_cli_config,
+    running_local_url,
 )
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
@@ -148,9 +149,11 @@ def describe_api_target(yaml_config_path: str) -> str:
 
 
 def report_unreachable(yaml_config_path: str, exc: Exception) -> None:
-    """Say that the server did not answer, and which one: see describe_api_target."""
+    """Say that the server did not answer, and which one: see describe_api_target. Then
+    a local server that runs besides it, if any."""
     rich_print_checked_statement(f"Cannot reach the Depictio server: {exc}", "error")
     rich_print_checked_statement(f"Tried {describe_api_target(yaml_config_path)}", "info")
+    say_local_server_running(yaml_config_path)
 
 
 def local_server_hint(yaml_config_path: str) -> str | None:
@@ -168,6 +171,42 @@ def local_server_hint(yaml_config_path: str) -> str | None:
         logger.debug(f"Could not tell whether the local server runs: {exc}")
         return None
     return "the local server is not running: start it with `depictio local up`"
+
+
+def local_server_running_instead(
+    yaml_config_path: str, api_base_url: str | None = None
+) -> str | None:
+    """The URL of the local server when it runs and ``yaml_config_path`` reaches another
+    server, for a hint that names it. None otherwise.
+
+    ``api_base_url`` is the URL that configuration resolved to, read here when not
+    given: a configuration copied from the local server's reaches it already. Only
+    ever a hint added to other output, so it never raises.
+    """
+    try:
+        if is_local_cli_config(cli_config_file(yaml_config_path)):
+            return None
+        local_url = running_local_url()
+        if local_url is None:
+            return None
+        if api_base_url is None:
+            api_base_url = str(_read_cli_config(yaml_config_path)[0].api_base_url)
+        if _same_loopback_server(api_base_url, local_url):
+            return None
+    except Exception as exc:
+        logger.debug(f"Could not tell whether a local server runs besides the target: {exc}")
+        return None
+    return local_url
+
+
+def say_local_server_running(yaml_config_path: str, option: str = "--server") -> None:
+    """After the "Tried ..." line of a server that failed: the local server, when it runs
+    and is another one. For the commands that print that line themselves, too."""
+    local_url = local_server_running_instead(yaml_config_path)
+    if local_url:
+        rich_print_checked_statement(
+            f"A local server is running at {local_url}: add {option} local to use it", "info"
+        )
 
 
 class CLIConfigError(ValueError):
@@ -383,6 +422,26 @@ def _bypass_proxy_for_loopback(api_base_url: str) -> None:
         os.environ["no_proxy"] = os.environ["NO_PROXY"] = ",".join(entries + missing)
 
 
+def _same_loopback_server(url: str, other: str) -> bool:
+    """Whether two URLs reach the same port of this machine, however they name it."""
+    first, second = urlparse(url), urlparse(other)
+    loopback = (*_LOOPBACK_HOSTS, "::1")
+    return first.hostname in loopback and second.hostname in loopback and first.port == second.port
+
+
+def _warn_local_server_running(yaml_config_path: str, api_base_url: str, option: str) -> None:
+    """After the Server line of a default: the local server, when it runs besides it.
+
+    A default only: a server named with --server is the one meant, whatever it is.
+    Once per command, like that line.
+    """
+    local_url = local_server_running_instead(yaml_config_path, api_base_url)
+    warning = f"A local server is running too ({local_url}): add {option} local to use it"
+    if local_url and warning not in _announced:
+        _announced.add(warning)
+        rich_print_checked_statement(warning, "warning")
+
+
 @validate_call(validate_return=True)
 def load_depictio_config(
     yaml_config_path: str = "~/.depictio/CLI.yaml",
@@ -401,6 +460,8 @@ def load_depictio_config(
     ``option`` is the option that named ``yaml_config_path``, so that a missing file
     is blamed on the one the user typed. ``label`` replaces "Server" in the
     announcement, for a command that talks to two servers, and always prints.
+    When no server was named and the local server runs besides the default one,
+    a warning after the announcement says how to use it.
 
     A configuration it cannot use is reported as such, naming the file, and ends
     the command with exit code 1.
@@ -417,4 +478,7 @@ def load_depictio_config(
     if not quiet and (label or target not in _announced):
         _announced.add(target)
         rich_print_checked_statement(f"{label or 'Server'}: {target}", "info")
+        # An unexpanded default spelling: no server was named, see _config_file.
+        if yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS:
+            _warn_local_server_running(yaml_config_path, str(config.api_base_url), option)
     return config

@@ -14,6 +14,8 @@ from typing import Annotated, NamedTuple
 
 import typer
 
+from depictio.cli.cli_logging import logger
+
 DEFAULT_CLI_CONFIG = "~/.depictio/CLI.yaml"
 # migrate's target before --to-server existed, kept so its invocations reach the same server.
 DEFAULT_TARGET_CLI_CONFIG = "~/.depictio/CLI_remote.yaml"
@@ -123,6 +125,31 @@ def default_server(default: str = DEFAULT_CLI_CONFIG) -> ConfigFile:
     if os.path.lexists(path) or any(os.environ.get(var) for var in _REMOTE_ENV_VARS):
         return ConfigFile(path)
     return ConfigFile(local_cli_config(), local_fallback=True)
+
+
+def local_is_default_server() -> bool:
+    """Whether a command given no --server reaches the local server (see default_server),
+    so that a hint can leave `--server local` out where it is not needed."""
+    return is_local_cli_config(default_server().path)
+
+
+def running_local_url() -> str | None:
+    """The URL of the local server when its API runs, else None.
+
+    For hints any command may print, so offline and cheap: the home's state.json and
+    whether the API process it records is alive, no request. A missing or unreadable
+    state counts as stopped, and nothing here raises.
+    """
+    try:
+        from depictio.cli.cli.local_stack import Paths, State, local_home, running_status
+
+        paths = Paths(local_home())
+        state = State.load(paths)
+        if state is not None and running_status(paths, state).get("api"):
+            return state.url
+    except Exception as exc:
+        logger.debug(f"Could not tell whether the local server runs: {exc}")
+    return None
 
 
 def _resolve(

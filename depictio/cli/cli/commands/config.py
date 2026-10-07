@@ -13,6 +13,7 @@ from depictio.cli.cli.utils.common import (
     describe_api_target,
     load_depictio_config,
     report_unreachable,
+    say_local_server_running,
 )
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.rich_utils import (
@@ -373,6 +374,7 @@ def check(
         else:
             rich_print_checked_statement(f"Unable to access server - {e}", "error")
             rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+            say_local_server_running(config_path)
         failed = True
     else:
         # The verdict only: the result embeds the configuration, access token included.
