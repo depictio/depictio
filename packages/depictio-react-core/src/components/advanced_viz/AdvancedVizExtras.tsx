@@ -51,6 +51,9 @@ export interface AdvancedVizExtrasPayload {
     columns?: string[];
     tierAnnotation?: TierAnnotation;
   };
+  /** The frame shows the controls docked beside or above the plot, so the
+   *  chrome row offers a toggle for them rather than a popover. */
+  docked?: boolean;
   /** Reduced-sampling state, when the renderer can expand to the full view.
    *  Shaped as `LoadAllState` so the dispatch can hand it straight to
    *  `LoadAllButton`. */
@@ -164,6 +167,26 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
     </Popover>
   );
 };
+
+/** The settings icon of a tile whose controls are docked: folds the panel
+ *  away and back, filled while it shows. */
+export const AdvancedVizDockToggle: React.FC<{ open: boolean; onToggle: () => void }> = ({
+  open,
+  onToggle,
+}) => (
+  <ActionIcon
+    variant={open ? 'filled' : 'subtle'}
+    color={TILE_ACTION_STYLE.settings.color}
+    size="sm"
+    aria-label={open ? 'Hide viz controls' : 'Show viz controls'}
+    aria-pressed={open}
+    title={open ? 'Hide viz controls' : 'Show viz controls'}
+    data-tile-action="settings"
+    onClick={onToggle}
+  >
+    <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
+  </ActionIcon>
+);
 
 export type { TierAnnotation } from '../data/DataGridBody';
 

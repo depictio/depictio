@@ -1,4 +1,12 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
@@ -13,6 +21,8 @@ import {
 import { useAdvancedVizShowcase } from './advancedVizShowcase';
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
+import { ControlsDockContext, resolveDock } from './controlsDock';
+import './controlsDock.css';
 
 /**
  * Server-side downsampling state, mirroring the scatter-figure reduction badge
@@ -42,10 +52,11 @@ interface AdvancedVizFrameProps {
   /** Optional sub-title shown below the title (dim, smaller). */
   subtitle?: string;
   /**
-   * Tier-2 controls (sliders / dropdowns / toggles). NOT rendered inline:
-   * the frame publishes them via AdvancedVizExtrasContext so the Settings
-   * ActionIcon ends up in ComponentChrome's hover-revealed action row,
-   * alongside metadata / fullscreen / reset (same styling, same position).
+   * Tier-2 controls (sliders / dropdowns / toggles). Docked beside or above
+   * the plot where the tile allows (see controlsDock.ts), else behind the
+   * Settings ActionIcon in ComponentChrome's hover-revealed action row; both
+   * through the payload published via AdvancedVizExtrasContext, which also
+   * feeds the inspector.
    */
   controls?: React.ReactNode;
   /** Loading state for initial fetch. */
@@ -155,6 +166,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   estimated,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
+  const dock = useContext(ControlsDockContext);
   // "not grouped", when the dispatch found the analysis groups cannot reach
   // this component. Null otherwise, and with no provider.
   const groupBadge = useContext(GroupStatusBadgeContext);
@@ -189,6 +201,39 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   onToggleRef.current = reduction?.onToggle;
   const stableToggle = useCallback(() => onToggleRef.current?.(), []);
 
+  // The tile's share of its grid row, which decides where the controls dock.
+  // Measured rather than read from the layout: a responsive grid puts every
+  // tile on its own row on a phone, and a fullscreen tile spans the screen.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [measure, setMeasure] = useState<{ rowShare: number | null; width: number }>({
+    rowShare: null,
+    width: 0,
+  });
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const tile = el.closest('.react-grid-item') as HTMLElement | null;
+    const grid = (tile?.parentElement?.closest('.react-grid-layout') ?? null) as HTMLElement | null;
+    const update = () => {
+      const width = Math.round((tile ?? el).getBoundingClientRect().width);
+      const gridW = grid?.getBoundingClientRect().width ?? 0;
+      const rowShare = tile && gridW > 0 ? Math.round((width / gridW) * 100) / 100 : null;
+      setMeasure((m) => (m.width === width && m.rowShare === rowShare ? m : { rowShare, width }));
+    };
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(update);
+    ro.observe(tile ?? el);
+    if (grid) ro.observe(grid);
+    return () => ro.disconnect();
+  }, []);
+  const showcase = useAdvancedVizShowcase();
+  const dockSide = controls
+    ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
+    : null;
+  const docked = dockSide != null;
+  const dockOpen = docked && !dock?.collapsed;
+
   // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
   // turns the payload back into the popovers; the inspector turns the same
   // fields into docked tabs. Publishing finished popovers, as this once did,
@@ -196,6 +241,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const extras = useMemo<AdvancedVizExtrasPayload | null>(() => {
     const payload: AdvancedVizExtrasPayload = {};
     if (controls) payload.controls = controls;
+    if (docked) payload.docked = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -219,6 +265,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     redLoading,
     stableToggle,
     showReduction,
+    docked,
   ]);
 
   useEffect(() => {
@@ -272,7 +319,6 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // title, subtitle inline, the tab it summarises), the frame the metric
   // cards'. The status chips sit at the end of the header line, as on a figure;
   // tier counts keep their own line under it.
-  const showcase = useAdvancedVizShowcase();
   const statusBadges =
     reductionBadge || estimated || groupBadge ? (
       <>
@@ -330,6 +376,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   return (
     <ErrorBoundary>
       <Paper
+        ref={rootRef}
         p={showcase ? 'md' : 'sm'}
         withBorder={!showcase}
         radius="md"
@@ -343,7 +390,21 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         }}
       >
         {header}
-        <div style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
+        <div
+          style={{
+            flex: '1 1 auto',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: dockSide === 'right' ? 'row' : 'column',
+            gap: dockSide === 'right' ? 10 : 0,
+          }}
+        >
+        {dockOpen && dockSide === 'top' ? (
+          <div className="dpx-viz-dock dpx-viz-dock--top" data-testid="viz-controls-dock">
+            {controls}
+          </div>
+        ) : null}
+        <div style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}>
           {loading ? (
             <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
               <ComponentSkeleton variant="block" />
@@ -368,6 +429,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           ) : (
             children
           )}
+        </div>
+        {dockOpen && dockSide === 'right' ? (
+          <div className="dpx-viz-dock dpx-viz-dock--right" data-testid="viz-controls-dock">
+            {controls}
+          </div>
+        ) : null}
         </div>
       </Paper>
     </ErrorBoundary>

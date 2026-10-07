@@ -451,6 +451,7 @@ function buildAdvancedViz(
     preset_config?: Record<string, unknown> | null;
     config?: Record<string, unknown> | null;
     viz_overrides?: Record<string, unknown> | null;
+    controls_placement?: StoredMetadata['controls_placement'];
   }>(state.config);
   // `preset_config` (catalog add) and `config` (edit-mode rehydration of a saved
   // component) both carry viz-control extras the role mapping can't express;
@@ -466,6 +467,8 @@ function buildAdvancedViz(
     ...base,
     viz_kind: c.viz_kind,
     config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}, preset),
+    // Where the viz controls sit; unset (auto) is left out.
+    ...('controls_placement' in c ? { controls_placement: c.controls_placement || null } : {}),
   };
 }
 

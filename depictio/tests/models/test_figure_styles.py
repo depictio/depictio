@@ -70,3 +70,37 @@ def test_section_figure_style_round_trips():
     assert full["grid_sections"][0]["figure_style"] == "minimal"
     back = DashboardDataLite.from_full(full)
     assert back.grid_sections[0].figure_style == "minimal"
+
+
+SUNBURST = {
+    "component_type": "advanced_viz",
+    "tag": "adv-sunburst",
+    "workflow_tag": "nf-core/ampliseq",
+    "data_collection_tag": "sunburst_canonical",
+    "viz_kind": "sunburst",
+    "config": {"viz_kind": "sunburst", "rank_cols": ["Kingdom", "Phylum"]},
+    "title": "Hierarchy",
+    "layout": {"x": 0, "y": 0, "w": 4, "h": 7},
+}
+
+
+def test_advanced_viz_controls_placement_round_trips():
+    full = _dash({**SUNBURST, "controls_placement": "top"}).to_full()["stored_metadata"][0]
+    assert full["controls_placement"] == "top"
+    back = DashboardDataLite.from_full(
+        _dash({**SUNBURST, "controls_placement": "top"}).to_full()
+    ).components[0]
+    assert back.controls_placement == "top"
+    # Unset (auto) is not written out.
+    assert "controls_placement:" not in _dash(SUNBURST).to_yaml()
+
+
+def test_advanced_viz_controls_placement_rejects_an_unknown_side():
+    from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
+
+    assert (
+        AdvancedVizLiteComponent(**SUNBURST, controls_placement="right").controls_placement
+        == "right"
+    )
+    with pytest.raises(ValidationError):
+        AdvancedVizLiteComponent(**SUNBURST, controls_placement="left")

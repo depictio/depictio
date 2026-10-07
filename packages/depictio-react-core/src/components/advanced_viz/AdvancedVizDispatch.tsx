@@ -33,9 +33,12 @@ import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
 import {
   AdvancedVizDataPopover,
+  AdvancedVizDockToggle,
   AdvancedVizExtrasProvider,
   AdvancedVizSettingsPopover,
 } from './AdvancedVizExtras';
+import { ControlsDockContext, isControlsPlacement } from './controlsDock';
+import type { ControlsDockState } from './controlsDock';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import LoadAllButton from '../chrome/LoadAllButton';
@@ -66,6 +69,26 @@ import {
 } from './advancedVizShowcase';
 
 /** The hover line behind each way an advanced viz ends up "not grouped". */
+/** The viewer's fold of a tile's docked controls, kept per component in this
+ *  browser. Storage can be missing or refuse (a private window): then the
+ *  fold lasts as long as the page. */
+const DOCK_FOLD_KEY = (index: string) => `depictio.vizControls.folded.${index}`;
+function readFolded(index: string): boolean {
+  try {
+    return window.localStorage.getItem(DOCK_FOLD_KEY(index)) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeFolded(index: string, folded: boolean): void {
+  try {
+    if (folded) window.localStorage.setItem(DOCK_FOLD_KEY(index), '1');
+    else window.localStorage.removeItem(DOCK_FOLD_KEY(index));
+  } catch {
+    // Not remembered; the fold still applies to this page.
+  }
+}
+
 const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
@@ -162,6 +185,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
+  const [folded, setFolded] = React.useState(() => readFolded(String(metadata.index ?? '')));
+  const toggleFolded = React.useCallback(() => {
+    setFolded((f) => {
+      writeFolded(String(metadata.index ?? ''), !f);
+      return !f;
+    });
+  }, [metadata.index]);
 
   // Forward to the inspector, when the app mounted one. Keyed by component so
   // the panel can show whichever component is selected.
@@ -178,7 +208,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     if (!published) return null;
     const nodes: React.ReactNode[] = [];
     if (published.controls) {
-      nodes.push(<AdvancedVizSettingsPopover key="settings" controls={published.controls} />);
+      nodes.push(
+        published.docked ? (
+          <AdvancedVizDockToggle key="settings" open={!folded} onToggle={toggleFolded} />
+        ) : (
+          <AdvancedVizSettingsPopover key="settings" controls={published.controls} />
+        ),
+      );
     }
     if (published.data) {
       nodes.push(
@@ -194,7 +230,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       nodes.push(<LoadAllButton key="load-all" state={published.reduction} />);
     }
     return nodes.length ? <>{nodes}</> : null;
-  }, [published]);
+  }, [published, folded, toggleFolded]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
@@ -215,6 +251,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
+  // Split into panels, each would dock its own copy of the controls: they
+  // stay behind the icon instead.
+  const placement = isControlsPlacement(metadata.controls_placement)
+    ? metadata.controls_placement
+    : null;
+  const dockState = React.useMemo<ControlsDockState>(
+    () => ({ placement: split ? 'popover' : placement, collapsed: folded }),
+    [split, placement, folded],
+  );
   // A kind that takes the groups neither as panels nor as colour (see
   // `groupingModeForKind`). Only a Split display asks the question: in the
   // colour overlay every kind is drawn whole with the groups, as before.
@@ -376,7 +421,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>
             <AdvancedVizShowcaseContext.Provider value={showcase}>
-              {inner}
+              <ControlsDockContext.Provider value={dockState}>{inner}</ControlsDockContext.Provider>
             </AdvancedVizShowcaseContext.Provider>
           </GroupColouringReportContext.Provider>
         </GroupStatusBadgeContext.Provider>

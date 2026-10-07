@@ -34,6 +34,7 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
             significance_col: significance
             significance_threshold: 0.05
             effect_threshold: 1.0
+          controls_placement: auto   # right on a full-width tile, top otherwise
     """
 
     component_type: Literal["advanced_viz"] = "advanced_viz"
@@ -83,6 +84,13 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
         default=None,
         description="The tab this tile summarises, as `tab:<name>`, linked from the end "
         "of the card header (`minimal` style).",
+    )
+    controls_placement: Literal["auto", "right", "top", "popover"] | None = Field(
+        default=None,
+        description="Where the viz controls sit. Unset or `auto`: docked beside the plot "
+        "on a tile that spans its row, above it on a narrower one, behind the settings "
+        "icon on a `minimal` card. `right` / `top` dock them there whatever the width; "
+        "`popover` keeps them behind the icon. The icon folds a docked panel away.",
     )
 
     @model_validator(mode="before")

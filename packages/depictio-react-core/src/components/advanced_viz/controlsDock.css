@@ -1,0 +1,45 @@
+/* Docked viz controls (see controlsDock.ts). Both keep clear of the tile's
+   right edge, where the hover-revealed action column sits over the content. */
+.dpx-viz-dock {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dpx-viz-dock--right {
+  flex: 0 0 270px;
+  padding: 2px 30px 2px 12px;
+  border-left: 1px solid var(--mantine-color-default-border);
+}
+
+/* Above the plot the controls run as a row: each control keeps its label, the
+   descriptions (which the column has room for) give way. */
+.dpx-viz-dock--top {
+  flex: 0 0 auto;
+  max-height: 45%;
+  padding: 0 30px 8px 2px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.dpx-viz-dock--top > .mantine-Stack-root {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+/* Three to a row on a half-width tile. */
+.dpx-viz-dock--top > .mantine-Stack-root > * {
+  flex: 1 1 136px;
+  min-width: 0;
+  max-width: 220px;
+}
+.dpx-viz-dock--top > .mantine-Stack-root > .mantine-Divider-root {
+  display: none;
+}
+.dpx-viz-dock--top .mantine-InputWrapper-description,
+.dpx-viz-dock--top .mantine-Switch-description,
+.dpx-viz-dock--top .mantine-Checkbox-description {
+  display: none;
+}

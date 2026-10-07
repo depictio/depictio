@@ -134,6 +134,9 @@ FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
     "caption",
 )
 
+# An advanced visualisation's own display keys, beside the figure ones.
+ADVANCED_VIZ_DISPLAY_FIELDS: tuple[str, ...] = (*FIGURE_DISPLAY_FIELDS, "controls_placement")
+
 # Where a highlight's figure lives (see HighlightLiteComponent).
 HIGHLIGHT_SOURCE_FIELDS: tuple[str, ...] = (
     "source_tab",
@@ -1365,7 +1368,7 @@ class DashboardDataLite(BaseModel):
                     lite_comp["viz_kind"] = viz_kind
                 if config:
                     lite_comp["config"] = dict(config)
-                for field in FIGURE_DISPLAY_FIELDS:
+                for field in ADVANCED_VIZ_DISPLAY_FIELDS:
                     if comp.get(field):
                         lite_comp[field] = comp[field]
 
@@ -1758,7 +1761,7 @@ class DashboardDataLite(BaseModel):
                 full_comp["viz_kind"] = viz_kind
                 full_comp["config"] = cfg
                 # The card header, as a figure carries it (see from_full).
-                for field in FIGURE_DISPLAY_FIELDS:
+                for field in ADVANCED_VIZ_DISPLAY_FIELDS:
                     if comp_dict.get(field) is not None:
                         full_comp[field] = comp_dict[field]
 

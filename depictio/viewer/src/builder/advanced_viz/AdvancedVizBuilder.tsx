@@ -22,6 +22,7 @@ import {
   Group,
   MultiSelect,
   Paper,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -292,6 +293,7 @@ const AdvancedVizBuilder: React.FC = () => {
     preset_config?: Record<string, unknown> | null;
     config?: Record<string, unknown> | null;
     viz_overrides?: Record<string, unknown> | null;
+    controls_placement?: 'auto' | 'right' | 'top' | 'popover' | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const setPreviewReady = useBuilderStore((s) => s.setPreviewReady);
@@ -1154,6 +1156,35 @@ const AdvancedVizBuilder: React.FC = () => {
                   patchRoles={patchRoles}
                 />
               ) : null}
+
+              <BuilderSection
+                value="viz-controls"
+                icon="tabler:adjustments-horizontal"
+                title="Viz controls"
+                subtitle="Where viewers find this visualization's settings"
+              >
+                <Stack gap={6}>
+                  <SegmentedControl
+                    fullWidth
+                    value={config.controls_placement || 'auto'}
+                    onChange={(v: string) =>
+                      patchConfig({ controls_placement: v === 'auto' ? null : v })
+                    }
+                    data={[
+                      { value: 'auto', label: 'Auto' },
+                      { value: 'right', label: 'Right' },
+                      { value: 'top', label: 'Top' },
+                      { value: 'popover', label: 'Behind icon' },
+                    ]}
+                    data-testid="advanced-viz-controls-placement"
+                  />
+                  <Text size="xs" c="dimmed">
+                    Auto: beside the plot when the tile spans its row, above it when it is
+                    narrower, behind the settings icon on a minimal card or a small tile.
+                    The icon folds a docked panel away.
+                  </Text>
+                </Stack>
+              </BuilderSection>
 
               <BuilderSection
                 value="roles"
