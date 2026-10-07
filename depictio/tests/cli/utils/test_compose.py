@@ -715,6 +715,8 @@ def test_sections_take_the_tabs_colour_then_others_tables_stay_gray():
     assert colors["Bracken"] == "green"
     assert colors["Tables"] == "gray"
     assert len({colors["Bracken"], colors["Centrifuge"], colors["Kraken 2"]}) == 3
+    # A gray tab (Other data) has no colour to lend its first section.
+    assert "gray" not in section_colors(["Abricate", "Deeparg"], "gray").values()
 
 
 def test_a_composed_dashboard_is_styled(run_with_unknown, tmp_path):
