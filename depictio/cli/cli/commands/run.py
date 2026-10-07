@@ -553,7 +553,10 @@ def register_run_command(app: typer.Typer):
         skip_join: bool = typer.Option(False, "--skip-join", help="Skip join execution step"),
         # Sync options
         update_config: bool = typer.Option(
-            False, "--update-config", help="Update the project configuration on the server"
+            False,
+            "--update-config",
+            help="Refresh a project already on the server in place: its configuration, its "
+            "tables and its dashboards. Implies --overwrite",
         ),
         # Scan options
         rescan_folders: bool = typer.Option(
@@ -569,7 +572,10 @@ def register_run_command(app: typer.Typer):
         ),
         # Process options
         overwrite: bool = typer.Option(
-            False, "--overwrite", help="Overwrite the workflow if it already exists"
+            False,
+            "--overwrite",
+            help="Rewrite the tables and dashboards that already exist, and rescan every run. "
+            "Implied by --update-config and --attach-run",
         ),
         preview_recipes: bool = typer.Option(
             False,
@@ -718,6 +724,12 @@ def register_run_command(app: typer.Typer):
                     "--attach-run: skipping dashboard import (dashboards already exist).",
                     "info",
                 )
+        # Refreshing a project in place rewrites what it already has: its tables, which
+        # write_delta_table refuses to replace without overwrite, and its dashboards.
+        # --update-config alone used to update the configuration, then fail every data
+        # collection on its existing table; the Nextflow hook always passed both.
+        if update_config:
+            overwrite = True
         if sync_files or (overwrite and not attach_run):
             rescan_folders = True
 

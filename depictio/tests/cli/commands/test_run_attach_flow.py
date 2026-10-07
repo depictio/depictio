@@ -116,6 +116,19 @@ class TestAttachRunFlags:
         assert result.exit_code == 0, result.output
         assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
 
+    def test_update_config_alone_refreshes_the_project_in_place(
+        self, app, runner, data_root, make_harness
+    ):
+        """One flag to re-ingest: the configuration, then the tables over the existing ones."""
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app, runner, harness, {"data_root": data_root, "flags": ["--update-config"]}
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["update"] is True
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+        assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
+
     def test_attach_to_a_missing_project_stops_before_writing(
         self, app, runner, data_root, make_harness
     ):
