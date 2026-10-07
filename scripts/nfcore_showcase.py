@@ -12,7 +12,7 @@ WHY ONE PROJECT PER SCENARIO. Every template but viralrecon declares
 run (``depictio/cli/cli/utils/scan.py``, the "Treat the provided directory as a
 single run" branch). The underlying ``locations`` field is a list and would give
 one run per entry, named after each directory's basename, but the template binds
-it to a single ``{DATA_ROOT}`` and ``--data-root`` is a scalar. Building a
+it to a single ``{DATA_ROOT}`` and ``ingest`` takes one results directory. Building a
 project config by hand would reach the list, but ``depictio-cli ingest`` guards its
 dashboard import with ``if is_template_mode``, so that route silently loses the
 template's dashboards, which is the entire point of the showcase.
@@ -411,7 +411,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 def cmd_ingest(args: argparse.Namespace) -> int:
     """Create one project per scenario with `depictio-cli ingest --template`.
 
-    Every project gets an explicit --project-name. The automatic name is
+    Every project gets an explicit --project. The automatic name is
     "<template_id> - <basename(data_root)>", which collides across scenarios that
     share a basename, and project creation is a check-then-insert with no unique
     index on the name, so two of them would both insert.
@@ -435,22 +435,20 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             _log(f"= {project}: already in the instance, skipped")
             skipped += 1
             continue
-        argv = [str(args.cli), "ingest"]
+        argv = [str(args.cli), "ingest", str(root)]
         if args.cli_config:
             argv += ["--server", str(args.cli_config)]
         argv += [
             "--template",
             scenario.template_id,
-            "--data-root",
-            str(root),
-            "--project-name",
+            "--project",
             project,
         ]
         for name, value in scenario.resolved_vars(args.root):
             argv += ["--var", f"{name}={value}"]
         if index > 0:
             # The S3 probe writes the fixed key .depictio/write_test; once per batch.
-            argv.append("--skip-s3-check")
+            argv += ["--skip", "s3-check"]
         if args.dry_run:
             argv.append("--dry-run")
         _log(f"-> {' '.join(shlex.quote(t) for t in argv)}")

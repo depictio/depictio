@@ -1440,7 +1440,7 @@ jobs:
           # and check every image the table references is in S3 (fails if one is missing)
           depictio-cli --verbose ingest \
             --sync-files \
-            --overwrite \
+            --update-config \
             --project-config-path ../projects/test/image_demo/project.yaml \
             --server admin_config.yaml
 
@@ -1725,10 +1725,9 @@ jobs:
           DATA_DIR="$(pwd)/../../ampliseq-testdata"
           echo "🚀 Running full template pipeline: depictio ingest --template..."
 
-          depictio-cli ingest \
+          depictio-cli ingest "$DATA_DIR" \
             --template nf-core/ampliseq/latest \
-            --data-root "$DATA_DIR" \
-            --project-name "Ampliseq CI Template Test" \
+            --project "Ampliseq CI Template Test" \
             --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
             --server admin_config.yaml \
             --continue-on-error

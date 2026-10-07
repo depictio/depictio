@@ -1,6 +1,6 @@
 # Import a template-based project (ingest + dashboard import)
 
-Runs `depictio-cli ingest --template <id> --data-root <path>` to ingest data and
+Runs `depictio-cli ingest <path> --template <id>` to ingest data and
 sync a template project (e.g. `nf-core/viralrecon/3.0.0`,
 `nf-core/ampliseq/2.16.0`), then re-imports each of the template's dashboard
 YAMLs via `depictio-cli dashboard import --overwrite`. Uses the per-worktree
@@ -33,16 +33,20 @@ Optional flags (mirror the underlying CLI flags 1-to-1):
 - `--var KEY=VALUE` *(repeatable)*: extra template variables (passed straight
   to `depictio-cli ingest --var`).
 - `--project-name <name>`: override the auto-generated project name.
-- `--overwrite`: pass `--overwrite` to `ingest` (re-process the workflow if it
-  already exists). Common when iterating on a recipe.
-- `--update-config`: pass `--update-config` to `ingest` (push the resolved
-  project config to the server, replacing what's there).
+- `--overwrite`: the same as `--update-config` (`ingest` treats them as one flag).
+- `--update-config`: pass `--update-config` to `ingest`: refresh the project in
+  place (new configuration, every run rescanned). Its dashboards are kept as
+  edited in the viewer, and the template's missing ones are added. Common when
+  iterating on a recipe.
+- `--reset-dashboards`: pass `--reset-dashboards` to `ingest`: re-apply the
+  template's dashboards over the project's, keeping their titles. Needed when
+  iterating on a template's dashboard YAML.
 - `--dashboards-only`: skip `ingest` entirely; only import dashboards. Use after
   hand-editing a `dashboards/*.yaml` when the data hasn't changed.
 - `--no-dashboards`: also skip step 5 (the explicit `dashboard import`
   loop). Use when you want to iterate on data only and re-import dashboards
   manually later. (`ingest` itself is already always called with
-  `--skip-dashboard-import` — see step 4 — so this flag specifically
+  `--skip dashboards`, see step 4, so this flag specifically
   controls the post-ingest dashboard loop.)
 - `--dashboard <path>` *(repeatable)*: override the template's default
   dashboard YAMLs with explicit file paths (forwarded to `ingest --dashboard`
@@ -117,11 +121,11 @@ $ARGUMENTS
      The standalone `depictio-cli dashboard import` cannot handle the
      multi-tab layout — it consumes one `DashboardDataLite` per YAML and
      silently ignores the `tabs:` block. So: **don't pass
-     `--skip-dashboard-import`** and rely on `ingest` to do the import.
+     `--skip dashboards`** and rely on `ingest` to do the import.
    - **Single-dashboard format** (no `tabs:` block, just a single dashboard
      definition — what `depictio/projects/init/*` and `depictio/projects/test/*`
      ship): use `depictio-cli dashboard import` per YAML with `--overwrite`.
-     Pass `--skip-dashboard-import` to `ingest` to avoid double-importing.
+     Pass `--skip dashboards` to `ingest` to avoid double-importing.
 
    Detect by reading the first dashboard YAML and checking whether the
    top-level keys include `main_dashboard` / `tabs`.
@@ -130,24 +134,23 @@ $ARGUMENTS
 
    ```bash
    source depictio/cli/.venv/bin/activate
-   depictio-cli ingest \
+   depictio-cli ingest "<data-root>" \
      --server "<cli-config>" \
      --template "<template-id>" \
-     --data-root "<data-root>" \
-     [--skip-dashboard-import]    # ONLY for single-dashboard format
-     [--project-name "<name>"] \
+     [--skip dashboards]    # ONLY for single-dashboard format
+     [--project "<name>"] \
      [--var KEY=VALUE]... \
-     [--overwrite] \
-     [--update-config]
+     [--update-config] \
+     [--reset-dashboards]
    ```
 
    - All in one Bash invocation (the venv activation does not persist across
      calls).
-   - `--overwrite` and `--update-config` are passed through directly when
-     the user provides them. Don't add them silently. **For multi-tab
-     templates, `--overwrite` is what makes the dashboard import update
-     existing tabs instead of erroring** — pass it any time the user
-     re-runs.
+   - `--update-config` (or `--overwrite`) and `--reset-dashboards` are passed
+     through when the user provides them. Don't add them silently. On a
+     re-run, `--update-config` keeps the dashboards the project has and adds
+     the missing ones; only `--reset-dashboards` makes edits to the template's
+     dashboard YAML replace them.
    - If `ingest` exits non-zero, **stop and surface the error**.
    - When `ingest` succeeds, capture the project ID from its output (look for
      `View at:` lines or the project document via `api_get_project_from_name`).

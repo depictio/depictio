@@ -164,7 +164,7 @@ class RunSpec:
 
     @property
     def data_root(self) -> Path:
-        """What --data-root is pointed at: the parent when the structure is sequencing-runs."""
+        """What `ingest` is pointed at: the parent when the structure is sequencing-runs."""
         return self.local_dir
 
     @property
@@ -853,7 +853,7 @@ def cmd_reprocess(args: argparse.Namespace) -> int:
 def cmd_ingest(args: argparse.Namespace) -> int:
     """Ingest the repatriated runs with the 1.10.0 CLI.
 
-    Every run gets an explicit --project-name. The automatic name is
+    Every run gets an explicit --project. The automatic name is
     "<template_id> - <basename(data_root)>", and project creation is a
     check-then-insert with no unique index on the name, so two runs that derive
     the same name can both insert and leave a pair of homonym projects behind.
@@ -862,7 +862,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     failed = 0
     for index, spec in enumerate(specs):
         project = args.project_prefix + f"{spec.pipeline}-{spec.version}-{spec.profile}"
-        argv = [args.cli, "ingest"]
+        argv = [args.cli, "ingest", str(spec.data_root)]
         if args.cli_config:
             # Each worktree stack has its own token and port, so the default
             # ~/.depictio/CLI.yaml is rarely the right one here.
@@ -870,16 +870,14 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         argv += [
             "--template",
             spec.template_id,
-            "--data-root",
-            str(spec.data_root),
-            "--project-name",
+            "--project",
             project,
         ]
         if index > 0:
             # The check writes the fixed key .depictio/write_test; one probe per batch.
-            argv.append("--skip-s3-check")
+            argv += ["--skip", "s3-check"]
         if args.update:
-            argv += ["--update-config", "--overwrite"]
+            argv.append("--update-config")
         if args.dry_run:
             argv.append("--dry-run")
         _log(f"-> {' '.join(shlex.quote(t) for t in argv)}")
@@ -999,7 +997,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="CLI config to use (default: $DEPICTIO_CLI_CONFIG_PATH, else the CLI's own)",
     )
     p_ingest.add_argument("--project-prefix", default="", help="prepended to every project name")
-    p_ingest.add_argument("--update", action="store_true", help="--update-config --overwrite")
+    p_ingest.add_argument("--update", action="store_true", help="pass --update-config")
     p_ingest.add_argument("--dry-run", action="store_true")
     p_ingest.set_defaults(func=cmd_ingest)
 
