@@ -74,6 +74,13 @@ def test_root_flags_set_the_log_level(cli, args, level):
     assert logging.getLogger("depictio-models").level == models
 
 
+def test_the_former_level_option_says_it_is_log_level(cli):
+    result = runner.invoke(cli.app, ["-vl", "INFO", "version"])
+
+    assert result.exit_code == 0, result.output
+    assert "-vl/--verbose-level is now --log-level" in " ".join(result.stderr.split())
+
+
 def test_an_unknown_log_level_is_a_usage_error(cli):
     result = runner.invoke(cli.app, ["--log-level", "bogus", "version"])
 

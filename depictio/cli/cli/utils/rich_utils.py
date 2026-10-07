@@ -22,6 +22,8 @@ from depictio.models.models.workflows import Workflow, WorkflowRun
 console = Console()
 # Stable reference for helpers whose ``console`` parameter shadows the global.
 _DEFAULT_CONSOLE = console
+# For notices about the CLI itself, kept out of the output a script reads.
+err_console = Console(stderr=True)
 
 
 # Symbol, symbol style and message style of each status line. One-cell glyphs rather
@@ -35,15 +37,17 @@ _STATUS_STYLES = {
 }
 
 
-def _print_status(statement: str, mode: str) -> None:
+def _print_status(statement: str, mode: str, target: Optional[Console] = None) -> None:
+    # Looked up at each call, as tests swap the module's console for their own.
+    target = target or console
     symbol, symbol_style, text_style = _STATUS_STYLES[mode]
-    text = console.render_str(statement, style=text_style)
+    text = target.render_str(statement, style=text_style)
     # Wrapped here with a hanging indent, so a long message continues under its text
     # rather than under the symbol (a Table would also pad lines with spaces).
-    for i, line in enumerate(text.wrap(console, max(console.width - 2, 20))):
+    for i, line in enumerate(text.wrap(target, max(target.width - 2, 20))):
         line.rstrip()
         prefix = Text(symbol, style=symbol_style) if i == 0 else Text(" ")
-        console.print(Text.assemble(prefix, " ", line), soft_wrap=True)
+        target.print(Text.assemble(prefix, " ", line), soft_wrap=True)
 
 
 @validate_call
@@ -96,15 +100,18 @@ def rich_print_json(statement: str, json_obj: dict | list[dict]):
 
 
 @validate_call
-def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
+def rich_print_checked_statement(
+    statement: str, mode: str, exit: bool = False, stderr: bool = False
+):
     """
     Print a status line: a symbol for ``mode`` (loading, success, error, info,
-    warning), then ``statement``, which may hold Rich markup.
+    warning), then ``statement``, which may hold Rich markup. On stderr with
+    ``stderr``.
     """
     if mode not in _STATUS_STYLES:
         handle_error(f"Invalid mode: {mode}", exit=exit)
         return
-    _print_status(statement, mode)
+    _print_status(statement, mode, err_console if stderr else None)
 
 
 def render_records_table(

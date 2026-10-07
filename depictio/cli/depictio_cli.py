@@ -24,6 +24,7 @@ from depictio.cli.cli.commands.migrate import app as migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
 from depictio.cli.cli.utils import logo_art
+from depictio.cli.cli.utils.renamed import note_renamed
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
 from depictio.cli.cli.utils.rich_utils import console as default_console
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
@@ -130,6 +131,8 @@ def verbose_callback(
         callback=_version_callback,
     ),
 ):
+    if verbose_level:
+        note_renamed("-vl/--verbose-level", "--log-level")
     # The CLI and the models log at the same level.
     level = _log_level(verbose, log_level or verbose_level)
     setup_cli_logging(level is not None, level or "INFO")

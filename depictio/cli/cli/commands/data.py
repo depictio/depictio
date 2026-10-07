@@ -6,6 +6,7 @@ import typer
 from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
+from depictio.cli.cli.utils.renamed import note_if_called_as
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
@@ -365,6 +366,7 @@ def join(
 
 @app.command("push-images")
 def push_images(
+    ctx: typer.Context,
     source_directory: Annotated[
         str,
         typer.Argument(help="Source directory containing images"),
@@ -396,6 +398,7 @@ def push_images(
 ):
     """
     Upload a directory of images to S3 storage, for an image data collection.
+    Formerly `images push`.
 
     The directory structure is kept, relative to the source directory, and images
     already in storage are skipped unless --overwrite. Upload to the collection's
@@ -422,6 +425,7 @@ def push_images(
     )
     from depictio.cli.cli.utils.rich_utils import console
 
+    note_if_called_as(ctx, "images push", "data push-images")
     rich_print_command_usage("data push-images")
 
     source_path = Path(source_directory).expanduser().resolve()

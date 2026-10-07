@@ -23,6 +23,27 @@ def test_the_legacy_option_stands_in_for_server():
     assert resolve_server(None, "~/old.yaml") == "~/old.yaml"
 
 
+@pytest.mark.parametrize(
+    ("resolve", "notice"),
+    [
+        (lambda: resolve_server(None, "~/old.yaml"), "--CLI-config-path is now --server"),
+        (
+            lambda: resolve_server(None, "~/old.yaml", legacy_option="--config"),
+            "--config is now --server",
+        ),
+        (
+            lambda: resolve_target_server(None, "~/remote.yaml"),
+            "--target-config is now --to-server",
+        ),
+    ],
+    ids=["--CLI-config-path", "--config", "--target-config"],
+)
+def test_a_legacy_option_says_what_replaced_it(capsys, resolve, notice):
+    resolve()
+
+    assert notice in " ".join(capsys.readouterr().err.split())
+
+
 def test_server_and_the_legacy_option_together_are_refused():
     with pytest.raises(typer.BadParameter, match="not both"):
         resolve_server("local", "~/old.yaml")

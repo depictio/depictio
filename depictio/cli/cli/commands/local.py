@@ -32,6 +32,7 @@ from depictio.cli.cli.local_stack import (
     viewer_built,
     wait_for_examples,
 )
+from depictio.cli.cli.utils.renamed import note_if_called_as
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
 
 app = typer.Typer(
@@ -383,15 +384,18 @@ def wipe(
 
 @app.command("export")
 def export_cmd(
+    ctx: typer.Context,
     out: Annotated[
         Path,
         typer.Option("--out", help="Directory to create for the Docker Compose stack"),
     ] = Path("depictio-docker"),
 ):
     """Copy the local server's data into a directory Docker Compose runs as is.
+    Formerly `export-compose`.
 
     A running local server is stopped first, so the copy is consistent.
     """
+    note_if_called_as(ctx, "local export-compose", "local export")
     paths = Paths(local_home())
     out = out.resolve()
     try:
@@ -408,5 +412,5 @@ def export_cmd(
     )
 
 
-# The 1.12.0b1 name, which CI still calls.
+# The 1.12.0b1 name, still accepted.
 app.command("export-compose", hidden=True)(export_cmd)

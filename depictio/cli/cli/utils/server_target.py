@@ -63,6 +63,10 @@ def _resolve(
 ) -> str:
     if value and legacy_path:
         raise typer.BadParameter(f"give {option} or {legacy_option}, not both", param_hint=option)
+    if legacy_path and not value:
+        from depictio.cli.cli.utils.renamed import note_renamed
+
+        note_renamed(legacy_option, option)
     chosen = value or legacy_path
     if chosen is None:
         # Left at the default, so DEPICTIO_CLI_CONFIG_PATH still applies to --server.

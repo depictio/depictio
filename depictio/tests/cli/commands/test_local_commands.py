@@ -325,7 +325,7 @@ def test_a_failure_after_the_checks_stops_what_up_started(stack):
     assert stack.stop_all.call_count == 2
 
 
-# export-compose: the 1.12.0b1 name, still called by CI.
+# export-compose: the 1.12.0b1 name, still accepted.
 @pytest.mark.parametrize("command", ["export", "export-compose"])
 def test_export_prints_the_command_to_run_next(tmp_path, monkeypatch, command):
     monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))

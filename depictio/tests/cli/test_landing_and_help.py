@@ -189,6 +189,8 @@ class TestHelp:
             result = runner.invoke(cli.app, [*command, "--help"])
             assert result.exit_code == 0, (command, result.output)
         assert "Ingest pipeline results" in runner.invoke(cli.app, ["run", "--help"]).output
+        # The help says what each was called, for whoever looks for the old name.
+        assert "Formerly `run`." in out
 
     def test_ingest_lists_its_steps_without_blank_lines(self, cli):
         result = runner.invoke(cli.app, ["ingest", "--help"], terminal_width=100)

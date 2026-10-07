@@ -28,6 +28,7 @@ from depictio.cli.cli.utils.image_upload import (
     image_collections_to_upload,
     upload_collection_images,
 )
+from depictio.cli.cli.utils.renamed import note_if_called_as
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
@@ -390,6 +391,7 @@ def register_run_command(app: typer.Typer):
 
     @_closes_ingestion_record
     def ingest(
+        ctx: typer.Context,
         server: ServerOption = None,
         CLI_config_path: LegacyConfigPathOption = None,
         project_config_path: Annotated[
@@ -593,6 +595,7 @@ def register_run_command(app: typer.Typer):
     ):
         """
         Ingest pipeline results into a Depictio server, from validation to dashboards.
+        Formerly `run`.
 
         Runs these steps in order:
           1. Check that the server answers
@@ -607,6 +610,7 @@ def register_run_command(app: typer.Typer):
         Example, from a template:
           depictio ingest --template nf-core/ampliseq/latest --data-root /path/to/data
         """
+        note_if_called_as(ctx, "run", "ingest")
         rich_print_command_usage("ingest")
         CLI_config_path = resolve_server(server, CLI_config_path)
 
@@ -1532,5 +1536,6 @@ def register_run_command(app: typer.Typer):
             raise typer.Exit(code=1)
 
     app.command("ingest")(ingest)
-    # Same command, same options: only its place in the help is gone.
+    # Same command, same options: only its place in the help is gone, and it says
+    # what it is called now.
     app.command("run", hidden=True)(ingest)
