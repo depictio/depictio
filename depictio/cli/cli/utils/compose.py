@@ -736,15 +736,20 @@ def compose_run(
         and str(PurePosixPath(f).parent) not in report_dirs
     ]
     include_regexes = [re.compile(include_regex(g)) for g in include]
+    shapes = {
+        path: shape
+        for path in candidates[:MAX_SCANNED]
+        if (shape := file_shape(root, path)) is not None
+    }
     unrecognised: list[dict[str, Any]] = []
-    for path in candidates:
+    for group in group_files(shapes, files):
         # The listing is capped; a file asked for by name is not.
-        named = any(r.match(path) for r in include_regexes)
+        named = any(r.match(f) for f in group.files for r in include_regexes)
         if len(unrecognised) >= MAX_UNRECOGNISED and not named:
             if not include_regexes:
                 break
             continue
-        proposal = propose_unrecognised(root, path)
+        proposal = propose_group(root, group)
         if proposal is None:
             continue
         wanted = include_unknown or named
@@ -819,25 +824,329 @@ def _is_identifier(column: str) -> bool:
     )
 
 
-def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
-    """What a tabular file nothing recognised could show: a deterministic first guess.
+# Files of one shape, one per sample, are one collection with the sample read
+# off their paths. Nothing here knows a tool: only where paths differ, what the
+# files share, and their columns.
 
-    A sample column (by name), up to four numeric columns as cards, up to three
-    low-cardinality text columns as filters, one figure (a scatter of the first
-    two numeric columns, else a box of the first numeric by the first category)
-    and the table itself.
+_SEPARATORS = "._-"
+MAX_SCANNED = 2000
+MAX_WILDCARD_VALUES = 500
+MAX_GROUP_READ = 20
+
+
+@dataclass
+class FileGroup:
+    """Unrecognised files of one shape: a single file, or one file per sample.
+
+    ``pattern`` is the scan regex, ``{wildcard}`` standing where the paths
+    differ; ``values`` is what stands there for each file.
     """
-    frame = read_sample(data_root / path)
+
+    files: list[str]
+    wildcard: str | None = None
+    pattern: str | None = None
+    values: list[str] = field(default_factory=list)
+    glob: str = ""
+    label: str = ""
+
+    @property
+    def wildcard_regex(self) -> str:
+        if len(self.values) > MAX_WILDCARD_VALUES:
+            return "[^/]+?"
+        return "|".join(re.escape(v) for v in sorted(set(self.values), key=len, reverse=True))
+
+
+def _common_suffix(texts: Sequence[str]) -> str:
+    """The longest end every text shares, started at a separator.
+
+    ``s10.tsv`` and ``s20.tsv`` share ``.tsv``, not ``0.tsv``: a shared end
+    that starts mid-word belongs to what differs.
+    """
+    suffix = texts[0]
+    for text in texts[1:]:
+        n = 0
+        while n < min(len(suffix), len(text)) and suffix[-1 - n] == text[-1 - n]:
+            n += 1
+        suffix = suffix[len(suffix) - n :] if n else ""
+    i = 0
+    while i < len(suffix) and suffix[i] not in _SEPARATORS:
+        i += 1
+    return suffix[i:]
+
+
+def _common_prefix(texts: Sequence[str]) -> str:
+    """The longest start every text shares, ended at a separator (``MOCK_`` of ``MOCK_001``)."""
+    prefix = texts[0]
+    for text in texts[1:]:
+        n = 0
+        while n < min(len(prefix), len(text)) and prefix[n] == text[n]:
+            n += 1
+        prefix = prefix[:n]
+    end = max((prefix.rfind(c) for c in _SEPARATORS), default=-1)
+    return prefix[: end + 1]
+
+
+def _as_group(paths: Sequence[str], wildcard: str) -> FileGroup | None:
+    """``paths`` as one group, when one value per file is all that tells them apart.
+
+    The value may appear in several places of a path (``ERZ01/ERZ01.txt``),
+    each followed by an end the files share; anything else differing between
+    them (two values, an empty one, two files with the same one) is not a group.
+    """
+    split = [PurePosixPath(p).parts for p in paths]
+    varying = [i for i in range(len(split[0])) if len({parts[i] for parts in split}) > 1]
+    if not varying:
+        return None
+    ends = {i: _common_suffix([parts[i] for parts in split]) for i in varying}
+    values: list[str] = []
+    for parts in split:
+        cores = {parts[i][: len(parts[i]) - len(ends[i])] for i in varying}
+        if len(cores) != 1:
+            return None
+        value = cores.pop()
+        if not value or "/" in value:
+            return None
+        values.append(value)
+    if len(set(values)) != len(values):
+        return None
+    start = _common_prefix(values)
+    pattern, glob = [], []
+    for i, segment in enumerate(split[0]):
+        if i in ends:
+            pattern.append(f"{{{wildcard}}}" + re.escape(ends[i]))
+            glob.append(start + "*" + ends[i])
+        else:
+            pattern.append(re.escape(segment))
+            glob.append(segment)
+    return FileGroup(
+        files=list(paths),
+        wildcard=wildcard,
+        pattern="^" + "/".join(pattern) + "$",
+        values=values,
+        glob="/".join(glob),
+    )
+
+
+def _pattern_regex(group: FileGroup) -> re.Pattern[str]:
+    """The group's pattern as a regex: one value, the same wherever it appears."""
+    placeholder = f"{{{group.wildcard}}}"
+    regex = (group.pattern or "").replace(placeholder, "(?P<v>[^/]+?)", 1)
+    return re.compile(regex.replace(placeholder, "(?P=v)"))
+
+
+def _split_bucket(members: list[str], wildcard: str) -> list[FileGroup]:
+    """Files of one shape, split into groups by the patterns that cover most of them.
+
+    Candidate patterns come from pairs of files: each file with the next one,
+    and with the first file of the next directory. The pattern covering the
+    most files is taken first; on a tie, the one whose value appears in more
+    places (``{sample}/{sample}.txt`` over ``ERZ01/{sample}.txt``).
+    """
+    ordered = sorted(members)
+    parents = [str(PurePosixPath(p).parent) for p in ordered]
+    next_dir = [len(ordered)] * len(ordered)
+    for i in range(len(ordered) - 2, -1, -1):
+        next_dir[i] = i + 1 if parents[i + 1] != parents[i] else next_dir[i + 1]
+    candidates: dict[str, FileGroup] = {}
+    for i, path in enumerate(ordered):
+        for j in {i + 1, next_dir[i]}:
+            if j < len(ordered):
+                pair = _as_group([path, ordered[j]], wildcard)
+                if pair and pair.pattern:
+                    candidates.setdefault(pair.pattern, pair)
+    regexes = {pattern: _pattern_regex(pair) for pattern, pair in candidates.items()}
+    remaining = list(ordered)
+    groups: list[FileGroup] = []
+    while candidates and len(remaining) > 1:
+        best: tuple[tuple[int, int], str, list[str]] | None = None
+        for pattern in candidates:
+            covered = [p for p in remaining if regexes[pattern].match(p)]
+            key = (len(covered), pattern.count("{"))
+            if len(covered) > 1 and (best is None or key > best[0]):
+                best = (key, pattern, covered)
+        if best is None:
+            break
+        _, pattern, covered = best
+        del candidates[pattern]
+        group = _as_group(covered, wildcard)
+        if group is None:
+            continue
+        groups.append(group)
+        taken = set(covered)
+        remaining = [p for p in remaining if p not in taken]
+    return groups + [FileGroup(files=[p], glob=p) for p in remaining]
+
+
+def _contexts(value: str, path: str) -> set[str]:
+    """The path segments ``value`` stands in, as whole words, each with it blanked out."""
+    found = set()
+    for segment in PurePosixPath(path).parts:
+        for match in re.finditer(re.escape(value), segment):
+            before = segment[match.start() - 1] if match.start() else ""
+            after = segment[match.end()] if match.end() < len(segment) else ""
+            if (not before or before in _SEPARATORS) and (not after or after in _SEPARATORS):
+                found.add(segment[: match.start()] + "{}" + segment[match.end() :])
+    return found
+
+
+def _names_samples(group: FileGroup, all_files: Sequence[str]) -> bool:
+    """Whether what tells the group's files apart is a sample.
+
+    A sample's name turns up elsewhere in the run under another kind of name
+    (``ERZ01.txt`` here, ``ERZ01.normalized.tsv`` there); variants of one
+    output (``salmon.merged.gene_counts.tsv``, ``…gene_tpm.tsv``) only ever
+    appear as themselves. Most of the values must turn up so.
+    """
+    own = set(group.files)
+    checked = group.values[:20]
+    found = 0
+    for value in checked:
+        mine = set().union(*(_contexts(value, p) for p in group.files))
+        if any(
+            _contexts(value, path) - mine for path in all_files if path not in own and value in path
+        ):
+            found += 1
+    return found * 2 > len(checked)
+
+
+def _name_wildcard(group: FileGroup, columns: Sequence[str], all_files: Sequence[str]) -> None:
+    """``sample`` when the paths name samples the rows do not, else ``file``."""
+    if not group.wildcard or not group.pattern:
+        return
+    samples = not _sample_column(columns) and _names_samples(group, all_files)
+    name = "sample" if samples else "file"
+    group.pattern = group.pattern.replace(f"{{{group.wildcard}}}", f"{{{name}}}")
+    group.wildcard = name
+
+
+def group_files(
+    shapes: dict[str, tuple[Any, ...]], all_files: Sequence[str] = ()
+) -> list[FileGroup]:
+    """Unrecognised tabular files, grouped by shape.
+
+    ``shapes`` maps each path to what its contents look like (its columns).
+    Files of the same depth, extension and columns are one group when a single
+    value tells them apart (``{sample}/{sample}.txt``); failing that, they are
+    split by the patterns that cover most of them, and a file no pattern
+    covers stands alone.
+    """
+    buckets: dict[tuple[Any, ...], list[str]] = {}
+    for path, shape in shapes.items():
+        posix = PurePosixPath(path)
+        buckets.setdefault((len(posix.parts), posix.suffix.lower(), shape), []).append(path)
+    groups: list[FileGroup] = []
+    for (_, _, shape), members in buckets.items():
+        members = sorted(members)
+        columns = shape[1] if shape and shape[0] == "named" else ()
+        whole = _as_group(members, "value") if len(members) > 1 else None
+        found = [whole] if whole else []
+        if not whole and len(members) > 1:
+            found = _split_bucket(members, "value")
+        elif not whole:
+            found = [FileGroup(files=members, glob=members[0])]
+        for group in found:
+            _name_wildcard(group, columns, all_files or list(shapes))
+        groups.extend(found)
+    groups.sort(key=lambda g: g.files[0])
+    _label_groups(groups)
+    return groups
+
+
+def _group_label(group: FileGroup) -> str:
+    """A short name: the file's name, or for a group its directory and kind.
+
+    ``arg/abricate/*/*.txt`` is ``abricate``; ``bracken-db/*.bracken.tsv`` is
+    ``bracken-db · bracken``: the last literal directory, then the last word of
+    the name the files share, before its extension.
+    """
+    if len(group.files) == 1:
+        return PurePosixPath(group.files[0]).name
+    parts = PurePosixPath(group.glob).parts
+    directories = [p for p in parts[:-1] if "*" not in p]
+    directory = directories[-1] if directories else ""
+    name = parts[-1]
+    if "*" in name:
+        tokens = [t.strip(_SEPARATORS) for t in name.split("*")[-1].split(".")[:-1]]
+        kind = next((t for t in reversed(tokens) if t), "")
+    else:
+        kind = PurePosixPath(name).stem
+    words = [directory] if directory else []
+    if kind and kind != directory:
+        words.append(kind)
+    return " · ".join(words) or "files"
+
+
+def _label_groups(groups: list[FileGroup]) -> None:
+    for group in groups:
+        group.label = _group_label(group)
+    by_label: dict[str, list[FileGroup]] = {}
+    for group in groups:
+        by_label.setdefault(group.label, []).append(group)
+    for same in by_label.values():
+        if len(same) < 2:
+            continue
+        for group, where in zip(same, distinct_labels([g.glob for g in same])):
+            group.label = f"{group.label} ({where})"
+
+
+def file_shape(data_root: Path, path: str) -> tuple[Any, ...] | None:
+    """What a file's contents look like, to group it: its columns, or how many."""
+    head = read_sample(data_root / path, rows=20)
+    if head is None:
+        return None
+    if looks_headerless(head.columns):
+        return ("headerless", head.width)
+    return ("named", tuple(head.columns))
+
+
+def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
+    """What a single tabular file nothing recognised could show."""
+    return propose_group(
+        data_root, FileGroup(files=[path], glob=path, label=PurePosixPath(path).name)
+    )
+
+
+def _read_group(data_root: Path, group: FileGroup, has_header: bool):  # -> pl.DataFrame | None
+    """A sample of the group's rows, each file's wildcard value in its own column."""
+    import polars as pl
+
+    files = group.files[:MAX_GROUP_READ]
+    rows = max(50, 1000 // len(files))
+    frames = []
+    for path, value in zip(files, group.values or [None] * len(files)):
+        frame = read_sample(data_root / path, rows=rows, has_header=has_header)
+        if frame is None:
+            continue
+        if group.wildcard and value is not None and group.wildcard not in frame.columns:
+            frame = frame.with_columns(pl.lit(value).alias(group.wildcard))
+        frames.append(frame)
+    if not frames:
+        return None
+    return pl.concat(frames, how="diagonal_relaxed") if len(frames) > 1 else frames[0]
+
+
+def propose_group(data_root: Path, group: FileGroup) -> dict[str, Any] | None:
+    """What a file, or a group of files of one shape, could show: a deterministic first guess.
+
+    A sample column (the group's wildcard, else by name), up to four numeric
+    columns as cards, up to three low-cardinality text columns as filters, one
+    figure (a scatter of the first two numeric columns, else a box of the first
+    numeric by the first category) and the table itself.
+    """
+    first = read_sample(data_root / group.files[0], rows=20)
+    if first is None:
+        return None
+    headerless = looks_headerless(first.columns)
+    frame = _read_group(data_root, group, has_header=not headerless)
     if frame is None:
         return None
-    headerless = looks_headerless(frame.columns)
-    if headerless:
-        frame = read_sample(data_root / path, has_header=False)
-        if frame is None:
-            return None
+    path = group.files[0]
     fmt = (table_format(path) or ("tsv", None))[0]
     types = column_types(frame)
-    sample = None if headerless else _sample_column(types)
+    if group.wildcard and group.wildcard in types:
+        sample = group.wildcard
+    else:
+        sample = None if headerless else _sample_column(types)
     numeric = [
         c
         for c, t in types.items()
@@ -865,7 +1174,11 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
         figure = {"visu_type": "scatter", "dict_kwargs": kwargs}
     elif numeric and groups:
         figure = {"visu_type": "box", "dict_kwargs": {"x": groups[0], "y": numeric[0]}}
-    proposal = ["no header row: columns numbered"] if headerless else []
+    proposal = []
+    if len(group.files) > 1:
+        proposal.append(f"{len(group.files)} files, one per {group.wildcard}")
+    if headerless:
+        proposal.append("no header row: columns numbered")
     proposal += [f"card: mean of {c}" for c in numeric]
     proposal += [f"filter: {c}" for c in categorical]
     if figure:
@@ -873,12 +1186,15 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
         proposal.append(f"figure: {figure['visu_type']} of {kw['y']} against {kw['x']}")
     proposal.append("table")
     return {
-        "path": path,
+        "path": group.glob if len(group.files) > 1 else path,
+        "title": group.label,
+        "n_files": len(group.files),
         "format": fmt,
         "n_columns": len(types),
         "columns": list(types)[:30],
         "sample_column": sample,
         "proposal": proposal,
+        "_group": group,
         "_types": types,
         "_headerless": headerless,
         "_numeric": numeric,
@@ -888,17 +1204,38 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
 
 
 def _unknown_collection(proposal: dict[str, Any]) -> Collection:
-    path = proposal["path"]
-    config = _table_config([path])
-    if proposal.get("_headerless"):
-        properties = config["dc_specific_properties"]
-        properties["polars_kwargs"] = {**properties.get("polars_kwargs", {}), "has_header": False}
+    group: FileGroup = proposal["_group"]
+    config = _table_config(group.files)
+    if group.wildcard and group.pattern:
+        config["scan"] = {
+            "mode": "recursive",
+            "scan_parameters": {
+                "regex_config": {
+                    "pattern": group.pattern,
+                    "wildcards": [{"name": group.wildcard, "wildcard_regex": group.wildcard_regex}],
+                }
+            },
+        }
+    # Read as the proposal read it: ragged lines cut to the header's width, and
+    # a first line of data kept as data.
+    properties = config["dc_specific_properties"]
+    if properties.get("format") != "parquet":
+        kwargs = {**properties.get("polars_kwargs", {}), "truncate_ragged_lines": True}
+        if proposal.get("_headerless"):
+            kwargs["has_header"] = False
+        properties["polars_kwargs"] = kwargs
+    what = proposal["path"] if len(group.files) == 1 else f"{group.glob} ({len(group.files)} files)"
+    tag = (
+        PurePosixPath(group.files[0]).with_suffix("").as_posix()
+        if len(group.files) == 1
+        else group.label
+    )
     return Collection(
-        tag=slug(PurePosixPath(path).with_suffix("").as_posix()),
+        tag=slug(tag),
         kind="unknown",
-        description=f"{path}, not recognised by the catalog, included on request",
+        description=f"{what}, not recognised by the catalog, included on request",
         config=config,
-        files=[path],
+        files=list(group.files),
         columns=proposal["_types"],
     )
 
@@ -1113,10 +1450,11 @@ def _unknown_tiles(
     models: dict[str, Any],
     skipped: list[Skipped],
 ) -> list[dict[str, Any]]:
+    section = proposal["title"]
     base = {
         "workflow_tag": workflow,
         "data_collection_tag": collection.tag,
-        "section": proposal["path"],
+        "section": section,
     }
     types = proposal["_types"]
     built: list[dict[str, Any]] = []
@@ -1140,7 +1478,7 @@ def _unknown_tiles(
                 tagger,
                 f"{collection.tag}-filter",
                 "interactive",
-                **{**base, "section": f"{proposal['path']} filters"},
+                **base,
                 title=pretty(column),
                 interactive_component_type="MultiSelect",
                 column_name=column,
@@ -1154,7 +1492,7 @@ def _unknown_tiles(
                 f"{collection.tag}-figure",
                 "figure",
                 **base,
-                title=PurePosixPath(proposal["path"]).name,
+                title=section,
                 **proposal["_figure"],
             )
         )
@@ -1164,7 +1502,7 @@ def _unknown_tiles(
             f"{collection.tag}-table",
             "table",
             **base,
-            title=PurePosixPath(proposal["path"]).name,
+            title=section,
         )
     )
     kept: list[dict[str, Any]] = []
@@ -1277,6 +1615,12 @@ def general_statistics(
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
+
+
+def _where(proposal: dict[str, Any]) -> str:
+    """Where an included collection's rows come from, for its section header."""
+    n = proposal.get("n_files", 1)
+    return proposal["path"] if n == 1 else f"{proposal['path']}: {n} files"
 
 
 def _section(name: str, stage: str, **extra: Any) -> dict[str, Any]:
@@ -1509,14 +1853,16 @@ def write_template(
         unknown_by_path = {c.files[0]: c for c in collections if c.kind == "unknown"}
         components = []
         for proposal in included:
-            collection = unknown_by_path.get(proposal["path"])
+            collection = unknown_by_path.get(proposal["_group"].files[0])
             if collection is not None:
                 components += _unknown_tiles(
                     collection, proposal, workflow, tagger, models, skipped
                 )
         if components:
             sections = [
-                _section(p["path"], "other") for p in included if p["path"] in unknown_by_path
+                _section(p["title"], "other", description=_where(p))
+                for p in included
+                if p["_group"].files[0] in unknown_by_path
             ]
             tab = {
                 "title": "Other data",
@@ -1526,16 +1872,24 @@ def write_template(
                 "grid_sections": sections,
                 "components": components,
             }
-            # One filter section per file: the same column name ("sample") in two
-            # files is two controls, and the section says which file each filters.
+            # One filter section per collection, named like its grid section: a
+            # filter narrows its own collection only, so "sample" in two of them is
+            # two controls, and the section says which data each one filters.
             filter_names = list(
                 dict.fromkeys(
                     c["section"] for c in components if c["component_type"] == "interactive"
                 )
             )
             if filter_names:
+                where = {p["title"]: _where(p) for p in included}
                 tab["filter_sections"] = [
-                    _section(name, "other", icon="mdi:filter-variant", collapsed=True)
+                    _section(
+                        name,
+                        "other",
+                        icon="mdi:filter-variant",
+                        collapsed=len(filter_names) > 1,
+                        description=where.get(name),
+                    )
                     for name in filter_names
                 ]
             tabs.append(tab)

@@ -392,8 +392,169 @@ def test_a_named_file_is_included_past_the_listing_cap(tmp_path, monkeypatch):
     import depictio.cli.cli.utils.compose as compose
 
     monkeypatch.setattr(compose, "MAX_UNRECOGNISED", 2)
-    for i in range(4):
-        (tmp_path / f"t{i}.tsv").write_text("sample\treads\nA\t1\nB\t2\n")
+    for i in range(4):  # four shapes: four lines, not one group
+        (tmp_path / f"t{i}.tsv").write_text(f"sample\treads_{i}\nA\t1\nB\t2\n")
     composition = compose_run(tmp_path, include=["t3.tsv"])
     included = [p["path"] for p in composition.unrecognised if p.get("_include")]
     assert included == ["t3.tsv"]
+
+
+# ---------------------------------------------------------------------------
+# Files of one shape, one per sample
+# ---------------------------------------------------------------------------
+
+
+def _write(root: Path, path: str, text: str) -> None:
+    (root / path).parent.mkdir(parents=True, exist_ok=True)
+    (root / path).write_text(text)
+
+
+def _groups(root: Path):
+    from depictio.cli.cli.utils.compose import file_shape, group_files
+
+    files = walk(root)
+    shapes = {p: shape for p in files if (shape := file_shape(root, p)) is not None}
+    return group_files(shapes, files)
+
+
+def test_a_directory_per_sample_is_one_group(tmp_path):
+    for sample in ("ERZ01", "ERZ02", "ERZ03"):
+        _write(
+            tmp_path,
+            f"arg/abricate/{sample}/{sample}.txt",
+            "GENE\tCOVERAGE\nblaA\t99.1\nmecA\t87\n",
+        )
+        _write(tmp_path, f"qc/{sample}_fastqc.html", "<html/>")  # the sample, elsewhere
+    (group,) = _groups(tmp_path)
+    assert group.wildcard == "sample"
+    assert group.values == ["ERZ01", "ERZ02", "ERZ03"]
+    assert group.glob == "arg/abricate/*/*.txt"
+    assert group.label == "abricate"
+
+
+def test_two_kinds_of_file_in_one_directory_are_two_groups(tmp_path):
+    for sample in ("MOCK_001", "MOCK_002"):
+        _write(
+            tmp_path,
+            f"bracken/db/{sample}_run_db.bracken.tsv",
+            "name\treads\nE. coli\t10\nB. sub\t5\n",
+        )
+        _write(tmp_path, f"bracken/db/{sample}_run_db.report.txt", "100.00\t15\t0\tR\t1\troot\n")
+    groups = _groups(tmp_path)
+    assert [(g.label, g.values) for g in groups] == [
+        ("db · bracken", ["MOCK_001", "MOCK_002"]),
+        ("db · report", ["MOCK_001", "MOCK_002"]),
+    ]
+
+
+def test_files_differing_in_two_ways_are_grouped_by_directory(tmp_path):
+    for tool in ("toolA", "toolB"):
+        for sample in ("s1", "s2"):
+            _write(tmp_path, f"{tool}/{sample}.tsv", "x\ty\n1\t2\n")
+    groups = _groups(tmp_path)
+    assert [(g.label, g.glob, g.values) for g in groups] == [
+        ("toolA", "toolA/*.tsv", ["s1", "s2"]),
+        ("toolB", "toolB/*.tsv", ["s1", "s2"]),
+    ]
+
+
+def test_a_file_that_names_its_samples_gets_a_file_column_instead(tmp_path):
+    for run in ("run1", "run2"):
+        _write(tmp_path, f"{run}.counts.tsv", "sample\treads\nA\t1\nB\t2\n")
+        _write(tmp_path, f"logs/{run}.log.tsv", "x\ty\n1\t2\n")
+    group = next(g for g in _groups(tmp_path) if g.glob.endswith("counts.tsv"))
+    assert group.wildcard == "file"
+
+
+def test_variants_of_one_output_are_files_not_samples(tmp_path):
+    """Matrices that differ by what they hold (counts, TPM) are not samples."""
+    for kind in ("gene_counts", "gene_tpm", "gene_lengths"):
+        _write(tmp_path, f"salmon/salmon.merged.{kind}.tsv", "gene_id\tA\tB\ng1\t1\t2\n")
+        _write(tmp_path, f"star_salmon/salmon.merged.{kind}.tsv", "gene_id\tA\tB\ng1\t1\t2\n")
+    groups = _groups(tmp_path)
+    assert {g.wildcard for g in groups} == {"file"}
+    assert [g.glob for g in groups] == [
+        "salmon/salmon.merged.gene_*.tsv",
+        "star_salmon/salmon.merged.gene_*.tsv",
+    ]
+
+
+def test_files_with_different_columns_are_not_grouped(tmp_path):
+    _write(tmp_path, "out/a.tsv", "x\ty\n1\t2\n")
+    _write(tmp_path, "out/b.tsv", "x\tz\n1\t2\n")
+    assert [len(g.files) for g in _groups(tmp_path)] == [1, 1]
+
+
+def test_a_group_is_one_collection_with_the_sample_read_off_its_paths(tmp_path):
+    import re
+
+    from depictio.cli.cli.utils.scan_utils import construct_full_regex, regex_match, wildcard_values
+    from depictio.models.models.data_collections import Regex
+
+    for sample in ("ERZ01", "ERZ02"):
+        _write(
+            tmp_path,
+            f"arg/abricate/{sample}/{sample}.txt",
+            "GENE\tCOVERAGE\nblaA\t99.1\nmecA\t87\n",
+        )
+        _write(tmp_path, f"qc/{sample}_fastqc.html", "<html/>")  # the sample, elsewhere
+    _write(tmp_path, "arg/abricate/ERZ01/notes.txt", "GENE\tCOVERAGE\nx\t1\n")  # not of the group
+    composition = compose_run(tmp_path, include=["arg/abricate/**"])
+    unknown = [c for c in composition.collections if c.kind == "unknown"]
+    group = next(c for c in unknown if len(c.files) == 2)
+    regex = group.config["scan"]["scan_parameters"]["regex_config"]
+    assert group.config["metatype"] == "Aggregate"
+    assert regex["wildcards"][0]["name"] == "sample"
+    full = construct_full_regex(Regex.model_validate(regex))
+    for path in group.files:
+        assert regex_match(path, full)[0]
+    assert not regex_match("arg/abricate/ERZ01/notes.txt", full)[0]
+    assert wildcard_values(
+        regex["pattern"], regex["wildcards"], f"{tmp_path}/{group.files[1]}"
+    ) == {"sample": "ERZ02"}
+    assert group.columns["sample"]
+    assert re.search("sample", " ".join(composition.unrecognised[0]["proposal"]))
+
+
+def test_aggregation_stamps_each_file_with_its_wildcard_values(tmp_path):
+    import polars as pl
+
+    from depictio.cli.cli.utils.deltatables import add_wildcard_columns
+
+    class FileInfo:
+        def __init__(self, location: str):
+            self.file_location = location
+
+    files = [FileInfo(f"{tmp_path}/abricate/{s}/{s}.txt") for s in ("ERZ01", "ERZ02")]
+    frames = [pl.LazyFrame({"GENE": ["blaA"]}), pl.LazyFrame({"GENE": ["mecA"]})]
+    scan = {
+        "mode": "recursive",
+        "scan_parameters": {
+            "regex_config": {
+                "pattern": r"^abricate/{sample}/{sample}\.txt$",
+                "wildcards": [{"name": "sample", "wildcard_regex": "ERZ01|ERZ02"}],
+            }
+        },
+    }
+    tagged = pl.concat(add_wildcard_columns(frames, files, scan)).collect()
+    assert tagged["sample"].to_list() == ["ERZ01", "ERZ02"]
+    plain = add_wildcard_columns(frames, files, {"mode": "recursive", "scan_parameters": {}})
+    assert plain is frames
+
+
+def test_a_grid_section_and_a_filter_section_may_share_a_name():
+    from depictio.cli.cli.utils.compose_layout import layout_dashboard
+
+    dashboard = {
+        "filter_sections": [{"name": "abricate"}],
+        "grid_sections": [{"name": "abricate"}],
+        "components": [
+            {"component_type": "interactive", "section": "abricate"},
+            {"component_type": "card", "section": "abricate"},
+            {"component_type": "table", "section": "abricate"},
+        ],
+    }
+    layout_dashboard(dashboard)
+    widths = {c["component_type"]: c["layout"]["w"] for c in dashboard["components"]}
+    assert widths["interactive"] == 1
+    assert widths["table"] == 8

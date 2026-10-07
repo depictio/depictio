@@ -224,7 +224,13 @@ class UnrecognisedFile(BaseModel):
     page can list what was left out and how to add it.
     """
 
-    path: str = Field(..., description="Path relative to the data root")
+    path: str = Field(
+        ...,
+        description="Path relative to the data root; for files of one shape, a glob "
+        "(`abricate/*/*.txt`) that `--include` takes as is",
+    )
+    title: str | None = Field(default=None, description="A short name for it")
+    n_files: int = Field(default=1, description="How many files of this shape, one per sample")
     format: str = Field(..., description="csv, tsv or parquet")
     n_columns: int = Field(default=0, description="Number of columns read")
     columns: list[str] = Field(default_factory=list, description="Its first columns, at most 30")

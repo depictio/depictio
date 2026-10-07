@@ -17,6 +17,8 @@ import { Icon } from '@iconify/react';
 /** One tabular file a composed template left out (`TemplateOrigin.unrecognised_files`). */
 interface UnrecognisedFile {
   path: string;
+  title?: string | null;
+  n_files?: number;
   format: string;
   n_columns?: number;
   columns?: string[];
@@ -91,9 +93,10 @@ export const UnrecognisedFilesPanel: React.FC<{ templateOrigin: unknown }> = ({
           </Group>
         </Group>
         <Text size="sm" c="dimmed">
-          These tables were left out of the composed dashboard. Each line shows the tiles it
-          would get in an <b>Other data</b> tab. Copy a line&apos;s command to add that file:
-          it ingests the directory again and resets the dashboard to the composed one.
+          These tables were left out of the composed dashboard. Files of one shape, one per
+          sample, are one line. Each line shows the tiles it would get in an <b>Other data</b>{' '}
+          tab. Copy a line&apos;s command to add it: it ingests the directory again and resets
+          the dashboard to the composed one.
         </Text>
         <Table striped highlightOnHover verticalSpacing="xs">
           <Table.Thead>
@@ -108,9 +111,21 @@ export const UnrecognisedFilesPanel: React.FC<{ templateOrigin: unknown }> = ({
             {files.map((file) => (
               <Table.Tr key={file.path}>
                 <Table.Td>
-                  <Text size="sm" ff="monospace">
-                    {file.path}
-                  </Text>
+                  <Group gap={6} wrap="nowrap">
+                    <Text size="sm" fw={500}>
+                      {file.title ?? file.path}
+                    </Text>
+                    {(file.n_files ?? 1) > 1 && (
+                      <Badge variant="light" color="gray" size="sm" tt="none">
+                        {file.n_files} files
+                      </Badge>
+                    )}
+                  </Group>
+                  {file.title && (
+                    <Text size="xs" c="dimmed" ff="monospace">
+                      {file.path}
+                    </Text>
+                  )}
                   {file.sample_column && (
                     <Text size="xs" c="dimmed">
                       samples in <Code>{file.sample_column}</Code>

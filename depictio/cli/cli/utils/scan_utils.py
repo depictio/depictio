@@ -65,6 +65,41 @@ def construct_full_regex(regex: Regex) -> str:
     return files_regex
 
 
+def wildcard_values(
+    pattern: str, wildcards: list[dict[str, str]] | None, file_location: str
+) -> dict[str, str]:
+    """What each wildcard of a scan regex captured in ``file_location``'s path.
+
+    The scan matches a file by its name, or by its path relative to the run, so
+    the pattern is tried against the name first and then against ever longer
+    trailing parts of the path. A wildcard that appears twice
+    (``{sample}/{sample}.txt``) captures at its first place. Empty when nothing
+    matches, or when the pattern declares no wildcard.
+    """
+    if not wildcards:
+        return {}
+    named = pattern
+    names: list[str] = []
+    for wildcard in wildcards:
+        name, regex = wildcard["name"], wildcard["wildcard_regex"]
+        placeholder = f"{{{name}}}"
+        first = named.find(placeholder)
+        if first < 0 or not name.isidentifier():
+            continue
+        rest = named[first + len(placeholder) :].replace(placeholder, f"(?:{regex})")
+        named = f"{named[:first]}(?P<{name}>{regex}){rest}"
+        names.append(name)
+    if not names:
+        return {}
+    compiled = re.compile(named)
+    parts = file_location.replace("\\", "/").split("/")
+    for start in range(len(parts) - 1, -1, -1):
+        match = compiled.match("/".join(parts[start:]))
+        if match:
+            return {name: match.group(name) for name in names}
+    return {}
+
+
 def generate_file_hash(
     filename: str, filesize: int, creation_time: str, modification_time: str
 ) -> str:
