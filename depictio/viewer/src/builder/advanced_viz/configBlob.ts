@@ -173,6 +173,23 @@ function extractRoleDerivedFallbacks(
 }
 
 
+/** The data collection whose columns a viz kind's roles bind to.
+ *
+ *  Usually the component's own DC. A phylogenetic viz is the exception: it is
+ *  bound to its tree, a Newick DC that has no table and so no schema (asking
+ *  for one is a 404), while its roles (`taxon`, `color`, `label`) name columns
+ *  of the tip-metadata table (PhylogeneticConfig in configs.py). A tree with no
+ *  metadata table has no columns to bind, which `null` says here. */
+export function bindingSchemaDcId(
+  vizKind: string | null | undefined,
+  dcId: string | null,
+  preset: Record<string, unknown> | null,
+): string | null {
+  if (vizKind !== 'phylogenetic') return dcId;
+  const metadataDcId = preset?.metadata_dc_id;
+  return typeof metadataDcId === 'string' && metadataDcId ? metadataDcId : null;
+}
+
 /** The config a component actually renders with: the catalog or previously
  *  saved preset underneath, the author's own Tier-2 edits on top.
  *

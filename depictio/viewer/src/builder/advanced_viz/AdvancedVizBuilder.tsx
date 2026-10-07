@@ -45,7 +45,7 @@ import { useBuilderStore } from '../store/useBuilderStore';
 import AdvancedVizPreview from './AdvancedVizPreview';
 import StickyPreview from '../shared/StickyPreview';
 import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
-import { mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
+import { bindingSchemaDcId, mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -317,16 +317,24 @@ const AdvancedVizBuilder: React.FC = () => {
     };
   }, []);
 
+  const selectedKind = config.viz_kind || null;
+
+  // Bindings validate against the table the roles read, which for a tree is its
+  // metadata table, not the bound DC. With no such table there is nothing to
+  // bind, so the schema is empty rather than missing and Save stays open.
+  const schemaDcId = bindingSchemaDcId(selectedKind, dcId, mergedPresetConfig(config));
+  const nothingToBind = Boolean(dcId) && !schemaDcId;
+
   useEffect(() => {
-    if (!dcId) {
-      setSchema(null);
+    if (!schemaDcId) {
+      setSchema(nothingToBind ? {} : null);
       setSchemaError(null);
       return;
     }
     let cancelled = false;
     setSchemaError(null);
     setSchema(null);
-    fetchPolarsSchema(dcId)
+    fetchPolarsSchema(schemaDcId)
       .then((res) => {
         if (!cancelled) setSchema(res);
       })
@@ -338,9 +346,7 @@ const AdvancedVizBuilder: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [dcId]);
-
-  const selectedKind = config.viz_kind || null;
+  }, [schemaDcId, nothingToBind]);
 
   // Fetch the backend's graded fit scores for the bound DC. Every kind is
   // scored; the picker ranks them and the binding step pre-fills from each
@@ -518,6 +524,7 @@ const AdvancedVizBuilder: React.FC = () => {
   // gated on errors only — warnings let the user proceed.
   const validation = useMemo(() => {
     if (!selectedKind || !schema) return { errors: [], warnings: [], ok: false };
+    if (nothingToBind) return { errors: [], warnings: [], ok: true };
     const errors: string[] = [];
     const warnings: string[] = [];
     const checkBinding = (role: string, accepted: string[], optional: boolean) => {
@@ -572,7 +579,7 @@ const AdvancedVizBuilder: React.FC = () => {
       errors.push('Pick a compute method (PCA / UMAP / t-SNE / PCoA)');
     }
     return { errors, warnings, ok: errors.length === 0 };
-  }, [selectedKind, schema, columnMapping, liveEmbedding, requiredRoles, optionalRoles]);
+  }, [selectedKind, schema, nothingToBind, columnMapping, liveEmbedding, requiredRoles, optionalRoles]);
 
   const setSaveError = useBuilderStore((s) => s.setSaveError);
   useEffect(() => {
@@ -644,12 +651,13 @@ const AdvancedVizBuilder: React.FC = () => {
   // in. Nothing left to do here, so the bindings block starts collapsed.
   const allRequiredBound = useMemo(
     () =>
-      requiredRoles.length > 0 &&
+      nothingToBind ||
+      (requiredRoles.length > 0 &&
       requiredRoles.every(([role]) => {
         const v = columnMapping[role];
         return Array.isArray(v) ? v.length > 0 : Boolean(v);
-      }),
-    [requiredRoles, columnMapping],
+      })),
+    [nothingToBind, requiredRoles, columnMapping],
   );
 
   /** Render a titled grid of kind tiles with a fit-score badge. Tiles are
@@ -801,6 +809,10 @@ const AdvancedVizBuilder: React.FC = () => {
                     <Alert color="yellow">Pick a data collection in step 1 first.</Alert>
                   ) : !schema ? (
                     <Text size="sm" c="dimmed">Loading DC schema…</Text>
+                  ) : nothingToBind ? (
+                    <Text size="sm" c="dimmed">
+                      This tree has no tip-metadata table, so there are no columns to bind.
+                    </Text>
                   ) : (
                     <>
                       {/* Sunburst has a multi-column "ranks" binding alongside its
